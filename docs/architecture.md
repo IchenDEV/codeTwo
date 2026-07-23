@@ -1,0 +1,101 @@
+# Architecture
+
+codeTwo drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
+Protocol (ACP)** and presents them through a **document-first** UI. One Rust core; two frontends.
+
+## Why this shape
+
+- **ACP is the common abstraction.** JSON-RPC over stdio, with entry points for all three
+  providers (Grok natively; Claude Code & Codex via official adapters). We implement the client
+  loop once and treat each backend as a launch command.
+- **Codex is the template, not opencode.** opencode is now all-TypeScript + Electron. Codex is
+  all-Rust with a `core` + a ratatui `tui` and an SQ/EQ event model. A Rust core lets the Tauri GUI
+  and a ratatui TUI link the same code with no server/serialization boundary.
+
+## Layers
+
+```
+                       crates/core  (Rust library — no UI)
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │  acp        ACP client over stdio (JSON-RPC peer + wire types)         │
+   │  provider   registry: launch spec + availability per backend          │
+   │  session    session / message / part model                            │
+   │  skill      skill library + document→prompt compiler                   │
+   │  permission ask/allow/deny × tool+glob; modes incl. YOLO               │
+   │  event      SQ/EQ types (Op in, Event out)                            │
+   └───────────────▲───────────────────────────────────────▲──────────────┘
+                   │ tauri::command + ipc::Channel          │ links directly
+        apps/desktop/src-tauri (Rust bridge)          crates/tui (ratatui)  [M3]
+                   │
+     apps/desktop/src  (React + Vite + BlockNote)
+```
+
+## The SQ/EQ interface (`core::event`)
+
+Frontends never touch ACP directly. They push [`Op`]s (NewSession, Prompt, Cancel,
+AnswerPermission, …) and consume [`Event`]s (AgentText, ToolCall, PermissionRequest, TurnEnded, …).
+- Tauri bridge: `Op` via `#[tauri::command]`, `Event` stream via `ipc::Channel`.
+- TUI: calls the same core engine in-process, renders `Event`s in its draw loop.
+
+The M1 engine is the piece that consumes `Op`s and, by driving `core::acp`, produces `Event`s. The
+ACP `ClientHandler` implemented by the engine translates `session/update` → `Event`s and routes
+`session/request_permission` through the permission engine (auto-answer or surface an `Ask`).
+
+## ACP client (`core::acp`)
+
+A minimal, self-contained JSON-RPC 2.0 peer over async byte streams (child stdio in prod; an
+in-memory duplex in tests). Hand-written wire types keep us independent of any single adapter's
+version churn; the official `agent-client-protocol` crate can be swapped in behind `AcpClient`.
+Unknown `session/update` variants are logged and dropped rather than fatal ("code to the common
+denominator, feature-detect the rest").
+
+Prompt-turn loop: `initialize` → `session/new` → `session/prompt` → stream `session/update` →
+answer `session/request_permission` → read `StopReason`. Proven end-to-end offline by
+`crates/core/tests/acp_prompt_turn.rs` against a mock agent (no provider binary needed).
+
+## Skills (the differentiator) — `core::skill`
+
+A skill has one of four kinds: `Fragment`, `AgentSkill`, `Mcp`, `Macro`. The document editor
+serializes to neutral `DocBlock`s (text + skill blocks); `compile()` lowers them into a
+`CompiledPrompt` = the markdown prompt (for `session/prompt`) plus MCP servers and agent-skills (for
+`session/new`). The compiler lives in the core so the TUI reuses it verbatim.
+
+## Providers (`core::provider`)
+
+| Provider | Launch | Notes |
+|---|---|---|
+| Claude Code | `npx -y @agentclientprotocol/claude-agent-acp` | needs Node; richest ACP surface |
+| Codex | `npx -y @zed-industries/codex-acp` | needs Node; official Rust adapter |
+| Grok | `grok agent stdio` | native ACP, no adapter |
+
+`Provider::is_available()` does a PATH check to drive a startup health panel (missing CLI → clear
+state, not a crash).
+
+## Milestones
+
+- **M0 (done):** workspace + tested core + Tauri/React/BlockNote scaffold + `/` skill menu.
+- **M1 (done):** engine (Op→Event) with permission parking, SQLite session store + transcript,
+  git-worktree manager, PTY, disk-backed skill library. All offline-tested.
+- **M2 (done):** full GUI over the engine — session list, doc editor with inline skill nodes,
+  live transcript, permission modal, xterm.js terminal, provider/mode pickers.
+- **M3 (done):** ratatui TUI on the same core (session list, transcript, composer + `/` skill
+  picker, inline permission prompts, provider/mode cyclers).
+- **M4 (done, minus packaging):** lazy ACP session creation with MCP attach at `session/new`,
+  dynamic add/remove skills reflected live in picker + compiler, transcript load on session select.
+  **Remaining:** bundle a Node sidecar (so Claude/Codex adapters need no system Node) + app
+  packaging/notarization — platform-specific, not verifiable in this environment.
+
+## Test coverage (offline, no provider binary needed)
+
+24 Rust tests across `core` + `tui`, incl. two protocol integration tests (full prompt turn;
+permission parking then answer), MCP passthrough, real git-worktree add/remove, real PTY streaming,
+skill compiler + persistence, and TUI state transitions. Frontend type-checks + builds; all three
+Rust crates compile clean (zero warnings).
+
+## Run
+
+```sh
+cargo test -p codetwo-core          # core, offline (mock ACP agent)
+cd apps/desktop && bun install && bun run build   # frontend
+cd apps/desktop && bun run tauri dev              # launch the desktop app (needs a display)
+```
