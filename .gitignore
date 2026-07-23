@@ -7,6 +7,10 @@ node_modules
 dist
 .vite
 
+# VitePress (website)
+website/.vitepress/cache
+website/.vitepress/dist
+
 # Reference repos (cloned for study, never vendored)
 /references
 
