@@ -27,8 +27,10 @@ Open **Source Control** from the toolbar or `Mod+Shift+G`:
 - **Diff viewer** — unified diff with added/removed/hunk coloring.
 - **Checkpoints** — "Checkpoint now" to snapshot on demand; per checkpoint, **diff** (working tree vs
   that snapshot) and **revert** (restore tracked files to it).
-- **Commit / Push** — write a message, **Commit** stages everything and commits, **Push** pushes to
-  the branch's upstream.
+- **Commit / Push / Create PR** — write a message (or hit **Suggest** for a Conventional-Commits
+  message derived from the actual changed files), **Commit** stages everything and commits, **Push**
+  pushes to the branch's upstream, and **Create PR** pushes the branch and opens a pull request via
+  `gh`.
 
 ## Worktree isolation
 

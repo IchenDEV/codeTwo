@@ -16,6 +16,37 @@ cursor. You can insert several and interleave them with your own text.
 Each chip is a real document element carrying a `skillId`, so the document serializes deterministically
 — text runs become text, skill chips become skill blocks, in order.
 
+## `@` — mentioning files
+
+Type `@` to search the workspace and insert a **file mention**. At compile time the core reads that
+file and inlines its contents into the prompt inside a fenced block, so the agent sees the actual
+code rather than a filename:
+
+````md
+**File** `src/auth.rs`
+
+```rust
+pub fn login(…) { … }
+```
+````
+
+Files are read relative to the session's working directory, capped in size, and guarded against
+`..`/absolute-path escapes. A file you mention but that can't be read is reported as unresolved
+instead of silently dropped.
+
+You can also browse: command palette → **“Browse workspace files”**.
+
+## Images
+
+Attach an image and it's sent to the agent as a real ACP image content block (base64), alongside the
+text — useful for screenshots of a broken UI.
+
+## Preview what will actually be sent
+
+Click **Preview** (or the palette's “Preview compiled prompt”) to see the fully compiled prompt:
+[project rules](/guide/rules) prepended, skills expanded, macros substituted, `@`-files inlined, plus
+the MCP servers and agent-skills that will be attached. It's exactly what goes over the wire.
+
 ## Skill kinds
 
 A skill is one of four kinds:

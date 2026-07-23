@@ -13,6 +13,23 @@ Set the mode in the toolbar (or cycle it with `Mod+Shift+P`):
 | **Accept edits** | Auto-approve edit-class tools (edit/delete/move) in the working dir; still ask for the rest. |
 | **YOLO** | Bypass everything — auto-approve all requests. |
 
+## Sandbox — a second, independent axis
+
+The permission mode decides *who approves*; the **sandbox** decides *what's possible at all*. Pick it
+in the toolbar:
+
+| Sandbox | Effect |
+| --- | --- |
+| **Read-only** | No mutations. Edits, deletes, moves, and commands are denied outright. |
+| **Workspace write** | Edits in the workspace are permitted; commands still follow the approval mode. The default. |
+| **Danger full access** | No sandbox restrictions (approvals still apply unless the mode bypasses them). |
+
+The sandbox is checked **first and wins**: a read-only sandbox denies a file edit *even in YOLO mode*.
+That combination — auto-approve everything, but physically can't mutate — is a genuinely useful way to
+let an agent explore a repo fast without any risk.
+
+This mirrors Codex's approval-policy × sandbox split.
+
 ## The permission prompt
 
 In Ask mode, a modal appears with the tool's summary and the agent's offered options (e.g. *Allow* /
