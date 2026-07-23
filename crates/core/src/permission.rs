@@ -19,6 +19,20 @@ pub enum PermissionMode {
     Yolo,
 }
 
+/// What the agent is physically allowed to touch, independent of who approves it. Mirrors Codex's
+/// sandbox axis (`read-only` / `workspace-write` / `danger-full-access`), which is orthogonal to the
+/// approval mode: the sandbox can veto an action even when the mode would allow it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SandboxPolicy {
+    /// No mutations at all — reads/searches only.
+    ReadOnly,
+    /// Edits inside the workspace are permitted; commands still follow the approval mode.
+    WorkspaceWrite,
+    /// No sandbox restrictions (approvals still apply unless the mode bypasses them).
+    DangerFullAccess,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
@@ -39,21 +53,38 @@ pub struct Rule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PermissionPolicy {
     pub mode: PermissionMode,
+    /// What the agent may touch at all. Vetoes before the mode is consulted.
+    #[serde(default = "default_sandbox")]
+    pub sandbox: SandboxPolicy,
     /// Evaluated in order; an explicit `Deny` always wins over a later `Allow`.
     pub rules: Vec<Rule>,
 }
 
+fn default_sandbox() -> SandboxPolicy {
+    SandboxPolicy::WorkspaceWrite
+}
+
 impl Default for PermissionPolicy {
     fn default() -> Self {
-        Self { mode: PermissionMode::Ask, rules: Vec::new() }
+        Self { mode: PermissionMode::Ask, sandbox: default_sandbox(), rules: Vec::new() }
     }
+}
+
+/// Tool kinds that mutate state (vs read/search/fetch/think).
+fn is_mutating(kind: &str) -> bool {
+    matches!(kind, "edit" | "delete" | "move" | "execute")
 }
 
 impl PermissionPolicy {
     /// Resolve an action for a tool invocation. `tool_kind` is the ACP tool kind
     /// (e.g. "edit", "execute", "read"); `input` is a stringified summary of the call.
     pub fn decide(&self, tool_kind: &str, input: &str) -> Action {
-        // Explicit rules first: any matching Deny short-circuits.
+        // The sandbox vetoes first — a read-only sandbox denies mutations even in YOLO mode.
+        if self.sandbox == SandboxPolicy::ReadOnly && is_mutating(tool_kind) {
+            return Action::Deny;
+        }
+
+        // Explicit rules next: any matching Deny short-circuits.
         let mut matched_allow = false;
         for rule in &self.rules {
             if glob_match(&rule.tool, tool_kind) && glob_match(&rule.pattern, input) {
@@ -127,13 +158,13 @@ mod tests {
 
     #[test]
     fn yolo_allows_everything() {
-        let p = PermissionPolicy { mode: PermissionMode::Yolo, rules: vec![] };
+        let p = PermissionPolicy { mode: PermissionMode::Yolo, ..Default::default() };
         assert_eq!(p.decide("execute", "anything"), Action::Allow);
     }
 
     #[test]
     fn accept_edits_allows_edits_only() {
-        let p = PermissionPolicy { mode: PermissionMode::AcceptEdits, rules: vec![] };
+        let p = PermissionPolicy { mode: PermissionMode::AcceptEdits, ..Default::default() };
         assert_eq!(p.decide("edit", "src/main.rs"), Action::Allow);
         assert_eq!(p.decide("execute", "ls"), Action::Ask);
     }
@@ -143,9 +174,43 @@ mod tests {
         let p = PermissionPolicy {
             mode: PermissionMode::Yolo,
             rules: vec![Rule { tool: "execute".into(), pattern: "git push*".into(), action: Action::Deny }],
+            ..Default::default()
         };
         assert_eq!(p.decide("execute", "git push origin main"), Action::Deny);
         assert_eq!(p.decide("execute", "git status"), Action::Allow);
+    }
+
+    #[test]
+    fn read_only_sandbox_vetoes_even_yolo() {
+        let p = PermissionPolicy {
+            mode: PermissionMode::Yolo,
+            sandbox: SandboxPolicy::ReadOnly,
+            rules: vec![],
+        };
+        // Mutations are denied outright…
+        assert_eq!(p.decide("edit", "src/main.rs"), Action::Deny);
+        assert_eq!(p.decide("execute", "rm -rf /"), Action::Deny);
+        assert_eq!(p.decide("delete", "x"), Action::Deny);
+        // …while reads still follow the mode.
+        assert_eq!(p.decide("read", "src/main.rs"), Action::Allow);
+    }
+
+    #[test]
+    fn workspace_write_and_danger_do_not_veto() {
+        let ws = PermissionPolicy {
+            mode: PermissionMode::AcceptEdits,
+            sandbox: SandboxPolicy::WorkspaceWrite,
+            rules: vec![],
+        };
+        assert_eq!(ws.decide("edit", "src/main.rs"), Action::Allow);
+        assert_eq!(ws.decide("execute", "ls"), Action::Ask);
+
+        let danger = PermissionPolicy {
+            mode: PermissionMode::Yolo,
+            sandbox: SandboxPolicy::DangerFullAccess,
+            rules: vec![],
+        };
+        assert_eq!(danger.decide("execute", "anything"), Action::Allow);
     }
 
     #[test]

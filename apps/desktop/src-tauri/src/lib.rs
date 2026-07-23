@@ -12,7 +12,8 @@ use codetwo_core::browser::Annotation;
 use codetwo_core::git::{self, Checkpoint, GitStatus};
 use codetwo_core::issues::{self, Issue};
 use codetwo_core::keymap::{Action as KeyAction, Keymap};
-use codetwo_core::permission::PermissionMode;
+use codetwo_core::permission::{PermissionMode, SandboxPolicy};
+use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::{Engine, Event, Op, Part, PtySession, Role, Session, Store};
@@ -397,6 +398,38 @@ async fn git_suggest_commit(cwd: String) -> String {
     git::suggest_commit_message(std::path::Path::new(&cwd)).await
 }
 
+// ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
+
+#[tauri::command]
+async fn set_sandbox(state: State<'_, AppState>, session: String, sandbox: String) -> Result<(), String> {
+    let policy = match sandbox.as_str() {
+        "read_only" => SandboxPolicy::ReadOnly,
+        "danger_full_access" => SandboxPolicy::DangerFullAccess,
+        _ => SandboxPolicy::WorkspaceWrite,
+    };
+    state
+        .engine
+        .submit(Op::SetSandbox { session, sandbox: policy })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_project_scripts(cwd: String) -> Vec<ProjectScript> {
+    project::load(std::path::Path::new(&cwd)).scripts
+}
+
+#[tauri::command]
+async fn run_project_script(cwd: String, id: String) -> Result<String, String> {
+    let cfg = project::load(std::path::Path::new(&cwd));
+    let script = cfg
+        .scripts
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| format!("unknown script: {id}"))?;
+    project::run_script(std::path::Path::new(&cwd), &script).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn new_session(
     state: State<'_, AppState>,
@@ -603,6 +636,9 @@ pub fn run() {
             list_archived_sessions,
             git_create_pr,
             git_suggest_commit,
+            set_sandbox,
+            list_project_scripts,
+            run_project_script,
             new_session,
             submit_prompt,
             answer_permission,

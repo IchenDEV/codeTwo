@@ -54,6 +54,49 @@ pub fn read_file(cwd: &Path, rel: &str) -> std::io::Result<String> {
     Ok(text.chars().take(MAX_FILE_CHARS).collect())
 }
 
+/// MIME type for an image path, or `None` if it isn't a supported image.
+pub fn image_mime(rel: &str) -> Option<&'static str> {
+    match rel.rsplit('.').next().unwrap_or("").to_ascii_lowercase().as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
+    }
+}
+
+/// Read an image and return `(mime, base64)` for an ACP image content block.
+pub fn read_image_base64(cwd: &Path, rel: &str) -> std::io::Result<(String, String)> {
+    if rel.starts_with('/') || rel.split('/').any(|c| c == "..") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "path escapes the workspace",
+        ));
+    }
+    let mime = image_mime(rel)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "not an image"))?;
+    let bytes = std::fs::read(cwd.join(rel))?;
+    Ok((mime.to_string(), base64_encode(&bytes)))
+}
+
+/// Minimal standard base64 encoder (avoids pulling in a dependency for one call site).
+pub fn base64_encode(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b1 = chunk[0] as u32;
+        let b2 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b3 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b1 << 16) | (b2 << 8) | b3;
+        out.push(T[(n >> 18 & 63) as usize] as char);
+        out.push(T[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { T[(n >> 6 & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
 /// A fenced-code language hint from a file extension (best effort).
 pub fn lang_for(rel: &str) -> &'static str {
     match rel.rsplit('.').next().unwrap_or("") {
@@ -121,6 +164,33 @@ mod tests {
         assert_eq!(read_file(&dir, "src/main.rs").unwrap(), "fn main() {}");
         assert!(read_file(&dir, "../secret").is_err());
         assert!(read_file(&dir, "/etc/passwd").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn base64_matches_known_vectors() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"hello world"), "aGVsbG8gd29ybGQ=");
+    }
+
+    #[test]
+    fn image_mime_and_read() {
+        assert_eq!(image_mime("a/b.PNG"), Some("image/png"));
+        assert_eq!(image_mime("a/b.jpeg"), Some("image/jpeg"));
+        assert_eq!(image_mime("a/b.rs"), None);
+
+        let dir = std::env::temp_dir().join(format!("codetwo-img-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("x.png"), b"foo").unwrap();
+        let (mime, b64) = read_image_base64(&dir, "x.png").unwrap();
+        assert_eq!(mime, "image/png");
+        assert_eq!(b64, "Zm9v");
+        assert!(read_image_base64(&dir, "x.rs").is_err(), "non-images rejected");
+        assert!(read_image_base64(&dir, "../x.png").is_err(), "escapes rejected");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

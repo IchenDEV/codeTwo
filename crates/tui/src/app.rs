@@ -397,6 +397,7 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::Text { text } => text.clone(),
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
+            DocBlock::Image { path } => format!("[img:{path}]"),
         })
         .collect::<Vec<_>>()
         .join(" ")

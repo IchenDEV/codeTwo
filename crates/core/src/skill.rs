@@ -163,6 +163,8 @@ pub enum DocBlock {
     },
     /// An `@`-mentioned workspace file; its contents are inlined as context at compile time.
     File { path: String },
+    /// An attached image; sent to the agent as an ACP image content block.
+    Image { path: String },
 }
 
 /// The result of compiling a document: what to send and how to configure the session.
@@ -176,6 +178,8 @@ pub struct CompiledPrompt {
     pub agent_skills: Vec<String>,
     /// Workspace files inlined via `@`-mentions.
     pub files: Vec<String>,
+    /// Attached image paths, sent as ACP image content blocks alongside the prompt.
+    pub images: Vec<String>,
     /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
 }
@@ -207,6 +211,13 @@ pub fn compile_with_context(
 
     for block in doc {
         match block {
+            DocBlock::Image { path } => {
+                // Validate now so a bad path surfaces in the preview rather than mid-turn.
+                match cwd.map(|c| crate::workspace::read_image_base64(c, path)) {
+                    Some(Ok(_)) => out.images.push(path.clone()),
+                    _ => out.unresolved.push(format!("image:{path}")),
+                }
+            }
             DocBlock::File { path } => {
                 out.files.push(path.clone());
                 match cwd.map(|c| crate::workspace::read_file(c, path)) {

@@ -70,7 +70,8 @@ async fn agent_output_is_persisted() {
     let (events_tx, _events_rx) = tokio::sync::mpsc::unbounded_channel();
     let router = PermissionRouter::default();
     // YOLO → auto-approve, no parking.
-    let policy = Arc::new(Mutex::new(PermissionPolicy { mode: PermissionMode::Yolo, rules: vec![] }));
+    let policy =
+        Arc::new(Mutex::new(PermissionPolicy { mode: PermissionMode::Yolo, ..Default::default() }));
     let handler = Arc::new(SessionHandler::new("s1".into(), events_tx, policy, router, Some(store.clone())));
 
     let (client_end, agent_end) = tokio::io::duplex(64 * 1024);

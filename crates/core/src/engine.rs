@@ -291,7 +291,7 @@ impl Engine {
                 let sess = Session::new(provider, cwd.clone());
                 let policy = Arc::new(Mutex::new(PermissionPolicy {
                     mode: sess.permission_mode,
-                    rules: Vec::new(),
+                    ..Default::default()
                 }));
                 let handler = Arc::new(SessionHandler::new(
                     sess.id.clone(),
@@ -339,6 +339,8 @@ impl Engine {
                     self.emit(Event::Error { session: Some(session), message: "no such session".into() });
                     return Ok(());
                 };
+                // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
+                let cwd_for_images = cwd.clone();
 
                 let compiled = {
                     let lib = self.state.skills.lock().unwrap();
@@ -350,6 +352,14 @@ impl Engine {
                         message: format!("unresolved: {id}"),
                     });
                 }
+                // Estimate how much of the context window this prompt uses (the UI meter).
+                let usage = crate::context::usage(&compiled.prompt, crate::context::DEFAULT_CONTEXT_WINDOW);
+                self.emit(Event::Usage {
+                    session: session.clone(),
+                    input_tokens: usage.input_tokens,
+                    output_tokens: 0,
+                });
+
                 if let Some(store) = &self.state.store {
                     let _ = store.append_part(&session, Role::User, &Part::Text { text: compiled.prompt.clone() });
                 }
@@ -395,8 +405,17 @@ impl Engine {
                 let acp_sid = acp_sid.expect("acp session id set above");
                 let events = self.state.events.clone();
                 let sess_for_task = session.clone();
+                let images_cwd = cwd_for_images;
                 tokio::spawn(async move {
-                    let blocks = vec![ContentBlock::text(compiled.prompt)];
+                    let mut blocks = vec![ContentBlock::text(compiled.prompt)];
+                    // Attached images ride along as ACP image content blocks.
+                    for path in &compiled.images {
+                        if let Ok((mime_type, data)) =
+                            crate::workspace::read_image_base64(std::path::Path::new(&images_cwd), path)
+                        {
+                            blocks.push(ContentBlock::Image { data, mime_type });
+                        }
+                    }
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
                             let _ = events.send(Event::TurnEnded {
@@ -435,6 +454,13 @@ impl Engine {
                 let map = self.state.sessions.lock().unwrap();
                 if let Some(rt) = map.get(&session) {
                     rt.policy.lock().unwrap().mode = mode;
+                }
+            }
+
+            Op::SetSandbox { session, sandbox } => {
+                let map = self.state.sessions.lock().unwrap();
+                if let Some(rt) = map.get(&session) {
+                    rt.policy.lock().unwrap().sandbox = sandbox;
                 }
             }
 

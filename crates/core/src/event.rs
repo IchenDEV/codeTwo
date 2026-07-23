@@ -22,6 +22,8 @@ pub enum Op {
     /// Answer an outstanding permission request. `option_id = None` means "cancelled".
     AnswerPermission { session: SessionId, request_id: String, option_id: Option<String> },
     SetPermissionMode { session: SessionId, mode: crate::permission::PermissionMode },
+    /// Change what the agent may touch at all (Codex-style sandbox axis).
+    SetSandbox { session: SessionId, sandbox: crate::permission::SandboxPolicy },
     SetModel { session: SessionId, model: String },
 }
 

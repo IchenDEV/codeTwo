@@ -20,6 +20,8 @@ interface EditorProps {
   getBlocksRef: MutableRefObject<(() => DocBlock[]) | null>;
   // App appends browser-annotation context blocks through this.
   insertTextRef: MutableRefObject<((text: string) => void) | null>;
+  // App inserts `@file` mentions (from the file browser) through this.
+  insertFileRef: MutableRefObject<((path: string) => void) | null>;
 }
 
 // The `/` "Skills" group, built from the live library. Picking one inserts a real inline skill node.
@@ -56,7 +58,7 @@ async function fileMenuItems(
   }));
 }
 
-export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef }: EditorProps) {
+export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef, insertFileRef }: EditorProps) {
   const editor = useCreateBlockNote({
     schema,
     initialContent: [
@@ -78,11 +80,15 @@ export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef }: EditorPr
         editor.insertBlocks([{ type: "paragraph", content: text }], last, "after");
       }
     };
+    insertFileRef.current = (path: string) => {
+      editor.insertInlineContent([{ type: "file", props: { path } }, " "]);
+    };
     return () => {
       getBlocksRef.current = null;
       insertTextRef.current = null;
+      insertFileRef.current = null;
     };
-  }, [editor, getBlocksRef, insertTextRef]);
+  }, [editor, getBlocksRef, insertTextRef, insertFileRef]);
 
   return (
     <BlockNoteView editor={editor} slashMenu={false}>

@@ -170,6 +170,29 @@ body,
 .spacer {
   flex: 1;
 }
+.ctx-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.ctx-bar {
+  width: 56px;
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ctx-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ctx-fill.tight {
+  background: #b45309;
+}
 .run {
   background: var(--accent);
   color: #fff;
@@ -312,6 +335,63 @@ body,
 }
 .terminal-head .wt-toggle {
   color: #cbd5e1;
+  margin-left: auto;
+}
+.term-tabs {
+  display: flex;
+  gap: 4px;
+}
+.term-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #2b2f38;
+  color: #cbd5e1;
+  border: none;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.term-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.term-close:hover {
+  color: #fca5a5;
+}
+.term-slot {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- file browser ---- */
+.file-list {
+  max-height: 440px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  text-align: left;
+}
+.file-row:hover {
+  background: #eef2ff;
+}
+.file-add {
+  color: var(--accent);
+  font-weight: 700;
 }
 .terminal {
   flex: 1;

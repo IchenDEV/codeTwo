@@ -34,7 +34,22 @@ export interface SessionInfo {
 export type DocBlock =
   | { type: "text"; text: string }
   | { type: "skill"; skill_id: string; params: Record<string, string> }
-  | { type: "file"; path: string };
+  | { type: "file"; path: string }
+  | { type: "image"; path: string };
+
+/// One-line description of a doc block, used for summaries and browser-mode previews.
+export function describeBlock(b: DocBlock): string {
+  switch (b.type) {
+    case "text":
+      return b.text;
+    case "skill":
+      return `[skill:${b.skill_id}]`;
+    case "file":
+      return `[@${b.path}]`;
+    case "image":
+      return `[img:${b.path}]`;
+  }
+}
 
 /// Mirrors core `Event` (tagged by `event`, snake_case).
 export type CoreEvent =
@@ -309,20 +324,43 @@ export interface CompiledPreview {
   mcp_servers: string[];
   agent_skills: string[];
   files: string[];
+  images: string[];
   unresolved: string[];
 }
 
 export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<CompiledPreview> {
   if (inTauri) return invoke<CompiledPreview>("compile_doc", { doc, cwd: cwd ?? null });
-  const describe = (b: DocBlock) =>
-    b.type === "text" ? b.text : b.type === "skill" ? `[skill:${b.skill_id}]` : `[@${b.path}]`;
   return {
-    prompt: doc.map(describe).join("\n\n"),
+    prompt: doc.map(describeBlock).join("\n\n"),
     mcp_servers: [],
     agent_skills: [],
     files: doc.flatMap((b) => (b.type === "file" ? [b.path] : [])),
+    images: doc.flatMap((b) => (b.type === "image" ? [b.path] : [])),
     unresolved: [],
   };
+}
+
+// ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
+
+export type Sandbox = "read_only" | "workspace_write" | "danger_full_access";
+
+export async function setSandbox(session: string, sandbox: Sandbox): Promise<void> {
+  if (inTauri) await invoke("set_sandbox", { session, sandbox });
+}
+
+export interface ProjectScript {
+  id: string;
+  name: string;
+  command: string;
+  run_on_worktree_create: boolean;
+}
+
+export async function listProjectScripts(cwd: string): Promise<ProjectScript[]> {
+  return inTauri ? invoke<ProjectScript[]>("list_project_scripts", { cwd }) : [];
+}
+
+export async function runProjectScript(cwd: string, id: string): Promise<string> {
+  return inTauri ? invoke<string>("run_project_script", { cwd, id }) : "";
 }
 
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------

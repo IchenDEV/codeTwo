@@ -175,6 +175,22 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             },
         },
         MarketEntry {
+            id: "web-search".into(),
+            name: "Web Search (MCP)".into(),
+            description: "Let the agent search the web for docs and answers.".into(),
+            author: "codetwo".into(),
+            tags: vec!["mcp".into(), "search".into(), "tools".into()],
+            icon: Some("🔎".into()),
+            payload: SkillPayload::Mcp {
+                server: McpServer {
+                    name: "web-search".into(),
+                    command: "mcp-server-web-search".into(),
+                    args: vec![],
+                    env: vec![],
+                },
+            },
+        },
+        MarketEntry {
             id: "filesystem-mcp".into(),
             name: "Filesystem Tool (MCP)".into(),
             description: "Scoped filesystem access via an MCP server.".into(),

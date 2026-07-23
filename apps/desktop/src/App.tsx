@@ -20,9 +20,13 @@ import {
   gitStatus,
   listProviders,
   listSessions,
+  describeBlock,
+  listProjectScripts,
   listSkills,
   marketCatalog,
   marketInstall,
+  runProjectScript,
+  setSandbox,
   newSession,
   onEngineEvent,
   providerLabel,
@@ -40,8 +44,10 @@ import {
   type KeymapEntry,
   type MarketItem,
   type Part,
+  type ProjectScript,
   type ProviderInfo,
   type RemoteInfo,
+  type Sandbox,
   type SessionInfo,
   type SkillInfo,
 } from "./bridge";
@@ -53,6 +59,7 @@ import { CommandPalette, type Command } from "./palette/CommandPalette";
 import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
+import { FileBrowserModal } from "./files/FileBrowser";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -67,12 +74,7 @@ interface PermissionState {
 }
 
 function summarizeDoc(doc: DocBlock[]): string {
-  return doc
-    .map((b) =>
-      b.type === "text" ? b.text : b.type === "skill" ? `[skill:${b.skill_id}]` : `[@${b.path}]`,
-    )
-    .join(" ")
-    .slice(0, 400);
+  return doc.map(describeBlock).join(" ").slice(0, 400);
 }
 
 function partToItem(role: string, part: Part): TranscriptItem {
@@ -136,9 +138,17 @@ export default function App() {
   const [termTmux, setTermTmux] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
+  const [scripts, setScripts] = useState<ProjectScript[]>([]);
+  const [tokens, setTokens] = useState<number>(0);
+  const [showFiles, setShowFiles] = useState(false);
+  const [terms, setTerms] = useState<number[]>([1]);
+  const [activeTerm, setActiveTerm] = useState(1);
+  const nextTermRef = useRef(2);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
+  const insertFileRef = useRef<((path: string) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const pendingDocRef = useRef<DocBlock[] | null>(null);
 
@@ -180,6 +190,9 @@ export default function App() {
             break;
           case "permission_request":
             setPermission({ session: ev.session, requestId: ev.request_id, title: ev.title, options: ev.options });
+            break;
+          case "usage":
+            setTokens(ev.input_tokens);
             break;
           case "turn_ended":
             append({ kind: "end", text: ev.stop_reason });
@@ -400,12 +413,24 @@ export default function App() {
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open skill market", run: openMarket },
     { id: "issues", label: "GitHub issues", run: () => setShowIssues(true) },
+    { id: "files", label: "Browse workspace files", run: () => setShowFiles(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: "Mod+,", run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: "Mod+J", run: () => setShowTerminal((v) => !v) },
     { id: "browser", label: "Toggle browser", hint: "Mod+B", run: () => setShowBrowser((v) => !v) },
     { id: "git", label: "Refresh git status", hint: "Mod+G", run: refreshGit },
+    ...scripts.map((s) => ({
+      id: `script-${s.id}`,
+      label: `Run script: ${s.name || s.id}`,
+      hint: s.command,
+      run: () => {
+        append({ kind: "tool", text: `running script: ${s.name || s.id}` });
+        void runProjectScript(cwd || ".", s.id)
+          .then((out) => append({ kind: "agent", text: out.trim() || "(no output)" }))
+          .catch((e) => append({ kind: "error", text: String(e) }));
+      },
+    })),
     ...sessions.map((s) => ({
       id: `sess-${s.id}`,
       label: `Session: ${s.title}`,
@@ -424,6 +449,19 @@ export default function App() {
   useEffect(() => {
     refreshGit();
   }, [refreshGit, activeSession]);
+
+  // Project scripts declared in .codetwo.json for this working dir.
+  useEffect(() => {
+    listProjectScripts(cwd || ".").then(setScripts).catch(() => setScripts([]));
+  }, [cwd]);
+
+  const onSandboxChange = useCallback(
+    (s: Sandbox) => {
+      setSandboxState(s);
+      if (activeSessionRef.current) void setSandbox(activeSessionRef.current, s);
+    },
+    [],
+  );
 
   // Global keyboard shortcuts (and shortcut capture when rebinding in settings).
   useEffect(() => {
@@ -597,6 +635,15 @@ export default function App() {
             <option value="accept_edits">Accept edits</option>
             <option value="yolo">YOLO ⚠</option>
           </select>
+          <select
+            value={sandbox}
+            onChange={(e) => onSandboxChange(e.target.value as Sandbox)}
+            title="Sandbox — what the agent may touch at all"
+          >
+            <option value="read_only">Read-only</option>
+            <option value="workspace_write">Workspace write</option>
+            <option value="danger_full_access">Full access ⚠</option>
+          </select>
           <label className="wt-toggle" title="Isolate this session in a git worktree">
             <input type="checkbox" checked={useWorktree} onChange={(e) => setUseWorktree(e.target.checked)} /> worktree
           </label>
@@ -604,6 +651,17 @@ export default function App() {
             <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} /> plan
           </label>
           <div className="spacer" />
+          {tokens > 0 && (
+            <span className="ctx-meter" title="Estimated prompt tokens vs the context window">
+              <span className="ctx-bar">
+                <span
+                  className={`ctx-fill ${tokens / 200000 >= 0.8 ? "tight" : ""}`}
+                  style={{ width: `${Math.min(100, (tokens / 200000) * 100)}%` }}
+                />
+              </span>
+              {(tokens / 1000).toFixed(1)}k
+            </span>
+          )}
           <button className="ghost" onClick={() => setShowBrowser((v) => !v)} title="Toggle browser (Mod+B)">
             {showBrowser ? "Hide browser" : "Browser"}
           </button>
@@ -639,6 +697,7 @@ export default function App() {
             cwd={cwd || "."}
             getBlocksRef={getBlocksRef}
             insertTextRef={insertTextRef}
+            insertFileRef={insertFileRef}
           />
         </section>
 
@@ -665,11 +724,60 @@ export default function App() {
         {showTerminal && (
           <section className="terminal-pane">
             <div className="terminal-head">
-              <label className="wt-toggle" title="Run the terminal in a persistent tmux session (attachable from a real terminal)">
+              <div className="term-tabs">
+                {terms.map((t) => (
+                  <button
+                    key={t}
+                    className={`term-tab ${t === activeTerm ? "active" : ""}`}
+                    onClick={() => {
+                      setActiveTerm(t);
+                      // Let the newly-visible xterm refit itself.
+                      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+                    }}
+                  >
+                    {t}
+                    {terms.length > 1 && (
+                      <span
+                        className="term-close"
+                        title="Close terminal"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const left = terms.filter((x) => x !== t);
+                          setTerms(left);
+                          if (activeTerm === t && left[0] !== undefined) setActiveTerm(left[0]);
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
+                  </button>
+                ))}
+                <button
+                  className="term-tab add"
+                  title="New terminal"
+                  onClick={() => {
+                    const id = nextTermRef.current++;
+                    setTerms((v) => [...v, id]);
+                    setActiveTerm(id);
+                  }}
+                >
+                  ＋
+                </button>
+              </div>
+              <label className="wt-toggle" title="Run terminals in persistent tmux sessions (attachable from a real terminal)">
                 <input type="checkbox" checked={termTmux} onChange={(e) => setTermTmux(e.target.checked)} /> tmux
               </label>
             </div>
-            <TerminalPanel cwd={cwd || null} tmux={termTmux} sessionKey={activeSession ?? "main"} />
+            {/* All terminals stay mounted so switching tabs doesn't kill the shell. */}
+            {terms.map((t) => (
+              <div key={t} className="term-slot" style={{ display: t === activeTerm ? "flex" : "none" }}>
+                <TerminalPanel
+                  cwd={cwd || null}
+                  tmux={termTmux}
+                  sessionKey={`${activeSession ?? "main"}-${t}`}
+                />
+              </div>
+            ))}
           </section>
         )}
       </main>
@@ -723,6 +831,17 @@ export default function App() {
       )}
 
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
+
+      {showFiles && (
+        <FileBrowserModal
+          cwd={cwd || "."}
+          onInsert={(p) => {
+            insertFileRef.current?.(p);
+            setShowFiles(false);
+          }}
+          onClose={() => setShowFiles(false)}
+        />
+      )}
 
       {skillDraft && (
         <div className="modal-backdrop">
