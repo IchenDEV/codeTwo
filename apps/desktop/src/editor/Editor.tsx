@@ -11,6 +11,7 @@ import { filterSuggestionItems } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
 import { listFiles, type DocBlock, type SkillInfo } from "../bridge";
+import { useColorScheme } from "../theme";
 
 interface EditorProps {
   skills: SkillInfo[];
@@ -90,8 +91,10 @@ export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef, insertFile
     };
   }, [editor, getBlocksRef, insertTextRef, insertFileRef]);
 
+  const scheme = useColorScheme();
+
   return (
-    <BlockNoteView editor={editor} slashMenu={false}>
+    <BlockNoteView editor={editor} slashMenu={false} theme={scheme}>
       <SuggestionMenuController
         triggerCharacter={"/"}
         getItems={async (query) =>

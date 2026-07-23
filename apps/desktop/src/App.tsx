@@ -75,6 +75,9 @@ interface PermissionState {
   options: [string, string][];
 }
 
+/** ⌘ on macOS, Ctrl elsewhere — for shortcut hints in the UI. */
+const MOD = /mac/i.test(navigator.userAgent) ? "⌘" : "Ctrl";
+
 function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join(" ").slice(0, 400);
 }
@@ -148,6 +151,10 @@ export default function App() {
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const nextTermRef = useRef(2);
+  // Editor/transcript split, as a percentage of the main column.
+  const [editorPct, setEditorPct] = useState(58);
+  const [dragging, setDragging] = useState(false);
+  const mainRef = useRef<HTMLElement | null>(null);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
@@ -362,6 +369,27 @@ export default function App() {
     setShowIssues(false);
   }, []);
 
+  // Drag the divider between the document editor and the transcript.
+  const startSplitDrag = useCallback(() => {
+    setDragging(true);
+    const onMove = (e: MouseEvent) => {
+      const el = mainRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const pct = ((e.clientY - rect.top) / rect.height) * 100;
+      setEditorPct(Math.min(85, Math.max(15, pct)));
+    };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      // Let xterm refit if the terminal is visible.
+      window.dispatchEvent(new Event("resize"));
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, []);
+
   const doPreview = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
@@ -499,7 +527,13 @@ export default function App() {
           </button>
         </div>
         <ul className="session-list">
-          {sessions.length === 0 && <li className="session-empty">No sessions yet</li>}
+          {sessions.length === 0 && (
+            <li className="session-empty">
+              No sessions yet.
+              <br />
+              Press <b>+</b> or just hit Run.
+            </li>
+          )}
           {sessions.map((s) => (
             <li
               key={s.id}
@@ -618,7 +652,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" ref={mainRef}>
         <header className="toolbar">
           <select value={provider} onChange={(e) => setProvider(e.target.value)}>
             {providers.map((p) => (
@@ -670,23 +704,31 @@ export default function App() {
               {(tokens / 1000).toFixed(1)}k
             </span>
           )}
-          <button className="ghost" onClick={() => setShowBrowser((v) => !v)} title="Toggle browser (Mod+B)">
-            {showBrowser ? "Hide browser" : "Browser"}
+          <button
+            className={`ghost icon-btn ${showBrowser ? "on" : ""}`}
+            onClick={() => setShowBrowser((v) => !v)}
+            title={`Browser (${MOD}+B)`}
+          >
+            ⌾
           </button>
-          <button className="ghost" onClick={() => setShowTerminal((v) => !v)} title="Toggle terminal (Mod+J)">
-            {showTerminal ? "Hide terminal" : "Terminal"}
+          <button
+            className={`ghost icon-btn ${showTerminal ? "on" : ""}`}
+            onClick={() => setShowTerminal((v) => !v)}
+            title={`Terminal (${MOD}+J)`}
+          >
+            ▤
           </button>
-          <button className="ghost" onClick={openSourceControl} title="Source control (Mod+Shift+G)">
-            Source
+          <button className="ghost icon-btn" onClick={openSourceControl} title={`Source control (${MOD}+Shift+G)`}>
+            ⎇
           </button>
           <VoiceButton onText={(t) => insertTextRef.current?.(t)} />
-          <button className="ghost" onClick={() => void doPreview()} title="Preview compiled prompt">
-            Preview
+          <button className="ghost icon-btn" onClick={() => void doPreview()} title="Preview compiled prompt">
+            ◉
           </button>
-          <button className="ghost" onClick={() => setShowPalette(true)} title="Command palette (Mod+K)">
-            ⌘K
+          <button className="ghost icon-btn" onClick={() => setShowPalette(true)} title={`Command palette (${MOD}+K)`}>
+            ⌘
           </button>
-          <button className="ghost" onClick={() => setShowSettings(true)} title="Settings (Mod+,)">
+          <button className="ghost icon-btn" onClick={() => setShowSettings(true)} title={`Settings (${MOD}+,)`}>
             ⚙
           </button>
           {running ? (
@@ -700,7 +742,7 @@ export default function App() {
           )}
         </header>
 
-        <section className="editor-pane">
+        <section className="editor-pane" style={{ flex: `0 0 ${editorPct}%` }}>
           <DocEditor
             skills={skills}
             cwd={cwd || "."}
@@ -710,8 +752,20 @@ export default function App() {
           />
         </section>
 
+        <div
+          className={`splitter ${dragging ? "dragging" : ""}`}
+          onMouseDown={startSplitDrag}
+          title="Drag to resize"
+        />
+
         <section className="transcript">
-          {transcript.length === 0 && <div className="transcript-empty">Run a prompt to see the agent’s work here.</div>}
+          {transcript.length === 0 && (
+            <div className="transcript-empty">
+              Compose above, then press <b>Run ▸</b> (or {MOD}+Enter).
+              <br />
+              Type <b>/</b> for skills, <b>@</b> to pull in a file.
+            </div>
+          )}
           {transcript.map((t, i) => (
             <div key={i} className={`t-item t-${t.kind}`}>
               {t.kind === "tool" && <span className="t-badge">tool</span>}
