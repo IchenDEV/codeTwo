@@ -7,7 +7,16 @@ import { onPtyOutput, ptyResize, ptySpawn, ptyWrite } from "../bridge";
 let nextId = 1;
 
 // Embedded terminal: xterm.js on the front, a core PTY on the back, streamed over `pty-output`.
-export function TerminalPanel({ cwd }: { cwd: string | null }) {
+// When `tmux` is set, the PTY runs inside a persistent tmux session keyed by `sessionKey`.
+export function TerminalPanel({
+  cwd,
+  tmux = false,
+  sessionKey,
+}: {
+  cwd: string | null;
+  tmux?: boolean;
+  sessionKey?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,7 +34,7 @@ export function TerminalPanel({ cwd }: { cwd: string | null }) {
       unlisten = await onPtyOutput((p) => {
         if (p.id === id) term.write(p.data);
       });
-      await ptySpawn(id, cwd, term.rows, term.cols);
+      await ptySpawn(id, cwd, term.rows, term.cols, tmux ? sessionKey ?? "main" : null);
     })();
 
     const dataSub = term.onData((d) => {
@@ -43,7 +52,7 @@ export function TerminalPanel({ cwd }: { cwd: string | null }) {
       if (unlisten) unlisten();
       term.dispose();
     };
-  }, [cwd]);
+  }, [cwd, tmux, sessionKey]);
 
   return <div className="terminal" ref={ref} />;
 }

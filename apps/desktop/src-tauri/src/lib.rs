@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use codetwo_core::browser::Annotation;
 use codetwo_core::git::{self, Checkpoint, GitStatus};
+use codetwo_core::issues::{self, Issue};
 use codetwo_core::keymap::{Action as KeyAction, Keymap};
 use codetwo_core::permission::PermissionMode;
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
@@ -300,6 +301,55 @@ fn remote_status(state: State<'_, AppState>) -> Option<RemoteInfo> {
     state.remote.lock().unwrap().clone()
 }
 
+// ---- issues (F14) ----------------------------------------------------------------------------
+
+#[tauri::command]
+fn gh_available() -> bool {
+    issues::gh_available()
+}
+
+#[tauri::command]
+async fn list_github_issues(cwd: String, limit: Option<u32>) -> Result<Vec<Issue>, String> {
+    issues::list_github(std::path::Path::new(&cwd), limit.unwrap_or(30))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn list_linear_issues(token: String, limit: Option<u32>) -> Result<Vec<Issue>, String> {
+    issues::list_linear(&token, limit.unwrap_or(30)).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn issue_context(issue: Issue) -> String {
+    issue.to_context()
+}
+
+// ---- compiled-prompt preview (F13) -----------------------------------------------------------
+
+#[derive(Serialize)]
+struct CompiledPromptDto {
+    prompt: String,
+    mcp_servers: Vec<String>,
+    agent_skills: Vec<String>,
+    unresolved: Vec<String>,
+}
+
+/// Compile the current document into the prompt that would actually be sent — so the editor can show
+/// a live preview with skills expanded.
+#[tauri::command]
+fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>) -> CompiledPromptDto {
+    let lib = state.engine.skills();
+    let lib = lib.lock().unwrap();
+    let c = codetwo_core::skill::compile(&doc, &lib);
+    CompiledPromptDto {
+        prompt: c.prompt,
+        mcp_servers: c.mcp_servers.into_iter().map(|s| s.name).collect(),
+        agent_skills: c.agent_skills,
+        unresolved: c.unresolved,
+    }
+}
+
 #[tauri::command]
 async fn new_session(
     state: State<'_, AppState>,
@@ -358,6 +408,11 @@ async fn cancel_turn(state: State<'_, AppState>, session: String) -> Result<(), 
 // ---- terminal --------------------------------------------------------------------------------
 
 #[tauri::command]
+fn tmux_available() -> bool {
+    codetwo_core::tmux::is_available()
+}
+
+#[tauri::command]
 fn pty_spawn(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -365,10 +420,21 @@ fn pty_spawn(
     cwd: Option<String>,
     rows: u16,
     cols: u16,
+    tmux_session: Option<String>,
 ) -> Result<(), String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
-    let (session, mut rx) =
-        PtySession::spawn(&shell, &["-l"], cwd.as_deref(), rows, cols).map_err(|e| e.to_string())?;
+    // When a tmux session name is given and tmux is available, run the terminal inside a persistent,
+    // attachable tmux session; otherwise a plain login shell.
+    let spawned = match tmux_session.filter(|_| codetwo_core::tmux::is_available()) {
+        Some(name) => {
+            let tname = codetwo_core::tmux::session_name(&name);
+            PtySession::spawn_tmux(&tname, cwd.as_deref(), rows, cols)
+        }
+        None => {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
+            PtySession::spawn(&shell, &["-l"], cwd.as_deref(), rows, cols)
+        }
+    };
+    let (session, mut rx) = spawned.map_err(|e| e.to_string())?;
 
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -477,6 +543,12 @@ pub fn run() {
             market_install,
             start_remote,
             remote_status,
+            tmux_available,
+            gh_available,
+            list_github_issues,
+            list_linear_issues,
+            issue_context,
+            compile_doc,
             new_session,
             submit_prompt,
             answer_permission,

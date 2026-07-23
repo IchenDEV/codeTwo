@@ -1,11 +1,9 @@
 name: Deploy docs to GitHub Pages
 
+# Manual-only for now: GitHub Pages requires a public repo (or GitHub Pro for private).
+# Enable Pages (Settings → Pages → Source: GitHub Actions), then run this workflow.
+# To auto-deploy on push, add a `push:` trigger back here.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "website/**"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 # Allow the GITHUB_TOKEN to deploy to Pages.

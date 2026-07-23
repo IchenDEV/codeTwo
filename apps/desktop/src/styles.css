@@ -253,14 +253,81 @@ body,
 
 /* ---- terminal ---- */
 .terminal-pane {
-  height: 240px;
+  height: 260px;
   border-top: 1px solid var(--border);
   background: #1e1e1e;
   padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+.terminal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 6px;
+}
+.terminal-head .wt-toggle {
+  color: #cbd5e1;
 }
 .terminal {
-  height: 100%;
+  flex: 1;
   width: 100%;
+}
+
+/* ---- issues (F14) ---- */
+.issue-list {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.issue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.issue-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.issue-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.issue-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issue-state {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ---- compiled-prompt preview (F13) ---- */
+.preview-prompt {
+  max-height: 52vh;
+  overflow: auto;
+  background: #f7f7f8;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ---- permission modal ---- */

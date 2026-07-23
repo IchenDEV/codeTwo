@@ -64,6 +64,22 @@ impl PtySession {
         Ok((PtySession { master: pair.master, writer, child }, rx))
     }
 
+    /// Spawn inside a tmux session (attach-or-create with `-A`), so the terminal persists across
+    /// restarts and can be attached from a real terminal (`tmux attach -t <session>`).
+    pub fn spawn_tmux(
+        session: &str,
+        cwd: Option<&str>,
+        rows: u16,
+        cols: u16,
+    ) -> io::Result<(PtySession, mpsc::UnboundedReceiver<Vec<u8>>)> {
+        let mut args: Vec<&str> = vec!["new-session", "-A", "-s", session];
+        if let Some(c) = cwd {
+            args.push("-c");
+            args.push(c);
+        }
+        PtySession::spawn("tmux", &args, cwd, rows, cols)
+    }
+
     /// Feed bytes (keystrokes) to the terminal.
     pub fn write(&mut self, data: &[u8]) -> io::Result<()> {
         self.writer.write_all(data)?;

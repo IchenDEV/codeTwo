@@ -5,8 +5,10 @@ import {
   answerPermission,
   browserContext,
   cancelTurn,
+  compileDoc,
   deleteSkill,
   getKeymap,
+  issueContext,
   getTranscript,
   gitCheckpoint,
   gitCheckpoints,
@@ -28,9 +30,11 @@ import {
   setPermissionMode,
   submitPrompt,
   type Checkpoint,
+  type CompiledPreview,
   type CoreEvent,
   type DocBlock,
   type GitStatus,
+  type Issue,
   type KeymapEntry,
   type MarketItem,
   type Part,
@@ -45,6 +49,8 @@ import { SettingsModal } from "./settings/Settings";
 import { SourceControlModal } from "./git/SourceControl";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
 import { RemoteModal } from "./remote/Remote";
+import { IssuesModal } from "./issues/Issues";
+import { PreviewModal } from "./editor/Preview";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -121,6 +127,9 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
   const [remoteInfo, setRemoteInfo] = useState<RemoteInfo | null>(null);
+  const [showIssues, setShowIssues] = useState(false);
+  const [preview, setPreview] = useState<CompiledPreview | null>(null);
+  const [termTmux, setTermTmux] = useState(false);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
@@ -321,6 +330,18 @@ export default function App() {
     [browserUrl],
   );
 
+  const insertIssue = useCallback(async (issue: Issue) => {
+    const ctx = await issueContext(issue);
+    insertTextRef.current?.(ctx);
+    setShowIssues(false);
+  }, []);
+
+  const doPreview = useCallback(async () => {
+    const getBlocks = getBlocksRef.current;
+    if (!getBlocks) return;
+    setPreview(await compileDoc(getBlocks()));
+  }, []);
+
   const dispatchAction = useCallback(
     (action: string) => {
       switch (action) {
@@ -368,6 +389,8 @@ export default function App() {
     { id: "sc", label: "Source control", hint: "Mod+Shift+G", run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open skill market", run: openMarket },
+    { id: "issues", label: "GitHub issues", run: () => setShowIssues(true) },
+    { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: "Mod+,", run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: "Mod+J", run: () => setShowTerminal((v) => !v) },
@@ -540,6 +563,9 @@ export default function App() {
           <button className="ghost" onClick={openSourceControl} title="Source control (Mod+Shift+G)">
             Source
           </button>
+          <button className="ghost" onClick={() => void doPreview()} title="Preview compiled prompt">
+            Preview
+          </button>
           <button className="ghost" onClick={() => setShowPalette(true)} title="Command palette (Mod+K)">
             ⌘K
           </button>
@@ -583,7 +609,12 @@ export default function App() {
 
         {showTerminal && (
           <section className="terminal-pane">
-            <TerminalPanel cwd={cwd || null} />
+            <div className="terminal-head">
+              <label className="wt-toggle" title="Run the terminal in a persistent tmux session (attachable from a real terminal)">
+                <input type="checkbox" checked={termTmux} onChange={(e) => setTermTmux(e.target.checked)} /> tmux
+              </label>
+            </div>
+            <TerminalPanel cwd={cwd || null} tmux={termTmux} sessionKey={activeSession ?? "main"} />
           </section>
         )}
       </main>
@@ -631,6 +662,12 @@ export default function App() {
       {showRemote && (
         <RemoteModal info={remoteInfo} onStarted={setRemoteInfo} onClose={() => setShowRemote(false)} />
       )}
+
+      {showIssues && (
+        <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
+      )}
+
+      {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
 
       {skillDraft && (
         <div className="modal-backdrop">

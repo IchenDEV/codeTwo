@@ -123,8 +123,18 @@ export async function cancelTurn(session: string): Promise<void> {
   if (inTauri) await invoke("cancel_turn", { session });
 }
 
-export async function ptySpawn(id: number, cwd: string | null, rows: number, cols: number): Promise<void> {
-  if (inTauri) await invoke("pty_spawn", { id, cwd, rows, cols });
+export async function ptySpawn(
+  id: number,
+  cwd: string | null,
+  rows: number,
+  cols: number,
+  tmuxSession?: string | null,
+): Promise<void> {
+  if (inTauri) await invoke("pty_spawn", { id, cwd, rows, cols, tmuxSession: tmuxSession ?? null });
+}
+
+export async function tmuxAvailable(): Promise<boolean> {
+  return inTauri ? invoke<boolean>("tmux_available") : false;
 }
 
 export async function ptyWrite(id: number, data: string): Promise<void> {
@@ -264,6 +274,50 @@ export async function startRemote(port?: number): Promise<RemoteInfo | null> {
 
 export async function remoteStatus(): Promise<RemoteInfo | null> {
   return inTauri ? invoke<RemoteInfo | null>("remote_status") : null;
+}
+
+// ---- issues (F14) ----------------------------------------------------------------------------
+
+export interface Issue {
+  id: string;
+  title: string;
+  state: string;
+  url: string;
+  body: string;
+  source: string;
+}
+
+export async function ghAvailable(): Promise<boolean> {
+  return inTauri ? invoke<boolean>("gh_available") : false;
+}
+export async function listGithubIssues(cwd: string, limit = 30): Promise<Issue[]> {
+  return inTauri ? invoke<Issue[]>("list_github_issues", { cwd, limit }) : [];
+}
+export async function listLinearIssues(token: string, limit = 30): Promise<Issue[]> {
+  return inTauri ? invoke<Issue[]>("list_linear_issues", { token, limit }) : [];
+}
+export async function issueContext(issue: Issue): Promise<string> {
+  if (inTauri) return invoke<string>("issue_context", { issue });
+  return `**${issue.source} #${issue.id}** — ${issue.title} (${issue.state})\n${issue.url}`;
+}
+
+// ---- compiled-prompt preview (F13) -----------------------------------------------------------
+
+export interface CompiledPreview {
+  prompt: string;
+  mcp_servers: string[];
+  agent_skills: string[];
+  unresolved: string[];
+}
+
+export async function compileDoc(doc: DocBlock[]): Promise<CompiledPreview> {
+  if (inTauri) return invoke<CompiledPreview>("compile_doc", { doc });
+  return {
+    prompt: doc.map((b) => (b.type === "text" ? b.text : `[skill:${b.skill_id}]`)).join("\n\n"),
+    mcp_servers: [],
+    agent_skills: [],
+    unresolved: [],
+  };
 }
 
 export async function browserContext(annotation: Annotation): Promise<string> {
