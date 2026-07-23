@@ -419,6 +419,28 @@ fn list_project_scripts(cwd: String) -> Vec<ProjectScript> {
     project::load(std::path::Path::new(&cwd)).scripts
 }
 
+// ---- usage tracking (G12) ----------------------------------------------------------------------
+
+#[derive(Serialize)]
+struct UsageReport {
+    windows: Vec<codetwo_core::usage::UsageWindow>,
+    by_source: Vec<(String, u64)>,
+    transcripts: usize,
+}
+
+/// Scan local provider transcripts and report rolling usage windows (CodexBar-style).
+#[tauri::command]
+fn usage_report() -> UsageReport {
+    let records = codetwo_core::usage::scan_all();
+    let now = codetwo_core::session::now_millis();
+    let limits = codetwo_core::usage::Limits::from_env();
+    UsageReport {
+        windows: codetwo_core::usage::windows(&records, now, &limits),
+        by_source: codetwo_core::usage::by_source(&records),
+        transcripts: records.len(),
+    }
+}
+
 // ---- voice input (G11) -------------------------------------------------------------------------
 
 /// Whether a local transcriber is configured/detected (the UI falls back to the webview's own
@@ -660,6 +682,7 @@ pub fn run() {
             run_project_script,
             voice_available,
             transcribe_audio,
+            usage_report,
             new_session,
             submit_prompt,
             answer_permission,

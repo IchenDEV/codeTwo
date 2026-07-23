@@ -376,6 +376,41 @@ export async function transcribeAudio(bytes: Uint8Array, ext = "webm"): Promise<
   return invoke<string>("transcribe_audio", { bytes: Array.from(bytes), ext });
 }
 
+// ---- usage tracking (G12) ----------------------------------------------------------------------
+
+export interface UsageWindow {
+  label: string;
+  window_secs: number;
+  input_tokens: number;
+  /// Cache reads — reported but excluded from `total_tokens`.
+  cached_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  limit: number | null;
+  fraction: number | null;
+  resets_in_secs: number;
+}
+
+export interface UsageReport {
+  windows: UsageWindow[];
+  by_source: [string, number][];
+  transcripts: number;
+}
+
+const EMPTY_USAGE: UsageReport = {
+  windows: [
+    { label: "5h session", window_secs: 18000, input_tokens: 0, cached_tokens: 0, output_tokens: 0, total_tokens: 0, limit: null, fraction: null, resets_in_secs: 0 },
+    { label: "week", window_secs: 604800, input_tokens: 0, cached_tokens: 0, output_tokens: 0, total_tokens: 0, limit: null, fraction: null, resets_in_secs: 0 },
+    { label: "month", window_secs: 2592000, input_tokens: 0, cached_tokens: 0, output_tokens: 0, total_tokens: 0, limit: null, fraction: null, resets_in_secs: 0 },
+  ],
+  by_source: [],
+  transcripts: 0,
+};
+
+export async function usageReport(): Promise<UsageReport> {
+  return inTauri ? invoke<UsageReport>("usage_report") : EMPTY_USAGE;
+}
+
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------
 
 const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];

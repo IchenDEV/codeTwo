@@ -61,6 +61,7 @@ import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
 import { VoiceButton } from "./voice/VoiceButton";
+import { UsageModal } from "./usage/Usage";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -143,6 +144,7 @@ export default function App() {
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
   const [tokens, setTokens] = useState<number>(0);
   const [showFiles, setShowFiles] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const nextTermRef = useRef(2);
@@ -415,6 +417,7 @@ export default function App() {
     { id: "market", label: "Open skill market", run: openMarket },
     { id: "issues", label: "GitHub issues", run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", run: () => setShowFiles(true) },
+    { id: "usage", label: "Usage (5h / week / month)", run: () => setShowUsage(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: "Mod+,", run: () => setShowSettings(true) },
@@ -653,7 +656,11 @@ export default function App() {
           </label>
           <div className="spacer" />
           {tokens > 0 && (
-            <span className="ctx-meter" title="Estimated prompt tokens vs the context window">
+            <span
+              className="ctx-meter"
+              title="Estimated prompt tokens vs the context window — click for usage windows"
+              onClick={() => setShowUsage(true)}
+            >
               <span className="ctx-bar">
                 <span
                   className={`ctx-fill ${tokens / 200000 >= 0.8 ? "tight" : ""}`}
@@ -833,6 +840,8 @@ export default function App() {
       )}
 
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
+
+      {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
 
       {showFiles && (
         <FileBrowserModal
