@@ -363,6 +363,19 @@ export async function runProjectScript(cwd: string, id: string): Promise<string>
   return inTauri ? invoke<string>("run_project_script", { cwd, id }) : "";
 }
 
+// ---- voice input (G11) -------------------------------------------------------------------------
+
+/// Whether the core has a local transcriber configured (CODETWO_TRANSCRIBE_CMD or an auto-detected
+/// whisper binary). The UI prefers the webview's own speech recognition when present.
+export async function voiceAvailable(): Promise<boolean> {
+  return inTauri ? invoke<boolean>("voice_available") : false;
+}
+
+export async function transcribeAudio(bytes: Uint8Array, ext = "webm"): Promise<string> {
+  if (!inTauri) return "";
+  return invoke<string>("transcribe_audio", { bytes: Array.from(bytes), ext });
+}
+
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------
 
 const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];

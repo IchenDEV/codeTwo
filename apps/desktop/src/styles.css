@@ -235,6 +235,19 @@ body,
 .run.cancel {
   background: #b91c1c;
 }
+.voice.listening {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+.voice.transcribing {
+  color: var(--accent);
+}
+@keyframes voice-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
 .session-empty,
 .transcript-empty {
   color: var(--muted);

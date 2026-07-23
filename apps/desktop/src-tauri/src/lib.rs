@@ -419,6 +419,25 @@ fn list_project_scripts(cwd: String) -> Vec<ProjectScript> {
     project::load(std::path::Path::new(&cwd)).scripts
 }
 
+// ---- voice input (G11) -------------------------------------------------------------------------
+
+/// Whether a local transcriber is configured/detected (the UI falls back to the webview's own
+/// speech recognition when this is false).
+#[tauri::command]
+fn voice_available() -> bool {
+    codetwo_core::voice::is_available()
+}
+
+/// Persist recorded audio bytes and transcribe them, returning the text.
+#[tauri::command]
+async fn transcribe_audio(bytes: Vec<u8>, ext: Option<String>) -> Result<String, String> {
+    let path = codetwo_core::voice::save_audio(&bytes, ext.as_deref().unwrap_or("webm"))
+        .map_err(|e| e.to_string())?;
+    let result = codetwo_core::voice::transcribe(&path).await.map_err(|e| e.to_string());
+    let _ = std::fs::remove_file(&path);
+    result
+}
+
 #[tauri::command]
 async fn run_project_script(cwd: String, id: String) -> Result<String, String> {
     let cfg = project::load(std::path::Path::new(&cwd));
@@ -639,6 +658,8 @@ pub fn run() {
             set_sandbox,
             list_project_scripts,
             run_project_script,
+            voice_available,
+            transcribe_audio,
             new_session,
             submit_prompt,
             answer_permission,

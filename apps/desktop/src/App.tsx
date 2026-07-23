@@ -60,6 +60,7 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
+import { VoiceButton } from "./voice/VoiceButton";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -671,6 +672,7 @@ export default function App() {
           <button className="ghost" onClick={openSourceControl} title="Source control (Mod+Shift+G)">
             Source
           </button>
+          <VoiceButton onText={(t) => insertTextRef.current?.(t)} />
           <button className="ghost" onClick={() => void doPreview()} title="Preview compiled prompt">
             Preview
           </button>
