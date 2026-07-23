@@ -332,22 +332,69 @@ struct CompiledPromptDto {
     prompt: String,
     mcp_servers: Vec<String>,
     agent_skills: Vec<String>,
+    files: Vec<String>,
     unresolved: Vec<String>,
 }
 
-/// Compile the current document into the prompt that would actually be sent — so the editor can show
-/// a live preview with skills expanded.
+/// Compile the current document into the prompt that would actually be sent — skills expanded,
+/// project rules prepended, `@`-mentioned files inlined.
 #[tauri::command]
-fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>) -> CompiledPromptDto {
+fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>, cwd: Option<String>) -> CompiledPromptDto {
     let lib = state.engine.skills();
     let lib = lib.lock().unwrap();
-    let c = codetwo_core::skill::compile(&doc, &lib);
+    let path = cwd.as_deref().map(std::path::Path::new);
+    let c = codetwo_core::skill::compile_with_context(&doc, &lib, path);
     CompiledPromptDto {
         prompt: c.prompt,
         mcp_servers: c.mcp_servers.into_iter().map(|s| s.name).collect(),
         agent_skills: c.agent_skills,
+        files: c.files,
         unresolved: c.unresolved,
     }
+}
+
+/// Workspace file search for `@`-mentions.
+#[tauri::command]
+fn list_files(cwd: String, query: String, limit: Option<usize>) -> Vec<String> {
+    codetwo_core::workspace::list_files(std::path::Path::new(&cwd), &query, limit.unwrap_or(50))
+}
+
+/// Project rule files detected in the workspace (AGENTS.md, .cursorrules, CLAUDE.md, …).
+#[tauri::command]
+fn list_rules(cwd: String) -> Vec<String> {
+    codetwo_core::rules::load(std::path::Path::new(&cwd))
+        .into_iter()
+        .map(|r| r.path)
+        .collect()
+}
+
+// ---- session management (G5) -----------------------------------------------------------------
+
+#[tauri::command]
+fn rename_session(state: State<'_, AppState>, session: String, title: String) {
+    state.engine.rename_session(&session, &title);
+}
+
+#[tauri::command]
+fn archive_session(state: State<'_, AppState>, session: String, archived: bool) {
+    state.engine.set_archived(&session, archived);
+}
+
+#[tauri::command]
+fn list_archived_sessions(state: State<'_, AppState>) -> Vec<Session> {
+    state.engine.list_archived()
+}
+
+// ---- PR + commit message (G6) ------------------------------------------------------------------
+
+#[tauri::command]
+async fn git_create_pr(cwd: String, title: String, body: String) -> Result<String, String> {
+    git::create_pr(std::path::Path::new(&cwd), &title, &body).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_suggest_commit(cwd: String) -> String {
+    git::suggest_commit_message(std::path::Path::new(&cwd)).await
 }
 
 #[tauri::command]
@@ -549,6 +596,13 @@ pub fn run() {
             list_linear_issues,
             issue_context,
             compile_doc,
+            list_files,
+            list_rules,
+            rename_session,
+            archive_session,
+            list_archived_sessions,
+            git_create_pr,
+            git_suggest_commit,
             new_session,
             submit_prompt,
             answer_permission,

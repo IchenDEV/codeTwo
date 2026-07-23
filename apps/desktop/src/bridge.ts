@@ -33,7 +33,8 @@ export interface SessionInfo {
 /// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
 export type DocBlock =
   | { type: "text"; text: string }
-  | { type: "skill"; skill_id: string; params: Record<string, string> };
+  | { type: "skill"; skill_id: string; params: Record<string, string> }
+  | { type: "file"; path: string };
 
 /// Mirrors core `Event` (tagged by `event`, snake_case).
 export type CoreEvent =
@@ -307,17 +308,55 @@ export interface CompiledPreview {
   prompt: string;
   mcp_servers: string[];
   agent_skills: string[];
+  files: string[];
   unresolved: string[];
 }
 
-export async function compileDoc(doc: DocBlock[]): Promise<CompiledPreview> {
-  if (inTauri) return invoke<CompiledPreview>("compile_doc", { doc });
+export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<CompiledPreview> {
+  if (inTauri) return invoke<CompiledPreview>("compile_doc", { doc, cwd: cwd ?? null });
+  const describe = (b: DocBlock) =>
+    b.type === "text" ? b.text : b.type === "skill" ? `[skill:${b.skill_id}]` : `[@${b.path}]`;
   return {
-    prompt: doc.map((b) => (b.type === "text" ? b.text : `[skill:${b.skill_id}]`)).join("\n\n"),
+    prompt: doc.map(describe).join("\n\n"),
     mcp_servers: [],
     agent_skills: [],
+    files: doc.flatMap((b) => (b.type === "file" ? [b.path] : [])),
     unresolved: [],
   };
+}
+
+// ---- workspace files & rules (G1/G2) ---------------------------------------------------------
+
+const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];
+
+export async function listFiles(cwd: string, query: string, limit = 50): Promise<string[]> {
+  if (!inTauri) return FALLBACK_FILES.filter((f) => f.includes(query));
+  return invoke<string[]>("list_files", { cwd, query, limit });
+}
+
+export async function listRules(cwd: string): Promise<string[]> {
+  return inTauri ? invoke<string[]>("list_rules", { cwd }) : [];
+}
+
+// ---- session management (G5) -----------------------------------------------------------------
+
+export async function renameSession(session: string, title: string): Promise<void> {
+  if (inTauri) await invoke("rename_session", { session, title });
+}
+export async function archiveSession(session: string, archived: boolean): Promise<void> {
+  if (inTauri) await invoke("archive_session", { session, archived });
+}
+export async function listArchivedSessions(): Promise<SessionInfo[]> {
+  return inTauri ? invoke<SessionInfo[]>("list_archived_sessions") : [];
+}
+
+// ---- PR + commit message (G6) ------------------------------------------------------------------
+
+export async function gitCreatePr(cwd: string, title: string, body: string): Promise<string> {
+  return inTauri ? invoke<string>("git_create_pr", { cwd, title, body }) : "";
+}
+export async function gitSuggestCommit(cwd: string): Promise<string> {
+  return inTauri ? invoke<string>("git_suggest_commit", { cwd }) : "chore: update";
 }
 
 export async function browserContext(annotation: Annotation): Promise<string> {

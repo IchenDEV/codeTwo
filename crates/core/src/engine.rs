@@ -24,7 +24,7 @@ use crate::event::{Event, Op};
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
-use crate::skill::{compile, SkillLibrary};
+use crate::skill::{compile_with_context, SkillLibrary};
 use crate::store::Store;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -247,6 +247,31 @@ impl Engine {
         }
     }
 
+    /// Rename a session (persisted).
+    pub fn rename_session(&self, id: &str, title: &str) {
+        if let Some(store) = &self.state.store {
+            let _ = store.rename_session(id, title);
+        }
+        if let Some(rt) = self.state.sessions.lock().unwrap().get_mut(id) {
+            rt.session.title = title.to_string();
+        }
+    }
+
+    /// Archive / unarchive a session (archived ones drop out of the main list).
+    pub fn set_archived(&self, id: &str, archived: bool) {
+        if let Some(store) = &self.state.store {
+            let _ = store.set_archived(id, archived);
+        }
+    }
+
+    /// Archived sessions.
+    pub fn list_archived(&self) -> Vec<Session> {
+        match &self.state.store {
+            Some(store) => store.list_archived_sessions().unwrap_or_default(),
+            None => Vec::new(),
+        }
+    }
+
     /// Sessions for the left-hand list. Reads the store when persistent, else live sessions.
     pub fn list_sessions(&self) -> Vec<Session> {
         match &self.state.store {
@@ -303,19 +328,8 @@ impl Engine {
             }
 
             Op::Prompt { session, doc } => {
-                let compiled = {
-                    let lib = self.state.skills.lock().unwrap();
-                    compile(&doc, &lib)
-                };
-                for id in &compiled.unresolved {
-                    self.emit(Event::Error {
-                        session: Some(session.clone()),
-                        message: format!("unknown skill: {id}"),
-                    });
-                }
-                if let Some(store) = &self.state.store {
-                    let _ = store.append_part(&session, Role::User, &Part::Text { text: compiled.prompt.clone() });
-                }
+                // Resolve the session first so the compiler has the workspace: project rules and
+                // `@`-mentioned file contents are pulled in relative to the session's cwd.
                 let looked = {
                     let map = self.state.sessions.lock().unwrap();
                     map.get(&session)
@@ -325,6 +339,20 @@ impl Engine {
                     self.emit(Event::Error { session: Some(session), message: "no such session".into() });
                     return Ok(());
                 };
+
+                let compiled = {
+                    let lib = self.state.skills.lock().unwrap();
+                    compile_with_context(&doc, &lib, Some(std::path::Path::new(&cwd)))
+                };
+                for id in &compiled.unresolved {
+                    self.emit(Event::Error {
+                        session: Some(session.clone()),
+                        message: format!("unresolved: {id}"),
+                    });
+                }
+                if let Some(store) = &self.state.store {
+                    let _ = store.append_part(&session, Role::User, &Part::Text { text: compiled.prompt.clone() });
+                }
 
                 // Auto-checkpoint the workspace before the turn (best-effort), t3code-style: a
                 // hidden git ref you can diff/revert to later.

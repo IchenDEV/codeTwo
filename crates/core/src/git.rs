@@ -234,6 +234,69 @@ pub async fn push(cwd: &Path) -> std::io::Result<String> {
     run(cwd, &["push"]).await
 }
 
+/// Push the current branch and open a pull request with `gh`. Returns the PR URL.
+pub async fn create_pr(cwd: &Path, title: &str, body: &str) -> std::io::Result<String> {
+    // Make sure the branch exists upstream first; ignore failure (it may already be pushed).
+    let _ = run(cwd, &["push", "-u", "origin", "HEAD"]).await;
+    let out = Command::new("gh")
+        .args(["pr", "create", "--title", title, "--body", body])
+        .current_dir(cwd)
+        .output()
+        .await?;
+    if !out.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// Suggest a Conventional-Commits-style message from the working-tree changes. A deterministic
+/// local heuristic — no model call — used to pre-fill the commit box.
+pub async fn suggest_commit_message(cwd: &Path) -> String {
+    let status = status(cwd).await;
+    suggest_from_files(&status.files)
+}
+
+/// The pure part of [`suggest_commit_message`], for testing.
+pub fn suggest_from_files(files: &[GitFile]) -> String {
+    if files.is_empty() {
+        return "chore: update".to_string();
+    }
+    let kind = if files.iter().all(|f| f.state == "added") {
+        "feat"
+    } else if files.iter().any(|f| f.path.contains("test")) {
+        "test"
+    } else if files.iter().all(|f| f.path.ends_with(".md")) {
+        "docs"
+    } else {
+        "chore"
+    };
+
+    // Scope = the shared top-level directory when there is one.
+    let first_seg = |p: &str| p.split('/').next().unwrap_or("").to_string();
+    let scopes: std::collections::BTreeSet<String> =
+        files.iter().map(|f| first_seg(&f.path)).collect();
+    let scope = if scopes.len() == 1 {
+        scopes.into_iter().next().unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let summary = if files.len() == 1 {
+        format!("update {}", files[0].path)
+    } else {
+        format!("update {} files", files.len())
+    };
+
+    if scope.is_empty() || scope.contains('.') {
+        format!("{kind}: {summary}")
+    } else {
+        format!("{kind}({scope}): {summary}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,6 +342,26 @@ mod tests {
         assert!(s.files.iter().any(|f| f.path == "hello.txt" && f.state == "untracked"));
 
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn commit_message_suggestions() {
+        let f = |path: &str, state: &str| GitFile {
+            path: path.into(),
+            staged: false,
+            state: state.into(),
+        };
+        assert_eq!(suggest_from_files(&[]), "chore: update");
+        assert_eq!(
+            suggest_from_files(&[f("src/main.rs", "modified")]),
+            "chore(src): update src/main.rs"
+        );
+        assert_eq!(
+            suggest_from_files(&[f("src/a.rs", "added"), f("src/b.rs", "added")]),
+            "feat(src): update 2 files"
+        );
+        assert!(suggest_from_files(&[f("README.md", "modified")]).starts_with("docs"));
+        assert!(suggest_from_files(&[f("tests/x.rs", "modified")]).starts_with("test"));
     }
 
     #[tokio::test]

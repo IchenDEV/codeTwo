@@ -3,12 +3,14 @@ import { DocEditor } from "./editor/Editor";
 import { TerminalPanel } from "./terminal/Terminal";
 import {
   answerPermission,
+  archiveSession,
   browserContext,
   cancelTurn,
   compileDoc,
   deleteSkill,
   getKeymap,
   issueContext,
+  renameSession,
   getTranscript,
   gitCheckpoint,
   gitCheckpoints,
@@ -66,7 +68,9 @@ interface PermissionState {
 
 function summarizeDoc(doc: DocBlock[]): string {
   return doc
-    .map((b) => (b.type === "text" ? b.text : `[skill:${b.skill_id}]`))
+    .map((b) =>
+      b.type === "text" ? b.text : b.type === "skill" ? `[skill:${b.skill_id}]` : `[@${b.path}]`,
+    )
     .join(" ")
     .slice(0, 400);
 }
@@ -130,6 +134,8 @@ export default function App() {
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
   const [termTmux, setTermTmux] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
@@ -197,8 +203,12 @@ export default function App() {
   const run = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
-    const doc = getBlocks();
+    let doc = getBlocks();
     if (doc.length === 0) return;
+    // Plan mode: ask the agent to propose a plan and wait for approval before editing.
+    if (planMode) {
+      doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
+    }
     setRunning(true);
     append({ kind: "user", text: summarizeDoc(doc) });
     if (activeSessionRef.current) {
@@ -207,7 +217,7 @@ export default function App() {
       pendingDocRef.current = doc;
       await newSession(provider, cwd || ".", useWorktree);
     }
-  }, [append, provider, cwd, useWorktree]);
+  }, [append, provider, cwd, useWorktree, planMode]);
 
   const createSession = useCallback(async () => {
     pendingDocRef.current = null;
@@ -339,8 +349,8 @@ export default function App() {
   const doPreview = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
-    setPreview(await compileDoc(getBlocks()));
-  }, []);
+    setPreview(await compileDoc(getBlocks(), cwd || "."));
+  }, [cwd]);
 
   const dispatchAction = useCallback(
     (action: string) => {
@@ -454,10 +464,47 @@ export default function App() {
               className={`session-item ${s.id === activeSession ? "active" : ""}`}
               onClick={() => void selectSession(s.id)}
             >
-              <span className="session-title">{s.title}</span>
+              {renaming?.id === s.id ? (
+                <input
+                  className="session-rename"
+                  autoFocus
+                  value={renaming.title}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
+                  onBlur={() => setRenaming(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      void renameSession(s.id, renaming.title).then(refreshSessions);
+                      setRenaming(null);
+                    } else if (e.key === "Escape") setRenaming(null);
+                  }}
+                />
+              ) : (
+                <span className="session-title">{s.title}</span>
+              )}
               <span className="session-meta">
                 {providerLabel(s.provider)}
                 {s.worktree_path ? " · wt" : ""}
+                <span className="session-actions">
+                  <button
+                    title="Rename"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRenaming({ id: s.id, title: s.title });
+                    }}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    title="Archive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void archiveSession(s.id, true).then(refreshSessions);
+                    }}
+                  >
+                    ⌫
+                  </button>
+                </span>
               </span>
             </li>
           ))}
@@ -553,6 +600,9 @@ export default function App() {
           <label className="wt-toggle" title="Isolate this session in a git worktree">
             <input type="checkbox" checked={useWorktree} onChange={(e) => setUseWorktree(e.target.checked)} /> worktree
           </label>
+          <label className="wt-toggle" title="Ask the agent to propose a plan before editing">
+            <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} /> plan
+          </label>
           <div className="spacer" />
           <button className="ghost" onClick={() => setShowBrowser((v) => !v)} title="Toggle browser (Mod+B)">
             {showBrowser ? "Hide browser" : "Browser"}
@@ -584,7 +634,12 @@ export default function App() {
         </header>
 
         <section className="editor-pane">
-          <DocEditor skills={skills} getBlocksRef={getBlocksRef} insertTextRef={insertTextRef} />
+          <DocEditor
+            skills={skills}
+            cwd={cwd || "."}
+            getBlocksRef={getBlocksRef}
+            insertTextRef={insertTextRef}
+          />
         </section>
 
         <section className="transcript">

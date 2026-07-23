@@ -12,8 +12,11 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
             Unknown skills: {preview.unresolved.join(", ")}
           </p>
         )}
-        {(preview.mcp_servers.length > 0 || preview.agent_skills.length > 0) && (
+        {(preview.mcp_servers.length > 0 ||
+          preview.agent_skills.length > 0 ||
+          preview.files.length > 0) && (
           <p className="settings-hint">
+            {preview.files.length > 0 && <>Files: {preview.files.join(", ")} · </>}
             {preview.mcp_servers.length > 0 && <>MCP: {preview.mcp_servers.join(", ")} · </>}
             {preview.agent_skills.length > 0 && <>Agent skills: {preview.agent_skills.join(", ")}</>}
           </p>

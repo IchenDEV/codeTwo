@@ -46,10 +46,16 @@ pub struct Store {
     conn: Mutex<Connection>,
 }
 
+/// Additive migrations for stores created by older versions. Each is ignored if already applied.
+fn migrate(conn: &Connection) {
+    let _ = conn.execute("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
+}
+
 impl Store {
     pub fn open(path: &str) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn);
         Ok(Self { conn: Mutex::new(conn) })
     }
 
@@ -57,7 +63,44 @@ impl Store {
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn);
         Ok(Self { conn: Mutex::new(conn) })
+    }
+
+    /// Rename a session (the sidebar title).
+    pub fn rename_session(&self, id: &str, title: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE sessions SET title=?2 WHERE id=?1", rusqlite::params![id, title])?;
+        Ok(())
+    }
+
+    /// Archive / unarchive a session (archived ones drop out of the main list).
+    pub fn set_archived(&self, id: &str, archived: bool) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET archived=?2 WHERE id=?1",
+            rusqlite::params![id, if archived { 1 } else { 0 }],
+        )?;
+        Ok(())
+    }
+
+    /// Archived sessions, newest first.
+    pub fn list_archived_sessions(&self) -> Result<Vec<Session>, StoreError> {
+        self.query_sessions(true)
+    }
+
+    fn query_sessions(&self, archived: bool) -> Result<Vec<Session>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at
+             FROM sessions WHERE archived=?1 ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([if archived { 1 } else { 0 }], row_to_session_parts)?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(build_session(r?)?);
+        }
+        Ok(out)
     }
 
     pub fn upsert_session(&self, s: &Session) -> Result<(), StoreError> {
@@ -85,18 +128,9 @@ impl Store {
         Ok(())
     }
 
+    /// Active (non-archived) sessions, newest first.
     pub fn list_sessions(&self) -> Result<Vec<Session>, StoreError> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at
-             FROM sessions ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], row_to_session_parts)?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(build_session(r?)?);
-        }
-        Ok(out)
+        self.query_sessions(false)
     }
 
     pub fn get_session(&self, id: &str) -> Result<Option<Session>, StoreError> {
@@ -204,6 +238,34 @@ mod tests {
         store.upsert_session(&a2).unwrap();
         assert_eq!(store.list_sessions().unwrap().len(), 2);
         assert_eq!(store.get_session(&a.id).unwrap().unwrap().model.as_deref(), Some("grok-build"));
+    }
+
+    #[test]
+    fn rename_and_archive_sessions() {
+        let store = Store::open_in_memory().unwrap();
+        let a = Session::new(ProviderId::Grok, "/a");
+        let b = Session::new(ProviderId::Codex, "/b");
+        store.upsert_session(&a).unwrap();
+        store.upsert_session(&b).unwrap();
+        assert_eq!(store.list_sessions().unwrap().len(), 2);
+
+        store.rename_session(&a.id, "Renamed").unwrap();
+        assert_eq!(store.get_session(&a.id).unwrap().unwrap().title, "Renamed");
+
+        store.set_archived(&b.id, true).unwrap();
+        let active = store.list_sessions().unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].id, a.id);
+        let archived = store.list_archived_sessions().unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].id, b.id);
+
+        // Unarchive restores it, and an upsert doesn't clobber the flag.
+        store.set_archived(&b.id, false).unwrap();
+        assert_eq!(store.list_sessions().unwrap().len(), 2);
+        store.set_archived(&b.id, true).unwrap();
+        store.upsert_session(&b).unwrap();
+        assert_eq!(store.list_sessions().unwrap().len(), 1, "upsert must preserve archived");
     }
 
     #[test]

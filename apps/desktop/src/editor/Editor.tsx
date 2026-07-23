@@ -10,10 +10,12 @@ import {
 import { filterSuggestionItems } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
-import type { DocBlock, SkillInfo } from "../bridge";
+import { listFiles, type DocBlock, type SkillInfo } from "../bridge";
 
 interface EditorProps {
   skills: SkillInfo[];
+  /// Working directory used to resolve `@`-file mentions.
+  cwd: string;
   // App reads the composed document out of the editor on Run.
   getBlocksRef: MutableRefObject<(() => DocBlock[]) | null>;
   // App appends browser-annotation context blocks through this.
@@ -36,7 +38,25 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
   }));
 }
 
-export function DocEditor({ skills, getBlocksRef, insertTextRef }: EditorProps) {
+// The `@` picker: workspace files, searched live. Picking one inserts a file mention whose contents
+// the core inlines at compile time.
+async function fileMenuItems(
+  editor: CodeTwoEditor,
+  cwd: string,
+  query: string,
+): Promise<DefaultReactSuggestionItem[]> {
+  const paths = await listFiles(cwd || ".", query, 30).catch(() => []);
+  return paths.map((p) => ({
+    title: p,
+    group: "Files",
+    icon: <span style={{ fontSize: 16 }}>📄</span>,
+    onItemClick: () => {
+      editor.insertInlineContent([{ type: "file", props: { path: p } }, " "]);
+    },
+  }));
+}
+
+export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef }: EditorProps) {
   const editor = useCreateBlockNote({
     schema,
     initialContent: [
@@ -74,6 +94,11 @@ export function DocEditor({ skills, getBlocksRef, insertTextRef }: EditorProps) 
             query,
           )
         }
+      />
+      {/* `@` mentions workspace files — their contents are inlined into the compiled prompt. */}
+      <SuggestionMenuController
+        triggerCharacter={"@"}
+        getItems={async (query) => fileMenuItems(editor, cwd, query)}
       />
     </BlockNoteView>
   );

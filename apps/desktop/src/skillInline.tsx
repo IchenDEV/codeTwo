@@ -24,11 +24,31 @@ export const SkillInline = createReactInlineContentSpec(
   },
 );
 
-// The editor schema = default blocks/inline + our skill inline node.
+// An inline `@file` mention. At compile time the core inlines the file's contents as context,
+// so the agent sees the actual code you pointed at (Cursor-style @-mentions).
+export const FileInline = createReactInlineContentSpec(
+  {
+    type: "file",
+    propSchema: {
+      path: { default: "" },
+    },
+    content: "none",
+  } as const,
+  {
+    render: (props) => (
+      <span className="file-chip" contentEditable={false}>
+        @{props.inlineContent.props.path}
+      </span>
+    ),
+  },
+);
+
+// The editor schema = default blocks/inline + our skill and file inline nodes.
 export const schema = BlockNoteSchema.create({
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     skill: SkillInline,
+    file: FileInline,
   },
 });
 
@@ -54,6 +74,10 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           flush();
           const props = inline.props as { skillId: string };
           out.push({ type: "skill", skill_id: props.skillId, params: {} });
+        } else if (inline.type === "file") {
+          flush();
+          const props = inline.props as { path: string };
+          out.push({ type: "file", path: props.path });
         } else if (inline.type === "link") {
           const parts = (inline.content as Array<{ text?: string }> | undefined) ?? [];
           buf += parts.map((c) => c.text ?? "").join("");

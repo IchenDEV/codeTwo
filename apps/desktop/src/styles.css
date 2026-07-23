@@ -78,6 +78,35 @@ body,
 .session-meta {
   font-size: 11px;
   color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.session-actions {
+  margin-left: auto;
+  display: none;
+  gap: 2px;
+}
+.session-item:hover .session-actions {
+  display: flex;
+}
+.session-actions button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+}
+.session-actions button:hover {
+  color: var(--accent);
+}
+.session-rename {
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
 }
 .providers {
   border-top: 1px solid var(--border);
@@ -202,6 +231,21 @@ body,
   padding: 0 6px;
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* inline @file mention chip */
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
   white-space: nowrap;
   user-select: none;
 }

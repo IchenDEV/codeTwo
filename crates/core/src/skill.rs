@@ -161,6 +161,8 @@ pub enum DocBlock {
         #[serde(default)]
         params: HashMap<String, String>,
     },
+    /// An `@`-mentioned workspace file; its contents are inlined as context at compile time.
+    File { path: String },
 }
 
 /// The result of compiling a document: what to send and how to configure the session.
@@ -172,7 +174,9 @@ pub struct CompiledPrompt {
     pub mcp_servers: Vec<McpServer>,
     /// Provider-native Agent Skills referenced (from `AgentSkill` skills).
     pub agent_skills: Vec<String>,
-    /// Skill ids referenced that were not found in the library (surfaced to the user as warnings).
+    /// Workspace files inlined via `@`-mentions.
+    pub files: Vec<String>,
+    /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
 }
 
@@ -180,11 +184,42 @@ pub struct CompiledPrompt {
 /// reference (and inline fallback text when present) so a provider without native skills still gets
 /// the intent as prose.
 pub fn compile(doc: &[DocBlock], library: &SkillLibrary) -> CompiledPrompt {
+    compile_with_context(doc, library, None)
+}
+
+/// Like [`compile`], but with a workspace: project rules (AGENTS.md / .cursorrules / CLAUDE.md …)
+/// are prepended and `@`-mentioned files are inlined from disk.
+pub fn compile_with_context(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+) -> CompiledPrompt {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
 
+    // Project rules travel with every prompt, regardless of provider.
+    if let Some(dir) = cwd {
+        let ctx = crate::rules::to_context(&crate::rules::load(dir));
+        if !ctx.is_empty() {
+            parts.push(ctx);
+        }
+    }
+
     for block in doc {
         match block {
+            DocBlock::File { path } => {
+                out.files.push(path.clone());
+                match cwd.map(|c| crate::workspace::read_file(c, path)) {
+                    Some(Ok(content)) => {
+                        let lang = crate::workspace::lang_for(path);
+                        parts.push(format!(
+                            "**File** `{path}`\n\n```{lang}\n{}\n```",
+                            content.trim_end()
+                        ));
+                    }
+                    _ => out.unresolved.push(format!("file:{path}")),
+                }
+            }
             DocBlock::Text { text } => {
                 let t = text.trim_end();
                 if !t.is_empty() {
@@ -224,6 +259,18 @@ pub fn compile(doc: &[DocBlock], library: &SkillLibrary) -> CompiledPrompt {
 /// and the TUI; merged with any user skills loaded from disk.
 pub fn builtin_skills() -> Vec<Skill> {
     vec![
+        Skill {
+            id: "plan-first".into(),
+            name: "Plan first".into(),
+            description: "Propose a plan and wait for approval before editing".into(),
+            icon: Some("🗺️".into()),
+            payload: SkillPayload::Fragment {
+                text: "Before changing anything, produce a short numbered plan of the steps you \
+                       intend to take, and wait for my approval. Do not edit files or run \
+                       destructive commands until I approve the plan."
+                    .into(),
+            },
+        },
         Skill {
             id: "reviewer".into(),
             name: "Code Reviewer".into(),
@@ -407,6 +454,39 @@ mod tests {
         assert!(SkillLibrary::load_dir(&dir).unwrap().get("mine").is_none());
         // Deleting again is a no-op.
         SkillLibrary::delete_from_dir(&dir, "mine").unwrap();
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn compile_with_context_inlines_rules_and_files() {
+        let dir = std::env::temp_dir().join(format!("codetwo-ctx-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("AGENTS.md"), "Use tabs.").unwrap();
+        std::fs::write(dir.join("src/a.rs"), "fn a() {}").unwrap();
+        let lib = sample_library();
+
+        let doc = vec![
+            DocBlock::Text { text: "Fix the bug.".into() },
+            DocBlock::File { path: "src/a.rs".into() },
+        ];
+        let c = compile_with_context(&doc, &lib, Some(&dir));
+        assert!(c.prompt.contains("## Project rules"), "rules prepended: {}", c.prompt);
+        assert!(c.prompt.contains("Use tabs."));
+        assert!(c.prompt.contains("**File** `src/a.rs`"));
+        assert!(c.prompt.contains("fn a() {}"));
+        assert!(c.prompt.contains("```rust"));
+        assert_eq!(c.files, vec!["src/a.rs".to_string()]);
+        assert!(c.unresolved.is_empty());
+
+        // A missing file is reported, not silently dropped.
+        let c2 = compile_with_context(&[DocBlock::File { path: "nope.rs".into() }], &lib, Some(&dir));
+        assert_eq!(c2.unresolved, vec!["file:nope.rs".to_string()]);
+
+        // Without a workspace, no rules and files can't be read.
+        let c3 = compile(&doc, &lib);
+        assert!(!c3.prompt.contains("Project rules"));
+        assert_eq!(c3.unresolved, vec!["file:src/a.rs".to_string()]);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

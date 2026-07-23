@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
-import { gitDiff, gitDiffSince, type Checkpoint, type GitStatus } from "../bridge";
+import {
+  gitCreatePr,
+  gitDiff,
+  gitDiffSince,
+  gitSuggestCommit,
+  type Checkpoint,
+  type GitStatus,
+} from "../bridge";
 
 function DiffView({ text }: { text: string }) {
   if (!text.trim()) return <div className="diff-empty">No changes.</div>;
@@ -46,6 +53,7 @@ export function SourceControlModal({
   const [diff, setDiff] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
 
   useEffect(() => {
     gitDiff(cwd, null).then(setDiff).catch(() => setDiff(""));
@@ -128,16 +136,38 @@ export function SourceControlModal({
             onChange={(e) => setMsg(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void commit()}
           />
+          <button
+            className="ghost"
+            title="Suggest a message from the changes"
+            onClick={() => void gitSuggestCommit(cwd).then(setMsg)}
+          >
+            Suggest
+          </button>
           <button className="modal-opt" disabled={busy} onClick={() => void commit()}>
             Commit
           </button>
           <button className="ghost" disabled={busy} onClick={() => void onPush()}>
             Push
           </button>
+          <button
+            className="ghost"
+            disabled={busy}
+            title="Push and open a pull request (gh)"
+            onClick={() => {
+              setBusy(true);
+              void gitCreatePr(cwd, msg.trim() || "Update", "")
+                .then((url) => setPrUrl(url))
+                .catch((e) => setPrUrl(String(e)))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Create PR
+          </button>
           <button className="modal-opt cancel" onClick={onClose}>
             Done
           </button>
         </div>
+        {prUrl && <p className="settings-hint">{prUrl}</p>}
       </div>
     </div>
   );

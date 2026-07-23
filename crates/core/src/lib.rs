@@ -24,10 +24,12 @@ pub mod market;
 pub mod permission;
 pub mod provider;
 pub mod pty;
+pub mod rules;
 pub mod session;
 pub mod skill;
 pub mod store;
 pub mod tmux;
+pub mod workspace;
 pub mod worktree;
 
 pub use browser::Annotation;
