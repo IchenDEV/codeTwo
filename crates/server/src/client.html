@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>codeTwo remote</title>
+    <style>
+      :root { color-scheme: light dark; font-family: -apple-system, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0f1115; color: #e8e8ea; }
+      header { padding: 10px 14px; background: #171a21; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #d1d5db; }
+      .dot.on { background: #16a34a; }
+      main { display: flex; flex-direction: column; height: calc(100vh - 42px); }
+      #log { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+      .msg { margin: 6px 0; white-space: pre-wrap; }
+      .msg.user { color: #fff; font-weight: 600; }
+      .msg.tool { color: #eab308; }
+      .msg.thought { color: #9ca3af; font-style: italic; }
+      .msg.err { color: #f87171; }
+      .msg.sys { color: #6b7280; font-size: 12px; }
+      .bar { display: flex; gap: 6px; padding: 8px; background: #171a21; flex-wrap: wrap; align-items: center; }
+      select, input, textarea, button { font: inherit; border-radius: 8px; border: 1px solid #2b2f38; background: #0f1115; color: #e8e8ea; padding: 8px 10px; }
+      textarea { flex: 1 1 100%; min-height: 54px; resize: vertical; }
+      button.run { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+      #perm { padding: 10px 14px; background: #24202b; display: none; }
+      #perm.show { display: block; }
+      #perm button { margin-right: 8px; margin-top: 6px; }
+      #sessions { display: flex; gap: 6px; overflow-x: auto; padding: 6px 8px; background: #12151b; }
+      .sess { border: 1px solid #2b2f38; border-radius: 999px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+      .sess.active { background: #1e2a4a; border-color: #2563eb; }
+    </style>
+  </head>
+  <body>
+    <header><span class="dot" id="status"></span> codeTwo remote</header>
+    <div id="sessions"></div>
+    <div id="perm"></div>
+    <main>
+      <div id="log"></div>
+      <div class="bar">
+        <select id="provider">
+          <option value="grok">Grok</option>
+          <option value="claude_code">Claude Code</option>
+          <option value="codex">Codex</option>
+          <option value="cursor">Cursor</option>
+          <option value="opencode">OpenCode</option>
+        </select>
+        <input id="cwd" value="." size="8" title="working dir" />
+        <button id="new">New</button>
+        <textarea id="prompt" placeholder="Type a prompt and press Run…"></textarea>
+        <button class="run" id="run">Run ▸</button>
+      </div>
+    </main>
+    <script>
+      const token = new URLSearchParams(location.search).get("token") || "";
+      const log = document.getElementById("log");
+      const statusDot = document.getElementById("status");
+      const sessionsEl = document.getElementById("sessions");
+      const permEl = document.getElementById("perm");
+      let active = null;
+      let pending = null;
+      let sessions = [];
+      let ws;
+
+      function add(text, cls) {
+        const d = document.createElement("div");
+        d.className = "msg " + (cls || "");
+        d.textContent = text;
+        log.appendChild(d);
+        log.scrollTop = log.scrollHeight;
+      }
+      function renderSessions() {
+        sessionsEl.innerHTML = "";
+        sessions.forEach((s) => {
+          const b = document.createElement("div");
+          b.className = "sess" + (s.id === active ? " active" : "");
+          b.textContent = s.title || s.id.slice(0, 6);
+          b.onclick = () => { active = s.id; renderSessions(); };
+          sessionsEl.appendChild(b);
+        });
+      }
+      function send(op) { ws && ws.readyState === 1 && ws.send(JSON.stringify(op)); }
+
+      function connect() {
+        ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(token)}`);
+        ws.onopen = () => { statusDot.classList.add("on"); add("connected", "sys"); };
+        ws.onclose = () => { statusDot.classList.remove("on"); add("disconnected — retrying…", "sys"); setTimeout(connect, 1500); };
+        ws.onmessage = (m) => {
+          const msg = JSON.parse(m.data);
+          if (msg.kind === "sessions") { sessions = msg.sessions || []; if (!active && sessions[0]) active = sessions[0].id; renderSessions(); return; }
+          if (msg.kind !== "event") return;
+          const ev = msg.event;
+          switch (ev.event) {
+            case "session_created":
+              active = ev.session; sessions.unshift({ id: ev.session, title: "session" }); renderSessions();
+              if (pending) { send({ op: "prompt", session: ev.session, doc: pending }); pending = null; }
+              break;
+            case "agent_text": add(ev.text, "agent"); break;
+            case "agent_thought": add(ev.text, "thought"); break;
+            case "tool_call": add(`⚙ ${ev.title || ev.id} — ${ev.status}`, "tool"); break;
+            case "plan": add("☰ " + (ev.entries || []).join("\n"), "tool"); break;
+            case "permission_request": showPerm(ev); break;
+            case "turn_ended": add(`— turn ended: ${ev.stop_reason}`, "sys"); break;
+            case "error": add("✗ " + ev.message, "err"); break;
+          }
+        };
+      }
+      function showPerm(ev) {
+        permEl.classList.add("show");
+        permEl.innerHTML = `<b>Permission:</b> ${ev.title} `;
+        (ev.options || []).forEach(([id, label]) => {
+          const b = document.createElement("button");
+          b.textContent = label;
+          b.onclick = () => { send({ op: "answer_permission", session: ev.session, request_id: ev.request_id, option_id: id }); permEl.classList.remove("show"); };
+          permEl.appendChild(b);
+        });
+        const c = document.createElement("button");
+        c.textContent = "Cancel";
+        c.onclick = () => { send({ op: "answer_permission", session: ev.session, request_id: ev.request_id, option_id: null }); permEl.classList.remove("show"); };
+        permEl.appendChild(c);
+      }
+
+      function run() {
+        const text = document.getElementById("prompt").value.trim();
+        if (!text) return;
+        add(text, "user");
+        document.getElementById("prompt").value = "";
+        const doc = [{ type: "text", text }];
+        if (active) send({ op: "prompt", session: active, doc });
+        else newSession(doc);
+      }
+      function newSession(doc) {
+        pending = doc || null;
+        send({ op: "new_session", provider: document.getElementById("provider").value, cwd: document.getElementById("cwd").value || ".", use_worktree: false });
+      }
+      document.getElementById("run").onclick = run;
+      document.getElementById("new").onclick = () => newSession(null);
+      document.getElementById("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); });
+      connect();
+    </script>
+  </body>
+</html>

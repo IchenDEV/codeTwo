@@ -250,6 +250,22 @@ export async function marketInstall(id: string): Promise<void> {
   if (inTauri) await invoke("market_install", { id });
 }
 
+// ---- remote control (F10) --------------------------------------------------------------------
+
+export interface RemoteInfo {
+  url: string;
+  token: string;
+  port: number;
+}
+
+export async function startRemote(port?: number): Promise<RemoteInfo | null> {
+  return inTauri ? invoke<RemoteInfo>("start_remote", { port: port ?? null }) : null;
+}
+
+export async function remoteStatus(): Promise<RemoteInfo | null> {
+  return inTauri ? invoke<RemoteInfo | null>("remote_status") : null;
+}
+
 export async function browserContext(annotation: Annotation): Promise<string> {
   if (inTauri) return invoke<string>("browser_context", { annotation });
   // Local fallback mirrors core::browser::Annotation::to_context.

@@ -1,0 +1,29 @@
+[package]
+name = "codetwo-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "codeTwo headless remote-control server: drive the engine over WebSocket from another device."
+
+[lib]
+name = "codetwo_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "codetwo-server"
+path = "src/main.rs"
+
+[dependencies]
+codetwo-core.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+axum = { version = "0.7", features = ["ws"] }
+futures-util = "0.3"
+qrcode = "0.14"
+
+[dev-dependencies]
+tokio-tungstenite = "0.21"

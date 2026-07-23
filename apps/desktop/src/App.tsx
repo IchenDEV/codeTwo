@@ -22,6 +22,7 @@ import {
   newSession,
   onEngineEvent,
   providerLabel,
+  remoteStatus,
   saveSkill,
   setKeymap,
   setPermissionMode,
@@ -34,6 +35,7 @@ import {
   type MarketItem,
   type Part,
   type ProviderInfo,
+  type RemoteInfo,
   type SessionInfo,
   type SkillInfo,
 } from "./bridge";
@@ -42,6 +44,7 @@ import { MarketModal } from "./market/Market";
 import { SettingsModal } from "./settings/Settings";
 import { SourceControlModal } from "./git/SourceControl";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
+import { RemoteModal } from "./remote/Remote";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -116,6 +119,8 @@ export default function App() {
   const [showSourceControl, setShowSourceControl] = useState(false);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [showPalette, setShowPalette] = useState(false);
+  const [showRemote, setShowRemote] = useState(false);
+  const [remoteInfo, setRemoteInfo] = useState<RemoteInfo | null>(null);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
@@ -363,6 +368,7 @@ export default function App() {
     { id: "sc", label: "Source control", hint: "Mod+Shift+G", run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open skill market", run: openMarket },
+    { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: "Mod+,", run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: "Mod+J", run: () => setShowTerminal((v) => !v) },
     { id: "browser", label: "Toggle browser", hint: "Mod+B", run: () => setShowBrowser((v) => !v) },
@@ -375,9 +381,10 @@ export default function App() {
     })),
   ];
 
-  // Load keybindings once.
+  // Load keybindings + remote status once.
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
+    remoteStatus().then(setRemoteInfo).catch(() => {});
   }, []);
 
   // Refresh git status when the working dir or active session changes.
@@ -620,6 +627,10 @@ export default function App() {
       )}
 
       {showPalette && <CommandPalette commands={paletteCommands} onClose={() => setShowPalette(false)} />}
+
+      {showRemote && (
+        <RemoteModal info={remoteInfo} onStarted={setRemoteInfo} onClose={() => setShowRemote(false)} />
+      )}
 
       {skillDraft && (
         <div className="modal-backdrop">

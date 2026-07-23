@@ -14,16 +14,26 @@ use codetwo_core::keymap::{Action as KeyAction, Keymap};
 use codetwo_core::permission::PermissionMode;
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
-use codetwo_core::{Engine, Op, Part, PtySession, Role, Session, Store};
+use codetwo_core::{Engine, Event, Op, Part, PtySession, Role, Session, Store};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tokio::sync::broadcast;
+
+#[derive(Serialize, Clone)]
+struct RemoteInfo {
+    url: String,
+    token: String,
+    port: u16,
+}
 
 struct AppState {
-    engine: Engine,
+    engine: Arc<Engine>,
+    events: broadcast::Sender<Event>,
     skills_dir: PathBuf,
     keymap: Mutex<Keymap>,
     keymap_path: PathBuf,
     ptys: Mutex<HashMap<u32, PtySession>>,
+    remote: Mutex<Option<RemoteInfo>>,
 }
 
 /// Rebuild the live skill library from built-ins + `<data>/skills/*.json` after an add/remove.
@@ -256,6 +266,40 @@ fn market_install(state: State<'_, AppState>, id: String) -> Result<(), String> 
     Ok(())
 }
 
+// ---- remote control (F10) --------------------------------------------------------------------
+
+/// Start the remote-control server (idempotent), sharing this app's live engine so remote and local
+/// see the same sessions. Returns the pairing URL + token to open on another device.
+#[tauri::command]
+async fn start_remote(state: State<'_, AppState>, port: Option<u16>) -> Result<RemoteInfo, String> {
+    {
+        let existing = state.remote.lock().unwrap().clone();
+        if let Some(info) = existing {
+            return Ok(info);
+        }
+    }
+    let port = port.unwrap_or(4599);
+    let addr: std::net::SocketAddr =
+        format!("0.0.0.0:{port}").parse().map_err(|e: std::net::AddrParseError| e.to_string())?;
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let (local, _handle) =
+        codetwo_server::bind_and_serve(state.engine.clone(), state.events.clone(), addr, token.clone())
+            .await
+            .map_err(|e| e.to_string())?;
+    let info = RemoteInfo {
+        url: codetwo_server::pairing_url(local.port(), &token),
+        token,
+        port: local.port(),
+    };
+    *state.remote.lock().unwrap() = Some(info.clone());
+    Ok(info)
+}
+
+#[tauri::command]
+fn remote_status(state: State<'_, AppState>) -> Option<RemoteInfo> {
+    state.remote.lock().unwrap().clone()
+}
+
 #[tauri::command]
 async fn new_session(
     state: State<'_, AppState>,
@@ -376,11 +420,23 @@ pub fn run() {
             let skills = SkillLibrary::new(skill_vec);
 
             let (engine, mut rx) = Engine::with_store(default_registry(), skills, store);
+            let engine = Arc::new(engine);
 
-            // Pump core events to the frontend.
-            let handle = app.handle().clone();
+            // Fan the engine's events into a broadcast so both the frontend and the remote server
+            // can subscribe (one shared engine, local + remote).
+            let (events, _) = broadcast::channel::<Event>(1024);
+            let ev_tx = events.clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(ev) = rx.recv().await {
+                    let _ = ev_tx.send(ev);
+                }
+            });
+
+            // Pump broadcast events to the frontend.
+            let handle = app.handle().clone();
+            let mut sub = events.subscribe();
+            tauri::async_runtime::spawn(async move {
+                while let Ok(ev) = sub.recv().await {
                     let _ = handle.emit("engine-event", ev);
                 }
             });
@@ -390,10 +446,12 @@ pub fn run() {
 
             app.manage(AppState {
                 engine,
+                events,
                 skills_dir,
                 keymap: Mutex::new(keymap),
                 keymap_path,
                 ptys: Mutex::new(HashMap::new()),
+                remote: Mutex::new(None),
             });
             Ok(())
         })
@@ -417,6 +475,8 @@ pub fn run() {
             browser_context,
             market_catalog,
             market_install,
+            start_remote,
+            remote_status,
             new_session,
             submit_prompt,
             answer_permission,
