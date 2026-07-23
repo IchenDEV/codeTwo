@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { startRemote, type RemoteInfo } from "../bridge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-// Remote control (F10): start a local server and show the pairing URL/token to open on another
-// device. The remote drives the same live engine/sessions as this app.
+/**
+ * Remote control: start a local server and show the pairing URL/token to open on another device.
+ * The remote drives the same live engine/sessions as this app.
+ */
 export function RemoteModal({
   info,
   onStarted,
@@ -29,40 +33,44 @@ export function RemoteModal({
   };
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <h3>Remote control</h3>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remote control</DialogTitle>
+        </DialogHeader>
+
         {info ? (
           <>
-            <p className="settings-hint">Open this on another device on the same network:</p>
-            <div className="remote-url">
-              <a href={info.url} target="_blank" rel="noreferrer">
+            <p className="text-xs text-muted-foreground">Open this on another device on the same network:</p>
+            <div className="break-all rounded-md bg-primary/10 px-3 py-2.5 text-[15px] font-semibold">
+              <a href={info.url} target="_blank" rel="noreferrer" className="text-primary no-underline">
                 {info.url}
               </a>
             </div>
-            <div className="remote-token">
-              token: <code>{info.token}</code>
-            </div>
-            <p className="settings-hint">The remote drives the same sessions as this app.</p>
+            <p className="text-[13px] text-muted-foreground">
+              token: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{info.token}</code>
+            </p>
+            <p className="text-xs text-muted-foreground">The remote drives the same sessions as this app.</p>
           </>
         ) : (
           <>
-            <p className="settings-hint">
-              Start a local server so you can drive codeTwo from your phone, tablet, or another
-              machine on the same network.
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Start a local server so you can drive codeTwo from your phone, tablet, or another machine on
+              the same network.
             </p>
-            <button className="modal-opt" disabled={busy} onClick={() => void start()}>
+            <Button disabled={busy} onClick={() => void start()}>
               {busy ? "Starting…" : "Start remote server"}
-            </button>
-            {err && <p className="settings-hint" style={{ color: "#b91c1c" }}>{err}</p>}
+            </Button>
+            {err && <p className="text-xs text-destructive">{err}</p>}
           </>
         )}
-        <div className="modal-actions">
-          <button className="modal-opt cancel" onClick={onClose}>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

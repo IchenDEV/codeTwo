@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { usageReport, type UsageReport } from "../bridge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 function fmtTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -17,8 +22,8 @@ function fmtReset(secs: number): string {
 }
 
 /**
- * Usage panel (CodexBar-style): rolling 5h / week / month windows scanned from local provider
- * transcripts, with percent-of-limit and a countdown to when each window frees up.
+ * Usage panel: rolling 5h / week / month windows scanned from local provider transcripts, with
+ * percent-of-limit and a countdown to when each window frees up.
  */
 export function UsageModal({ onClose }: { onClose: () => void }) {
   const [report, setReport] = useState<UsageReport | null>(null);
@@ -36,32 +41,38 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   useEffect(load, []);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal wide">
-        <div className="market-head">
-          <h3>Usage</h3>
-          <button className="mini" title="Rescan" onClick={load}>
-            ⟳
-          </button>
-        </div>
-        {loading && <p className="settings-hint">Scanning local transcripts…</p>}
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Usage
+            <Button variant="ghost" size="icon" className="size-6" onClick={load} title="Rescan">
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+
+        {loading && !report && <p className="text-xs text-muted-foreground">Scanning local transcripts…</p>}
 
         {report && (
           <>
-            <div className="usage-windows">
+            <div className="space-y-4">
               {report.windows.map((w) => (
-                <div key={w.label} className="usage-row">
-                  <div className="usage-head">
-                    <span className="usage-label">{w.label}</span>
-                    <span className="usage-nums">
+                <div key={w.label}>
+                  <div className="flex items-baseline justify-between text-[13px]">
+                    <span className="font-semibold">{w.label}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
                       {fmtTokens(w.total_tokens)}
                       {w.limit != null && ` / ${fmtTokens(w.limit)}`}
                       {w.fraction != null && ` · ${Math.round(w.fraction * 100)}%`}
                     </span>
                   </div>
-                  <div className="usage-bar">
+                  <div className="my-1.5 h-2 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={`usage-fill ${w.fraction != null && w.fraction >= 0.8 ? "tight" : ""}`}
+                      className={cn(
+                        "h-full rounded-full bg-primary transition-all",
+                        w.fraction != null && w.fraction >= 0.8 && "bg-warning",
+                      )}
                       style={{
                         width:
                           w.fraction != null
@@ -73,43 +84,41 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                       }}
                     />
                   </div>
-                  <div className="usage-foot">
+                  <div className="font-mono text-[11px] text-muted-foreground">
                     in {fmtTokens(w.input_tokens)} · out {fmtTokens(w.output_tokens)}
-                    {w.cached_tokens > 0 && (
-                      <> · cache-read {fmtTokens(w.cached_tokens)} (not counted)</>
-                    )}{" "}
-                    · frees up in {fmtReset(w.resets_in_secs)}
+                    {w.cached_tokens > 0 && <> · cache-read {fmtTokens(w.cached_tokens)} (not counted)</>} ·
+                    frees up in {fmtReset(w.resets_in_secs)}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="usage-sources">
+            <div className="flex flex-wrap gap-1.5">
               {report.by_source.length === 0 ? (
-                <span className="settings-hint">
+                <p className="text-xs text-muted-foreground">
                   No local transcripts found (looked in ~/.codex/sessions and ~/.claude/projects).
-                </span>
+                </p>
               ) : (
                 report.by_source.map(([src, total]) => (
-                  <span key={src} className="usage-chip">
+                  <Badge key={src} variant="secondary" className="font-mono text-[11px]">
                     {src}: {fmtTokens(total)}
-                  </span>
+                  </Badge>
                 ))
               )}
             </div>
-            <p className="settings-hint">
+            <p className="text-xs text-muted-foreground">
               Scanned {report.transcripts} transcript{report.transcripts === 1 ? "" : "s"}. Set
-              CODETWO_LIMIT_5H / _WEEK / _MONTH to show percentages against your plan.
+              CODETWO_LIMIT_5H / _WEEK / _MONTH to show percentages.
             </p>
           </>
         )}
 
-        <div className="modal-actions">
-          <button className="modal-opt cancel" onClick={onClose}>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

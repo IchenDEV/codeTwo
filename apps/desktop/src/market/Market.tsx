@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
+import { Check } from "lucide-react";
 import type { MarketItem } from "../bridge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Skill Market (F5): browse a curated catalog and install skills into your library with one click.
+// Skill Market: browse a curated catalog and install skills into your library with one click.
 export function MarketModal({
   items,
   onInstall,
@@ -26,48 +32,54 @@ export function MarketModal({
   }, [items, q]);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal wide market">
-        <div className="market-head">
-          <h3>Skill Market</h3>
-          <input
-            className="market-search"
-            placeholder="Search skills, tags…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-          />
-        </div>
-        <div className="market-list">
-          {filtered.map((it) => (
-            <div key={it.id} className="market-item">
-              <span className="market-icon">{it.icon ?? "✦"}</span>
-              <div className="market-meta">
-                <div className="market-name">
-                  {it.name} <span className="market-kind">{it.kind}</span>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Skill Market</DialogTitle>
+        </DialogHeader>
+
+        <Input placeholder="Search skills, tags…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+
+        <ScrollArea className="max-h-[55vh] pr-3">
+          <div className="space-y-2">
+            {filtered.map((it) => (
+              <div key={it.id} className="flex items-center gap-3 rounded-lg border p-3">
+                <span className="w-7 text-center text-xl">{it.icon ?? "✦"}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    {it.name}
+                    <Badge variant="secondary" className="text-[9px] uppercase">
+                      {it.kind}
+                    </Badge>
+                  </div>
+                  <div className="text-[13px] text-muted-foreground">{it.description}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+                    {[it.author, ...it.tags].join(" · ")}
+                  </div>
                 </div>
-                <div className="market-desc">{it.description}</div>
-                <div className="market-tags">{[it.author, ...it.tags].join(" · ")}</div>
+                {it.installed ? (
+                  <Button variant="outline" size="sm" onClick={() => onUninstall(it.id)} title="Uninstall">
+                    <Check className="size-3.5 text-success" /> Installed
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => onInstall(it.id)}>
+                    Install
+                  </Button>
+                )}
               </div>
-              {it.installed ? (
-                <button className="market-btn installed" onClick={() => onUninstall(it.id)} title="Uninstall">
-                  Installed ✓
-                </button>
-              ) : (
-                <button className="market-btn" onClick={() => onInstall(it.id)}>
-                  Install
-                </button>
-              )}
-            </div>
-          ))}
-          {filtered.length === 0 && <div className="market-empty">No skills match “{q}”.</div>}
-        </div>
-        <div className="modal-actions">
-          <button className="modal-opt" onClick={onClose}>
+            ))}
+            {filtered.length === 0 && (
+              <p className="p-3 text-sm text-muted-foreground">No skills match “{q}”.</p>
+            )}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { listGithubIssues, type Issue } from "../bridge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// GitHub Issues (F14): list open issues for the working dir's repo (via gh) and insert one as
-// prompt context.
+// GitHub Issues: list open issues for the working dir's repo (via gh) and insert one as context.
 export function IssuesModal({
   cwd,
   onInsert,
@@ -31,36 +33,48 @@ export function IssuesModal({
   }, [cwd]);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal wide">
-        <h3>GitHub Issues</h3>
-        {loading && <p className="settings-hint">Loading via gh…</p>}
-        {err && <p className="settings-hint" style={{ color: "#b91c1c" }}>{err}</p>}
-        <div className="issue-list">
-          {issues.map((it) => (
-            <div key={`${it.source}-${it.id}`} className="issue-item">
-              <div className="issue-meta">
-                <a href={it.url} target="_blank" rel="noreferrer" className="issue-num">
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>GitHub Issues</DialogTitle>
+        </DialogHeader>
+
+        {loading && <p className="text-xs text-muted-foreground">Loading via gh…</p>}
+        {err && <p className="text-xs text-destructive">{err}</p>}
+
+        <ScrollArea className="max-h-[52vh] pr-3">
+          <div className="space-y-1.5">
+            {issues.map((it) => (
+              <div key={`${it.source}-${it.id}`} className="flex items-center gap-3 rounded-lg border p-2.5">
+                <a
+                  href={it.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="shrink-0 font-mono text-sm font-semibold text-primary no-underline"
+                >
                   #{it.id}
                 </a>
-                <span className="issue-title">{it.title}</span>
-                <span className="issue-state">{it.state}</span>
+                <span className="flex-1 truncate text-[13px]">{it.title}</span>
+                <span className="text-[10px] uppercase text-muted-foreground">{it.state}</span>
+                <Button size="sm" onClick={() => onInsert(it)}>
+                  Add to prompt
+                </Button>
               </div>
-              <button className="market-btn" onClick={() => onInsert(it)}>
-                Add to prompt
-              </button>
-            </div>
-          ))}
-          {!loading && !err && issues.length === 0 && (
-            <div className="git-clean">No open issues (or this dir isn't a GitHub repo).</div>
-          )}
-        </div>
-        <div className="modal-actions">
-          <button className="modal-opt cancel" onClick={onClose}>
+            ))}
+            {!loading && !err && issues.length === 0 && (
+              <p className="p-2 text-sm text-muted-foreground">
+                No open issues (or this dir isn’t a GitHub repo).
+              </p>
+            )}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

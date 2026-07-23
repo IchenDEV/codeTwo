@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Mic, MicOff } from "lucide-react";
 import { transcribeAudio, voiceAvailable } from "../bridge";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 type Mode = "idle" | "listening" | "transcribing";
 
@@ -116,14 +120,23 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
     }
   };
 
-  const label = mode === "listening" ? "● rec" : mode === "transcribing" ? "…" : "🎤";
+  const Icon = mode === "listening" ? MicOff : Mic;
   return (
-    <button
-      className={`ghost voice ${mode}`}
-      onClick={() => void toggle()}
-      title={note ?? "Voice input — dictate into the prompt"}
-    >
-      {label}
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={mode === "listening" ? "destructive" : "ghost"}
+          size="icon"
+          className={cn("size-8 shrink-0", mode === "listening" && "animate-pulse")}
+          onClick={() => void toggle()}
+          disabled={mode === "transcribing"}
+        >
+          <Icon className={cn("size-4", mode === "transcribing" && "animate-spin")} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {note ?? (mode === "listening" ? "Stop listening" : "Voice input — dictate into the prompt")}
+      </TooltipContent>
+    </Tooltip>
   );
 }

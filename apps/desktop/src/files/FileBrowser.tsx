@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { AtSign } from "lucide-react";
 import { listFiles } from "../bridge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// File browser: search the workspace and drop a file into the prompt as an `@` mention, whose
-// contents the core inlines at compile time.
+// File browser: search the workspace and drop a file into the prompt as an `@` mention.
 export function FileBrowserModal({
   cwd,
   onInsert,
@@ -28,39 +32,44 @@ export function FileBrowserModal({
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    const list = s ? all.filter((p) => p.toLowerCase().includes(s)) : all;
-    return list.slice(0, 300);
+    return (s ? all.filter((p) => p.toLowerCase().includes(s)) : all).slice(0, 300);
   }, [all, q]);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal wide">
-        <div className="market-head">
-          <h3>Workspace files</h3>
-          <input
-            className="market-search"
-            autoFocus
-            placeholder="Filter files…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-        </div>
-        {loading && <p className="settings-hint">Scanning…</p>}
-        <div className="file-list">
-          {filtered.map((p) => (
-            <button key={p} className="file-row" onClick={() => onInsert(p)} title="Add to prompt">
-              <span className="file-path">{p}</span>
-              <span className="file-add">@</span>
-            </button>
-          ))}
-          {!loading && filtered.length === 0 && <div className="git-clean">No matching files.</div>}
-        </div>
-        <div className="modal-actions">
-          <button className="modal-opt cancel" onClick={onClose}>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Workspace files</DialogTitle>
+        </DialogHeader>
+
+        <Input placeholder="Filter files…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        {loading && <p className="text-xs text-muted-foreground">Scanning…</p>}
+
+        <ScrollArea className="max-h-[52vh] pr-3">
+          <div className="space-y-0.5">
+            {filtered.map((p) => (
+              <button
+                key={p}
+                onClick={() => onInsert(p)}
+                title="Add to prompt"
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left font-mono text-xs hover:bg-accent"
+              >
+                <span className="truncate">{p}</span>
+                <AtSign className="size-3.5 shrink-0 text-primary" />
+              </button>
+            ))}
+            {!loading && filtered.length === 0 && (
+              <p className="p-2 text-sm text-muted-foreground">No matching files.</p>
+            )}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Done
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

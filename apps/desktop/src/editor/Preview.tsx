@@ -1,33 +1,55 @@
 import type { CompiledPreview } from "../bridge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Compiled-prompt preview (F13): shows exactly what will be sent — skills expanded, macros
-// substituted — plus any attached MCP servers / agent skills and unresolved skill ids.
+// Compiled-prompt preview: exactly what will be sent — rules prepended, skills expanded,
+// macros substituted, @-files inlined.
 export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; onClose: () => void }) {
   return (
-    <div className="modal-backdrop">
-      <div className="modal wide">
-        <h3>Compiled prompt preview</h3>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Compiled prompt preview</DialogTitle>
+        </DialogHeader>
+
         {preview.unresolved.length > 0 && (
-          <p className="settings-hint" style={{ color: "#b45309" }}>
-            Unknown skills: {preview.unresolved.join(", ")}
-          </p>
+          <p className="text-xs text-warning">Unresolved: {preview.unresolved.join(", ")}</p>
         )}
-        {(preview.mcp_servers.length > 0 ||
-          preview.agent_skills.length > 0 ||
-          preview.files.length > 0) && (
-          <p className="settings-hint">
-            {preview.files.length > 0 && <>Files: {preview.files.join(", ")} · </>}
-            {preview.mcp_servers.length > 0 && <>MCP: {preview.mcp_servers.join(", ")} · </>}
-            {preview.agent_skills.length > 0 && <>Agent skills: {preview.agent_skills.join(", ")}</>}
-          </p>
+
+        {(preview.files.length > 0 || preview.mcp_servers.length > 0 || preview.agent_skills.length > 0) && (
+          <div className="flex flex-wrap gap-1.5">
+            {preview.files.map((f) => (
+              <Badge key={f} variant="outline" className="font-mono text-[10px]">
+                @{f}
+              </Badge>
+            ))}
+            {preview.mcp_servers.map((m) => (
+              <Badge key={m} variant="secondary" className="text-[10px]">
+                mcp: {m}
+              </Badge>
+            ))}
+            {preview.agent_skills.map((s) => (
+              <Badge key={s} variant="secondary" className="text-[10px]">
+                skill: {s}
+              </Badge>
+            ))}
+          </div>
         )}
-        <pre className="preview-prompt">{preview.prompt || "(empty)"}</pre>
-        <div className="modal-actions">
-          <button className="modal-opt cancel" onClick={onClose}>
+
+        <ScrollArea className="max-h-[52vh] rounded-md border bg-muted/40">
+          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12.5px] leading-relaxed">
+            {preview.prompt || "(empty)"}
+          </pre>
+        </ScrollArea>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

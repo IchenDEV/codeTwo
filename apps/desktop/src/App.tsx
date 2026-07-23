@@ -1,4 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Archive,
+  ChevronRight,
+  CircleDot,
+  Eye,
+  GitBranch,
+  Globe,
+  Keyboard,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Settings as SettingsIcon,
+  Square,
+  Store,
+  Terminal as TerminalIcon,
+  X,
+} from "lucide-react";
+
 import { DocEditor } from "./editor/Editor";
 import { TerminalPanel } from "./terminal/Terminal";
 import {
@@ -8,9 +26,8 @@ import {
   cancelTurn,
   compileDoc,
   deleteSkill,
+  describeBlock,
   getKeymap,
-  issueContext,
-  renameSession,
   getTranscript,
   gitCheckpoint,
   gitCheckpoints,
@@ -18,22 +35,23 @@ import {
   gitPush,
   gitRevert,
   gitStatus,
+  issueContext,
+  listProjectScripts,
   listProviders,
   listSessions,
-  describeBlock,
-  listProjectScripts,
   listSkills,
   marketCatalog,
   marketInstall,
-  runProjectScript,
-  setSandbox,
   newSession,
   onEngineEvent,
   providerLabel,
   remoteStatus,
+  renameSession,
+  runProjectScript,
   saveSkill,
   setKeymap,
   setPermissionMode,
+  setSandbox,
   submitPrompt,
   type Checkpoint,
   type CompiledPreview,
@@ -62,6 +80,23 @@ import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
 import { VoiceButton } from "./voice/VoiceButton";
 import { UsageModal } from "./usage/Usage";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface TranscriptItem {
   kind: "user" | "agent" | "thought" | "tool" | "plan" | "error" | "end";
@@ -111,6 +146,47 @@ function comboFromEvent(e: KeyboardEvent): string {
   return parts.join("+");
 }
 
+/** A compact toolbar icon button with a tooltip. */
+function IconAction({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+}: {
+  icon: typeof Globe;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant={active ? "secondary" : "ghost"}
+          size="icon"
+          className={cn("size-8 shrink-0", active && "text-primary")}
+          onClick={onClick}
+        >
+          <Icon className="size-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** A labelled section header in the sidebar. */
+function SectionTitle({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-3 pb-1.5 pt-3">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {children}
+      </span>
+      {actions && <div className="flex gap-1">{actions}</div>}
+    </div>
+  );
+}
+
 export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -151,7 +227,6 @@ export default function App() {
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const nextTermRef = useRef(2);
-  // Editor/transcript split, as a percentage of the main column.
   const [editorPct, setEditorPct] = useState(58);
   const [dragging, setDragging] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
@@ -199,7 +274,12 @@ export default function App() {
             append({ kind: "plan", text: ev.entries.join("\n") });
             break;
           case "permission_request":
-            setPermission({ session: ev.session, requestId: ev.request_id, title: ev.title, options: ev.options });
+            setPermission({
+              session: ev.session,
+              requestId: ev.request_id,
+              title: ev.title,
+              options: ev.options,
+            });
             break;
           case "usage":
             setTokens(ev.input_tokens);
@@ -228,10 +308,7 @@ export default function App() {
     if (!getBlocks) return;
     let doc = getBlocks();
     if (doc.length === 0) return;
-    // Plan mode: ask the agent to propose a plan and wait for approval before editing.
-    if (planMode) {
-      doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
-    }
+    if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     setRunning(true);
     append({ kind: "user", text: summarizeDoc(doc) });
     if (activeSessionRef.current) {
@@ -257,13 +334,10 @@ export default function App() {
     [permission],
   );
 
-  const onModeChange = useCallback(
-    (m: string) => {
-      setMode(m);
-      if (activeSessionRef.current) void setPermissionMode(activeSessionRef.current, m);
-    },
-    [],
-  );
+  const onModeChange = useCallback((m: string) => {
+    setMode(m);
+    if (activeSessionRef.current) void setPermissionMode(activeSessionRef.current, m);
+  }, []);
 
   const selectSession = useCallback(async (id: string) => {
     activeSessionRef.current = id;
@@ -355,21 +429,12 @@ export default function App() {
     [cwd, refreshGit],
   );
 
-  const annotate = useCallback(
-    async (note: string) => {
-      const ctx = await browserContext({ url: browserUrl, note, selector: null, selected_text: null });
-      insertTextRef.current?.(ctx);
-    },
-    [browserUrl],
-  );
-
   const insertIssue = useCallback(async (issue: Issue) => {
     const ctx = await issueContext(issue);
     insertTextRef.current?.(ctx);
     setShowIssues(false);
   }, []);
 
-  // Drag the divider between the document editor and the transcript.
   const startSplitDrag = useCallback(() => {
     setDragging(true);
     const onMove = (e: MouseEvent) => {
@@ -383,7 +448,6 @@ export default function App() {
       setDragging(false);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      // Let xterm refit if the terminal is visible.
       window.dispatchEvent(new Event("resize"));
     };
     window.addEventListener("mousemove", onMove);
@@ -395,6 +459,19 @@ export default function App() {
     if (!getBlocks) return;
     setPreview(await compileDoc(getBlocks(), cwd || "."));
   }, [cwd]);
+
+  const annotate = useCallback(
+    async (note: string) => {
+      const ctx = await browserContext({ url: browserUrl, note, selector: null, selected_text: null });
+      insertTextRef.current?.(ctx);
+    },
+    [browserUrl],
+  );
+
+  const onSandboxChange = useCallback((s: Sandbox) => {
+    setSandboxState(s);
+    if (activeSessionRef.current) void setSandbox(activeSessionRef.current, s);
+  }, []);
 
   const dispatchAction = useCallback(
     (action: string) => {
@@ -436,11 +513,10 @@ export default function App() {
     [run, createSession, mode, onModeChange, refreshGit, openSourceControl],
   );
 
-  // Commands available in the palette (Mod+K): actions + switch-to-session.
   const paletteCommands: Command[] = [
-    { id: "run", label: "Run prompt", hint: "Mod+Enter", run: () => void run() },
-    { id: "new", label: "New session", hint: "Mod+N", run: () => void createSession() },
-    { id: "sc", label: "Source control", hint: "Mod+Shift+G", run: openSourceControl },
+    { id: "run", label: "Run prompt", hint: `${MOD}+Enter`, run: () => void run() },
+    { id: "new", label: "New session", hint: `${MOD}+N`, run: () => void createSession() },
+    { id: "sc", label: "Source control", hint: `${MOD}+Shift+G`, run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open skill market", run: openMarket },
     { id: "issues", label: "GitHub issues", run: () => setShowIssues(true) },
@@ -448,10 +524,10 @@ export default function App() {
     { id: "usage", label: "Usage (5h / week / month)", run: () => setShowUsage(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
-    { id: "settings", label: "Open settings", hint: "Mod+,", run: () => setShowSettings(true) },
-    { id: "terminal", label: "Toggle terminal", hint: "Mod+J", run: () => setShowTerminal((v) => !v) },
-    { id: "browser", label: "Toggle browser", hint: "Mod+B", run: () => setShowBrowser((v) => !v) },
-    { id: "git", label: "Refresh git status", hint: "Mod+G", run: refreshGit },
+    { id: "settings", label: "Open settings", hint: `${MOD}+,`, run: () => setShowSettings(true) },
+    { id: "terminal", label: "Toggle terminal", hint: `${MOD}+J`, run: () => setShowTerminal((v) => !v) },
+    { id: "browser", label: "Toggle browser", hint: `${MOD}+B`, run: () => setShowBrowser((v) => !v) },
+    { id: "git", label: "Refresh git status", hint: `${MOD}+G`, run: refreshGit },
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
       label: `Run script: ${s.name || s.id}`,
@@ -471,31 +547,19 @@ export default function App() {
     })),
   ];
 
-  // Load keybindings + remote status once.
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
     remoteStatus().then(setRemoteInfo).catch(() => {});
   }, []);
 
-  // Refresh git status when the working dir or active session changes.
   useEffect(() => {
     refreshGit();
   }, [refreshGit, activeSession]);
 
-  // Project scripts declared in .codetwo.json for this working dir.
   useEffect(() => {
     listProjectScripts(cwd || ".").then(setScripts).catch(() => setScripts([]));
   }, [cwd]);
 
-  const onSandboxChange = useCallback(
-    (s: Sandbox) => {
-      setSandboxState(s);
-      if (activeSessionRef.current) void setSandbox(activeSessionRef.current, s);
-    },
-    [],
-  );
-
-  // Global keyboard shortcuts (and shortcut capture when rebinding in settings).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (capturing) {
@@ -507,7 +571,7 @@ export default function App() {
         return;
       }
       const combo = comboFromEvent(e);
-      if (!combo.startsWith("Mod+")) return; // only chorded shortcuts trigger actions
+      if (!combo.startsWith("Mod+")) return;
       const entry = bindings.find(([, key]) => key === combo);
       if (!entry) return;
       e.preventDefault();
@@ -518,231 +582,300 @@ export default function App() {
   }, [bindings, capturing, dispatchAction]);
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar-header">
-          <span className="logo">codeTwo</span>
-          <button className="new-session" title="New session" onClick={() => void createSession()}>
-            +
-          </button>
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
+      {/* ---------------- sidebar ---------------- */}
+      <aside className="flex w-[264px] min-w-[264px] flex-col border-r bg-sidebar">
+        <div className="flex items-center justify-between px-3.5 pb-3 pt-7">
+          <span className="text-[15px] font-bold tracking-tight">codeTwo</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="size-7" onClick={() => void createSession()}>
+                <Plus className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>New session ({MOD}+N)</TooltipContent>
+          </Tooltip>
         </div>
-        <ul className="session-list">
-          {sessions.length === 0 && (
-            <li className="session-empty">
-              No sessions yet.
-              <br />
-              Press <b>+</b> or just hit Run.
-            </li>
-          )}
-          {sessions.map((s) => (
-            <li
-              key={s.id}
-              className={`session-item ${s.id === activeSession ? "active" : ""}`}
-              onClick={() => void selectSession(s.id)}
-            >
-              {renaming?.id === s.id ? (
-                <input
-                  className="session-rename"
-                  autoFocus
-                  value={renaming.title}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
-                  onBlur={() => setRenaming(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      void renameSession(s.id, renaming.title).then(refreshSessions);
-                      setRenaming(null);
-                    } else if (e.key === "Escape") setRenaming(null);
-                  }}
-                />
-              ) : (
-                <span className="session-title">{s.title}</span>
-              )}
-              <span className="session-meta">
-                {providerLabel(s.provider)}
-                {s.worktree_path ? " · wt" : ""}
-                <span className="session-actions">
-                  <button
-                    title="Rename"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setRenaming({ id: s.id, title: s.title });
-                    }}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    title="Archive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void archiveSession(s.id, true).then(refreshSessions);
-                    }}
-                  >
-                    ⌫
-                  </button>
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
 
-        <div className="git-panel">
-          <div className="providers-title">
-            Git
-            <button className="mini" title="Refresh (Mod+G)" onClick={refreshGit}>
-              ⟳
-            </button>
-          </div>
-          {git && git.is_repo ? (
-            <>
-              <div className="git-branch">
-                ⎇ {git.branch || "?"}
-                {git.ahead > 0 && <span className="git-ab">↑{git.ahead}</span>}
-                {git.behind > 0 && <span className="git-ab">↓{git.behind}</span>}
-              </div>
-              {git.files.length === 0 && <div className="git-clean">working tree clean</div>}
-              {git.files.slice(0, 12).map((f) => (
-                <div key={f.path} className="git-file">
-                  <span className={`git-badge ${f.staged ? "staged" : ""}`} title={f.state}>
-                    {f.state.charAt(0).toUpperCase()}
+        <ScrollArea className="min-h-[60px] flex-1">
+          <div className="space-y-0.5 px-2 pb-2">
+            {sessions.length === 0 && (
+              <p className="px-2 py-4 text-center text-xs leading-relaxed text-muted-foreground">
+                No sessions yet.
+                <br />
+                Press <b>+</b> or just hit Run.
+              </p>
+            )}
+            {sessions.map((s) => (
+              <div
+                key={s.id}
+                onClick={() => void selectSession(s.id)}
+                className={cn(
+                  "group cursor-pointer rounded-md px-2.5 py-1.5 transition-colors hover:bg-accent",
+                  s.id === activeSession && "bg-accent",
+                )}
+              >
+                {renaming?.id === s.id ? (
+                  <Input
+                    autoFocus
+                    className="h-6 text-[13px]"
+                    value={renaming.title}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
+                    onBlur={() => setRenaming(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        void renameSession(s.id, renaming.title).then(refreshSessions);
+                        setRenaming(null);
+                      } else if (e.key === "Escape") setRenaming(null);
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={cn(
+                      "truncate text-[13px] font-medium",
+                      s.id === activeSession && "text-primary",
+                    )}
+                  >
+                    {s.title}
+                  </div>
+                )}
+                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  {providerLabel(s.provider)}
+                  {s.worktree_path && <Badge variant="secondary" className="h-4 px-1 text-[9px]">wt</Badge>}
+                  <span className="ml-auto hidden gap-0.5 group-hover:flex">
+                    <button
+                      title="Rename"
+                      className="rounded p-0.5 hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenaming({ id: s.id, title: s.title });
+                      }}
+                    >
+                      <Pencil className="size-3" />
+                    </button>
+                    <button
+                      title="Archive"
+                      className="rounded p-0.5 hover:text-primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void archiveSession(s.id, true).then(refreshSessions);
+                      }}
+                    >
+                      <Archive className="size-3" />
+                    </button>
                   </span>
-                  <span className="git-path">{f.path}</span>
                 </div>
-              ))}
-              {git.files.length > 12 && <div className="git-more">+{git.files.length - 12} more</div>}
-            </>
-          ) : (
-            <div className="git-none">not a git repo</div>
-          )}
-        </div>
-
-        <div className="providers">
-          <div className="providers-title">
-            Skills
-            <span className="title-actions">
-              <button className="mini" title="Skill market" onClick={openMarket}>
-                🛒
-              </button>
-              <button className="mini" title="New skill" onClick={() => setSkillDraft({ name: "", text: "" })}>
-                ＋
-              </button>
-            </span>
+              </div>
+            ))}
           </div>
-          {skills.map((s) => (
-            <div key={s.id} className="provider-row">
-              <span>
-                {s.icon ?? "✦"} {s.name}
-              </span>
-              <button className="mini-x" title="Delete skill" onClick={() => void removeSkill(s.id)}>
-                ×
-              </button>
-            </div>
-          ))}
+        </ScrollArea>
+
+        <Separator />
+        <div className="max-h-52 overflow-y-auto pb-2">
+          <SectionTitle
+            actions={
+              <Button variant="ghost" size="icon" className="size-5" onClick={refreshGit} title={`Refresh (${MOD}+G)`}>
+                <RefreshCw className="size-3" />
+              </Button>
+            }
+          >
+            Git
+          </SectionTitle>
+          <div className="px-3 text-xs">
+            {git?.is_repo ? (
+              <>
+                <div className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold">
+                  <GitBranch className="size-3.5" /> {git.branch || "?"}
+                  {git.ahead > 0 && <span className="text-primary">↑{git.ahead}</span>}
+                  {git.behind > 0 && <span className="text-primary">↓{git.behind}</span>}
+                </div>
+                {git.files.length === 0 && <div className="text-muted-foreground">working tree clean</div>}
+                {git.files.slice(0, 10).map((f) => (
+                  <div key={f.path} className="flex items-center gap-2 py-0.5">
+                    <span
+                      className={cn(
+                        "inline-flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-bold",
+                        f.staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+                      )}
+                      title={f.state}
+                    >
+                      {f.state.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="truncate font-mono text-[11px] text-muted-foreground">{f.path}</span>
+                  </div>
+                ))}
+                {git.files.length > 10 && (
+                  <div className="pt-1 text-[11px] text-muted-foreground">+{git.files.length - 10} more</div>
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground">not a git repo</span>
+            )}
+          </div>
         </div>
 
-        <div className="providers">
-          <div className="providers-title">Providers</div>
-          {providers.map((p) => (
-            <div key={p.id} className="provider-row">
-              <span className={`dot ${p.available ? "ok" : "off"}`} />
-              <span>{p.display_name}</span>
-              {p.needs_node && <span className="tag">node</span>}
-            </div>
-          ))}
+        <Separator />
+        <div className="pb-2">
+          <SectionTitle
+            actions={
+              <>
+                <Button variant="ghost" size="icon" className="size-5" onClick={openMarket} title="Skill market">
+                  <Store className="size-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-5"
+                  onClick={() => setSkillDraft({ name: "", text: "" })}
+                  title="New skill"
+                >
+                  <Plus className="size-3" />
+                </Button>
+              </>
+            }
+          >
+            Skills
+          </SectionTitle>
+          <div className="px-3">
+            {skills.map((s) => (
+              <div key={s.id} className="group flex items-center gap-2 py-0.5 text-[12.5px]">
+                <span>{s.icon ?? "✦"}</span>
+                <span className="truncate">{s.name}</span>
+                <button
+                  className="ml-auto opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                  title="Delete skill"
+                  onClick={() => void removeSkill(s.id)}
+                >
+                  <X className="size-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
+        <div className="pb-3">
+          <SectionTitle>Providers</SectionTitle>
+          <div className="px-3">
+            {providers.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 py-0.5 text-[12.5px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    p.available ? "bg-success ring-3 ring-success/20" : "bg-border",
+                  )}
+                />
+                <span>{p.display_name}</span>
+                {p.needs_node && (
+                  <Badge variant="secondary" className="ml-auto h-4 px-1 text-[9px] uppercase">
+                    node
+                  </Badge>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </aside>
 
-      <main className="main" ref={mainRef}>
-        <header className="toolbar">
-          <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-            {providers.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.display_name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="cwd"
+      {/* ---------------- main ---------------- */}
+      <main className="flex min-w-0 flex-1 flex-col" ref={mainRef}>
+        <header className="flex items-center gap-1.5 overflow-x-auto border-b bg-card px-3 pb-2 pt-7 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <Select value={provider} onValueChange={setProvider}>
+            <SelectTrigger size="sm" className="w-[132px] shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {providers.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.display_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            className="h-8 w-[110px] shrink-0 font-mono text-xs"
             value={cwd}
             onChange={(e) => setCwd(e.target.value)}
             placeholder="working dir"
             title="Working directory"
           />
-          <select value={mode} onChange={(e) => onModeChange(e.target.value)} title="Permission mode">
-            <option value="ask">Ask</option>
-            <option value="accept_edits">Accept edits</option>
-            <option value="yolo">YOLO ⚠</option>
-          </select>
-          <select
-            value={sandbox}
-            onChange={(e) => onSandboxChange(e.target.value as Sandbox)}
-            title="Sandbox — what the agent may touch at all"
-          >
-            <option value="read_only">Read-only</option>
-            <option value="workspace_write">Workspace write</option>
-            <option value="danger_full_access">Full access ⚠</option>
-          </select>
-          <label className="wt-toggle" title="Isolate this session in a git worktree">
-            <input type="checkbox" checked={useWorktree} onChange={(e) => setUseWorktree(e.target.checked)} /> worktree
+
+          <Select value={mode} onValueChange={onModeChange}>
+            <SelectTrigger size="sm" className="w-[118px] shrink-0" title="Permission mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ask">Ask</SelectItem>
+              <SelectItem value="accept_edits">Accept edits</SelectItem>
+              <SelectItem value="yolo">YOLO ⚠</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={sandbox} onValueChange={(v) => onSandboxChange(v as Sandbox)}>
+            <SelectTrigger size="sm" className="w-[124px] shrink-0" title="Sandbox — what the agent may touch">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="read_only">Read-only</SelectItem>
+              <SelectItem value="workspace_write">Workspace</SelectItem>
+              <SelectItem value="danger_full_access">Full access ⚠</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            <Checkbox checked={useWorktree} onCheckedChange={(v) => setUseWorktree(v === true)} className="size-3.5" />
+            worktree
           </label>
-          <label className="wt-toggle" title="Ask the agent to propose a plan before editing">
-            <input type="checkbox" checked={planMode} onChange={(e) => setPlanMode(e.target.checked)} /> plan
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
+            <Checkbox checked={planMode} onCheckedChange={(v) => setPlanMode(v === true)} className="size-3.5" />
+            plan
           </label>
-          <div className="spacer" />
+
+          <div className="flex-1" />
+
           {tokens > 0 && (
-            <span
-              className="ctx-meter"
-              title="Estimated prompt tokens vs the context window — click for usage windows"
+            <button
+              className="flex shrink-0 items-center gap-1.5 font-mono text-[11px] text-muted-foreground"
+              title="Estimated prompt tokens — click for usage windows"
               onClick={() => setShowUsage(true)}
             >
-              <span className="ctx-bar">
+              <span className="h-1.5 w-14 overflow-hidden rounded-full bg-border">
                 <span
-                  className={`ctx-fill ${tokens / 200000 >= 0.8 ? "tight" : ""}`}
+                  className={cn("block h-full bg-primary", tokens / 200000 >= 0.8 && "bg-warning")}
                   style={{ width: `${Math.min(100, (tokens / 200000) * 100)}%` }}
                 />
               </span>
               {(tokens / 1000).toFixed(1)}k
-            </span>
+            </button>
           )}
-          <button
-            className={`ghost icon-btn ${showBrowser ? "on" : ""}`}
-            onClick={() => setShowBrowser((v) => !v)}
-            title={`Browser (${MOD}+B)`}
-          >
-            ⌾
-          </button>
-          <button
-            className={`ghost icon-btn ${showTerminal ? "on" : ""}`}
-            onClick={() => setShowTerminal((v) => !v)}
-            title={`Terminal (${MOD}+J)`}
-          >
-            ▤
-          </button>
-          <button className="ghost icon-btn" onClick={openSourceControl} title={`Source control (${MOD}+Shift+G)`}>
-            ⎇
-          </button>
+
+          <IconAction icon={Globe} label={`Browser (${MOD}+B)`} active={showBrowser} onClick={() => setShowBrowser((v) => !v)} />
+          <IconAction icon={TerminalIcon} label={`Terminal (${MOD}+J)`} active={showTerminal} onClick={() => setShowTerminal((v) => !v)} />
+          <IconAction icon={GitBranch} label={`Source control (${MOD}+Shift+G)`} onClick={openSourceControl} />
           <VoiceButton onText={(t) => insertTextRef.current?.(t)} />
-          <button className="ghost icon-btn" onClick={() => void doPreview()} title="Preview compiled prompt">
-            ◉
-          </button>
-          <button className="ghost icon-btn" onClick={() => setShowPalette(true)} title={`Command palette (${MOD}+K)`}>
-            ⌘
-          </button>
-          <button className="ghost icon-btn" onClick={() => setShowSettings(true)} title={`Settings (${MOD}+,)`}>
-            ⚙
-          </button>
+          <IconAction icon={Eye} label="Preview compiled prompt" onClick={() => void doPreview()} />
+          <IconAction icon={Keyboard} label={`Command palette (${MOD}+K)`} onClick={() => setShowPalette(true)} />
+          <IconAction icon={SettingsIcon} label={`Settings (${MOD}+,)`} onClick={() => setShowSettings(true)} />
+
           {running ? (
-            <button className="run cancel" onClick={() => activeSession && void cancelTurn(activeSession)}>
-              Stop ■
-            </button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="shrink-0"
+              onClick={() => activeSession && void cancelTurn(activeSession)}
+            >
+              <Square className="size-3.5" /> Stop
+            </Button>
           ) : (
-            <button className="run" onClick={() => void run()}>
-              Run ▸
-            </button>
+            <Button size="sm" className="shrink-0" onClick={() => void run()}>
+              Run <ChevronRight className="size-3.5" />
+            </Button>
           )}
         </header>
 
-        <section className="editor-pane" style={{ flex: `0 0 ${editorPct}%` }}>
+        <section className="min-h-[90px] overflow-y-auto px-2 pt-5" style={{ flex: `0 0 ${editorPct}%` }}>
           <DocEditor
             skills={skills}
             cwd={cwd || "."}
@@ -752,56 +885,66 @@ export default function App() {
           />
         </section>
 
-        <div
-          className={`splitter ${dragging ? "dragging" : ""}`}
-          onMouseDown={startSplitDrag}
-          title="Drag to resize"
-        />
+        <div className={cn("splitter", dragging && "dragging")} onMouseDown={startSplitDrag} title="Drag to resize" />
 
-        <section className="transcript">
+        <section className="min-h-20 flex-1 overflow-y-auto bg-muted/40 px-5 py-3">
           {transcript.length === 0 && (
-            <div className="transcript-empty">
-              Compose above, then press <b>Run ▸</b> (or {MOD}+Enter).
+            <p className="py-4 text-center text-xs leading-relaxed text-muted-foreground">
+              Compose above, then press <b>Run</b> ({MOD}+Enter).
               <br />
               Type <b>/</b> for skills, <b>@</b> to pull in a file.
-            </div>
+            </p>
           )}
           {transcript.map((t, i) => (
-            <div key={i} className={`t-item t-${t.kind}`}>
-              {t.kind === "tool" && <span className="t-badge">tool</span>}
-              {t.kind === "thought" && <span className="t-badge">thinking</span>}
-              {t.kind === "plan" && <span className="t-badge">plan</span>}
-              {t.kind === "error" && <span className="t-badge err">error</span>}
-              {t.kind === "end" && <span className="t-badge">turn: {t.text}</span>}
-              {t.kind !== "end" && <span className="t-text">{t.text}</span>}
+            <div key={i} className="flex items-start gap-2 py-1 text-[13px] leading-relaxed">
+              {t.kind === "tool" && <Badge variant="secondary" className="mt-0.5 shrink-0 text-[9px] uppercase">tool</Badge>}
+              {t.kind === "thought" && <Badge variant="outline" className="mt-0.5 shrink-0 text-[9px] uppercase">thinking</Badge>}
+              {t.kind === "plan" && <Badge variant="secondary" className="mt-0.5 shrink-0 text-[9px] uppercase">plan</Badge>}
+              {t.kind === "error" && <Badge variant="destructive" className="mt-0.5 shrink-0 text-[9px] uppercase">error</Badge>}
+              {t.kind === "end" && (
+                <Badge variant="outline" className="shrink-0 text-[9px] uppercase">turn: {t.text}</Badge>
+              )}
+              {t.kind !== "end" && (
+                <span
+                  className={cn(
+                    "whitespace-pre-wrap break-words",
+                    t.kind === "user" && "font-semibold",
+                    t.kind === "thought" && "italic text-muted-foreground",
+                    t.kind === "error" && "text-destructive",
+                  )}
+                >
+                  {t.text}
+                </span>
+              )}
             </div>
           ))}
         </section>
 
         {showBrowser && (
-          <section className="browser-pane">
+          <section className="flex h-[45%] min-h-60 border-t">
             <BrowserPanel url={browserUrl} onNavigate={setBrowserUrl} onAnnotate={(n) => void annotate(n)} />
           </section>
         )}
 
         {showTerminal && (
-          <section className="terminal-pane">
-            <div className="terminal-head">
-              <div className="term-tabs">
+          <section className="flex h-[270px] flex-col border-t bg-terminal p-1.5">
+            <div className="flex items-center gap-2 px-1 pb-1.5">
+              <div className="flex gap-1">
                 {terms.map((t) => (
                   <button
                     key={t}
-                    className={`term-tab ${t === activeTerm ? "active" : ""}`}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded px-2 py-0.5 text-[11px] transition-colors",
+                      t === activeTerm ? "bg-primary text-primary-foreground" : "bg-white/8 text-white/70 hover:bg-white/15",
+                    )}
                     onClick={() => {
                       setActiveTerm(t);
-                      // Let the newly-visible xterm refit itself.
                       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
                     }}
                   >
                     {t}
                     {terms.length > 1 && (
                       <span
-                        className="term-close"
                         title="Close terminal"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -810,13 +953,13 @@ export default function App() {
                           if (activeTerm === t && left[0] !== undefined) setActiveTerm(left[0]);
                         }}
                       >
-                        ×
+                        <X className="size-3" />
                       </span>
                     )}
                   </button>
                 ))}
                 <button
-                  className="term-tab add"
+                  className="rounded bg-white/8 px-2 py-0.5 text-[11px] text-white/70 hover:bg-white/15"
                   title="New terminal"
                   onClick={() => {
                     const id = nextTermRef.current++;
@@ -824,27 +967,24 @@ export default function App() {
                     setActiveTerm(id);
                   }}
                 >
-                  ＋
+                  <Plus className="size-3" />
                 </button>
               </div>
-              <label className="wt-toggle" title="Run terminals in persistent tmux sessions (attachable from a real terminal)">
-                <input type="checkbox" checked={termTmux} onChange={(e) => setTermTmux(e.target.checked)} /> tmux
+              <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-white/60">
+                <Checkbox checked={termTmux} onCheckedChange={(v) => setTermTmux(v === true)} className="size-3.5 border-white/30" />
+                tmux
               </label>
             </div>
-            {/* All terminals stay mounted so switching tabs doesn't kill the shell. */}
             {terms.map((t) => (
-              <div key={t} className="term-slot" style={{ display: t === activeTerm ? "flex" : "none" }}>
-                <TerminalPanel
-                  cwd={cwd || null}
-                  tmux={termTmux}
-                  sessionKey={`${activeSession ?? "main"}-${t}`}
-                />
+              <div key={t} className="min-h-0 flex-1" style={{ display: t === activeTerm ? "flex" : "none" }}>
+                <TerminalPanel cwd={cwd || null} tmux={termTmux} sessionKey={`${activeSession ?? "main"}-${t}`} />
               </div>
             ))}
           </section>
         )}
       </main>
 
+      {/* ---------------- dialogs ---------------- */}
       {showSettings && (
         <SettingsModal
           bindings={bindings}
@@ -856,7 +996,6 @@ export default function App() {
           }}
         />
       )}
-
       {showMarket && (
         <MarketModal
           items={market}
@@ -865,7 +1004,6 @@ export default function App() {
           onClose={() => setShowMarket(false)}
         />
       )}
-
       {showSourceControl && (
         <SourceControlModal
           cwd={cwd || "."}
@@ -882,21 +1020,13 @@ export default function App() {
           onClose={() => setShowSourceControl(false)}
         />
       )}
-
       {showPalette && <CommandPalette commands={paletteCommands} onClose={() => setShowPalette(false)} />}
-
-      {showRemote && (
-        <RemoteModal info={remoteInfo} onStarted={setRemoteInfo} onClose={() => setShowRemote(false)} />
-      )}
-
+      {showRemote && <RemoteModal info={remoteInfo} onStarted={setRemoteInfo} onClose={() => setShowRemote(false)} />}
       {showIssues && (
         <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
       )}
-
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
-
       {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
-
       {showFiles && (
         <FileBrowserModal
           cwd={cwd || "."}
@@ -909,50 +1039,53 @@ export default function App() {
       )}
 
       {skillDraft && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h3>New skill</h3>
-            <input
-              className="skill-name"
+        <Dialog open onOpenChange={(o) => !o && setSkillDraft(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New skill</DialogTitle>
+            </DialogHeader>
+            <Input
               placeholder="Skill name"
               value={skillDraft.name}
               onChange={(e) => setSkillDraft({ ...skillDraft, name: e.target.value })}
             />
             <textarea
-              className="skill-text"
+              className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               placeholder="Prompt fragment inserted when this skill is picked"
               value={skillDraft.text}
               onChange={(e) => setSkillDraft({ ...skillDraft, text: e.target.value })}
             />
-            <div className="modal-actions">
-              <button className="modal-opt" onClick={() => void saveDraft()}>
-                Save
-              </button>
-              <button className="modal-opt cancel" onClick={() => setSkillDraft(null)}>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSkillDraft(null)}>
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+              <Button onClick={() => void saveDraft()}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {permission && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h3>Permission requested</h3>
-            <p className="modal-title">{permission.title}</p>
-            <div className="modal-actions">
-              {permission.options.map(([id, label]) => (
-                <button key={id} className="modal-opt" onClick={() => void answer(id)}>
-                  {label}
-                </button>
-              ))}
-              <button className="modal-opt cancel" onClick={() => void answer(null)}>
+        <Dialog open onOpenChange={(o) => !o && void answer(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CircleDot className="size-4 text-warning" /> Permission requested
+              </DialogTitle>
+            </DialogHeader>
+            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-[13px]">{permission.title}</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => void answer(null)}>
                 Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+              {permission.options.map(([id, label]) => (
+                <Button key={id} onClick={() => void answer(id)}>
+                  {label}
+                </Button>
+              ))}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );
