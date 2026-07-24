@@ -19,14 +19,14 @@ Four regions, each with one job:
 
 | Region | Holds |
 | --- | --- |
-| **Session rail** (left) | Your sessions, and nothing else. Skill-library management sits at its foot. |
-| **Document** (centre) | The prompt you're composing. `/` inserts a skill, `@` pulls in a file. |
-| **Transcript** (below) | One card per **turn** — prompt, answer, and collapsed tools/thinking/plan. |
-| **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. |
+| **Session rail** (left) | Your sessions, grouped by recency and filterable. Skill-library management and the live provider sit at its foot. |
+| **Transcript** (centre) | One **turn** per exchange — your prompt in a bubble, the answer full width, tools/thinking/plan collapsed underneath. |
+| **Composer** (bottom) | The prompt you're composing. It sits where a chat box would, but it's the full document editor: `/` inserts a skill, `@` pulls in a file. Drag it taller, or expand it to the whole column (`Mod+Shift+E`) for a longer brief. |
+| **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. Drag its edge to resize. |
 
 Per-session setup (provider, working directory, approvals, sandbox, worktree, plan mode) lives in one
-config popover in the header, so the header itself only carries per-moment actions. A status bar
-along the bottom keeps provider, branch, mode, sandbox, and context size visible at all times.
+config popover, reached from the status chips along the bottom of the composer — so what this turn is
+allowed to do is readable right where you fire it, and the header carries only per-moment actions.
 
 ## What it shares with the category
 

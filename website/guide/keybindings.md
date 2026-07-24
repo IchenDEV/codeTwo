@@ -25,6 +25,7 @@ silently do nothing.
 | Cancel turn | `Mod+.` |
 | Open skill picker (`/`) | `Mod+/` |
 | Focus editor | `Mod+E` |
+| Expand document to full height | `Mod+Shift+E` |
 
 **Sessions**
 
@@ -62,7 +63,7 @@ silently do nothing.
 | Cycle approval mode | `Mod+Shift+P` |
 | Refresh git status | `Mod+G` |
 
-Shortcut hints in tooltips, the command palette, and the Run button are read from the live keymap —
+Shortcut hints in tooltips, the command palette, and the composer are read from the live keymap —
 rebind a key and the hint updates everywhere.
 
 ## Customizing

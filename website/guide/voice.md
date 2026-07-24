@@ -1,7 +1,7 @@
 # Voice input
 
-Dictate into the prompt document with the **🎤** button in the header. It works two ways and picks
-automatically.
+Dictate into the prompt document with the **🎤** button in the composer's control row. It works two
+ways and picks automatically.
 
 ## 1. Live dictation (no setup)
 

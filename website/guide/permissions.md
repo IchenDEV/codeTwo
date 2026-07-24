@@ -5,7 +5,8 @@ decides how to respond based on the session's **permission mode** and any rules.
 
 ## Modes
 
-Set the mode in the header's config popover (or cycle it with `Mod+Shift+P`):
+Set the mode in the config popover — the provider chip at the bottom of the composer reads
+`provider · mode` and opens it — or cycle it with `Mod+Shift+P`:
 
 | Mode | Behavior |
 | --- | --- |
@@ -16,7 +17,8 @@ Set the mode in the header's config popover (or cycle it with `Mod+Shift+P`):
 ## Sandbox — a second, independent axis
 
 The permission mode decides *who approves*; the **sandbox** decides *what's possible at all*. Pick it
-in the config popover, next to the approval mode:
+in the config popover, next to the approval mode — the composer's left-hand chip shows the current
+one, and turns amber on **Danger full access**:
 
 | Sandbox | Effect |
 | --- | --- |

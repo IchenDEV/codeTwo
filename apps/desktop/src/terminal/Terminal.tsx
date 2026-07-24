@@ -27,7 +27,20 @@ export function TerminalPanel({
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(el);
-    fit.fit();
+
+    // Terminals stay mounted when they're not the visible tab, so they have no layout box — and
+    // xterm's fit addon throws on those. The dock's resize event reaches every mounted instance, so
+    // this guard is what keeps a panel resize from spraying errors from the hidden ones.
+    const fitIfVisible = () => {
+      if (el.offsetParent === null || el.clientWidth === 0 || el.clientHeight === 0) return false;
+      try {
+        fit.fit();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    fitIfVisible();
 
     let unlisten: (() => void) | null = null;
     void (async () => {
@@ -41,7 +54,7 @@ export function TerminalPanel({
       void ptyWrite(id, d);
     });
     const onResize = () => {
-      fit.fit();
+      if (!fitIfVisible()) return;
       void ptyResize(id, term.rows, term.cols);
     };
     window.addEventListener("resize", onResize);

@@ -167,29 +167,64 @@
     border: 1px solid color-mix(in oklch, var(--success) 30%, transparent);
   }
 
-  .splitter {
-    height: 6px;
-    cursor: row-resize;
-    background: var(--border);
+  /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
+     stays invisible until you're near it, so the resting state reads as a plain card. */
+  .composer-grip {
+    height: 11px;
     flex-shrink: 0;
+    cursor: row-resize;
     position: relative;
-    transition: background 0.12s ease;
   }
-  .splitter::after {
+  .composer-grip::after {
     content: "";
     position: absolute;
     left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 34px;
-    height: 2px;
-    border-radius: 2px;
+    top: 4px;
+    transform: translateX(-50%);
+    width: 32px;
+    height: 3px;
+    border-radius: 999px;
     background: var(--muted-foreground);
-    opacity: 0.5;
+    opacity: 0;
+    transition: opacity 0.12s ease;
   }
-  .splitter:hover,
-  .splitter.dragging {
-    background: color-mix(in oklch, var(--primary) 30%, transparent);
+  .composer-card:hover .composer-grip::after {
+    opacity: 0.35;
+  }
+  .composer-grip:hover::after {
+    opacity: 0.7;
+  }
+
+  /* Sits over the dock's left border so the whole edge is a grab target. */
+  .dock-grip {
+    position: absolute;
+    left: -3px;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    z-index: 20;
+    cursor: col-resize;
+    transition: background 0.12s ease;
+  }
+  .dock-grip:hover {
+    background: color-mix(in oklch, var(--primary) 35%, transparent);
+  }
+
+  /* While a drag is live: one cursor everywhere, no text selection, and iframes (the browser panel)
+     stop swallowing the mousemove events the drag depends on. */
+  body.resizing-v,
+  body.resizing-v * {
+    cursor: row-resize !important;
+    user-select: none;
+  }
+  body.resizing-h,
+  body.resizing-h * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
+  body.resizing-v iframe,
+  body.resizing-h iframe {
+    pointer-events: none;
   }
 
   .diff {
@@ -266,4 +301,26 @@
 .bn-block-content pre {
   font-family: var(--font-mono);
   font-size: 12.5px;
+}
+
+/* Expanded ("document mode"): the composer has the whole column, so give the text a real document
+   measure — a proper gutter for the drag/insert handles, and looser type for long-form writing. */
+.bn-doc-mode .bn-editor {
+  padding-inline: 46px 28px;
+  font-size: 15px;
+}
+.bn-doc-mode .bn-block-content[data-content-type="paragraph"] {
+  line-height: 1.75;
+}
+.bn-doc-mode .bn-editor [data-node-type="blockContainer"] {
+  padding-block: 2px;
+}
+.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+  font-size: 25px;
+}
+.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+  font-size: 20px;
+}
+.bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+  font-size: 17px;
 }

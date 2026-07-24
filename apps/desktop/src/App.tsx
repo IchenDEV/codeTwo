@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Archive,
-  ChevronRight,
   CircleAlert,
-  Eye,
+  Folder,
   GitBranch,
   Keyboard,
   PanelRight,
-  Pencil,
-  Plus,
   Settings as SettingsIcon,
-  Square,
-  Store,
 } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
@@ -73,22 +67,22 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
-import { VoiceButton } from "./voice/VoiceButton";
 import { UsageModal } from "./usage/Usage";
-import { ConfigPopover } from "./session/ConfigPopover";
+import type { SessionConfig } from "./session/ConfigPopover";
+import { Composer } from "./session/Composer";
 import { TurnCard } from "./session/TurnCard";
-import { applyEvent, isRunning, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
+import { applyEvent, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
 import { Dock, type DockTab } from "./dock/Dock";
+import { SessionRail } from "./sidebar/SessionRail";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
 import { useToast } from "./ui/toast";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 
 interface PermissionState {
@@ -113,7 +107,7 @@ function IconAction({
   onClick,
   active,
 }: {
-  icon: typeof Eye;
+  icon: typeof Keyboard;
   label: string;
   /** Live shortcut from the keymap, so a rebind shows up here too. */
   hint?: string;
@@ -170,15 +164,17 @@ export default function App() {
   const [remoteInfo, setRemoteInfo] = useState<RemoteInfo | null>(null);
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
   const [tokens, setTokens] = useState<number>(0);
   const [showFiles, setShowFiles] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
-  const [editorPct, setEditorPct] = useState(45);
-  const [dragging, setDragging] = useState(false);
   const [docEmpty, setDocEmpty] = useState(true);
+  // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
+  // taken over the whole column for long-form authoring.
+  const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
+  const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
+  const [docMode, setDocMode] = useState(false);
   const mainRef = useRef<HTMLElement | null>(null);
   const toast = useToast();
 
@@ -287,6 +283,8 @@ export default function App() {
       return;
     }
     if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
+    // Sending is the moment you stop writing and start watching — give the transcript back.
+    setDocMode(false);
     setRunning(true);
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc))]);
     try {
@@ -408,22 +406,10 @@ export default function App() {
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
   }, []);
 
-  const startSplitDrag = useCallback(() => {
-    setDragging(true);
-    const onMove = (e: MouseEvent) => {
-      const el = mainRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setEditorPct(Math.min(85, Math.max(15, ((e.clientY - rect.top) / rect.height) * 100)));
-    };
-    const onUp = () => {
-      setDragging(false);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      window.dispatchEvent(new Event("resize"));
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+  // Expanding hands the whole column to the document; focus follows so you can just start writing.
+  const toggleDocMode = useCallback((v: boolean) => {
+    setDocMode(v);
+    if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
   const stepSession = useCallback(
@@ -470,6 +456,9 @@ export default function App() {
           break;
         case "focus_editor":
           focusEditorRef.current?.();
+          break;
+        case "toggle_doc_mode":
+          toggleDocMode(!docMode);
           break;
         case "open_settings":
           setShowSettings(true);
@@ -523,6 +512,8 @@ export default function App() {
       openSourceControl,
       openMarket,
       toggleDock,
+      toggleDocMode,
+      docMode,
       stepSession,
       toast,
     ],
@@ -541,6 +532,12 @@ export default function App() {
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
     { id: "usage", label: "Usage (5h / week / month)", hint: hint("open_usage"), run: () => setShowUsage(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
+    {
+      id: "docmode",
+      label: docMode ? "Collapse the document" : "Expand the document to full height",
+      hint: hint("toggle_doc_mode"),
+      run: () => toggleDocMode(!docMode),
+    },
     { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: hint("open_settings"), run: () => setShowSettings(true) },
@@ -622,149 +619,75 @@ export default function App() {
 
   const currentProvider = providers.find((p) => p.id === provider);
 
+  const sessionConfig: SessionConfig = {
+    providers,
+    provider,
+    onProvider: (p) => {
+      providerPinned.current = true;
+      setProvider(p);
+    },
+    cwd,
+    onCwd: setCwd,
+    mode,
+    onMode: onModeChange,
+    sandbox,
+    onSandbox: onSandboxChange,
+    useWorktree,
+    onWorktree: setUseWorktree,
+    planMode,
+    onPlan: setPlanMode,
+  };
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       <div className="flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
-        <aside className="flex w-60 min-w-60 flex-col border-r bg-sidebar">
-          <div className="flex items-center justify-between px-3 pb-2.5 pt-7">
-            <span className="text-[15px] font-bold tracking-tight">codeTwo</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" className="size-7" onClick={() => void createSession()}>
-                  <Plus className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                New session <span className="ml-1 opacity-60">{hint("new_session")}</span>
-              </TooltipContent>
-            </Tooltip>
-          </div>
-
-          <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-px px-1.5 pb-2">
-              {sessions.length === 0 && (
-                <p className="px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-                  No sessions yet.
-                  <br />
-                  Write a prompt and hit Run.
-                </p>
+        <SessionRail
+          sessions={sessions}
+          activeSession={activeSession}
+          onSelect={(id) => void selectSession(id)}
+          onNew={() => void createSession()}
+          onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
+          onArchive={(id) => void archiveSession(id, true).then(refreshSessions)}
+          displayProvider={displayProvider}
+          skills={skills}
+          onOpenMarket={openMarket}
+          onNewSkill={() => setSkillDraft({ name: "", text: "" })}
+          newHint={hint("new_session")}
+          status={
+            <>
+              <span
+                className={cn("size-1.5 shrink-0 rounded-full", currentProvider?.available ? "bg-success" : "bg-border")}
+              />
+              <span className="truncate">{currentProvider?.display_name ?? provider}</span>
+              {tokens > 0 && (
+                <button
+                  className="ml-auto shrink-0 font-mono hover:text-foreground"
+                  onClick={() => setShowUsage(true)}
+                  title="Usage"
+                >
+                  {(tokens / 1000).toFixed(1)}k
+                </button>
               )}
-              {sessions.map((s) => (
-                <div
-                  key={s.id}
-                  onClick={() => void selectSession(s.id)}
-                  className={cn(
-                    "group cursor-pointer rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent",
-                    s.id === activeSession && "bg-accent",
-                  )}
-                >
-                  {renaming?.id === s.id ? (
-                    <Input
-                      autoFocus
-                      className="h-6 text-[13px]"
-                      value={renaming.title}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
-                      onBlur={() => setRenaming(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          void renameSession(s.id, renaming.title).then(refreshSessions);
-                          setRenaming(null);
-                        } else if (e.key === "Escape") setRenaming(null);
-                      }}
-                    />
-                  ) : (
-                    <div className={cn("truncate text-[13px] font-medium", s.id === activeSession && "text-primary")}>
-                      {s.title}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    {displayProvider(s.provider)}
-                    {s.worktree_path && <Badge variant="secondary" className="h-4 px-1 text-[9px]">wt</Badge>}
-                    <span className="ml-auto hidden gap-0.5 group-hover:flex">
-                      <button
-                        title="Rename"
-                        className="rounded p-0.5 hover:text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenaming({ id: s.id, title: s.title });
-                        }}
-                      >
-                        <Pencil className="size-3" />
-                      </button>
-                      <button
-                        title="Archive"
-                        className="rounded p-0.5 hover:text-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void archiveSession(s.id, true).then(refreshSessions);
-                        }}
-                      >
-                        <Archive className="size-3" />
-                      </button>
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+            </>
+          }
+        />
 
-          {/* Skills live at the foot of the rail — they're picked with "/" in the doc, not here. */}
-          <div className="border-t px-3 py-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {skills.length} skills
-              </span>
-              <span className="flex gap-1">
-                <Button variant="ghost" size="icon" className="size-5" onClick={openMarket} title="Skill market">
-                  <Store className="size-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5"
-                  onClick={() => setSkillDraft({ name: "", text: "" })}
-                  title="New skill"
-                >
-                  <Plus className="size-3" />
-                </Button>
-              </span>
-            </div>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Type <b>/</b> in the document to insert one.
-            </p>
-          </div>
-        </aside>
-
-        {/* ---------------- document + transcript ---------------- */}
+        {/* ---------------- transcript + composer ---------------- */}
         <main className="flex min-w-0 flex-1 flex-col" ref={mainRef}>
-          <header className="flex items-center gap-1.5 border-b bg-card px-3 pb-2.5 pt-7">
-            <span className="max-w-56 truncate text-[13px] font-semibold">{activeTitle}</span>
-
-            <ConfigPopover
-              providers={providers}
-              provider={provider}
-              onProvider={(p) => {
-                providerPinned.current = true;
-                setProvider(p);
-              }}
-              cwd={cwd}
-              onCwd={setCwd}
-              mode={mode}
-              onMode={onModeChange}
-              sandbox={sandbox}
-              onSandbox={onSandboxChange}
-              useWorktree={useWorktree}
-              onWorktree={setUseWorktree}
-              planMode={planMode}
-              onPlan={setPlanMode}
-            />
+          <header className="flex items-center gap-1.5 px-3 pb-2 pt-7">
+            <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="max-w-96 truncate text-[13px] font-semibold">{activeTitle}</span>
+            {git?.is_repo && (
+              <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                <GitBranch className="size-3" />
+                {git.branch}
+                {git.files.length > 0 && <span className="text-warning">•{git.files.length}</span>}
+              </span>
+            )}
 
             <div className="flex-1" />
 
-            <VoiceButton onText={(t) => insertTextRef.current?.(t)} />
-            <IconAction icon={Eye} label="Preview compiled prompt" onClick={() => void doPreview()} />
             <IconAction
               icon={Keyboard}
               label="Command palette"
@@ -784,71 +707,68 @@ export default function App() {
               active={dockTab !== null}
               onClick={() => toggleDock(dockTab ?? "terminal")}
             />
-
-            {running ? (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="ml-1 shrink-0"
-                onClick={() => activeSession && void cancelTurn(activeSession)}
-              >
-                <Square className="size-3.5" /> Stop
-                <span className="ml-0.5 opacity-70">{hint("cancel")}</span>
-              </Button>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-                      focuses the editor and says what's missing. */}
-                  <Button
-                    size="sm"
-                    variant={docEmpty ? "secondary" : "default"}
-                    className="ml-1 shrink-0"
-                    onClick={() => void run()}
-                  >
-                    Run <ChevronRight className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {docEmpty ? "Write a prompt first" : "Run this document"}
-                  <span className="ml-1.5 opacity-60">{hint("run")}</span>
-                </TooltipContent>
-              </Tooltip>
-            )}
           </header>
 
-          {/* Both panes share one centred measure so the prompt and its answer line up. */}
-          <section className="min-h-[90px] overflow-y-auto pt-5" style={{ flex: `0 0 ${editorPct}%` }}>
-            <div className="mx-auto w-full max-w-[820px] px-2">
-              <DocEditor
-                skills={skills}
-                cwd={cwd || "."}
-                getBlocksRef={getBlocksRef}
-                insertTextRef={insertTextRef}
-                insertFileRef={insertFileRef}
-                focusRef={focusEditorRef}
-                openSkillPickerRef={openSkillPickerRef}
-                onEmptyChange={setDocEmpty}
-              />
-            </div>
-          </section>
-
-          <div className={cn("splitter", dragging && "dragging")} onMouseDown={startSplitDrag} title="Drag to resize" />
-
-          <section className="min-h-20 flex-1 overflow-y-auto bg-muted/30">
-            <div className="mx-auto w-full max-w-[820px] px-5">
+          {/* The transcript owns the column; the composer is docked under it. In document mode the
+              transcript steps aside entirely and the editor gets the whole height. */}
+          {!docMode && (
+            <section className="min-h-0 flex-1 overflow-y-auto">
               {turns.length === 0 ? (
-                <p className="py-8 text-center text-xs leading-relaxed text-muted-foreground">
-                  Compose above, then press <b>Run</b> ({hint("run")}).
-                  <br />
-                  Type <b>/</b> for skills, <b>@</b> to pull in a file.
-                </p>
+                <div className="flex h-full items-center justify-center px-6 pb-10">
+                  <div className="text-center">
+                    <p className="text-[17px] font-medium">What should we build?</p>
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                      Write a prompt below — type <b>/</b> for skills, <b>@</b> to pull in a file.
+                      <br />
+                      Send with <b>{hint("run")}</b>, or expand the document with{" "}
+                      <b>{hint("toggle_doc_mode")}</b> for longer briefs.
+                    </p>
+                  </div>
+                </div>
               ) : (
-                turns.map((t) => <TurnCard key={t.id} turn={t} />)
+                <div className="mx-auto w-full max-w-[860px] px-6 pb-2">
+                  {turns.map((t) => (
+                    <TurnCard key={t.id} turn={t} />
+                  ))}
+                  <div ref={transcriptEndRef} />
+                </div>
               )}
-              <div ref={transcriptEndRef} />
-            </div>
-          </section>
+            </section>
+          )}
+
+          <Composer
+            config={sessionConfig}
+            docMode={docMode}
+            onDocMode={toggleDocMode}
+            height={composerH}
+            onHeight={setComposerH}
+            boundsRef={mainRef}
+            running={running}
+            docEmpty={docEmpty}
+            onRun={() => void run()}
+            onStop={() => activeSession && void cancelTurn(activeSession)}
+            onPreview={() => void doPreview()}
+            onAttachFile={() => setShowFiles(true)}
+            onInsertSkill={() => openSkillPickerRef.current?.()}
+            onInsertIssue={() => setShowIssues(true)}
+            onOpenMarket={openMarket}
+            onVoiceText={(t) => insertTextRef.current?.(t)}
+            runHint={hint("run")}
+            docModeHint={hint("toggle_doc_mode")}
+            skillHint={hint("open_skill_picker")}
+            filesHint={hint("open_files")}
+          >
+            <DocEditor
+              skills={skills}
+              cwd={cwd || "."}
+              getBlocksRef={getBlocksRef}
+              insertTextRef={insertTextRef}
+              insertFileRef={insertFileRef}
+              focusRef={focusEditorRef}
+              openSkillPickerRef={openSkillPickerRef}
+              onEmptyChange={setDocEmpty}
+            />
+          </Composer>
         </main>
 
         {/* ---------------- side dock ---------------- */}
@@ -865,39 +785,11 @@ export default function App() {
             browserUrl={browserUrl}
             onNavigate={setBrowserUrl}
             onAnnotate={(n) => void annotate(n)}
+            width={dockWidth}
+            onWidth={setDockWidth}
           />
         )}
       </div>
-
-      {/* ---------------- status bar ---------------- */}
-      <footer className="flex h-7 shrink-0 items-center gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className={cn("size-1.5 rounded-full", currentProvider?.available ? "bg-success" : "bg-border")} />
-          {currentProvider?.display_name ?? provider}
-        </span>
-        {git?.is_repo && (
-          <span className="flex items-center gap-1">
-            <GitBranch className="size-3" />
-            {git.branch}
-            {git.files.length > 0 && <span className="text-warning">•{git.files.length}</span>}
-          </span>
-        )}
-        <span className="font-mono">{mode}</span>
-        <span className="font-mono">{sandbox.replace("_", " ")}</span>
-        {useWorktree && <span>worktree</span>}
-        {planMode && <span>plan</span>}
-        <div className="flex-1" />
-        {isRunning(turns[turns.length - 1]) && (
-          <span className="flex items-center gap-1 text-primary">
-            <span className="size-1.5 animate-pulse rounded-full bg-primary" /> running
-          </span>
-        )}
-        {tokens > 0 && (
-          <button className="font-mono hover:text-foreground" onClick={() => setShowUsage(true)} title="Usage">
-            {(tokens / 1000).toFixed(1)}k ctx
-          </button>
-        )}
-      </footer>
 
       {/* ---------------- dialogs ---------------- */}
       {showSettings && (

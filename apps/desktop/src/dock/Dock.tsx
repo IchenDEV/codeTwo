@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GitBranch, Globe, Plus, TerminalIcon, X } from "lucide-react";
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
@@ -27,6 +27,8 @@ export function Dock({
   browserUrl,
   onNavigate,
   onAnnotate,
+  width,
+  onWidth,
 }: {
   tab: DockTab;
   onTab: (t: DockTab) => void;
@@ -39,14 +41,57 @@ export function Dock({
   browserUrl: string;
   onNavigate: (u: string) => void;
   onAnnotate: (note: string) => void;
+  /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
+  width: number;
+  onWidth: (n: number) => void;
 }) {
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const [nextTerm, setNextTerm] = useState(2);
   const [tmux, setTmux] = useState(false);
 
+  // Never let the dock squeeze the document column below a usable measure. This is applied on every
+  // render, not just while dragging: a width saved on a wide display would otherwise come back on a
+  // laptop screen and leave the document a sliver. The preferred width is kept, only the *applied*
+  // one is clamped, so it returns in full on a big window.
+  const [maxWidth, setMaxWidth] = useState(() => Math.max(300, window.innerWidth - 620));
+  useEffect(() => {
+    const measure = () => setMaxWidth(Math.max(300, window.innerWidth - 620));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const applied = Math.min(width, maxWidth);
+
+  const startDrag = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = applied;
+      const onMove = (ev: MouseEvent) => {
+        const max = Math.max(300, window.innerWidth - 620);
+        onWidth(Math.round(Math.min(max, Math.max(300, startW + (startX - ev.clientX)))));
+      };
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        document.body.classList.remove("resizing-h");
+        window.dispatchEvent(new Event("resize"));
+      };
+      document.body.classList.add("resizing-h");
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [applied, onWidth],
+  );
+
   return (
-    <aside className="flex w-[440px] min-w-[320px] flex-col border-l bg-card">
+    <aside
+      className="relative flex min-w-[300px] shrink-0 flex-col border-l bg-card"
+      style={{ width: applied }}
+    >
+      <div className="dock-grip" onMouseDown={startDrag} title="Drag to resize the panel" />
+
       <Tabs value={tab} onValueChange={(v) => onTab(v as DockTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* pt-7 matches the main header's titlebar inset so the two rows line up. */}
         <div className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">

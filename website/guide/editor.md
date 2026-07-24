@@ -4,8 +4,17 @@ codeTwo's core idea: **compose your prompt as a document**, and combine reusable
 
 ## The document editor
 
-The main pane is a block editor (BlockNote). Write your request as prose — headings, paragraphs,
-lists — like a short spec. When you run, the whole document becomes one prompt turn.
+The composer at the foot of the transcript is a block editor (BlockNote), not a text field. Write
+your request as prose — headings, paragraphs, lists, code blocks — like a short spec. When you run,
+the whole document becomes one prompt turn.
+
+It starts compact, the way a chat box does, and grows with what you write. Two ways to get more
+room, neither of which changes what the document *is*:
+
+- **Drag the top edge** of the composer to any height. The size is remembered.
+- **Expand** (`Mod+Shift+E`, or the ⤢ button) hands the document the entire column, with a wider
+  measure, a block gutter for drag/insert handles, and larger type for long-form writing. Sending
+  collapses it so the transcript comes back.
 
 ## The `/` skill picker
 

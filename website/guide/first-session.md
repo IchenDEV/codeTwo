@@ -4,18 +4,19 @@ This walks through composing and running a prompt in the desktop app.
 
 ## 1. Pick a provider and working directory
 
-Click the **config button** in the header — it reads `provider · mode`, e.g. `Grok · ask`. That
-popover holds everything you set once per session: **provider**, **working directory**, approvals,
-sandbox, worktree isolation, and plan mode. A green dot next to a provider means its CLI is on your
-`PATH`.
+Click either **status chip** along the bottom of the composer — they read the sandbox (`Workspace
+write`) and the provider and approval mode (`Grok · Ask first`). Both open the same popover, which
+holds everything you set once per session: **provider**, **working directory**, approvals, sandbox,
+worktree isolation, and plan mode. A green dot next to a provider means its CLI is on your `PATH`.
 
 Optionally tick **Isolate in a git worktree** to run this session on a fresh branch and checkout.
 See [Git](/guide/git).
 
 ## 2. Compose your prompt as a document
 
-The main pane is a document editor, not a chat box. Write your request in plain prose. Then type
-`/` to open the **skill picker** and insert skills:
+The composer sits at the foot of the transcript, where a chat box would be — but it *is* a document
+editor, not a text field. Write your request in plain prose. Then type `/` to open the **skill
+picker** and insert skills:
 
 - `Skill: Code Reviewer` — a reviewer persona (a fragment).
 - `Skill: Test Writer`, `Security Audit`, and anything you've installed from the
@@ -25,14 +26,19 @@ Inserted skills appear as inline chips. You can combine several and interleave t
 text — the whole document is compiled into one prompt when you run it. Details:
 [Document editor & skills](/guide/editor).
 
+The composer grows as you write. Drag its top edge for more room, or press `Mod+Shift+E` (the ⤢
+button) to hand the document the **whole column** for a longer brief — headings, lists, code blocks
+and all. Sending collapses it again so you can watch the answer.
+
 ## 3. Run
 
-Press **Run ▸** (or `Mod+Enter`). codeTwo:
+Press the **send** button (or `Mod+Enter`). codeTwo:
 
 1. Auto-checkpoints your workspace (a hidden git ref) so you can revert later.
 2. Compiles the document — text + skill fragments + macro substitutions — into the prompt, and
    attaches any MCP servers from MCP skills.
-3. Starts (or reuses) the session and streams the agent's work into the transcript below the editor.
+3. Starts (or reuses) the session and streams the agent's work into the transcript above the
+   composer.
 
 Each prompt becomes one **turn** in the transcript: your prompt, the agent's answer, and — collapsed
 underneath — its **tools**, **thinking**, and **plan**. Expand a disclosure when you want the detail;

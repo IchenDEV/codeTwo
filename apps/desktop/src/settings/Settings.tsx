@@ -7,10 +7,13 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-// A flat list of 20 shortcuts is hard to scan, so group them by what they touch. Any action not
+// A flat list of every shortcut is hard to scan, so group them by what they touch. Any action not
 // listed here still shows up under "Other", so a new binding is never hidden.
 const GROUPS: { title: string; actions: string[] }[] = [
-  { title: "Prompt", actions: ["run", "cancel", "open_skill_picker", "focus_editor"] },
+  {
+    title: "Prompt",
+    actions: ["run", "cancel", "open_skill_picker", "focus_editor", "toggle_doc_mode"],
+  },
   { title: "Sessions", actions: ["new_session", "prev_session", "next_session"] },
   { title: "Panels", actions: ["toggle_terminal", "toggle_browser", "toggle_git", "close_panel"] },
   { title: "Git", actions: ["refresh_git", "open_source_control"] },

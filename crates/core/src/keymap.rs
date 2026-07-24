@@ -22,6 +22,7 @@ pub enum Action {
     OpenCommandPalette,
     OpenSourceControl,
     FocusEditor,
+    ToggleDocMode,
     CyclePermissionMode,
     RefreshGit,
     ToggleGit,
@@ -35,7 +36,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 20] = [
+    pub const ALL: [Action; 21] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
@@ -45,6 +46,7 @@ impl Action {
         Action::ClosePanel,
         Action::OpenSkillPicker,
         Action::FocusEditor,
+        Action::ToggleDocMode,
         Action::OpenCommandPalette,
         Action::OpenSourceControl,
         Action::OpenMarket,
@@ -70,6 +72,7 @@ impl Action {
             Action::OpenCommandPalette => "open_command_palette",
             Action::OpenSourceControl => "open_source_control",
             Action::FocusEditor => "focus_editor",
+            Action::ToggleDocMode => "toggle_doc_mode",
             Action::CyclePermissionMode => "cycle_permission_mode",
             Action::RefreshGit => "refresh_git",
             Action::ToggleGit => "toggle_git",
@@ -95,6 +98,7 @@ impl Action {
             Action::OpenCommandPalette => "Command palette",
             Action::OpenSourceControl => "Source control",
             Action::FocusEditor => "Focus editor",
+            Action::ToggleDocMode => "Expand document to full height",
             Action::CyclePermissionMode => "Cycle permission mode",
             Action::RefreshGit => "Refresh git status",
             Action::ToggleGit => "Toggle git panel",
@@ -120,6 +124,7 @@ impl Action {
             Action::OpenCommandPalette => "Mod+K",
             Action::OpenSourceControl => "Mod+Shift+G",
             Action::FocusEditor => "Mod+E",
+            Action::ToggleDocMode => "Mod+Shift+E",
             Action::CyclePermissionMode => "Mod+Shift+P",
             Action::RefreshGit => "Mod+G",
             Action::ToggleGit => "Mod+Shift+B",

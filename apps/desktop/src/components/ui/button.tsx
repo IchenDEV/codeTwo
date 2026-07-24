@@ -38,20 +38,23 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean
-  }) {
+/**
+ * Ref-forwarding is load-bearing here, not boilerplate: shadcn's current source targets React 19,
+ * where a function component receives `ref` as a prop, and this app is on React 18. Without the
+ * forwardRef, every `<TooltipTrigger asChild><Button/></TooltipTrigger>` and
+ * `<PopoverTrigger asChild><Button/></PopoverTrigger>` hands Radix a null anchor — the content
+ * mounts but is never positioned, so it sits off-screen at `translate(0, -200%)` and no tooltip or
+ * popover ever appears. Drop this and the app loses every keyboard hint in silence.
+ */
+const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }
+>(({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
   const Comp = asChild ? Slot.Root : "button"
 
   return (
     <Comp
+      ref={ref}
       data-slot="button"
       data-variant={variant}
       data-size={size}
@@ -59,6 +62,7 @@ function Button({
       {...props}
     />
   )
-}
+})
+Button.displayName = "Button"
 
 export { Button, buttonVariants }

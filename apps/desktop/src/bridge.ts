@@ -231,6 +231,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["close_panel", "Escape", "Close side panel"],
   ["open_skill_picker", "Mod+/", "Open skill picker"],
   ["focus_editor", "Mod+E", "Focus editor"],
+  ["toggle_doc_mode", "Mod+Shift+E", "Expand document to full height"],
   ["open_command_palette", "Mod+K", "Command palette"],
   ["open_source_control", "Mod+Shift+G", "Source control"],
   ["open_market", "Mod+Shift+M", "Open skill market"],
