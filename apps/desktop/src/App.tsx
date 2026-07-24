@@ -41,6 +41,7 @@ import {
   runProjectScript,
   saveSkill,
   setKeymap,
+  setModel,
   setPermissionMode,
   setSandbox,
   submitPrompt,
@@ -52,6 +53,7 @@ import {
   type Issue,
   type KeymapEntry,
   type MarketItem,
+  type ModelChoice,
   type ProjectScript,
   type ProviderInfo,
   type RemoteInfo,
@@ -170,6 +172,9 @@ export default function App() {
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
+  // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
+  const [models, setModels] = useState<ModelChoice[]>([]);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
@@ -243,6 +248,12 @@ export default function App() {
           setTokens(ev.input_tokens);
           return;
         }
+        if (ev.event === "models") {
+          // A switch echoes back the same list; only session/new carries a fresh one.
+          if (ev.available.length > 0) setModels(ev.available);
+          setCurrentModel(ev.current || null);
+          return;
+        }
         if (ev.event === "permission_request") {
           setPermission({
             session: ev.session,
@@ -303,6 +314,8 @@ export default function App() {
   const createSession = useCallback(async () => {
     pendingDocRef.current = null;
     setTurns([]);
+    setModels([]);
+    setCurrentModel(null);
     try {
       await newSession(provider, cwd || ".", useWorktree);
     } catch (e) {
@@ -329,11 +342,18 @@ export default function App() {
     if (activeSessionRef.current) void setSandbox(activeSessionRef.current, s);
   }, []);
 
-  const selectSession = useCallback(async (id: string) => {
-    activeSessionRef.current = id;
-    setActiveSession(id);
-    setTurns(turnsFromTranscript(await getTranscript(id)));
-  }, []);
+  const selectSession = useCallback(
+    async (id: string) => {
+      activeSessionRef.current = id;
+      setActiveSession(id);
+      // Models belong to a session. The agent only reports the list at session/new, so for a
+      // session resumed from the store we know the chosen model but not the menu it came from.
+      setModels([]);
+      setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
+      setTurns(turnsFromTranscript(await getTranscript(id)));
+    },
+    [sessions],
+  );
 
   const refreshSkills = useCallback(() => {
     listSkills().then(setSkills).catch(() => {});
@@ -636,6 +656,7 @@ export default function App() {
     onWorktree: setUseWorktree,
     planMode,
     onPlan: setPlanMode,
+    hasSession: activeSession !== null,
   };
 
   return (
@@ -743,6 +764,17 @@ export default function App() {
             height={composerH}
             onHeight={setComposerH}
             boundsRef={mainRef}
+            models={models}
+            currentModel={currentModel}
+            onModel={(id) => {
+              if (!activeSessionRef.current) return;
+              // Optimistic: the engine answers with a `models` event, or an `error` if the provider
+              // doesn't implement the switch.
+              setCurrentModel(id);
+              void setModel(activeSessionRef.current, id).catch((e) =>
+                toast(`Could not switch model: ${e}`, "error"),
+              );
+            }}
             running={running}
             docEmpty={docEmpty}
             onRun={() => void run()}

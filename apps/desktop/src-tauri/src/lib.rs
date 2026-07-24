@@ -414,6 +414,17 @@ async fn set_sandbox(state: State<'_, AppState>, session: String, sandbox: Strin
         .map_err(|e| e.to_string())
 }
 
+/// Switch the session's model. The engine forwards it to the agent over ACP and answers with a
+/// `models` event; a provider that doesn't implement the call reports an `error` event instead.
+#[tauri::command]
+async fn set_model(state: State<'_, AppState>, session: String, model: String) -> Result<(), String> {
+    state
+        .engine
+        .submit(Op::SetModel { session, model })
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn list_project_scripts(cwd: String) -> Vec<ProjectScript> {
     project::load(std::path::Path::new(&cwd)).scripts
@@ -687,6 +698,7 @@ pub fn run() {
             submit_prompt,
             answer_permission,
             set_permission_mode,
+            set_model,
             cancel_turn,
             pty_spawn,
             pty_write,

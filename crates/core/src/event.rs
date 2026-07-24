@@ -44,6 +44,18 @@ pub enum Event {
         options: Vec<(String, String)>,
     },
     Usage { session: SessionId, input_tokens: u64, output_tokens: u64 },
+    /// The models this session's agent offers, reported at `session/new` and after a switch.
+    /// Providers that don't implement the (UNSTABLE) ACP model API never emit this, which is how
+    /// the UI knows to say so instead of showing an empty picker.
+    Models { session: SessionId, available: Vec<ModelChoice>, current: String },
     TurnEnded { session: SessionId, stop_reason: String },
     Error { session: Option<SessionId>, message: String },
+}
+
+/// One selectable model, flattened from ACP's `ModelInfo` for the frontends.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelChoice {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
 }

@@ -21,12 +21,14 @@ Four regions, each with one job:
 | --- | --- |
 | **Session rail** (left) | Your sessions, grouped by recency and filterable. Skill-library management and the live provider sit at its foot. |
 | **Transcript** (centre) | One **turn** per exchange — your prompt in a bubble, the answer full width, tools/thinking/plan collapsed underneath. |
-| **Composer** (bottom) | The prompt you're composing. It sits where a chat box would, but it's the full document editor: `/` inserts a skill, `@` pulls in a file. Drag it taller, or expand it to the whole column (`Mod+Shift+E`) for a longer brief. |
+| **Composer** (bottom) | The prompt you're composing. It sits where a chat box would, but it's the full document editor: `/` inserts a skill, `@` pulls in a file. Drag it taller, or expand it (`Mod+Shift+E`) so the document becomes the whole page for a longer brief. |
 | **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. Drag its edge to resize. |
 
 Per-session setup (provider, working directory, approvals, sandbox, worktree, plan mode) lives in one
-config popover, reached from the status chips along the bottom of the composer — so what this turn is
-allowed to do is readable right where you fire it, and the header carries only per-moment actions.
+config popover, reached from the status chips along the bottom of the composer — plus a
+[model picker](/guide/providers#models) when the agent reports one. So what this turn is allowed to
+do, and what it runs on, is readable right where you fire it; the header carries only per-moment
+actions.
 
 ## What it shares with the category
 

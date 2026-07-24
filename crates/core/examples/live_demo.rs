@@ -125,6 +125,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 Event::Usage { .. } => {}
+                Event::Models { available, current, .. } => {
+                    println!("models: {} available, current = {current}", available.len());
+                }
             }
         }
     };

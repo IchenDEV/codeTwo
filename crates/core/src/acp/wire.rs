@@ -47,6 +47,40 @@ pub struct NewSessionRequest {
 pub struct NewSessionResponse {
     #[serde(rename = "sessionId")]
     pub session_id: String,
+    /// The agent's selectable models, when it reports any. Marked UNSTABLE in the ACP spec and
+    /// absent from most adapters today, so this stays optional and its absence is a normal state —
+    /// the UI says "this provider doesn't expose models" rather than showing an empty picker.
+    #[serde(default)]
+    pub models: Option<SessionModelState>,
+}
+
+// ---- models (ACP: UNSTABLE) ------------------------------------------------------------------
+
+/// One model the agent can be switched to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelInfo {
+    #[serde(rename = "modelId")]
+    pub model_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// The models an agent offers, and which one is live.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionModelState {
+    #[serde(rename = "availableModels", default)]
+    pub available_models: Vec<ModelInfo>,
+    #[serde(rename = "currentModelId", default)]
+    pub current_model_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetModelRequest {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "modelId")]
+    pub model_id: String,
 }
 
 // ---- content blocks (MCP-shaped) -----------------------------------------------------------

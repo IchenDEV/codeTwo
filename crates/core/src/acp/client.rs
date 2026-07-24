@@ -46,11 +46,35 @@ impl AcpClient {
         cwd: impl Into<String>,
         mcp_servers: Vec<Value>,
     ) -> Result<String, AcpError> {
-        let r: NewSessionResponse = self
-            .conn
+        Ok(self.new_session_full(cwd, mcp_servers).await?.session_id)
+    }
+
+    /// `session/new` with the whole response, including the models the agent offers (if any).
+    pub async fn new_session_full(
+        &self,
+        cwd: impl Into<String>,
+        mcp_servers: Vec<Value>,
+    ) -> Result<NewSessionResponse, AcpError> {
+        self.conn
             .request("session/new", NewSessionRequest { cwd: cwd.into(), mcp_servers })
+            .await
+    }
+
+    /// Switch the session's model. `session/set_model` is UNSTABLE in the ACP spec and adapters
+    /// that don't implement it answer with a method-not-found error — the caller is expected to
+    /// surface that rather than treat it as fatal.
+    pub async fn set_model(&self, session_id: &str, model_id: &str) -> Result<(), AcpError> {
+        let _: serde_json::Value = self
+            .conn
+            .request(
+                "session/set_model",
+                SetModelRequest {
+                    session_id: session_id.to_string(),
+                    model_id: model_id.to_string(),
+                },
+            )
             .await?;
-        Ok(r.session_id)
+        Ok(())
     }
 
     /// Run one prompt turn. Streamed updates arrive via the [`super::handler::ClientHandler`];

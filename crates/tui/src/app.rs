@@ -98,6 +98,18 @@ impl App {
                 self.permission = Some(PermReq { session, request_id, title, options });
             }
             Event::Usage { .. } => {}
+            // The TUI has no picker yet, but the agent's choice belongs in the status line rather
+            // than being dropped on the floor.
+            Event::Models { available, current, .. } => {
+                let name = available
+                    .iter()
+                    .find(|m| m.id == current)
+                    .map(|m| m.name.clone())
+                    .unwrap_or(current);
+                if !name.is_empty() {
+                    self.status = format!("model: {name}");
+                }
+            }
             Event::TurnEnded { stop_reason, .. } => {
                 self.status = format!("turn ended: {stop_reason}");
                 self.push("end", stop_reason);

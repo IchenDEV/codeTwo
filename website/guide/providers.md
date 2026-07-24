@@ -38,6 +38,17 @@ health dot in the config popover and at the foot of the session rail (green = av
 composer's provider chip carries an amber dot when the picked CLI is missing. A missing CLI is a
 clear state, not a crash — install the CLI and it lights up.
 
+## Models
+
+When an agent reports its models at `session/new`, the composer grows a **model chip** next to the
+provider — click it to switch, and codeTwo sends `session/set_model` and remembers the choice with
+the session.
+
+ACP's model API is marked **UNSTABLE** in the spec and most adapters don't implement it yet. That's
+a normal state, not a failure: the picker says the provider doesn't expose models and the model
+stays whatever the CLI itself is configured to use. Nothing is faked — codeTwo never shows a model
+it can't actually switch.
+
 ## Adapter flags may vary
 
 The exact adapter invocation for Cursor and OpenCode can change between versions of those tools. If a

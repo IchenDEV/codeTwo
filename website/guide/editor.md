@@ -12,9 +12,12 @@ It starts compact, the way a chat box does, and grows with what you write. Two w
 room, neither of which changes what the document *is*:
 
 - **Drag the top edge** of the composer to any height. The size is remembered.
-- **Expand** (`Mod+Shift+E`, or the ⤢ button) hands the document the entire column, with a wider
-  measure, a block gutter for drag/insert handles, and larger type for long-form writing. Sending
-  collapses it so the transcript comes back.
+- **Expand** (`Mod+Shift+E`, or the ⤢ button) makes the document *the page*: the card falls away and
+  the text runs full height on a centred measure, with a block gutter for the drag/insert handles
+  and larger type for long-form writing. The control row becomes the page's footer. Sending — or
+  `Mod+Shift+E` again — brings the transcript back.
+
+Your draft is the same document in both, so switching never costs you what you've written.
 
 ## The `/` skill picker
 

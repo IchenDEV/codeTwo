@@ -20,7 +20,7 @@ use crate::acp::wire::{
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::error::AcpError;
-use crate::event::{Event, Op};
+use crate::event::{Event, ModelChoice, Op};
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
@@ -175,6 +175,9 @@ struct SessionRuntime {
     acp_session_id: Option<String>,
     cwd: String,
     policy: Arc<Mutex<PermissionPolicy>>,
+    /// What the agent reported at `session/new`. Empty when the provider doesn't implement the
+    /// (UNSTABLE) ACP model API — which is most of them today.
+    models: Vec<ModelChoice>,
 }
 
 struct EngineState {
@@ -322,6 +325,7 @@ impl Engine {
                         acp_session_id: None,
                         cwd: cwd_stored,
                         policy,
+                        models: Vec::new(),
                     },
                 );
                 self.emit(Event::SessionCreated { session: session_id });
@@ -382,17 +386,53 @@ impl Engine {
                 if acp_sid.is_none() {
                     let mcp: Vec<serde_json::Value> =
                         compiled.mcp_servers.iter().map(|s| s.to_acp_json()).collect();
-                    match client.new_session(cwd, mcp).await {
-                        Ok(id) => {
-                            let mut map = self.state.sessions.lock().unwrap();
-                            if let Some(r) = map.get_mut(&session) {
-                                r.acp_session_id = Some(id.clone());
-                                r.session.acp_session_id = Some(id.clone());
-                            }
-                            if let Some(store) = &self.state.store {
-                                if let Some(r) = map.get(&session) {
-                                    let _ = store.upsert_session(&r.session);
+                    match client.new_session_full(cwd, mcp).await {
+                        Ok(resp) => {
+                            let id = resp.session_id;
+                            // Models are optional in ACP and reported only here, so this is the one
+                            // chance to learn them.
+                            let models: Vec<ModelChoice> = resp
+                                .models
+                                .as_ref()
+                                .map(|m| {
+                                    m.available_models
+                                        .iter()
+                                        .map(|x| ModelChoice {
+                                            id: x.model_id.clone(),
+                                            name: x.name.clone(),
+                                            description: x.description.clone(),
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            let current = resp
+                                .models
+                                .as_ref()
+                                .map(|m| m.current_model_id.clone())
+                                .unwrap_or_default();
+
+                            {
+                                let mut map = self.state.sessions.lock().unwrap();
+                                if let Some(r) = map.get_mut(&session) {
+                                    r.acp_session_id = Some(id.clone());
+                                    r.session.acp_session_id = Some(id.clone());
+                                    r.models = models.clone();
+                                    if !current.is_empty() {
+                                        r.session.model = Some(current.clone());
+                                    }
                                 }
+                                if let Some(store) = &self.state.store {
+                                    if let Some(r) = map.get(&session) {
+                                        let _ = store.upsert_session(&r.session);
+                                    }
+                                }
+                            }
+                            if !models.is_empty() {
+                                self.emit(Event::Models {
+                                    session: session.clone(),
+                                    available: models,
+                                    current,
+                                });
                             }
                             acp_sid = Some(id);
                         }
@@ -465,10 +505,35 @@ impl Engine {
             }
 
             Op::SetModel { session, model } => {
-                let mut map = self.state.sessions.lock().unwrap();
-                if let Some(rt) = map.get_mut(&session) {
-                    rt.session.model = Some(model);
+                // Tell the agent, then record it. Storing it without the ACP call would leave the
+                // UI claiming a model the agent never switched to.
+                let target = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session).map(|r| (r.client.clone(), r.acp_session_id.clone()))
+                };
+                if let Some((client, Some(acp_sid))) = target {
+                    if let Err(e) = client.set_model(&acp_sid, &model).await {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!("{} doesn't support switching models: {e}", model),
+                        });
+                        return Ok(());
+                    }
                 }
+                let available = {
+                    let mut map = self.state.sessions.lock().unwrap();
+                    match map.get_mut(&session) {
+                        Some(rt) => {
+                            rt.session.model = Some(model.clone());
+                            if let Some(store) = &self.state.store {
+                                let _ = store.upsert_session(&rt.session);
+                            }
+                            rt.models.clone()
+                        }
+                        None => Vec::new(),
+                    }
+                };
+                self.emit(Event::Models { session, available, current: model });
             }
         }
         Ok(())

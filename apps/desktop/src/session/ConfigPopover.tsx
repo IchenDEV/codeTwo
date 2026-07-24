@@ -22,6 +22,8 @@ export interface SessionConfig {
   onWorktree: (v: boolean) => void;
   planMode: boolean;
   onPlan: (v: boolean) => void;
+  /** Whether a session exists yet — some controls have nothing to act on before that. */
+  hasSession: boolean;
 }
 
 export const SANDBOX_LABEL: Record<Sandbox, string> = {

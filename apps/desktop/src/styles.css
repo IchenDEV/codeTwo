@@ -303,10 +303,16 @@
   font-size: 12.5px;
 }
 
-/* Expanded ("document mode"): the composer has the whole column, so give the text a real document
-   measure — a proper gutter for the drag/insert handles, and looser type for long-form writing. */
+/* Expanded ("document mode"): the composer is the page, not a panel on it. The editor centres its
+   own measure on the app background — no card, no border — with a real gutter for the drag/insert
+   handles and looser type for long-form writing. */
+.bn-doc-mode {
+  padding-block: 40px 24px;
+}
 .bn-doc-mode .bn-editor {
-  padding-inline: 46px 28px;
+  max-width: 880px;
+  margin-inline: auto;
+  padding-inline: 54px;
   font-size: 15px;
 }
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {

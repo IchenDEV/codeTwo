@@ -27,8 +27,11 @@ text — the whole document is compiled into one prompt when you run it. Details
 [Document editor & skills](/guide/editor).
 
 The composer grows as you write. Drag its top edge for more room, or press `Mod+Shift+E` (the ⤢
-button) to hand the document the **whole column** for a longer brief — headings, lists, code blocks
-and all. Sending collapses it again so you can watch the answer.
+button) to make the document **the whole page** for a longer brief — headings, lists, code blocks and
+all. Sending collapses it again so you can watch the answer.
+
+Once the session exists, a **model chip** appears beside the provider if the agent reports models.
+See [Models](/guide/providers#models).
 
 ## 3. Run
 

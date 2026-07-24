@@ -30,6 +30,14 @@ export interface SessionInfo {
   created_at: number;
 }
 
+/// One model an agent offers. ACP's model API is UNSTABLE and most adapters don't implement it,
+/// so a session may legitimately have none — the picker says so rather than showing an empty list.
+export interface ModelChoice {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
 /// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
 export type DocBlock =
   | { type: "text"; text: string }
@@ -60,6 +68,7 @@ export type CoreEvent =
   | { event: "plan"; session: string; entries: string[] }
   | { event: "permission_request"; session: string; request_id: string; title: string; options: [string, string][] }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
+  | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "turn_ended"; session: string; stop_reason: string }
   | { event: "error"; session: string | null; message: string };
 
@@ -133,6 +142,10 @@ export async function answerPermission(session: string, requestId: string, optio
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {
   if (inTauri) await invoke("set_permission_mode", { session, mode });
+}
+
+export async function setModel(session: string, model: string): Promise<void> {
+  if (inTauri) await invoke("set_model", { session, model });
 }
 
 export async function cancelTurn(session: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ArrowUp,
+  Check,
   Eye,
   FileText,
   Maximize2,
@@ -14,8 +15,10 @@ import {
 
 import { ConfigPopover, MODE_LABEL, SANDBOX_LABEL, type SessionConfig } from "./ConfigPopover";
 import { VoiceButton } from "../voice/VoiceButton";
+import type { ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +26,7 @@ interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
   children: ReactNode;
   config: SessionConfig;
-  /** Full-height authoring: the document takes the whole column and the transcript steps aside. */
+  /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
   docMode: boolean;
   onDocMode: (v: boolean) => void;
   /** Height of the document area in compact mode, in px — dragged by the grip, persisted. */
@@ -31,6 +34,10 @@ interface ComposerProps {
   onHeight: (n: number) => void;
   /** The column the composer lives in; bounds the drag so it can't swallow the transcript. */
   boundsRef: React.MutableRefObject<HTMLElement | null>;
+  /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
+  models: ModelChoice[];
+  currentModel: string | null;
+  onModel: (id: string) => void;
   running: boolean;
   docEmpty: boolean;
   onRun: () => void;
@@ -94,11 +101,75 @@ const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "
 Chip.displayName = "Chip";
 
 /**
- * The prompt composer, docked to the bottom of the transcript.
+ * The model this turn will run on.
  *
- * It reads like a chat box — that's the point, it's where you type — but it *is* the full BlockNote
- * document: headings, lists, code, `/` skills and `@` files all work in place. It grows with the
- * content, the grip drags it taller, and Expand hands it the entire column for long-form authoring.
+ * ACP's model API is marked UNSTABLE and most adapters don't implement it, so "no models" is a
+ * normal answer, not a failure — the picker explains that instead of showing an empty list. The
+ * chip is hidden entirely until a session exists, because before that there's nothing to ask.
+ */
+function ModelPicker({
+  models,
+  current,
+  onModel,
+  hasSession,
+}: {
+  models: ModelChoice[];
+  current: string | null;
+  onModel: (id: string) => void;
+  hasSession: boolean;
+}) {
+  if (!hasSession) return null;
+
+  const active = models.find((m) => m.id === current);
+  const label = active?.name ?? current ?? "Default model";
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Chip title="Model">
+          <span className="max-w-44 truncate">{label}</span>
+        </Chip>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-72 p-1">
+        {models.length === 0 ? (
+          <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            This provider doesn't report selectable models over ACP, so the model is whatever its
+            CLI is configured to use. Set it in the CLI's own config.
+          </p>
+        ) : (
+          <ScrollArea className="max-h-72">
+            {models.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onModel(m.id)}
+                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
+              >
+                <Check
+                  className={cn("mt-0.5 size-3.5 shrink-0", m.id === current ? "text-primary" : "opacity-0")}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px]">{m.name}</span>
+                  {m.description && (
+                    <span className="block truncate text-[11px] text-muted-foreground">{m.description}</span>
+                  )}
+                </span>
+              </button>
+            ))}
+          </ScrollArea>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * The prompt composer.
+ *
+ * Two shapes, one document. Compact, it's docked to the foot of the transcript and reads like a
+ * chat box — that's the point, it's where you type. Expanded, it *becomes the page*: the card
+ * chrome falls away and the document runs the full column on the app's own background, with a
+ * centred measure and a real block gutter. It is the same BlockNote document in both — headings,
+ * lists, code, `/` skills and `@` files work throughout.
  */
 export function Composer({
   children,
@@ -108,6 +179,9 @@ export function Composer({
   height,
   onHeight,
   boundsRef,
+  models,
+  currentModel,
+  onModel,
   running,
   docEmpty,
   onRun,
@@ -143,8 +217,6 @@ export function Composer({
   const startDrag = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      // Dragging is a compact-mode gesture; in doc mode the height is the whole column.
-      onDocMode(false);
       const startY = e.clientY;
       const startH = applied;
       const column = boundsRef.current?.getBoundingClientRect().height ?? 720;
@@ -160,157 +232,186 @@ export function Composer({
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [applied, onHeight, onDocMode, boundsRef],
+    [applied, onHeight, boundsRef],
   );
 
+  const controls = (
+    <>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Add to the document">
+            <Plus className="size-4" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" side="top" className="w-60 p-1">
+          <MenuItem icon={FileText} label="Mention a file" hint={filesHint} onClick={onAttachFile} />
+          <MenuItem icon={Sparkles} label="Insert a skill" hint={skillHint} onClick={onInsertSkill} />
+          <MenuItem icon={Ticket} label="Pull in an issue" onClick={onInsertIssue} />
+          <MenuItem icon={Store} label="Skill market" onClick={onOpenMarket} />
+          <p className="px-2 pb-1 pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            Or type <b>/</b> for skills and <b>@</b> for files, right in the document.
+          </p>
+        </PopoverContent>
+      </Popover>
+
+      {/* Sandbox, provider and model read as a sentence about what this turn will do. */}
+      <ConfigPopover
+        config={config}
+        trigger={
+          <Chip tone={config.sandbox === "danger_full_access" ? "warning" : undefined} title="Sandbox and approvals">
+            {config.sandbox === "danger_full_access" && <span className="size-1.5 rounded-full bg-warning" />}
+            {SANDBOX_LABEL[config.sandbox]}
+          </Chip>
+        }
+      />
+
+      <ConfigPopover
+        config={config}
+        trigger={
+          <Chip title="Provider and approval mode">
+            {provider && !provider.available && (
+              <span className="size-1.5 rounded-full bg-warning" title="CLI not found" />
+            )}
+            <span className="max-w-40 truncate text-foreground/80">
+              {provider?.display_name ?? config.provider}
+            </span>
+            <span className="opacity-50">{MODE_LABEL[config.mode] ?? config.mode}</span>
+          </Chip>
+        }
+      />
+
+      <ModelPicker models={models} current={currentModel} onModel={onModel} hasSession={config.hasSession} />
+
+      {config.planMode && <Chip title="Plan first is on">plan</Chip>}
+      {config.useWorktree && <Chip title="Running in an isolated worktree">worktree</Chip>}
+
+      <div className="flex-1" />
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onPreview}>
+            <Eye className="size-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Preview the compiled prompt</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("size-7 shrink-0", docMode && "text-primary")}
+            onClick={() => onDocMode(!docMode)}
+            aria-label={docMode ? "Collapse the document" : "Expand the document"}
+          >
+            {docMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {docMode ? "Back to the transcript" : "Write full page"}
+          {docModeHint && <span className="ml-1.5 opacity-60">{docModeHint}</span>}
+        </TooltipContent>
+      </Tooltip>
+
+      <VoiceButton onText={onVoiceText} />
+
+      {running ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="destructive"
+              size="icon"
+              className="size-8 shrink-0 rounded-full"
+              onClick={onStop}
+              aria-label="Stop this turn"
+            >
+              <Square className="size-3.5 fill-current" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Stop this turn</TooltipContent>
+        </Tooltip>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+                focuses the document and says what's missing. */}
+            <Button
+              size="icon"
+              variant={docEmpty ? "secondary" : "default"}
+              className="size-8 shrink-0 rounded-full"
+              onClick={onRun}
+              aria-label="Run this document"
+            >
+              <ArrowUp className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {docEmpty ? "Write a prompt first" : "Run this document"}
+            <span className="ml-1.5 opacity-60">{runHint}</span>
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </>
+  );
+
+  /*
+   * Compact and expanded are the *same* element tree with different classes, deliberately. Two
+   * branches returning different JSX would give React a different structure to reconcile, which
+   * unmounts BlockNote and takes the draft with it — expanding the composer would silently erase
+   * what you'd written. Keep one tree; vary the styling.
+   */
   return (
-    <section className={cn("flex shrink-0 flex-col px-4 pb-3.5 pt-1", docMode && "min-h-0 flex-1")}>
-      <div className={cn("mx-auto flex w-full max-w-[860px] flex-col", docMode && "min-h-0 flex-1")}>
+    <section
+      className={cn(
+        "flex flex-col",
+        docMode ? "min-h-0 flex-1" : "shrink-0 px-4 pb-3.5 pt-1",
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-col",
+          docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-[860px]",
+        )}
+      >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. */}
         <div
           className={cn(
-            "composer-card flex flex-col rounded-2xl border bg-card shadow-lg transition-shadow",
-            "focus-within:border-ring/50 focus-within:shadow-xl",
-            docMode && "min-h-0 flex-1",
+            "composer-card flex flex-col",
+            docMode
+              ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
+                "min-h-0 flex-1"
+              : "rounded-2xl border bg-card shadow-lg transition-shadow focus-within:border-ring/50 focus-within:shadow-xl",
           )}
         >
-          {/* Grip: drag for any height, double-click for the full column. */}
+          {/* Grip: drag for any height, double-click for the full page. Meaningless once the
+              document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
           <div
-            className="composer-grip"
+            className={cn("composer-grip", docMode && "hidden")}
             onMouseDown={startDrag}
-            onDoubleClick={() => onDocMode(!docMode)}
-            title="Drag to resize · double-click to expand"
+            onDoubleClick={() => onDocMode(true)}
+            title="Drag to resize · double-click for full page"
           />
 
-          {/* The document. Scrolls inside the card so the control row never gets pushed away. */}
           <div
-            className={cn("min-h-0 overflow-y-auto py-1", docMode && "bn-doc-mode flex-1")}
+            className={cn("min-h-0 overflow-y-auto", docMode ? "bn-doc-mode flex-1" : "py-1")}
             style={docMode ? undefined : { maxHeight: applied }}
           >
             {children}
           </div>
 
-          {/* control row */}
-          <div className="flex items-center gap-0.5 px-2 pb-1.5 pt-1">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Add to the document">
-                  <Plus className="size-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="start" side="top" className="w-60 p-1">
-                <MenuItem icon={FileText} label="Mention a file" hint={filesHint} onClick={onAttachFile} />
-                <MenuItem icon={Sparkles} label="Insert a skill" hint={skillHint} onClick={onInsertSkill} />
-                <MenuItem icon={Ticket} label="Pull in an issue" onClick={onInsertIssue} />
-                <MenuItem icon={Store} label="Skill market" onClick={onOpenMarket} />
-                <p className="px-2 pb-1 pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Or type <b>/</b> for skills and <b>@</b> for files, right in the document.
-                </p>
-              </PopoverContent>
-            </Popover>
-
-            {/* Sandbox and provider read as a sentence about what this turn will be allowed to do. */}
-            <ConfigPopover
-              config={config}
-              trigger={
-                <Chip
-                  tone={config.sandbox === "danger_full_access" ? "warning" : undefined}
-                  title="Sandbox and approvals"
-                >
-                  {config.sandbox === "danger_full_access" && (
-                    <span className="size-1.5 rounded-full bg-warning" />
-                  )}
-                  {SANDBOX_LABEL[config.sandbox]}
-                </Chip>
-              }
-            />
-
-            <ConfigPopover
-              config={config}
-              trigger={
-                <Chip title="Provider and approval mode">
-                  {provider && !provider.available && (
-                    <span className="size-1.5 rounded-full bg-warning" title="CLI not found" />
-                  )}
-                  <span className="max-w-40 truncate text-foreground/80">
-                    {provider?.display_name ?? config.provider}
-                  </span>
-                  <span className="opacity-50">{MODE_LABEL[config.mode] ?? config.mode}</span>
-                </Chip>
-              }
-            />
-
-            {config.planMode && <Chip title="Plan first is on">plan</Chip>}
-            {config.useWorktree && <Chip title="Running in an isolated worktree">worktree</Chip>}
-
-            <div className="flex-1" />
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onPreview}>
-                  <Eye className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Preview the compiled prompt</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn("size-7 shrink-0", docMode && "text-primary")}
-                  onClick={() => onDocMode(!docMode)}
-                  aria-label={docMode ? "Collapse the document" : "Expand the document"}
-                >
-                  {docMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {docMode ? "Back to the transcript" : "Full-height document"}
-                {docModeHint && <span className="ml-1.5 opacity-60">{docModeHint}</span>}
-              </TooltipContent>
-            </Tooltip>
-
-            <VoiceButton onText={onVoiceText} />
-
-            {running ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="size-8 shrink-0 rounded-full"
-                    onClick={onStop}
-                    aria-label="Stop this turn"
-                  >
-                    <Square className="size-3.5 fill-current" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Stop this turn</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-                      focuses the document and says what's missing. */}
-                  <Button
-                    size="icon"
-                    variant={docEmpty ? "secondary" : "default"}
-                    className="size-8 shrink-0 rounded-full"
-                    onClick={onRun}
-                    aria-label="Run this document"
-                  >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {docEmpty ? "Write a prompt first" : "Run this document"}
-                  <span className="ml-1.5 opacity-60">{runHint}</span>
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* Expanded, the control row spans the window and lines up with the text measure, so it
+              reads as the page's own footer rather than a bar floating over it. */}
+          <div className={cn(docMode && "border-t")}>
+            <div
+              className={cn(
+                "flex items-center gap-0.5",
+                docMode ? "mx-auto w-full max-w-[860px] px-6 py-2" : "px-2 pb-1.5 pt-1",
+              )}
+            >
+              {controls}
+            </div>
           </div>
         </div>
       </div>
