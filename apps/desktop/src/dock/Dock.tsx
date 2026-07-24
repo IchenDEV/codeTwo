@@ -93,8 +93,9 @@ export function Dock({
       <div className="dock-grip" onMouseDown={startDrag} title="Drag to resize the panel" />
 
       <Tabs value={tab} onValueChange={(v) => onTab(v as DockTab)} className="flex min-h-0 flex-1 flex-col gap-0">
-        {/* pt-7 matches the main header's titlebar inset so the two rows line up. */}
-        <div className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
+        {/* pt-7 matches the main header's titlebar inset so the two rows line up, and it drags the
+            window for the same reason: the overlay title bar leaves nothing else to grab. */}
+        <div data-tauri-drag-region className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
           <TabsList className="h-7">
             <TabsTrigger value="terminal" className="gap-1.5 text-xs">
               <TerminalIcon className="size-3.5" /> Terminal

@@ -712,9 +712,13 @@ export default function App() {
 
         {/* ---------------- transcript + composer ---------------- */}
         <main className="flex min-w-0 flex-1 flex-col" ref={mainRef}>
-          <header className="flex items-center gap-1.5 px-3 pb-2 pt-7">
+          {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
+              other children stay clickable — only elements carrying the attribute start a drag. */}
+          <header data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-2 pt-7">
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="max-w-96 truncate text-[13px] font-semibold">{activeTitle}</span>
+            <span data-tauri-drag-region className="max-w-96 truncate text-[13px] font-semibold">
+              {activeTitle}
+            </span>
             {git?.is_repo && (
               <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
                 <GitBranch className="size-3" />
@@ -723,7 +727,7 @@ export default function App() {
               </span>
             )}
 
-            <div className="flex-1" />
+            <div data-tauri-drag-region className="flex-1" />
 
             <IconAction
               icon={Keyboard}

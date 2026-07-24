@@ -76,9 +76,13 @@ export function SessionRail({
 
   return (
     <aside className="flex w-60 min-w-60 flex-col border-r bg-sidebar">
-      {/* pt-7 clears the macOS traffic lights. */}
-      <div className="flex items-center gap-1 px-3 pb-1 pt-7">
-        <span className="flex-1 text-[15px] font-bold tracking-tight">codeTwo</span>
+      {/* pt-7 clears the macOS traffic lights, which float over this row under the overlay title
+          bar. That bar is transparent, so this row is also the only thing left to drag the window
+          by — hence the drag region, on the row and on the wordmark that covers most of it. */}
+      <div data-tauri-drag-region className="flex items-center gap-1 px-3 pb-1 pt-7">
+        <span data-tauri-drag-region className="flex-1 text-[15px] font-bold tracking-tight">
+          codeTwo
+        </span>
         <Button
           variant="ghost"
           size="icon"
