@@ -1,6 +1,6 @@
 # Voice input
 
-Dictate into the prompt document with the **🎤** button in the toolbar. It works two ways and picks
+Dictate into the prompt document with the **🎤** button in the header. It works two ways and picks
 automatically.
 
 ## 1. Live dictation (no setup)

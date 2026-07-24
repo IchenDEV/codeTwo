@@ -34,7 +34,7 @@ dependency. Claude Code has the richest ACP surface (diffs, terminals, plans, sl
 ## Availability & health
 
 On startup codeTwo checks whether each provider's launch command resolves on your `PATH` and shows a
-health dot in the sidebar (green = available). A missing CLI is a clear state, not a crash — install
+health dot in the config popover and status bar (green = available). A missing CLI is a clear state, not a crash — install
 the CLI and it lights up.
 
 ## Adapter flags may vary

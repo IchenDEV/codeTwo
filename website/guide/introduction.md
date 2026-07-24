@@ -13,6 +13,21 @@ existing coding CLIs — you keep your models, tools, and auth — behind one co
   parameterized macro, a reference to a provider-native Agent Skill, or an MCP tool. Browse and
   install more from the built-in [skill market](/guide/market).
 
+## The layout
+
+Four regions, each with one job:
+
+| Region | Holds |
+| --- | --- |
+| **Session rail** (left) | Your sessions, and nothing else. Skill-library management sits at its foot. |
+| **Document** (centre) | The prompt you're composing. `/` inserts a skill, `@` pulls in a file. |
+| **Transcript** (below) | One card per **turn** — prompt, answer, and collapsed tools/thinking/plan. |
+| **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. |
+
+Per-session setup (provider, working directory, approvals, sandbox, worktree, plan mode) lives in one
+config popover in the header, so the header itself only carries per-moment actions. A status bar
+along the bottom keeps provider, branch, mode, sandbox, and context size visible at all times.
+
 ## What it shares with the category
 
 - One GUI (and TUI) over **five agent CLIs** — Claude Code, Codex, Grok, Cursor, OpenCode — via the

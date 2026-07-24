@@ -225,3 +225,45 @@
     width: 100%;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   BlockNote. Its defaults are tuned for a full-page Notion-style document; this
+   is a prompt composer sharing a window with a transcript, so the type scale is
+   pulled in and the editor surface is made transparent to match the app.
+   ------------------------------------------------------------------------ */
+.bn-container,
+.bn-editor {
+  background: transparent !important;
+  font-family: inherit;
+}
+.bn-editor {
+  padding-inline: 12px;
+  font-size: 14px;
+}
+.bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
+  font-size: 21px;
+  line-height: 1.35;
+}
+.bn-block-content[data-content-type="heading"][data-level="2"] .bn-inline-content {
+  font-size: 17px;
+  line-height: 1.4;
+}
+.bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
+  font-size: 15px;
+  line-height: 1.45;
+}
+.bn-block-content[data-content-type="paragraph"] {
+  line-height: 1.6;
+}
+/* The drag handle / + button gutter, tightened to reclaim horizontal space. */
+.bn-block-outer {
+  --bn-block-outer-padding: 0;
+}
+.bn-editor [data-node-type="blockContainer"] {
+  padding-block: 1px;
+}
+.bn-block-content code,
+.bn-block-content pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}

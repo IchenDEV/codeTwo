@@ -71,11 +71,13 @@ blocks. Unknown skill ids are surfaced as a warning rather than silently dropped
 
 ## Managing your library
 
-In the sidebar's **Skills** section:
+At the foot of the session rail:
 
 - **＋** — author a new fragment skill (name + text).
-- **×** — remove a skill.
-- **🛒** — open the [skill market](/guide/market) to install more.
+- **🛒** — open the [skill market](/guide/market) to install or remove skills.
+
+You pick skills with `/` inside the document, so the rail only carries the library management — it
+doesn't list every skill and compete with your sessions for space.
 
 Skills are stored as JSON files under `~/.config/codetwo/skills/` (built-in skills are always
 available on top). Adding or removing one updates the `/` picker and the compiler immediately.

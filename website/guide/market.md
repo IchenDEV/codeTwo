@@ -1,7 +1,7 @@
 # Skill market
 
 The **skill market** lets you browse a curated catalog and install skills into your library with one
-click. Open it from the sidebar's Skills section (**🛒**) or the [command palette](/guide/keybindings)
+click. Open it from the **🛒** button at the foot of the session rail, or the [command palette](/guide/keybindings)
 ("Open skill market").
 
 ## Browsing & installing
@@ -31,7 +31,7 @@ provider to launch it — the catalog entry wires it up, but doesn't ship the se
 
 ## Authoring your own
 
-You don't need the market to add skills. Use **＋** in the Skills sidebar to author a fragment, or
+You don't need the market to add skills. Use **＋** at the foot of the session rail to author a fragment, or
 drop a JSON file into `~/.config/codetwo/skills/`. A skill file looks like:
 
 ```json

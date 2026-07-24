@@ -1,7 +1,9 @@
 # Terminal
 
-codeTwo has an embedded terminal so you can run commands next to the agent. Toggle it from the
-toolbar or `Mod+J`.
+codeTwo has an embedded terminal so you can run commands next to the agent. It lives in the **side
+dock** — open it with `Mod+J`, or the panel button in the header and pick the **Terminal** tab. The
+dock sits beside the document rather than under it, so opening a terminal doesn't shrink the prompt
+you're writing.
 
 It's a real PTY: codeTwo spawns your login shell (`$SHELL`) through a pseudo-terminal and streams its
 output to an xterm.js view. Keystrokes go back to the shell, and the terminal resizes with the panel.

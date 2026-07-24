@@ -4,10 +4,13 @@ This walks through composing and running a prompt in the desktop app.
 
 ## 1. Pick a provider and working directory
 
-In the toolbar, choose a **provider** (e.g. Grok) and set the **working directory** — the folder the
-agent runs in. A green dot next to a provider means its CLI is on your `PATH`.
+Click the **config button** in the header — it reads `provider · mode`, e.g. `Grok · ask`. That
+popover holds everything you set once per session: **provider**, **working directory**, approvals,
+sandbox, worktree isolation, and plan mode. A green dot next to a provider means its CLI is on your
+`PATH`.
 
-Optionally tick **worktree** to run this session in an isolated git worktree. See [Git](/guide/git).
+Optionally tick **Isolate in a git worktree** to run this session on a fresh branch and checkout.
+See [Git](/guide/git).
 
 ## 2. Compose your prompt as a document
 
@@ -31,15 +34,20 @@ Press **Run ▸** (or `Mod+Enter`). codeTwo:
    attaches any MCP servers from MCP skills.
 3. Starts (or reuses) the session and streams the agent's work into the transcript below the editor.
 
+Each prompt becomes one **turn** in the transcript: your prompt, the agent's answer, and — collapsed
+underneath — its **tools**, **thinking**, and **plan**. Expand a disclosure when you want the detail;
+otherwise the answer is the only thing at full weight. A badge shows `running`, the stop reason, and
+how long the turn took.
+
 ## 4. Answer permission prompts
 
 By default codeTwo is in **Ask** mode: when the agent wants to run a command or edit files, a
-permission dialog appears. Allow or reject it. Switch to **Accept edits** or **YOLO** in the toolbar
-to reduce prompts — see [Permissions & YOLO](/guide/permissions).
+permission dialog appears. Allow or reject it. Switch to **Accept edits** or **YOLO** in the config
+popover to reduce prompts — see [Permissions & YOLO](/guide/permissions).
 
 ## 5. Review and ship
 
-Open **Source Control** (toolbar or `Mod+Shift+G`) to:
+Open the side dock's **Git** tab (or `Mod+Shift+G` for the full Source Control dialog) to:
 
 - see changed files and a colored **diff**,
 - **diff/revert** against any checkpoint,

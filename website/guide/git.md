@@ -4,10 +4,13 @@ codeTwo treats git as a first-class safety net and review surface. It shells out
 
 ## Quick-view status
 
-The sidebar's **Git** panel shows the current branch, ahead/behind counts, and changed files (with a
+The side dock's **Git** tab shows the current branch, ahead/behind counts, and changed files (with a
 staged/unstaged badge and a one-letter status: **M**odified, **A**dded, **D**eleted, **R**enamed,
-untracked). Refresh with the ⟳ button or `Mod+G`. It refreshes automatically when you switch
-sessions.
+untracked). Refresh with the **Refresh** button or `Mod+G`. It refreshes automatically when you
+switch sessions.
+
+The status bar along the bottom of the window always shows the branch and a change count, so you can
+see you have uncommitted work without opening anything.
 
 ## Checkpoints (per-turn snapshots)
 
@@ -20,7 +23,8 @@ before it.
 
 ## Source Control
 
-Open **Source Control** from the toolbar or `Mod+Shift+G`:
+Open **Source Control** from the dock's **Review & commit** button, the command palette, or
+`Mod+Shift+G`:
 
 - **Changed files** — click a file to see its diff; "All changes" shows the full working-tree diff
   against `HEAD`.

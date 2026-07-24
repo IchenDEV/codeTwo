@@ -3,7 +3,7 @@
 How much have you burned, and when does it free up? codeTwo scans the transcripts your provider CLIs
 already write locally and reports **rolling windows** — 5-hour session, week, and month.
 
-Open it from the command palette (**“Usage”**) or by clicking the context meter in the toolbar. There's
+Open it from the command palette (**“Usage”**) or by clicking the context meter in the status bar. There's
 a terminal version too:
 
 ```sh

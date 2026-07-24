@@ -7,7 +7,7 @@ import {
   useCreateBlockNote,
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
-import { filterSuggestionItems } from "@blocknote/core";
+import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
 import { listFiles, type DocBlock, type SkillInfo } from "../bridge";
@@ -60,16 +60,18 @@ async function fileMenuItems(
 }
 
 export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef, insertFileRef }: EditorProps) {
+  // Start empty. A pre-filled sample used to be the first thing every session showed, which meant
+  // the user's first act was deleting our text; the placeholder carries the same hint for free.
   const editor = useCreateBlockNote({
     schema,
-    initialContent: [
-      { type: "heading", content: "Refactor the auth module" },
-      {
-        type: "paragraph",
-        content: "Type '/' to insert a skill, or write your prompt as a document.",
+    initialContent: [{ type: "paragraph", content: "" }],
+    dictionary: {
+      ...locales.en,
+      placeholders: {
+        ...locales.en.placeholders,
+        default: "Write your prompt —  /  for skills,  @  for files",
       },
-      { type: "paragraph", content: "" },
-    ],
+    },
   });
 
   useEffect(() => {

@@ -1,7 +1,7 @@
 # Built-in browser
 
 codeTwo has an embedded browser panel so you can bring web context to the agent without leaving the
-app. Toggle it from the toolbar or `Mod+B`.
+app. Open it in the side dock with `Mod+B`, or the panel button in the header → **Browser** tab.
 
 ## Navigating
 

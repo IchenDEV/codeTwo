@@ -5,7 +5,7 @@ decides how to respond based on the session's **permission mode** and any rules.
 
 ## Modes
 
-Set the mode in the toolbar (or cycle it with `Mod+Shift+P`):
+Set the mode in the header's config popover (or cycle it with `Mod+Shift+P`):
 
 | Mode | Behavior |
 | --- | --- |
@@ -16,7 +16,7 @@ Set the mode in the toolbar (or cycle it with `Mod+Shift+P`):
 ## Sandbox — a second, independent axis
 
 The permission mode decides *who approves*; the **sandbox** decides *what's possible at all*. Pick it
-in the toolbar:
+in the config popover, next to the approval mode:
 
 | Sandbox | Effect |
 | --- | --- |
