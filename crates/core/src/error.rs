@@ -9,6 +9,9 @@ use thiserror::Error;
 pub enum AcpError {
     #[error("acp connection closed")]
     Closed,
+    /// The launch command isn't on PATH. Carries the command so the UI can name it.
+    #[error("{0} isn't installed or on your PATH. Install its CLI, or pick another provider in the config popover.")]
+    CommandNotFound(String),
     #[error("failed to spawn provider: {0}")]
     Spawn(#[source] std::io::Error),
     #[error("decode error: {0}")]

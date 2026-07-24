@@ -209,8 +209,24 @@ export default function App() {
     [providers],
   );
 
+  // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
+  const providerPinned = useRef(false);
+
   useEffect(() => {
-    listProviders().then(setProviders).catch(() => {});
+    listProviders()
+      .then((list) => {
+        setProviders(list);
+        // Default to a provider whose CLI is actually installed. Shipping `grok` as the default
+        // meant a machine without it failed on the first session with a raw spawn error.
+        if (!providerPinned.current) {
+          const cur = list.find((p) => p.id === provider);
+          if (!cur?.available) {
+            const firstAvailable = list.find((p) => p.available);
+            if (firstAvailable) setProvider(firstAvailable.id);
+          }
+        }
+      })
+      .catch(() => {});
     listSkills().then(setSkills).catch(() => {});
     refreshSessions();
 
@@ -729,7 +745,10 @@ export default function App() {
             <ConfigPopover
               providers={providers}
               provider={provider}
-              onProvider={setProvider}
+              onProvider={(p) => {
+                providerPinned.current = true;
+                setProvider(p);
+              }}
               cwd={cwd}
               onCwd={setCwd}
               mode={mode}

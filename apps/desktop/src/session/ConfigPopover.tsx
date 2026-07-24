@@ -34,6 +34,10 @@ export function ConfigPopover(props: {
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5">
           <Settings2 className="size-3.5" />
+          {/* A dot only when the picked provider is missing — a green "all good" dot would be noise. */}
+          {current && !current.available && (
+            <span className="size-1.5 shrink-0 rounded-full bg-warning" title="Provider CLI not found" />
+          )}
           <span className="max-w-32 truncate">{current?.display_name ?? props.provider}</span>
           <span className="text-muted-foreground">·</span>
           <span className="font-mono text-[11px] text-muted-foreground">{props.mode}</span>
@@ -62,7 +66,8 @@ export function ConfigPopover(props: {
           </Select>
           {current && !current.available && (
             <p className="text-[11px] text-warning">
-              Not found on PATH{current.needs_node ? " (needs Node)" : ""}.
+              {current.display_name}'s CLI isn't on your PATH{current.needs_node ? " (needs Node)" : ""}. A
+              new session will fail until it's installed — pick a provider with a green dot instead.
             </p>
           )}
         </div>

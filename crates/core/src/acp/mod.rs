@@ -41,7 +41,15 @@ pub async fn spawn(spec: &LaunchSpec, handler: Arc<dyn ClientHandler>) -> Result
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(AcpError::Spawn)?;
+    let mut child = cmd.spawn().map_err(|e| {
+        // "No such file or directory (os error 2)" is inscrutable; name the missing command and
+        // point at the fix instead.
+        if e.kind() == std::io::ErrorKind::NotFound {
+            AcpError::CommandNotFound(spec.command.clone())
+        } else {
+            AcpError::Spawn(e)
+        }
+    })?;
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     if let Some(stderr) = child.stderr.take() {
