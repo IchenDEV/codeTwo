@@ -414,6 +414,25 @@ async fn set_sandbox(state: State<'_, AppState>, session: String, sandbox: Strin
         .map_err(|e| e.to_string())
 }
 
+/// The working directory a new session should start in.
+///
+/// Not `"."`: a bundled app launched from Finder inherits `/` as its process directory, so the
+/// obvious default would silently point every session at the filesystem root. Fall back to the
+/// user's home when the process directory is unusable as a workspace.
+#[tauri::command]
+fn default_cwd() -> String {
+    let cwd = std::env::current_dir().ok();
+    let usable = cwd.filter(|p| p.parent().is_some());
+    usable
+        .or_else(dirs_home)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| ".".to_string())
+}
+
+fn dirs_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("HOME").map(std::path::PathBuf::from)
+}
+
 /// Switch the session's model. The engine forwards it to the agent over ACP and answers with a
 /// `models` event; a provider that doesn't implement the call reports an `error` event instead.
 #[tauri::command]
@@ -699,6 +718,7 @@ pub fn run() {
             answer_permission,
             set_permission_mode,
             set_model,
+            default_cwd,
             cancel_turn,
             pty_spawn,
             pty_write,

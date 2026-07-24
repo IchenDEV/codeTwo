@@ -144,6 +144,11 @@ export async function setPermissionMode(session: string, mode: string): Promise<
   if (inTauri) await invoke("set_permission_mode", { session, mode });
 }
 
+/** Where a new session should start. Resolved by the core, never `"."` — see `default_cwd`. */
+export async function defaultCwd(): Promise<string> {
+  return inTauri ? invoke<string>("default_cwd") : ".";
+}
+
 export async function setModel(session: string, model: string): Promise<void> {
   if (inTauri) await invoke("set_model", { session, model });
 }

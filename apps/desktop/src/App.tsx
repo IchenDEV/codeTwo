@@ -16,6 +16,7 @@ import {
   cancelTurn,
   compileDoc,
   DEFAULT_KEYMAP,
+  defaultCwd,
   deleteSkill,
   describeBlock,
   getKeymap,
@@ -598,6 +599,8 @@ export default function App() {
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
     remoteStatus().then(setRemoteInfo).catch(() => {});
+    // Start in a real directory rather than ".", which a Finder-launched app resolves to "/".
+    defaultCwd().then(setCwd).catch(() => {});
     // The app opens on a blank page, so put the caret in it. Deferred one tick: the editor installs
     // its focus handle in its own mount effect.
     setTimeout(() => focusEditorRef.current?.(), 0);

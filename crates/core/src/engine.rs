@@ -291,6 +291,16 @@ impl Engine {
                     self.emit(Event::Error { session: None, message: format!("unknown provider {:?}", provider) });
                     return Ok(());
                 };
+                // ACP requires an absolute `cwd`, and every frontend has a natural way to hand us a
+                // relative one ("." is the obvious default). Resolve it once, here, so the session
+                // record, the worktree, git, and `session/new` all agree on one real path.
+                let cwd = match resolve_cwd(&cwd) {
+                    Ok(p) => p,
+                    Err(message) => {
+                        self.emit(Event::Error { session: None, message });
+                        return Ok(());
+                    }
+                };
                 let sess = Session::new(provider, cwd.clone());
                 let policy = Arc::new(Mutex::new(PermissionPolicy {
                     mode: sess.permission_mode,
@@ -544,5 +554,61 @@ impl Engine {
     }
 }
 
+/// Turn a possibly-relative working directory into the absolute one ACP demands.
+///
+/// Agents reject a relative `cwd` outright (`-32602 … must be an absolute path`), and the error
+/// names the symptom rather than the fix, so resolve before we ever get there. A path that doesn't
+/// exist is reported as itself — canonicalizing would only say "No such file or directory" without
+/// saying which one.
+fn resolve_cwd(cwd: &str) -> Result<String, String> {
+    let raw = if cwd.trim().is_empty() { "." } else { cwd.trim() };
+    let path = std::path::Path::new(raw);
+    let abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("can't resolve “{raw}”: the current directory is unavailable ({e})"))?
+            .join(path)
+    };
+    if !abs.is_dir() {
+        return Err(format!("working directory “{}” doesn't exist", abs.display()));
+    }
+    // `canonicalize` also resolves `..` and symlinks; keep the joined path if it somehow fails.
+    Ok(abs.canonicalize().unwrap_or(abs).to_string_lossy().into_owned())
+}
+
 /// Default permission mode for a fresh session.
 pub const DEFAULT_MODE: PermissionMode = PermissionMode::Ask;
+
+#[cfg(test)]
+mod cwd_tests {
+    use super::resolve_cwd;
+
+    #[test]
+    fn relative_becomes_absolute() {
+        let out = resolve_cwd(".").expect("cwd resolves");
+        assert!(std::path::Path::new(&out).is_absolute(), "got {out}");
+    }
+
+    #[test]
+    fn empty_means_here() {
+        assert_eq!(resolve_cwd("").unwrap(), resolve_cwd(".").unwrap());
+        assert_eq!(resolve_cwd("  ").unwrap(), resolve_cwd(".").unwrap());
+    }
+
+    #[test]
+    fn absolute_is_kept() {
+        let tmp = std::env::temp_dir();
+        let out = resolve_cwd(&tmp.to_string_lossy()).unwrap();
+        assert_eq!(
+            std::path::Path::new(&out).canonicalize().unwrap(),
+            tmp.canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn missing_directory_names_itself() {
+        let err = resolve_cwd("/definitely/not/a/real/directory").unwrap_err();
+        assert!(err.contains("/definitely/not/a/real/directory"), "got {err}");
+    }
+}
