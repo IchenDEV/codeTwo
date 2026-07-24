@@ -15,6 +15,7 @@
 pub mod acp;
 pub mod browser;
 pub mod context;
+pub mod delegate;
 pub mod engine;
 pub mod error;
 pub mod event;
