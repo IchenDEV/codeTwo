@@ -27,7 +27,10 @@
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.546 0.215 262.881);
-  --sidebar: oklch(0.984 0.003 247.858);
+  /* Distinctly greyer than the white content area. At the old 1.6% separation the two surfaces
+     read as one flat sheet, which is what made the window look like a web page no matter how
+     translucent it was — depth on macOS comes from the step between layers, not from alpha. */
+  --sidebar: oklch(0.945 0.005 250);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --terminal: oklch(0.19 0.012 264);
@@ -146,22 +149,30 @@
    ------------------------------------------------------------------------ */
 @layer components {
   /* ---- glass -------------------------------------------------------------------------------
-     One tint over the system material. Kept high enough that text never fights the desktop
-     behind it: vibrancy is atmosphere, not a readability feature. */
+     Finder's arrangement, not "translucent everywhere": the sidebar is vibrant and the content
+     area is solid. Tinting the whole window was the mistake — it flattened every surface to the
+     same value, so nothing read as glass and the text sat on an unpredictable backdrop. */
   .app-shell {
-    background: color-mix(in oklch, var(--background) 62%, transparent);
+    background: transparent;
   }
-  /* macOS sidebars are the most translucent surface in the system; ours follows. */
+  /* The one surface the material shows through. Alpha high enough to stay a surface, low enough
+     that the desktop moves behind it. */
   .glass-rail {
-    background: color-mix(in oklch, var(--sidebar) 38%, transparent);
+    background: color-mix(in oklch, var(--sidebar) 72%, transparent);
   }
-  /* Panels that hold dense content (dock, composer) sit closer to opaque, and blur what's behind
-     them so they read as layers of glass rather than one flat wash. */
+  /* Where you read: opaque, and a clear step up in value from the rail beside it. */
+  .content-surface {
+    background: var(--background);
+  }
+  /* The other window edge. Like the rail, it sits over the material rather than over page content,
+     so it gets no backdrop-filter: that property blurs the page behind an element, and the
+     NSVisualEffectView is behind the *webview* — the blur would be a no-op charged to the GPU.
+     The OS already did the blurring. */
   .glass-panel {
-    background: color-mix(in oklch, var(--card) 68%, transparent);
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    background: color-mix(in oklch, var(--card) 78%, transparent);
   }
+  /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
+     page content, so the blur does what it looks like it does. */
   .glass-raised {
     background: color-mix(in oklch, var(--card) 82%, transparent);
     backdrop-filter: blur(28px) saturate(160%);

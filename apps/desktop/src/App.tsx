@@ -711,7 +711,7 @@ export default function App() {
         />
 
         {/* ---------------- transcript + composer ---------------- */}
-        <main className="flex min-w-0 flex-1 flex-col" ref={mainRef}>
+        <main className="content-surface flex min-w-0 flex-1 flex-col" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
           <header data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-2 pt-7">
