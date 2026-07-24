@@ -676,7 +676,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
       <div className="flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         <SessionRail
@@ -756,7 +756,7 @@ export default function App() {
             <section className="min-h-0 flex-1 overflow-y-auto">
               {turns.length === 0 ? (
                 <div className="flex h-full items-center justify-center px-6 pb-10">
-                  <div className="text-center">
+                  <div className="animate-rise-in text-center">
                     <p className="text-[17px] font-medium">What should we build?</p>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                       Write a prompt below — type <b>/</b> for skills, <b>@</b> to pull in a file.

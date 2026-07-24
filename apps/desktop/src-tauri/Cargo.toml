@@ -10,7 +10,10 @@ description = "codeTwo desktop app (Tauri v2) — thin bridge over codetwo-core.
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `macos-private-api` is what `transparent: true` rides on: without it the window stays opaque and
+# the NSVisualEffectView material never shows through. tauri-build keeps this in sync with the
+# `macOSPrivateApi` flag in tauri.conf.json — change it there, not here.
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-shell = "2"
 serde.workspace = true
 serde_json.workspace = true

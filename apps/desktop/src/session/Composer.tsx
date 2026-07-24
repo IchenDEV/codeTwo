@@ -330,7 +330,7 @@ export function Composer({
             <Button
               variant="destructive"
               size="icon"
-              className="size-8 shrink-0 rounded-full"
+              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onStop}
               aria-label="Stop this turn"
             >
@@ -347,7 +347,7 @@ export function Composer({
             <Button
               size="icon"
               variant={docEmpty ? "secondary" : "default"}
-              className="size-8 shrink-0 rounded-full"
+              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onRun}
               aria-label="Run this document"
             >
@@ -390,7 +390,7 @@ export function Composer({
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 "min-h-0 flex-1"
-              : "rounded-2xl border bg-card shadow-lg transition-shadow focus-within:border-ring/50 focus-within:shadow-xl",
+              : "glass-raised rounded-2xl border shadow-lg transition-[box-shadow,border-color] duration-200 focus-within:border-ring/50 focus-within:shadow-xl",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the

@@ -75,7 +75,7 @@ export function SessionRail({
   }, [sessions, query, displayProvider]);
 
   return (
-    <aside className="flex w-60 min-w-60 flex-col border-r bg-sidebar">
+    <aside className="glass-rail flex w-60 min-w-60 flex-col border-r">
       {/* pt-7 clears the macOS traffic lights, which float over this row under the overlay title
           bar. That bar is transparent, so this row is also the only thing left to drag the window
           by — hence the drag region, on the row and on the wordmark that covers most of it. */}

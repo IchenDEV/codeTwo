@@ -106,8 +106,15 @@
     height: 100%;
     margin: 0;
   }
+  /* The window is transparent and macOS paints an NSVisualEffectView underneath it, so every layer
+     above has to stay out of the way — an opaque body would hide the material completely. The app
+     shell re-tints on top of it (see `.app-shell`), which also means that if the effect ever fails
+     to apply, the app is merely translucent rather than unreadable. */
+  html,
   body {
-    background: var(--background);
+    background: transparent;
+  }
+  body {
     color: var(--foreground);
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-synthesis: none;
@@ -138,6 +145,59 @@
    viewer, the terminal surface, and the pane splitter.
    ------------------------------------------------------------------------ */
 @layer components {
+  /* ---- glass -------------------------------------------------------------------------------
+     One tint over the system material. Kept high enough that text never fights the desktop
+     behind it: vibrancy is atmosphere, not a readability feature. */
+  .app-shell {
+    background: color-mix(in oklch, var(--background) 62%, transparent);
+  }
+  /* macOS sidebars are the most translucent surface in the system; ours follows. */
+  .glass-rail {
+    background: color-mix(in oklch, var(--sidebar) 38%, transparent);
+  }
+  /* Panels that hold dense content (dock, composer) sit closer to opaque, and blur what's behind
+     them so they read as layers of glass rather than one flat wash. */
+  .glass-panel {
+    background: color-mix(in oklch, var(--card) 68%, transparent);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+  }
+  .glass-raised {
+    background: color-mix(in oklch, var(--card) 82%, transparent);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+  }
+
+  /* ---- motion ------------------------------------------------------------------------------
+     macOS eases out of motion rather than in and out of it; the standard curve does most of the
+     work of not feeling like a web page. */
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(16px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-rise-in {
+    animation: rise-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-slide-in-right {
+    animation: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
   .skill-chip {
     display: inline-flex;
     align-items: center;
@@ -258,6 +318,19 @@
     flex: 1;
     height: 100%;
     width: 100%;
+  }
+}
+
+/* Motion is decoration here — every animation above is an entrance or a hover, so honouring the
+   system preference costs nothing and skipping it would be the kind of thing that makes an app
+   feel careless rather than native. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

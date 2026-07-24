@@ -48,7 +48,9 @@ export function TurnCard({ turn }: { turn: Turn }) {
   const hasDetail = turn.tools.length + turn.thoughts.length + turn.plan.length > 0;
 
   return (
-    <div className="py-5">
+    // Turns arrive one at a time, so each one entering under its own animation reads as the
+    // conversation advancing rather than the list redrawing.
+    <div className="animate-rise-in py-5">
       {/* prompt */}
       <div className="flex justify-end">
         <div className="max-w-[86%] whitespace-pre-wrap break-words rounded-2xl bg-secondary px-3.5 py-2 text-[13px] leading-relaxed text-secondary-foreground">

@@ -87,7 +87,7 @@ export function Dock({
 
   return (
     <aside
-      className="relative flex min-w-[300px] shrink-0 flex-col border-l bg-card"
+      className="glass-panel animate-slide-in-right relative flex min-w-[300px] shrink-0 flex-col border-l"
       style={{ width: applied }}
     >
       <div className="dock-grip" onMouseDown={startDrag} title="Drag to resize the panel" />
