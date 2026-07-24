@@ -3,6 +3,7 @@ import { Mic, MicOff } from "lucide-react";
 import { transcribeAudio, voiceAvailable } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
 
 type Mode = "idle" | "listening" | "transcribing";
@@ -34,10 +35,10 @@ interface SpeechResultEvent {
  * Voice input. Prefers the webview's built-in speech recognition (live, no setup); otherwise records
  * audio and hands it to the core's configured local transcriber.
  */
-export function VoiceButton({ onText }: { onText: (text: string) => void }) {
+export function VoiceButton({ onText, hint }: { onText: (text: string) => void; hint?: string }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [hasLocal, setHasLocal] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const toast = useToast();
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -90,9 +91,9 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
         const bytes = new Uint8Array(await blob.arrayBuffer());
         const text = await transcribeAudio(bytes, "webm");
         if (text.trim()) onText(text.trim());
-        else setNote("No speech detected.");
+        else toast("No speech detected.", "error");
       } catch (e) {
-        setNote(String(e));
+        toast(`Transcription failed: ${e}`, "error");
       }
       setMode("idle");
     };
@@ -102,7 +103,6 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
   };
 
   const toggle = async () => {
-    setNote(null);
     if (mode === "listening") {
       stopAll();
       setMode("idle");
@@ -113,20 +113,29 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
     try {
       if (SR) startDictation(SR);
       else if (hasLocal) await startRecording();
-      else setNote("No speech recognition here. Set CODETWO_TRANSCRIBE_CMD to use a local transcriber.");
+      else {
+        // This is the common case in a plain webview. Say so out loud — the button used to look
+        // simply broken here.
+        toast(
+          "No speech recognition available in this webview. Set CODETWO_TRANSCRIBE_CMD to a local transcriber (e.g. whisper.cpp) to dictate.",
+          "error",
+        );
+      }
     } catch (e) {
-      setNote(String(e));
+      toast(`Microphone unavailable: ${e}`, "error");
       setMode("idle");
     }
   };
 
   const Icon = mode === "listening" ? MicOff : Mic;
+  const label = mode === "listening" ? "Stop listening" : "Voice input — dictate into the prompt";
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
           variant={mode === "listening" ? "destructive" : "ghost"}
           size="icon"
+          aria-label={label}
           className={cn("size-8 shrink-0", mode === "listening" && "animate-pulse")}
           onClick={() => void toggle()}
           disabled={mode === "transcribing"}
@@ -135,7 +144,8 @@ export function VoiceButton({ onText }: { onText: (text: string) => void }) {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {note ?? (mode === "listening" ? "Stop listening" : "Voice input — dictate into the prompt")}
+        {label}
+        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
       </TooltipContent>
     </Tooltip>
   );

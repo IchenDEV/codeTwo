@@ -7,6 +7,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 // Compiled-prompt preview: exactly what will be sent — rules prepended, skills expanded,
 // macros substituted, @-files inlined.
 export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; onClose: () => void }) {
+  // Tolerate a partial shape rather than white-screening if a field is ever absent.
+  const files = preview.files ?? [];
+  const mcp = preview.mcp_servers ?? [];
+  const agentSkills = preview.agent_skills ?? [];
+  const unresolved = preview.unresolved ?? [];
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl">
@@ -14,23 +19,23 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
           <DialogTitle>Compiled prompt preview</DialogTitle>
         </DialogHeader>
 
-        {preview.unresolved.length > 0 && (
-          <p className="text-xs text-warning">Unresolved: {preview.unresolved.join(", ")}</p>
+        {unresolved.length > 0 && (
+          <p className="text-xs text-warning">Unresolved: {unresolved.join(", ")}</p>
         )}
 
-        {(preview.files.length > 0 || preview.mcp_servers.length > 0 || preview.agent_skills.length > 0) && (
+        {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0) && (
           <div className="flex flex-wrap gap-1.5">
-            {preview.files.map((f) => (
+            {files.map((f) => (
               <Badge key={f} variant="outline" className="font-mono text-[10px]">
                 @{f}
               </Badge>
             ))}
-            {preview.mcp_servers.map((m) => (
+            {mcp.map((m) => (
               <Badge key={m} variant="secondary" className="text-[10px]">
                 mcp: {m}
               </Badge>
             ))}
-            {preview.agent_skills.map((s) => (
+            {agentSkills.map((s) => (
               <Badge key={s} variant="secondary" className="text-[10px]">
                 skill: {s}
               </Badge>

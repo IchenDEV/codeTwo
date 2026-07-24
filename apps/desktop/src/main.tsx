@@ -2,6 +2,8 @@ import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
+import { ToastProvider } from "./ui/toast";
 import { useColorScheme } from "./theme";
 import "./styles.css";
 
@@ -13,9 +15,13 @@ function Root() {
   }, [scheme]);
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <App />
-    </TooltipProvider>
+    <ErrorBoundary>
+      <TooltipProvider delayDuration={300}>
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </TooltipProvider>
+    </ErrorBoundary>
   );
 }
 

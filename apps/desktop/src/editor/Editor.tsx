@@ -23,6 +23,11 @@ interface EditorProps {
   insertTextRef: MutableRefObject<((text: string) => void) | null>;
   // App inserts `@file` mentions (from the file browser) through this.
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
+  // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
+  focusRef: MutableRefObject<(() => void) | null>;
+  openSkillPickerRef: MutableRefObject<(() => void) | null>;
+  // Lets the toolbar disable Run — and explain why — while the document is empty.
+  onEmptyChange: (empty: boolean) => void;
 }
 
 // The `/` "Skills" group, built from the live library. Picking one inserts a real inline skill node.
@@ -59,7 +64,16 @@ async function fileMenuItems(
   }));
 }
 
-export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef, insertFileRef }: EditorProps) {
+export function DocEditor({
+  skills,
+  cwd,
+  getBlocksRef,
+  insertTextRef,
+  insertFileRef,
+  focusRef,
+  openSkillPickerRef,
+  onEmptyChange,
+}: EditorProps) {
   // Start empty. A pre-filled sample used to be the first thing every session showed, which meant
   // the user's first act was deleting our text; the placeholder carries the same hint for free.
   const editor = useCreateBlockNote({
@@ -86,17 +100,29 @@ export function DocEditor({ skills, cwd, getBlocksRef, insertTextRef, insertFile
     insertFileRef.current = (path: string) => {
       editor.insertInlineContent([{ type: "file", props: { path } }, " "]);
     };
+    focusRef.current = () => editor.focus();
+    openSkillPickerRef.current = () => {
+      editor.focus();
+      editor.openSuggestionMenu("/");
+    };
     return () => {
       getBlocksRef.current = null;
       insertTextRef.current = null;
       insertFileRef.current = null;
+      focusRef.current = null;
+      openSkillPickerRef.current = null;
     };
-  }, [editor, getBlocksRef, insertTextRef, insertFileRef]);
+  }, [editor, getBlocksRef, insertTextRef, insertFileRef, focusRef, openSkillPickerRef]);
 
   const scheme = useColorScheme();
 
   return (
-    <BlockNoteView editor={editor} slashMenu={false} theme={scheme}>
+    <BlockNoteView
+      editor={editor}
+      slashMenu={false}
+      theme={scheme}
+      onChange={() => onEmptyChange(docToBlocks(editor).length === 0)}
+    >
       <SuggestionMenuController
         triggerCharacter={"/"}
         getItems={async (query) =>

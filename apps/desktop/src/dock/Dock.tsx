@@ -49,7 +49,7 @@ export function Dock({
     <aside className="flex w-[440px] min-w-[320px] flex-col border-l bg-card">
       <Tabs value={tab} onValueChange={(v) => onTab(v as DockTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* pt-7 matches the main header's titlebar inset so the two rows line up. */}
-        <div className="flex items-center gap-2 border-b px-2 pb-2 pt-7">
+        <div className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
           <TabsList className="h-7">
             <TabsTrigger value="terminal" className="gap-1.5 text-xs">
               <TerminalIcon className="size-3.5" /> Terminal
@@ -128,7 +128,7 @@ export function Dock({
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="space-y-2 p-3 text-xs">
+            <div className="space-y-2.5 p-4 text-xs">
               {git?.is_repo ? (
                 <>
                   <div className="flex items-center gap-2">

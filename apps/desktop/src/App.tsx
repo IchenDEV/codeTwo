@@ -21,6 +21,7 @@ import {
   browserContext,
   cancelTurn,
   compileDoc,
+  DEFAULT_KEYMAP,
   deleteSkill,
   describeBlock,
   getKeymap,
@@ -79,6 +80,9 @@ import { TurnCard } from "./session/TurnCard";
 import { applyEvent, isRunning, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
 import { Dock, type DockTab } from "./dock/Dock";
 
+import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
+import { useToast } from "./ui/toast";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -94,9 +98,6 @@ interface PermissionState {
   options: [string, string][];
 }
 
-/** ⌘ on macOS, Ctrl elsewhere — for shortcut hints in the UI. */
-const MOD = /mac/i.test(navigator.userAgent) ? "⌘" : "Ctrl";
-
 function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join(" ").slice(0, 400);
 }
@@ -105,26 +106,17 @@ function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function comboFromEvent(e: KeyboardEvent): string {
-  const parts: string[] = [];
-  if (e.metaKey || e.ctrlKey) parts.push("Mod");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
-  let k = e.key;
-  if (k === " ") k = "Space";
-  else if (k.length === 1) k = k.toUpperCase();
-  parts.push(k);
-  return parts.join("+");
-}
-
 function IconAction({
   icon: Icon,
   label,
+  hint,
   onClick,
   active,
 }: {
   icon: typeof Eye;
   label: string;
+  /** Live shortcut from the keymap, so a rebind shows up here too. */
+  hint?: string;
   onClick: () => void;
   active?: boolean;
 }) {
@@ -141,7 +133,10 @@ function IconAction({
           <Icon className="size-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
+      <TooltipContent>
+        {label}
+        {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -183,11 +178,15 @@ export default function App() {
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [editorPct, setEditorPct] = useState(45);
   const [dragging, setDragging] = useState(false);
+  const [docEmpty, setDocEmpty] = useState(true);
   const mainRef = useRef<HTMLElement | null>(null);
+  const toast = useToast();
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
+  const focusEditorRef = useRef<(() => void) | null>(null);
+  const openSkillPickerRef = useRef<(() => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const pendingDocRef = useRef<DocBlock[] | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
@@ -260,23 +259,42 @@ export default function App() {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
     let doc = getBlocks();
-    if (doc.length === 0) return;
+    // Running an empty document used to no-op in silence, which is indistinguishable from a broken
+    // button. Say what's missing and put the caret where the fix goes.
+    if (doc.length === 0) {
+      toast("Write a prompt first — the document is empty.");
+      focusEditorRef.current?.();
+      return;
+    }
+    if (running) {
+      toast("A turn is already running. Stop it first.");
+      return;
+    }
     if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     setRunning(true);
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc))]);
-    if (activeSessionRef.current) {
-      await submitPrompt(activeSessionRef.current, doc);
-    } else {
-      pendingDocRef.current = doc;
-      await newSession(provider, cwd || ".", useWorktree);
+    try {
+      if (activeSessionRef.current) {
+        await submitPrompt(activeSessionRef.current, doc);
+      } else {
+        pendingDocRef.current = doc;
+        await newSession(provider, cwd || ".", useWorktree);
+      }
+    } catch (e) {
+      setRunning(false);
+      toast(`Could not start the turn: ${e}`, "error");
     }
-  }, [provider, cwd, useWorktree, planMode]);
+  }, [provider, cwd, useWorktree, planMode, running, toast]);
 
   const createSession = useCallback(async () => {
     pendingDocRef.current = null;
     setTurns([]);
-    await newSession(provider, cwd || ".", useWorktree);
-  }, [provider, cwd, useWorktree]);
+    try {
+      await newSession(provider, cwd || ".", useWorktree);
+    } catch (e) {
+      toast(`Could not create a session: ${e}`, "error");
+    }
+  }, [provider, cwd, useWorktree, toast]);
 
   const answer = useCallback(
     async (optionId: string | null) => {
@@ -336,15 +354,24 @@ export default function App() {
   }, [cwd, refreshGit]);
 
   const doCheckpoint = useCallback(async () => {
-    await gitCheckpoint(cwd || ".", "manual checkpoint");
+    try {
+      const cp = await gitCheckpoint(cwd || ".", "manual checkpoint");
+      toast(cp ? "Checkpoint saved." : "Nothing to checkpoint.", cp ? "success" : "info");
+    } catch (e) {
+      toast(`Checkpoint failed: ${e}`, "error");
+    }
     gitCheckpoints(cwd || ".").then(setCheckpoints).catch(() => {});
-  }, [cwd]);
+  }, [cwd, toast]);
 
   const doPreview = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
-    setPreview(await compileDoc(getBlocks(), cwd || "."));
-  }, [cwd]);
+    try {
+      setPreview(await compileDoc(getBlocks(), cwd || "."));
+    } catch (e) {
+      toast(`Could not compile the document: ${e}`, "error");
+    }
+  }, [cwd, toast]);
 
   const annotate = useCallback(
     async (note: string) => {
@@ -383,6 +410,20 @@ export default function App() {
     window.addEventListener("mouseup", onUp);
   }, []);
 
+  const stepSession = useCallback(
+    (delta: number) => {
+      if (sessions.length === 0) return;
+      const at = sessions.findIndex((s) => s.id === activeSession);
+      const next = sessions[(at + delta + sessions.length) % sessions.length];
+      if (next) void selectSession(next.id);
+    },
+    [sessions, activeSession, selectSession],
+  );
+
+  /**
+   * Every action in the keymap must land here. An action with no arm is a key that silently does
+   * nothing — `open_skill_picker` and `focus_editor` were exactly that.
+   */
   const dispatchAction = useCallback(
     (action: string) => {
       switch (action) {
@@ -393,13 +434,26 @@ export default function App() {
           void createSession();
           break;
         case "cancel":
-          if (activeSessionRef.current) void cancelTurn(activeSessionRef.current);
+          if (activeSessionRef.current && running) void cancelTurn(activeSessionRef.current);
+          else toast("Nothing is running.");
           break;
         case "toggle_terminal":
           toggleDock("terminal");
           break;
         case "toggle_browser":
           toggleDock("browser");
+          break;
+        case "toggle_git":
+          toggleDock("git");
+          break;
+        case "close_panel":
+          setDockTab(null);
+          break;
+        case "open_skill_picker":
+          openSkillPickerRef.current?.();
+          break;
+        case "focus_editor":
+          focusEditorRef.current?.();
           break;
         case "open_settings":
           setShowSettings(true);
@@ -410,40 +464,84 @@ export default function App() {
         case "open_source_control":
           openSourceControl();
           break;
-        case "cycle_permission_mode":
-          onModeChange(mode === "ask" ? "accept_edits" : mode === "accept_edits" ? "yolo" : "ask");
+        case "open_market":
+          openMarket();
           break;
+        case "open_usage":
+          setShowUsage(true);
+          break;
+        case "open_files":
+          setShowFiles(true);
+          break;
+        case "open_issues":
+          setShowIssues(true);
+          break;
+        case "prev_session":
+          stepSession(-1);
+          break;
+        case "next_session":
+          stepSession(1);
+          break;
+        case "cycle_permission_mode": {
+          const next = mode === "ask" ? "accept_edits" : mode === "accept_edits" ? "yolo" : "ask";
+          onModeChange(next);
+          toast(`Approvals: ${next.replace("_", " ")}`);
+          break;
+        }
         case "refresh_git":
           refreshGit();
           break;
         default:
+          // A binding pointing at an action this frontend doesn't implement.
+          toast(`No handler for "${action}".`, "error");
           break;
       }
     },
-    [run, createSession, mode, onModeChange, refreshGit, openSourceControl, toggleDock],
+    [
+      run,
+      createSession,
+      running,
+      mode,
+      onModeChange,
+      refreshGit,
+      openSourceControl,
+      openMarket,
+      toggleDock,
+      stepSession,
+      toast,
+    ],
   );
 
+  // Hints come from the live keymap, so a rebind is reflected everywhere without touching labels.
+  const hint = useCallback((action: string) => keyHint(bindings, action), [bindings]);
+
   const paletteCommands: Command[] = [
-    { id: "run", label: "Run prompt", hint: `${MOD}+Enter`, run: () => void run() },
-    { id: "new", label: "New session", hint: `${MOD}+N`, run: () => void createSession() },
-    { id: "sc", label: "Source control", hint: `${MOD}+Shift+G`, run: openSourceControl },
+    { id: "run", label: "Run prompt", hint: hint("run"), run: () => void run() },
+    { id: "new", label: "New session", hint: hint("new_session"), run: () => void createSession() },
+    { id: "sc", label: "Source control", hint: hint("open_source_control"), run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
-    { id: "market", label: "Open skill market", run: openMarket },
-    { id: "issues", label: "GitHub issues", run: () => setShowIssues(true) },
-    { id: "files", label: "Browse workspace files", run: () => setShowFiles(true) },
-    { id: "usage", label: "Usage (5h / week / month)", run: () => setShowUsage(true) },
+    { id: "market", label: "Open skill market", hint: hint("open_market"), run: openMarket },
+    { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
+    { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
+    { id: "usage", label: "Usage (5h / week / month)", hint: hint("open_usage"), run: () => setShowUsage(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
+    { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
-    { id: "settings", label: "Open settings", hint: `${MOD}+,`, run: () => setShowSettings(true) },
-    { id: "terminal", label: "Toggle terminal", hint: `${MOD}+J`, run: () => toggleDock("terminal") },
-    { id: "browser", label: "Toggle browser", hint: `${MOD}+B`, run: () => toggleDock("browser") },
-    { id: "git", label: "Refresh git status", hint: `${MOD}+G`, run: refreshGit },
+    { id: "settings", label: "Open settings", hint: hint("open_settings"), run: () => setShowSettings(true) },
+    { id: "terminal", label: "Toggle terminal", hint: hint("toggle_terminal"), run: () => toggleDock("terminal") },
+    { id: "browser", label: "Toggle browser", hint: hint("toggle_browser"), run: () => toggleDock("browser") },
+    { id: "gitpanel", label: "Toggle git panel", hint: hint("toggle_git"), run: () => toggleDock("git") },
+    { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
+    { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
       label: `Run script: ${s.name || s.id}`,
       hint: s.command,
       run: () => {
-        void runProjectScript(cwd || ".", s.id).catch(() => {});
+        toast(`Running “${s.name || s.id}”…`);
+        void runProjectScript(cwd || ".", s.id)
+          .then((out) => toast(out.trim() ? out.trim().slice(-300) : `“${s.name || s.id}” finished.`, "success"))
+          .catch((e) => toast(`Script failed: ${e}`, "error"));
       },
     })),
     ...sessions.map((s) => ({
@@ -470,22 +568,41 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (capturing) {
-        if (["Meta", "Control", "Shift", "Alt"].includes(e.key)) return;
+        if (isModifierOnly(e)) return;
         e.preventDefault();
-        void setKeymap(capturing, comboFromEvent(e)).then(() => getKeymap().then(setBindings));
+        // Escape aborts the capture rather than binding Escape to this action.
+        if (e.key === "Escape") {
+          setCapturing(null);
+          return;
+        }
+        void setKeymap(capturing, comboFromEvent(e))
+          .then(() => getKeymap().then(setBindings))
+          .catch((err) => toast(`Could not save shortcut: ${err}`, "error"));
         setCapturing(null);
         return;
       }
-      const combo = comboFromEvent(e);
-      if (!combo.startsWith("Mod+")) return;
-      const entry = bindings.find(([, key]) => key === combo);
-      if (!entry) return;
+      const action = actionForEvent(e, bindings);
+      if (!action) return;
+      // Escape is also how dialogs and the suggestion menu close; let those win when one is open.
+      if (e.key === "Escape" && document.querySelector('[role="dialog"],.bn-suggestion-menu')) return;
       e.preventDefault();
-      dispatchAction(entry[0]);
+      dispatchAction(action);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [bindings, capturing, dispatchAction]);
+  }, [bindings, capturing, dispatchAction, toast]);
+
+  // Restore one shortcut to its shipped default.
+  const resetBinding = useCallback(
+    (action: string) => {
+      const def = DEFAULT_KEYMAP.find(([a]) => a === action);
+      if (!def) return;
+      void setKeymap(action, def[1])
+        .then(() => getKeymap().then(setBindings))
+        .catch((err) => toast(`Could not reset shortcut: ${err}`, "error"));
+    },
+    [toast],
+  );
 
   const currentProvider = providers.find((p) => p.id === provider);
 
@@ -494,7 +611,7 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         <aside className="flex w-60 min-w-60 flex-col border-r bg-sidebar">
-          <div className="flex items-center justify-between px-3 pb-2 pt-7">
+          <div className="flex items-center justify-between px-3 pb-2.5 pt-7">
             <span className="text-[15px] font-bold tracking-tight">codeTwo</span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -502,12 +619,14 @@ export default function App() {
                   <Plus className="size-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>New session ({MOD}+N)</TooltipContent>
+              <TooltipContent>
+                New session <span className="ml-1 opacity-60">{hint("new_session")}</span>
+              </TooltipContent>
             </Tooltip>
           </div>
 
           <ScrollArea className="min-h-0 flex-1">
-            <div className="space-y-0.5 px-2 pb-2">
+            <div className="space-y-px px-1.5 pb-2">
               {sessions.length === 0 && (
                 <p className="px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
                   No sessions yet.
@@ -520,7 +639,7 @@ export default function App() {
                   key={s.id}
                   onClick={() => void selectSession(s.id)}
                   className={cn(
-                    "group cursor-pointer rounded-md px-2.5 py-1.5 transition-colors hover:bg-accent",
+                    "group cursor-pointer rounded-md px-1.5 py-1.5 transition-colors hover:bg-accent",
                     s.id === activeSession && "bg-accent",
                   )}
                 >
@@ -576,7 +695,7 @@ export default function App() {
           </ScrollArea>
 
           {/* Skills live at the foot of the rail — they're picked with "/" in the doc, not here. */}
-          <div className="border-t px-3 py-2">
+          <div className="border-t px-3 py-2.5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {skills.length} skills
@@ -604,7 +723,7 @@ export default function App() {
 
         {/* ---------------- document + transcript ---------------- */}
         <main className="flex min-w-0 flex-1 flex-col" ref={mainRef}>
-          <header className="flex items-center gap-2 border-b bg-card px-3 pb-2 pt-7">
+          <header className="flex items-center gap-1.5 border-b bg-card px-3 pb-2.5 pt-7">
             <span className="max-w-56 truncate text-[13px] font-semibold">{activeTitle}</span>
 
             <ConfigPopover
@@ -627,11 +746,22 @@ export default function App() {
 
             <VoiceButton onText={(t) => insertTextRef.current?.(t)} />
             <IconAction icon={Eye} label="Preview compiled prompt" onClick={() => void doPreview()} />
-            <IconAction icon={Keyboard} label={`Command palette (${MOD}+K)`} onClick={() => setShowPalette(true)} />
-            <IconAction icon={SettingsIcon} label={`Settings (${MOD}+,)`} onClick={() => setShowSettings(true)} />
+            <IconAction
+              icon={Keyboard}
+              label="Command palette"
+              hint={hint("open_command_palette")}
+              onClick={() => setShowPalette(true)}
+            />
+            <IconAction
+              icon={SettingsIcon}
+              label="Settings"
+              hint={hint("open_settings")}
+              onClick={() => setShowSettings(true)}
+            />
             <IconAction
               icon={PanelRight}
               label="Toggle side panel"
+              hint={hint("toggle_terminal")}
               active={dockTab !== null}
               onClick={() => toggleDock(dockTab ?? "terminal")}
             />
@@ -640,15 +770,31 @@ export default function App() {
               <Button
                 variant="destructive"
                 size="sm"
-                className="shrink-0"
+                className="ml-1 shrink-0"
                 onClick={() => activeSession && void cancelTurn(activeSession)}
               >
                 <Square className="size-3.5" /> Stop
+                <span className="ml-0.5 opacity-70">{hint("cancel")}</span>
               </Button>
             ) : (
-              <Button size="sm" className="shrink-0" onClick={() => void run()}>
-                Run <ChevronRight className="size-3.5" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+                      focuses the editor and says what's missing. */}
+                  <Button
+                    size="sm"
+                    variant={docEmpty ? "secondary" : "default"}
+                    className="ml-1 shrink-0"
+                    onClick={() => void run()}
+                  >
+                    Run <ChevronRight className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {docEmpty ? "Write a prompt first" : "Run this document"}
+                  <span className="ml-1.5 opacity-60">{hint("run")}</span>
+                </TooltipContent>
+              </Tooltip>
             )}
           </header>
 
@@ -661,6 +807,9 @@ export default function App() {
                 getBlocksRef={getBlocksRef}
                 insertTextRef={insertTextRef}
                 insertFileRef={insertFileRef}
+                focusRef={focusEditorRef}
+                openSkillPickerRef={openSkillPickerRef}
+                onEmptyChange={setDocEmpty}
               />
             </div>
           </section>
@@ -671,7 +820,7 @@ export default function App() {
             <div className="mx-auto w-full max-w-[820px] px-5">
               {turns.length === 0 ? (
                 <p className="py-8 text-center text-xs leading-relaxed text-muted-foreground">
-                  Compose above, then press <b>Run</b> ({MOD}+Enter).
+                  Compose above, then press <b>Run</b> ({hint("run")}).
                   <br />
                   Type <b>/</b> for skills, <b>@</b> to pull in a file.
                 </p>
@@ -702,7 +851,7 @@ export default function App() {
       </div>
 
       {/* ---------------- status bar ---------------- */}
-      <footer className="flex h-6 shrink-0 items-center gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
+      <footer className="flex h-7 shrink-0 items-center gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className={cn("size-1.5 rounded-full", currentProvider?.available ? "bg-success" : "bg-border")} />
           {currentProvider?.display_name ?? provider}
@@ -737,6 +886,7 @@ export default function App() {
           bindings={bindings}
           capturing={capturing}
           onCapture={setCapturing}
+          onReset={resetBinding}
           onClose={() => {
             setShowSettings(false);
             setCapturing(null);
@@ -757,11 +907,21 @@ export default function App() {
           status={git}
           checkpoints={checkpoints}
           onCommit={async (m) => {
-            await gitCommit(cwd || ".", m);
+            try {
+              await gitCommit(cwd || ".", m);
+              toast("Committed.", "success");
+            } catch (e) {
+              toast(`Commit failed: ${e}`, "error");
+            }
             refreshGit();
           }}
           onPush={async () => {
-            await gitPush(cwd || ".");
+            try {
+              await gitPush(cwd || ".");
+              toast("Pushed.", "success");
+            } catch (e) {
+              toast(`Push failed: ${e}`, "error");
+            }
           }}
           onCheckpoint={doCheckpoint}
           onRevert={async (c) => {

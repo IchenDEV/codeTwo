@@ -24,22 +24,38 @@ pub enum Action {
     FocusEditor,
     CyclePermissionMode,
     RefreshGit,
+    ToggleGit,
+    OpenMarket,
+    OpenUsage,
+    OpenFiles,
+    OpenIssues,
+    ClosePanel,
+    PrevSession,
+    NextSession,
 }
 
 impl Action {
-    pub const ALL: [Action; 12] = [
+    pub const ALL: [Action; 20] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
         Action::ToggleTerminal,
         Action::ToggleBrowser,
+        Action::ToggleGit,
+        Action::ClosePanel,
         Action::OpenSkillPicker,
-        Action::OpenSettings,
+        Action::FocusEditor,
         Action::OpenCommandPalette,
         Action::OpenSourceControl,
-        Action::FocusEditor,
+        Action::OpenMarket,
+        Action::OpenFiles,
+        Action::OpenIssues,
+        Action::OpenUsage,
+        Action::OpenSettings,
         Action::CyclePermissionMode,
         Action::RefreshGit,
+        Action::PrevSession,
+        Action::NextSession,
     ];
 
     pub fn as_str(&self) -> &'static str {
@@ -56,6 +72,14 @@ impl Action {
             Action::FocusEditor => "focus_editor",
             Action::CyclePermissionMode => "cycle_permission_mode",
             Action::RefreshGit => "refresh_git",
+            Action::ToggleGit => "toggle_git",
+            Action::OpenMarket => "open_market",
+            Action::OpenUsage => "open_usage",
+            Action::OpenFiles => "open_files",
+            Action::OpenIssues => "open_issues",
+            Action::ClosePanel => "close_panel",
+            Action::PrevSession => "prev_session",
+            Action::NextSession => "next_session",
         }
     }
 
@@ -73,6 +97,14 @@ impl Action {
             Action::FocusEditor => "Focus editor",
             Action::CyclePermissionMode => "Cycle permission mode",
             Action::RefreshGit => "Refresh git status",
+            Action::ToggleGit => "Toggle git panel",
+            Action::OpenMarket => "Open skill market",
+            Action::OpenUsage => "Open usage",
+            Action::OpenFiles => "Browse workspace files",
+            Action::OpenIssues => "Open issues",
+            Action::ClosePanel => "Close side panel",
+            Action::PrevSession => "Previous session",
+            Action::NextSession => "Next session",
         }
     }
 
@@ -90,6 +122,14 @@ impl Action {
             Action::FocusEditor => "Mod+E",
             Action::CyclePermissionMode => "Mod+Shift+P",
             Action::RefreshGit => "Mod+G",
+            Action::ToggleGit => "Mod+Shift+B",
+            Action::OpenMarket => "Mod+Shift+M",
+            Action::OpenUsage => "Mod+Shift+U",
+            Action::OpenFiles => "Mod+P",
+            Action::OpenIssues => "Mod+Shift+I",
+            Action::ClosePanel => "Escape",
+            Action::PrevSession => "Mod+Alt+ArrowUp",
+            Action::NextSession => "Mod+Alt+ArrowDown",
         }
     }
 }

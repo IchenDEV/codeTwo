@@ -219,17 +219,29 @@ export async function gitPush(cwd: string): Promise<string> {
 
 export type KeymapEntry = [action: string, key: string, label: string];
 
-const DEFAULT_KEYMAP: KeymapEntry[] = [
+// Mirrors `Action::default_key()` in crates/core/src/keymap.rs — keep the two in step. This is only
+// the browser-preview fallback; inside Tauri the real keymap (with user overrides) comes from core.
+export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["run", "Mod+Enter", "Run prompt"],
   ["new_session", "Mod+N", "New session"],
   ["cancel", "Mod+.", "Cancel turn"],
   ["toggle_terminal", "Mod+J", "Toggle terminal"],
   ["toggle_browser", "Mod+B", "Toggle browser"],
+  ["toggle_git", "Mod+Shift+B", "Toggle git panel"],
+  ["close_panel", "Escape", "Close side panel"],
   ["open_skill_picker", "Mod+/", "Open skill picker"],
-  ["open_settings", "Mod+,", "Open settings"],
   ["focus_editor", "Mod+E", "Focus editor"],
-  ["cycle_permission_mode", "Mod+K", "Cycle permission mode"],
+  ["open_command_palette", "Mod+K", "Command palette"],
+  ["open_source_control", "Mod+Shift+G", "Source control"],
+  ["open_market", "Mod+Shift+M", "Open skill market"],
+  ["open_files", "Mod+P", "Browse workspace files"],
+  ["open_issues", "Mod+Shift+I", "Open issues"],
+  ["open_usage", "Mod+Shift+U", "Open usage"],
+  ["open_settings", "Mod+,", "Open settings"],
+  ["cycle_permission_mode", "Mod+Shift+P", "Cycle permission mode"],
   ["refresh_git", "Mod+G", "Refresh git status"],
+  ["prev_session", "Mod+Alt+ArrowUp", "Previous session"],
+  ["next_session", "Mod+Alt+ArrowDown", "Next session"],
 ];
 
 export async function getKeymap(): Promise<KeymapEntry[]> {

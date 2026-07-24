@@ -25,12 +25,12 @@ function Detail({
   if (count === 0) return null;
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group flex items-center gap-1.5 rounded px-1 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
       </CollapsibleTrigger>
-      <CollapsibleContent className="pl-5 pt-1">{children}</CollapsibleContent>
+      <CollapsibleContent className="py-1 pl-4">{children}</CollapsibleContent>
     </Collapsible>
   );
 }
@@ -44,12 +44,15 @@ export function TurnCard({ turn }: { turn: Turn }) {
   const dur = duration(turn);
 
   return (
-    <div className="border-b py-3 last:border-b-0">
-      {/* prompt */}
-      <div className="flex items-start gap-2">
-        <span className="mt-[3px] shrink-0 text-[11px] font-semibold text-muted-foreground">▸</span>
-        <p className="flex-1 whitespace-pre-wrap break-words text-[13px] font-medium">{turn.prompt}</p>
-        <span className="flex shrink-0 items-center gap-1.5">
+    // Everything in a turn shares one left edge, so the prompt, the answer, and the disclosures
+    // read as a single column instead of a stepped indent.
+    <div className="border-b py-4 last:border-b-0">
+      {/* prompt + status, on one row */}
+      <div className="flex items-start gap-3">
+        <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[13px] font-medium leading-relaxed">
+          {turn.prompt}
+        </p>
+        <span className="flex shrink-0 items-center gap-1.5 pt-px">
           {running ? (
             <Badge variant="secondary" className="gap-1 text-[9px] uppercase">
               <Loader2 className="size-2.5 animate-spin" /> running
@@ -67,20 +70,20 @@ export function TurnCard({ turn }: { turn: Turn }) {
 
       {/* answer */}
       {turn.text && (
-        <p className="mt-2 whitespace-pre-wrap break-words pl-4 text-[13px] leading-relaxed">
+        <p className="mt-2.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground/90">
           {turn.text}
         </p>
       )}
 
       {turn.error && (
-        <p className="mt-2 flex items-start gap-1.5 pl-4 text-[13px] text-destructive">
+        <p className="mt-2.5 flex items-start gap-1.5 text-[13px] text-destructive">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
       )}
 
       {/* secondary detail, collapsed by default */}
-      <div className="mt-1.5 space-y-0.5 pl-3">
+      <div className="mt-2.5 space-y-0.5">
         <Detail icon={Wrench} label="tools" count={turn.tools.length}>
           <div className="space-y-0.5">
             {turn.tools.map((t) => (
