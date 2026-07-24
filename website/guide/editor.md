@@ -4,12 +4,17 @@ codeTwo's core idea: **compose your prompt as a document**, and combine reusable
 
 ## The document editor
 
-The composer at the foot of the transcript is a block editor (BlockNote), not a text field. Write
-your request as prose — headings, paragraphs, lists, code blocks — like a short spec. When you run,
-the whole document becomes one prompt turn.
+The prompt is a block editor (BlockNote), not a text field. Write your request as prose — headings,
+paragraphs, lists, code blocks — like a short spec. When you run, the whole document becomes one
+prompt turn.
 
-It starts compact, the way a chat box does, and grows with what you write. Two ways to get more
-room, neither of which changes what the document *is*:
+**A new session opens as a full page**, with the caret already in it: a document-first app should
+hand you a page to write on, not a chat box under an empty transcript. Sending collapses the page
+into a composer docked at the foot of the transcript, because from then on there's an answer worth
+looking at. Starting another session gives you the page back.
+
+Docked, it grows with what you write. Two ways to get more room, neither of which changes what the
+document *is*:
 
 - **Drag the top edge** of the composer to any height. The size is remembered.
 - **Expand** (`Mod+Shift+E`, or the ⤢ button) makes the document *the page*: the card falls away and

@@ -14,9 +14,9 @@ See [Git](/guide/git).
 
 ## 2. Compose your prompt as a document
 
-The composer sits at the foot of the transcript, where a chat box would be — but it *is* a document
-editor, not a text field. Write your request in plain prose. Then type `/` to open the **skill
-picker** and insert skills:
+A new session opens as a **full page** with the caret in it — it *is* a document editor, not a text
+field. Write your request in plain prose. Then type `/` to open the **skill picker** and insert
+skills:
 
 - `Skill: Code Reviewer` — a reviewer persona (a fragment).
 - `Skill: Test Writer`, `Security Audit`, and anything you've installed from the
@@ -26,9 +26,10 @@ Inserted skills appear as inline chips. You can combine several and interleave t
 text — the whole document is compiled into one prompt when you run it. Details:
 [Document editor & skills](/guide/editor).
 
-The composer grows as you write. Drag its top edge for more room, or press `Mod+Shift+E` (the ⤢
-button) to make the document **the whole page** for a longer brief — headings, lists, code blocks and
-all. Sending collapses it again so you can watch the answer.
+Because this is a document, `Enter` starts a new paragraph — send with `Mod+Enter` (the composer
+says so while the document is empty). Sending collapses the page into a composer docked under the
+transcript; `Mod+Shift+E` (the ⤢ button) takes you back to the full page whenever a brief needs the
+room, and the draft survives either way.
 
 Once the session exists, a **model chip** appears beside the provider if the agent reports models.
 See [Models](/guide/providers#models).

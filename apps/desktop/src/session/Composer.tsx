@@ -316,6 +316,14 @@ export function Composer({
 
       <VoiceButton onText={onVoiceText} />
 
+      {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
+          assumed. It shows only while the document is empty, and so retires itself. */}
+      {docEmpty && !running && runHint && (
+        <span className="mx-1 shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+          {runHint} to send
+        </span>
+      )}
+
       {running ? (
         <Tooltip>
           <TooltipTrigger asChild>

@@ -21,7 +21,7 @@ Four regions, each with one job:
 | --- | --- |
 | **Session rail** (left) | Your sessions, grouped by recency and filterable. Skill-library management and the live provider sit at its foot. |
 | **Transcript** (centre) | One **turn** per exchange — your prompt in a bubble, the answer full width, tools/thinking/plan collapsed underneath. |
-| **Composer** (bottom) | The prompt you're composing. It sits where a chat box would, but it's the full document editor: `/` inserts a skill, `@` pulls in a file. Drag it taller, or expand it (`Mod+Shift+E`) so the document becomes the whole page for a longer brief. |
+| **Prompt** | The document you're composing: `/` inserts a skill, `@` pulls in a file. A new session opens it as a **full page**; sending docks it under the transcript, and `Mod+Shift+E` expands it again for a longer brief. |
 | **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. Drag its edge to resize. |
 
 Per-session setup (provider, working directory, approvals, sandbox, worktree, plan mode) lives in one

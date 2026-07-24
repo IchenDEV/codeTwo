@@ -179,7 +179,10 @@ export default function App() {
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
   const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
-  const [docMode, setDocMode] = useState(false);
+  // A fresh session opens as a full page: this is a document-first app, so the first thing you meet
+  // is a page to write on, not a chat box under an empty transcript. Running a turn collapses it —
+  // from then on there's an answer worth looking at.
+  const [docMode, setDocMode] = useState(true);
   const mainRef = useRef<HTMLElement | null>(null);
   const toast = useToast();
 
@@ -316,6 +319,9 @@ export default function App() {
     setTurns([]);
     setModels([]);
     setCurrentModel(null);
+    // Back to a blank page with the caret in it — the point of a new session.
+    setDocMode(true);
+    setTimeout(() => focusEditorRef.current?.(), 0);
     try {
       await newSession(provider, cwd || ".", useWorktree);
     } catch (e) {
@@ -350,7 +356,11 @@ export default function App() {
       // session resumed from the store we know the chosen model but not the menu it came from.
       setModels([]);
       setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
-      setTurns(turnsFromTranscript(await getTranscript(id)));
+      const restored = turnsFromTranscript(await getTranscript(id));
+      setTurns(restored);
+      // A session with history opens on its transcript; an empty one opens on the page, same as a
+      // new session would.
+      setDocMode(restored.length === 0);
     },
     [sessions],
   );
@@ -588,6 +598,9 @@ export default function App() {
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
     remoteStatus().then(setRemoteInfo).catch(() => {});
+    // The app opens on a blank page, so put the caret in it. Deferred one tick: the editor installs
+    // its focus handle in its own mount effect.
+    setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
   useEffect(() => {
