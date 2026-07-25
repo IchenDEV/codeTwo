@@ -155,10 +155,13 @@
   .app-shell {
     background: transparent;
   }
-  /* The one surface the material shows through. Alpha high enough to stay a surface, low enough
-     that the desktop moves behind it. */
+  /* The material *is* this surface — that's the whole point of asking macOS for one. A tint here
+     only subtracts from it: at 72% opaque only 28% of the vibrancy survived, which in light mode
+     meant painting light grey over a light frosted panel and seeing nothing move behind it.
+     What's left is a wash thin enough to read as a tint of the material rather than a lid on it,
+     and thick enough that the rail is still a surface if the effect ever fails to apply. */
   .glass-rail {
-    background: color-mix(in oklch, var(--sidebar) 72%, transparent);
+    background: color-mix(in oklch, var(--sidebar) 18%, transparent);
   }
   /* Where you read: opaque, and a clear step up in value from the rail beside it. */
   .content-surface {
