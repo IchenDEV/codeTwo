@@ -163,6 +163,18 @@ export async function listDir(cwd: string, path: string): Promise<DirEntry[]> {
   return inTauri ? invoke<DirEntry[]>("list_dir", { cwd, path }) : [];
 }
 
+/** Create an empty file. Rejects paths that already exist rather than overwriting. */
+export async function createFile(cwd: string, path: string): Promise<void> {
+  if (inTauri) await invoke("create_file", { cwd, path });
+}
+
+/** Newest text per session id, for the rail's preview line. */
+export async function sessionPreviews(): Promise<Record<string, string>> {
+  if (!inTauri) return {};
+  const rows = await invoke<[string, string][]>("session_previews");
+  return Object.fromEntries(rows);
+}
+
 // ---- projects ----------------------------------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {

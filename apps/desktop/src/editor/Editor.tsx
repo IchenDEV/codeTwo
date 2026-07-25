@@ -26,6 +26,8 @@ interface EditorProps {
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
   // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
   focusRef: MutableRefObject<(() => void) | null>;
+  // App empties the document after a successful send.
+  clearRef: MutableRefObject<(() => void) | null>;
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
@@ -72,6 +74,7 @@ export function DocEditor({
   insertTextRef,
   insertFileRef,
   focusRef,
+  clearRef,
   openSkillPickerRef,
   onEmptyChange,
 }: EditorProps) {
@@ -106,6 +109,12 @@ export function DocEditor({
       editor.insertInlineContent([{ type: "file", props: { path } }, " "]);
     };
     focusRef.current = () => editor.focus();
+    clearRef.current = () => {
+      // Replace every block with one empty paragraph. Removing them all leaves BlockNote with no
+      // block to put a cursor in.
+      editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "" }]);
+      onEmptyChange(true);
+    };
     openSkillPickerRef.current = () => {
       editor.focus();
       editor.openSuggestionMenu("/");
@@ -115,9 +124,10 @@ export function DocEditor({
       insertTextRef.current = null;
       insertFileRef.current = null;
       focusRef.current = null;
+      clearRef.current = null;
       openSkillPickerRef.current = null;
     };
-  }, [editor, getBlocksRef, insertTextRef, insertFileRef, focusRef, openSkillPickerRef]);
+  }, [editor, getBlocksRef, insertTextRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
 
   const scheme = useColorScheme();
 

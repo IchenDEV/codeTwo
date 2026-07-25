@@ -368,6 +368,18 @@ fn list_dir(cwd: String, path: String) -> Result<Vec<DirEntry>, String> {
     codetwo_core::workspace::list_dir(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
 }
 
+/// Create an empty file in the workspace. Errors rather than overwriting.
+#[tauri::command]
+fn create_file(cwd: String, path: String) -> Result<(), String> {
+    codetwo_core::workspace::create_file(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+}
+
+/// Newest text per session, for the rail's preview line.
+#[tauri::command]
+fn session_previews(state: State<'_, AppState>) -> Vec<(String, String)> {
+    state.engine.store().and_then(|s| s.last_texts().ok()).unwrap_or_default()
+}
+
 /// Project rule files detected in the workspace (AGENTS.md, .cursorrules, CLAUDE.md, …).
 #[tauri::command]
 fn list_rules(cwd: String) -> Vec<String> {
@@ -769,6 +781,8 @@ pub fn run() {
             compile_doc,
             list_files,
             list_dir,
+            create_file,
+            session_previews,
             list_rules,
             rename_session,
             archive_session,

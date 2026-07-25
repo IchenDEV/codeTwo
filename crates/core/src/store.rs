@@ -157,6 +157,35 @@ impl Store {
         Ok(())
     }
 
+    /// The most recent text in each session, for the rail's preview line.
+    ///
+    /// One query for every session rather than one per row: the rail redraws on every event, and a
+    /// query per visible session would put the transcript table in the hot path of streaming.
+    /// Non-text parts (tool calls, plans) are skipped — "ran a command" is not a conversation.
+    pub fn last_texts(&self) -> Result<Vec<(String, String)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT p.session_id, p.part_json FROM parts p
+             WHERE p.seq = (
+               SELECT MAX(q.seq) FROM parts q
+               WHERE q.session_id = p.session_id AND q.part_json LIKE '%\"kind\":\"text\"%'
+             )",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+
+        let mut out = Vec::new();
+        for row in rows.flatten() {
+            let (id, json) = row;
+            if let Ok(Part::Text { text }) = serde_json::from_str::<Part>(&json) {
+                let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                if !flat.is_empty() {
+                    out.push((id, flat.chars().take(160).collect()));
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Rename a session (the sidebar title).
     pub fn rename_session(&self, id: &str, title: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
@@ -363,6 +392,42 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].path, "/work/beta", "ordered by the newest session in each");
         assert_eq!(list[0].name, "beta");
+    }
+
+    #[test]
+    fn last_texts_returns_the_newest_text_per_session() {
+        let store = Store::open_in_memory().unwrap();
+        let a = Session::new(ProviderId::Grok, "/a");
+        store.upsert_session(&a).unwrap();
+
+        store.append_part(&a.id, Role::User, &Part::Text { text: "first".into() }).unwrap();
+        store
+            .append_part(&a.id, Role::Agent, &Part::Text { text: "  second\n  answer  ".into() })
+            .unwrap();
+        // A tool call lands last, but "ran a command" is not a conversation preview.
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::ToolCall { id: "t".into(), title: "ls".into(), status: "completed".into() },
+            )
+            .unwrap();
+
+        let previews = store.last_texts().unwrap();
+        assert_eq!(previews.len(), 1);
+        assert_eq!(previews[0].0, a.id);
+        // Whitespace is flattened so a multi-line answer stays one line in the rail.
+        assert_eq!(previews[0].1, "second answer");
+    }
+
+    #[test]
+    fn a_session_with_no_text_has_no_preview() {
+        let store = Store::open_in_memory().unwrap();
+        let a = Session::new(ProviderId::Grok, "/a");
+        store.upsert_session(&a).unwrap();
+        store.append_part(&a.id, Role::Agent, &Part::Plan { entries: vec!["x".into()] }).unwrap();
+
+        assert!(store.last_texts().unwrap().is_empty());
     }
 
     #[test]

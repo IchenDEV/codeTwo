@@ -54,6 +54,28 @@ pub fn list_dir(cwd: &Path, rel: &str) -> Result<Vec<DirEntry>, std::io::Error> 
     Ok(out)
 }
 
+/// Create an empty file at a workspace-relative path, making parent directories as needed.
+///
+/// Refuses to overwrite: "new file" that silently truncates an existing one is a data-loss bug
+/// wearing a friendly name. Same escape rejection as [`read_file`].
+pub fn create_file(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
+    let rel = rel.trim();
+    if rel.is_empty() || rel.starts_with('/') || rel.split('/').any(|c| c == "..") {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path"));
+    }
+    let path = cwd.join(rel);
+    if path.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("“{rel}” already exists"),
+        ));
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, "")
+}
+
 /// List workspace-relative file paths under `cwd`, filtered by a case-insensitive substring query.
 pub fn list_files(cwd: &Path, query: &str, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
@@ -180,6 +202,24 @@ mod tests {
         std::fs::write(dir.join("node_modules/pkg/index.js"), "junk").unwrap();
         std::fs::write(dir.join(".git/config"), "junk").unwrap();
         dir
+    }
+
+    #[test]
+    fn create_file_makes_parents_and_refuses_to_clobber() {
+        let dir = fixture();
+
+        create_file(&dir, "src/new/deep.rs").unwrap();
+        assert!(dir.join("src/new/deep.rs").exists(), "parents are created");
+
+        // The existing README must survive a second "new file" with the same name.
+        let before = std::fs::read_to_string(dir.join("README.md")).unwrap();
+        assert!(create_file(&dir, "README.md").is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), before);
+
+        assert!(create_file(&dir, "../escape.txt").is_err());
+        assert!(create_file(&dir, "").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

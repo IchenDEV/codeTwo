@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { AtSign, ChevronRight, File, Folder, FolderOpen, RefreshCw } from "lucide-react";
+import { AtSign, ChevronRight, File, FilePlus, Folder, FolderOpen, RefreshCw } from "lucide-react";
 
-import { listDir, type DirEntry } from "../bridge";
+import { createFile, listDir, type DirEntry } from "../bridge";
+import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,8 @@ function Row({
  */
 export function FilePanel({ cwd, onInsert }: { cwd: string | null; onInsert: (path: string) => void }) {
   const t = useT();
+  const toast = useToast();
+  const [creating, setCreating] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<Loaded>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
@@ -147,6 +150,20 @@ export function FilePanel({ cwd, onInsert }: { cwd: string | null; onInsert: (pa
               variant="ghost"
               size="icon"
               className="size-7 shrink-0"
+              disabled={!cwd}
+              onClick={() => setCreating("")}
+            >
+              <FilePlus className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("files.newFile")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
               onClick={() => {
                 setLoaded({});
                 setExpanded(new Set());
@@ -159,6 +176,40 @@ export function FilePanel({ cwd, onInsert }: { cwd: string | null; onInsert: (pa
           <TooltipContent>{t("files.refresh")}</TooltipContent>
         </Tooltip>
       </div>
+
+      {/* A path field rather than a name field: typing `src/api/routes.ts` creates the folders on
+          the way, which is what you actually want and saves a round of "new folder" first. */}
+      {creating !== null && (
+        <div className="border-b p-2">
+          <Input
+            autoFocus
+            className="h-7 font-mono text-[12px]"
+            placeholder={t("files.newFilePrompt")}
+            value={creating}
+            onChange={(e) => setCreating(e.target.value)}
+            onBlur={() => setCreating(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setCreating(null);
+                return;
+              }
+              if (e.key !== "Enter" || !cwd || !creating.trim()) return;
+              const path = creating.trim();
+              void createFile(cwd, path)
+                .then(() => {
+                  setCreating(null);
+                  toast(t("files.created", { path }), "success");
+                  // Reload the whole tree: the new file may sit under folders that didn't exist.
+                  setLoaded({});
+                  setExpanded(new Set());
+                  void load("");
+                  onInsert(path);
+                })
+                .catch((err) => toast(t("files.createFailed", { error: String(err) }), "error"));
+            }}
+          />
+        </div>
+      )}
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1.5">

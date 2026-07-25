@@ -14,7 +14,8 @@ import {
   X,
 } from "lucide-react";
 
-import type { GitStatus, Project, SessionInfo, SkillInfo } from "../bridge";
+import { providerLabel, type GitStatus, type Project, type SessionInfo, type SkillInfo } from "../bridge";
+import { ProviderIcon } from "../providers/ProviderIcon";
 import type { StringKey } from "../i18n/strings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -242,6 +243,8 @@ export function SessionRail({
   onRemoveProject,
   sessions,
   activeSession,
+  previews,
+  running,
   onSelect,
   onNew,
   onRename,
@@ -263,6 +266,10 @@ export function SessionRail({
   onRemoveProject: (path: string) => void;
   sessions: SessionInfo[];
   activeSession: string | null;
+  /** Newest text per session id — row 2. */
+  previews: Record<string, string>;
+  /** Whether the active session has a turn in flight — row 3. */
+  running: boolean;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, title: string) => void;
@@ -407,6 +414,7 @@ export function SessionRail({
                         s.id === activeSession && "bg-accent",
                       )}
                     >
+                      {/* 1 — the session's name */}
                       {renaming?.id === s.id ? (
                         <Input
                           autoFocus
@@ -432,7 +440,26 @@ export function SessionRail({
                           {s.title}
                         </div>
                       )}
-                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+
+                      {/* 2 — the last thing said, so the title isn't the only way to tell two
+                             "Untitled session" rows apart */}
+                      <div className="truncate text-[11px] leading-snug text-muted-foreground/80">
+                        {previews[s.id] ?? t("session.noMessages")}
+                      </div>
+
+                      {/* 3 — what it's doing and what it's running on */}
+                      <div className="flex items-center gap-1 pt-0.5 text-[11px] text-muted-foreground">
+                        {s.id === activeSession && running ? (
+                          <>
+                            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
+                            <span className="shrink-0 text-primary">{t("session.running")}</span>
+                          </>
+                        ) : (
+                          <ProviderIcon
+                            provider={providerLabel(s.provider)}
+                            className="size-3 shrink-0 opacity-70"
+                          />
+                        )}
                         <span className="truncate">{displayProvider(s.provider)}</span>
                         {s.worktree_path && (
                           <Badge variant="secondary" className="h-4 px-1 text-[9px]">

@@ -49,6 +49,9 @@ export const en = {
   "header.settings": "Settings",
   "header.panel": "Toggle side panel",
   "header.newSession": "New session",
+  "header.running": "Working…",
+  "header.showTranscript": "Show the transcript ({count})",
+  "header.turns": "{count} turns",
 
   // composer
   "composer.placeholder": "Write your prompt —  /  for skills,  @  for files",
@@ -160,6 +163,12 @@ export const en = {
   "files.insert": "Add to the prompt as an @ mention",
   "files.empty": "Nothing here.",
   "files.noProject": "Pick a project to browse its files.",
+  "files.newFile": "New file",
+  "files.newFilePrompt": "Path for the new file, relative to the project",
+  "files.created": "Created {path}",
+  "files.createFailed": "Could not create the file: {error}",
+  "session.running": "Working",
+  "session.noMessages": "No messages yet",
 
   // toasts / errors
   "toast.emptyDoc": "Write a prompt first — the document is empty.",
@@ -236,6 +245,9 @@ export const zhCN: Record<StringKey, string> = {
   "header.settings": "设置",
   "header.panel": "切换侧边面板",
   "header.newSession": "新建会话",
+  "header.running": "处理中…",
+  "header.showTranscript": "查看对话（{count}）",
+  "header.turns": "{count} 轮",
 
   "composer.placeholder": "写下你的提示词 —  /  插入技能，  @  引用文件",
   "composer.add": "向文档添加内容",
@@ -340,6 +352,12 @@ export const zhCN: Record<StringKey, string> = {
   "files.insert": "作为 @ 引用加入提示词",
   "files.empty": "这里没有内容。",
   "files.noProject": "先选一个项目再浏览文件。",
+  "files.newFile": "新建文件",
+  "files.newFilePrompt": "新文件的路径（相对于项目根目录）",
+  "files.created": "已创建 {path}",
+  "files.createFailed": "创建文件失败：{error}",
+  "session.running": "处理中",
+  "session.noMessages": "还没有消息",
 
   "toast.emptyDoc": "先写点什么——文档现在是空的。",
   "toast.alreadyRunning": "已经有一轮在运行了，先停止它。",

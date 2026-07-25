@@ -47,6 +47,7 @@ import {
   renameSession,
   runProjectScript,
   saveSkill,
+  sessionPreviews,
   setKeymap,
   setModel,
   setPermissionMode,
@@ -187,15 +188,21 @@ export default function App() {
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
+  // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
+  // preview is a glance, and requerying the transcript table on every token would be absurd.
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [activeProject, setActiveProject] = useState<string | null>(null);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
   const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
-  // A fresh session opens as a full page: this is a document-first app, so the first thing you meet
-  // is a page to write on, not a chat box under an empty transcript. Running a turn collapses it —
-  // from then on there's an answer worth looking at.
-  const [docMode, setDocMode] = useState(true);
+  // Full-page document is *the* mode of this app, not a temporary state it visits. Nothing here
+  // takes it away on your behalf — not sending, not switching sessions. It's a preference you set
+  // and the app keeps, because a document-first tool that keeps collapsing into a chat box isn't
+  // document-first. Only the ⤢ button and Mod+Shift+E change it.
+  const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
+  const docMode = docModeRaw !== 0;
+  const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
   const mainRef = useRef<HTMLElement | null>(null);
   const toast = useToast();
   const t = useT();
@@ -205,6 +212,7 @@ export default function App() {
   const insertTextRef = useRef<((text: string) => void) | null>(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
+  const clearEditorRef = useRef<(() => void) | null>(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const pendingDocRef = useRef<DocBlock[] | null>(null);
@@ -224,6 +232,7 @@ export default function App() {
 
   const refreshSessions = useCallback(() => {
     listSessions().then(setSessions).catch(() => {});
+    sessionPreviews().then(setPreviews).catch(() => {});
   }, []);
 
   const refreshProjects = useCallback(() => {
@@ -327,7 +336,10 @@ export default function App() {
           return;
         }
         setTurns((prev) => applyEvent(prev, ev));
-        if (ev.event === "turn_ended" || ev.event === "error") setRunning(false);
+        if (ev.event === "turn_ended" || ev.event === "error") {
+          setRunning(false);
+          refreshSessions();
+        }
       });
     })();
 
@@ -357,8 +369,6 @@ export default function App() {
       return;
     }
     if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
-    // Sending is the moment you stop writing and start watching — give the transcript back.
-    setDocMode(false);
     setRunning(true);
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc))]);
     try {
@@ -368,6 +378,10 @@ export default function App() {
         pendingDocRef.current = doc;
         await newSession(provider, cwd || ".", useWorktree);
       }
+      // Only after the submit is accepted. Clearing first would lose the draft if it threw, and in
+      // full-page mode there's no collapse to signal the send happened — an empty page is the
+      // signal.
+      clearEditorRef.current?.();
     } catch (e) {
       setRunning(false);
       toast(t("toast.turnFailed", { error: String(e) }), "error");
@@ -379,8 +393,7 @@ export default function App() {
     setTurns([]);
     setModels([]);
     setCurrentModel(null);
-    // Back to a blank page with the caret in it — the point of a new session.
-    setDocMode(true);
+    // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
     try {
       await newSession(provider, cwd || ".", useWorktree);
@@ -416,11 +429,7 @@ export default function App() {
       // session resumed from the store we know the chosen model but not the menu it came from.
       setModels([]);
       setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
-      const restored = turnsFromTranscript(await getTranscript(id));
-      setTurns(restored);
-      // A session with history opens on its transcript; an empty one opens on the page, same as a
-      // new session would.
-      setDocMode(restored.length === 0);
+      setTurns(turnsFromTranscript(await getTranscript(id)));
     },
     [sessions],
   );
@@ -780,6 +789,8 @@ export default function App() {
           onOpenSourceControl={openSourceControl}
           sessions={projectSessions}
           activeSession={activeSession}
+          previews={previews}
+          running={running}
           onSelect={(id) => void selectSession(id)}
           onNew={() => void createSession()}
           onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
@@ -838,6 +849,19 @@ export default function App() {
             )}
 
             <div data-tauri-drag-region className="flex-1" />
+
+            {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
+                is in flight — and the way back to the answer without leaving the mode for good. */}
+            {docMode && (running || turns.length > 0) && (
+              <button
+                onClick={() => toggleDocMode(false)}
+                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title={t("header.showTranscript", { count: turns.length })}
+              >
+                {running && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
+                {running ? t("header.running") : t("header.turns", { count: turns.length })}
+              </button>
+            )}
 
             <IconAction
               icon={Keyboard}
@@ -927,6 +951,7 @@ export default function App() {
               insertTextRef={insertTextRef}
               insertFileRef={insertFileRef}
               focusRef={focusEditorRef}
+              clearRef={clearEditorRef}
               openSkillPickerRef={openSkillPickerRef}
               onEmptyChange={setDocEmpty}
             />
