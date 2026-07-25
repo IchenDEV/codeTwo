@@ -8,6 +8,15 @@ import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
 import "./styles.css";
 
+// The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
+// app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
+// paste / look up) is genuinely the right one.
+document.addEventListener("contextmenu", (e) => {
+  const el = e.target as HTMLElement | null;
+  const editable = el?.closest?.("input, textarea, [contenteditable='true']");
+  if (!editable) e.preventDefault();
+});
+
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

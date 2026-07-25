@@ -78,6 +78,7 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
+import { FileViewer } from "./files/FileViewer";
 import { UsageModal } from "./usage/Usage";
 import type { SessionConfig } from "./session/ConfigPopover";
 import { Composer } from "./session/Composer";
@@ -192,6 +193,9 @@ export default function App() {
   // preview is a glance, and requerying the transcript table on every token would be absurd.
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  // The built-in file view. Opening is read-only; `fileEditing` is the deliberate second step.
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  const [fileEditing, setFileEditing] = useState(false);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
@@ -820,7 +824,19 @@ export default function App() {
         />
 
         {/* ---------------- settings, or the session ---------------- */}
-        {showSettings ? (
+        {openFile && activeProject ? (
+          <FileViewer
+            cwd={activeProject}
+            path={openFile}
+            editing={fileEditing}
+            onEditing={setFileEditing}
+            onClose={() => {
+              setOpenFile(null);
+              setFileEditing(false);
+            }}
+            onInsert={(p) => insertFileRef.current?.(p)}
+          />
+        ) : showSettings ? (
           <SettingsPage
             bindings={bindings}
             capturing={capturing}
@@ -974,6 +990,11 @@ export default function App() {
             onNavigate={setBrowserUrl}
             onAnnotate={(n) => void annotate(n)}
             onInsertFile={(p) => insertFileRef.current?.(p)}
+            onOpenFile={(p) => {
+              setOpenFile(p);
+              setFileEditing(false);
+            }}
+            openFile={openFile}
             width={dockWidth}
             onWidth={setDockWidth}
           />

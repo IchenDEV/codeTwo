@@ -26,9 +26,13 @@ export const SkillInline = createReactInlineContentSpec(
 
 // An inline `@file` mention. At compile time the core inlines the file's contents as context,
 // so the agent sees the actual code you pointed at (Cursor-style @-mentions).
+//
+// Named `fileMention`, not `file`: BlockNote ships a `file` *block*, and registering an inline spec
+// under the same name made inserting a mention produce an empty "Add file" upload block instead of
+// a chip.
 export const FileInline = createReactInlineContentSpec(
   {
-    type: "file",
+    type: "fileMention",
     propSchema: {
       path: { default: "" },
     },
@@ -48,7 +52,7 @@ export const schema = BlockNoteSchema.create({
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     skill: SkillInline,
-    file: FileInline,
+    fileMention: FileInline,
   },
 });
 
@@ -74,7 +78,7 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           flush();
           const props = inline.props as { skillId: string };
           out.push({ type: "skill", skill_id: props.skillId, params: {} });
-        } else if (inline.type === "file") {
+        } else if (inline.type === "fileMention") {
           flush();
           const props = inline.props as { path: string };
           out.push({ type: "file", path: props.path });

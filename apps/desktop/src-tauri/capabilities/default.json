@@ -1,11 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window. start-dragging is not part of core:default and has to be named: the overlay title bar leaves no OS bar to grab, so without it every data-tauri-drag-region fails silently and the window cannot be moved.",
-  "windows": ["main"],
+  "description": "Default capability for the main window. start-dragging is not part of core:default and has to be named: the overlay title bar leaves no OS bar to grab. set-theme likewise \u2014 the vibrancy material follows the window's appearance, not the app's CSS, so an in-app dark theme on a light system leaves a light sidebar against dark content unless the window is told.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-theme",
     "dialog:allow-open"
   ]
 }

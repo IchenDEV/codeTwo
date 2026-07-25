@@ -168,6 +168,32 @@ export async function createFile(cwd: string, path: string): Promise<void> {
   if (inTauri) await invoke("create_file", { cwd, path });
 }
 
+export async function createDir(cwd: string, path: string): Promise<void> {
+  if (inTauri) await invoke("create_dir", { cwd, path });
+}
+
+/** Read a file for the viewer. Rejects binaries and oversized files rather than showing mojibake. */
+export async function readText(cwd: string, path: string): Promise<string> {
+  return inTauri ? invoke<string>("read_text", { cwd, path }) : "";
+}
+
+export async function writeText(cwd: string, path: string, content: string): Promise<void> {
+  if (inTauri) await invoke("write_text", { cwd, path, content });
+}
+
+/** Rename *and* move — a `to` with a different parent moves it. */
+export async function renamePath(cwd: string, from: string, to: string): Promise<void> {
+  if (inTauri) await invoke("rename_path", { cwd, from, to });
+}
+
+export async function copyPath(cwd: string, from: string, to: string): Promise<void> {
+  if (inTauri) await invoke("copy_path", { cwd, from, to });
+}
+
+export async function deletePath(cwd: string, path: string): Promise<void> {
+  if (inTauri) await invoke("delete_path", { cwd, path });
+}
+
 /** Newest text per session id, for the rail's preview line. */
 export async function sessionPreviews(): Promise<Record<string, string>> {
   if (!inTauri) return {};

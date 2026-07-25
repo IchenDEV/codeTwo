@@ -30,6 +30,8 @@ export function Dock({
   onNavigate,
   onAnnotate,
   onInsertFile,
+  onOpenFile,
+  openFile,
   width,
   onWidth,
 }: {
@@ -46,6 +48,10 @@ export function Dock({
   onAnnotate: (note: string) => void;
   /** Drops an `@` mention into the prompt document. */
   onInsertFile: (path: string) => void;
+  /** Shows a file in the built-in viewer. */
+  onOpenFile: (path: string) => void;
+  /** Which file the viewer has open, so the tree can mark it. */
+  openFile: string | null;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
@@ -182,7 +188,7 @@ export function Dock({
         </TabsContent>
 
         <TabsContent value="files" className="m-0 flex min-h-0 flex-1">
-          <FilePanel cwd={cwd} onInsert={onInsertFile} />
+          <FilePanel cwd={cwd} onInsert={onInsertFile} onOpen={onOpenFile} openPath={openFile} />
         </TabsContent>
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">

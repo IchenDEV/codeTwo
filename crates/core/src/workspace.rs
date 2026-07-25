@@ -9,6 +9,9 @@ const SKIP_DIRS: [&str; 9] =
 const MAX_DEPTH: usize = 8;
 /// Per-file cap when inlining a mentioned file into a prompt.
 pub const MAX_FILE_CHARS: usize = 20_000;
+/// Cap for the built-in viewer. Generous — it exists to refuse things that aren't really text
+/// documents, not to truncate real source files the way the prompt cap does.
+pub const MAX_VIEW_BYTES: usize = 2_000_000;
 
 /// One entry in a directory listing.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -54,26 +57,123 @@ pub fn list_dir(cwd: &Path, rel: &str) -> Result<Vec<DirEntry>, std::io::Error> 
     Ok(out)
 }
 
-/// Create an empty file at a workspace-relative path, making parent directories as needed.
+/// Resolve a workspace-relative path, refusing anything that leaves the workspace.
 ///
-/// Refuses to overwrite: "new file" that silently truncates an existing one is a data-loss bug
-/// wearing a friendly name. Same escape rejection as [`read_file`].
-pub fn create_file(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
-    let rel = rel.trim();
-    if rel.is_empty() || rel.starts_with('/') || rel.split('/').any(|c| c == "..") {
+/// Every mutating operation goes through this. The checks are on the *string* rather than the
+/// resolved path on purpose: `canonicalize` needs the file to exist, which is exactly what a
+/// create or a rename target doesn't.
+fn safe_path(cwd: &Path, rel: &str) -> Result<std::path::PathBuf, std::io::Error> {
+    let rel = rel.trim().trim_matches('/');
+    if rel.is_empty() || rel.starts_with('/') || rel.split('/').any(|c| c == ".." || c == ".") {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid path"));
     }
-    let path = cwd.join(rel);
+    Ok(cwd.join(rel))
+}
+
+fn already_exists(rel: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("“{rel}” already exists"))
+}
+
+/// Create an empty file, making parent directories as needed.
+///
+/// Refuses to overwrite: a "new file" that silently truncates an existing one is data loss wearing
+/// a friendly name.
+pub fn create_file(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
+    let path = safe_path(cwd, rel)?;
     if path.exists() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::AlreadyExists,
-            format!("“{rel}” already exists"),
-        ));
+        return Err(already_exists(rel));
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&path, "")
+}
+
+/// Create a directory, and any missing parents.
+pub fn create_dir(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
+    let path = safe_path(cwd, rel)?;
+    if path.exists() {
+        return Err(already_exists(rel));
+    }
+    std::fs::create_dir_all(&path)
+}
+
+/// Read a file for viewing. Separate from [`read_file`], which truncates hard because its output
+/// goes into a prompt; a viewer wants the whole file, so the cap here is only a guard against
+/// opening something that isn't really text.
+pub fn read_text(cwd: &Path, rel: &str) -> Result<String, std::io::Error> {
+    let path = safe_path(cwd, rel)?;
+    let bytes = std::fs::read(&path)?;
+    if bytes.len() > MAX_VIEW_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("file is {} KB — too large to open here", bytes.len() / 1024),
+        ));
+    }
+    // A NUL byte in the first block is the same heuristic `grep` uses to call a file binary.
+    if bytes.iter().take(8000).any(|b| *b == 0) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "binary file"));
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "not valid UTF-8"))
+}
+
+/// Overwrite a file's contents. The file must already exist — this saves an edit, it doesn't
+/// create, so a typo'd path fails loudly instead of leaving a stray file behind.
+pub fn write_text(cwd: &Path, rel: &str, content: &str) -> Result<(), std::io::Error> {
+    let path = safe_path(cwd, rel)?;
+    if !path.is_file() {
+        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("no such file: {rel}")));
+    }
+    std::fs::write(&path, content)
+}
+
+/// Rename or move. One operation, because on a filesystem they are one operation: renaming to a
+/// path with a different parent *is* a move, which is what makes "type the new path" a complete
+/// answer to both.
+pub fn rename_path(cwd: &Path, from: &str, to: &str) -> Result<(), std::io::Error> {
+    let src = safe_path(cwd, from)?;
+    let dst = safe_path(cwd, to)?;
+    if !src.exists() {
+        return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("no such path: {from}")));
+    }
+    if dst.exists() {
+        return Err(already_exists(to));
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(&src, &dst)
+}
+
+/// Copy a file to a new path. Directories are refused — a recursive copy is a different operation
+/// with different failure modes, and quietly doing one under "duplicate" would surprise.
+pub fn copy_file(cwd: &Path, from: &str, to: &str) -> Result<(), std::io::Error> {
+    let src = safe_path(cwd, from)?;
+    let dst = safe_path(cwd, to)?;
+    if src.is_dir() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "can't duplicate a folder"));
+    }
+    if dst.exists() {
+        return Err(already_exists(to));
+    }
+    if let Some(parent) = dst.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::copy(&src, &dst).map(|_| ())
+}
+
+/// Delete a file, or a directory and everything in it.
+///
+/// `safe_path` rejects the empty string, so the workspace root can never be the target — the one
+/// mistake here that would be unrecoverable.
+pub fn delete_path(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
+    let path = safe_path(cwd, rel)?;
+    if path.is_dir() {
+        std::fs::remove_dir_all(&path)
+    } else {
+        std::fs::remove_file(&path)
+    }
 }
 
 /// List workspace-relative file paths under `cwd`, filtered by a case-insensitive substring query.
@@ -218,6 +318,76 @@ mod tests {
 
         assert!(create_file(&dir, "../escape.txt").is_err());
         assert!(create_file(&dir, "").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_moves_across_directories() {
+        let dir = fixture();
+        // Renaming to a different parent is a move — the same call, because it's the same syscall.
+        rename_path(&dir, "README.md", "src/docs/README.md").unwrap();
+        assert!(!dir.join("README.md").exists());
+        assert_eq!(std::fs::read_to_string(dir.join("src/docs/README.md")).unwrap(), "# hi");
+
+        assert!(rename_path(&dir, "nope.md", "x.md").is_err(), "missing source");
+        assert!(rename_path(&dir, "src/main.rs", "src/lib.rs").is_err(), "won't clobber");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_text_refuses_to_create() {
+        let dir = fixture();
+        write_text(&dir, "src/main.rs", "fn main() { todo!() }").unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("src/main.rs")).unwrap(), "fn main() { todo!() }");
+        // Saving to a path that doesn't exist is a typo, not an instruction to create one.
+        assert!(write_text(&dir, "src/typo.rs", "x").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_text_refuses_binary() {
+        let dir = fixture();
+        std::fs::write(dir.join("blob.bin"), [0x00u8, 0x01, 0x02]).unwrap();
+        assert!(read_text(&dir, "blob.bin").is_err());
+        assert_eq!(read_text(&dir, "README.md").unwrap(), "# hi");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_removes_trees_but_the_root_is_unreachable() {
+        let dir = fixture();
+        delete_path(&dir, "src").unwrap();
+        assert!(!dir.join("src").exists());
+
+        // The one unrecoverable mistake: no spelling of "the workspace itself" is accepted.
+        for root in ["", " ", "/", ".", "..", "src/.."] {
+            assert!(delete_path(&dir, root).is_err(), "{root:?} must not be deletable");
+        }
+        assert!(dir.exists());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn copy_file_duplicates_and_refuses_folders() {
+        let dir = fixture();
+        copy_file(&dir, "README.md", "README copy.md").unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("README copy.md")).unwrap(), "# hi");
+        assert!(copy_file(&dir, "src", "src2").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn create_dir_makes_parents_and_refuses_to_clobber() {
+        let dir = fixture();
+        create_dir(&dir, "a/b/c").unwrap();
+        assert!(dir.join("a/b/c").is_dir());
+        assert!(create_dir(&dir, "src").is_err());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

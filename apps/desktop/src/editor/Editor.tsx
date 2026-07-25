@@ -62,7 +62,7 @@ async function fileMenuItems(
     group: "Files",
     icon: <span style={{ fontSize: 16 }}>📄</span>,
     onItemClick: () => {
-      editor.insertInlineContent([{ type: "file", props: { path: p } }, " "]);
+      editor.insertInlineContent([{ type: "fileMention", props: { path: p } }, " "]);
     },
   }));
 }
@@ -106,7 +106,7 @@ export function DocEditor({
       }
     };
     insertFileRef.current = (path: string) => {
-      editor.insertInlineContent([{ type: "file", props: { path } }, " "]);
+      editor.insertInlineContent([{ type: "fileMention", props: { path } }, " "]);
     };
     focusRef.current = () => editor.focus();
     clearRef.current = () => {
@@ -142,7 +142,15 @@ export function DocEditor({
         triggerCharacter={"/"}
         getItems={async (query) =>
           filterSuggestionItems(
-            [...skillItems(editor, skills), ...getDefaultReactSlashMenuItems(editor)],
+            [
+              ...skillItems(editor, skills),
+              // Drop the media blocks: they need an upload handler this app doesn't configure, so
+              // they insert an "Add file" placeholder that can never be filled and never reaches
+              // the compiled prompt. Use `@` for files instead.
+              ...getDefaultReactSlashMenuItems(editor).filter(
+                (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
+              ),
+            ],
             query,
           )
         }

@@ -59,6 +59,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // Tells the webview to render form controls and scrollbars in the matching scheme, so the bits
     // the OS draws don't stay light while the app goes dark.
     document.documentElement.style.colorScheme = scheme;
+
+    // And tell the *window*. The sidebar's vibrancy is an NSVisualEffectView, which follows the
+    // window's appearance rather than our CSS — so picking Dark in the app while macOS is Light
+    // left a pale sidebar against dark content. CSS can't reach that surface; only this can.
+    void (async () => {
+      try {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        await getCurrentWindow().setTheme(scheme);
+      } catch {
+        /* not in Tauri, or the window is gone — the CSS above is still correct */
+      }
+    })();
   }, [scheme]);
 
   const setPreference = useCallback((p: ThemePreference) => {

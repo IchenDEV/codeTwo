@@ -374,6 +374,41 @@ fn create_file(cwd: String, path: String) -> Result<(), String> {
     codetwo_core::workspace::create_file(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn create_dir(cwd: String, path: String) -> Result<(), String> {
+    codetwo_core::workspace::create_dir(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+}
+
+/// Read a file for the built-in viewer. Refuses binaries and anything oversized.
+#[tauri::command]
+fn read_text(cwd: String, path: String) -> Result<String, String> {
+    codetwo_core::workspace::read_text(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn write_text(cwd: String, path: String, content: String) -> Result<(), String> {
+    codetwo_core::workspace::write_text(std::path::Path::new(&cwd), &path, &content)
+        .map_err(|e| e.to_string())
+}
+
+/// Rename or move — one call, because on a filesystem they're one operation.
+#[tauri::command]
+fn rename_path(cwd: String, from: String, to: String) -> Result<(), String> {
+    codetwo_core::workspace::rename_path(std::path::Path::new(&cwd), &from, &to)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn copy_path(cwd: String, from: String, to: String) -> Result<(), String> {
+    codetwo_core::workspace::copy_file(std::path::Path::new(&cwd), &from, &to)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_path(cwd: String, path: String) -> Result<(), String> {
+    codetwo_core::workspace::delete_path(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+}
+
 /// Newest text per session, for the rail's preview line.
 #[tauri::command]
 fn session_previews(state: State<'_, AppState>) -> Vec<(String, String)> {
@@ -782,6 +817,12 @@ pub fn run() {
             list_files,
             list_dir,
             create_file,
+            create_dir,
+            read_text,
+            write_text,
+            rename_path,
+            copy_path,
+            delete_path,
             session_previews,
             list_rules,
             rename_session,

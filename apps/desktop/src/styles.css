@@ -37,31 +37,41 @@
 }
 
 .dark {
-  --background: oklch(0.184 0.017 264);
-  --foreground: oklch(0.968 0.007 247.896);
-  --card: oklch(0.216 0.019 264);
-  --card-foreground: oklch(0.968 0.007 247.896);
-  --popover: oklch(0.216 0.019 264);
-  --popover-foreground: oklch(0.968 0.007 247.896);
-  --primary: oklch(0.673 0.152 262.5);
-  --primary-foreground: oklch(0.15 0.02 264);
-  --secondary: oklch(0.262 0.021 264);
-  --secondary-foreground: oklch(0.968 0.007 247.896);
-  --muted: oklch(0.262 0.021 264);
-  --muted-foreground: oklch(0.68 0.02 257);
-  --accent: oklch(0.28 0.03 264);
-  --accent-foreground: oklch(0.968 0.007 247.896);
+  /* Near-neutral, not navy. The old palette carried chroma 0.017–0.03 at hue 264, which reads as
+     blue rather than dark — every surface had a cast, and the blue primary had nothing to sit
+     against. Chroma is now 0.004–0.008: enough to stay cool and avoid the deadness of pure grey,
+     little enough that "dark" is the impression rather than "blue".
+
+     The steps between surfaces matter more than their absolute values: sidebar → background →
+     card are 0.145 / 0.178 / 0.212, far enough apart to read as separate planes at a glance. */
+  --background: oklch(0.178 0.005 265);
+  --foreground: oklch(0.955 0.004 250);
+  --card: oklch(0.212 0.006 265);
+  --card-foreground: oklch(0.955 0.004 250);
+  --popover: oklch(0.222 0.006 265);
+  --popover-foreground: oklch(0.955 0.004 250);
+  --primary: oklch(0.68 0.15 258);
+  --primary-foreground: oklch(0.16 0.01 265);
+  --secondary: oklch(0.262 0.007 265);
+  --secondary-foreground: oklch(0.955 0.004 250);
+  --muted: oklch(0.262 0.007 265);
+  /* Lifted from 0.68: secondary text was the weakest part of the old scheme, and preview lines and
+     hints are exactly the text that has to stay readable at 11px. */
+  --muted-foreground: oklch(0.715 0.008 260);
+  --accent: oklch(0.288 0.008 265);
+  --accent-foreground: oklch(0.98 0.003 250);
   --destructive: oklch(0.68 0.19 22);
   --destructive-foreground: oklch(0.98 0.003 247);
-  --success: oklch(0.72 0.17 150);
-  --warning: oklch(0.79 0.15 80);
-  --border: oklch(0.3 0.02 264);
-  --input: oklch(0.32 0.02 264);
-  --ring: oklch(0.673 0.152 262.5);
-  --sidebar: oklch(0.156 0.015 264);
-  --sidebar-foreground: oklch(0.968 0.007 247.896);
-  --sidebar-border: oklch(0.3 0.02 264);
-  --terminal: oklch(0.145 0.012 264);
+  --success: oklch(0.74 0.16 152);
+  --warning: oklch(0.8 0.14 82);
+  /* Visible enough to define a card edge without drawing a grid over the UI. */
+  --border: oklch(0.318 0.007 265);
+  --input: oklch(0.345 0.008 265);
+  --ring: oklch(0.68 0.15 258);
+  --sidebar: oklch(0.145 0.005 265);
+  --sidebar-foreground: oklch(0.955 0.004 250);
+  --sidebar-border: oklch(0.29 0.007 265);
+  --terminal: oklch(0.135 0.005 265);
 }
 
 @theme inline {
