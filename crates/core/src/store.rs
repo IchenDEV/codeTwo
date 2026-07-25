@@ -40,7 +40,21 @@ CREATE TABLE IF NOT EXISTS parts (
   PRIMARY KEY (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
+CREATE TABLE IF NOT EXISTS projects (
+  path           TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  last_opened_at INTEGER NOT NULL
+);
 ";
+
+/// A workspace the user works in. Sessions belong to one by their `cwd`.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Project {
+    /// Absolute path. Also the identity — one directory is one project.
+    pub path: String,
+    pub name: String,
+    pub last_opened_at: i64,
+}
 
 pub struct Store {
     conn: Mutex<Connection>,
@@ -49,6 +63,31 @@ pub struct Store {
 /// Additive migrations for stores created by older versions. Each is ignored if already applied.
 fn migrate(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
+    // Stores that predate the projects table already hold the answer to "what projects are there?"
+    // in the sessions they contain — seed from those rather than opening to an empty list on a
+    // machine that's been in use for months. Names come from the path's last component, so the
+    // list reads like a project list instead of a column of absolute paths.
+    if let Ok(mut stmt) = conn.prepare("SELECT cwd, MAX(created_at) FROM sessions GROUP BY cwd") {
+        let rows: Vec<(String, i64)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map(|rs| rs.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default();
+        for (path, at) in rows {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO projects (path, name, last_opened_at) VALUES (?1,?2,?3)",
+                rusqlite::params![path, default_project_name(&path), at],
+            );
+        }
+    }
+}
+
+/// A project's display name when the user hasn't set one: the directory's own name.
+pub fn default_project_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| path.to_string())
 }
 
 impl Store {
@@ -65,6 +104,57 @@ impl Store {
         conn.execute_batch(SCHEMA)?;
         migrate(&conn);
         Ok(Self { conn: Mutex::new(conn) })
+    }
+
+    // ---- projects -----------------------------------------------------------------------------
+
+    /// Known projects, most recently opened first.
+    pub fn list_projects(&self) -> Result<Vec<Project>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT path, name, last_opened_at FROM projects ORDER BY last_opened_at DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(Project { path: r.get(0)?, name: r.get(1)?, last_opened_at: r.get(2)? })
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Add a project, or bump an existing one to the top. Adding a directory you already have is a
+    /// normal thing to do by accident, so it re-opens rather than erroring or duplicating.
+    pub fn add_project(&self, path: &str, name: Option<&str>, now: i64) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let name = name.map(|s| s.to_string()).unwrap_or_else(|| default_project_name(path));
+        conn.execute(
+            "INSERT INTO projects (path, name, last_opened_at) VALUES (?1,?2,?3)
+             ON CONFLICT(path) DO UPDATE SET last_opened_at=excluded.last_opened_at",
+            rusqlite::params![path, name, now],
+        )?;
+        Ok(())
+    }
+
+    /// Mark a project as the one just opened, so the list stays in use-order.
+    pub fn touch_project(&self, path: &str, now: i64) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE projects SET last_opened_at=?2 WHERE path=?1",
+            rusqlite::params![path, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn rename_project(&self, path: &str, name: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("UPDATE projects SET name=?2 WHERE path=?1", rusqlite::params![path, name])?;
+        Ok(())
+    }
+
+    /// Forget a project. Its sessions are left alone — removing a project from the list is a
+    /// bookkeeping act, not a request to delete months of transcripts.
+    pub fn remove_project(&self, path: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM projects WHERE path=?1", [path])?;
+        Ok(())
     }
 
     /// Rename a session (the sidebar title).
@@ -212,6 +302,68 @@ fn build_session(c: SessionCols) -> Result<Session, StoreError> {
 mod tests {
     use super::*;
     use crate::provider::ProviderId;
+
+    #[test]
+    fn projects_are_listed_in_use_order() {
+        let store = Store::open_in_memory().unwrap();
+        store.add_project("/work/alpha", None, 100).unwrap();
+        store.add_project("/work/beta", None, 200).unwrap();
+
+        let list = store.list_projects().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].path, "/work/beta", "most recently opened first");
+        // A name defaults to the directory's own name, not the whole path.
+        assert_eq!(list[0].name, "beta");
+
+        store.touch_project("/work/alpha", 300).unwrap();
+        assert_eq!(store.list_projects().unwrap()[0].path, "/work/alpha");
+    }
+
+    #[test]
+    fn adding_a_known_project_reopens_it_rather_than_duplicating() {
+        let store = Store::open_in_memory().unwrap();
+        store.add_project("/work/alpha", Some("Alpha"), 100).unwrap();
+        store.add_project("/work/alpha", None, 400).unwrap();
+
+        let list = store.list_projects().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].last_opened_at, 400);
+        // Re-adding must not clobber a name the user chose.
+        assert_eq!(list[0].name, "Alpha");
+    }
+
+    #[test]
+    fn removing_a_project_keeps_its_sessions() {
+        let store = Store::open_in_memory().unwrap();
+        let s = Session::new(ProviderId::Grok, "/work/alpha");
+        store.upsert_session(&s).unwrap();
+        store.add_project("/work/alpha", None, 100).unwrap();
+
+        store.remove_project("/work/alpha").unwrap();
+        assert!(store.list_projects().unwrap().is_empty());
+        assert_eq!(store.list_sessions().unwrap().len(), 1, "transcripts are not the bookkeeping");
+    }
+
+    #[test]
+    fn an_existing_store_seeds_projects_from_its_sessions() {
+        // A store that predates the projects table shouldn't open to an empty picker.
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        let store = Store { conn: Mutex::new(conn) };
+        let mut a = Session::new(ProviderId::Grok, "/work/alpha");
+        a.created_at = 100;
+        let mut b = Session::new(ProviderId::Grok, "/work/beta");
+        b.created_at = 300;
+        store.upsert_session(&a).unwrap();
+        store.upsert_session(&b).unwrap();
+
+        migrate(&store.conn.lock().unwrap());
+
+        let list = store.list_projects().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].path, "/work/beta", "ordered by the newest session in each");
+        assert_eq!(list[0].name, "beta");
+    }
 
     #[test]
     fn session_round_trip_and_ordering() {

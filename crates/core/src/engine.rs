@@ -233,6 +233,13 @@ impl Engine {
     }
 
     /// The shared skill library (for the picker / management UI).
+    /// The persistence layer, when one is configured. Frontends reach through this for the things
+    /// that are pure bookkeeping — the project list — rather than routing them through `Op`, which
+    /// is for anything that touches a running agent.
+    pub fn store(&self) -> Option<Arc<Store>> {
+        self.state.store.clone()
+    }
+
     pub fn skills(&self) -> Arc<Mutex<SkillLibrary>> {
         self.state.skills.clone()
     }

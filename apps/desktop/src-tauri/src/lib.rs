@@ -16,6 +16,7 @@ use codetwo_core::permission::{PermissionMode, SandboxPolicy};
 use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
+use codetwo_core::store::Project;
 use codetwo_core::{Engine, Event, Op, Part, PtySession, Role, Session, Store};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -369,6 +370,62 @@ fn list_rules(cwd: String) -> Vec<String> {
         .collect()
 }
 
+// ---- projects ----------------------------------------------------------------------------------
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[tauri::command]
+fn list_projects(state: State<'_, AppState>) -> Vec<Project> {
+    state.engine.store().and_then(|s| s.list_projects().ok()).unwrap_or_default()
+}
+
+/// Add a directory to the project list. The path is resolved first so that the same project can't
+/// enter the list twice under two spellings of one directory.
+#[tauri::command]
+fn add_project(state: State<'_, AppState>, path: String, name: Option<String>) -> Result<String, String> {
+    let resolved = std::path::Path::new(&path)
+        .canonicalize()
+        .map_err(|e| format!("can't open “{path}”: {e}"))?;
+    if !resolved.is_dir() {
+        return Err(format!("“{}” is not a directory", resolved.display()));
+    }
+    let path = resolved.to_string_lossy().into_owned();
+    if let Some(store) = state.engine.store() {
+        store
+            .add_project(&path, name.as_deref(), now_millis())
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+fn open_project(state: State<'_, AppState>, path: String) {
+    if let Some(store) = state.engine.store() {
+        let _ = store.touch_project(&path, now_millis());
+    }
+}
+
+#[tauri::command]
+fn rename_project(state: State<'_, AppState>, path: String, name: String) -> Result<(), String> {
+    match state.engine.store() {
+        Some(store) => store.rename_project(&path, &name).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+#[tauri::command]
+fn remove_project(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    match state.engine.store() {
+        Some(store) => store.remove_project(&path).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
 // ---- session management (G5) -----------------------------------------------------------------
 
 #[tauri::command]
@@ -622,6 +679,9 @@ fn pty_resize(state: State<'_, AppState>, id: u32, rows: u16, cols: u16) -> Resu
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // "Add a project" opens a real folder chooser. Typing an absolute path into a text field
+        // is the kind of thing that makes a desktop app feel like a web form.
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir).ok();
@@ -719,6 +779,11 @@ pub fn run() {
             set_permission_mode,
             set_model,
             default_cwd,
+            list_projects,
+            add_project,
+            open_project,
+            rename_project,
+            remove_project,
             cancel_turn,
             pty_spawn,
             pty_write,

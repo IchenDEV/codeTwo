@@ -21,6 +21,7 @@ tokio.workspace = true
 uuid.workspace = true
 codetwo-core.workspace = true
 codetwo-server = { path = "../../../crates/server" }
+tauri-plugin-dialog = "2"
 
 [lib]
 name = "codetwo_desktop_lib"

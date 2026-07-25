@@ -30,6 +30,13 @@ export interface SessionInfo {
   created_at: number;
 }
 
+/// A workspace the user works in. The path is the identity — one directory is one project.
+export interface Project {
+  path: string;
+  name: string;
+  last_opened_at: number;
+}
+
 /// One model an agent offers. ACP's model API is UNSTABLE and most adapters don't implement it,
 /// so a session may legitimately have none — the picker says so rather than showing an empty list.
 export interface ModelChoice {
@@ -142,6 +149,40 @@ export async function answerPermission(session: string, requestId: string, optio
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {
   if (inTauri) await invoke("set_permission_mode", { session, mode });
+}
+
+// ---- projects ----------------------------------------------------------------------------------
+
+export async function listProjects(): Promise<Project[]> {
+  return inTauri ? invoke<Project[]>("list_projects") : [];
+}
+
+/**
+ * Native folder chooser. Returns null when the user cancels — which is a normal outcome, not an
+ * error. Outside Tauri there's no picker, so it resolves to null and the caller does nothing.
+ */
+export async function pickDirectory(): Promise<string | null> {
+  if (!inTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({ directory: true, multiple: false, title: "Choose a project folder" });
+  return typeof picked === "string" ? picked : null;
+}
+
+/** Returns the resolved absolute path, which is the project's identity. */
+export async function addProject(path: string, name?: string): Promise<string> {
+  return inTauri ? invoke<string>("add_project", { path, name: name ?? null }) : path;
+}
+
+export async function openProject(path: string): Promise<void> {
+  if (inTauri) await invoke("open_project", { path });
+}
+
+export async function renameProject(path: string, name: string): Promise<void> {
+  if (inTauri) await invoke("rename_project", { path, name });
+}
+
+export async function removeProject(path: string): Promise<void> {
+  if (inTauri) await invoke("remove_project", { path });
 }
 
 /** Where a new session should start. Resolved by the core, never `"."` — see `default_cwd`. */

@@ -15,6 +15,7 @@ import {
   browserContext,
   cancelTurn,
   compileDoc,
+  addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
   deleteSkill,
@@ -29,6 +30,7 @@ import {
   gitStatus,
   issueContext,
   listProjectScripts,
+  listProjects,
   listProviders,
   listSessions,
   listSkills,
@@ -36,8 +38,12 @@ import {
   marketInstall,
   newSession,
   onEngineEvent,
+  openProject,
+  pickDirectory,
   providerLabel,
   remoteStatus,
+  removeProject,
+  renameProject,
   renameSession,
   runProjectScript,
   saveSkill,
@@ -55,6 +61,7 @@ import {
   type KeymapEntry,
   type MarketItem,
   type ModelChoice,
+  type Project,
   type ProjectScript,
   type ProviderInfo,
   type RemoteInfo,
@@ -176,6 +183,10 @@ export default function App() {
   // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  // Projects are the rail's organising idea: the conversation list and the git section below it
+  // both describe whichever one is active.
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<string | null>(null);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
@@ -199,6 +210,39 @@ export default function App() {
   const refreshSessions = useCallback(() => {
     listSessions().then(setSessions).catch(() => {});
   }, []);
+
+  const refreshProjects = useCallback(() => {
+    listProjects().then(setProjects).catch(() => {});
+  }, []);
+
+  // The rail shows one project's conversations. A session belongs to whichever project its cwd is,
+  // so this is a filter rather than a stored relation — nothing to keep in sync.
+  const projectSessions = useMemo(
+    () => (activeProject ? sessions.filter((s) => s.cwd === activeProject) : sessions),
+    [sessions, activeProject],
+  );
+
+  /** Switch projects: the working directory, the conversation list and the git section all follow. */
+  const selectProject = useCallback(
+    (path: string) => {
+      setActiveProject(path);
+      setCwd(path);
+      void openProject(path).then(refreshProjects);
+    },
+    [refreshProjects],
+  );
+
+  const addProjectFolder = useCallback(async () => {
+    const picked = await pickDirectory();
+    if (!picked) return; // cancelled — a normal outcome, not an error
+    try {
+      const resolved = await addProject(picked);
+      refreshProjects();
+      selectProject(resolved);
+    } catch (e) {
+      toast(`Could not add that folder: ${e}`, "error");
+    }
+  }, [refreshProjects, selectProject, toast]);
 
   const activeTitle = useMemo(
     () => sessions.find((s) => s.id === activeSession)?.title ?? "New session",
@@ -599,8 +643,27 @@ export default function App() {
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
     remoteStatus().then(setRemoteInfo).catch(() => {});
-    // Start in a real directory rather than ".", which a Finder-launched app resolves to "/".
-    defaultCwd().then(setCwd).catch(() => {});
+    // Open on the project used last. Failing that, register the directory the app started in, so
+    // the picker is never empty and the first session has somewhere real to run.
+    listProjects()
+      .then(async (list) => {
+        setProjects(list);
+        if (list.length > 0) {
+          setActiveProject(list[0].path);
+          setCwd(list[0].path);
+          return;
+        }
+        const here = await defaultCwd();
+        setCwd(here);
+        const resolved = await addProject(here).catch(() => null);
+        if (resolved) {
+          setActiveProject(resolved);
+          listProjects().then(setProjects).catch(() => {});
+        }
+      })
+      .catch(() => {
+        defaultCwd().then(setCwd).catch(() => {});
+      });
     // The app opens on a blank page, so put the caret in it. Deferred one tick: the editor installs
     // its focus handle in its own mount effect.
     setTimeout(() => focusEditorRef.current?.(), 0);
@@ -680,7 +743,26 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         <SessionRail
-          sessions={sessions}
+          projects={projects}
+          activeProject={activeProject}
+          onSelectProject={selectProject}
+          onAddProject={() => void addProjectFolder()}
+          onRenameProject={(p, name) => void renameProject(p, name).then(refreshProjects)}
+          onRemoveProject={(p) => {
+            void removeProject(p).then(() => {
+              refreshProjects();
+              // Dropping the project you were in leaves nothing selected; fall back to the next one
+              // rather than stranding the rail on a project that's no longer listed.
+              if (p === activeProject) {
+                const next = projects.find((x) => x.path !== p);
+                if (next) selectProject(next.path);
+                else setActiveProject(null);
+              }
+            });
+          }}
+          git={git}
+          onOpenSourceControl={openSourceControl}
+          sessions={projectSessions}
           activeSession={activeSession}
           onSelect={(id) => void selectSession(id)}
           onNew={() => void createSession()}

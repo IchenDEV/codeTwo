@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Default capability for the main window. start-dragging is not part of core:default and has to be named: the overlay title bar leaves no OS bar to grab, so without it every data-tauri-drag-region fails silently and the window cannot be moved.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "dialog:allow-open"
+  ]
 }
