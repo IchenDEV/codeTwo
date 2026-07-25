@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { GitBranch, Globe, Plus, TerminalIcon, X } from "lucide-react";
+import { FolderTree, GitBranch, Globe, Plus, TerminalIcon, X } from "lucide-react";
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
+import { FilePanel } from "../files/FilePanel";
 import type { GitStatus } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-export type DockTab = "terminal" | "browser" | "git";
+export type DockTab = "terminal" | "browser" | "files" | "git";
 
 /**
  * A side dock rather than stacked bottom panels: the terminal, browser, and git status sit beside
@@ -28,6 +29,7 @@ export function Dock({
   browserUrl,
   onNavigate,
   onAnnotate,
+  onInsertFile,
   width,
   onWidth,
 }: {
@@ -42,6 +44,8 @@ export function Dock({
   browserUrl: string;
   onNavigate: (u: string) => void;
   onAnnotate: (note: string) => void;
+  /** Drops an `@` mention into the prompt document. */
+  onInsertFile: (path: string) => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
@@ -104,6 +108,9 @@ export function Dock({
             </TabsTrigger>
             <TabsTrigger value="browser" className="gap-1.5 text-xs">
               <Globe className="size-3.5" /> {t("dock.browser")}
+            </TabsTrigger>
+            <TabsTrigger value="files" className="gap-1.5 text-xs">
+              <FolderTree className="size-3.5" /> {t("dock.files")}
             </TabsTrigger>
             <TabsTrigger value="git" className="gap-1.5 text-xs">
               <GitBranch className="size-3.5" /> {t("dock.git")}
@@ -172,6 +179,10 @@ export function Dock({
 
         <TabsContent value="browser" className="m-0 flex min-h-0 flex-1">
           <BrowserPanel url={browserUrl} onNavigate={onNavigate} onAnnotate={onAnnotate} />
+        </TabsContent>
+
+        <TabsContent value="files" className="m-0 flex min-h-0 flex-1">
+          <FilePanel cwd={cwd} onInsert={onInsertFile} />
         </TabsContent>
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">

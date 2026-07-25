@@ -89,4 +89,7 @@ export function useLanguage(): I18nValue {
   return useContext(I18nContext);
 }
 
-export { LOCALES, type Locale, type StringKey };
+// Deliberately no re-export of LOCALES here: mixing non-component exports into a module that
+// exports components breaks React Fast Refresh, which turns every edit to this file into a full
+// page reload that discards whatever you were doing. Import it from `./strings` instead.
+export type { Locale, StringKey };

@@ -10,6 +10,50 @@ const MAX_DEPTH: usize = 8;
 /// Per-file cap when inlining a mentioned file into a prompt.
 pub const MAX_FILE_CHARS: usize = 20_000;
 
+/// One entry in a directory listing.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DirEntry {
+    /// Name on its own, for display.
+    pub name: String,
+    /// Workspace-relative path, which is what an `@` mention needs.
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// List a single directory level under `cwd`.
+///
+/// The recursive [`list_files`] is the right shape for a search box, which is where it's used, but
+/// wrong for a tree: it caps its output, and past that cap files simply aren't there with nothing
+/// saying so. A tree expands one level at a time, so it never needs a cap and never lies about a
+/// large repository.
+///
+/// Rejects absolute paths and `..` escapes, same as [`read_file`].
+pub fn list_dir(cwd: &Path, rel: &str) -> Result<Vec<DirEntry>, std::io::Error> {
+    if rel.starts_with('/') || rel.split('/').any(|c| c == "..") {
+        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "path escapes the workspace"));
+    }
+    let dir = if rel.is_empty() { cwd.to_path_buf() } else { cwd.join(rel) };
+
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(&dir)?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let is_dir = entry.path().is_dir();
+        // Same exclusions as the search: a tree full of node_modules is a tree nobody can use.
+        if name.starts_with('.') || (is_dir && SKIP_DIRS.contains(&name.as_str())) {
+            continue;
+        }
+        let path = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+        out.push(DirEntry { name, path, is_dir });
+    }
+    // Directories first, then case-insensitive by name — the order every file tree uses.
+    out.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(out)
+}
+
 /// List workspace-relative file paths under `cwd`, filtered by a case-insensitive substring query.
 pub fn list_files(cwd: &Path, query: &str, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
@@ -136,6 +180,42 @@ mod tests {
         std::fs::write(dir.join("node_modules/pkg/index.js"), "junk").unwrap();
         std::fs::write(dir.join(".git/config"), "junk").unwrap();
         dir
+    }
+
+    #[test]
+    fn list_dir_puts_directories_first_and_skips_noise() {
+        let dir = fixture();
+        let top = list_dir(&dir, "").unwrap();
+        let names: Vec<&str> = top.iter().map(|e| e.name.as_str()).collect();
+
+        assert_eq!(names, vec!["src", "README.md"], "dirs first, then files");
+        assert!(top[0].is_dir);
+        // node_modules and .git never appear — a tree full of them is a tree nobody can use.
+        assert!(!names.contains(&"node_modules"));
+        assert!(!names.contains(&".git"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_dir_paths_are_workspace_relative() {
+        let dir = fixture();
+        let src = list_dir(&dir, "src").unwrap();
+        let paths: Vec<&str> = src.iter().map(|e| e.path.as_str()).collect();
+        // The path is what an `@` mention needs, so it has to carry the parent.
+        assert_eq!(paths, vec!["src/lib.rs", "src/main.rs"]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_dir_rejects_escapes() {
+        let dir = fixture();
+        assert!(list_dir(&dir, "../..").is_err());
+        assert!(list_dir(&dir, "/etc").is_err());
+        assert!(list_dir(&dir, "src/../..").is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

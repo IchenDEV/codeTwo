@@ -633,6 +633,7 @@ export default function App() {
     { id: "settings", label: "Open settings", hint: hint("open_settings"), run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: hint("toggle_terminal"), run: () => toggleDock("terminal") },
     { id: "browser", label: "Toggle browser", hint: hint("toggle_browser"), run: () => toggleDock("browser") },
+    { id: "filespanel", label: "Toggle file tree", run: () => toggleDock("files") },
     { id: "gitpanel", label: "Toggle git panel", hint: hint("toggle_git"), run: () => toggleDock("git") },
     { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
     { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
@@ -947,6 +948,7 @@ export default function App() {
             browserUrl={browserUrl}
             onNavigate={setBrowserUrl}
             onAnnotate={(n) => void annotate(n)}
+            onInsertFile={(p) => insertFileRef.current?.(p)}
             width={dockWidth}
             onWidth={setDockWidth}
           />

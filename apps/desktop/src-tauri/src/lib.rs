@@ -17,6 +17,7 @@ use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::store::Project;
+use codetwo_core::workspace::DirEntry;
 use codetwo_core::{Engine, Event, Op, Part, PtySession, Role, Session, Store};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -359,6 +360,12 @@ fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>, cwd: Option<Strin
 #[tauri::command]
 fn list_files(cwd: String, query: String, limit: Option<usize>) -> Vec<String> {
     codetwo_core::workspace::list_files(std::path::Path::new(&cwd), &query, limit.unwrap_or(50))
+}
+
+/// One directory level, for the file tree in the side dock.
+#[tauri::command]
+fn list_dir(cwd: String, path: String) -> Result<Vec<DirEntry>, String> {
+    codetwo_core::workspace::list_dir(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
 }
 
 /// Project rule files detected in the workspace (AGENTS.md, .cursorrules, CLAUDE.md, …).
@@ -761,6 +768,7 @@ pub fn run() {
             issue_context,
             compile_doc,
             list_files,
+            list_dir,
             list_rules,
             rename_session,
             archive_session,

@@ -151,6 +151,18 @@ export async function setPermissionMode(session: string, mode: string): Promise<
   if (inTauri) await invoke("set_permission_mode", { session, mode });
 }
 
+/// One entry in a directory listing, for the file tree in the side dock.
+export interface DirEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+}
+
+/** One directory level. The tree expands lazily, so nothing is capped or silently truncated. */
+export async function listDir(cwd: string, path: string): Promise<DirEntry[]> {
+  return inTauri ? invoke<DirEntry[]>("list_dir", { cwd, path }) : [];
+}
+
 // ---- projects ----------------------------------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {

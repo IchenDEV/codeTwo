@@ -152,6 +152,14 @@ export const en = {
   "dock.newTerminal": "New terminal",
   "dock.refresh": "Refresh",
   "dock.reviewCommit": "Review & commit",
+  "dock.files": "Files",
+
+  // file tree
+  "files.filter": "Filter files…",
+  "files.refresh": "Rescan the workspace",
+  "files.insert": "Add to the prompt as an @ mention",
+  "files.empty": "Nothing here.",
+  "files.noProject": "Pick a project to browse its files.",
 
   // toasts / errors
   "toast.emptyDoc": "Write a prompt first — the document is empty.",
@@ -325,6 +333,13 @@ export const zhCN: Record<StringKey, string> = {
   "dock.newTerminal": "新建终端",
   "dock.refresh": "刷新",
   "dock.reviewCommit": "审查并提交",
+  "dock.files": "文件",
+
+  "files.filter": "筛选文件…",
+  "files.refresh": "重新扫描工作区",
+  "files.insert": "作为 @ 引用加入提示词",
+  "files.empty": "这里没有内容。",
+  "files.noProject": "先选一个项目再浏览文件。",
 
   "toast.emptyDoc": "先写点什么——文档现在是空的。",
   "toast.alreadyRunning": "已经有一轮在运行了，先停止它。",

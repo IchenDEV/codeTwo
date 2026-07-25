@@ -3,8 +3,8 @@ import { Check, RotateCcw, X } from "lucide-react";
 
 import type { KeymapEntry } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
-import { LOCALES, useLanguage, useT, type LanguagePreference } from "../i18n";
-import { en as EN_STRINGS, type StringKey } from "../i18n/strings";
+import { useLanguage, useT, type LanguagePreference } from "../i18n";
+import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
 import { useTheme, type ThemePreference } from "../theme";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
