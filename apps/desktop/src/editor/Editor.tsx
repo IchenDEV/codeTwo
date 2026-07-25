@@ -12,6 +12,7 @@ import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
 import { listFiles, type DocBlock, type SkillInfo } from "../bridge";
 import { useColorScheme } from "../theme";
+import { useT } from "../i18n";
 
 interface EditorProps {
   skills: SkillInfo[];
@@ -74,6 +75,10 @@ export function DocEditor({
   openSkillPickerRef,
   onEmptyChange,
 }: EditorProps) {
+  const t = useT();
+  // Read once: BlockNote bakes its dictionary in at creation, so a language change needs a remount
+  // rather than a re-render. The `key` in App does that.
+  const placeholder = t("composer.placeholder");
   // Start empty. A pre-filled sample used to be the first thing every session showed, which meant
   // the user's first act was deleting our text; the placeholder carries the same hint for free.
   const editor = useCreateBlockNote({
@@ -83,7 +88,7 @@ export function DocEditor({
       ...locales.en,
       placeholders: {
         ...locales.en.placeholders,
-        default: "Write your prompt —  /  for skills,  @  for files",
+        default: placeholder,
       },
     },
   });

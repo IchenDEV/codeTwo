@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 export type DockTab = "terminal" | "browser" | "git";
@@ -45,6 +46,7 @@ export function Dock({
   width: number;
   onWidth: (n: number) => void;
 }) {
+  const t = useT();
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const [nextTerm, setNextTerm] = useState(2);
@@ -90,7 +92,7 @@ export function Dock({
       className="glass-panel animate-slide-in-right relative flex min-w-[300px] shrink-0 flex-col border-l"
       style={{ width: applied }}
     >
-      <div className="dock-grip" onMouseDown={startDrag} title="Drag to resize the panel" />
+      <div className="dock-grip" onMouseDown={startDrag} title={t("dock.resize")} />
 
       <Tabs value={tab} onValueChange={(v) => onTab(v as DockTab)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* pt-7 matches the main header's titlebar inset so the two rows line up, and it drags the
@@ -98,16 +100,16 @@ export function Dock({
         <div data-tauri-drag-region className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
           <TabsList className="h-7">
             <TabsTrigger value="terminal" className="gap-1.5 text-xs">
-              <TerminalIcon className="size-3.5" /> Terminal
+              <TerminalIcon className="size-3.5" /> {t("dock.terminal")}
             </TabsTrigger>
             <TabsTrigger value="browser" className="gap-1.5 text-xs">
-              <Globe className="size-3.5" /> Browser
+              <Globe className="size-3.5" /> {t("dock.browser")}
             </TabsTrigger>
             <TabsTrigger value="git" className="gap-1.5 text-xs">
-              <GitBranch className="size-3.5" /> Git
+              <GitBranch className="size-3.5" /> {t("dock.git")}
             </TabsTrigger>
           </TabsList>
-          <Button variant="ghost" size="icon" className="ml-auto size-6" onClick={onClose} title="Close panel">
+          <Button variant="ghost" size="icon" className="ml-auto size-6" onClick={onClose} title={t("dock.close")}>
             <X className="size-3.5" />
           </Button>
         </div>
@@ -115,27 +117,27 @@ export function Dock({
         {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. */}
         <TabsContent value="terminal" className="m-0 flex min-h-0 flex-1 flex-col bg-terminal p-1.5">
           <div className="flex items-center gap-1 pb-1.5">
-            {terms.map((t) => (
+            {terms.map((n) => (
               <button
-                key={t}
+                key={n}
                 onClick={() => {
-                  setActiveTerm(t);
+                  setActiveTerm(n);
                   setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
                 }}
                 className={cn(
                   "flex items-center gap-1 rounded px-2 py-0.5 text-[11px]",
-                  t === activeTerm ? "bg-primary text-primary-foreground" : "bg-white/10 text-white/70",
+                  n === activeTerm ? "bg-primary text-primary-foreground" : "bg-white/10 text-white/70",
                 )}
               >
-                {t}
+                {n}
                 {terms.length > 1 && (
                   <X
                     className="size-3"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const left = terms.filter((x) => x !== t);
+                      const left = terms.filter((x) => x !== n);
                       setTerms(left);
-                      if (activeTerm === t && left[0]) setActiveTerm(left[0]);
+                      if (activeTerm === n && left[0]) setActiveTerm(left[0]);
                     }}
                   />
                 )}
@@ -143,7 +145,7 @@ export function Dock({
             ))}
             <button
               className="rounded bg-white/10 px-1.5 py-0.5 text-white/70"
-              title="New terminal"
+              title={t("dock.newTerminal")}
               onClick={() => {
                 setTerms((v) => [...v, nextTerm]);
                 setActiveTerm(nextTerm);
@@ -161,9 +163,9 @@ export function Dock({
               tmux
             </label>
           </div>
-          {terms.map((t) => (
-            <div key={t} className="min-h-0 flex-1" style={{ display: t === activeTerm ? "flex" : "none" }}>
-              <TerminalPanel cwd={cwd} tmux={tmux} sessionKey={`${sessionKey}-${t}`} />
+          {terms.map((n) => (
+            <div key={n} className="min-h-0 flex-1" style={{ display: n === activeTerm ? "flex" : "none" }}>
+              <TerminalPanel cwd={cwd} tmux={tmux} sessionKey={`${sessionKey}-${n}`} />
             </div>
           ))}
         </TabsContent>
@@ -183,12 +185,12 @@ export function Dock({
                     {git.ahead > 0 && <span className="text-primary">↑{git.ahead}</span>}
                     {git.behind > 0 && <span className="text-primary">↓{git.behind}</span>}
                     <Button variant="ghost" size="sm" className="ml-auto h-6 text-[11px]" onClick={onRefreshGit}>
-                      Refresh
+                      {t("dock.refresh")}
                     </Button>
                   </div>
 
                   {git.files.length === 0 ? (
-                    <p className="text-muted-foreground">working tree clean</p>
+                    <p className="text-muted-foreground">{t("rail.clean")}</p>
                   ) : (
                     <div className="space-y-0.5">
                       {git.files.map((f) => (
@@ -209,11 +211,11 @@ export function Dock({
                   )}
 
                   <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
-                    Review &amp; commit
+                    {t("dock.reviewCommit")}
                   </Button>
                 </>
               ) : (
-                <p className="text-muted-foreground">Not a git repo.</p>
+                <p className="text-muted-foreground">{t("rail.notARepo")}</p>
               )}
             </div>
           </ScrollArea>

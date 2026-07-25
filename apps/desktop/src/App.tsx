@@ -70,7 +70,7 @@ import {
   type SkillInfo,
 } from "./bridge";
 import { MarketModal } from "./market/Market";
-import { SettingsModal } from "./settings/Settings";
+import { SettingsPage } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
 import { RemoteModal } from "./remote/Remote";
@@ -87,6 +87,7 @@ import { SessionRail } from "./sidebar/SessionRail";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
 import { useToast } from "./ui/toast";
+import { useLanguage, useT } from "./i18n";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -197,6 +198,8 @@ export default function App() {
   const [docMode, setDocMode] = useState(true);
   const mainRef = useRef<HTMLElement | null>(null);
   const toast = useToast();
+  const t = useT();
+  const { locale } = useLanguage();
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
@@ -206,6 +209,18 @@ export default function App() {
   const activeSessionRef = useRef<string | null>(null);
   const pendingDocRef = useRef<DocBlock[] | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+
+  // BlockNote bakes its dictionary in at creation, so the placeholder only changes language on a
+  // remount — and a remount discards whatever is in the document. Wait for the document to be empty
+  // before taking the change: then a remount costs nothing, and a draft is never traded for a
+  // placeholder. If the language changes mid-draft this simply defers until the draft is gone.
+  const [editorKey, setEditorKey] = useState(0);
+  const mountedLocale = useRef(locale);
+  useEffect(() => {
+    if (mountedLocale.current === locale || !docEmpty) return;
+    mountedLocale.current = locale;
+    setEditorKey((k) => k + 1);
+  }, [locale, docEmpty]);
 
   const refreshSessions = useCallback(() => {
     listSessions().then(setSessions).catch(() => {});
@@ -240,7 +255,7 @@ export default function App() {
       refreshProjects();
       selectProject(resolved);
     } catch (e) {
-      toast(`Could not add that folder: ${e}`, "error");
+      toast(t("toast.projectFailed", { error: String(e) }), "error");
     }
   }, [refreshProjects, selectProject, toast]);
 
@@ -333,12 +348,12 @@ export default function App() {
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
     if (doc.length === 0) {
-      toast("Write a prompt first — the document is empty.");
+      toast(t("toast.emptyDoc"));
       focusEditorRef.current?.();
       return;
     }
     if (running) {
-      toast("A turn is already running. Stop it first.");
+      toast(t("toast.alreadyRunning"));
       return;
     }
     if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
@@ -355,7 +370,7 @@ export default function App() {
       }
     } catch (e) {
       setRunning(false);
-      toast(`Could not start the turn: ${e}`, "error");
+      toast(t("toast.turnFailed", { error: String(e) }), "error");
     }
   }, [provider, cwd, useWorktree, planMode, running, toast]);
 
@@ -370,7 +385,7 @@ export default function App() {
     try {
       await newSession(provider, cwd || ".", useWorktree);
     } catch (e) {
-      toast(`Could not create a session: ${e}`, "error");
+      toast(t("toast.sessionFailed", { error: String(e) }), "error");
     }
   }, [provider, cwd, useWorktree, toast]);
 
@@ -512,7 +527,7 @@ export default function App() {
           break;
         case "cancel":
           if (activeSessionRef.current && running) void cancelTurn(activeSessionRef.current);
-          else toast("Nothing is running.");
+          else toast(t("toast.nothingRunning"));
           break;
         case "toggle_terminal":
           toggleDock("terminal");
@@ -792,7 +807,19 @@ export default function App() {
           }
         />
 
-        {/* ---------------- transcript + composer ---------------- */}
+        {/* ---------------- settings, or the session ---------------- */}
+        {showSettings ? (
+          <SettingsPage
+            bindings={bindings}
+            capturing={capturing}
+            onCapture={setCapturing}
+            onReset={resetBinding}
+            onClose={() => {
+              setShowSettings(false);
+              setCapturing(null);
+            }}
+          />
+        ) : (
         <main className="content-surface flex min-w-0 flex-1 flex-col" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
@@ -813,19 +840,19 @@ export default function App() {
 
             <IconAction
               icon={Keyboard}
-              label="Command palette"
+              label={t("header.palette")}
               hint={hint("open_command_palette")}
               onClick={() => setShowPalette(true)}
             />
             <IconAction
               icon={SettingsIcon}
-              label="Settings"
+              label={t("header.settings")}
               hint={hint("open_settings")}
               onClick={() => setShowSettings(true)}
             />
             <IconAction
               icon={PanelRight}
-              label="Toggle side panel"
+              label={t("header.panel")}
               hint={hint("toggle_terminal")}
               active={dockTab !== null}
               onClick={() => toggleDock(dockTab ?? "terminal")}
@@ -839,12 +866,11 @@ export default function App() {
               {turns.length === 0 ? (
                 <div className="flex h-full items-center justify-center px-6 pb-10">
                   <div className="animate-rise-in text-center">
-                    <p className="text-[17px] font-medium">What should we build?</p>
+                    <p className="text-[17px] font-medium">{t("transcript.greeting")}</p>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                      Write a prompt below — type <b>/</b> for skills, <b>@</b> to pull in a file.
+                      {t("transcript.hint")}
                       <br />
-                      Send with <b>{hint("run")}</b>, or expand the document with{" "}
-                      <b>{hint("toggle_doc_mode")}</b> for longer briefs.
+                      {t("transcript.hint2", { run: hint("run"), expand: hint("toggle_doc_mode") })}
                     </p>
                   </div>
                 </div>
@@ -874,7 +900,7 @@ export default function App() {
               // doesn't implement the switch.
               setCurrentModel(id);
               void setModel(activeSessionRef.current, id).catch((e) =>
-                toast(`Could not switch model: ${e}`, "error"),
+                toast(t("toast.modelFailed", { error: String(e) }), "error"),
               );
             }}
             running={running}
@@ -893,6 +919,7 @@ export default function App() {
             filesHint={hint("open_files")}
           >
             <DocEditor
+              key={editorKey}
               skills={skills}
               cwd={cwd || "."}
               getBlocksRef={getBlocksRef}
@@ -904,6 +931,7 @@ export default function App() {
             />
           </Composer>
         </main>
+        )}
 
         {/* ---------------- side dock ---------------- */}
         {dockTab && (
@@ -926,18 +954,6 @@ export default function App() {
       </div>
 
       {/* ---------------- dialogs ---------------- */}
-      {showSettings && (
-        <SettingsModal
-          bindings={bindings}
-          capturing={capturing}
-          onCapture={setCapturing}
-          onReset={resetBinding}
-          onClose={() => {
-            setShowSettings(false);
-            setCapturing(null);
-          }}
-        />
-      )}
       {showMarket && (
         <MarketModal
           items={market}

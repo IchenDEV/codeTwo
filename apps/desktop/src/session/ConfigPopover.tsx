@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useT } from "../i18n";
 
 /** Everything that is configured once per session rather than once per turn. */
 export interface SessionConfig {
@@ -26,24 +27,13 @@ export interface SessionConfig {
   hasSession: boolean;
 }
 
-export const SANDBOX_LABEL: Record<Sandbox, string> = {
-  read_only: "Read-only",
-  workspace_write: "Workspace write",
-  danger_full_access: "Full access",
-};
-
-export const MODE_LABEL: Record<string, string> = {
-  ask: "Ask first",
-  accept_edits: "Auto-accept edits",
-  yolo: "YOLO",
-};
-
 /**
  * Per-session setup (provider, working dir, permissions, isolation). It hangs off whatever trigger
  * the caller supplies so the same panel can be reached from the composer's status chips — the place
  * you actually look before firing a turn.
  */
 export function ConfigPopover({ config, trigger }: { config: SessionConfig; trigger: ReactNode }) {
+  const t = useT();
   const current = config.providers.find((p) => p.id === config.provider);
 
   return (
@@ -52,7 +42,7 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
 
       <PopoverContent align="start" side="top" className="w-80 space-y-3">
         <div className="space-y-1.5">
-          <Label className="text-xs">Provider</Label>
+          <Label className="text-xs">{t("config.provider")}</Label>
           <Select value={config.provider} onValueChange={config.onProvider}>
             <SelectTrigger className="w-full" size="sm">
               <SelectValue />
@@ -70,14 +60,16 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
           </Select>
           {current && !current.available && (
             <p className="text-[11px] text-warning">
-              {current.display_name}'s CLI isn't on your PATH{current.needs_node ? " (needs Node)" : ""}. A
-              new session will fail until it's installed — pick a provider with a green dot instead.
+              {t("config.providerMissing", {
+                name: current.display_name,
+                node: current.needs_node ? t("config.needsNode") : "",
+              })}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs">Working directory</Label>
+          <Label className="text-xs">{t("config.cwd")}</Label>
           <Input
             className="h-8 font-mono text-xs"
             value={config.cwd}
@@ -90,28 +82,28 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">Approvals</Label>
+            <Label className="text-xs">{t("config.approvals")}</Label>
             <Select value={config.mode} onValueChange={config.onMode}>
               <SelectTrigger className="w-full" size="sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ask">Ask</SelectItem>
-                <SelectItem value="accept_edits">Accept edits</SelectItem>
-                <SelectItem value="yolo">YOLO ⚠</SelectItem>
+                <SelectItem value="ask">{t("config.ask")}</SelectItem>
+                <SelectItem value="accept_edits">{t("config.acceptEdits")}</SelectItem>
+                <SelectItem value="yolo">{t("config.yolo")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Sandbox</Label>
+            <Label className="text-xs">{t("config.sandbox")}</Label>
             <Select value={config.sandbox} onValueChange={(v) => config.onSandbox(v as Sandbox)}>
               <SelectTrigger className="w-full" size="sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="read_only">Read-only</SelectItem>
-                <SelectItem value="workspace_write">Workspace</SelectItem>
-                <SelectItem value="danger_full_access">Full access ⚠</SelectItem>
+                <SelectItem value="read_only">{t("config.readOnly")}</SelectItem>
+                <SelectItem value="workspace_write">{t("config.workspace")}</SelectItem>
+                <SelectItem value="danger_full_access">{t("config.fullAccess")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -119,7 +111,7 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
 
         {config.sandbox === "read_only" && (
           <p className="text-[11px] text-muted-foreground">
-            Read-only denies all edits and commands — even in YOLO.
+            {t("config.readOnlyHint")}
           </p>
         )}
 
@@ -132,16 +124,16 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
             className="mt-0.5"
           />
           <span className="text-xs">
-            Isolate in a git worktree
-            <span className="block text-[11px] text-muted-foreground">Runs on a fresh branch + checkout.</span>
+            {t("config.worktree")}
+            <span className="block text-[11px] text-muted-foreground">{t("config.worktreeHint")}</span>
           </span>
         </label>
 
         <label className="flex cursor-pointer items-start gap-2">
           <Checkbox checked={config.planMode} onCheckedChange={(v) => config.onPlan(v === true)} className="mt-0.5" />
           <span className="text-xs">
-            Plan first
-            <span className="block text-[11px] text-muted-foreground">Propose a plan and wait before editing.</span>
+            {t("config.planFirst")}
+            <span className="block text-[11px] text-muted-foreground">{t("config.planFirstHint")}</span>
           </span>
         </label>
       </PopoverContent>

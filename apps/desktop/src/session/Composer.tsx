@@ -13,13 +13,14 @@ import {
   Ticket,
 } from "lucide-react";
 
-import { ConfigPopover, MODE_LABEL, SANDBOX_LABEL, type SessionConfig } from "./ConfigPopover";
+import { ConfigPopover, type SessionConfig } from "./ConfigPopover";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 interface ComposerProps {
@@ -118,23 +119,23 @@ function ModelPicker({
   onModel: (id: string) => void;
   hasSession: boolean;
 }) {
+  const t = useT();
   if (!hasSession) return null;
 
   const active = models.find((m) => m.id === current);
-  const label = active?.name ?? current ?? "Default model";
+  const label = active?.name ?? current ?? t("composer.defaultModel");
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Chip title="Model">
+        <Chip title={t("composer.model")}>
           <span className="max-w-44 truncate">{label}</span>
         </Chip>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-72 p-1">
         {models.length === 0 ? (
           <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            This provider doesn't report selectable models over ACP, so the model is whatever its
-            CLI is configured to use. Set it in the CLI's own config.
+            {t("composer.noModels")}
           </p>
         ) : (
           <ScrollArea className="max-h-72">
@@ -197,6 +198,7 @@ export function Composer({
   skillHint,
   filesHint,
 }: ComposerProps) {
+  const t = useT();
   const provider = config.providers.find((p) => p.id === config.provider);
 
   // Leave room for at least a few transcript lines, whatever the window size — including when a
@@ -239,17 +241,17 @@ export function Composer({
     <>
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Add to the document">
+          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
             <Plus className="size-4" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" side="top" className="w-60 p-1">
-          <MenuItem icon={FileText} label="Mention a file" hint={filesHint} onClick={onAttachFile} />
-          <MenuItem icon={Sparkles} label="Insert a skill" hint={skillHint} onClick={onInsertSkill} />
-          <MenuItem icon={Ticket} label="Pull in an issue" onClick={onInsertIssue} />
-          <MenuItem icon={Store} label="Skill market" onClick={onOpenMarket} />
+          <MenuItem icon={FileText} label={t("composer.mentionFile")} hint={filesHint} onClick={onAttachFile} />
+          <MenuItem icon={Sparkles} label={t("composer.insertSkill")} hint={skillHint} onClick={onInsertSkill} />
+          <MenuItem icon={Ticket} label={t("composer.pullIssue")} onClick={onInsertIssue} />
+          <MenuItem icon={Store} label={t("composer.market")} onClick={onOpenMarket} />
           <p className="px-2 pb-1 pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-            Or type <b>/</b> for skills and <b>@</b> for files, right in the document.
+            {t("composer.addHint")}
           </p>
         </PopoverContent>
       </Popover>
@@ -258,9 +260,9 @@ export function Composer({
       <ConfigPopover
         config={config}
         trigger={
-          <Chip tone={config.sandbox === "danger_full_access" ? "warning" : undefined} title="Sandbox and approvals">
+          <Chip tone={config.sandbox === "danger_full_access" ? "warning" : undefined} title={t("composer.sandbox")}>
             {config.sandbox === "danger_full_access" && <span className="size-1.5 rounded-full bg-warning" />}
-            {SANDBOX_LABEL[config.sandbox]}
+            {t(`sandbox.${config.sandbox}` as const)}
           </Chip>
         }
       />
@@ -268,22 +270,22 @@ export function Composer({
       <ConfigPopover
         config={config}
         trigger={
-          <Chip title="Provider and approval mode">
+          <Chip title={t("composer.providerMode")}>
             {provider && !provider.available && (
-              <span className="size-1.5 rounded-full bg-warning" title="CLI not found" />
+              <span className="size-1.5 rounded-full bg-warning" title={t("composer.cliNotFound")} />
             )}
             <span className="max-w-40 truncate text-foreground/80">
               {provider?.display_name ?? config.provider}
             </span>
-            <span className="opacity-50">{MODE_LABEL[config.mode] ?? config.mode}</span>
+            <span className="opacity-50">{t(`mode.${config.mode}` as "mode.ask")}</span>
           </Chip>
         }
       />
 
       <ModelPicker models={models} current={currentModel} onModel={onModel} hasSession={config.hasSession} />
 
-      {config.planMode && <Chip title="Plan first is on">plan</Chip>}
-      {config.useWorktree && <Chip title="Running in an isolated worktree">worktree</Chip>}
+      {config.planMode && <Chip title={t("composer.plan")}>plan</Chip>}
+      {config.useWorktree && <Chip title={t("composer.worktree")}>worktree</Chip>}
 
       <div className="flex-1" />
 
@@ -293,7 +295,7 @@ export function Composer({
             <Eye className="size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Preview the compiled prompt</TooltipContent>
+        <TooltipContent>{t("composer.preview")}</TooltipContent>
       </Tooltip>
 
       <Tooltip>
@@ -303,13 +305,13 @@ export function Composer({
             size="icon"
             className={cn("size-7 shrink-0", docMode && "text-primary")}
             onClick={() => onDocMode(!docMode)}
-            aria-label={docMode ? "Collapse the document" : "Expand the document"}
+            aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
           >
             {docMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {docMode ? "Back to the transcript" : "Write full page"}
+          {docMode ? t("composer.collapse") : t("composer.expand")}
           {docModeHint && <span className="ml-1.5 opacity-60">{docModeHint}</span>}
         </TooltipContent>
       </Tooltip>
@@ -320,7 +322,7 @@ export function Composer({
           assumed. It shows only while the document is empty, and so retires itself. */}
       {docEmpty && !running && runHint && (
         <span className="mx-1 shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
-          {runHint} to send
+          {t("composer.toSend", { key: runHint })}
         </span>
       )}
 
@@ -332,12 +334,12 @@ export function Composer({
               size="icon"
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onStop}
-              aria-label="Stop this turn"
+              aria-label={t("composer.stop")}
             >
               <Square className="size-3.5 fill-current" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Stop this turn</TooltipContent>
+          <TooltipContent>{t("composer.stop")}</TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
@@ -349,13 +351,13 @@ export function Composer({
               variant={docEmpty ? "secondary" : "default"}
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onRun}
-              aria-label="Run this document"
+              aria-label={t("composer.run")}
             >
               <ArrowUp className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {docEmpty ? "Write a prompt first" : "Run this document"}
+            {docEmpty ? t("composer.runEmpty") : t("composer.run")}
             <span className="ml-1.5 opacity-60">{runHint}</span>
           </TooltipContent>
         </Tooltip>
@@ -399,7 +401,7 @@ export function Composer({
             className={cn("composer-grip", docMode && "hidden")}
             onMouseDown={startDrag}
             onDoubleClick={() => onDocMode(true)}
-            title="Drag to resize · double-click for full page"
+            title={t("composer.grip")}
           />
 
           <div

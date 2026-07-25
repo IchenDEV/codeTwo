@@ -2,6 +2,7 @@ import { Brain, ChevronRight, CircleAlert, Loader2, ListTodo, Wrench } from "luc
 import { isRunning, type Turn } from "./turns";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 function duration(t: Turn): string | null {
@@ -43,6 +44,7 @@ function Detail({
  * calls and the plan stay collapsed underneath.
  */
 export function TurnCard({ turn }: { turn: Turn }) {
+  const t = useT();
   const running = isRunning(turn);
   const dur = duration(turn);
   const hasDetail = turn.tools.length + turn.thoughts.length + turn.plan.length > 0;
@@ -68,7 +70,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
       {running && !turn.text && (
         <p className="mt-3.5 flex items-center gap-2 text-[13px] text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
-          Working…
+          {t("turn.working")}
         </p>
       )}
 
@@ -82,38 +84,38 @@ export function TurnCard({ turn }: { turn: Turn }) {
       {/* secondary detail + outcome, on one quiet line */}
       {(hasDetail || dur || turn.stopReason || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <Detail icon={Wrench} label="tools" count={turn.tools.length}>
+          <Detail icon={Wrench} label={t("turn.tools")} count={turn.tools.length}>
             <div className="space-y-0.5">
-              {turn.tools.map((t) => (
-                <div key={t.id} className="flex items-center gap-2 text-[11px]">
+              {turn.tools.map((tool) => (
+                <div key={tool.id} className="flex items-center gap-2 text-[11px]">
                   <span
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
-                      t.status === "completed"
+                      tool.status === "completed"
                         ? "bg-success"
-                        : t.status === "failed"
+                        : tool.status === "failed"
                           ? "bg-destructive"
                           : "bg-warning",
                     )}
                   />
-                  <span className="truncate font-mono">{t.title}</span>
-                  <span className="ml-auto shrink-0 text-muted-foreground">{t.status}</span>
+                  <span className="truncate font-mono">{tool.title}</span>
+                  <span className="ml-auto shrink-0 text-muted-foreground">{tool.status}</span>
                 </div>
               ))}
             </div>
           </Detail>
 
-          <Detail icon={Brain} label="thinking" count={turn.thoughts.length}>
+          <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
             <div className="space-y-1 text-[11px] italic text-muted-foreground">
-              {turn.thoughts.map((t, i) => (
+              {turn.thoughts.map((thought, i) => (
                 <p key={i} className="whitespace-pre-wrap">
-                  {t}
+                  {thought}
                 </p>
               ))}
             </div>
           </Detail>
 
-          <Detail icon={ListTodo} label="plan" count={turn.plan.length}>
+          <Detail icon={ListTodo} label={t("turn.plan")} count={turn.plan.length}>
             <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
               {turn.plan.map((p, i) => (
                 <li key={i}>{p}</li>
@@ -124,11 +126,11 @@ export function TurnCard({ turn }: { turn: Turn }) {
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {running ? (
               <Badge variant="secondary" className="gap-1 text-[9px] uppercase">
-                <Loader2 className="size-2.5 animate-spin" /> running
+                <Loader2 className="size-2.5 animate-spin" /> {t("turn.running")}
               </Badge>
             ) : turn.error ? (
               <Badge variant="destructive" className="text-[9px] uppercase">
-                failed
+                {t("turn.failed")}
               </Badge>
             ) : (
               turn.stopReason && (

@@ -15,24 +15,26 @@ import {
 } from "lucide-react";
 
 import type { GitStatus, Project, SessionInfo, SkillInfo } from "../bridge";
+import type { StringKey } from "../i18n/strings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 /** Which recency bucket a session falls into. Sessions arrive newest-first, so a single pass works. */
-function bucketOf(createdAt: number): string {
+function bucketOf(createdAt: number): StringKey {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const day = 86_400_000;
-  if (createdAt >= startOfToday) return "Today";
-  if (createdAt >= startOfToday - day) return "Yesterday";
-  if (createdAt >= startOfToday - 7 * day) return "Previous 7 days";
-  if (createdAt >= startOfToday - 30 * day) return "Previous 30 days";
-  return "Older";
+  if (createdAt >= startOfToday) return "date.today";
+  if (createdAt >= startOfToday - day) return "date.yesterday";
+  if (createdAt >= startOfToday - 7 * day) return "date.last7";
+  if (createdAt >= startOfToday - 30 * day) return "date.last30";
+  return "date.older";
 }
 
 /** `/Users/me/projects/codeTwo` → `~/projects/codeTwo`. The home prefix is noise on every row. */
@@ -57,6 +59,7 @@ function ProjectPicker({
   onRename: (path: string, name: string) => void;
   onRemove: (path: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ path: string; name: string } | null>(null);
   const current = projects.find((p) => p.path === activeProject);
@@ -70,7 +73,7 @@ function ProjectPicker({
               {current?.name ?? "codeTwo"}
             </span>
             <span className="block truncate text-[11px] text-muted-foreground">
-              {current ? tildify(current.path) : "No project selected"}
+              {current ? tildify(current.path) : t("rail.noProject")}
             </span>
           </span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
@@ -81,7 +84,7 @@ function ProjectPicker({
         <ScrollArea className="max-h-72">
           {projects.length === 0 && (
             <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              No projects yet. Add a directory to work in — sessions and git status follow it.
+              {t("rail.projectsEmpty")}
             </p>
           )}
           {projects.map((p) => (
@@ -127,14 +130,14 @@ function ProjectPicker({
                   </button>
                   <span className="hidden shrink-0 gap-0.5 pr-1 group-hover:flex">
                     <button
-                      title="Rename"
+                      title={t("rail.renameProject")}
                       className="rounded p-1 text-muted-foreground hover:text-foreground"
                       onClick={() => setRenaming({ path: p.path, name: p.name })}
                     >
                       <Pencil className="size-3" />
                     </button>
                     <button
-                      title="Remove from list (sessions are kept)"
+                      title={t("rail.removeProject")}
                       className="rounded p-1 text-muted-foreground hover:text-destructive"
                       onClick={() => onRemove(p.path)}
                     >
@@ -155,7 +158,7 @@ function ProjectPicker({
           className="mt-1 flex w-full items-center gap-2.5 rounded-md border-t px-2 py-2 text-left text-[13px] transition-colors hover:bg-accent"
         >
           <FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
-          Add a project…
+          {t("rail.addProject")}
         </button>
       </PopoverContent>
     </Popover>
@@ -170,9 +173,10 @@ function GitSection({
   git: GitStatus | null;
   onOpenSourceControl: () => void;
 }) {
+  const t = useT();
   if (!git?.is_repo) {
     return (
-      <div className="border-t px-3 py-2.5 text-[11px] text-muted-foreground">Not a git repo.</div>
+      <div className="border-t px-3 py-2.5 text-[11px] text-muted-foreground">{t("rail.notARepo")}</div>
     );
   }
 
@@ -186,7 +190,7 @@ function GitSection({
       </div>
 
       {git.files.length === 0 ? (
-        <p className="px-3 pb-2.5 text-[11px] text-muted-foreground">Working tree clean</p>
+        <p className="px-3 pb-2.5 text-[11px] text-muted-foreground">{t("rail.clean")}</p>
       ) : (
         <>
           {/* Capped on purpose: this is a status glance, not the review surface. The count below
@@ -215,8 +219,8 @@ function GitSection({
             onClick={onOpenSourceControl}
             className="w-full px-3 pb-2.5 pt-1 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >
-            {git.files.length > 8 && `+${git.files.length - 8} more · `}
-            Review &amp; commit →
+            {git.files.length > 8 && t("rail.andMore", { count: git.files.length - 8 })}
+            {t("rail.review")}
           </button>
         </>
       )}
@@ -273,6 +277,7 @@ export function SessionRail({
   /** Foot-of-rail line: which provider is live. */
   status: React.ReactNode;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
@@ -287,7 +292,7 @@ export function SessionRail({
         )
       : sessions;
 
-    const out: { label: string; items: SessionInfo[] }[] = [];
+    const out: { label: StringKey; items: SessionInfo[] }[] = [];
     for (const s of matched) {
       const label = bucketOf(s.created_at);
       const last = out[out.length - 1];
@@ -322,18 +327,18 @@ export function SessionRail({
               className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors hover:bg-accent"
             >
               <SquarePen className="size-4 text-muted-foreground" />
-              New session
+              {t("rail.newSession")}
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            Start a fresh session <span className="ml-1 opacity-60">{newHint}</span>
+            {t("rail.newSessionHint")} <span className="ml-1 opacity-60">{newHint}</span>
           </TooltipContent>
         </Tooltip>
         <Button
           variant="ghost"
           size="icon"
           className={cn("size-7 shrink-0", searching && "text-primary")}
-          aria-label="Search sessions"
+          aria-label={t("rail.search")}
           onClick={() => {
             setSearching((v) => !v);
             if (searching) setQuery("");
@@ -348,7 +353,7 @@ export function SessionRail({
           <Input
             autoFocus
             className="h-7 pl-7 text-[13px]"
-            placeholder="Filter conversations"
+            placeholder={t("rail.filter")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -371,26 +376,26 @@ export function SessionRail({
       )}
 
       <div className="px-3 pb-0.5 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Recent
+        {t("rail.recent")}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-1.5 pb-2">
           {sessions.length === 0 ? (
             <p className="px-2 py-5 text-center text-xs leading-relaxed text-muted-foreground">
-              Nothing here yet.
+              {t("rail.empty")}
               <br />
-              Write a prompt and send it.
+              {t("rail.emptyHint")}
             </p>
           ) : groups.length === 0 ? (
             <p className="px-2 py-5 text-center text-xs text-muted-foreground">
-              Nothing matches “{query}”.
+              {t("rail.noMatch", { query })}
             </p>
           ) : (
             groups.map((g) => (
-              <div key={g.label} className="mb-1">
+              <div key={t(g.label)} className="mb-1">
                 <div className="px-2 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                  {g.label}
+                  {t(g.label)}
                 </div>
                 <div className="space-y-px">
                   {g.items.map((s) => (
@@ -436,7 +441,7 @@ export function SessionRail({
                         )}
                         <span className="ml-auto hidden shrink-0 gap-0.5 group-hover:flex">
                           <button
-                            title="Rename"
+                            title={t("rail.rename")}
                             className="rounded p-0.5 hover:text-primary"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -446,7 +451,7 @@ export function SessionRail({
                             <Pencil className="size-3" />
                           </button>
                           <button
-                            title="Archive"
+                            title={t("rail.archive")}
                             className="rounded p-0.5 hover:text-primary"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -478,7 +483,7 @@ export function SessionRail({
                 <Store className="size-3" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{skills.length} skills — open the market</TooltipContent>
+            <TooltipContent>{t("rail.market", { count: skills.length })}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -486,7 +491,7 @@ export function SessionRail({
                 <Plus className="size-3" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>New skill — type / in the document to insert one</TooltipContent>
+            <TooltipContent>{t("rail.newSkill")}</TooltipContent>
           </Tooltip>
         </span>
       </div>
