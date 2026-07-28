@@ -208,6 +208,11 @@ export const en = {
   "files.loading": "Opening…",
   "files.created": "Created {path}",
   "files.createFailed": "Could not create the file: {error}",
+  "files.commentTitle": "Line comment",
+  "files.commentOn": "{range} — goes into your prompt",
+  "files.commentPlaceholder": "Request a change or leave a note about these lines…",
+  "files.commentAdded": "Comment added to your prompt.",
+  "files.gutterHint": "Click or drag the line numbers to comment",
   "session.running": "Working",
   "session.noMessages": "No messages yet",
 
@@ -437,6 +442,11 @@ export const zhCN: Record<StringKey, string> = {
   "files.loading": "正在打开…",
   "files.created": "已创建 {path}",
   "files.createFailed": "创建文件失败：{error}",
+  "files.commentTitle": "行内评论",
+  "files.commentOn": "{range} — 会加入你的提示词",
+  "files.commentPlaceholder": "对这几行提出修改要求，或留个说明…",
+  "files.commentAdded": "评论已加入提示词。",
+  "files.gutterHint": "点击或拖选行号来评论",
   "session.running": "处理中",
   "session.noMessages": "还没有消息",
 

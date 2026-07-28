@@ -510,6 +510,21 @@ export default function App() {
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
+  /**
+   * Insert into the prompt from the file viewer. The viewer replaces the editor column, and the
+   * editor nulls its insert refs on unmount — so "insert" must first close the viewer, then wait
+   * for the editor to remount and re-install them. Without this the button was a silent no-op.
+   */
+  const insertFromViewer = useCallback((run: () => boolean) => {
+    setOpenFile(null);
+    setFileEditing(false);
+    let tries = 0;
+    const tick = () => {
+      if (!run() && tries++ < 20) setTimeout(tick, 50);
+    };
+    setTimeout(tick, 0);
+  }, []);
+
   const stepSession = useCallback(
     (delta: number) => {
       if (sessions.length === 0) return;
@@ -853,7 +868,20 @@ export default function App() {
               setOpenFile(null);
               setFileEditing(false);
             }}
-            onInsert={(p) => insertFileRef.current?.(p)}
+            onInsert={(p) =>
+              insertFromViewer(() => {
+                if (!insertFileRef.current) return false;
+                insertFileRef.current(p);
+                return true;
+              })
+            }
+            onComment={(text) =>
+              insertFromViewer(() => {
+                if (!insertTextRef.current) return false;
+                insertTextRef.current(text);
+                return true;
+              })
+            }
           />
         ) : (
         <main className="content-surface flex min-w-0 flex-1 flex-col" ref={mainRef}>
