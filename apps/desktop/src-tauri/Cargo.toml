@@ -13,7 +13,9 @@ tauri-build = { version = "2", features = [] }
 # `macos-private-api` is what `transparent: true` rides on: without it the window stays opaque and
 # the NSVisualEffectView material never shows through. tauri-build keeps this in sync with the
 # `macOSPrivateApi` flag in tauri.conf.json — change it there, not here.
-tauri = { version = "2", features = ["macos-private-api"] }
+# `devtools` keeps the inspector available in release builds too — the built-in browser panel has
+# an "Open DevTools" item, and a menu entry that only works in debug builds is a broken promise.
+tauri = { version = "2", features = ["macos-private-api", "devtools"] }
 tauri-plugin-shell = "2"
 serde.workspace = true
 serde_json.workspace = true

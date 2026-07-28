@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FolderTree, GitBranch, Globe, Plus, TerminalIcon, X } from "lucide-react";
+import { FolderTree, GitBranch, Globe, Maximize2, Minimize2, Plus, TerminalIcon, X } from "lucide-react";
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
@@ -88,6 +88,31 @@ export function Dock({
   }, []);
   const applied = Math.min(width, maxWidth);
 
+  // T3-style widen/restore: one click to take all the room the document can spare, one to give it
+  // back. The pre-max width is remembered so restore means *your* width, not a default.
+  const [preMax, setPreMax] = useState<number | null>(null);
+  const maximized = applied >= maxWidth - 4;
+  const toggleMax = () => {
+    if (maximized) onWidth(Math.min(preMax ?? 440, maxWidth));
+    else {
+      setPreMax(applied);
+      onWidth(maxWidth);
+    }
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+  };
+
+  const maxButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-6"
+      onClick={toggleMax}
+      title={maximized ? t("dock.restore") : t("dock.maximize")}
+    >
+      {maximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+    </Button>
+  );
+
   const startDrag = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
@@ -120,8 +145,9 @@ export function Dock({
       {tab === "home" ? (
         <>
           {/* Same titlebar inset and drag behaviour as the surface header below. */}
-          <div data-tauri-drag-region className="flex items-center gap-2 px-3 pb-2.5 pt-7">
+          <div data-tauri-drag-region className="flex items-center gap-1 px-3 pb-2.5 pt-7">
             <div data-tauri-drag-region className="flex-1" />
+            {maxButton}
             <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
               <X className="size-3.5" />
             </Button>
@@ -156,22 +182,23 @@ export function Dock({
       <Tabs value={tab} onValueChange={(v) => onTab(v as DockSurface)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* pt-7 matches the main header's titlebar inset so the two rows line up, and it drags the
             window for the same reason: the overlay title bar leaves nothing else to grab. */}
-        <div data-tauri-drag-region className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
-          <TabsList className="h-7">
-            <TabsTrigger value="terminal" className="gap-1.5 text-xs">
-              <TerminalIcon className="size-3.5" /> {t("dock.terminal")}
-            </TabsTrigger>
-            <TabsTrigger value="browser" className="gap-1.5 text-xs">
-              <Globe className="size-3.5" /> {t("dock.browser")}
-            </TabsTrigger>
-            <TabsTrigger value="files" className="gap-1.5 text-xs">
-              <FolderTree className="size-3.5" /> {t("dock.files")}
-            </TabsTrigger>
-            <TabsTrigger value="git" className="gap-1.5 text-xs">
-              <GitBranch className="size-3.5" /> {t("dock.git")}
-            </TabsTrigger>
+        {/* Frameless tab pills rather than the boxed segmented control — the dock's chrome should
+            weigh less than what's inside it. */}
+        <div data-tauri-drag-region className="flex items-center gap-1 border-b px-3 pb-2 pt-7">
+          <TabsList className="h-7 gap-0.5 bg-transparent p-0">
+            {SURFACES.map(({ id, icon: Icon, titleKey }) => (
+              <TabsTrigger
+                key={id}
+                value={id}
+                className="gap-1.5 rounded-md px-2 text-xs text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
+              >
+                <Icon className="size-3.5" /> {t(titleKey)}
+              </TabsTrigger>
+            ))}
           </TabsList>
-          <Button variant="ghost" size="icon" className="ml-auto size-6" onClick={onClose} title={t("dock.close")}>
+          <div data-tauri-drag-region className="flex-1" />
+          {maxButton}
+          <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
             <X className="size-3.5" />
           </Button>
         </div>

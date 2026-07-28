@@ -194,6 +194,21 @@ export async function deletePath(cwd: string, path: string): Promise<void> {
   if (inTauri) await invoke("delete_path", { cwd, path });
 }
 
+/** Open the webview inspector — shared with the embedded browser panel's pages. */
+export async function openDevtools(): Promise<void> {
+  if (inTauri) await invoke("open_devtools");
+}
+
+/** Hand a URL to the system's default browser. Outside Tauri, a plain new tab. */
+export async function openExternal(url: string): Promise<void> {
+  if (inTauri) {
+    const { open } = await import("@tauri-apps/plugin-shell");
+    await open(url);
+  } else {
+    window.open(url, "_blank", "noopener");
+  }
+}
+
 /** Newest text per session id, for the rail's preview line. */
 export async function sessionPreviews(): Promise<Record<string, string>> {
   if (!inTauri) return {};

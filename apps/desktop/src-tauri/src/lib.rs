@@ -238,6 +238,13 @@ fn browser_context(annotation: Annotation) -> String {
     annotation.to_context()
 }
 
+/// Open the webview inspector. The embedded browser panel shares this webview, so this is also how
+/// you inspect the page loaded in it.
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    window.open_devtools();
+}
+
 // ---- skill market (F5) -----------------------------------------------------------------------
 
 #[tauri::command]
@@ -804,6 +811,7 @@ pub fn run() {
             get_keymap,
             set_keymap,
             browser_context,
+            open_devtools,
             market_catalog,
             market_install,
             start_remote,

@@ -165,7 +165,9 @@ export default function App() {
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
-  const [browserUrl, setBrowserUrl] = useState("https://developer.mozilla.org");
+  // A blank tab, not a landing page: most sites refuse to be iframed anyway, and this browser's
+  // job is your localhost dev server, which you type in.
+  const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showMarket, setShowMarket] = useState(false);
