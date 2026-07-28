@@ -17,32 +17,20 @@ export const en = {
 
   // rail — conversations
   "rail.newSession": "New session",
-  "rail.newSessionHint": "Start a fresh session",
-  "rail.search": "Search conversations",
-  "rail.filter": "Filter conversations",
-  "rail.recent": "Recent",
+  "rail.searchLabel": "Search",
+  "rail.allProjects": "All projects",
   "rail.empty": "Nothing here yet.",
   "rail.emptyHint": "Write a prompt and send it.",
-  "rail.noMatch": "Nothing matches “{query}”.",
   "rail.rename": "Rename",
   "rail.archive": "Archive",
 
-  // rail — git
+  // rail — git (the dock's git tab shares these)
   "rail.notARepo": "Not a git repo.",
   "rail.clean": "Working tree clean",
-  "rail.review": "Review & commit →",
-  "rail.andMore": "+{count} more · ",
 
   // rail — footer
   "rail.market": "{count} skills — open the market",
   "rail.newSkill": "New skill — type / in the document to insert one",
-
-  // date buckets
-  "date.today": "Today",
-  "date.yesterday": "Yesterday",
-  "date.last7": "Previous 7 days",
-  "date.last30": "Previous 30 days",
-  "date.older": "Older",
 
   // header
   "header.palette": "Command palette",
@@ -94,8 +82,15 @@ export const en = {
 
   // settings
   "settings.title": "Settings",
-  "settings.close": "Close settings",
-  "settings.appearance": "Appearance",
+  "settings.back": "Back",
+  "settings.general": "General",
+  "settings.providers": "Providers",
+  "settings.restoreDefaults": "Restore defaults",
+  "settings.providersHint":
+    "The agent CLIs codeTwo can drive. Anything installed on your PATH shows a green dot.",
+  "settings.installed": "Installed",
+  "settings.notInstalled": "CLI not found",
+  "settings.needsNode": "Needs Node",
   "settings.theme": "Theme",
   "settings.themeHint": "System follows your macOS appearance and keeps following it.",
   "settings.themeLight": "Light",
@@ -156,6 +151,12 @@ export const en = {
   "dock.refresh": "Refresh",
   "dock.reviewCommit": "Review & commit",
   "dock.files": "Files",
+  "dock.openSurface": "Open a surface",
+  "dock.openSurfaceHint": "Choose what to show in the right panel.",
+  "dock.terminalDesc": "Start a shell in this workspace.",
+  "dock.browserDesc": "Open a local app or URL.",
+  "dock.filesDesc": "Browse and read workspace files.",
+  "dock.gitDesc": "Review changes in the working tree.",
 
   // file tree
   "files.filter": "Filter files…",
@@ -234,29 +235,18 @@ export const zhCN: Record<StringKey, string> = {
   "rail.chooseFolder": "选择项目文件夹",
 
   "rail.newSession": "新建会话",
-  "rail.newSessionHint": "开始一个新会话",
-  "rail.search": "搜索会话",
-  "rail.filter": "筛选会话",
-  "rail.recent": "最近",
+  "rail.searchLabel": "搜索",
+  "rail.allProjects": "所有项目",
   "rail.empty": "这里还是空的。",
   "rail.emptyHint": "写一段提示词发出去。",
-  "rail.noMatch": "没有匹配“{query}”的内容。",
   "rail.rename": "重命名",
   "rail.archive": "归档",
 
   "rail.notARepo": "不是 Git 仓库。",
   "rail.clean": "工作区干净",
-  "rail.review": "审查并提交 →",
-  "rail.andMore": "还有 {count} 个 · ",
 
   "rail.market": "{count} 个技能——打开市场",
   "rail.newSkill": "新建技能——在文档里输入 / 插入",
-
-  "date.today": "今天",
-  "date.yesterday": "昨天",
-  "date.last7": "过去 7 天",
-  "date.last30": "过去 30 天",
-  "date.older": "更早",
 
   "header.palette": "命令面板",
   "header.settings": "设置",
@@ -304,8 +294,14 @@ export const zhCN: Record<StringKey, string> = {
   "turn.plan": "方案",
 
   "settings.title": "设置",
-  "settings.close": "关闭设置",
-  "settings.appearance": "外观",
+  "settings.back": "返回",
+  "settings.general": "通用",
+  "settings.providers": "供应商",
+  "settings.restoreDefaults": "恢复默认",
+  "settings.providersHint": "codeTwo 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
+  "settings.installed": "已安装",
+  "settings.notInstalled": "未找到 CLI",
+  "settings.needsNode": "需要 Node",
   "settings.theme": "主题",
   "settings.themeHint": "「跟随系统」会一直跟着 macOS 的外观走。",
   "settings.themeLight": "浅色",
@@ -363,6 +359,12 @@ export const zhCN: Record<StringKey, string> = {
   "dock.refresh": "刷新",
   "dock.reviewCommit": "审查并提交",
   "dock.files": "文件",
+  "dock.openSurface": "打开一个面板",
+  "dock.openSurfaceHint": "选择右侧面板要显示的内容。",
+  "dock.terminalDesc": "在这个工作区启动一个 shell。",
+  "dock.browserDesc": "打开本地应用或网址。",
+  "dock.filesDesc": "浏览、阅读工作区的文件。",
+  "dock.gitDesc": "查看工作区的改动。",
 
   "files.filter": "筛选文件…",
   "files.refresh": "重新扫描工作区",

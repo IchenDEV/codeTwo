@@ -4,6 +4,7 @@ import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
 import type { GitStatus } from "../bridge";
+import type { StringKey } from "../i18n/strings";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,11 +12,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-export type DockTab = "terminal" | "browser" | "files" | "git";
+export type DockSurface = "terminal" | "browser" | "files" | "git";
+/** "home" is the dock open with nothing chosen yet — the surface picker. */
+export type DockTab = DockSurface | "home";
+
+/** The picker's cards, in the order a coding session tends to want them. */
+const SURFACES: { id: DockSurface; icon: typeof Globe; titleKey: StringKey; descKey: StringKey }[] = [
+  { id: "browser", icon: Globe, titleKey: "dock.browser", descKey: "dock.browserDesc" },
+  { id: "terminal", icon: TerminalIcon, titleKey: "dock.terminal", descKey: "dock.terminalDesc" },
+  { id: "files", icon: FolderTree, titleKey: "dock.files", descKey: "dock.filesDesc" },
+  { id: "git", icon: GitBranch, titleKey: "dock.git", descKey: "dock.gitDesc" },
+];
 
 /**
  * A side dock rather than stacked bottom panels: the terminal, browser, and git status sit beside
- * the document instead of eating its vertical space, and only one is visible at a time.
+ * the document instead of eating its vertical space, and only one is visible at a time. Opened
+ * without a surface it shows a picker — four cards that say what each surface is for — instead of
+ * guessing which one you wanted.
  */
 export function Dock({
   tab,
@@ -36,7 +49,7 @@ export function Dock({
   onWidth,
 }: {
   tab: DockTab;
-  onTab: (t: DockTab) => void;
+  onTab: (t: DockSurface) => void;
   onClose: () => void;
   cwd: string | null;
   sessionKey: string;
@@ -104,7 +117,43 @@ export function Dock({
     >
       <div className="dock-grip" onMouseDown={startDrag} title={t("dock.resize")} />
 
-      <Tabs value={tab} onValueChange={(v) => onTab(v as DockTab)} className="flex min-h-0 flex-1 flex-col gap-0">
+      {tab === "home" ? (
+        <>
+          {/* Same titlebar inset and drag behaviour as the surface header below. */}
+          <div data-tauri-drag-region className="flex items-center gap-2 px-3 pb-2.5 pt-7">
+            <div data-tauri-drag-region className="flex-1" />
+            <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
+              <X className="size-3.5" />
+            </Button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-6 pt-[18vh]">
+            <div className="animate-rise-in w-full max-w-[420px]">
+              <h2 className="text-center text-[17px] font-semibold">{t("dock.openSurface")}</h2>
+              <p className="mt-1 text-center text-[12px] text-muted-foreground">
+                {t("dock.openSurfaceHint")}
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                {SURFACES.map(({ id, icon: Icon, titleKey, descKey }) => (
+                  <button
+                    key={id}
+                    onClick={() => onTab(id)}
+                    className="flex flex-col items-start gap-2.5 rounded-xl border bg-card/40 p-4 text-left transition-colors hover:border-primary/40 hover:bg-accent"
+                  >
+                    <Icon className="size-5 text-muted-foreground" />
+                    <span>
+                      <span className="block text-[13px] font-semibold">{t(titleKey)}</span>
+                      <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+                        {t(descKey)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+      <Tabs value={tab} onValueChange={(v) => onTab(v as DockSurface)} className="flex min-h-0 flex-1 flex-col gap-0">
         {/* pt-7 matches the main header's titlebar inset so the two rows line up, and it drags the
             window for the same reason: the overlay title bar leaves nothing else to grab. */}
         <div data-tauri-drag-region className="flex items-center gap-2 border-b px-3 pb-2.5 pt-7">
@@ -238,6 +287,7 @@ export function Dock({
           </ScrollArea>
         </TabsContent>
       </Tabs>
+      )}
     </aside>
   );
 }
