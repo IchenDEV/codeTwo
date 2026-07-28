@@ -1,238 +1,42 @@
 import { useMemo, useState } from "react";
 import {
   Archive,
-  Check,
-  ChevronDown,
+  Folder,
+  FolderOpen,
   FolderPlus,
-  GitBranch,
   Pencil,
   Plus,
   Search,
+  Settings,
   SquarePen,
   Store,
   Trash2,
-  X,
 } from "lucide-react";
 
-import { providerLabel, type GitStatus, type Project, type SessionInfo, type SkillInfo } from "../bridge";
+import { providerLabel, type Project, type SessionInfo, type SkillInfo } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import type { StringKey } from "../i18n/strings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-/** Which recency bucket a session falls into. Sessions arrive newest-first, so a single pass works. */
-function bucketOf(createdAt: number): StringKey {
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const day = 86_400_000;
-  if (createdAt >= startOfToday) return "date.today";
-  if (createdAt >= startOfToday - day) return "date.yesterday";
-  if (createdAt >= startOfToday - 7 * day) return "date.last7";
-  if (createdAt >= startOfToday - 30 * day) return "date.last30";
-  return "date.older";
-}
-
-/** `/Users/me/projects/codeTwo` → `~/projects/codeTwo`. The home prefix is noise on every row. */
-function tildify(path: string): string {
-  const home = path.match(/^\/Users\/[^/]+/)?.[0];
-  return home ? path.replace(home, "~") : path;
-}
-
-/** Section 1 — which project you're in, and how to get to another. */
-function ProjectPicker({
-  projects,
-  activeProject,
-  onSelect,
-  onAdd,
-  onRename,
-  onRemove,
-}: {
-  projects: Project[];
-  activeProject: string | null;
-  onSelect: (path: string) => void;
-  onAdd: () => void;
-  onRename: (path: string, name: string) => void;
-  onRemove: (path: string) => void;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const [renaming, setRenaming] = useState<{ path: string; name: string } | null>(null);
-  const current = projects.find((p) => p.path === activeProject);
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left transition-colors hover:bg-accent">
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-bold tracking-tight">
-              {current?.name ?? "codeTwo"}
-            </span>
-            <span className="block truncate text-[11px] text-muted-foreground">
-              {current ? tildify(current.path) : t("rail.noProject")}
-            </span>
-          </span>
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </button>
-      </PopoverTrigger>
-
-      <PopoverContent align="start" className="w-72 p-1">
-        <ScrollArea className="max-h-72">
-          {projects.length === 0 && (
-            <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              {t("rail.projectsEmpty")}
-            </p>
-          )}
-          {projects.map((p) => (
-            <div
-              key={p.path}
-              className="group flex items-center gap-1 rounded-md px-1 transition-colors hover:bg-accent"
-            >
-              {renaming?.path === p.path ? (
-                <Input
-                  autoFocus
-                  className="my-1 h-6 text-[13px]"
-                  value={renaming.name}
-                  onChange={(e) => setRenaming({ path: p.path, name: e.target.value })}
-                  onBlur={() => setRenaming(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      onRename(p.path, renaming.name);
-                      setRenaming(null);
-                    } else if (e.key === "Escape") setRenaming(null);
-                  }}
-                />
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      onSelect(p.path);
-                      setOpen(false);
-                    }}
-                    className="flex min-w-0 flex-1 items-start gap-2 py-1.5 text-left"
-                  >
-                    <Check
-                      className={cn(
-                        "mt-0.5 size-3.5 shrink-0",
-                        p.path === activeProject ? "text-primary" : "opacity-0",
-                      )}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{p.name}</span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {tildify(p.path)}
-                      </span>
-                    </span>
-                  </button>
-                  <span className="hidden shrink-0 gap-0.5 pr-1 group-hover:flex">
-                    <button
-                      title={t("rail.renameProject")}
-                      className="rounded p-1 text-muted-foreground hover:text-foreground"
-                      onClick={() => setRenaming({ path: p.path, name: p.name })}
-                    >
-                      <Pencil className="size-3" />
-                    </button>
-                    <button
-                      title={t("rail.removeProject")}
-                      className="rounded p-1 text-muted-foreground hover:text-destructive"
-                      onClick={() => onRemove(p.path)}
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  </span>
-                </>
-              )}
-            </div>
-          ))}
-        </ScrollArea>
-
-        <button
-          onClick={() => {
-            setOpen(false);
-            onAdd();
-          }}
-          className="mt-1 flex w-full items-center gap-2.5 rounded-md border-t px-2 py-2 text-left text-[13px] transition-colors hover:bg-accent"
-        >
-          <FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
-          {t("rail.addProject")}
-        </button>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Section 3 — what the working tree looks like right now. */
-function GitSection({
-  git,
-  onOpenSourceControl,
-}: {
-  git: GitStatus | null;
-  onOpenSourceControl: () => void;
-}) {
-  const t = useT();
-  if (!git?.is_repo) {
-    return (
-      <div className="border-t px-3 py-2.5 text-[11px] text-muted-foreground">{t("rail.notARepo")}</div>
-    );
-  }
-
-  return (
-    <div className="border-t">
-      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2.5">
-        <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{git.branch || "?"}</span>
-        {git.ahead > 0 && <span className="shrink-0 text-[11px] text-primary">↑{git.ahead}</span>}
-        {git.behind > 0 && <span className="shrink-0 text-[11px] text-primary">↓{git.behind}</span>}
-      </div>
-
-      {git.files.length === 0 ? (
-        <p className="px-3 pb-2.5 text-[11px] text-muted-foreground">{t("rail.clean")}</p>
-      ) : (
-        <>
-          {/* Capped on purpose: this is a status glance, not the review surface. The count below
-              says how many didn't fit, and the button goes where they all are. */}
-          <ScrollArea className="max-h-32">
-            <div className="space-y-0.5 px-3 pb-1">
-              {git.files.slice(0, 8).map((f) => (
-                <div key={f.path} className="flex items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "inline-flex size-3.5 shrink-0 items-center justify-center rounded text-[9px] font-bold",
-                      f.staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
-                    )}
-                    title={f.state}
-                  >
-                    {f.state.charAt(0).toUpperCase()}
-                  </span>
-                  <span className="truncate font-mono text-[11px] text-muted-foreground" title={f.path}>
-                    {f.path}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-          <button
-            onClick={onOpenSourceControl}
-            className="w-full px-3 pb-2.5 pt-1 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {git.files.length > 8 && t("rail.andMore", { count: git.files.length - 8 })}
-            {t("rail.review")}
-          </button>
-        </>
-      )}
-    </div>
-  );
+/** "3h", "2d", "5w" — the glanceable age on a project row. Anything under a minute is "now". */
+function shortAge(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86_400) return `${Math.floor(s / 3600)}h`;
+  if (s < 7 * 86_400) return `${Math.floor(s / 86_400)}d`;
+  return `${Math.floor(s / (7 * 86_400))}w`;
 }
 
 /**
- * The rail, in three sections: which project you're in, what you've been talking about in it, and
- * what its working tree looks like. Each one answers a question you'd otherwise leave the app to
- * answer.
+ * The rail as a project tree: search and compose on top, every project listed with the active
+ * one's conversations nested under it, and settings anchored at the bottom. One glance answers
+ * where you are, what you've been doing there, and where everything else is.
  */
 export function SessionRail({
   projects,
@@ -254,8 +58,9 @@ export function SessionRail({
   onOpenMarket,
   onNewSkill,
   newHint,
-  git,
-  onOpenSourceControl,
+  searchHint,
+  onOpenSearch,
+  onOpenSettings,
   status,
 }: {
   projects: Project[];
@@ -264,6 +69,7 @@ export function SessionRail({
   onAddProject: () => void;
   onRenameProject: (path: string, name: string) => void;
   onRemoveProject: (path: string) => void;
+  /** Every session; the rail groups them under their project by cwd. */
   sessions: SessionInfo[];
   activeSession: string | null;
   /** Newest text per session id — row 2. */
@@ -279,248 +85,300 @@ export function SessionRail({
   onOpenMarket: () => void;
   onNewSkill: () => void;
   newHint: string;
-  git: GitStatus | null;
-  onOpenSourceControl: () => void;
+  /** The palette's shortcut, shown in the search pill. */
+  searchHint: string;
+  onOpenSearch: () => void;
+  onOpenSettings: () => void;
   /** Foot-of-rail line: which provider is live. */
   status: React.ReactNode;
 }) {
   const t = useT();
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
+  const [renamingProject, setRenamingProject] = useState<{ path: string; name: string } | null>(null);
 
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matched = q
-      ? sessions.filter(
-          (s) =>
-            s.title.toLowerCase().includes(q) ||
-            displayProvider(s.provider).toLowerCase().includes(q),
-        )
-      : sessions;
-
-    const out: { label: StringKey; items: SessionInfo[] }[] = [];
-    for (const s of matched) {
-      const label = bucketOf(s.created_at);
-      const last = out[out.length - 1];
-      if (last && last.label === label) last.items.push(s);
-      else out.push({ label, items: [s] });
+  // A session belongs to whichever project its cwd is — a filter, not a stored relation.
+  const byProject = useMemo(() => {
+    const map = new Map<string, SessionInfo[]>();
+    for (const s of sessions) {
+      const list = map.get(s.cwd);
+      if (list) list.push(s);
+      else map.set(s.cwd, [s]);
     }
-    return out;
-  }, [sessions, query, displayProvider]);
+    return map;
+  }, [sessions]);
 
-  return (
-    <aside className="glass-rail flex w-64 min-w-64 flex-col border-r">
-      {/* ---- 1. the project ---------------------------------------------------------------- */}
-      {/* pt-7 clears the macOS traffic lights, which float over this row under the overlay title
-          bar. That bar is transparent, so this row is also what drags the window. */}
-      <div data-tauri-drag-region className="flex items-center gap-1 px-2 pb-1 pt-7">
-        <ProjectPicker
-          projects={projects}
-          activeProject={activeProject}
-          onSelect={onSelectProject}
-          onAdd={onAddProject}
-          onRename={onRenameProject}
-          onRemove={onRemoveProject}
-        />
-      </div>
-
-      {/* ---- 2. the conversations ---------------------------------------------------------- */}
-      <div className="flex items-center gap-1 px-2 pt-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={onNew}
-              className="flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors hover:bg-accent"
-            >
-              <SquarePen className="size-4 text-muted-foreground" />
-              {t("rail.newSession")}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            {t("rail.newSessionHint")} <span className="ml-1 opacity-60">{newHint}</span>
-          </TooltipContent>
-        </Tooltip>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn("size-7 shrink-0", searching && "text-primary")}
-          aria-label={t("rail.search")}
-          onClick={() => {
-            setSearching((v) => !v);
-            if (searching) setQuery("");
+  const sessionRow = (s: SessionInfo) => (
+    <div
+      key={s.id}
+      onClick={() => onSelect(s.id)}
+      className={cn(
+        "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+        s.id === activeSession && "bg-accent",
+      )}
+    >
+      {/* 1 — the session's name */}
+      {renaming?.id === s.id ? (
+        <Input
+          autoFocus
+          className="h-6 text-[13px]"
+          value={renaming.title}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
+          onBlur={() => setRenaming(null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onRename(s.id, renaming.title);
+              setRenaming(null);
+            } else if (e.key === "Escape") setRenaming(null);
           }}
+        />
+      ) : (
+        <div
+          className={cn("truncate text-[13px] font-medium", s.id === activeSession && "text-primary")}
         >
-          <Search className="size-4" />
-        </Button>
-      </div>
-
-      {searching && (
-        <div className="relative px-2 pt-1.5">
-          <Input
-            autoFocus
-            className="h-7 pl-7 text-[13px]"
-            placeholder={t("rail.filter")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setQuery("");
-                setSearching(false);
-              }
-            }}
-          />
-          <Search className="pointer-events-none absolute left-4 top-3 size-4 text-muted-foreground" />
-          {query && (
-            <button
-              className="absolute right-3.5 top-3 rounded p-0.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setQuery("")}
-            >
-              <X className="size-3.5" />
-            </button>
-          )}
+          {s.title}
         </div>
       )}
 
-      <div className="px-3 pb-0.5 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {t("rail.recent")}
+      {/* 2 — the last thing said, so the title isn't the only way to tell two
+             "Untitled session" rows apart */}
+      <div className="truncate text-[11px] leading-snug text-muted-foreground/80">
+        {previews[s.id] ?? t("session.noMessages")}
+      </div>
+
+      {/* 3 — what it's doing and what it's running on */}
+      <div className="flex items-center gap-1 pt-0.5 text-[11px] text-muted-foreground">
+        {s.id === activeSession && running ? (
+          <>
+            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
+            <span className="shrink-0 text-primary">{t("session.running")}</span>
+          </>
+        ) : (
+          <ProviderIcon provider={providerLabel(s.provider)} className="size-3 shrink-0 opacity-70" />
+        )}
+        <span className="truncate">{displayProvider(s.provider)}</span>
+        {s.worktree_path && (
+          <Badge variant="secondary" className="h-4 px-1 text-[9px]">
+            wt
+          </Badge>
+        )}
+        <span className="ml-auto hidden shrink-0 gap-0.5 group-hover:flex">
+          <button
+            title={t("rail.rename")}
+            className="rounded p-0.5 hover:text-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRenaming({ id: s.id, title: s.title });
+            }}
+          >
+            <Pencil className="size-3" />
+          </button>
+          <button
+            title={t("rail.archive")}
+            className="rounded p-0.5 hover:text-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchive(s.id);
+            }}
+          >
+            <Archive className="size-3" />
+          </button>
+        </span>
+      </div>
+    </div>
+  );
+
+  return (
+    <aside className="glass-rail flex w-72 min-w-72 flex-col border-r">
+      {/* ---- search + compose ------------------------------------------------------------- */}
+      {/* pt-7 clears the macOS traffic lights, which float over this row under the overlay title
+          bar. That bar is transparent, so this row is also what drags the window. */}
+      <div data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-1.5 pt-7">
+        <button
+          onClick={onOpenSearch}
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-foreground/[0.05] px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent"
+        >
+          <Search className="size-3.5 shrink-0" />
+          <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
+          {searchHint && (
+            <kbd className="shrink-0 rounded border border-border/70 px-1 py-px font-mono text-[10px] text-muted-foreground/80">
+              {searchHint}
+            </kbd>
+          )}
+        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label={t("rail.newSession")}
+              onClick={onNew}
+            >
+              <SquarePen className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            {t("rail.newSession")} <span className="ml-1 opacity-60">{newHint}</span>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+
+      {/* ---- all projects ----------------------------------------------------------------- */}
+      <div className="flex items-center gap-2 px-3 pb-0.5 pt-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 text-[13px] font-medium">
+          <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{t("rail.allProjects")}</span>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 shrink-0 text-muted-foreground"
+              aria-label={t("rail.addProject")}
+              onClick={onAddProject}
+            >
+              <FolderPlus className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t("rail.addProject")}</TooltipContent>
+        </Tooltip>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-1.5 pb-2">
-          {sessions.length === 0 ? (
-            <p className="px-2 py-5 text-center text-xs leading-relaxed text-muted-foreground">
-              {t("rail.empty")}
-              <br />
-              {t("rail.emptyHint")}
-            </p>
-          ) : groups.length === 0 ? (
-            <p className="px-2 py-5 text-center text-xs text-muted-foreground">
-              {t("rail.noMatch", { query })}
+        <div className="px-2 pb-3">
+          {projects.length === 0 ? (
+            <p className="px-3 py-4 text-[11px] leading-relaxed text-muted-foreground">
+              {t("rail.projectsEmpty")}
             </p>
           ) : (
-            groups.map((g) => (
-              <div key={t(g.label)} className="mb-1">
-                <div className="px-2 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                  {t(g.label)}
-                </div>
-                <div className="space-y-px">
-                  {g.items.map((s) => (
-                    <div
-                      key={s.id}
-                      onClick={() => onSelect(s.id)}
+            projects.map((p) => {
+              const isActive = p.path === activeProject;
+              const list = byProject.get(p.path) ?? [];
+              return (
+                <div key={p.path} className="mb-0.5">
+                  {/* the project */}
+                  <div
+                    onClick={() => onSelectProject(p.path)}
+                    className={cn(
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+                      isActive && "text-foreground",
+                    )}
+                  >
+                    <Folder
                       className={cn(
-                        "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
-                        s.id === activeSession && "bg-accent",
+                        "size-4 shrink-0",
+                        isActive ? "text-foreground" : "text-muted-foreground",
                       )}
-                    >
-                      {/* 1 — the session's name */}
-                      {renaming?.id === s.id ? (
-                        <Input
-                          autoFocus
-                          className="h-6 text-[13px]"
-                          value={renaming.title}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
-                          onBlur={() => setRenaming(null)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              onRename(s.id, renaming.title);
-                              setRenaming(null);
-                            } else if (e.key === "Escape") setRenaming(null);
-                          }}
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            "truncate text-[13px] font-medium",
-                            s.id === activeSession && "text-primary",
-                          )}
-                        >
-                          {s.title}
-                        </div>
-                      )}
-
-                      {/* 2 — the last thing said, so the title isn't the only way to tell two
-                             "Untitled session" rows apart */}
-                      <div className="truncate text-[11px] leading-snug text-muted-foreground/80">
-                        {previews[s.id] ?? t("session.noMessages")}
-                      </div>
-
-                      {/* 3 — what it's doing and what it's running on */}
-                      <div className="flex items-center gap-1 pt-0.5 text-[11px] text-muted-foreground">
-                        {s.id === activeSession && running ? (
-                          <>
-                            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
-                            <span className="shrink-0 text-primary">{t("session.running")}</span>
-                          </>
-                        ) : (
-                          <ProviderIcon
-                            provider={providerLabel(s.provider)}
-                            className="size-3 shrink-0 opacity-70"
-                          />
+                    />
+                    {renamingProject?.path === p.path ? (
+                      <Input
+                        autoFocus
+                        className="h-6 flex-1 text-[13px]"
+                        value={renamingProject.name}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setRenamingProject({ path: p.path, name: e.target.value })}
+                        onBlur={() => setRenamingProject(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            onRenameProject(p.path, renamingProject.name);
+                            setRenamingProject(null);
+                          } else if (e.key === "Escape") setRenamingProject(null);
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-[13px]",
+                          isActive ? "font-semibold" : "font-medium text-muted-foreground",
                         )}
-                        <span className="truncate">{displayProvider(s.provider)}</span>
-                        {s.worktree_path && (
-                          <Badge variant="secondary" className="h-4 px-1 text-[9px]">
-                            wt
-                          </Badge>
-                        )}
-                        <span className="ml-auto hidden shrink-0 gap-0.5 group-hover:flex">
-                          <button
-                            title={t("rail.rename")}
-                            className="rounded p-0.5 hover:text-primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenaming({ id: s.id, title: s.title });
-                            }}
-                          >
-                            <Pencil className="size-3" />
-                          </button>
-                          <button
-                            title={t("rail.archive")}
-                            className="rounded p-0.5 hover:text-primary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onArchive(s.id);
-                            }}
-                          >
-                            <Archive className="size-3" />
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                        title={p.path}
+                      >
+                        {p.name}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-[11px] text-muted-foreground group-hover:hidden">
+                      {shortAge(p.last_opened_at)}
+                    </span>
+                    <span className="hidden shrink-0 gap-0.5 group-hover:flex">
+                      <button
+                        title={t("rail.renameProject")}
+                        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenamingProject({ path: p.path, name: p.name });
+                        }}
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                      <button
+                        title={t("rail.removeProject")}
+                        className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveProject(p.path);
+                        }}
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </span>
+                  </div>
+
+                  {/* its conversations, only for the project you're in */}
+                  {isActive &&
+                    (list.length === 0 ? (
+                      <p className="py-2 pl-8 pr-2 text-[11px] leading-relaxed text-muted-foreground">
+                        {t("rail.empty")} {t("rail.emptyHint")}
+                      </p>
+                    ) : (
+                      <div className="mt-0.5 space-y-px pl-4">{list.map(sessionRow)}</div>
+                    ))}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </ScrollArea>
 
-      {/* ---- 3. the working tree ----------------------------------------------------------- */}
-      <GitSection git={git} onOpenSourceControl={onOpenSourceControl} />
-
-      <div className="flex h-8 items-center gap-2 border-t px-3 text-[11px] text-muted-foreground">
-        {status}
-        <span className="ml-auto flex shrink-0 gap-1">
+      {/* ---- foot: what's live, and the way to settings ------------------------------------ */}
+      <div className="border-t px-2 pb-1.5 pt-1">
+        <div className="flex h-7 items-center gap-2 px-2 text-[11px] text-muted-foreground">{status}</div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onOpenSettings}
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-accent"
+          >
+            <Settings className="size-4 shrink-0 text-muted-foreground" />
+            {t("header.settings")}
+          </button>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-5" onClick={onOpenMarket}>
-                <Store className="size-3" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground"
+                onClick={onOpenMarket}
+              >
+                <Store className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("rail.market", { count: skills.length })}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-5" onClick={onNewSkill}>
-                <Plus className="size-3" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground"
+                onClick={onNewSkill}
+              >
+                <Plus className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("rail.newSkill")}</TooltipContent>
           </Tooltip>
-        </span>
+        </div>
       </div>
     </aside>
   );

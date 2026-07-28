@@ -1,20 +1,70 @@
 import { useCallback, useEffect, useState } from "react";
-import { AtSign, Loader2, Pencil, Save, X } from "lucide-react";
+import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Pencil, Save, X } from "lucide-react";
+import { codeToTokens, type ThemedToken } from "shiki";
 
 import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
+import { useColorScheme } from "../theme";
 import { useToast } from "../ui/toast";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+
+/** Extension → shiki grammar. Anything not listed renders as plain text, which is never wrong. */
+const LANGS: Record<string, string> = {
+  ts: "typescript",
+  tsx: "tsx",
+  js: "javascript",
+  jsx: "jsx",
+  mjs: "javascript",
+  cjs: "javascript",
+  json: "json",
+  rs: "rust",
+  toml: "toml",
+  md: "markdown",
+  css: "css",
+  scss: "scss",
+  html: "html",
+  sh: "shellscript",
+  bash: "shellscript",
+  zsh: "shellscript",
+  yml: "yaml",
+  yaml: "yaml",
+  py: "python",
+  go: "go",
+  java: "java",
+  c: "c",
+  h: "c",
+  cpp: "cpp",
+  hpp: "cpp",
+  sql: "sql",
+  xml: "xml",
+  vue: "vue",
+  svelte: "svelte",
+  swift: "swift",
+  kt: "kotlin",
+  rb: "ruby",
+  php: "php",
+};
+
+function langOf(path: string): string | null {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return LANGS[ext] ?? null;
+}
+
+// Past this, tokenizing costs more than it teaches; the viewer falls back to plain text.
+const MAX_HIGHLIGHT_LINES = 5_000;
+const MAX_HIGHLIGHT_BYTES = 400_000;
 
 /**
  * The built-in file view.
  *
- * Read-only until you ask for otherwise. Opening a file to look at it is the common act and should
- * never risk changing it; editing is rarer, deliberate, and reached on purpose — from the tree's
- * context menu or the pencil here. That asymmetry is the whole design: a stray keystroke in a
- * viewer costs nothing.
+ * Read-only until you ask for otherwise — a stray keystroke in a viewer must cost nothing. Reading
+ * gets the full treatment: syntax colours, a breadcrumb, and a gutter you can click or drag to
+ * pick lines and leave a comment. The comment doesn't stay here — it lands in the prompt document
+ * as a context block, because "look at these lines and do X" is the whole reason a coding agent's
+ * app has a file viewer.
  */
 export function FileViewer({
   cwd,
@@ -23,6 +73,7 @@ export function FileViewer({
   onEditing,
   onClose,
   onInsert,
+  onComment,
 }: {
   cwd: string;
   path: string;
@@ -30,17 +81,27 @@ export function FileViewer({
   onEditing: (v: boolean) => void;
   onClose: () => void;
   onInsert: (path: string) => void;
+  /** Receives a ready-made markdown context block for the prompt document. */
+  onComment: (text: string) => void;
 }) {
   const t = useT();
   const toast = useToast();
+  const scheme = useColorScheme();
   const [content, setContent] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<ThemedToken[][] | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Line selection: `a` is the anchor, `b` the end the drag or shift-click moved to.
+  const [sel, setSel] = useState<{ a: number; b: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [note, setNote] = useState("");
 
   useEffect(() => {
     setContent(null);
     setError(null);
+    setSel(null);
+    setNote("");
     readText(cwd, path)
       .then((text) => {
         setContent(text);
@@ -49,7 +110,57 @@ export function FileViewer({
       .catch((e) => setError(String(e)));
   }, [cwd, path]);
 
+  // Highlight off the render path: plain text paints immediately, colour arrives when ready.
+  useEffect(() => {
+    setTokens(null);
+    if (content === null) return;
+    const lang = langOf(path);
+    if (!lang || content.length > MAX_HIGHLIGHT_BYTES) return;
+    const lineCount = content.split("\n").length;
+    if (lineCount > MAX_HIGHLIGHT_LINES) return;
+    let alive = true;
+    codeToTokens(content, {
+      lang: lang as never,
+      theme: scheme === "dark" ? "github-dark" : "github-light",
+    })
+      .then((r) => {
+        if (alive) setTokens(r.tokens);
+      })
+      .catch(() => {
+        /* unknown grammar or tokenizer failure — plain text is already on screen */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [content, path, scheme]);
+
+  useEffect(() => {
+    const up = () => setDragging(false);
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
+  }, []);
+
   const dirty = editing && draft !== content;
+  const lines = content?.split("\n") ?? [];
+  const lo = sel ? Math.min(sel.a, sel.b) : -1;
+  const hi = sel ? Math.max(sel.a, sel.b) : -1;
+  const range = sel ? (lo === hi ? `L${lo + 1}` : `L${lo + 1}–L${hi + 1}`) : "";
+
+  const clearSel = () => {
+    setSel(null);
+    setNote("");
+  };
+
+  const submit = () => {
+    if (!sel || !note.trim() || content === null) return;
+    const excerpt = lines.slice(lo, hi + 1).join("\n");
+    const lang = langOf(path) ?? "";
+    // Same shape as the browser's context block: a labelled quote the agent can act on.
+    const block = `**File comment** — \`${path}\` (${range})\n\n\`\`\`${lang}\n${excerpt}\n\`\`\`\n\n${note.trim()}\n`;
+    toast(t("files.commentAdded"), "success");
+    clearSel();
+    onComment(block);
+  };
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -64,12 +175,26 @@ export function FileViewer({
     setSaving(false);
   }, [cwd, path, draft, onEditing, toast, t]);
 
+  const parts = path.split("/");
+
   return (
     <main className="content-surface flex min-w-0 flex-1 flex-col">
       <header data-tauri-drag-region className="flex items-center gap-2 px-4 pb-2 pt-7">
-        <span data-tauri-drag-region className="min-w-0 flex-1 truncate font-mono text-[12px]">
-          {path}
-          {dirty && <span className="ml-1.5 text-warning">•</span>}
+        {/* Breadcrumb, not a raw path: the segments are how you know where you are. */}
+        <span data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-0.5 text-[12px]">
+          {parts.map((p, i) =>
+            i === parts.length - 1 ? (
+              <span key={i} className="truncate font-medium">
+                {p}
+                {dirty && <span className="ml-1.5 text-warning">•</span>}
+              </span>
+            ) : (
+              <span key={i} className="flex shrink-0 items-center gap-0.5 text-muted-foreground">
+                <span className="max-w-32 truncate">{p}</span>
+                <ChevronRight className="size-3 text-muted-foreground/50" />
+              </span>
+            ),
+          )}
         </span>
 
         <Tooltip>
@@ -129,14 +254,85 @@ export function FileViewer({
         />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          {/* Line numbers make it a viewer rather than a wall of text, and cost one column. */}
-          <div className="flex px-4 pb-6 font-mono text-[12.5px] leading-relaxed">
-            <div className="select-none pr-3 text-right text-muted-foreground/50">
-              {content.split("\n").map((_, i) => (
-                <div key={i}>{i + 1}</div>
-              ))}
-            </div>
-            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words">{content}</pre>
+          <div className="px-2 pb-6 font-mono text-[12.5px] leading-relaxed" title={sel ? undefined : t("files.gutterHint")}>
+            {lines.map((line, i) => {
+              const selected = sel !== null && i >= lo && i <= hi;
+              return (
+                <div key={i}>
+                  <div className={cn("flex", selected && "bg-primary/8")}>
+                    {/* The gutter is the comment affordance: click a number, or drag a range. */}
+                    <span
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        if (e.shiftKey && sel) {
+                          setSel({ a: sel.a, b: i });
+                        } else {
+                          setSel({ a: i, b: i });
+                          setDragging(true);
+                        }
+                      }}
+                      onMouseEnter={() => dragging && setSel((s) => (s ? { a: s.a, b: i } : s))}
+                      className={cn(
+                        "w-12 shrink-0 cursor-pointer select-none pr-3 text-right",
+                        selected ? "text-primary" : "text-muted-foreground/50 hover:text-foreground",
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 whitespace-pre-wrap break-words border-l-2 pl-3",
+                        selected ? "border-primary" : "border-transparent",
+                      )}
+                    >
+                      {tokens?.[i] ? (
+                        tokens[i].map((tk, j) => (
+                          <span key={j} style={{ color: tk.color }}>
+                            {tk.content}
+                          </span>
+                        ))
+                      ) : line.length === 0 ? (
+                        "​"
+                      ) : (
+                        line
+                      )}
+                    </span>
+                  </div>
+
+                  {/* The comment card sits right under the selection, where the eye already is. */}
+                  {sel !== null && i === hi && (
+                    <div className="glass-raised my-2 ml-14 max-w-md rounded-xl border p-3 font-sans shadow-lg">
+                      <div className="flex items-center gap-2 text-[12.5px] font-medium">
+                        <MessageSquarePlus className="size-3.5 text-primary" />
+                        {t("files.commentTitle")}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                        {t("files.commentOn", { range })}
+                      </div>
+                      <textarea
+                        autoFocus
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") clearSel();
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+                        }}
+                        placeholder={t("files.commentPlaceholder")}
+                        className="mt-2 min-h-16 w-full resize-y rounded-md border bg-transparent px-2.5 py-1.5 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      />
+                      <div className="mt-2 flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" className="h-7 text-[12px]" onClick={clearSel}>
+                          {t("files.cancel")}
+                        </Button>
+                        <Button size="sm" className="h-7 text-[12px]" disabled={!note.trim()} onClick={submit}>
+                          {t("browser.addToPrompt")}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </ScrollArea>
       )}

@@ -84,7 +84,7 @@ import type { SessionConfig } from "./session/ConfigPopover";
 import { Composer } from "./session/Composer";
 import { TurnCard } from "./session/TurnCard";
 import { applyEvent, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
-import { Dock, type DockTab } from "./dock/Dock";
+import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
@@ -165,7 +165,9 @@ export default function App() {
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
-  const [browserUrl, setBrowserUrl] = useState("https://developer.mozilla.org");
+  // A blank tab, not a landing page: most sites refuse to be iframed anyway, and this browser's
+  // job is your localhost dev server, which you type in.
+  const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showMarket, setShowMarket] = useState(false);
@@ -242,13 +244,6 @@ export default function App() {
   const refreshProjects = useCallback(() => {
     listProjects().then(setProjects).catch(() => {});
   }, []);
-
-  // The rail shows one project's conversations. A session belongs to whichever project its cwd is,
-  // so this is a filter rather than a stored relation — nothing to keep in sync.
-  const projectSessions = useMemo(
-    () => (activeProject ? sessions.filter((s) => s.cwd === activeProject) : sessions),
-    [sessions, activeProject],
-  );
 
   /** Switch projects: the working directory, the conversation list and the git section all follow. */
   const selectProject = useCallback(
@@ -504,7 +499,7 @@ export default function App() {
     setShowIssues(false);
   }, []);
 
-  const toggleDock = useCallback((t: DockTab) => {
+  const toggleDock = useCallback((t: DockSurface) => {
     setDockTab((cur) => (cur === t ? null : t));
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
   }, []);
@@ -513,6 +508,21 @@ export default function App() {
   const toggleDocMode = useCallback((v: boolean) => {
     setDocMode(v);
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
+  }, []);
+
+  /**
+   * Insert into the prompt from the file viewer. The viewer replaces the editor column, and the
+   * editor nulls its insert refs on unmount — so "insert" must first close the viewer, then wait
+   * for the editor to remount and re-install them. Without this the button was a silent no-op.
+   */
+  const insertFromViewer = useCallback((run: () => boolean) => {
+    setOpenFile(null);
+    setFileEditing(false);
+    let tries = 0;
+    const tick = () => {
+      if (!run() && tries++ < 20) setTimeout(tick, 50);
+    };
+    setTimeout(tick, 0);
   }, []);
 
   const stepSession = useCallback(
@@ -745,6 +755,13 @@ export default function App() {
     [toast],
   );
 
+  // Restore every shortcut — settings' "Restore defaults" on the keybindings tab.
+  const resetAllBindings = useCallback(() => {
+    void Promise.all(DEFAULT_KEYMAP.map(([a, key]) => setKeymap(a, key)))
+      .then(() => getKeymap().then(setBindings))
+      .catch((err) => toast(`Could not reset shortcuts: ${err}`, "error"));
+  }, [toast]);
+
   const currentProvider = providers.find((p) => p.id === provider);
 
   const sessionConfig: SessionConfig = {
@@ -769,6 +786,22 @@ export default function App() {
 
   return (
     <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
+      {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
+          Back row at its foot is the way home. */}
+      {showSettings ? (
+        <SettingsPage
+          bindings={bindings}
+          capturing={capturing}
+          onCapture={setCapturing}
+          onReset={resetBinding}
+          onResetAll={resetAllBindings}
+          providers={providers}
+          onClose={() => {
+            setShowSettings(false);
+            setCapturing(null);
+          }}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         <SessionRail
@@ -789,9 +822,7 @@ export default function App() {
               }
             });
           }}
-          git={git}
-          onOpenSourceControl={openSourceControl}
-          sessions={projectSessions}
+          sessions={sessions}
           activeSession={activeSession}
           previews={previews}
           running={running}
@@ -804,6 +835,9 @@ export default function App() {
           onOpenMarket={openMarket}
           onNewSkill={() => setSkillDraft({ name: "", text: "" })}
           newHint={hint("new_session")}
+          searchHint={hint("open_command_palette")}
+          onOpenSearch={() => setShowPalette(true)}
+          onOpenSettings={() => setShowSettings(true)}
           status={
             <>
               <span
@@ -823,7 +857,7 @@ export default function App() {
           }
         />
 
-        {/* ---------------- settings, or the session ---------------- */}
+        {/* ---------------- the file viewer, or the session ---------------- */}
         {openFile && activeProject ? (
           <FileViewer
             cwd={activeProject}
@@ -834,18 +868,20 @@ export default function App() {
               setOpenFile(null);
               setFileEditing(false);
             }}
-            onInsert={(p) => insertFileRef.current?.(p)}
-          />
-        ) : showSettings ? (
-          <SettingsPage
-            bindings={bindings}
-            capturing={capturing}
-            onCapture={setCapturing}
-            onReset={resetBinding}
-            onClose={() => {
-              setShowSettings(false);
-              setCapturing(null);
-            }}
+            onInsert={(p) =>
+              insertFromViewer(() => {
+                if (!insertFileRef.current) return false;
+                insertFileRef.current(p);
+                return true;
+              })
+            }
+            onComment={(text) =>
+              insertFromViewer(() => {
+                if (!insertTextRef.current) return false;
+                insertTextRef.current(text);
+                return true;
+              })
+            }
           />
         ) : (
         <main className="content-surface flex min-w-0 flex-1 flex-col" ref={mainRef}>
@@ -856,12 +892,18 @@ export default function App() {
             <span data-tauri-drag-region className="max-w-96 truncate text-[13px] font-semibold">
               {activeTitle}
             </span>
+            {/* The rail no longer carries a git section, so this chip is the glance — and the
+                click-through to review & commit. */}
             {git?.is_repo && (
-              <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+              <button
+                onClick={openSourceControl}
+                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title={t("action.open_source_control")}
+              >
                 <GitBranch className="size-3" />
                 {git.branch}
                 {git.files.length > 0 && <span className="text-warning">•{git.files.length}</span>}
-              </span>
+              </button>
             )}
 
             <div data-tauri-drag-region className="flex-1" />
@@ -896,7 +938,12 @@ export default function App() {
               label={t("header.panel")}
               hint={hint("toggle_terminal")}
               active={dockTab !== null}
-              onClick={() => toggleDock(dockTab ?? "terminal")}
+              // Opening from here lands on the surface picker; the shortcuts still jump straight
+              // to a specific surface.
+              onClick={() => {
+                setDockTab(dockTab ? null : "home");
+                setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+              }}
             />
           </header>
 
@@ -1000,6 +1047,7 @@ export default function App() {
           />
         )}
       </div>
+      )}
 
       {/* ---------------- dialogs ---------------- */}
       {showMarket && (
