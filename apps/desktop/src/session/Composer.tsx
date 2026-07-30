@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { ConfigPopover, type SessionConfig } from "./ConfigPopover";
+import { sessionMode } from "./mode";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort, type ModelFamily } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
@@ -274,6 +275,7 @@ export function Composer({
 }: ComposerProps) {
   const t = useT();
   const provider = config.providers.find((p) => p.id === config.provider);
+  const activeMode = sessionMode(config.mode, config.sandbox);
 
   // Leave room for at least a few transcript lines, whatever the window size — including when a
   // height saved on a tall window is restored on a short one. Only the applied height is clamped;
@@ -344,13 +346,14 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Sandbox, provider and model read as a sentence about what this turn will do. */}
+      {/* Mode, provider and model read as a sentence about what this turn will do. The mode used to
+          be two chips saying overlapping things; it's one question, so it's one chip. */}
       <ConfigPopover
         config={config}
         trigger={
-          <Chip tone={config.sandbox === "danger_full_access" ? "warning" : undefined} title={t("composer.sandbox")}>
-            {config.sandbox === "danger_full_access" && <span className="size-1.5 rounded-full bg-warning" />}
-            {t(`sandbox.${config.sandbox}` as const)}
+          <Chip tone={activeMode === "full_access" ? "warning" : undefined} title={t("config.mode")}>
+            {activeMode === "full_access" && <span className="size-1.5 rounded-full bg-warning" />}
+            {t(`mode.${activeMode}` as "mode.ask")}
           </Chip>
         }
       />
@@ -358,14 +361,13 @@ export function Composer({
       <ConfigPopover
         config={config}
         trigger={
-          <Chip title={t("composer.providerMode")}>
+          <Chip title={t("composer.provider")}>
             {provider && !provider.available && (
               <span className="size-1.5 rounded-full bg-warning" title={t("composer.cliNotFound")} />
             )}
             <span className="max-w-40 truncate text-foreground/80">
               {provider?.display_name ?? config.provider}
             </span>
-            <span className="opacity-50">{t(`mode.${config.mode}` as "mode.ask")}</span>
           </Chip>
         }
       />

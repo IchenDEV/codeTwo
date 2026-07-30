@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useT } from "../i18n";
+import { SESSION_MODES, sessionMode, type SessionMode } from "./mode";
 
 /** Everything that is configured once per session rather than once per turn. */
 export interface SessionConfig {
@@ -14,10 +15,10 @@ export interface SessionConfig {
   onProvider: (v: string) => void;
   cwd: string;
   onCwd: (v: string) => void;
+  /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: string;
-  onMode: (v: string) => void;
   sandbox: Sandbox;
-  onSandbox: (v: Sandbox) => void;
+  onSessionMode: (v: SessionMode) => void;
   useWorktree: boolean;
   onWorktree: (v: boolean) => void;
   planMode: boolean;
@@ -34,6 +35,7 @@ export interface SessionConfig {
 export function ConfigPopover({ config, trigger }: { config: SessionConfig; trigger: ReactNode }) {
   const t = useT();
   const current = config.providers.find((p) => p.id === config.provider);
+  const activeMode = sessionMode(config.mode, config.sandbox);
 
   return (
     <Popover>
@@ -77,40 +79,27 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("config.approvals")}</Label>
-            <Select value={config.mode} onValueChange={config.onMode}>
-              <SelectTrigger className="w-full" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ask">{t("config.ask")}</SelectItem>
-                <SelectItem value="accept_edits">{t("config.acceptEdits")}</SelectItem>
-                <SelectItem value="yolo">{t("config.yolo")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t("config.sandbox")}</Label>
-            <Select value={config.sandbox} onValueChange={(v) => config.onSandbox(v as Sandbox)}>
-              <SelectTrigger className="w-full" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="read_only">{t("config.readOnly")}</SelectItem>
-                <SelectItem value="workspace_write">{t("config.workspace")}</SelectItem>
-                <SelectItem value="danger_full_access">{t("config.fullAccess")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {config.sandbox === "read_only" && (
+        {/* One control, not two. The approval mode and the sandbox are separate axes in the engine,
+            but asking about them separately makes the caller resolve a nine-cell matrix to answer
+            one question: how much rope does this session get? */}
+        <div className="space-y-1.5">
+          <Label className="text-xs">{t("config.mode")}</Label>
+          <Select value={activeMode} onValueChange={(v) => config.onSessionMode(v as SessionMode)}>
+            <SelectTrigger className="w-full" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SESSION_MODES.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {t(`mode.${m.id}` as "mode.ask")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-fine text-muted-foreground">
-            {t("config.readOnlyHint")}
+            {t(`mode.${activeMode}Hint` as "mode.askHint")}
           </p>
-        )}
+        </div>
 
         <label className="flex cursor-pointer items-start gap-2">
           <Checkbox

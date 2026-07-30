@@ -86,6 +86,7 @@ import { FileBrowserModal } from "./files/FileBrowser";
 import { FileViewer } from "./files/FileViewer";
 import { UsageModal } from "./usage/Usage";
 import type { SessionConfig } from "./session/ConfigPopover";
+import { SESSION_MODES, nextSessionMode, sessionMode, type SessionMode } from "./session/mode";
 import { Composer } from "./session/Composer";
 import { TurnCard } from "./session/TurnCard";
 import { applyEvent, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
@@ -449,14 +450,21 @@ export default function App() {
     [permission],
   );
 
-  const onModeChange = useCallback((m: string) => {
-    setMode(m);
-    if (activeSessionRef.current) void setPermissionMode(activeSessionRef.current, m);
-  }, []);
-
-  const onSandboxChange = useCallback((s: Sandbox) => {
-    setSandboxState(s);
-    if (activeSessionRef.current) void setSandbox(activeSessionRef.current, s);
+  /**
+   * The UI asks one question about permissions; the engine keeps two axes. This is where the one
+   * becomes the two — both are always set together, so a session can't drift into a combination the
+   * picker can't name (an "auto-edit" that a read-only sandbox silently vetoes).
+   */
+  const onSessionModeChange = useCallback((id: SessionMode) => {
+    const preset = SESSION_MODES.find((m) => m.id === id);
+    if (!preset) return;
+    setMode(preset.mode);
+    setSandboxState(preset.sandbox);
+    const session = activeSessionRef.current;
+    if (session) {
+      void setPermissionMode(session, preset.mode);
+      void setSandbox(session, preset.sandbox);
+    }
   }, []);
 
   const selectSession = useCallback(
@@ -642,9 +650,9 @@ export default function App() {
           stepSession(1);
           break;
         case "cycle_permission_mode": {
-          const next = mode === "ask" ? "accept_edits" : mode === "accept_edits" ? "yolo" : "ask";
-          onModeChange(next);
-          toast(`Approvals: ${next.replace("_", " ")}`);
+          const next = nextSessionMode(sessionMode(mode, sandbox));
+          onSessionModeChange(next);
+          toast(`Mode: ${t(`mode.${next}` as "mode.ask")}`);
           break;
         }
         case "refresh_git":
@@ -661,7 +669,9 @@ export default function App() {
       createSession,
       running,
       mode,
-      onModeChange,
+      sandbox,
+      onSessionModeChange,
+      t,
       refreshGit,
       openSourceControl,
       openMarket,
@@ -820,9 +830,8 @@ export default function App() {
     cwd,
     onCwd: setCwd,
     mode,
-    onMode: onModeChange,
     sandbox,
-    onSandbox: onSandboxChange,
+    onSessionMode: onSessionModeChange,
     useWorktree,
     onWorktree: setUseWorktree,
     planMode,
