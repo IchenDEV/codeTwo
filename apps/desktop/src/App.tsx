@@ -827,8 +827,6 @@ export default function App() {
       providerPinned.current = true;
       setProvider(p);
     },
-    cwd,
-    onCwd: setCwd,
     mode,
     sandbox,
     onSessionMode: onSessionModeChange,

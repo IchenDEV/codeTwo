@@ -3,7 +3,7 @@ import {
   ArrowUp,
   ChevronDown,
   FileText,
-  Folder,
+  GitBranch,
   ListChecks,
   Plus,
   Sparkles,
@@ -19,9 +19,6 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -220,48 +217,6 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
             }}
           />
         ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/**
- * Where the session runs: the directory, and whether it gets its own checkout of it. Two fields, but
- * one question — both answer "which files is this turn going to touch?".
- */
-function WorkspacePicker({ config }: { config: SessionConfig }) {
-  const t = useT();
-  const name = config.cwd.split("/").filter(Boolean).pop() ?? config.cwd;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Chip title={t("composer.workspace")}>
-          <Folder className="size-3.5 shrink-0 opacity-70" />
-          <span className="max-w-32 truncate">{name}</span>
-          {/* The worktree toggle lives inside, so its "on" state has to show out here. */}
-          {config.useWorktree && <span className="shrink-0 text-primary">{t("composer.wt")}</span>}
-        </Chip>
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-80 space-y-1.5">
-        <Label className="text-xs">{t("config.cwd")}</Label>
-        <Input
-          className="h-8 font-mono text-xs"
-          value={config.cwd}
-          onChange={(e) => config.onCwd(e.target.value)}
-          placeholder="."
-        />
-        <label className="flex cursor-pointer items-start gap-2 pt-1">
-          <Checkbox
-            checked={config.useWorktree}
-            onCheckedChange={(v) => config.onWorktree(v === true)}
-            className="mt-0.5"
-          />
-          <span className="text-xs">
-            {t("config.worktree")}
-            <span className="block text-fine text-muted-foreground">{t("config.worktreeHint")}</span>
-          </span>
-        </label>
       </PopoverContent>
     </Popover>
   );
@@ -480,10 +435,9 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Workspace, mode, provider and model read as a sentence about what this turn will do — and
-          each one opens only itself. */}
-      <WorkspacePicker config={config} />
-
+      {/* Mode, provider and model read as a sentence about what this turn will do — and each one
+          opens only itself. Where it runs isn't here: that's the project you picked in the rail,
+          named in the title bar, rather than a path to retype. */}
       <ModePicker config={config} />
 
       <ProviderPicker config={config} />
@@ -506,6 +460,16 @@ export function Composer({
       >
         <ListChecks className="size-3.5 shrink-0" />
         {t("config.planFirst")}
+      </Chip>
+
+      <Chip
+        title={t("config.worktreeHint")}
+        aria-pressed={config.useWorktree}
+        className={cn(config.useWorktree && "text-primary hover:text-primary")}
+        onClick={() => config.onWorktree(!config.useWorktree)}
+      >
+        <GitBranch className="size-3.5 shrink-0" />
+        {t("composer.worktree")}
       </Chip>
 
       <div className="flex-1" />

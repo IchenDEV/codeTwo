@@ -51,8 +51,7 @@ export const en = {
   "composer.pullIssue": "Pull in an issue",
   "composer.market": "Skill market",
   "composer.addHint": "Or type / for skills and @ for files, right in the document.",
-  "composer.workspace": "Where this session runs",
-  "composer.wt": "wt",
+  "composer.worktree": "Worktree",
   "composer.model": "Model",
   "composer.noModels":
     "This provider doesn't report selectable models over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
@@ -131,7 +130,6 @@ export const en = {
 
   // config popover
   "config.provider": "Provider",
-  "config.cwd": "Working directory",
   "config.mode": "Mode",
   "config.worktree": "Isolate in a git worktree",
   "config.worktreeHint": "Runs on a fresh branch + checkout.",
@@ -317,8 +315,7 @@ export const zhCN: Record<StringKey, string> = {
   "composer.pullIssue": "引入 Issue",
   "composer.market": "技能市场",
   "composer.addHint": "也可以直接在文档里输入 / 插入技能、@ 引用文件。",
-  "composer.workspace": "此会话的运行位置",
-  "composer.wt": "wt",
+  "composer.worktree": "Worktree",
   "composer.model": "模型",
   "composer.noModels":
     "这个供应商没有通过 ACP 报告可选模型，所以模型取决于它自己 CLI 的配置。请在那边设置。",
@@ -393,7 +390,6 @@ export const zhCN: Record<StringKey, string> = {
   "settings.groupOther": "其他",
 
   "config.provider": "供应商",
-  "config.cwd": "工作目录",
   "config.mode": "模式",
   "config.worktree": "在 Git worktree 中隔离",
   "config.worktreeHint": "在新分支和新检出目录上运行。",

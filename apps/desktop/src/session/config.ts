@@ -12,8 +12,6 @@ export interface SessionConfig {
   providers: ProviderInfo[];
   provider: string;
   onProvider: (v: string) => void;
-  cwd: string;
-  onCwd: (v: string) => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: string;
   sandbox: Sandbox;
