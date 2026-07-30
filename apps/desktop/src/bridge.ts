@@ -45,6 +45,17 @@ export interface ModelChoice {
   description: string | null;
 }
 
+/// One session config selector the agent reports (ACP config options — the newer surface where
+/// current adapters put the model picker and the reasoning/thought level).
+export interface ConfigOptionInfo {
+  id: string;
+  name: string;
+  /// Semantic hint from the spec: "model" | "mode" | "thought_level" | anything else.
+  category: string | null;
+  current: string;
+  choices: ModelChoice[];
+}
+
 /// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
 export type DocBlock =
   | { type: "text"; text: string }
@@ -76,6 +87,7 @@ export type CoreEvent =
   | { event: "permission_request"; session: string; request_id: string; title: string; options: [string, string][] }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
+  | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
   | { event: "turn_ended"; session: string; stop_reason: string }
   | { event: "error"; session: string | null; message: string };
 
@@ -382,6 +394,11 @@ export async function defaultCwd(): Promise<string> {
 
 export async function setModel(session: string, model: string): Promise<void> {
   if (inTauri) await invoke("set_model", { session, model });
+}
+
+/** Set an agent-reported config option (model, reasoning effort, …) by its id. */
+export async function setConfigOption(session: string, configId: string, value: string): Promise<void> {
+  if (inTauri) await invoke("set_config_option", { session, configId, value });
 }
 
 export async function cancelTurn(session: string): Promise<void> {

@@ -20,7 +20,7 @@ use crate::acp::wire::{
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::error::AcpError;
-use crate::event::{Event, ModelChoice, Op};
+use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
@@ -84,6 +84,38 @@ impl SessionHandler {
     }
 }
 
+/// Flatten ACP config options into the frontend shape. Non-select options (booleans we never
+/// advertise support for, future types) are dropped — the UI can only render selectors.
+fn config_option_infos(options: &[crate::acp::wire::SessionConfigOption]) -> Vec<ConfigOptionInfo> {
+    options
+        .iter()
+        .filter(|o| o.option_type.as_deref().unwrap_or("select") == "select")
+        .map(|o| ConfigOptionInfo {
+            id: o.id.clone(),
+            name: o.name.clone(),
+            category: o.category.clone(),
+            current: o.current().unwrap_or_default(),
+            choices: o
+                .choices()
+                .into_iter()
+                .map(|c| ModelChoice { id: c.value, name: c.name, description: c.description })
+                .collect(),
+        })
+        .collect()
+}
+
+/// The current model implied by a config option set, for the session record: the display name of
+/// the selected choice in the "model"-category option (falling back to the raw value id).
+fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
+    let model = options
+        .iter()
+        .find(|o| o.category.as_deref() == Some("model") || o.id == "model")?;
+    if model.current.is_empty() {
+        return None;
+    }
+    Some(model.current.clone())
+}
+
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
     options
         .iter()
@@ -125,6 +157,11 @@ impl ClientHandler for SessionHandler {
             SessionUpdate::Plan { entries } => {
                 let items: Vec<String> = entries.into_iter().map(|e| e.content).collect();
                 (Some(Event::Plan { session, entries: items.clone() }), Some(Part::Plan { entries: items }))
+            }
+            // Agent-side config change (e.g. it switched model itself): forward the new set to the
+            // UI. Not a transcript part — configuration isn't conversation.
+            SessionUpdate::ConfigOptionUpdate { config_options } => {
+                (Some(Event::ConfigOptions { session, options: config_option_infos(&config_options) }), None)
             }
             // Our own echoed input and any image/resource chunks aren't rendered/persisted here.
             _ => (None, None),
@@ -495,6 +532,14 @@ impl Engine {
                                 .map(|m| m.current_model_id.clone())
                                 .unwrap_or_default();
 
+                            // The newer config-options surface: model selector + thought level.
+                            let options = resp
+                                .config_options
+                                .as_deref()
+                                .map(config_option_infos)
+                                .unwrap_or_default();
+                            let option_model = current_model_from_options(&options);
+
                             {
                                 let mut map = self.state.sessions.lock().unwrap();
                                 if let Some(r) = map.get_mut(&session) {
@@ -503,6 +548,9 @@ impl Engine {
                                     r.models = models.clone();
                                     if !current.is_empty() {
                                         r.session.model = Some(current.clone());
+                                    }
+                                    if let Some(m) = &option_model {
+                                        r.session.model = Some(m.clone());
                                     }
                                 }
                                 if let Some(store) = &self.state.store {
@@ -517,6 +565,9 @@ impl Engine {
                                     available: models,
                                     current,
                                 });
+                            }
+                            if !options.is_empty() {
+                                self.emit(Event::ConfigOptions { session: session.clone(), options });
                             }
                             acp_sid = Some(id);
                         }
@@ -618,6 +669,46 @@ impl Engine {
                     }
                 };
                 self.emit(Event::Models { session, available, current: model });
+            }
+
+            Op::SetConfigOption { session, config_id, value } => {
+                let target = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session).map(|r| (r.client.clone(), r.acp_session_id.clone()))
+                };
+                let Some((client, Some(acp_sid))) = target else {
+                    // No live ACP session yet (fresh or resumed): nothing to switch on. The UI's
+                    // pickers are populated by the agent, so this is a "try again after the first
+                    // prompt" state, not a crash.
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: format!("can't set {config_id} before the session's first prompt"),
+                    });
+                    return Ok(());
+                };
+                match client.set_config_option(&acp_sid, &config_id, &value).await {
+                    Ok(options) => {
+                        let options = config_option_infos(&options);
+                        if let Some(model) = current_model_from_options(&options) {
+                            let mut map = self.state.sessions.lock().unwrap();
+                            if let Some(rt) = map.get_mut(&session) {
+                                rt.session.model = Some(model);
+                                if let Some(store) = &self.state.store {
+                                    let _ = store.upsert_session(&rt.session);
+                                }
+                            }
+                        }
+                        // Echo the agent's authoritative set even if empty — the UI un-does its
+                        // optimistic selection from this.
+                        self.emit(Event::ConfigOptions { session, options });
+                    }
+                    Err(e) => {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!("{config_id} can't be changed here: {e}"),
+                        });
+                    }
+                }
             }
         }
         Ok(())

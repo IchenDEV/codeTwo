@@ -14,10 +14,10 @@ import {
 
 import type { SessionConfig } from "./config";
 import { SESSION_MODES, sessionMode } from "./mode";
-import { familyOf, groupModels, pickVariant, variantOf, type Effort, type ModelFamily } from "./models";
+import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
-import type { ModelChoice } from "../bridge";
+import type { ConfigOptionInfo, ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,6 +50,9 @@ interface ComposerProps {
   /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
   defaultModel: string | null;
   onModel: (id: string) => void;
+  /** Selectors the agent reported as session config options — model and reasoning effort. */
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
   running: boolean;
   docEmpty: boolean;
   onRun: () => void;
@@ -134,6 +137,16 @@ function MenuRow({
       {isDefault && <DefaultBadge />}
     </button>
   );
+}
+
+/** One row of a picker menu, normalized so the two data sources below render identically. */
+interface PickerRow {
+  key: string;
+  label: string;
+  detail?: string | null;
+  isDefault: boolean;
+  selected: boolean;
+  select: () => void;
 }
 
 /**
@@ -226,14 +239,20 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
  *
- * ACP's model API is flat, so adapters that offer reasoning effort mint one entry per level
- * ("gpt-5.1-codex low/medium/high"). `groupModels` folds those back into families: the first chip
- * picks the family, the second the effort, and together they resolve to one of the adapter's own
- * ids. Adapters without variants just get the flat list under the first chip.
+ * Agents describe this two different ways, so the picker reads both and renders one menu.
  *
- * The API is also marked UNSTABLE and most adapters skip it entirely, so "no models" is a normal
- * answer, not a failure — the menu explains that instead of showing an empty list. Everything is
- * hidden until a session exists, because before that there's nothing to ask.
+ * Newer adapters (claude-agent-acp, codex-acp) report *selectors* as session config options — a
+ * "model" one and a "thought_level" one — and those are taken at face value: no parsing, and
+ * effort is independent of the model, which is the only way it works for Claude Code.
+ *
+ * Older adapters report a flat model list instead, and encode effort by minting one entry per
+ * level ("gpt-5.1-codex low/medium/high"). `groupModels` folds those back into families: the first
+ * chip picks the family, the second the effort, and together they resolve to one of the adapter's
+ * own ids.
+ *
+ * Either API is optional and most adapters skip both, so "no models" is a normal answer, not a
+ * failure — the menu explains that instead of showing an empty list. Everything is hidden until a
+ * session exists, because before that there's nothing to ask.
  */
 function ModelPicker({
   models,
@@ -241,6 +260,8 @@ function ModelPicker({
   defaultModel,
   provider,
   onModel,
+  configOptions,
+  onConfigOption,
   hasSession,
 }: {
   models: ModelChoice[];
@@ -248,6 +269,8 @@ function ModelPicker({
   defaultModel: string | null;
   provider: string;
   onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
 }) {
   const t = useT();
@@ -256,16 +279,68 @@ function ModelPicker({
   const families = useMemo(() => groupModels(models), [models]);
   if (!hasSession) return null;
 
-  const activeFamily = familyOf(families, current);
-  const activeVariant = variantOf(families, current);
-  const active = models.find((m) => m.id === current);
-  const label = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
-  const pick = (family: ModelFamily) => {
-    onModel(pickVariant(family, activeVariant?.effort ?? null, defaultModel).id);
-    setModelOpen(false);
-  };
+  const modelOpt = configOptions.find((o) => o.category === "model" || o.id === "model");
+  const effortOpt = configOptions.find(
+    (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
+  );
+
+  let modelLabel: string;
+  let modelRows: PickerRow[];
+  let effortLabel = "";
+  let effortRows: PickerRow[] = [];
+
+  if (modelOpt) {
+    // The adapter described its own selectors; show them as described.
+    modelLabel =
+      modelOpt.choices.find((c) => c.id === modelOpt.current)?.name ||
+      modelOpt.current ||
+      t("composer.defaultModel");
+    modelRows = modelOpt.choices.map((c) => ({
+      key: c.id,
+      label: c.name,
+      detail: c.description,
+      isDefault: c.id === defaultModel,
+      selected: c.id === modelOpt.current,
+      select: () => onConfigOption(modelOpt.id, c.id),
+    }));
+    if (effortOpt) {
+      effortLabel = effortOpt.choices.find((c) => c.id === effortOpt.current)?.name || effortOpt.current;
+      effortRows = effortOpt.choices.map((c) => ({
+        key: c.id,
+        label: c.name,
+        detail: c.description,
+        isDefault: false,
+        selected: c.id === effortOpt.current,
+        select: () => onConfigOption(effortOpt.id, c.id),
+      }));
+    }
+  } else {
+    // Flat list: regroup by the effort suffix parsed out of each name.
+    const activeFamily = familyOf(families, current);
+    const activeVariant = variantOf(families, current);
+    const active = models.find((m) => m.id === current);
+    modelLabel = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
+    modelRows = families.map((f) => ({
+      key: f.key,
+      label: f.label,
+      detail: f.variants[0]?.choice.description,
+      isDefault: f.variants.some((v) => v.choice.id === defaultModel),
+      selected: f === activeFamily,
+      select: () => onModel(pickVariant(f, activeVariant?.effort ?? null, defaultModel).id),
+    }));
+    if (activeFamily) {
+      effortLabel = effortName(activeVariant?.effort ?? null);
+      effortRows = activeFamily.variants.map((v) => ({
+        key: v.choice.id,
+        label: effortName(v.effort),
+        isDefault: v.choice.id === defaultModel,
+        selected: v.choice.id === current,
+        select: () => onModel(v.choice.id),
+      }));
+    }
+  }
 
   return (
     <>
@@ -273,12 +348,12 @@ function ModelPicker({
         <PopoverTrigger asChild>
           <Chip title={t("composer.model")}>
             <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-            <span className="max-w-44 truncate text-foreground/80">{label}</span>
+            <span className="max-w-44 truncate text-foreground/80">{modelLabel}</span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         </PopoverTrigger>
         <PopoverContent align="start" side="top" className="w-64 p-1.5">
-          {models.length === 0 ? (
+          {modelRows.length === 0 ? (
             <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
               {t("composer.noModels")}
             </p>
@@ -286,14 +361,17 @@ function ModelPicker({
             <>
               <MenuSection>{t("composer.model")}</MenuSection>
               <ScrollArea className="max-h-80">
-                {families.map((f) => (
+                {modelRows.map((r) => (
                   <MenuRow
-                    key={f.key}
-                    selected={f === activeFamily}
-                    isDefault={f.variants.some((v) => v.choice.id === defaultModel)}
-                    label={f.label}
-                    detail={f.variants[0]?.choice.description}
-                    onClick={() => pick(f)}
+                    key={r.key}
+                    selected={r.selected}
+                    isDefault={r.isDefault}
+                    label={r.label}
+                    detail={r.detail}
+                    onClick={() => {
+                      r.select();
+                      setModelOpen(false);
+                    }}
                   />
                 ))}
               </ScrollArea>
@@ -302,24 +380,26 @@ function ModelPicker({
         </PopoverContent>
       </Popover>
 
-      {activeFamily && activeFamily.variants.length > 1 && (
+      {/* Only worth a chip when there's an actual choice to make. */}
+      {effortRows.length > 1 && (
         <Popover open={effortOpen} onOpenChange={setEffortOpen}>
           <PopoverTrigger asChild>
             <Chip title={t("composer.reasoning")}>
-              <span>{effortName(activeVariant?.effort ?? null)}</span>
+              <span>{effortLabel}</span>
               <ChevronDown className="size-3 shrink-0 opacity-50" />
             </Chip>
           </PopoverTrigger>
           <PopoverContent align="start" side="top" className="w-44 p-1.5">
             <MenuSection>{t("composer.reasoning")}</MenuSection>
-            {activeFamily.variants.map((v) => (
+            {effortRows.map((r) => (
               <MenuRow
-                key={v.choice.id}
-                selected={v.choice.id === current}
-                isDefault={v.choice.id === defaultModel}
-                label={effortName(v.effort)}
+                key={r.key}
+                selected={r.selected}
+                isDefault={r.isDefault}
+                label={r.label}
+                detail={r.detail}
                 onClick={() => {
-                  onModel(v.choice.id);
+                  r.select();
                   setEffortOpen(false);
                 }}
               />
@@ -352,6 +432,8 @@ export function Composer({
   currentModel,
   defaultModel,
   onModel,
+  configOptions,
+  onConfigOption,
   running,
   docEmpty,
   onRun,
@@ -448,6 +530,8 @@ export function Composer({
         defaultModel={defaultModel}
         provider={config.provider}
         onModel={onModel}
+        configOptions={configOptions}
+        onConfigOption={onConfigOption}
         hasSession={config.hasSession}
       />
 

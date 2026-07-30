@@ -77,6 +77,29 @@ impl AcpClient {
         Ok(())
     }
 
+    /// Set a session config option (`session/set_config_option`, UNSTABLE) — how current adapters
+    /// switch model and reasoning effort. Answers with the full replacement option set. Adapters
+    /// without the method reply method-not-found; the caller surfaces that, it isn't fatal.
+    pub async fn set_config_option(
+        &self,
+        session_id: &str,
+        config_id: &str,
+        value: &str,
+    ) -> Result<Vec<SessionConfigOption>, AcpError> {
+        let r: SetConfigOptionResponse = self
+            .conn
+            .request(
+                "session/set_config_option",
+                SetConfigOptionRequest {
+                    session_id: session_id.to_string(),
+                    config_id: config_id.to_string(),
+                    value: value.to_string(),
+                },
+            )
+            .await?;
+        Ok(r.config_options)
+    }
+
     /// Run one prompt turn. Streamed updates arrive via the [`super::handler::ClientHandler`];
     /// this resolves with the turn's stop reason.
     pub async fn prompt(
