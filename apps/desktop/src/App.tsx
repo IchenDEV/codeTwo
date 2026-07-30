@@ -85,7 +85,7 @@ import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
 import { FileViewer } from "./files/FileViewer";
 import { UsageModal } from "./usage/Usage";
-import type { SessionConfig } from "./session/ConfigPopover";
+import type { SessionConfig } from "./session/config";
 import { SESSION_MODES, nextSessionMode, sessionMode, type SessionMode } from "./session/mode";
 import { Composer } from "./session/Composer";
 import { TurnCard } from "./session/TurnCard";

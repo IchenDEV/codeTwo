@@ -51,7 +51,8 @@ export const en = {
   "composer.pullIssue": "Pull in an issue",
   "composer.market": "Skill market",
   "composer.addHint": "Or type / for skills and @ for files, right in the document.",
-  "composer.provider": "Provider",
+  "composer.workspace": "Where this session runs",
+  "composer.wt": "wt",
   "composer.model": "Model",
   "composer.noModels":
     "This provider doesn't report selectable models over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
@@ -74,8 +75,6 @@ export const en = {
   "composer.run": "Run this document",
   "composer.runEmpty": "Write a prompt first",
   "composer.toSend": "{key} to send",
-  "composer.plan": "Plan first is on",
-  "composer.worktree": "Running in an isolated worktree",
   "composer.grip": "Drag to resize · double-click for full page",
   "composer.cliNotFound": "CLI not found",
 
@@ -318,7 +317,8 @@ export const zhCN: Record<StringKey, string> = {
   "composer.pullIssue": "引入 Issue",
   "composer.market": "技能市场",
   "composer.addHint": "也可以直接在文档里输入 / 插入技能、@ 引用文件。",
-  "composer.provider": "供应商",
+  "composer.workspace": "此会话的运行位置",
+  "composer.wt": "wt",
   "composer.model": "模型",
   "composer.noModels":
     "这个供应商没有通过 ACP 报告可选模型，所以模型取决于它自己 CLI 的配置。请在那边设置。",
@@ -341,8 +341,6 @@ export const zhCN: Record<StringKey, string> = {
   "composer.run": "运行这篇文档",
   "composer.runEmpty": "先写点什么",
   "composer.toSend": "{key} 发送",
-  "composer.plan": "已开启「先出方案」",
-  "composer.worktree": "在独立 worktree 中运行",
   "composer.grip": "拖动调整高度 · 双击整页",
   "composer.cliNotFound": "未找到 CLI",
 
