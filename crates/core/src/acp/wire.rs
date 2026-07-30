@@ -52,6 +52,11 @@ pub struct NewSessionResponse {
     /// the UI says "this provider doesn't expose models" rather than showing an empty picker.
     #[serde(default)]
     pub models: Option<SessionModelState>,
+    /// Session config options (UNSTABLE) — where current adapters report the model selector and
+    /// the thought/reasoning level. Newer than (and superseding) the `models` field above; both
+    /// are read so either generation of adapter works.
+    #[serde(rename = "configOptions", default)]
+    pub config_options: Option<Vec<SessionConfigOption>>,
 }
 
 // ---- models (ACP: UNSTABLE) ------------------------------------------------------------------
@@ -81,6 +86,80 @@ pub struct SetModelRequest {
     pub session_id: String,
     #[serde(rename = "modelId")]
     pub model_id: String,
+}
+
+// ---- session config options (ACP: UNSTABLE) --------------------------------------------------
+
+/// One selectable value of a config option.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigSelectChoice {
+    pub value: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// A session configuration selector (`category` distinguishes model / mode / thought_level).
+///
+/// Only `type: "select"` carries choices we can render; anything else still parses (lenient, like
+/// the rest of this module) but exposes an empty choice list. `options` stays a raw `Value`
+/// because the spec allows both a flat list and a grouped one — [`Self::choices`] flattens either.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionConfigOption {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(rename = "type", default)]
+    pub option_type: Option<String>,
+    #[serde(rename = "currentValue", default)]
+    pub current_value: Option<Value>,
+    #[serde(default)]
+    pub options: Option<Value>,
+}
+
+impl SessionConfigOption {
+    /// The currently selected value id, when this is a select option.
+    pub fn current(&self) -> Option<String> {
+        self.current_value.as_ref().and_then(|v| v.as_str()).map(str::to_string)
+    }
+
+    /// Flatten the select choices, accepting both wire shapes: a flat option list and a list of
+    /// `{group, name, options: […]}` groups.
+    pub fn choices(&self) -> Vec<ConfigSelectChoice> {
+        let Some(Value::Array(items)) = &self.options else { return Vec::new() };
+        let mut out = Vec::new();
+        for item in items {
+            if let Some(Value::Array(grouped)) = item.get("options") {
+                for o in grouped {
+                    if let Ok(c) = serde_json::from_value::<ConfigSelectChoice>(o.clone()) {
+                        out.push(c);
+                    }
+                }
+            } else if let Ok(c) = serde_json::from_value::<ConfigSelectChoice>(item.clone()) {
+                out.push(c);
+            }
+        }
+        out
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetConfigOptionRequest {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "configId")]
+    pub config_id: String,
+    /// A `SessionConfigValueId` — the "value_id" request variant (no `type` field on the wire).
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetConfigOptionResponse {
+    #[serde(rename = "configOptions", default)]
+    pub config_options: Vec<SessionConfigOption>,
 }
 
 // ---- content blocks (MCP-shaped) -----------------------------------------------------------
@@ -156,6 +235,12 @@ pub enum SessionUpdate {
     ToolCall(ToolCall),
     ToolCallUpdate(ToolCallUpdate),
     Plan { entries: Vec<PlanEntry> },
+    /// The agent's config options changed (model switched, effort adjusted, …). Carries the full
+    /// replacement set, same as `session/new` and `session/set_config_option` responses.
+    ConfigOptionUpdate {
+        #[serde(rename = "configOptions", default)]
+        config_options: Vec<SessionConfigOption>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

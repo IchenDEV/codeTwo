@@ -25,6 +25,8 @@ pub enum Op {
     /// Change what the agent may touch at all (Codex-style sandbox axis).
     SetSandbox { session: SessionId, sandbox: crate::permission::SandboxPolicy },
     SetModel { session: SessionId, model: String },
+    /// Set an agent-reported session config option (model, reasoning effort, …) by id.
+    SetConfigOption { session: SessionId, config_id: String, value: String },
 }
 
 /// Events: what the core streams back for the UI to render.
@@ -48,6 +50,10 @@ pub enum Event {
     /// Providers that don't implement the (UNSTABLE) ACP model API never emit this, which is how
     /// the UI knows to say so instead of showing an empty picker.
     Models { session: SessionId, available: Vec<ModelChoice>, current: String },
+    /// The agent's session config options (model selector, thought level, …), reported at
+    /// `session/new`, echoed after every `set_config_option`, and pushed on agent-side changes.
+    /// This is the newer ACP surface that superseded `Models`; sessions may emit either or both.
+    ConfigOptions { session: SessionId, options: Vec<ConfigOptionInfo> },
     TurnEnded { session: SessionId, stop_reason: String },
     Error { session: Option<SessionId>, message: String },
 }
@@ -58,4 +64,16 @@ pub struct ModelChoice {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
+}
+
+/// One session config selector, flattened from ACP's `SessionConfigOption` for the frontends.
+/// `category` is the spec's semantic hint ("model", "mode", "thought_level", …); `choices` reuses
+/// [`ModelChoice`] since the shape (id, name, description) is identical.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigOptionInfo {
+    pub id: String,
+    pub name: String,
+    pub category: Option<String>,
+    pub current: String,
+    pub choices: Vec<ModelChoice>,
 }

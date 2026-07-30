@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 
 import { ConfigPopover, type SessionConfig } from "./ConfigPopover";
+import { FALLBACK_EFFORT_CONFIG_ID, FALLBACK_EFFORTS, FALLBACK_MODELS } from "./models";
 import { VoiceButton } from "../voice/VoiceButton";
-import type { ModelChoice } from "../bridge";
+import type { ConfigOptionInfo, ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -39,6 +40,9 @@ interface ComposerProps {
   models: ModelChoice[];
   currentModel: string | null;
   onModel: (id: string) => void;
+  /** Agent-reported session config options (model selector, reasoning effort, …). */
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
   running: boolean;
   docEmpty: boolean;
   onRun: () => void;
@@ -101,29 +105,93 @@ const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "
 );
 Chip.displayName = "Chip";
 
+/** One selectable row in the model picker: check mark, name, optional description. */
+function ChoiceRow({
+  choice,
+  selected,
+  onSelect,
+}: {
+  choice: ModelChoice;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
+    >
+      <Check className={cn("mt-0.5 size-3.5 shrink-0", selected ? "text-primary" : "opacity-0")} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px]">{choice.name}</span>
+        {choice.description && (
+          <span className="block truncate text-[11px] text-muted-foreground">{choice.description}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** Small section header inside the picker popover. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <p className="px-2 pb-0.5 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
 /**
- * The model this turn will run on.
+ * The model this turn will run on, and how hard it should think.
  *
- * ACP's model API is marked UNSTABLE and most adapters don't implement it, so "no models" is a
- * normal answer, not a failure — the picker explains that instead of showing an empty list. The
- * chip is hidden entirely until a session exists, because before that there's nothing to ask.
+ * Current adapters report both as ACP session config options (category "model" and
+ * "thought_level"), which always win here. But the report only arrives once the ACP session
+ * exists — after the first prompt — and resumed sessions or older adapters never send one. In
+ * those states the picker falls back to the legacy `models` list, then to a hardcoded list of
+ * the provider's well-known models, sent optimistically: an unsupported choice comes back as an
+ * error toast rather than silently sticking. The chip is hidden entirely until a session exists,
+ * because before that there's nothing to ask.
  */
 function ModelPicker({
   models,
   current,
   onModel,
+  configOptions,
+  onConfigOption,
+  provider,
   hasSession,
 }: {
   models: ModelChoice[];
   current: string | null;
   onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  provider: string;
   hasSession: boolean;
 }) {
   const t = useT();
   if (!hasSession) return null;
 
-  const active = models.find((m) => m.id === current);
-  const label = active?.name ?? current ?? t("composer.defaultModel");
+  const modelOpt = configOptions.find((o) => o.category === "model" || o.id === "model");
+  const effortOpt = configOptions.find(
+    (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
+  );
+
+  // Model choices: agent config option > legacy ACP model list > hardcoded per-provider presets.
+  const reportedModels = modelOpt && modelOpt.choices.length > 0 ? modelOpt.choices : models;
+  const usingPresets = reportedModels.length === 0;
+  const modelChoices = usingPresets ? (FALLBACK_MODELS[provider] ?? []) : reportedModels;
+  const currentModelId = (modelOpt?.current || current) ?? null;
+  const pickModel = (id: string) => (modelOpt ? onConfigOption(modelOpt.id, id) : onModel(id));
+
+  // Effort choices: agent-reported when available, else the common low/medium/high presets.
+  const effortChoices = effortOpt ? effortOpt.choices : FALLBACK_EFFORTS;
+  const currentEffortId = effortOpt?.current ?? null;
+  const pickEffort = (id: string) => onConfigOption(effortOpt?.id ?? FALLBACK_EFFORT_CONFIG_ID, id);
+
+  const activeModel = modelChoices.find((m) => m.id === currentModelId);
+  const activeEffort = effortChoices.find((e) => e.id === currentEffortId);
+  let label = activeModel?.name ?? currentModelId ?? t("composer.defaultModel");
+  if (activeEffort && activeEffort.id !== "default") label += ` · ${activeEffort.name}`;
 
   return (
     <Popover>
@@ -133,30 +201,29 @@ function ModelPicker({
         </Chip>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-72 p-1">
-        {models.length === 0 ? (
+        <SectionLabel>{t("composer.model")}</SectionLabel>
+        {modelChoices.length === 0 ? (
           <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
             {t("composer.noModels")}
           </p>
         ) : (
-          <ScrollArea className="max-h-72">
-            {models.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => onModel(m.id)}
-                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
-              >
-                <Check
-                  className={cn("mt-0.5 size-3.5 shrink-0", m.id === current ? "text-primary" : "opacity-0")}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">{m.name}</span>
-                  {m.description && (
-                    <span className="block truncate text-[11px] text-muted-foreground">{m.description}</span>
-                  )}
-                </span>
-              </button>
+          <ScrollArea className="max-h-60">
+            {modelChoices.map((m) => (
+              <ChoiceRow key={m.id} choice={m} selected={m.id === currentModelId} onSelect={() => pickModel(m.id)} />
             ))}
           </ScrollArea>
+        )}
+
+        <SectionLabel>{t("composer.effort")}</SectionLabel>
+        {effortChoices.map((e) => (
+          <ChoiceRow key={e.id} choice={e} selected={e.id === currentEffortId} onSelect={() => pickEffort(e.id)} />
+        ))}
+
+        {/* Nothing reported by the agent yet — say the lists are optimistic presets. */}
+        {usingPresets && !effortOpt && (
+          <p className="px-2 pb-1.5 pt-2 text-[11px] leading-relaxed text-muted-foreground">
+            {t("composer.presetHint")}
+          </p>
         )}
       </PopoverContent>
     </Popover>
@@ -183,6 +250,8 @@ export function Composer({
   models,
   currentModel,
   onModel,
+  configOptions,
+  onConfigOption,
   running,
   docEmpty,
   onRun,
@@ -256,23 +325,20 @@ export function Composer({
         </PopoverContent>
       </Popover>
 
-      {/* Sandbox, provider and model read as a sentence about what this turn will do. */}
+      {/* Session setup and model read as a sentence about what this turn will do. One chip opens
+          the whole config panel — provider, approvals and sandbox all live in there. */}
       <ConfigPopover
         config={config}
         trigger={
-          <Chip tone={config.sandbox === "danger_full_access" ? "warning" : undefined} title={t("composer.sandbox")}>
-            {config.sandbox === "danger_full_access" && <span className="size-1.5 rounded-full bg-warning" />}
-            {t(`sandbox.${config.sandbox}` as const)}
-          </Chip>
-        }
-      />
-
-      <ConfigPopover
-        config={config}
-        trigger={
-          <Chip title={t("composer.providerMode")}>
-            {provider && !provider.available && (
-              <span className="size-1.5 rounded-full bg-warning" title={t("composer.cliNotFound")} />
+          <Chip
+            tone={config.sandbox === "danger_full_access" ? "warning" : undefined}
+            title={t("composer.providerMode")}
+          >
+            {(config.sandbox === "danger_full_access" || (provider && !provider.available)) && (
+              <span
+                className="size-1.5 rounded-full bg-warning"
+                title={provider && !provider.available ? t("composer.cliNotFound") : t("composer.sandbox")}
+              />
             )}
             <span className="max-w-40 truncate text-foreground/80">
               {provider?.display_name ?? config.provider}
@@ -282,7 +348,15 @@ export function Composer({
         }
       />
 
-      <ModelPicker models={models} current={currentModel} onModel={onModel} hasSession={config.hasSession} />
+      <ModelPicker
+        models={models}
+        current={currentModel}
+        onModel={onModel}
+        configOptions={configOptions}
+        onConfigOption={onConfigOption}
+        provider={config.provider}
+        hasSession={config.hasSession}
+      />
 
       {config.planMode && <Chip title={t("composer.plan")}>plan</Chip>}
       {config.useWorktree && <Chip title={t("composer.worktree")}>worktree</Chip>}

@@ -48,6 +48,7 @@ import {
   runProjectScript,
   saveSkill,
   sessionPreviews,
+  setConfigOption,
   setKeymap,
   setModel,
   setPermissionMode,
@@ -55,6 +56,7 @@ import {
   submitPrompt,
   type Checkpoint,
   type CompiledPreview,
+  type ConfigOptionInfo,
   type CoreEvent,
   type DocBlock,
   type GitStatus,
@@ -188,6 +190,8 @@ export default function App() {
   // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  // Session config options (model + reasoning effort) — the newer ACP surface, same lifecycle.
+  const [configOptions, setConfigOptions] = useState<ConfigOptionInfo[]>([]);
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
@@ -325,6 +329,13 @@ export default function App() {
           setCurrentModel(ev.current || null);
           return;
         }
+        if (ev.event === "config_options") {
+          // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
+          setConfigOptions(ev.options);
+          const model = ev.options.find((o) => o.category === "model" || o.id === "model");
+          if (model?.current) setCurrentModel(model.current);
+          return;
+        }
         if (ev.event === "permission_request") {
           setPermission({
             session: ev.session,
@@ -392,6 +403,7 @@ export default function App() {
     setTurns([]);
     setModels([]);
     setCurrentModel(null);
+    setConfigOptions([]);
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
     try {
@@ -425,8 +437,10 @@ export default function App() {
       activeSessionRef.current = id;
       setActiveSession(id);
       // Models belong to a session. The agent only reports the list at session/new, so for a
-      // session resumed from the store we know the chosen model but not the menu it came from.
+      // session resumed from the store we know the chosen model but not the menu it came from —
+      // the picker falls back to its preset lists until the agent reports again.
       setModels([]);
+      setConfigOptions([]);
       setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
       setTurns(turnsFromTranscript(await getTranscript(id)));
     },
@@ -988,6 +1002,18 @@ export default function App() {
               // doesn't implement the switch.
               setCurrentModel(id);
               void setModel(activeSessionRef.current, id).catch((e) =>
+                toast(t("toast.modelFailed", { error: String(e) }), "error"),
+              );
+            }}
+            configOptions={configOptions}
+            onConfigOption={(configId, value) => {
+              if (!activeSessionRef.current) return;
+              // Optimistic: the engine echoes the agent's authoritative `config_options` set, or
+              // an `error` event if the option isn't supported — either replaces this state.
+              setConfigOptions((prev) =>
+                prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
+              );
+              void setConfigOption(activeSessionRef.current, configId, value).catch((e) =>
                 toast(t("toast.modelFailed", { error: String(e) }), "error"),
               );
             }}

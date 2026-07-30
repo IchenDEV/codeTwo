@@ -55,6 +55,9 @@ export const en = {
   "composer.noModels":
     "This provider doesn't report selectable models over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
   "composer.defaultModel": "Default model",
+  "composer.effort": "Reasoning effort",
+  "composer.presetHint":
+    "Preset list — the agent hasn't reported its own options yet. A choice it doesn't support comes back as an error.",
   "composer.preview": "Preview the compiled prompt",
   "composer.expand": "Write full page",
   "composer.collapse": "Back to the transcript",
@@ -297,6 +300,8 @@ export const zhCN: Record<StringKey, string> = {
   "composer.noModels":
     "这个供应商没有通过 ACP 报告可选模型，所以模型取决于它自己 CLI 的配置。请在那边设置。",
   "composer.defaultModel": "默认模型",
+  "composer.effort": "推理强度",
+  "composer.presetHint": "预设列表 — 代理尚未报告可选项；不支持的选择会以错误提示返回。",
   "composer.preview": "预览编译后的提示词",
   "composer.expand": "整页书写",
   "composer.collapse": "回到对话",
