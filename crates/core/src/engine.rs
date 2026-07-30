@@ -290,6 +290,65 @@ impl Engine {
         }
     }
 
+    /// Re-arm a stored session whose runtime died with a previous process: respawn its provider
+    /// CLI and re-insert a [`SessionRuntime`]. The old ACP session id is dropped — the agent side
+    /// of that conversation died with its process — so the next prompt runs `session/new` again in
+    /// the session's cwd, and the app-side transcript carries the history. Without this, every
+    /// session in the rail is stranded the moment the app restarts.
+    async fn revive_session(
+        &self,
+        id: &str,
+    ) -> Result<(Arc<AcpClient>, Option<String>, String), String> {
+        let sess = self
+            .state
+            .store
+            .as_ref()
+            .and_then(|s| s.get_session(id).ok().flatten())
+            .ok_or_else(|| "no such session".to_string())?;
+        let prov = self
+            .state
+            .providers
+            .iter()
+            .find(|p| p.id == sess.provider)
+            .cloned()
+            .ok_or_else(|| format!("unknown provider {:?}", sess.provider))?;
+        let policy = Arc::new(Mutex::new(PermissionPolicy {
+            mode: sess.permission_mode,
+            ..Default::default()
+        }));
+        let handler = Arc::new(SessionHandler::new(
+            id.to_string(),
+            self.state.events.clone(),
+            policy.clone(),
+            self.state.router.clone(),
+            self.state.store.clone(),
+        ));
+        let client = acp::spawn(&prov.launch, handler)
+            .await
+            .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
+        client
+            .initialize(serde_json::json!({}))
+            .await
+            .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
+        let client = Arc::new(client);
+
+        let mut sess = sess;
+        sess.acp_session_id = None;
+        let cwd = sess.cwd.clone();
+        self.state.sessions.lock().unwrap().insert(
+            id.to_string(),
+            SessionRuntime {
+                session: sess,
+                client: client.clone(),
+                acp_session_id: None,
+                cwd: cwd.clone(),
+                policy,
+                models: Vec::new(),
+            },
+        );
+        Ok((client, None, cwd))
+    }
+
     /// Process one submission. Long-running work (a prompt turn) is spawned so this returns promptly.
     pub async fn submit(&self, op: Op) -> Result<(), AcpError> {
         match op {
@@ -356,9 +415,17 @@ impl Engine {
                     map.get(&session)
                         .map(|r| (r.client.clone(), r.acp_session_id.clone(), r.cwd.clone()))
                 };
-                let Some((client, mut acp_sid, cwd)) = looked else {
-                    self.emit(Event::Error { session: Some(session), message: "no such session".into() });
-                    return Ok(());
+                // A session picked from the rail can predate this process — runtimes die with the
+                // app, the store doesn't. Revive it instead of stranding it.
+                let (client, mut acp_sid, cwd) = match looked {
+                    Some(l) => l,
+                    None => match self.revive_session(&session).await {
+                        Ok(l) => l,
+                        Err(message) => {
+                            self.emit(Event::Error { session: Some(session), message });
+                            return Ok(());
+                        }
+                    },
                 };
                 // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
                 let cwd_for_images = cwd.clone();

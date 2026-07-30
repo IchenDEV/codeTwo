@@ -45,7 +45,7 @@ export function IssuesModal({
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-1.5">
             {issues.map((it) => (
-              <div key={`${it.source}-${it.id}`} className="flex items-center gap-3 rounded-lg border p-2.5">
+              <div key={`${it.source}-${it.id}`} className="flex items-center gap-3 rounded-xl bg-foreground/[0.04] p-2.5">
                 <a
                   href={it.url}
                   target="_blank"
@@ -54,8 +54,8 @@ export function IssuesModal({
                 >
                   #{it.id}
                 </a>
-                <span className="flex-1 truncate text-[13px]">{it.title}</span>
-                <span className="text-[10px] uppercase text-muted-foreground">{it.state}</span>
+                <span className="flex-1 truncate text-ui">{it.title}</span>
+                <span className="text-cap uppercase text-muted-foreground">{it.state}</span>
                 <Button size="sm" onClick={() => onInsert(it)}>
                   Add to prompt
                 </Button>

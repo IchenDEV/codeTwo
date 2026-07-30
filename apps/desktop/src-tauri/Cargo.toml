@@ -15,7 +15,9 @@ tauri-build = { version = "2", features = [] }
 # `macOSPrivateApi` flag in tauri.conf.json — change it there, not here.
 # `devtools` keeps the inspector available in release builds too — the built-in browser panel has
 # an "Open DevTools" item, and a menu entry that only works in debug builds is a broken promise.
-tauri = { version = "2", features = ["macos-private-api", "devtools"] }
+# `unstable` is what makes the built-in browser possible: each browser tab is a child webview of
+# the main window (see `src/browser.rs`), and Tauri's multiwebview API is still behind that flag.
+tauri = { version = "2", features = ["macos-private-api", "devtools", "unstable"] }
 tauri-plugin-shell = "2"
 serde.workspace = true
 serde_json.workspace = true

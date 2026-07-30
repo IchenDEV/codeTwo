@@ -60,6 +60,29 @@ serializes to neutral `DocBlock`s (text + skill blocks); `compile()` lowers them
 `CompiledPrompt` = the markdown prompt (for `session/prompt`) plus MCP servers and agent-skills (for
 `session/new`). The compiler lives in the core so the TUI reuses it verbatim.
 
+## Terminal (`core::term`, `core::pty`)
+
+The embedded terminal is a real emulator living in the core, not a byte pipe to xterm.js.
+`core::pty` owns the child process and master fd; `core::term` pairs it with a `libghostty-vt`
+`Terminal` — Ghostty's VT engine, which does escape-sequence parsing, scrollback, and reflow on
+resize.
+
+The point of putting that state in the core is that **a terminal outlives whatever is drawing it**.
+Terminals are keyed by a stable id (`<session>-<slot>[-tmux]`), and attaching to one returns a VT
+dump of its scrollback, screen, and cursor. A dock tab switch, a session change, or an app restart
+re-attaches and replays; only closing the tab kills the child. It also means the terminal is
+*readable*: `TerminalHandle::text` hands plain text to the agent, and the TUI can render the same
+grid without a second emulator.
+
+`libghostty-vt` is `!Send`, so each terminal owns a dedicated thread reached over a command
+channel; the PTY reader feeds the same queue, which is why VT state is never observed mid-write.
+The renderer still answers device queries (DA, DSR), so libghostty's `on_pty_write` is deliberately
+left unregistered rather than replying twice.
+
+> **Build requirement:** `libghostty-vt` compiles Ghostty from source with **Zig 0.15.2 exactly**
+> (`brew install zig@0.15 && brew link --force zig@0.15`). This is the only non-Rust toolchain the
+> workspace needs.
+
 ## Providers (`core::provider`)
 
 | Provider | Launch | Notes |
@@ -77,7 +100,7 @@ state, not a crash).
 - **M1 (done):** engine (Op→Event) with permission parking, SQLite session store + transcript,
   git-worktree manager, PTY, disk-backed skill library. All offline-tested.
 - **M2 (done):** full GUI over the engine — session list, doc editor with inline skill nodes,
-  live transcript, permission modal, xterm.js terminal, provider/mode pickers.
+  live transcript, permission modal, embedded terminal, provider/mode pickers.
 - **M3 (done):** ratatui TUI on the same core (session list, transcript, composer + `/` skill
   picker, inline permission prompts, provider/mode cyclers).
 - **M4 (done, minus packaging):** lazy ACP session creation with MCP attach at `session/new`,

@@ -1,11 +1,8 @@
-import { forwardRef, useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ArrowUp,
-  Check,
-  Eye,
+  ChevronDown,
   FileText,
-  Maximize2,
-  Minimize2,
   Plus,
   Sparkles,
   Square,
@@ -14,9 +11,18 @@ import {
 } from "lucide-react";
 
 import { ConfigPopover, type SessionConfig } from "./ConfigPopover";
+import { familyOf, groupModels, pickVariant, variantOf, type Effort, type ModelFamily } from "./models";
+import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ModelChoice } from "../bridge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,45 +44,21 @@ interface ComposerProps {
   /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
   models: ModelChoice[];
   currentModel: string | null;
+  /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
+  defaultModel: string | null;
   onModel: (id: string) => void;
   running: boolean;
   docEmpty: boolean;
   onRun: () => void;
   onStop: () => void;
-  onPreview: () => void;
   onAttachFile: () => void;
   onInsertSkill: () => void;
   onInsertIssue: () => void;
   onOpenMarket: () => void;
   onVoiceText: (text: string) => void;
   runHint: string;
-  docModeHint: string;
   skillHint: string;
   filesHint: string;
-}
-
-/** One row of the `+` menu. */
-function MenuItem({
-  icon: Icon,
-  label,
-  hint,
-  onClick,
-}: {
-  icon: typeof Plus;
-  label: string;
-  hint?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-accent"
-      onClick={onClick}
-    >
-      <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="flex-1 truncate">{label}</span>
-      {hint && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{hint}</span>}
-    </button>
-  );
 }
 
 /**
@@ -89,7 +71,7 @@ const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-[12px] transition-colors hover:bg-accent",
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-hint transition-colors hover:bg-accent",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -101,65 +83,158 @@ const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "
 );
 Chip.displayName = "Chip";
 
+/** Muted section header inside a picker menu — "Model", "Reasoning". */
+function MenuSection({ children }: { children: ReactNode }) {
+  return <p className="px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
+}
+
+/** The small "Default" pill on the adapter's own pick. */
+function DefaultBadge() {
+  const t = useT();
+  return (
+    <span className="shrink-0 rounded-md border bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
+      {t("composer.default")}
+    </span>
+  );
+}
+
+/** One selectable row of a picker menu: the current choice sits on a filled background. */
+function MenuRow({
+  selected,
+  isDefault,
+  label,
+  detail,
+  onClick,
+}: {
+  selected: boolean;
+  isDefault: boolean;
+  label: string;
+  detail?: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
+        selected ? "bg-accent" : "hover:bg-accent/60",
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {detail && <span className="block truncate text-fine text-muted-foreground">{detail}</span>}
+      </span>
+      {isDefault && <DefaultBadge />}
+    </button>
+  );
+}
+
 /**
- * The model this turn will run on.
+ * The model this turn will run on: a model chip, and an effort chip when the model comes in
+ * reasoning variants.
  *
- * ACP's model API is marked UNSTABLE and most adapters don't implement it, so "no models" is a
- * normal answer, not a failure — the picker explains that instead of showing an empty list. The
- * chip is hidden entirely until a session exists, because before that there's nothing to ask.
+ * ACP's model API is flat, so adapters that offer reasoning effort mint one entry per level
+ * ("gpt-5.1-codex low/medium/high"). `groupModels` folds those back into families: the first chip
+ * picks the family, the second the effort, and together they resolve to one of the adapter's own
+ * ids. Adapters without variants just get the flat list under the first chip.
+ *
+ * The API is also marked UNSTABLE and most adapters skip it entirely, so "no models" is a normal
+ * answer, not a failure — the menu explains that instead of showing an empty list. Everything is
+ * hidden until a session exists, because before that there's nothing to ask.
  */
 function ModelPicker({
   models,
   current,
+  defaultModel,
+  provider,
   onModel,
   hasSession,
 }: {
   models: ModelChoice[];
   current: string | null;
+  defaultModel: string | null;
+  provider: string;
   onModel: (id: string) => void;
   hasSession: boolean;
 }) {
   const t = useT();
+  const [modelOpen, setModelOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
+  const families = useMemo(() => groupModels(models), [models]);
   if (!hasSession) return null;
 
+  const activeFamily = familyOf(families, current);
+  const activeVariant = variantOf(families, current);
   const active = models.find((m) => m.id === current);
-  const label = active?.name ?? current ?? t("composer.defaultModel");
+  const label = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
+  const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
+
+  const pick = (family: ModelFamily) => {
+    onModel(pickVariant(family, activeVariant?.effort ?? null, defaultModel).id);
+    setModelOpen(false);
+  };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Chip title={t("composer.model")}>
-          <span className="max-w-44 truncate">{label}</span>
-        </Chip>
-      </PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-72 p-1">
-        {models.length === 0 ? (
-          <p className="px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            {t("composer.noModels")}
-          </p>
-        ) : (
-          <ScrollArea className="max-h-72">
-            {models.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => onModel(m.id)}
-                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
-              >
-                <Check
-                  className={cn("mt-0.5 size-3.5 shrink-0", m.id === current ? "text-primary" : "opacity-0")}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">{m.name}</span>
-                  {m.description && (
-                    <span className="block truncate text-[11px] text-muted-foreground">{m.description}</span>
-                  )}
-                </span>
-              </button>
+    <>
+      <Popover open={modelOpen} onOpenChange={setModelOpen}>
+        <PopoverTrigger asChild>
+          <Chip title={t("composer.model")}>
+            <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
+            <span className="max-w-44 truncate text-foreground/80">{label}</span>
+            <ChevronDown className="size-3 shrink-0 opacity-50" />
+          </Chip>
+        </PopoverTrigger>
+        <PopoverContent align="start" side="top" className="w-64 p-1.5">
+          {models.length === 0 ? (
+            <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
+              {t("composer.noModels")}
+            </p>
+          ) : (
+            <>
+              <MenuSection>{t("composer.model")}</MenuSection>
+              <ScrollArea className="max-h-80">
+                {families.map((f) => (
+                  <MenuRow
+                    key={f.key}
+                    selected={f === activeFamily}
+                    isDefault={f.variants.some((v) => v.choice.id === defaultModel)}
+                    label={f.label}
+                    detail={f.variants[0]?.choice.description}
+                    onClick={() => pick(f)}
+                  />
+                ))}
+              </ScrollArea>
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {activeFamily && activeFamily.variants.length > 1 && (
+        <Popover open={effortOpen} onOpenChange={setEffortOpen}>
+          <PopoverTrigger asChild>
+            <Chip title={t("composer.reasoning")}>
+              <span>{effortName(activeVariant?.effort ?? null)}</span>
+              <ChevronDown className="size-3 shrink-0 opacity-50" />
+            </Chip>
+          </PopoverTrigger>
+          <PopoverContent align="start" side="top" className="w-44 p-1.5">
+            <MenuSection>{t("composer.reasoning")}</MenuSection>
+            {activeFamily.variants.map((v) => (
+              <MenuRow
+                key={v.choice.id}
+                selected={v.choice.id === current}
+                isDefault={v.choice.id === defaultModel}
+                label={effortName(v.effort)}
+                onClick={() => {
+                  onModel(v.choice.id);
+                  setEffortOpen(false);
+                }}
+              />
             ))}
-          </ScrollArea>
-        )}
-      </PopoverContent>
-    </Popover>
+          </PopoverContent>
+        </Popover>
+      )}
+    </>
   );
 }
 
@@ -182,19 +257,18 @@ export function Composer({
   boundsRef,
   models,
   currentModel,
+  defaultModel,
   onModel,
   running,
   docEmpty,
   onRun,
   onStop,
-  onPreview,
   onAttachFile,
   onInsertSkill,
   onInsertIssue,
   onOpenMarket,
   onVoiceText,
   runHint,
-  docModeHint,
   skillHint,
   filesHint,
 }: ComposerProps) {
@@ -239,22 +313,36 @@ export function Composer({
 
   const controls = (
     <>
-      <Popover>
-        <PopoverTrigger asChild>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
             <Plus className="size-4" />
           </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" side="top" className="w-60 p-1">
-          <MenuItem icon={FileText} label={t("composer.mentionFile")} hint={filesHint} onClick={onAttachFile} />
-          <MenuItem icon={Sparkles} label={t("composer.insertSkill")} hint={skillHint} onClick={onInsertSkill} />
-          <MenuItem icon={Ticket} label={t("composer.pullIssue")} onClick={onInsertIssue} />
-          <MenuItem icon={Store} label={t("composer.market")} onClick={onOpenMarket} />
-          <p className="px-2 pb-1 pt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="top" className="w-60">
+          <DropdownMenuItem onSelect={onAttachFile}>
+            <FileText />
+            {t("composer.mentionFile")}
+            {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onInsertSkill}>
+            <Sparkles />
+            {t("composer.insertSkill")}
+            {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onInsertIssue}>
+            <Ticket />
+            {t("composer.pullIssue")}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenMarket}>
+            <Store />
+            {t("composer.market")}
+          </DropdownMenuItem>
+          <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
           </p>
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Sandbox, provider and model read as a sentence about what this turn will do. */}
       <ConfigPopover
@@ -282,46 +370,26 @@ export function Composer({
         }
       />
 
-      <ModelPicker models={models} current={currentModel} onModel={onModel} hasSession={config.hasSession} />
+      <ModelPicker
+        models={models}
+        current={currentModel}
+        defaultModel={defaultModel}
+        provider={config.provider}
+        onModel={onModel}
+        hasSession={config.hasSession}
+      />
 
       {config.planMode && <Chip title={t("composer.plan")}>plan</Chip>}
       {config.useWorktree && <Chip title={t("composer.worktree")}>worktree</Chip>}
 
       <div className="flex-1" />
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onPreview}>
-            <Eye className="size-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t("composer.preview")}</TooltipContent>
-      </Tooltip>
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("size-7 shrink-0", docMode && "text-primary")}
-            onClick={() => onDocMode(!docMode)}
-            aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
-          >
-            {docMode ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {docMode ? t("composer.collapse") : t("composer.expand")}
-          {docModeHint && <span className="ml-1.5 opacity-60">{docModeHint}</span>}
-        </TooltipContent>
-      </Tooltip>
-
       <VoiceButton onText={onVoiceText} />
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
       {docEmpty && !running && runHint && (
-        <span className="mx-1 shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+        <span className="mx-1 shrink-0 whitespace-nowrap text-fine text-muted-foreground">
           {t("composer.toSend", { key: runHint })}
         </span>
       )}
@@ -375,7 +443,9 @@ export function Composer({
     <section
       className={cn(
         "flex flex-col",
-        docMode ? "min-h-0 flex-1" : "shrink-0 px-4 pb-3.5 pt-1",
+        // min-w-0: in document mode the composer sits in a row beside the transcript panel and
+        // must be able to shrink, or the panel gets pushed off the module's edge.
+        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-4 pb-3.5 pt-1",
       )}
     >
       <div
@@ -392,7 +462,7 @@ export function Composer({
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 "min-h-0 flex-1"
-              : "glass-raised rounded-2xl border shadow-lg transition-[box-shadow,border-color] duration-200 focus-within:border-ring/50 focus-within:shadow-xl",
+              : "glass-raised rounded-2xl shadow-lg ring-1 ring-foreground/10 transition-[box-shadow] duration-200 focus-within:shadow-xl focus-within:ring-ring/40",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -413,7 +483,7 @@ export function Composer({
 
           {/* Expanded, the control row spans the window and lines up with the text measure, so it
               reads as the page's own footer rather than a bar floating over it. */}
-          <div className={cn(docMode && "border-t")}>
+          <div>
             <div
               className={cn(
                 "flex items-center gap-0.5",

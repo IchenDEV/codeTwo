@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { transcribeAudio, voiceAvailable } from "../bridge";
+import { preferredRecordingType, toWav16kMono } from "./wav";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "../ui/toast";
@@ -77,8 +78,13 @@ export function VoiceButton({ onText, hint }: { onText: (text: string) => void; 
   };
 
   const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast("This webview exposes no microphone API.", "error");
+      return;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mr = new MediaRecorder(stream);
+    const mimeType = preferredRecordingType();
+    const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     chunksRef.current = [];
     mr.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -87,9 +93,10 @@ export function VoiceButton({ onText, hint }: { onText: (text: string) => void; 
       stream.getTracks().forEach((t) => t.stop());
       setMode("transcribing");
       try {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        const text = await transcribeAudio(bytes, "webm");
+        // Send WAV, not the recorder's native container: whisper.cpp and the other local
+        // transcribers read 16 kHz PCM and nothing else.
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || mimeType });
+        const text = await transcribeAudio(await toWav16kMono(blob), "wav");
         if (text.trim()) onText(text.trim());
         else toast("No speech detected.", "error");
       } catch (e) {
@@ -111,13 +118,21 @@ export function VoiceButton({ onText, hint }: { onText: (text: string) => void; 
     if (mode === "transcribing") return;
     const SR = getSpeechRecognition();
     try {
-      if (SR) startDictation(SR);
-      else if (hasLocal) await startRecording();
+      if (SR) {
+        startDictation(SR);
+        return;
+      }
+      // Re-check rather than trusting the mount-time answer: the transcriber may have been
+      // installed since the app started.
+      const local = hasLocal || (await voiceAvailable().catch(() => false));
+      setHasLocal(local);
+      if (local) await startRecording();
       else {
-        // This is the common case in a plain webview. Say so out loud — the button used to look
-        // simply broken here.
+        // Say so out loud, and name the fix — the button used to look simply broken here.
         toast(
-          "No speech recognition available in this webview. Set CODETWO_TRANSCRIBE_CMD to a local transcriber (e.g. whisper.cpp) to dictate.",
+          "Dictation isn't available: this webview has no speech API, and the system recognizer is " +
+            "off or has no on-device model for your language. Allow it under Privacy & Security → " +
+            "Speech Recognition, or point CODETWO_TRANSCRIBE_CMD at a local transcriber.",
           "error",
         );
       }

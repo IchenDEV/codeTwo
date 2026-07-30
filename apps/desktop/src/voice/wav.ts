@@ -1,0 +1,67 @@
+/**
+ * Recorded audio → 16 kHz mono 16-bit WAV.
+ *
+ * `MediaRecorder` hands us whatever the webview likes — Opus-in-WebM on Chromium, AAC-in-MP4 in
+ * WKWebView — and local transcribers (whisper.cpp above all) read neither. WebAudio decodes both,
+ * so we resample here and send the one format they all accept.
+ */
+
+/** Decode `blob` and re-render it as a single 16 kHz channel. */
+export async function toWav16kMono(blob: Blob): Promise<Uint8Array> {
+  const bytes = await blob.arrayBuffer();
+  const ctx = new AudioContext();
+  let decoded: AudioBuffer;
+  try {
+    decoded = await ctx.decodeAudioData(bytes);
+  } finally {
+    void ctx.close();
+  }
+
+  const rate = 16000;
+  const frames = Math.max(1, Math.round(decoded.duration * rate));
+  // The three-argument form: Safari never gained the options-object constructor.
+  const offline = new OfflineAudioContext(1, frames, rate);
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination); // multi-channel input is downmixed to the mono destination
+  source.start();
+  const rendered = await offline.startRendering();
+
+  return encodeWav(rendered.getChannelData(0), rate);
+}
+
+/** Wrap float samples in a canonical 44-byte-header PCM WAV. */
+function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
+  const bytesPerSample = 2;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+
+  ascii(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM header size
+  view.setUint16(20, 1, true); // format: PCM
+  view.setUint16(22, 1, true); // channels
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true); // byte rate
+  view.setUint16(32, bytesPerSample, true); // block align
+  view.setUint16(34, 8 * bytesPerSample, true); // bits per sample
+  ascii(36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  for (let i = 0; i < samples.length; i++) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * bytesPerSample, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+  }
+  return new Uint8Array(buffer);
+}
+
+/** The first container this webview will actually record, or undefined to take its default. */
+export function preferredRecordingType(): string | undefined {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/aac"];
+  return candidates.find((t) => MediaRecorder.isTypeSupported?.(t));
+}

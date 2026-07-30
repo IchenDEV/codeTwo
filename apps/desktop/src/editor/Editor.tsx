@@ -10,7 +10,7 @@ import {
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
-import { listFiles, type DocBlock, type SkillInfo } from "../bridge";
+import { listFiles, type Annotation, type DocBlock, type SkillInfo } from "../bridge";
 import { useColorScheme } from "../theme";
 import { useT } from "../i18n";
 
@@ -20,8 +20,11 @@ interface EditorProps {
   cwd: string;
   // App reads the composed document out of the editor on Run.
   getBlocksRef: MutableRefObject<(() => DocBlock[]) | null>;
-  // App appends browser-annotation context blocks through this.
+  // App appends plain text (voice, terminal sends) through this.
   insertTextRef: MutableRefObject<((text: string) => void) | null>;
+  // App appends browser annotations through this — as dedicated cards, not markdown paragraphs.
+  // `context` is the compiled markdown the block serializes back into.
+  insertAnnotationRef: MutableRefObject<((a: Annotation, context: string) => void) | null>;
   // App inserts `@file` mentions (from the file browser) through this.
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
   // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
@@ -72,6 +75,7 @@ export function DocEditor({
   cwd,
   getBlocksRef,
   insertTextRef,
+  insertAnnotationRef,
   insertFileRef,
   focusRef,
   clearRef,
@@ -105,6 +109,29 @@ export function DocEditor({
         editor.insertBlocks([{ type: "paragraph", content: text }], last, "after");
       }
     };
+    insertAnnotationRef.current = (a: Annotation, context: string) => {
+      const doc = editor.document;
+      const last = doc[doc.length - 1];
+      if (!last) return;
+      editor.insertBlocks(
+        [
+          {
+            type: "browserNote",
+            props: {
+              url: a.url,
+              note: a.note,
+              selector: a.selector ?? "",
+              selectedText: a.selected_text ?? "",
+              styles: JSON.stringify(a.styles),
+              context,
+            },
+          },
+        ],
+        last,
+        "after",
+      );
+      onEmptyChange(false);
+    };
     insertFileRef.current = (path: string) => {
       editor.insertInlineContent([{ type: "fileMention", props: { path } }, " "]);
     };
@@ -122,12 +149,13 @@ export function DocEditor({
     return () => {
       getBlocksRef.current = null;
       insertTextRef.current = null;
+      insertAnnotationRef.current = null;
       insertFileRef.current = null;
       focusRef.current = null;
       clearRef.current = null;
       openSkillPickerRef.current = null;
     };
-  }, [editor, getBlocksRef, insertTextRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
+  }, [editor, getBlocksRef, insertTextRef, insertAnnotationRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
 
   const scheme = useColorScheme();
 

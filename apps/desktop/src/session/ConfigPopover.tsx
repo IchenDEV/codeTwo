@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { useT } from "../i18n";
 
 /** Everything that is configured once per session rather than once per turn. */
@@ -59,7 +58,7 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
             </SelectContent>
           </Select>
           {current && !current.available && (
-            <p className="text-[11px] text-warning">
+            <p className="text-fine text-warning">
               {t("config.providerMissing", {
                 name: current.display_name,
                 node: current.needs_node ? t("config.needsNode") : "",
@@ -77,8 +76,6 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
             placeholder="."
           />
         </div>
-
-        <Separator />
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
@@ -110,12 +107,10 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
         </div>
 
         {config.sandbox === "read_only" && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-fine text-muted-foreground">
             {t("config.readOnlyHint")}
           </p>
         )}
-
-        <Separator />
 
         <label className="flex cursor-pointer items-start gap-2">
           <Checkbox
@@ -125,7 +120,7 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
           />
           <span className="text-xs">
             {t("config.worktree")}
-            <span className="block text-[11px] text-muted-foreground">{t("config.worktreeHint")}</span>
+            <span className="block text-fine text-muted-foreground">{t("config.worktreeHint")}</span>
           </span>
         </label>
 
@@ -133,7 +128,7 @@ export function ConfigPopover({ config, trigger }: { config: SessionConfig; trig
           <Checkbox checked={config.planMode} onCheckedChange={(v) => config.onPlan(v === true)} className="mt-0.5" />
           <span className="text-xs">
             {t("config.planFirst")}
-            <span className="block text-[11px] text-muted-foreground">{t("config.planFirstHint")}</span>
+            <span className="block text-fine text-muted-foreground">{t("config.planFirstHint")}</span>
           </span>
         </label>
       </PopoverContent>

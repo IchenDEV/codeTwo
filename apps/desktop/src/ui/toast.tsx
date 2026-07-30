@@ -62,7 +62,7 @@ function ToastRow({ toast, onDismiss }: { toast: Toast; onDismiss: () => void })
     <div
       role="status"
       className={cn(
-        "glass-raised animate-rise-in pointer-events-auto flex max-w-96 items-start gap-2 rounded-lg border px-3 py-2 text-[13px] shadow-lg",
+        "glass-raised animate-rise-in pointer-events-auto flex max-w-96 items-start gap-2 rounded-lg border px-3 py-2 text-ui shadow-lg",
         toast.tone === "error" && "border-destructive/40",
         toast.tone === "success" && "border-success/40",
       )}

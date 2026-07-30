@@ -275,7 +275,7 @@ export function FilePanel({
       )}
       <Input
         ref={draftInput}
-        className="h-6 font-mono text-[12px]"
+        className="h-6 font-mono text-hint"
         value={draft?.value ?? ""}
         onChange={(e) => setDraft((d) => (d ? { ...d, value: e.target.value } : d))}
         onBlur={() => void commitDraft()}
@@ -291,7 +291,7 @@ export function FilePanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-1 border-b p-2">
         <Input
-          className="h-7 text-[12px]"
+          className="h-7 text-hint"
           placeholder={t("files.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -339,9 +339,9 @@ export function FilePanel({
           {draft && draft.kind !== "rename" && draft.parent === "" && draftRow(0)}
 
           {error ? (
-            <p className="px-2 py-3 text-[11px] text-destructive">{error}</p>
+            <p className="px-2 py-3 text-fine text-destructive">{error}</p>
           ) : rows.length === 0 && !draft ? (
-            <p className="px-2 py-3 text-[11px] text-muted-foreground">
+            <p className="px-2 py-3 text-fine text-muted-foreground">
               {cwd ? t("files.empty") : t("files.noProject")}
             </p>
           ) : (
@@ -383,7 +383,7 @@ export function FilePanel({
                             )}
                           />
                           <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate py-1 text-[12px]">{entry.name}</span>
+                          <span className="truncate py-1 text-hint">{entry.name}</span>
 
                           {!entry.is_dir && (
                             <button

@@ -34,6 +34,39 @@
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --terminal: oklch(0.19 0.012 264);
+
+  /* The terminal palette is hex, not oklch, unlike every other token here. Two reasons: ANSI
+     colours are a fixed 16-slot convention rather than a perceptual scale, and the renderer parses
+     these strings itself — it has no browser to resolve oklch() for it.
+
+     The terminal surface stays dark in both schemes (see --terminal above, dark in :root too), so
+     the palette is defined once and only the background shifts under .dark. Hues are pulled toward
+     the app's cool blue rather than the usual warm terminal defaults.
+
+     --term-bg deliberately sits one step *above* --terminal so the terminal reads as a surface
+     resting on the panel rather than a hole cut in it — the same layering the sidebar and cards
+     use. Matching them exactly is what made the dock look like one flat slab. */
+  --term-bg: #23272f;
+  --term-fg: #c9cfd9;
+  --term-cursor: #79a9f0;
+  --term-selection: #3b6ea566;
+
+  --term-ansi-0: #3b4048;
+  --term-ansi-1: #e5707b;
+  --term-ansi-2: #8fbf7f;
+  --term-ansi-3: #e5c07b;
+  --term-ansi-4: #79a9f0;
+  --term-ansi-5: #c29bf0;
+  --term-ansi-6: #6fc1c9;
+  --term-ansi-7: #c3c8d1;
+  --term-ansi-8: #5a616e;
+  --term-ansi-9: #ff8b93;
+  --term-ansi-10: #a9d68f;
+  --term-ansi-11: #f2cf8c;
+  --term-ansi-12: #96bcff;
+  --term-ansi-13: #d4b3ff;
+  --term-ansi-14: #86d7df;
+  --term-ansi-15: #e7ebf2;
 }
 
 .dark {
@@ -72,6 +105,8 @@
   --sidebar-foreground: oklch(0.955 0.004 250);
   --sidebar-border: oklch(0.29 0.007 265);
   --terminal: oklch(0.135 0.005 265);
+  /* Only the surface moves; the 16 ANSI slots in :root already suit a dark background. */
+  --term-bg: #1b1d22;
 }
 
 @theme inline {
@@ -107,6 +142,21 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* ---- type roles (see docs/design.md) -------------------------------------------------------
+     Six sizes, named for what they do rather than how big they are. Use these instead of
+     arbitrary text-[Npx] values — the half-pixel variants that accumulated (11.5, 12.5, 13.5)
+     were never design decisions, just drift.
+
+     Font-size ONLY, exactly like the text-[Npx] values these replaced: pairing default
+     line-heights here re-spaced every row and label in the app at once (the "typography is
+     suddenly wrong everywhere" incident). Line height stays a per-use decision via leading-*. */
+  --text-cap: 10px; /* keycaps, badges, all-caps micro-labels */
+  --text-fine: 11px; /* metadata, preview lines, timestamps */
+  --text-hint: 12px; /* secondary text, hints, tab labels */
+  --text-ui: 13px; /* the default: rows, buttons, menu items, body */
+  --text-title: 15px; /* panel + dialog titles */
+  --text-heading: 17px; /* page headings, empty-state greetings */
 }
 
 @layer base {
@@ -159,30 +209,50 @@
    ------------------------------------------------------------------------ */
 @layer components {
   /* ---- glass -------------------------------------------------------------------------------
-     Finder's arrangement, not "translucent everywhere": the sidebar is vibrant and the content
-     area is solid. Tinting the whole window was the mistake — it flattened every surface to the
-     same value, so nothing read as glass and the text sat on an unpredictable backdrop. */
+     Finder's arrangement, not "translucent everywhere": the glass is one continuous backdrop and
+     the content areas are solid sheets laid on it. Tinting the whole window *opaquely* was the
+     mistake — it flattened every surface to the same value, so nothing read as glass and the text
+     sat on an unpredictable backdrop.
+
+     The wash lives here, on the whole backdrop, rather than on the rail alone. The rail is not a
+     separate surface from the margin around the modules; it is the same glass, and giving only
+     the rail a tint drew a visible seam wherever its edge met the untinted margin — most obviously
+     straight above and below the main module, which sits flush against the rail (ml-0).
+
+     A tint over the material only subtracts from it: at 72% opaque only 28% of the vibrancy
+     survived, which in light mode meant painting light grey over a light frosted panel and seeing
+     nothing move behind it. What's left is thin enough to read as a tint of the material rather
+     than a lid on it, and thick enough that the backdrop is still a surface if the effect ever
+     fails to apply. The radius matches windowEffects.radius in tauri.conf.json — without it the
+     wash would paint square corners over the material's rounded ones. */
   .app-shell {
+    background: color-mix(in oklch, var(--sidebar) 18%, transparent);
+    border-radius: 12px;
+  }
+  /* Deliberately empty of background: the rail reads as glass because the shell under it does.
+     Re-tinting here would double the wash and put the seam back. */
+  .glass-rail {
     background: transparent;
   }
-  /* The material *is* this surface — that's the whole point of asking macOS for one. A tint here
-     only subtracts from it: at 72% opaque only 28% of the vibrancy survived, which in light mode
-     meant painting light grey over a light frosted panel and seeing nothing move behind it.
-     What's left is a wash thin enough to read as a tint of the material rather than a lid on it,
-     and thick enough that the rail is still a surface if the effect ever fails to apply. */
-  .glass-rail {
-    background: color-mix(in oklch, var(--sidebar) 18%, transparent);
-  }
-  /* Where you read: opaque, and a clear step up in value from the rail beside it. */
-  .content-surface {
+  /* Where you read: a floating sheet on the window glass. The layout is borderless — modules are
+     cut out of the glass by shadow, not by drawn lines. The 0.5px ring is the edge: crisp enough
+     to define the sheet, too thin to read as a border; the two soft layers under it are contact
+     and ambient depth. */
+  .surface-module {
     background: var(--background);
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 0.5px color-mix(in oklch, var(--foreground) 10%, transparent),
+      0 1px 2px rgb(0 0 0 / 0.04),
+      0 8px 24px rgb(0 0 0 / 0.06);
   }
-  /* The other window edge. Like the rail, it sits over the material rather than over page content,
-     so it gets no backdrop-filter: that property blurs the page behind an element, and the
-     NSVisualEffectView is behind the *webview* — the blur would be a no-op charged to the GPU.
-     The OS already did the blurring. */
-  .glass-panel {
-    background: color-mix(in oklch, var(--card) 78%, transparent);
+  /* Dark mode gets its depth from a light rim + heavier ambient shade — a dark shadow on a dark
+     glass does nothing, so the rim carries the edge. */
+  .dark .surface-module {
+    box-shadow:
+      0 0 0 0.5px color-mix(in oklch, var(--foreground) 18%, transparent),
+      0 1px 2px rgb(0 0 0 / 0.35),
+      0 12px 32px rgb(0 0 0 / 0.4);
   }
   /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
      page content, so the blur does what it looks like it does. */
@@ -222,6 +292,109 @@
     animation: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  /* ---- floating layers ---------------------------------------------------------------------
+     The shadcn components ship `animate-in`/`fade-in-0`-style utilities from a Tailwind plugin
+     this project doesn't carry, so every overlay used to pop into place fully formed. These are
+     the first-party replacement. Radix stamps `data-state` and delays unmount while a close
+     animation runs, so exits play too. Anchored layers grow from their trigger (Radix supplies
+     the transform-origin; the components keep their origin-(--radix-*) classes). */
+  @keyframes layer-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97) translateY(3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes layer-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.98) translateY(2px);
+    }
+  }
+  .pop-layer[data-state="open"],
+  .pop-layer[data-state="delayed-open"] {
+    animation: layer-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pop-layer[data-state="closed"] {
+    animation: layer-out 0.12s ease-in forwards;
+  }
+
+  /* The centred dialog: its -50% positioning translate has to live inside the keyframes, or the
+     scale would override it and the panel would jump to the top-left corner mid-animation. */
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -49%) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+  }
+  @keyframes dialog-out {
+    from {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate(-50%, -49.5%) scale(0.98);
+    }
+  }
+  .dialog-layer[data-state="open"] {
+    animation: dialog-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .dialog-layer[data-state="closed"] {
+    animation: dialog-out 0.15s ease-in forwards;
+  }
+
+  @keyframes veil-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes veil-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  .overlay-layer[data-state="open"] {
+    animation: veil-in 0.2s ease-out;
+  }
+  .overlay-layer[data-state="closed"] {
+    animation: veil-out 0.15s ease-in forwards;
+  }
+
+  /* Full-page swaps — settings, the file viewer, the shell itself. Each side mounts fresh, so a
+     mount animation is the whole transition; a slow fade-up reads as a page change rather than a
+     flicker. */
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-page-in {
+    animation: page-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
   .skill-chip {
     display: inline-flex;
     align-items: center;
@@ -249,6 +422,113 @@
     background: color-mix(in oklch, var(--success) 14%, transparent);
     color: var(--success);
     border: 1px solid color-mix(in oklch, var(--success) 30%, transparent);
+  }
+
+  /* ---- browser annotation cards (see BrowserNoteBlock in skillInline.tsx) ------------------
+     A quiet card, not a callout: the document is the star and three of these in a row must read
+     as attachments, not alarms. Same primary family as the skill chip, one step calmer. */
+  .bn-annotation {
+    width: 100%;
+    margin: 2px 0;
+    padding: 6px 10px 7px;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in oklch, var(--primary) 22%, transparent);
+    border-left: 3px solid color-mix(in oklch, var(--primary) 55%, transparent);
+    background: color-mix(in oklch, var(--primary) 6%, transparent);
+    user-select: none;
+  }
+  .bn-annotation-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .bn-annotation-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--primary);
+  }
+  .bn-annotation-host {
+    flex: none;
+    font-size: var(--text-fine);
+    font-weight: 600;
+    color: var(--primary);
+  }
+  .bn-annotation-sel {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: var(--text-cap);
+    color: var(--muted-foreground);
+  }
+  .bn-annotation-x {
+    flex: none;
+    margin-left: auto;
+    border: 0;
+    background: none;
+    padding: 0 2px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .bn-annotation:hover .bn-annotation-x {
+    opacity: 1;
+  }
+  .bn-annotation-x:hover {
+    color: var(--destructive);
+  }
+  .bn-annotation-quote {
+    margin-top: 3px;
+    font-size: var(--text-fine);
+    color: var(--muted-foreground);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .bn-annotation-note {
+    margin-top: 3px;
+    font-size: var(--text-hint);
+    color: var(--foreground);
+  }
+  .bn-annotation-styles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+  }
+  .bn-annotation-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-family: var(--font-mono);
+    font-size: var(--text-cap);
+    background: color-mix(in oklch, var(--primary) 10%, transparent);
+    border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+  }
+  .bn-annotation-change .prop {
+    color: var(--muted-foreground);
+  }
+  .bn-annotation-change .from {
+    color: var(--muted-foreground);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+  }
+  .bn-annotation-change .arrow {
+    color: var(--muted-foreground);
+  }
+  .bn-annotation-change .to {
+    color: var(--primary);
+    font-weight: 600;
   }
 
   /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
@@ -279,23 +559,66 @@
     opacity: 0.7;
   }
 
-  /* Sits over the dock's left border so the whole edge is a grab target. */
+  /* The dock's left edge as a grab target. Inside the module (not overhanging it) so the module's
+     overflow clipping — which the rounded corners need — can't eat it. */
   .dock-grip {
     position: absolute;
-    left: -3px;
+    left: 0;
     top: 0;
     bottom: 0;
-    width: 7px;
+    width: 6px;
     z-index: 20;
     cursor: col-resize;
     transition: background 0.12s ease;
   }
-  .dock-grip:hover {
-    background: color-mix(in oklch, var(--primary) 35%, transparent);
+  /* The hover affordance is a slim inset line, not a filled bar — a 6px full-height fill reads
+     as a hard blue border on the module edge, which is exactly what this design removed. */
+  .dock-grip::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--primary) 55%, transparent);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .dock-grip:hover::after {
+    opacity: 1;
   }
 
-  /* While a drag is live: one cursor everywhere, no text selection, and iframes (the browser panel)
-     stop swallowing the mousemove events the drag depends on. */
+  /* Same affordance on the rail's right edge. */
+  .rail-grip {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    z-index: 20;
+    cursor: col-resize;
+    transition: background 0.12s ease;
+  }
+  .rail-grip::after {
+    content: "";
+    position: absolute;
+    right: 2px;
+    top: 12px;
+    bottom: 12px;
+    width: 2px;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--primary) 55%, transparent);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .rail-grip:hover::after {
+    opacity: 1;
+  }
+
+  /* While a drag is live: one cursor everywhere and no text selection. The browser panel's page is
+     a native webview rather than an element, so it can't be told to ignore the pointer — it watches
+     for these classes and hides instead (see `useDragging` in browser/Browser.tsx). */
   body.resizing-v,
   body.resizing-v * {
     cursor: row-resize !important;
@@ -306,11 +629,6 @@
     cursor: col-resize !important;
     user-select: none;
   }
-  body.resizing-v iframe,
-  body.resizing-h iframe {
-    pointer-events: none;
-  }
-
   .diff {
     margin: 0;
     font-family: var(--font-mono);
@@ -338,10 +656,42 @@
     color: var(--muted-foreground);
   }
 
+  /* xterm's defaults are a 2015 terminal: text hard against the edge, lines at 1.0, a scrollbar
+     from the OS. The fit addon reads this padding out of the computed style, so insetting here is
+     safe — the grid is measured against the padded box, not the raw one. */
   .terminal {
     flex: 1;
     height: 100%;
     width: 100%;
+    padding: 6px 4px 6px 10px;
+    border-radius: 8px;
+  }
+  .terminal .xterm-viewport {
+    /* Overlay the gutter instead of reserving a column for it, and let it fade in on hover the way
+       the rest of the app's scroll surfaces do. */
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 150ms ease;
+  }
+  .terminal:hover .xterm-viewport {
+    scrollbar-color: var(--term-ansi-8) transparent;
+  }
+  .terminal .xterm-viewport::-webkit-scrollbar {
+    width: 8px;
+  }
+  .terminal .xterm-viewport::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background-color 150ms ease;
+  }
+  .terminal:hover .xterm-viewport::-webkit-scrollbar-thumb {
+    background: var(--term-ansi-8);
+    background-clip: content-box;
+  }
+  .terminal .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 

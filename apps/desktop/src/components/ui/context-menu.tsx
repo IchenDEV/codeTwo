@@ -21,9 +21,7 @@ function ContextMenuContent({
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(
-          "glass-raised z-50 min-w-44 overflow-hidden rounded-md border p-1 text-popover-foreground shadow-md",
-          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "glass-raised pop-layer z-50 min-w-44 origin-(--radix-context-menu-content-transform-origin) overflow-hidden rounded-md p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10",
           className,
         )}
         {...props}
@@ -41,7 +39,7 @@ function ContextMenuItem({
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"
       className={cn(
-        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-[13px] outline-none",
+        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-ui outline-none",
         "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         variant === "destructive" && "text-destructive focus:bg-destructive/10 focus:text-destructive",
         className,
@@ -67,7 +65,7 @@ function ContextMenuSeparator({
 function ContextMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
-      className={cn("ml-auto font-mono text-[10px] tracking-widest text-muted-foreground", className)}
+      className={cn("ml-auto font-mono text-cap tracking-widest text-muted-foreground", className)}
       {...props}
     />
   );

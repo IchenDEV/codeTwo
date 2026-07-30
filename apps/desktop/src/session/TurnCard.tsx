@@ -26,7 +26,7 @@ function Detail({
   if (count === 0) return null;
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground">
+      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
@@ -55,27 +55,27 @@ export function TurnCard({ turn }: { turn: Turn }) {
     <div className="animate-rise-in py-5">
       {/* prompt */}
       <div className="flex justify-end">
-        <div className="max-w-[86%] whitespace-pre-wrap break-words rounded-2xl bg-secondary px-3.5 py-2 text-[13px] leading-relaxed text-secondary-foreground">
+        <div className="max-w-[86%] whitespace-pre-wrap break-words rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
           {turn.prompt}
         </div>
       </div>
 
       {/* answer */}
       {turn.text && (
-        <p className="mt-3.5 whitespace-pre-wrap break-words text-[13.5px] leading-[1.7] text-foreground/90">
+        <p className="mt-3.5 whitespace-pre-wrap break-words text-ui leading-[1.7] text-foreground/90">
           {turn.text}
         </p>
       )}
 
       {running && !turn.text && (
-        <p className="mt-3.5 flex items-center gap-2 text-[13px] text-muted-foreground">
+        <p className="mt-3.5 flex items-center gap-2 text-ui text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
           {t("turn.working")}
         </p>
       )}
 
       {turn.error && (
-        <p className="mt-3.5 flex items-start gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+        <p className="mt-3.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-ui text-destructive">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
@@ -87,7 +87,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
           <Detail icon={Wrench} label={t("turn.tools")} count={turn.tools.length}>
             <div className="space-y-0.5">
               {turn.tools.map((tool) => (
-                <div key={tool.id} className="flex items-center gap-2 text-[11px]">
+                <div key={tool.id} className="flex items-center gap-2 text-fine">
                   <span
                     className={cn(
                       "size-1.5 shrink-0 rounded-full",
@@ -106,7 +106,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
           </Detail>
 
           <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
-            <div className="space-y-1 text-[11px] italic text-muted-foreground">
+            <div className="space-y-1 text-fine italic text-muted-foreground">
               {turn.thoughts.map((thought, i) => (
                 <p key={i} className="whitespace-pre-wrap">
                   {thought}
@@ -116,7 +116,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
           </Detail>
 
           <Detail icon={ListTodo} label={t("turn.plan")} count={turn.plan.length}>
-            <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+            <ol className="list-decimal space-y-0.5 pl-4 text-fine text-muted-foreground">
               {turn.plan.map((p, i) => (
                 <li key={i}>{p}</li>
               ))}
@@ -125,21 +125,21 @@ export function TurnCard({ turn }: { turn: Turn }) {
 
           <span className="ml-auto flex shrink-0 items-center gap-1.5">
             {running ? (
-              <Badge variant="secondary" className="gap-1 text-[9px] uppercase">
+              <Badge variant="secondary" className="gap-1 text-cap uppercase">
                 <Loader2 className="size-2.5 animate-spin" /> {t("turn.running")}
               </Badge>
             ) : turn.error ? (
-              <Badge variant="destructive" className="text-[9px] uppercase">
+              <Badge variant="destructive" className="text-cap uppercase">
                 {t("turn.failed")}
               </Badge>
             ) : (
               turn.stopReason && (
-                <Badge variant="outline" className="text-[9px] uppercase">
+                <Badge variant="outline" className="text-cap uppercase">
                   {turn.stopReason}
                 </Badge>
               )
             )}
-            {dur && <span className="font-mono text-[10px] text-muted-foreground">{dur}</span>}
+            {dur && <span className="font-mono text-cap text-muted-foreground">{dur}</span>}
           </span>
         </div>
       )}
