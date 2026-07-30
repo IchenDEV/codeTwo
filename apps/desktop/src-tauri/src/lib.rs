@@ -580,6 +580,23 @@ async fn set_model(state: State<'_, AppState>, session: String, model: String) -
         .map_err(|e| e.to_string())
 }
 
+/// Set an agent-reported session config option (model, reasoning effort, …). The engine forwards
+/// it over ACP and answers with a `config_options` event, or an `error` event if the provider
+/// doesn't implement the option.
+#[tauri::command]
+async fn set_config_option(
+    state: State<'_, AppState>,
+    session: String,
+    config_id: String,
+    value: String,
+) -> Result<(), String> {
+    state
+        .engine
+        .submit(Op::SetConfigOption { session, config_id, value })
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn list_project_scripts(cwd: String) -> Vec<ProjectScript> {
     project::load(std::path::Path::new(&cwd)).scripts
@@ -903,6 +920,7 @@ pub fn run() {
             answer_permission,
             set_permission_mode,
             set_model,
+            set_config_option,
             default_cwd,
             list_projects,
             add_project,

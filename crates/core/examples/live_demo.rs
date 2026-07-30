@@ -128,6 +128,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::Models { available, current, .. } => {
                     println!("models: {} available, current = {current}", available.len());
                 }
+                Event::ConfigOptions { options, .. } => {
+                    println!("config options: {}", options.iter().map(|o| o.id.as_str()).collect::<Vec<_>>().join(", "));
+                }
             }
         }
     };

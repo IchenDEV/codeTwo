@@ -110,6 +110,23 @@ impl App {
                     self.status = format!("model: {name}");
                 }
             }
+            // Same as Models, via the newer config-options surface: surface the current model.
+            Event::ConfigOptions { options, .. } => {
+                if let Some(m) = options
+                    .iter()
+                    .find(|o| o.category.as_deref() == Some("model") || o.id == "model")
+                {
+                    let name = m
+                        .choices
+                        .iter()
+                        .find(|c| c.id == m.current)
+                        .map(|c| c.name.clone())
+                        .unwrap_or_else(|| m.current.clone());
+                    if !name.is_empty() {
+                        self.status = format!("model: {name}");
+                    }
+                }
+            }
             Event::TurnEnded { stop_reason, .. } => {
                 self.status = format!("turn ended: {stop_reason}");
                 self.push("end", stop_reason);
