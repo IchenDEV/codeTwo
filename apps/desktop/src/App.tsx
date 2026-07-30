@@ -729,9 +729,12 @@ export default function App() {
       .then(async (list) => {
         setProjects(list);
         if (list.length > 0) {
-          activeProjectRef.current = list[0].path;
-          setActiveProject(list[0].path);
-          setCwd(list[0].path);
+          // The list is in a fixed order, so "used last" is a property of the rows, not their
+          // position — read it off `last_opened_at` rather than taking the first one.
+          const last = list.reduce((a, b) => (b.last_opened_at > a.last_opened_at ? b : a));
+          activeProjectRef.current = last.path;
+          setActiveProject(last.path);
+          setCwd(last.path);
           return;
         }
         const here = await defaultCwd();
