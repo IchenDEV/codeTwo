@@ -298,24 +298,32 @@
      the first-party replacement. Radix stamps `data-state` and delays unmount while a close
      animation runs, so exits play too. Anchored layers grow from their trigger (Radix supplies
      the transform-origin; the components keep their origin-(--radix-*) classes). */
+  /* Scale only — no translate. Radix puts the transform-origin on whichever corner faces the
+     trigger, so scaling about it already reads as "growing out of the trigger", and it reads that
+     way on every side. A hardcoded `translateY` cannot: on a side="top" layer the origin pins the
+     bottom edge at its resting place, so an extra 3px down pushed that edge *over* the trigger and
+     then snapped it back — a dip at the very corner the eye is on, which is what read as lag.
+
+     The end state is `scale(1)` rather than `none` so the keyframe can never cancel a positioning
+     transform on layers that carry one on the animated element itself. */
   @keyframes layer-in {
     from {
       opacity: 0;
-      transform: scale(0.97) translateY(3px);
+      transform: scale(0.96);
     }
     to {
       opacity: 1;
-      transform: none;
+      transform: scale(1);
     }
   }
   @keyframes layer-out {
     from {
       opacity: 1;
-      transform: none;
+      transform: scale(1);
     }
     to {
       opacity: 0;
-      transform: scale(0.98) translateY(2px);
+      transform: scale(0.98);
     }
   }
   .pop-layer[data-state="open"],
@@ -324,6 +332,23 @@
   }
   .pop-layer[data-state="closed"] {
     animation: layer-out 0.12s ease-in forwards;
+  }
+  /* These layers are glass, and re-sampling a 28px backdrop blur under a changing transform every
+     frame is the expensive half of the jank. Promoting them gets the blur rasterised into its own
+     layer once, so the animation is a composite rather than a re-blur. */
+  .pop-layer[data-state] {
+    will-change: transform, opacity;
+  }
+
+  /* A folder's children in the file tree, opened and closed by height — see `Branch` in FilePanel,
+     which supplies the measured pixel value. Written here rather than as a utility because the
+     arbitrary-value form of a two-property transition didn't survive the class scanner, and a
+     transition that silently doesn't exist is the worst kind. */
+  .tree-branch {
+    overflow: hidden;
+    transition:
+      height 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.15s ease-out;
   }
 
   /* The centred dialog: its -50% positioning translate has to live inside the keyframes, or the

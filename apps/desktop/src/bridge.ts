@@ -8,6 +8,9 @@ export interface ProviderInfo {
   display_name: string;
   available: boolean;
   needs_node: boolean;
+  /// The core's built-in models for this provider — what the picker offers when the provider
+  /// reports none of its own over ACP. Empty only for providers we ship no list for.
+  models: ModelChoice[];
 }
 
 export interface SkillInfo {
@@ -37,8 +40,8 @@ export interface Project {
   last_opened_at: number;
 }
 
-/// One model an agent offers. ACP's model API is UNSTABLE and most adapters don't implement it,
-/// so a session may legitimately have none — the picker says so rather than showing an empty list.
+/// One model a session can run on. ACP's model API is UNSTABLE and most adapters don't report a
+/// list, so these usually come from the core's built-in list for the provider instead.
 export interface ModelChoice {
   id: string;
   name: string;
@@ -137,11 +140,11 @@ const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI
 export const isDesktop = inTauri;
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
-  { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true },
-  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true },
-  { id: "grok", display_name: "Grok", available: false, needs_node: false },
-  { id: "cursor", display_name: "Cursor", available: false, needs_node: false },
-  { id: "opencode", display_name: "OpenCode", available: false, needs_node: false },
+  { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [] },
+  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [] },
+  { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [] },
+  { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [] },
+  { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [] },
 ];
 
 const FALLBACK_SKILLS: SkillInfo[] = [

@@ -15,6 +15,8 @@ use codetwo_core::browser::Annotation;
 use codetwo_core::git::{self, Checkpoint, GitStatus};
 use codetwo_core::issues::{self, Issue};
 use codetwo_core::keymap::{Action as KeyAction, Keymap};
+use codetwo_core::event::ModelChoice;
+use codetwo_core::models::builtin_models;
 use codetwo_core::permission::{PermissionMode, SandboxPolicy};
 use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
@@ -59,6 +61,9 @@ struct ProviderInfo {
     display_name: String,
     available: bool,
     needs_node: bool,
+    /// The models we offer for this provider when it reports none of its own over ACP. Empty only
+    /// for providers we ship no list for.
+    models: Vec<ModelChoice>,
 }
 
 #[derive(Serialize)]
@@ -142,6 +147,7 @@ fn list_providers() -> Vec<ProviderInfo> {
             display_name: p.display_name.clone(),
             available: p.is_available(),
             needs_node: p.needs_node,
+            models: builtin_models(&p.id),
         })
         .collect()
 }

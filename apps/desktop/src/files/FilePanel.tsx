@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AtSign,
   ChevronRight,
@@ -49,6 +49,53 @@ function copyName(path: string): string {
   const base = nameOf(path);
   const dup = `${base.slice(0, dot)} copy${base.slice(dot)}`;
   return dir ? `${dir}/${dup}` : dup;
+}
+
+/**
+ * A folder's children, opened and closed with a height transition.
+ *
+ * The height is measured rather than expressed as `grid-template-rows: 0fr → 1fr`, which is the
+ * tidier trick but leans on interpolating a track size — support this app can't check for itself,
+ * since it ships on whatever WKWebView the user's macOS has. Measuring works on every engine, and
+ * an animation that silently does nothing is worse than a few lines of arithmetic.
+ *
+ * Once open the height goes back to `auto`, so a nested folder expanding inside this one isn't
+ * clipped by a pixel value measured before it existed. Closing has to pin that auto height for a
+ * frame first: a browser cannot transition *from* a value it was never given.
+ *
+ * Children stay mounted while closed — something has to still be there to animate on the way out.
+ */
+function Branch({ open, children }: { open: boolean; children: ReactNode }) {
+  const inner = useRef<HTMLDivElement | null>(null);
+  /** `null` is "no explicit height" — the subtree sizes itself. */
+  const [height, setHeight] = useState<number | null>(0);
+
+  useEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    if (open) {
+      setHeight(el.scrollHeight);
+      return;
+    }
+    setHeight(el.scrollHeight); // pin the current auto height, then collapse from it
+    const id = requestAnimationFrame(() => setHeight(0));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
+  return (
+    <div
+      style={{ height: height ?? undefined }}
+      // Landing on `auto` matters only after opening; the closed state must stay pinned at 0. The
+      // guards are load-bearing: `transitionend` bubbles, and every row in here has its own colour
+      // transition, so hovering one mid-open would otherwise snap the branch to its full height.
+      onTransitionEnd={(e) => {
+        if (open && e.target === e.currentTarget && e.propertyName === "height") setHeight(null);
+      }}
+      className={cn("tree-branch", open ? "opacity-100" : "opacity-0")}
+    >
+      <div ref={inner}>{children}</div>
+    </div>
+  );
 }
 
 export function FilePanel({
@@ -178,21 +225,16 @@ export function FilePanel({
     setDraft(null);
   }, [draft, cwd, run, t, reveal, onOpen]);
 
-  /** Depth-first walk of what's open, flattened into rows — plus any in-place draft input. */
-  const rows = useMemo(() => {
-    const out: { entry: DirEntry; depth: number }[] = [];
-    const q = filter.trim().toLowerCase();
-    const walk = (path: string, depth: number) => {
-      for (const entry of loaded[path] ?? []) {
-        // A filter hides non-matching files but keeps folders, so matches stay reachable.
-        if (q && !entry.is_dir && !entry.name.toLowerCase().includes(q)) continue;
-        out.push({ entry, depth });
-        if (entry.is_dir && expanded.has(entry.path)) walk(entry.path, depth + 1);
-      }
-    };
-    walk("", 0);
-    return out;
-  }, [loaded, expanded, filter]);
+  /** A filter hides non-matching files but keeps folders, so matches stay reachable. */
+  const visible = useCallback(
+    (entry: DirEntry) => {
+      const q = filter.trim().toLowerCase();
+      return !q || entry.is_dir || entry.name.toLowerCase().includes(q);
+    },
+    [filter],
+  );
+
+  const roots = useMemo(() => (loaded[""] ?? []).filter(visible), [loaded, visible]);
 
   const menuFor = (entry: DirEntry) => (
     <ContextMenuContent>
@@ -265,6 +307,83 @@ export function FilePanel({
       </ContextMenuItem>
     </ContextMenuContent>
   );
+
+  /**
+   * One directory's rows, with each folder's children nested underneath rather than flattened into
+   * the same list. The nesting is what gives a subtree a box of its own to grow and shrink; a flat
+   * list can only have rows appear and vanish.
+   *
+   * Children are rendered for any folder whose contents are known, open or not — `Branch` hides the
+   * closed ones, and something has to still be there to animate on the way out.
+   */
+  const level = (path: string, depth: number): ReactNode =>
+    (loaded[path] ?? []).filter(visible).map((entry) => {
+      const isRenaming = draft?.kind === "rename" && draft.path === entry.path;
+      const Icon = entry.is_dir ? (expanded.has(entry.path) ? FolderOpen : Folder) : File;
+
+      return (
+        <div key={entry.path}>
+          {isRenaming ? (
+            draftRow(depth)
+          ) : (
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <div
+                  onClick={() => {
+                    setSelected(entry.path);
+                    // A plain click opens a directory or *views* a file. It never edits —
+                    // editing is a deliberate act, so it lives in the menu.
+                    if (entry.is_dir) toggle(entry.path);
+                    else onOpen(entry.path);
+                  }}
+                  onContextMenu={() => setSelected(entry.path)}
+                  className={cn(
+                    "group flex cursor-default items-center gap-1 rounded-md pr-1 transition-colors",
+                    openPath === entry.path
+                      ? "bg-accent"
+                      : selected === entry.path
+                        ? "bg-accent/60"
+                        : "hover:bg-accent/50",
+                  )}
+                  style={{ paddingLeft: depth * 12 }}
+                >
+                  <ChevronRight
+                    className={cn(
+                      "size-3 shrink-0 text-muted-foreground transition-transform",
+                      !entry.is_dir && "opacity-0",
+                      expanded.has(entry.path) && "rotate-90",
+                    )}
+                  />
+                  <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate py-1 text-hint">{entry.name}</span>
+
+                  {!entry.is_dir && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onInsert(entry.path);
+                      }}
+                      title={t("files.insert")}
+                      className="ml-auto hidden shrink-0 rounded p-1 text-muted-foreground hover:text-primary group-hover:block"
+                    >
+                      <AtSign className="size-3" />
+                    </button>
+                  )}
+                </div>
+              </ContextMenuTrigger>
+              {menuFor(entry)}
+            </ContextMenu>
+          )}
+
+          {entry.is_dir && entry.path in loaded && (
+            <Branch open={expanded.has(entry.path)}>{level(entry.path, depth + 1)}</Branch>
+          )}
+
+          {/* A new child appears indented under the folder it's going into. */}
+          {draft && draft.kind !== "rename" && draft.parent === entry.path && draftRow(depth + 1)}
+        </div>
+      );
+    });
 
   const draftRow = (depth: number) => (
     <div className="flex items-center gap-1 py-0.5" style={{ paddingLeft: depth * 12 + 18 }}>
@@ -340,77 +459,12 @@ export function FilePanel({
 
           {error ? (
             <p className="px-2 py-3 text-fine text-destructive">{error}</p>
-          ) : rows.length === 0 && !draft ? (
+          ) : roots.length === 0 && !draft ? (
             <p className="px-2 py-3 text-fine text-muted-foreground">
               {cwd ? t("files.empty") : t("files.noProject")}
             </p>
           ) : (
-            rows.map(({ entry, depth }) => {
-              const isRenaming = draft?.kind === "rename" && draft.path === entry.path;
-              const Icon = entry.is_dir ? (expanded.has(entry.path) ? FolderOpen : Folder) : File;
-
-              return (
-                <div key={entry.path}>
-                  {isRenaming ? (
-                    draftRow(depth)
-                  ) : (
-                    <ContextMenu>
-                      <ContextMenuTrigger asChild>
-                        <div
-                          onClick={() => {
-                            setSelected(entry.path);
-                            // A plain click opens a directory or *views* a file. It never edits —
-                            // editing is a deliberate act, so it lives in the menu.
-                            if (entry.is_dir) toggle(entry.path);
-                            else onOpen(entry.path);
-                          }}
-                          onContextMenu={() => setSelected(entry.path)}
-                          className={cn(
-                            "group flex cursor-default items-center gap-1 rounded-md pr-1 transition-colors",
-                            openPath === entry.path
-                              ? "bg-accent"
-                              : selected === entry.path
-                                ? "bg-accent/60"
-                                : "hover:bg-accent/50",
-                          )}
-                          style={{ paddingLeft: depth * 12 }}
-                        >
-                          <ChevronRight
-                            className={cn(
-                              "size-3 shrink-0 text-muted-foreground transition-transform",
-                              !entry.is_dir && "opacity-0",
-                              expanded.has(entry.path) && "rotate-90",
-                            )}
-                          />
-                          <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate py-1 text-hint">{entry.name}</span>
-
-                          {!entry.is_dir && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onInsert(entry.path);
-                              }}
-                              title={t("files.insert")}
-                              className="ml-auto hidden shrink-0 rounded p-1 text-muted-foreground hover:text-primary group-hover:block"
-                            >
-                              <AtSign className="size-3" />
-                            </button>
-                          )}
-                        </div>
-                      </ContextMenuTrigger>
-                      {menuFor(entry)}
-                    </ContextMenu>
-                  )}
-
-                  {/* A new child appears indented under the folder it's going into. */}
-                  {draft &&
-                    draft.kind !== "rename" &&
-                    draft.parent === entry.path &&
-                    draftRow(depth + 1)}
-                </div>
-              );
-            })
+            level("", 0)
           )}
         </div>
       </ScrollArea>

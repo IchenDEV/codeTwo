@@ -49,7 +49,7 @@ pub struct NewSessionResponse {
     pub session_id: String,
     /// The agent's selectable models, when it reports any. Marked UNSTABLE in the ACP spec and
     /// absent from most adapters today, so this stays optional and its absence is a normal state —
-    /// the UI says "this provider doesn't expose models" rather than showing an empty picker.
+    /// the engine then offers [`crate::models::builtin_models`] for the provider instead.
     #[serde(default)]
     pub models: Option<SessionModelState>,
     /// Session config options (UNSTABLE) — where current adapters report the model selector and

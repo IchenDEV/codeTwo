@@ -43,7 +43,8 @@ CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
 CREATE TABLE IF NOT EXISTS projects (
   path           TEXT PRIMARY KEY,
   name           TEXT NOT NULL,
-  last_opened_at INTEGER NOT NULL
+  last_opened_at INTEGER NOT NULL,
+  added_at       INTEGER NOT NULL DEFAULT 0
 );
 ";
 
@@ -63,6 +64,13 @@ pub struct Store {
 /// Additive migrations for stores created by older versions. Each is ignored if already applied.
 fn migrate(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
+    // Ordering used to come from `last_opened_at`, which meant the rail resorted itself under the
+    // cursor every time you clicked a project. Backfilling `added_at` from it keeps the order an
+    // existing store already shows, and freezes it there.
+    if conn.execute("ALTER TABLE projects ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0", []).is_ok()
+    {
+        let _ = conn.execute("UPDATE projects SET added_at=last_opened_at", []);
+    }
     // Stores that predate the projects table already hold the answer to "what projects are there?"
     // in the sessions they contain — seed from those rather than opening to an empty list on a
     // machine that's been in use for months. Names come from the path's last component, so the
@@ -74,7 +82,8 @@ fn migrate(conn: &Connection) {
             .unwrap_or_default();
         for (path, at) in rows {
             let _ = conn.execute(
-                "INSERT OR IGNORE INTO projects (path, name, last_opened_at) VALUES (?1,?2,?3)",
+                "INSERT OR IGNORE INTO projects (path, name, last_opened_at, added_at)
+                 VALUES (?1,?2,?3,?3)",
                 rusqlite::params![path, default_project_name(&path), at],
             );
         }
@@ -108,11 +117,13 @@ impl Store {
 
     // ---- projects -----------------------------------------------------------------------------
 
-    /// Known projects, most recently opened first.
+    /// Known projects, most recently *added* first. Deliberately not use-order: the rail is a list
+    /// you learn the shape of, and a list that reshuffles itself when you click it can't be learned.
+    /// `path` breaks ties so that projects seeded from one migration still have a stable order.
     pub fn list_projects(&self) -> Result<Vec<Project>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT path, name, last_opened_at FROM projects ORDER BY last_opened_at DESC",
+            "SELECT path, name, last_opened_at FROM projects ORDER BY added_at DESC, path ASC",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok(Project { path: r.get(0)?, name: r.get(1)?, last_opened_at: r.get(2)? })
@@ -120,20 +131,22 @@ impl Store {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
-    /// Add a project, or bump an existing one to the top. Adding a directory you already have is a
-    /// normal thing to do by accident, so it re-opens rather than erroring or duplicating.
+    /// Add a project, or re-open one already in the list. Adding a directory you already have is a
+    /// normal thing to do by accident, so it re-opens rather than erroring or duplicating — and it
+    /// keeps its original `added_at`, so re-adding doesn't move a row the user has learned to find.
     pub fn add_project(&self, path: &str, name: Option<&str>, now: i64) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
         let name = name.map(|s| s.to_string()).unwrap_or_else(|| default_project_name(path));
         conn.execute(
-            "INSERT INTO projects (path, name, last_opened_at) VALUES (?1,?2,?3)
+            "INSERT INTO projects (path, name, last_opened_at, added_at) VALUES (?1,?2,?3,?3)
              ON CONFLICT(path) DO UPDATE SET last_opened_at=excluded.last_opened_at",
             rusqlite::params![path, name, now],
         )?;
         Ok(())
     }
 
-    /// Mark a project as the one just opened, so the list stays in use-order.
+    /// Record that a project was just opened. This feeds the age shown on its row; it does *not*
+    /// reorder the list.
     pub fn touch_project(&self, path: &str, now: i64) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -333,19 +346,34 @@ mod tests {
     use crate::provider::ProviderId;
 
     #[test]
-    fn projects_are_listed_in_use_order() {
+    fn projects_are_listed_newest_added_first() {
         let store = Store::open_in_memory().unwrap();
         store.add_project("/work/alpha", None, 100).unwrap();
         store.add_project("/work/beta", None, 200).unwrap();
 
         let list = store.list_projects().unwrap();
         assert_eq!(list.len(), 2);
-        assert_eq!(list[0].path, "/work/beta", "most recently opened first");
+        assert_eq!(list[0].path, "/work/beta", "most recently added first");
         // A name defaults to the directory's own name, not the whole path.
         assert_eq!(list[0].name, "beta");
+    }
 
+    #[test]
+    fn opening_a_project_does_not_reorder_the_list() {
+        let store = Store::open_in_memory().unwrap();
+        store.add_project("/work/alpha", None, 100).unwrap();
+        store.add_project("/work/beta", None, 200).unwrap();
+        let before: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
+
+        // Clicking the bottom row must not walk it to the top under the cursor.
         store.touch_project("/work/alpha", 300).unwrap();
-        assert_eq!(store.list_projects().unwrap()[0].path, "/work/alpha");
+        // Nor does re-adding a directory that's already listed.
+        store.add_project("/work/alpha", None, 400).unwrap();
+
+        let after = store.list_projects().unwrap();
+        assert_eq!(after.iter().map(|p| p.path.clone()).collect::<Vec<_>>(), before);
+        // The age on the row still tracks use, even though the position doesn't.
+        assert_eq!(after.iter().find(|p| p.path == "/work/alpha").unwrap().last_opened_at, 400);
     }
 
     #[test]
@@ -392,6 +420,30 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].path, "/work/beta", "ordered by the newest session in each");
         assert_eq!(list[0].name, "beta");
+    }
+
+    #[test]
+    fn a_store_without_added_at_keeps_the_order_it_already_showed() {
+        // Upgrading shouldn't shuffle a rail the user already knows: the order that use-order
+        // produced becomes the fixed order, and stays put from then on.
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE projects (path TEXT PRIMARY KEY, name TEXT NOT NULL,
+                                    last_opened_at INTEGER NOT NULL);
+             INSERT INTO projects VALUES ('/work/alpha', 'alpha', 100),
+                                         ('/work/beta',  'beta',  200);",
+        )
+        .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        migrate(&conn);
+        let store = Store { conn: Mutex::new(conn) };
+
+        let paths: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
+        assert_eq!(paths, ["/work/beta", "/work/alpha"]);
+
+        store.touch_project("/work/alpha", 999).unwrap();
+        let after: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
+        assert_eq!(after, paths, "frozen after the migration, not re-derived from use");
     }
 
     #[test]

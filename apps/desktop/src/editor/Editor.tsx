@@ -10,6 +10,7 @@ import {
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
+import { FileMenu, type FileItem } from "./FileMenu";
 import { listFiles, type Annotation, type DocBlock, type SkillInfo } from "../bridge";
 import { useColorScheme } from "../theme";
 import { useT } from "../i18n";
@@ -52,22 +53,26 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
   }));
 }
 
-// The `@` picker: workspace files, searched live. Picking one inserts a file mention whose contents
-// the core inlines at compile time.
-async function fileMenuItems(
-  editor: CodeTwoEditor,
-  cwd: string,
-  query: string,
-): Promise<DefaultReactSuggestionItem[]> {
-  const paths = await listFiles(cwd || ".", query, 30).catch(() => []);
-  return paths.map((p) => ({
-    title: p,
-    group: "Files",
-    icon: <span style={{ fontSize: 16 }}>📄</span>,
-    onItemClick: () => {
-      editor.insertInlineContent([{ type: "fileMention", props: { path: p } }, " "]);
-    },
-  }));
+// The `@` picker: workspace files, searched live and ranked by the core. Picking one inserts a file
+// mention whose contents the core inlines at compile time. Drawn by `FileMenu` — the rows carry a
+// name, a directory and a matched span rather than one path string, so the shape is ours, not
+// BlockNote's default item.
+async function fileMenuItems(cwd: string, query: string): Promise<FileItem[]> {
+  // 60, not 30: the rows are now compact enough that scrolling a longer list beats being told the
+  // file you wanted didn't make the cut.
+  const paths = await listFiles(cwd || ".", query, 60).catch(() => []);
+  const q = query.toLowerCase();
+  return paths.map((path) => {
+    const cut = path.lastIndexOf("/");
+    const name = cut < 0 ? path : path.slice(cut + 1);
+    const at = q ? name.toLowerCase().indexOf(q) : -1;
+    return {
+      path,
+      name,
+      dir: cut < 0 ? "" : path.slice(0, cut + 1),
+      hit: at < 0 ? null : ([at, at + q.length] as [number, number]),
+    };
+  });
 }
 
 export function DocEditor({
@@ -158,6 +163,7 @@ export function DocEditor({
   }, [editor, getBlocksRef, insertTextRef, insertAnnotationRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
 
   const scheme = useColorScheme();
+  const getFileItems = (query: string) => fileMenuItems(cwd, query);
 
   return (
     <BlockNoteView
@@ -184,9 +190,15 @@ export function DocEditor({
         }
       />
       {/* `@` mentions workspace files — their contents are inlined into the compiled prompt. */}
-      <SuggestionMenuController
+      {/* The type argument is explicit because the controller infers its item type from `getItems`,
+          and an inline lambda lets it fall back to BlockNote's default item instead. */}
+      <SuggestionMenuController<typeof getFileItems>
         triggerCharacter={"@"}
-        getItems={async (query) => fileMenuItems(editor, cwd, query)}
+        getItems={getFileItems}
+        suggestionMenuComponent={FileMenu}
+        onItemClick={(item) => {
+          editor.insertInlineContent([{ type: "fileMention", props: { path: item.path } }, " "]);
+        }}
       />
     </BlockNoteView>
   );

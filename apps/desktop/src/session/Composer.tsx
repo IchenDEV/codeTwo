@@ -3,6 +3,8 @@ import {
   ArrowUp,
   ChevronDown,
   FileText,
+  GitBranch,
+  ListChecks,
   Plus,
   Sparkles,
   Square,
@@ -10,7 +12,8 @@ import {
   Ticket,
 } from "lucide-react";
 
-import { ConfigPopover, type SessionConfig } from "./ConfigPopover";
+import type { SessionConfig } from "./config";
+import { SESSION_MODES, sessionMode } from "./mode";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
@@ -107,12 +110,15 @@ function MenuRow({
   isDefault,
   label,
   detail,
+  leading,
   onClick,
 }: {
   selected: boolean;
   isDefault: boolean;
   label: string;
   detail?: string | null;
+  /** Optional marker before the label — the provider list's availability dot. */
+  leading?: ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -123,6 +129,7 @@ function MenuRow({
         selected ? "bg-accent" : "hover:bg-accent/60",
       )}
     >
+      {leading}
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
         {detail && <span className="block truncate text-fine text-muted-foreground">{detail}</span>}
@@ -143,6 +150,92 @@ interface PickerRow {
 }
 
 /**
+ * One chip, one question.
+ *
+ * These used to be a single popover holding provider, working directory, permissions and two
+ * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
+ * asked you about four other things first. Each control row chip now opens only its own list.
+ */
+function ModePicker({ config }: { config: SessionConfig }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const active = sessionMode(config.mode, config.sandbox);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Chip tone={active === "full_access" ? "warning" : undefined} title={t("config.mode")}>
+          {active === "full_access" && <span className="size-1.5 shrink-0 rounded-full bg-warning" />}
+          <span>{t(`mode.${active}` as "mode.ask")}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-64 p-1.5">
+        <MenuSection>{t("config.mode")}</MenuSection>
+        {SESSION_MODES.map((m) => (
+          <MenuRow
+            key={m.id}
+            selected={m.id === active}
+            isDefault={false}
+            label={t(`mode.${m.id}` as "mode.ask")}
+            detail={t(`mode.${m.id}Hint` as "mode.askHint")}
+            onClick={() => {
+              config.onSessionMode(m.id);
+              setOpen(false);
+            }}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ProviderPicker({ config }: { config: SessionConfig }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const active = config.providers.find((p) => p.id === config.provider);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Chip title={t("config.provider")}>
+          {active && !active.available && (
+            <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
+          )}
+          <span className="max-w-40 truncate text-foreground/80">
+            {active?.display_name ?? config.provider}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-64 p-1.5">
+        <MenuSection>{t("config.provider")}</MenuSection>
+        {config.providers.map((p) => (
+          <MenuRow
+            key={p.id}
+            selected={p.id === config.provider}
+            isDefault={false}
+            label={p.display_name}
+            // The dot says installed; the line under it says what's missing, so the list itself
+            // answers "why can't I use that one?" without a paragraph of warning text.
+            detail={p.available ? null : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")}
+            leading={
+              <span
+                className={cn("size-1.5 shrink-0 rounded-full", p.available ? "bg-success" : "bg-border")}
+              />
+            }
+            onClick={() => {
+              config.onProvider(p.id);
+              setOpen(false);
+            }}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
  *
@@ -157,9 +250,11 @@ interface PickerRow {
  * chip picks the family, the second the effort, and together they resolve to one of the adapter's
  * own ids.
  *
- * Either API is optional and most adapters skip both, so "no models" is a normal answer, not a
- * failure — the menu explains that instead of showing an empty list. Everything is hidden until a
- * session exists, because before that there's nothing to ask.
+ * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
+ * built-in one for that provider rather than the agent's own — same shape either way. Only a
+ * provider we have no list for (a custom one) falls through to the note explaining that its CLI
+ * config decides. Everything is hidden until a session exists, because before that there's nothing
+ * to ask.
  */
 function ModelPicker({
   models,
@@ -355,8 +450,6 @@ export function Composer({
   filesHint,
 }: ComposerProps) {
   const t = useT();
-  const provider = config.providers.find((p) => p.id === config.provider);
-
   // Leave room for at least a few transcript lines, whatever the window size — including when a
   // height saved on a tall window is restored on a short one. Only the applied height is clamped;
   // the saved preference comes back in full once there's room again.
@@ -426,28 +519,12 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Session setup and model read as a sentence about what this turn will do. One chip, not
-          two: both used to open this same panel, and the provider they named is already on the
-          model chip as its icon. What's left is what actually changes how the turn behaves — what
-          the agent may touch, and what it must ask about first. The dot covers either warning. */}
-      <ConfigPopover
-        config={config}
-        trigger={
-          <Chip
-            tone={config.sandbox === "danger_full_access" ? "warning" : undefined}
-            title={t("composer.providerMode")}
-          >
-            {(config.sandbox === "danger_full_access" || (provider && !provider.available)) && (
-              <span
-                className="size-1.5 rounded-full bg-warning"
-                title={provider && !provider.available ? t("composer.cliNotFound") : t("composer.sandbox")}
-              />
-            )}
-            <span>{t(`sandbox.${config.sandbox}` as const)}</span>
-            <span className="opacity-50">{t(`mode.${config.mode}` as "mode.ask")}</span>
-          </Chip>
-        }
-      />
+      {/* Mode, provider and model read as a sentence about what this turn will do — and each one
+          opens only itself. Where it runs isn't here: that's the project you picked in the rail,
+          named in the title bar, rather than a path to retype. */}
+      <ModePicker config={config} />
+
+      <ProviderPicker config={config} />
 
       <ModelPicker
         models={models}
@@ -460,8 +537,26 @@ export function Composer({
         hasSession={config.hasSession}
       />
 
-      {config.planMode && <Chip title={t("composer.plan")}>plan</Chip>}
-      {config.useWorktree && <Chip title={t("composer.worktree")}>worktree</Chip>}
+      {/* A boolean needs no view to choose from: the chip *is* the control. */}
+      <Chip
+        title={t("config.planFirstHint")}
+        aria-pressed={config.planMode}
+        className={cn(config.planMode && "text-primary hover:text-primary")}
+        onClick={() => config.onPlan(!config.planMode)}
+      >
+        <ListChecks className="size-3.5 shrink-0" />
+        {t("config.planFirst")}
+      </Chip>
+
+      <Chip
+        title={t("config.worktreeHint")}
+        aria-pressed={config.useWorktree}
+        className={cn(config.useWorktree && "text-primary hover:text-primary")}
+        onClick={() => config.onWorktree(!config.useWorktree)}
+      >
+        <GitBranch className="size-3.5 shrink-0" />
+        {t("composer.worktree")}
+      </Chip>
 
       <div className="flex-1" />
 
