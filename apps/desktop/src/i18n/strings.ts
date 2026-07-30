@@ -204,6 +204,8 @@ export const en = {
   "browser.addToPrompt": "Add to prompt",
 
   // file tree
+  "files.searching": "Searching…",
+  "files.noMatches": "No files match.",
   "files.filter": "Filter files…",
   "files.refresh": "Rescan the workspace",
   "files.insert": "Add to the prompt as an @ mention",
@@ -459,6 +461,8 @@ export const zhCN: Record<StringKey, string> = {
   "browser.annotateCount": "已标注 {n} 处",
   "browser.addToPrompt": "加入提示词",
 
+  "files.searching": "搜索中…",
+  "files.noMatches": "没有匹配的文件。",
   "files.filter": "筛选文件…",
   "files.refresh": "重新扫描工作区",
   "files.insert": "作为 @ 引用加入提示词",

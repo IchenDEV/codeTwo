@@ -176,18 +176,51 @@ pub fn delete_path(cwd: &Path, rel: &str) -> Result<(), std::io::Error> {
     }
 }
 
-/// List workspace-relative file paths under `cwd`, filtered by a case-insensitive substring query.
+/// How well a path answers a query, as a sort key — smaller is better.
+///
+/// The point is that a picker's first row should be the file you meant. Typing `main` wants
+/// `src/main.rs`, not `docs/domain/maintenance.md` merely because `d` sorts before `s`. So a hit on
+/// the file's own name outranks one that only matched some directory along the way, a name that
+/// *starts* with the query outranks one that merely contains it, and shallower and shorter paths
+/// win the ties — a top-level file is a likelier mention than something eight directories down.
+///
+/// With no query there is nothing to score, so every path lands in the same tier and the depth and
+/// length tiebreaks do the work: the root of the workspace first, generated trees like `gen/` and
+/// `icons/` after it, rather than whatever happens to start with an early letter.
+fn rank(rel: &str, q: &str) -> (u8, usize, usize) {
+    let lower = rel.to_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(lower.as_str());
+    let tier = if q.is_empty() {
+        0
+    } else if name.starts_with(q) {
+        0
+    } else if name.contains(q) {
+        1
+    } else {
+        2 // matched a directory in the path, not the file itself
+    };
+    (tier, rel.matches('/').count(), rel.len())
+}
+
+/// List workspace-relative file paths under `cwd`, filtered by a case-insensitive substring query
+/// and ordered by how well each one answers it. See [`rank`].
 pub fn list_files(cwd: &Path, query: &str, limit: usize) -> Vec<String> {
     let mut out = Vec::new();
     let q = query.to_lowercase();
-    walk(cwd, cwd, 0, &q, limit, &mut out);
-    out.sort();
+    walk(cwd, cwd, 0, &q, &mut out);
+    // Rank the whole set, then cut. Cutting first — which is what sorting alphabetically and
+    // truncating amounted to — could drop the exact file the query named.
+    out.sort_by(|a, b| rank(a, &q).cmp(&rank(b, &q)).then_with(|| a.cmp(b)));
     out.truncate(limit);
     out
 }
 
-fn walk(root: &Path, dir: &Path, depth: usize, q: &str, limit: usize, out: &mut Vec<String>) {
-    if depth > MAX_DEPTH || out.len() >= limit.saturating_mul(4) {
+/// Matches collected before the walk gives up. Generous, because ranking needs to see the
+/// candidates to order them, and bounded, because a home directory is not a workspace.
+const SCAN_CAP: usize = 2_000;
+
+fn walk(root: &Path, dir: &Path, depth: usize, q: &str, out: &mut Vec<String>) {
+    if depth > MAX_DEPTH || out.len() >= SCAN_CAP {
         return;
     }
     let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -198,7 +231,7 @@ fn walk(root: &Path, dir: &Path, depth: usize, q: &str, limit: usize, out: &mut 
             if name.starts_with('.') || SKIP_DIRS.contains(&name.as_str()) {
                 continue;
             }
-            walk(root, &path, depth + 1, q, limit, out);
+            walk(root, &path, depth + 1, q, out);
         } else {
             let rel = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().to_string();
             if q.is_empty() || rel.to_lowercase().contains(q) {
@@ -445,6 +478,42 @@ mod tests {
         let rs = list_files(&dir, "main", 100);
         assert_eq!(rs, vec!["src/main.rs".to_string()]);
         assert!(list_files(&dir, "", 1).len() <= 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_best_match_comes_first_and_survives_the_limit() {
+        let dir = fixture();
+        std::fs::create_dir_all(dir.join("apps/main/deep")).unwrap();
+        // Alphabetically this is the *first* of the three; by relevance it's last, because "main"
+        // only appears in a directory it sits under.
+        std::fs::write(dir.join("apps/main/deep/a.rs"), "").unwrap();
+        std::fs::write(dir.join("apps/mainframe.rs"), "").unwrap();
+
+        let hits = list_files(&dir, "main", 100);
+        assert_eq!(
+            hits,
+            vec![
+                "src/main.rs".to_string(),      // name starts with the query, shallow
+                "apps/mainframe.rs".to_string(), // name starts with it too, but longer
+                "apps/main/deep/a.rs".to_string(), // only the directory matched
+            ],
+        );
+        // And the one you meant is still there when only one row fits.
+        assert_eq!(list_files(&dir, "main", 1), vec!["src/main.rs".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_empty_query_puts_the_workspace_root_first() {
+        let dir = fixture();
+        std::fs::create_dir_all(dir.join("gen/schemas")).unwrap();
+        std::fs::write(dir.join("gen/schemas/acl.json"), "").unwrap();
+
+        let all = list_files(&dir, "", 100);
+        let root = all.iter().position(|p| p == "README.md").unwrap();
+        let deep = all.iter().position(|p| p == "gen/schemas/acl.json").unwrap();
+        assert!(root < deep, "generated trees shouldn't crowd out the root: {all:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
