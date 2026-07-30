@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Activity,
   CircleAlert,
+  EllipsisVertical,
   Folder,
   GitBranch,
+  Globe,
   Keyboard,
   PanelRight,
   Settings as SettingsIcon,
+  TerminalIcon,
 } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
@@ -59,6 +63,7 @@ import {
   type ConfigOptionInfo,
   type CoreEvent,
   type DocBlock,
+  type Annotation,
   type GitStatus,
   type Issue,
   type KeymapEntry,
@@ -96,6 +101,13 @@ import { useLanguage, useT } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
@@ -167,8 +179,8 @@ export default function App() {
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
-  // A blank tab, not a landing page: most sites refuse to be iframed anyway, and this browser's
-  // job is your localhost dev server, which you type in.
+  // A blank tab, not a landing page: this browser's job is your localhost dev server, which you
+  // type in.
   const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
@@ -190,6 +202,9 @@ export default function App() {
   // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
+  // What the adapter itself picked at session/new — the picker badges it as "Default". Later
+  // `models` events are switch echoes, so only the first one after a reset gets to set this.
+  const [defaultModel, setDefaultModel] = useState<string | null>(null);
   // Session config options (model + reasoning effort) — the newer ACP surface, same lifecycle.
   const [configOptions, setConfigOptions] = useState<ConfigOptionInfo[]>([]);
   // Projects are the rail's organising idea: the conversation list and the git section below it
@@ -206,6 +221,7 @@ export default function App() {
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
   const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
+  const [railWidth, setRailWidth] = usePersistedNumber("codetwo.railWidth", 288);
   // Full-page document is *the* mode of this app, not a temporary state it visits. Nothing here
   // takes it away on your behalf — not sending, not switching sessions. It's a preference you set
   // and the app keeps, because a document-first tool that keeps collapsing into a chat box isn't
@@ -220,11 +236,15 @@ export default function App() {
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
+  const insertAnnotationRef = useRef<((a: Annotation, context: string) => void) | null>(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  // Mirrors `activeProject` so `selectProject` can tell a real switch from a re-click without
+  // remaking its callback (and the rail rows' props) on every project change.
+  const activeProjectRef = useRef<string | null>(null);
   const pendingDocRef = useRef<DocBlock[] | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -254,6 +274,17 @@ export default function App() {
     (path: string) => {
       setActiveProject(path);
       setCwd(path);
+      // Switching projects means composing into a different workspace — carrying the previous
+      // session across would silently send the next prompt to the old project's cwd.
+      if (path !== activeProjectRef.current) {
+        activeProjectRef.current = path;
+        activeSessionRef.current = null;
+        setActiveSession(null);
+        setTurns([]);
+        setModels([]);
+        setCurrentModel(null);
+        setDefaultModel(null);
+      }
       void openProject(path).then(refreshProjects);
     },
     [refreshProjects],
@@ -274,6 +305,12 @@ export default function App() {
   const activeTitle = useMemo(
     () => sessions.find((s) => s.id === activeSession)?.title ?? "New session",
     [sessions, activeSession],
+  );
+
+  // The title bar's project badge — the workspace this session lives in, at a glance.
+  const activeProjectName = useMemo(
+    () => projects.find((p) => p.path === activeProject)?.name ?? null,
+    [projects, activeProject],
   );
 
   // Sessions store a provider id; show the registry's display name where we have one.
@@ -327,13 +364,18 @@ export default function App() {
           // A switch echoes back the same list; only session/new carries a fresh one.
           if (ev.available.length > 0) setModels(ev.available);
           setCurrentModel(ev.current || null);
+          setDefaultModel((prev) => prev ?? (ev.current || null));
           return;
         }
         if (ev.event === "config_options") {
           // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
           setConfigOptions(ev.options);
           const model = ev.options.find((o) => o.category === "model" || o.id === "model");
-          if (model?.current) setCurrentModel(model.current);
+          if (model?.current) {
+            setCurrentModel(model.current);
+            // Same rule as `models`: the first report after a reset is the adapter's own pick.
+            setDefaultModel((prev) => prev ?? model.current);
+          }
           return;
         }
         if (ev.event === "permission_request") {
@@ -403,6 +445,7 @@ export default function App() {
     setTurns([]);
     setModels([]);
     setCurrentModel(null);
+    setDefaultModel(null);
     setConfigOptions([]);
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
@@ -436,12 +479,13 @@ export default function App() {
     async (id: string) => {
       activeSessionRef.current = id;
       setActiveSession(id);
-      // Models belong to a session. The agent only reports the list at session/new, so for a
-      // session resumed from the store we know the chosen model but not the menu it came from —
-      // the picker falls back to its preset lists until the agent reports again.
+      // Models belong to a session. The agent only reports the menu at session/new, so for a
+      // session resumed from the store we know the chosen model but not the options it came from;
+      // the picker names the model and stays closed until the agent reports again.
       setModels([]);
       setConfigOptions([]);
       setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
+      setDefaultModel(null);
       setTurns(turnsFromTranscript(await getTranscript(id)));
     },
     [sessions],
@@ -499,13 +543,14 @@ export default function App() {
     }
   }, [cwd, toast]);
 
-  const annotate = useCallback(
-    async (note: string) => {
-      const ctx = await browserContext({ url: browserUrl, note, selector: null, selected_text: null });
-      insertTextRef.current?.(ctx);
-    },
-    [browserUrl],
-  );
+  /* One card per annotation. The core renders the markdown the agent will see; the editor shows
+     it as a dedicated block — host, element, note, style edits — instead of a wall of text. */
+  const annotate = useCallback(async (notes: Annotation[]) => {
+    for (const a of notes) {
+      const ctx = await browserContext(a);
+      insertAnnotationRef.current?.(a, ctx);
+    }
+  }, []);
 
   const insertIssue = useCallback(async (issue: Issue) => {
     const ctx = await issueContext(issue);
@@ -702,6 +747,7 @@ export default function App() {
       .then(async (list) => {
         setProjects(list);
         if (list.length > 0) {
+          activeProjectRef.current = list[0].path;
           setActiveProject(list[0].path);
           setCwd(list[0].path);
           return;
@@ -710,6 +756,7 @@ export default function App() {
         setCwd(here);
         const resolved = await addProject(here).catch(() => null);
         if (resolved) {
+          activeProjectRef.current = resolved;
           setActiveProject(resolved);
           listProjects().then(setProjects).catch(() => {});
         }
@@ -816,7 +863,9 @@ export default function App() {
           }}
         />
       ) : (
-      <div className="flex min-h-0 flex-1">
+      // page-in makes the return from settings (which remounts this whole subtree) a transition
+      // rather than a cut, and doubles as the app's own opening animation.
+      <div className="animate-page-in flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
         <SessionRail
           projects={projects}
@@ -832,7 +881,10 @@ export default function App() {
               if (p === activeProject) {
                 const next = projects.find((x) => x.path !== p);
                 if (next) selectProject(next.path);
-                else setActiveProject(null);
+                else {
+                  activeProjectRef.current = null;
+                  setActiveProject(null);
+                }
               }
             });
           }}
@@ -848,6 +900,8 @@ export default function App() {
           skills={skills}
           onOpenMarket={openMarket}
           onNewSkill={() => setSkillDraft({ name: "", text: "" })}
+          width={railWidth}
+          onWidth={setRailWidth}
           newHint={hint("new_session")}
           searchHint={hint("open_command_palette")}
           onOpenSearch={() => setShowPalette(true)}
@@ -898,20 +952,27 @@ export default function App() {
             }
           />
         ) : (
-        <main className="content-surface flex min-w-0 flex-1 flex-col" ref={mainRef}>
+        <main className="surface-module m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          <header data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-2 pt-7">
+          {/* pt-1 + the module's 8px top margin puts this row's centre at 28px from the window
+              top — the same line as the traffic lights and the rail's search box. */}
+          <header data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-2 pt-1">
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            <span data-tauri-drag-region className="max-w-96 truncate text-[13px] font-semibold">
+            <span data-tauri-drag-region className="max-w-96 truncate text-ui font-semibold">
               {activeTitle}
             </span>
+            {activeProjectName && (
+              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-fine text-muted-foreground">
+                {activeProjectName}
+              </span>
+            )}
             {/* The rail no longer carries a git section, so this chip is the glance — and the
                 click-through to review & commit. */}
             {git?.is_repo && (
               <button
                 onClick={openSourceControl}
-                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-fine text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 title={t("action.open_source_control")}
               >
                 <GitBranch className="size-3" />
@@ -927,7 +988,7 @@ export default function App() {
             {docMode && (running || turns.length > 0) && (
               <button
                 onClick={() => toggleDocMode(false)}
-                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 title={t("header.showTranscript", { count: turns.length })}
               >
                 {running && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
@@ -935,22 +996,25 @@ export default function App() {
               </button>
             )}
 
+            {/* The surfaces you reach for constantly get their own icons, t3code-style; everything
+                else lives behind the ⋮. */}
             <IconAction
-              icon={Keyboard}
-              label={t("header.palette")}
-              hint={hint("open_command_palette")}
-              onClick={() => setShowPalette(true)}
+              icon={TerminalIcon}
+              label={t("action.toggle_terminal")}
+              hint={hint("toggle_terminal")}
+              active={dockTab === "terminal"}
+              onClick={() => toggleDock("terminal")}
             />
             <IconAction
-              icon={SettingsIcon}
-              label={t("header.settings")}
-              hint={hint("open_settings")}
-              onClick={() => setShowSettings(true)}
+              icon={Globe}
+              label={t("action.toggle_browser")}
+              hint={hint("toggle_browser")}
+              active={dockTab === "browser"}
+              onClick={() => toggleDock("browser")}
             />
             <IconAction
               icon={PanelRight}
               label={t("header.panel")}
-              hint={hint("toggle_terminal")}
               active={dockTab !== null}
               // Opening from here lands on the surface picker; the shortcuts still jump straight
               // to a specific surface.
@@ -959,16 +1023,41 @@ export default function App() {
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={t("header.more")} className="size-8 shrink-0">
+                  <EllipsisVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onSelect={() => setShowPalette(true)}>
+                  <Keyboard />
+                  {t("header.palette")}
+                  <DropdownMenuShortcut>{hint("open_command_palette")}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowUsage(true)}>
+                  <Activity />
+                  {t("action.open_usage")}
+                  <DropdownMenuShortcut>{hint("open_usage")}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowSettings(true)}>
+                  <SettingsIcon />
+                  {t("header.settings")}
+                  <DropdownMenuShortcut>{hint("open_settings")}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </header>
 
           {/* The transcript owns the column; the composer is docked under it. In document mode the
-              transcript steps aside entirely and the editor gets the whole height. */}
+              editor takes the column and the transcript moves to a side panel on the right. */}
           {!docMode && (
             <section className="min-h-0 flex-1 overflow-y-auto">
               {turns.length === 0 ? (
                 <div className="flex h-full items-center justify-center px-6 pb-10">
                   <div className="animate-rise-in text-center">
-                    <p className="text-[17px] font-medium">{t("transcript.greeting")}</p>
+                    <p className="text-heading font-medium">{t("transcript.greeting")}</p>
                     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                       {t("transcript.hint")}
                       <br />
@@ -987,6 +1076,11 @@ export default function App() {
             </section>
           )}
 
+          {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
+              BlockNote unmounts (and takes the draft with it) if the structure around it changes.
+              Compact, the wrapper is just the composer's slot; expanded, it's a row that gives the
+              document the column and hangs the conversation off its right. */}
+          <div className={cn("flex", docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 flex-col")}>
           <Composer
             config={sessionConfig}
             docMode={docMode}
@@ -996,6 +1090,7 @@ export default function App() {
             boundsRef={mainRef}
             models={models}
             currentModel={currentModel}
+            defaultModel={defaultModel}
             onModel={(id) => {
               if (!activeSessionRef.current) return;
               // Optimistic: the engine answers with a `models` event, or an `error` if the provider
@@ -1021,14 +1116,12 @@ export default function App() {
             docEmpty={docEmpty}
             onRun={() => void run()}
             onStop={() => activeSession && void cancelTurn(activeSession)}
-            onPreview={() => void doPreview()}
             onAttachFile={() => setShowFiles(true)}
             onInsertSkill={() => openSkillPickerRef.current?.()}
             onInsertIssue={() => setShowIssues(true)}
             onOpenMarket={openMarket}
             onVoiceText={(t) => insertTextRef.current?.(t)}
             runHint={hint("run")}
-            docModeHint={hint("toggle_doc_mode")}
             skillHint={hint("open_skill_picker")}
             filesHint={hint("open_files")}
           >
@@ -1038,6 +1131,7 @@ export default function App() {
               cwd={cwd || "."}
               getBlocksRef={getBlocksRef}
               insertTextRef={insertTextRef}
+              insertAnnotationRef={insertAnnotationRef}
               insertFileRef={insertFileRef}
               focusRef={focusEditorRef}
               clearRef={clearEditorRef}
@@ -1045,12 +1139,26 @@ export default function App() {
               onEmptyChange={setDocEmpty}
             />
           </Composer>
+
+          {/* Document mode's view of the conversation: beside the page, not instead of it. Only
+              once there's something to show — a fresh document keeps the full width. */}
+          {docMode && (turns.length > 0 || running) && (
+            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto bg-foreground/[0.025] px-4 pb-4 pt-2">
+              {turns.map((t) => (
+                <TurnCard key={t.id} turn={t} />
+              ))}
+              <div ref={transcriptEndRef} />
+            </aside>
+          )}
+          </div>
         </main>
         )}
 
         {/* ---------------- side dock ---------------- */}
-        {dockTab && (
-          <Dock
+        {/* Always mounted: closing animates the width to zero instead of unmounting, which both
+            plays the full collapse and keeps shells alive across close/open. */}
+        <Dock
+            open={dockTab !== null}
             tab={dockTab}
             onTab={setDockTab}
             onClose={() => setDockTab(null)}
@@ -1063,6 +1171,7 @@ export default function App() {
             onNavigate={setBrowserUrl}
             onAnnotate={(n) => void annotate(n)}
             onInsertFile={(p) => insertFileRef.current?.(p)}
+            onSendText={(text) => insertTextRef.current?.(text)}
             onOpenFile={(p) => {
               setOpenFile(p);
               setFileEditing(false);
@@ -1071,7 +1180,6 @@ export default function App() {
             width={dockWidth}
             onWidth={setDockWidth}
           />
-        )}
       </div>
       )}
 
@@ -1171,7 +1279,7 @@ export default function App() {
                 <CircleAlert className="size-4 text-warning" /> Permission requested
               </DialogTitle>
             </DialogHeader>
-            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-[13px]">{permission.title}</p>
+            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">{permission.title}</p>
             <DialogFooter>
               <Button variant="outline" onClick={() => void answer(null)}>
                 Cancel

@@ -20,6 +20,10 @@
         "minHeight": 500,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 31
+        },
         "transparent": true,
         "windowEffects": {
           "effects": [
@@ -51,7 +55,8 @@
     "shortDescription": "Document-first coding agent",
     "longDescription": "Compose prompts as documents, weave in skills, and drive Claude Code, Codex, Grok, Cursor, and OpenCode over the Agent Client Protocol.",
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "entitlements": "Entitlements.plist"
     }
   }
 }

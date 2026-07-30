@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
             Your sessions are stored on disk and are unaffected.
           </p>
         </div>
-        <pre className="max-h-52 max-w-2xl overflow-auto rounded-md border bg-muted/50 px-4 py-3 text-left font-mono text-[12px]">
+        <pre className="max-h-52 max-w-2xl overflow-auto rounded-md border bg-muted/50 px-4 py-3 text-left font-mono text-hint">
           {error.stack ?? String(error)}
         </pre>
         <div className="flex gap-2">

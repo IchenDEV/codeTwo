@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Archive,
   Folder,
@@ -62,6 +62,8 @@ export function SessionRail({
   onOpenSearch,
   onOpenSettings,
   status,
+  width,
+  onWidth,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -91,10 +93,37 @@ export function SessionRail({
   onOpenSettings: () => void;
   /** Foot-of-rail line: which provider is live. */
   status: React.ReactNode;
+  /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
+  width: number;
+  onWidth: (n: number) => void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ path: string; name: string } | null>(null);
+
+  // Clamped on every render, not just while dragging, so a width saved on one display comes back
+  // usable on another. 220 keeps the search row workable next to the traffic lights; 420 stops the
+  // rail from eating the document.
+  const applied = Math.min(420, Math.max(220, width));
+
+  const startDrag = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = applied;
+      const onMove = (ev: MouseEvent) =>
+        onWidth(Math.round(Math.min(420, Math.max(220, startW + (ev.clientX - startX)))));
+      const onUp = () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        document.body.classList.remove("resizing-h");
+      };
+      document.body.classList.add("resizing-h");
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [applied, onWidth],
+  );
 
   // A session belongs to whichever project its cwd is — a filter, not a stored relation.
   const byProject = useMemo(() => {
@@ -120,7 +149,7 @@ export function SessionRail({
       {renaming?.id === s.id ? (
         <Input
           autoFocus
-          className="h-6 text-[13px]"
+          className="h-6 text-ui"
           value={renaming.title}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
@@ -134,7 +163,7 @@ export function SessionRail({
         />
       ) : (
         <div
-          className={cn("truncate text-[13px] font-medium", s.id === activeSession && "text-primary")}
+          className={cn("truncate text-ui font-medium", s.id === activeSession && "text-primary")}
         >
           {s.title}
         </div>
@@ -142,12 +171,12 @@ export function SessionRail({
 
       {/* 2 — the last thing said, so the title isn't the only way to tell two
              "Untitled session" rows apart */}
-      <div className="truncate text-[11px] leading-snug text-muted-foreground/80">
+      <div className="truncate text-fine leading-snug text-muted-foreground/80">
         {previews[s.id] ?? t("session.noMessages")}
       </div>
 
       {/* 3 — what it's doing and what it's running on */}
-      <div className="flex items-center gap-1 pt-0.5 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-1 pt-0.5 text-fine text-muted-foreground">
         {s.id === activeSession && running ? (
           <>
             <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
@@ -158,7 +187,7 @@ export function SessionRail({
         )}
         <span className="truncate">{displayProvider(s.provider)}</span>
         {s.worktree_path && (
-          <Badge variant="secondary" className="h-4 px-1 text-[9px]">
+          <Badge variant="secondary" className="h-4 px-1 text-cap">
             wt
           </Badge>
         )}
@@ -189,19 +218,24 @@ export function SessionRail({
   );
 
   return (
-    <aside className="glass-rail flex w-72 min-w-72 flex-col border-r">
+    <aside className="glass-rail relative flex shrink-0 flex-col" style={{ width: applied }}>
+      <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />
       {/* ---- search + compose ------------------------------------------------------------- */}
-      {/* pt-7 clears the macOS traffic lights, which float over this row under the overlay title
-          bar. That bar is transparent, so this row is also what drags the window. */}
-      <div data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-1.5 pt-7">
+      {/* One line with the macOS traffic lights. Their y in tauri.conf.json is NOT a plain top
+          inset — tao grows the titlebar container to button-height + y with the buttons pinned to
+          its bottom — so the value (28, eyeballed against a real window) is tuned to centre the
+          lights on the 28px line this row's search box and the main module's header icons sit on.
+          The left padding starts the search box past them; the bar is transparent, so this row is
+          also what drags the window. */}
+      <div data-tauri-drag-region className="flex items-center gap-1.5 pb-2 pl-[78px] pr-3 pt-3">
         <button
           onClick={onOpenSearch}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-foreground/[0.05] px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-foreground/[0.05] px-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent"
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
           {searchHint && (
-            <kbd className="shrink-0 rounded border border-border/70 px-1 py-px font-mono text-[10px] text-muted-foreground/80">
+            <kbd className="shrink-0 rounded bg-foreground/[0.07] px-1 py-px font-mono text-cap text-muted-foreground/80">
               {searchHint}
             </kbd>
           )}
@@ -226,7 +260,7 @@ export function SessionRail({
 
       {/* ---- all projects ----------------------------------------------------------------- */}
       <div className="flex items-center gap-2 px-3 pb-0.5 pt-1.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 text-[13px] font-medium">
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 text-ui font-medium">
           <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{t("rail.allProjects")}</span>
         </div>
@@ -247,9 +281,11 @@ export function SessionRail({
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-2 pb-3">
+        {/* Same px-3 gutter as the header row above: with rows padding a further px-2, project
+            icons land exactly under the "All projects" icon instead of 4px adrift. */}
+        <div className="px-3 pb-3">
           {projects.length === 0 ? (
-            <p className="px-3 py-4 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
             </p>
           ) : (
@@ -275,7 +311,7 @@ export function SessionRail({
                     {renamingProject?.path === p.path ? (
                       <Input
                         autoFocus
-                        className="h-6 flex-1 text-[13px]"
+                        className="h-6 flex-1 text-ui"
                         value={renamingProject.name}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => setRenamingProject({ path: p.path, name: e.target.value })}
@@ -290,7 +326,7 @@ export function SessionRail({
                     ) : (
                       <span
                         className={cn(
-                          "min-w-0 flex-1 truncate text-[13px]",
+                          "min-w-0 flex-1 truncate text-ui",
                           isActive ? "font-semibold" : "font-medium text-muted-foreground",
                         )}
                         title={p.path}
@@ -298,7 +334,7 @@ export function SessionRail({
                         {p.name}
                       </span>
                     )}
-                    <span className="shrink-0 text-[11px] text-muted-foreground group-hover:hidden">
+                    <span className="shrink-0 text-fine text-muted-foreground group-hover:hidden">
                       {shortAge(p.last_opened_at)}
                     </span>
                     <span className="hidden shrink-0 gap-0.5 group-hover:flex">
@@ -328,7 +364,7 @@ export function SessionRail({
                   {/* its conversations, only for the project you're in */}
                   {isActive &&
                     (list.length === 0 ? (
-                      <p className="py-2 pl-8 pr-2 text-[11px] leading-relaxed text-muted-foreground">
+                      <p className="py-2 pl-8 pr-2 text-fine leading-relaxed text-muted-foreground">
                         {t("rail.empty")} {t("rail.emptyHint")}
                       </p>
                     ) : (
@@ -342,12 +378,12 @@ export function SessionRail({
       </ScrollArea>
 
       {/* ---- foot: what's live, and the way to settings ------------------------------------ */}
-      <div className="border-t px-2 pb-1.5 pt-1">
-        <div className="flex h-7 items-center gap-2 px-2 text-[11px] text-muted-foreground">{status}</div>
+      <div className="px-3 pb-2 pt-1">
+        <div className="flex h-7 items-center gap-2 px-2 text-fine text-muted-foreground">{status}</div>
         <div className="flex items-center gap-1">
           <button
             onClick={onOpenSettings}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-accent"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-ui transition-colors hover:bg-accent"
           >
             <Settings className="size-4 shrink-0 text-muted-foreground" />
             {t("header.settings")}

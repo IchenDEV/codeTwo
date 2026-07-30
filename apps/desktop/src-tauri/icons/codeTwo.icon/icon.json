@@ -1,0 +1,60 @@
+{
+  "fill" : {
+    "linear-gradient" : {
+      "angle" : 90,
+      "colors" : [
+        "extended-srgb:0.35686,0.57647,1.00000,1.00000",
+        "extended-srgb:0.11765,0.30980,0.84706,1.00000"
+      ]
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "back-sheet.svg",
+          "name" : "Back Sheet",
+          "fill" : "extended-srgb:1.00000,1.00000,1.00000,0.34000"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.35
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "prompt.svg",
+          "name" : "Prompt"
+        },
+        {
+          "image-name" : "front-sheet.svg",
+          "name" : "Front Sheet"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : [
+      "macOS",
+      "iOS"
+    ]
+  }
+}

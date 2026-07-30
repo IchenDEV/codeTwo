@@ -26,25 +26,25 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
         {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0) && (
           <div className="flex flex-wrap gap-1.5">
             {files.map((f) => (
-              <Badge key={f} variant="outline" className="font-mono text-[10px]">
+              <Badge key={f} variant="outline" className="font-mono text-cap">
                 @{f}
               </Badge>
             ))}
             {mcp.map((m) => (
-              <Badge key={m} variant="secondary" className="text-[10px]">
+              <Badge key={m} variant="secondary" className="text-cap">
                 mcp: {m}
               </Badge>
             ))}
             {agentSkills.map((s) => (
-              <Badge key={s} variant="secondary" className="text-[10px]">
+              <Badge key={s} variant="secondary" className="text-cap">
                 skill: {s}
               </Badge>
             ))}
           </div>
         )}
 
-        <ScrollArea className="max-h-[52vh] rounded-md border bg-muted/40">
-          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-[12.5px] leading-relaxed">
+        <ScrollArea className="max-h-[52vh] rounded-lg bg-muted/40">
+          <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-hint leading-relaxed">
             {preview.prompt || "(empty)"}
           </pre>
         </ScrollArea>

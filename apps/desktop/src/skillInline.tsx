@@ -1,6 +1,6 @@
-import { BlockNoteSchema, defaultInlineContentSpecs } from "@blocknote/core";
-import { createReactInlineContentSpec } from "@blocknote/react";
-import type { DocBlock } from "./bridge";
+import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from "@blocknote/core";
+import { createReactBlockSpec, createReactInlineContentSpec } from "@blocknote/react";
+import type { DocBlock, StyleChange } from "./bridge";
 
 // A real inline "skill" node: a first-class document element (not styled text), so a composed
 // prompt serializes deterministically into `DocBlock::Skill` with a stable skillId. This is what
@@ -47,8 +47,81 @@ export const FileInline = createReactInlineContentSpec(
   },
 );
 
-// The editor schema = default blocks/inline + our skill and file inline nodes.
+// A browser annotation as a first-class document block, not a paragraph of markdown. The raw
+// context text (`**Browser context** — …`) is what the *agent* needs; a person composing a prompt
+// around three of them needs a card: where, which element, what was said, what was dialled in.
+// The compiled markdown rides along in `context` so serialization stays exact — the card is a
+// view of it, never a re-rendering.
+export const BrowserNoteBlock = createReactBlockSpec(
+  {
+    type: "browserNote",
+    propSchema: {
+      url: { default: "" },
+      note: { default: "" },
+      selector: { default: "" },
+      selectedText: { default: "" },
+      /// `StyleChange[]` as JSON — BlockNote props are scalars only.
+      styles: { default: "[]" },
+      /// The exact markdown block `browser_context` rendered; what the document compiles to.
+      context: { default: "" },
+    },
+    content: "none",
+  } as const,
+  {
+    render: (props) => {
+      const { url, note, selector, selectedText, styles } = props.block.props;
+      let host = url;
+      try {
+        host = new URL(url).host || url;
+      } catch {
+        /* keep as-is */
+      }
+      let changes: StyleChange[] = [];
+      try {
+        changes = JSON.parse(styles) as StyleChange[];
+      } catch {
+        /* corrupt props render as no changes */
+      }
+      return (
+        <div className="bn-annotation" contentEditable={false}>
+          <div className="bn-annotation-head">
+            <span className="bn-annotation-dot" />
+            <span className="bn-annotation-host">{host}</span>
+            {selector && <code className="bn-annotation-sel">{selector}</code>}
+            <button
+              className="bn-annotation-x"
+              title="Remove"
+              onClick={() => props.editor.removeBlocks([props.block])}
+            >
+              ×
+            </button>
+          </div>
+          {selectedText && <div className="bn-annotation-quote">“{selectedText}”</div>}
+          {note && <div className="bn-annotation-note">{note}</div>}
+          {changes.length > 0 && (
+            <div className="bn-annotation-styles">
+              {changes.map((c) => (
+                <span key={c.property} className="bn-annotation-change">
+                  <span className="prop">{c.property}</span>
+                  <span className="from">{c.from}</span>
+                  <span className="arrow">→</span>
+                  <span className="to">{c.to}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    },
+  },
+);
+
+// The editor schema = default blocks/inline + our skill/file inline nodes and the annotation block.
 export const schema = BlockNoteSchema.create({
+  blockSpecs: {
+    ...defaultBlockSpecs,
+    browserNote: BrowserNoteBlock,
+  },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     skill: SkillInline,
@@ -69,6 +142,13 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
   };
 
   for (const block of editor.document) {
+    // An annotation block compiles to exactly the markdown the core rendered for it.
+    if (block.type === "browserNote") {
+      flush();
+      const text = String((block.props as { context?: string }).context ?? "");
+      if (text.trim()) out.push({ type: "text", text });
+      continue;
+    }
     const content = block.content;
     if (Array.isArray(content)) {
       for (const inline of content as Array<Record<string, unknown>>) {

@@ -43,17 +43,17 @@ export function MarketModal({
         <ScrollArea className="max-h-[55vh] pr-3">
           <div className="space-y-2">
             {filtered.map((it) => (
-              <div key={it.id} className="flex items-center gap-3 rounded-lg border p-3">
+              <div key={it.id} className="flex items-center gap-3 rounded-xl bg-foreground/[0.04] p-3">
                 <span className="w-7 text-center text-xl">{it.icon ?? "✦"}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     {it.name}
-                    <Badge variant="secondary" className="text-[9px] uppercase">
+                    <Badge variant="secondary" className="text-cap uppercase">
                       {it.kind}
                     </Badge>
                   </div>
-                  <div className="text-[13px] text-muted-foreground">{it.description}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+                  <div className="text-ui text-muted-foreground">{it.description}</div>
+                  <div className="mt-0.5 text-fine text-muted-foreground/70">
                     {[it.author, ...it.tags].join(" · ")}
                   </div>
                 </div>

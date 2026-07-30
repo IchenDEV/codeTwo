@@ -16,3 +16,12 @@ uuid.workspace = true
 tracing.workspace = true
 rusqlite = { version = "0.32", features = ["bundled"] }
 portable-pty = "0.8"
+# Ghostty's VT engine (parsing, scrollback, reflow) behind a C API. NOTE: this builds Ghostty from
+# source with Zig — see the terminal section of docs/architecture.md for the toolchain requirement.
+libghostty-vt = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSError", "NSLocale", "NSSet", "NSArray"] }
+objc2-speech = { version = "0.3", features = ["SFSpeechRecognizer", "SFSpeechRecognitionRequest", "SFSpeechRecognitionResult", "SFSpeechRecognitionTask", "SFTranscription", "SFErrors", "block2"] }

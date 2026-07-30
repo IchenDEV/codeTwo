@@ -6,8 +6,10 @@ import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
 import { useTheme, type ThemePreference } from "../theme";
+import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -48,8 +50,8 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
   return (
     <div className="flex items-center justify-between gap-8 py-4">
       <div className="min-w-0 max-w-[420px]">
-        <div className="text-[13.5px] font-medium">{label}</div>
-        {hint && <div className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{hint}</div>}
+        <div className="text-ui font-medium">{label}</div>
+        {hint && <div className="mt-1 text-hint leading-relaxed text-muted-foreground">{hint}</div>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -83,6 +85,7 @@ export function SettingsPage({
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { preference: language, setPreference: setLanguage } = useLanguage();
+  const term = useTerminalSettings();
   const [tab, setTab] = useState<SettingsTab>("general");
 
   const byAction = useMemo(() => new Map(bindings.map((b) => [b[0], b])), [bindings]);
@@ -120,10 +123,10 @@ export function SettingsPage({
     const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
     return (
       <div key={action} className="flex items-center justify-between gap-4 py-2">
-        <span className="min-w-0 truncate text-[13px]">{label}</span>
+        <span className="min-w-0 truncate text-ui">{label}</span>
         <div className="flex shrink-0 items-center gap-1">
           {conflicts.has(key) && capturing !== action && (
-            <span className="text-[10px] text-warning" title={t("settings.conflictHint")}>
+            <span className="text-cap text-warning" title={t("settings.conflictHint")}>
               {t("settings.conflict")}
             </span>
           )}
@@ -131,9 +134,9 @@ export function SettingsPage({
             variant="outline"
             size="sm"
             className={cn(
-              "min-w-24 justify-center font-mono text-[11.5px]",
-              capturing === action && "border-primary text-primary",
-              conflicts.has(key) && capturing !== action && "border-warning/60",
+              "min-w-24 justify-center font-mono text-fine",
+              capturing === action && "ring-1 ring-primary/60 text-primary",
+              conflicts.has(key) && capturing !== action && "ring-1 ring-warning/60",
             )}
             onClick={() => onCapture(action)}
           >
@@ -156,9 +159,9 @@ export function SettingsPage({
   };
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1">
+    <div className="animate-page-in flex min-h-0 min-w-0 flex-1">
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
-      <aside className="glass-rail flex w-56 shrink-0 flex-col border-r">
+      <aside className="glass-rail flex w-56 shrink-0 flex-col">
         {/* Clears the traffic lights and gives the window something to drag by. */}
         <div data-tauri-drag-region className="h-12 shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
@@ -167,7 +170,7 @@ export function SettingsPage({
               key={id}
               onClick={() => setTab(id)}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors",
+                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors",
                 id === tab
                   ? "bg-accent font-medium text-foreground"
                   : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -180,7 +183,7 @@ export function SettingsPage({
         </nav>
         <button
           onClick={onClose}
-          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <ArrowLeft className="size-4 shrink-0" />
           {t("settings.back")}
@@ -188,9 +191,9 @@ export function SettingsPage({
       </aside>
 
       {/* ---- the page ---- */}
-      <main className="content-surface flex min-w-0 flex-1 flex-col">
-        <header data-tauri-drag-region className="flex items-center px-6 pb-2 pt-7">
-          <span data-tauri-drag-region className="text-[13px] font-medium text-muted-foreground">
+      <main className="surface-module m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header data-tauri-drag-region className="flex items-center px-6 pb-2 pt-2">
+          <span data-tauri-drag-region className="text-ui font-medium text-muted-foreground">
             {t("settings.title")}
           </span>
           <div data-tauri-drag-region className="flex-1" />
@@ -198,7 +201,7 @@ export function SettingsPage({
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-[12px] text-muted-foreground hover:text-foreground"
+              className="gap-1.5 text-hint text-muted-foreground hover:text-foreground"
               onClick={restore}
             >
               <RotateCcw className="size-3.5" />
@@ -243,20 +246,56 @@ export function SettingsPage({
                     </SelectContent>
                   </Select>
                 </Row>
+
+                <h3 className="pt-6 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+                  {t("settings.terminal")}
+                </h3>
+
+                <Row label={t("settings.termFont")} hint={t("settings.termFontHint")}>
+                  <Input
+                    value={term.fontFamily}
+                    placeholder={t("settings.termFontDefault")}
+                    onChange={(e) => setTerminalSettings({ fontFamily: e.target.value })}
+                    className="h-8 w-44 text-hint"
+                  />
+                </Row>
+
+                <Row label={t("settings.termFontSize")}>
+                  <Input
+                    type="number"
+                    min={8}
+                    max={32}
+                    value={term.fontSize}
+                    onChange={(e) => setTerminalSettings({ fontSize: Number(e.target.value) })}
+                    className="h-8 w-44 text-hint"
+                  />
+                </Row>
+
+                <Row label={t("settings.termScrollback")} hint={t("settings.termScrollbackHint")}>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={200000}
+                    step={1000}
+                    value={term.scrollback}
+                    onChange={(e) => setTerminalSettings({ scrollback: Number(e.target.value) })}
+                    className="h-8 w-44 text-hint"
+                  />
+                </Row>
               </div>
             )}
 
             {tab === "keybindings" && (
               <div>
-                <p className="pb-2 text-[12px] leading-relaxed text-muted-foreground">
+                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
                   {t("settings.keysHint", { mod: MOD_LABEL })}
                 </p>
                 {groups.map((g) => (
                   <div key={g.title} className="pt-4">
-                    <h3 className="pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <h3 className="pb-1 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
                       {g.title}
                     </h3>
-                    <div className="divide-y divide-border/60">{g.actions.map(keyRow)}</div>
+                    <div className="space-y-0.5">{g.actions.map(keyRow)}</div>
                   </div>
                 ))}
               </div>
@@ -264,21 +303,21 @@ export function SettingsPage({
 
             {tab === "providers" && (
               <div>
-                <p className="pb-2 text-[12px] leading-relaxed text-muted-foreground">
+                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
                   {t("settings.providersHint")}
                 </p>
-                <div className="divide-y divide-border/60">
+                <div className="space-y-0.5">
                   {providers.map((p) => (
                     <div key={p.id} className="flex items-center gap-3 py-3.5">
                       <ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />
                       <div className="min-w-0 flex-1">
-                        <div className="text-[13.5px] font-medium">{p.display_name}</div>
-                        <div className="font-mono text-[11px] text-muted-foreground">
+                        <div className="text-ui font-medium">{p.display_name}</div>
+                        <div className="font-mono text-fine text-muted-foreground">
                           {p.id}
                           {p.needs_node && ` · ${t("settings.needsNode")}`}
                         </div>
                       </div>
-                      <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="flex shrink-0 items-center gap-1.5 text-fine text-muted-foreground">
                         <span
                           className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
                         />

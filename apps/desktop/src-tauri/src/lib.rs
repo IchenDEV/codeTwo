@@ -1,8 +1,11 @@
 //! codeTwo desktop bridge: a thin Tauri layer over `codetwo-core`.
 //!
 //! The core `Engine` is managed in Tauri state. Frontends push `Op`s through commands and receive
-//! `Event`s streamed over the `engine-event` channel. Terminal I/O uses the core PTY manager,
-//! streamed over `pty-output`.
+//! `Event`s streamed over the `engine-event` channel. Terminals live in the core as real emulators
+//! (`codetwo_core::term`) keyed by a stable id; the frontend attaches to one and streams it over
+//! `pty-output`.
+
+mod browser;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,7 +21,8 @@ use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::store::Project;
 use codetwo_core::workspace::DirEntry;
-use codetwo_core::{Engine, Event, Op, Part, PtySession, Role, Session, Store};
+use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+use codetwo_core::{Engine, Event, Op, Part, Role, Session, Store};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::broadcast;
@@ -36,7 +40,7 @@ struct AppState {
     skills_dir: PathBuf,
     keymap: Mutex<Keymap>,
     keymap_path: PathBuf,
-    ptys: Mutex<HashMap<u32, PtySession>>,
+    ptys: Mutex<HashMap<String, TerminalHandle>>,
     remote: Mutex<Option<RemoteInfo>>,
 }
 
@@ -68,8 +72,22 @@ struct SkillInfo {
 
 #[derive(Serialize, Clone)]
 struct PtyOutput {
-    id: u32,
+    id: String,
     data: String,
+}
+
+#[derive(Serialize, Clone)]
+struct PtyTitle {
+    id: String,
+    title: String,
+}
+
+/// The result of attaching to a terminal. `restore` is a VT dump that replays the terminal's
+/// scrollback and screen into a fresh renderer — empty for one that was just created.
+#[derive(Serialize)]
+struct PtyAttach {
+    created: bool,
+    restore: String,
 }
 
 #[derive(Serialize)]
@@ -238,8 +256,8 @@ fn browser_context(annotation: Annotation) -> String {
     annotation.to_context()
 }
 
-/// Open the webview inspector. The embedded browser panel shares this webview, so this is also how
-/// you inspect the page loaded in it.
+/// Open the inspector on the app's own UI. The browser panel's pages are separate webviews now and
+/// have their own item — see `browser::browser_devtools`.
 #[tauri::command]
 fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
@@ -698,63 +716,99 @@ fn tmux_available() -> bool {
     codetwo_core::tmux::is_available()
 }
 
+/// Attach to the terminal `id`, creating it if it doesn't exist yet.
+///
+/// Attaching rather than always spawning is what lets a terminal outlive its renderer: remounting
+/// the panel (a dock tab switch, a session change, an app restart) hands back the same emulator
+/// plus a VT dump to replay into the new renderer, instead of a blank shell and an orphaned child.
 #[tauri::command]
 fn pty_spawn(
     app: AppHandle,
     state: State<'_, AppState>,
-    id: u32,
+    id: String,
     cwd: Option<String>,
     rows: u16,
     cols: u16,
+    scrollback: Option<usize>,
     tmux_session: Option<String>,
-) -> Result<(), String> {
-    // When a tmux session name is given and tmux is available, run the terminal inside a persistent,
-    // attachable tmux session; otherwise a plain login shell.
-    let spawned = match tmux_session.filter(|_| codetwo_core::tmux::is_available()) {
-        Some(name) => {
-            let tname = codetwo_core::tmux::session_name(&name);
-            PtySession::spawn_tmux(&tname, cwd.as_deref(), rows, cols)
-        }
-        None => {
-            let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".into());
-            PtySession::spawn(&shell, &["-l"], cwd.as_deref(), rows, cols)
-        }
+) -> Result<PtyAttach, String> {
+    if let Some(existing) = state.ptys.lock().unwrap().get(&id) {
+        // The renderer may have been resized while detached.
+        let _ = existing.resize(rows, cols);
+        let restore = existing.restore().map_err(|e| e.to_string())?;
+        return Ok(PtyAttach { created: false, restore });
+    }
+
+    let cfg = TerminalConfig {
+        cwd,
+        rows,
+        cols,
+        scrollback: scrollback.unwrap_or(10_000),
+        tmux_session,
     };
-    let (session, mut rx) = spawned.map_err(|e| e.to_string())?;
+    let (term, mut rx) = TerminalHandle::spawn(cfg).map_err(|e| e.to_string())?;
 
     let handle = app.clone();
+    let stream_id = id.clone();
     tauri::async_runtime::spawn(async move {
-        while let Some(chunk) = rx.recv().await {
-            let data = String::from_utf8_lossy(&chunk).to_string();
-            let _ = handle.emit("pty-output", PtyOutput { id, data });
+        while let Some(out) = rx.recv().await {
+            let _ = match out {
+                TerminalOutput::Data(data) => {
+                    handle.emit("pty-output", PtyOutput { id: stream_id.clone(), data })
+                }
+                TerminalOutput::Title(title) => {
+                    handle.emit("pty-title", PtyTitle { id: stream_id.clone(), title })
+                }
+            };
         }
-        let _ = handle.emit("pty-exit", id);
+        let _ = handle.emit("pty-exit", stream_id);
     });
 
-    state.ptys.lock().unwrap().insert(id, session);
+    state.ptys.lock().unwrap().insert(id, term);
+    Ok(PtyAttach { created: true, restore: String::new() })
+}
+
+#[tauri::command]
+fn pty_write(state: State<'_, AppState>, id: String, data: String) -> Result<(), String> {
+    with_terminal(&state, &id, |t| t.write(data.as_bytes()))
+}
+
+#[tauri::command]
+fn pty_resize(state: State<'_, AppState>, id: String, rows: u16, cols: u16) -> Result<(), String> {
+    with_terminal(&state, &id, |t| t.resize(rows, cols))
+}
+
+/// Terminal contents as plain text, for handing to the agent. `all` includes scrollback; otherwise
+/// just what's on screen.
+#[tauri::command]
+fn pty_dump(state: State<'_, AppState>, id: String, all: bool) -> Result<String, String> {
+    let scope = if all { Scope::All } else { Scope::Screen };
+    with_terminal(&state, &id, |t| t.text(scope))
+}
+
+/// Close a terminal for good. Unlike detaching, this kills the child process.
+#[tauri::command]
+fn pty_kill(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    state.ptys.lock().unwrap().remove(&id);
     Ok(())
 }
 
-#[tauri::command]
-fn pty_write(state: State<'_, AppState>, id: u32, data: String) -> Result<(), String> {
-    let mut map = state.ptys.lock().unwrap();
-    match map.get_mut(&id) {
-        Some(s) => s.write(data.as_bytes()).map_err(|e| e.to_string()),
-        None => Err("no such terminal".into()),
-    }
-}
-
-#[tauri::command]
-fn pty_resize(state: State<'_, AppState>, id: u32, rows: u16, cols: u16) -> Result<(), String> {
+fn with_terminal<T>(
+    state: &AppState,
+    id: &str,
+    f: impl FnOnce(&TerminalHandle) -> std::io::Result<T>,
+) -> Result<T, String> {
     let map = state.ptys.lock().unwrap();
-    match map.get(&id) {
-        Some(s) => s.resize(rows, cols).map_err(|e| e.to_string()),
-        None => Err("no such terminal".into()),
-    }
+    let term = map.get(id).ok_or("no such terminal")?;
+    f(term).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Launched from Finder we inherit a bare PATH, and every CLI we shell out to — the provider
+    // adapters, the voice transcriber — looks missing. Do this before anything reads the
+    // environment or spawns a child.
+    codetwo_core::provider::augment_search_path();
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         // "Add a project" opens a real folder chooser. Typing an absolute path into a text field
@@ -876,7 +930,23 @@ pub fn run() {
             cancel_turn,
             pty_spawn,
             pty_write,
-            pty_resize
+            pty_resize,
+            pty_dump,
+            pty_kill,
+            browser::browser_open,
+            browser::browser_bounds,
+            browser::browser_navigate,
+            browser::browser_history,
+            browser::browser_reload,
+            browser::browser_visible,
+            browser::browser_zoom,
+            browser::browser_devtools,
+            browser::browser_annotate,
+            browser::browser_annotations,
+            browser::browser_annotation_count,
+            browser::browser_annotations_clear,
+            browser::browser_close,
+            browser::browser_close_all
         ])
         .run(tauri::generate_context!())
         .expect("error while running codeTwo");

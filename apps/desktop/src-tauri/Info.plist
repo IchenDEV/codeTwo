@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the bundle's Info.plist by tauri-bundler. Without the microphone usage string macOS
+     refuses the webview's getUserMedia call outright, so the voice button can never record; without
+     the speech one, requesting recognition authorization aborts the process outright. -->
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>codeTwo uses the microphone to dictate into the prompt document. Audio is transcribed on this Mac and never leaves it.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>codeTwo turns your dictation into text using macOS's on-device speech recognition. Audio is never sent to a server.</string>
+  </dict>
+</plist>

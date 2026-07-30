@@ -59,7 +59,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-4">
               {report.windows.map((w) => (
                 <div key={w.label}>
-                  <div className="flex items-baseline justify-between text-[13px]">
+                  <div className="flex items-baseline justify-between text-ui">
                     <span className="font-semibold">{w.label}</span>
                     <span className="font-mono text-xs text-muted-foreground">
                       {fmtTokens(w.total_tokens)}
@@ -84,7 +84,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                       }}
                     />
                   </div>
-                  <div className="font-mono text-[11px] text-muted-foreground">
+                  <div className="font-mono text-fine text-muted-foreground">
                     in {fmtTokens(w.input_tokens)} · out {fmtTokens(w.output_tokens)}
                     {w.cached_tokens > 0 && <> · cache-read {fmtTokens(w.cached_tokens)} (not counted)</>} ·
                     frees up in {fmtReset(w.resets_in_secs)}
@@ -100,7 +100,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                 </p>
               ) : (
                 report.by_source.map(([src, total]) => (
-                  <Badge key={src} variant="secondary" className="font-mono text-[11px]">
+                  <Badge key={src} variant="secondary" className="font-mono text-fine">
                     {src}: {fmtTokens(total)}
                   </Badge>
                 ))

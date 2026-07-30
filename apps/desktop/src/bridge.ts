@@ -92,8 +92,21 @@ export type CoreEvent =
   | { event: "error"; session: string | null; message: string };
 
 export interface PtyOutput {
-  id: number;
+  id: string;
   data: string;
+}
+
+/** The title the child set (OSC 0/2), or its working directory (OSC 7). */
+export interface PtyTitle {
+  id: string;
+  title: string;
+}
+
+export interface PtyAttach {
+  /** False when we re-attached to a terminal that was already running. */
+  created: boolean;
+  /** VT sequences reproducing the terminal's scrollback, screen, and cursor. */
+  restore: string;
 }
 
 /// Mirrors core `Part` (tagged by `kind`).
@@ -119,6 +132,9 @@ export interface Skill {
 
 // True only inside the Tauri webview; lets `vite build`/`preview` run in a plain browser.
 const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== "undefined";
+
+/** False when the UI runs in a plain browser (`bun run dev`), where no native commands exist. */
+export const isDesktop = inTauri;
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true },
@@ -206,9 +222,118 @@ export async function deletePath(cwd: string, path: string): Promise<void> {
   if (inTauri) await invoke("delete_path", { cwd, path });
 }
 
-/** Open the webview inspector — shared with the embedded browser panel's pages. */
+/** Open the webview inspector on the app's own UI. */
 export async function openDevtools(): Promise<void> {
   if (inTauri) await invoke("open_devtools");
+}
+
+// ---- built-in browser --------------------------------------------------------------------------
+// Each browser tab is a native child webview of the main window, not an iframe: the sites people
+// actually open (github.com, google.com, anything with `X-Frame-Options: DENY`) refuse to be framed
+// and render blank. The panel measures a placeholder in the DOM and keeps the native view pinned
+// over it — see `browser/Browser.tsx` and `src-tauri/src/browser.rs`.
+
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Create the tab's webview if needed, place it, and load `url`. Safe to call repeatedly. */
+export async function browserOpen(label: string, url: string, r: Rect): Promise<void> {
+  if (inTauri) await invoke("browser_open", { label, url, ...r });
+}
+
+export async function browserBounds(label: string, r: Rect): Promise<void> {
+  if (inTauri) await invoke("browser_bounds", { label, ...r });
+}
+
+export async function browserNavigate(label: string, url: string): Promise<void> {
+  if (inTauri) await invoke("browser_navigate", { label, url });
+}
+
+/** −1 is back, 1 is forward — the page's own history, not one we keep for it. */
+export async function browserHistory(label: string, delta: number): Promise<void> {
+  if (inTauri) await invoke("browser_history", { label, delta });
+}
+
+export async function browserReload(label: string): Promise<void> {
+  if (inTauri) await invoke("browser_reload", { label });
+}
+
+/** Hide, not close: the page keeps its state, which is the point of tabs. */
+export async function browserVisible(label: string, visible: boolean): Promise<void> {
+  if (inTauri) await invoke("browser_visible", { label, visible });
+}
+
+export async function browserZoom(label: string, factor: number): Promise<void> {
+  if (inTauri) await invoke("browser_zoom", { label, factor });
+}
+
+export async function browserDevtools(label: string): Promise<void> {
+  if (inTauri) await invoke("browser_devtools", { label });
+}
+
+export async function browserClose(label: string): Promise<void> {
+  if (inTauri) await invoke("browser_close", { label });
+}
+
+export async function browserCloseAll(): Promise<void> {
+  if (inTauri) await invoke("browser_close_all");
+}
+
+export interface BrowserNav {
+  label: string;
+  url: string;
+}
+
+// ---- in-page annotator -------------------------------------------------------------------------
+// Element picking, the note card and the live style edits all live inside the page (`annotate.js`),
+// because the page is a native webview and nothing in our DOM can be drawn on top of it. The app
+// arms it and pulls the results back out; the page can never call in.
+
+/** Arm or disarm element picking on the active page. */
+export async function browserAnnotate(label: string, on: boolean): Promise<void> {
+  if (inTauri) await invoke("browser_annotate", { label, on });
+}
+
+export async function browserAnnotations(label: string, url: string): Promise<Annotation[]> {
+  return inTauri ? invoke<Annotation[]>("browser_annotations", { label, url }) : [];
+}
+
+export async function browserAnnotationCount(label: string): Promise<number> {
+  return inTauri ? invoke<number>("browser_annotation_count", { label }) : 0;
+}
+
+/** Drop the notes and undo the live style edits they described. */
+export async function browserAnnotationsClear(label: string): Promise<void> {
+  if (inTauri) await invoke("browser_annotations_clear", { label });
+}
+
+/** A document finished loading — the point at which a fresh annotator exists to re-arm. */
+export async function onBrowserLoad(cb: (p: BrowserNav) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<BrowserNav>("browser-load", (e) => cb(e.payload));
+}
+
+/** The page navigated itself — a link, a redirect, a form post. The address bar follows this. */
+export async function onBrowserNav(cb: (p: BrowserNav) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<BrowserNav>("browser-nav", (e) => cb(e.payload));
+}
+
+export async function onBrowserTitle(
+  cb: (p: { label: string; title: string }) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<{ label: string; title: string }>("browser-title", (e) => cb(e.payload));
+}
+
+/** `target="_blank"` / `window.open`, denied natively and reopened here as a tab. */
+export async function onBrowserPopup(cb: (p: BrowserNav) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<BrowserNav>("browser-popup", (e) => cb(e.payload));
 }
 
 /** Hand a URL to the system's default browser. Outside Tauri, a plain new tab. */
@@ -280,26 +405,49 @@ export async function cancelTurn(session: string): Promise<void> {
   if (inTauri) await invoke("cancel_turn", { session });
 }
 
+/**
+ * Attach to the terminal `id`, creating it if it doesn't exist. Terminals live in the core, so a
+ * re-attach returns `restore`: a VT dump to replay into a fresh renderer so the screen and
+ * scrollback come back exactly as they were.
+ */
 export async function ptySpawn(
-  id: number,
+  id: string,
   cwd: string | null,
   rows: number,
   cols: number,
-  tmuxSession?: string | null,
-): Promise<void> {
-  if (inTauri) await invoke("pty_spawn", { id, cwd, rows, cols, tmuxSession: tmuxSession ?? null });
+  opts?: { tmuxSession?: string | null; scrollback?: number },
+): Promise<PtyAttach> {
+  if (!inTauri) return { created: true, restore: "" };
+  return invoke<PtyAttach>("pty_spawn", {
+    id,
+    cwd,
+    rows,
+    cols,
+    scrollback: opts?.scrollback ?? null,
+    tmuxSession: opts?.tmuxSession ?? null,
+  });
 }
 
 export async function tmuxAvailable(): Promise<boolean> {
   return inTauri ? invoke<boolean>("tmux_available") : false;
 }
 
-export async function ptyWrite(id: number, data: string): Promise<void> {
+export async function ptyWrite(id: string, data: string): Promise<void> {
   if (inTauri) await invoke("pty_write", { id, data });
 }
 
-export async function ptyResize(id: number, rows: number, cols: number): Promise<void> {
+export async function ptyResize(id: string, rows: number, cols: number): Promise<void> {
   if (inTauri) await invoke("pty_resize", { id, rows, cols });
+}
+
+/** Terminal contents as plain text — `all` includes scrollback, otherwise just the visible screen. */
+export async function ptyDump(id: string, all = true): Promise<string> {
+  return inTauri ? invoke<string>("pty_dump", { id, all }) : "";
+}
+
+/** Close a terminal for good, killing its child process. Detaching a renderer does not do this. */
+export async function ptyKill(id: string): Promise<void> {
+  if (inTauri) await invoke("pty_kill", { id });
 }
 
 export async function getTranscript(session: string): Promise<TranscriptEntry[]> {
@@ -396,11 +544,19 @@ export async function setKeymap(action: string, key: string): Promise<void> {
 
 // ---- browser annotate (F3/F4) ----------------------------------------------------------------
 
+/** One property the in-page annotator adjusted, and what it went from and to. */
+export interface StyleChange {
+  property: string;
+  from: string;
+  to: string;
+}
+
 export interface Annotation {
   url: string;
   note: string;
   selector: string | null;
   selected_text: string | null;
+  styles: StyleChange[];
 }
 
 // ---- skill market (F5) -----------------------------------------------------------------------
@@ -624,6 +780,17 @@ export async function onEngineEvent(cb: (ev: CoreEvent) => void): Promise<() => 
 export async function onPtyOutput(cb: (p: PtyOutput) => void): Promise<() => void> {
   if (!inTauri) return () => {};
   return listen<PtyOutput>("pty-output", (e) => cb(e.payload));
+}
+
+export async function onPtyTitle(cb: (p: PtyTitle) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<PtyTitle>("pty-title", (e) => cb(e.payload));
+}
+
+/** Fires when a terminal's child process exits. */
+export async function onPtyExit(cb: (id: string) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<string>("pty-exit", (e) => cb(e.payload));
 }
 
 export function providerLabel(p: string | { custom: string }): string {

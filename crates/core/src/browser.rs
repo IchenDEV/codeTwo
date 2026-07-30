@@ -2,8 +2,20 @@
 //! prompt" flow. An [`Annotation`] captures what the user is looking at (URL, optional selected
 //! element/text, a note); [`Annotation::to_context`] renders it as a markdown block the GUI inserts
 //! into the prompt document, so the composed prompt carries the browser context to the agent.
+//!
+//! An annotation can also carry [`StyleChange`]s: the in-page annotator lets you drag colour, size
+//! and weight until the element looks right, and "make it look like this" is far less useful to an
+//! agent than the property, the value it had, and the value you settled on.
 
 use serde::{Deserialize, Serialize};
+
+/// One property the user adjusted on the page, and what they adjusted it from and to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StyleChange {
+    pub property: String,
+    pub from: String,
+    pub to: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Annotation {
@@ -16,6 +28,9 @@ pub struct Annotation {
     /// Text the user selected on the page, if any.
     #[serde(default)]
     pub selected_text: Option<String>,
+    /// Live style edits made on the annotated element, if any.
+    #[serde(default)]
+    pub styles: Vec<StyleChange>,
 }
 
 impl Annotation {
@@ -35,6 +50,12 @@ impl Annotation {
         if !self.note.trim().is_empty() {
             s.push_str(&format!("\n- note: {}", self.note.trim()));
         }
+        if !self.styles.is_empty() {
+            s.push_str("\n- requested styles:");
+            for c in &self.styles {
+                s.push_str(&format!("\n  - `{}`: `{}` → `{}`", c.property, c.from, c.to));
+            }
+        }
         s
     }
 }
@@ -50,6 +71,7 @@ mod tests {
             note: "this button is misaligned".into(),
             selector: Some(".cta-primary".into()),
             selected_text: Some("Start free trial".into()),
+            styles: Vec::new(),
         };
         let ctx = a.to_context();
         assert!(ctx.contains("https://example.com/pricing"));
@@ -59,8 +81,33 @@ mod tests {
     }
 
     #[test]
+    fn style_changes_render_as_property_from_to() {
+        let a = Annotation {
+            url: "https://x.test".into(),
+            note: String::new(),
+            selector: Some("button".into()),
+            selected_text: None,
+            styles: vec![StyleChange {
+                property: "font-size".into(),
+                from: "16px".into(),
+                to: "18px".into(),
+            }],
+        };
+        let ctx = a.to_context();
+        assert!(ctx.contains("font-size"));
+        assert!(ctx.contains("16px"));
+        assert!(ctx.contains("18px"));
+    }
+
+    #[test]
     fn minimal_annotation_is_just_url() {
-        let a = Annotation { url: "https://x.test".into(), note: String::new(), selector: None, selected_text: None };
+        let a = Annotation {
+            url: "https://x.test".into(),
+            note: String::new(),
+            selector: None,
+            selected_text: None,
+            styles: Vec::new(),
+        };
         assert_eq!(a.to_context(), "**Browser context** — https://x.test");
     }
 }
