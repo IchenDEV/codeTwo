@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- codeTwo app icon, full-bleed variant: same art as icon.svg but run edge-to-edge with no
+       baked corner radius. Modern macOS applies its own squircle mask to app icons; shipping a
+       pre-rounded icon gets it shrunk onto the system's white plate instead — the "white edge"
+       look. All bundled icons are generated from THIS file (`npx tauri icon`); icon.svg remains
+       the framed artwork for anywhere that wants a standalone mark. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5B93FF"/>
+      <stop offset="1" stop-color="#1E4FD8"/>
+    </linearGradient>
+    <filter id="sheetShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#0B2A78" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Content scaled 1024/824 about the centre so the composition inside the old squircle frame
+       is reproduced exactly at full bleed. -->
+  <g transform="translate(512 512) scale(1.2427) translate(-512 -512)">
+    <!-- back sheet -->
+    <rect x="288" y="232" width="380" height="470" rx="52" ry="52" fill="#FFFFFF" opacity="0.34"/>
+
+    <!-- front sheet -->
+    <g filter="url(#sheetShadow)">
+      <rect x="344" y="288" width="392" height="482" rx="54" ry="54" fill="#FFFFFF"/>
+    </g>
+
+    <!-- prompt: >_ -->
+    <g fill="none" stroke="#1E4FD8" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M417 396 L476 455 L417 514"/>
+      <path d="M534 514 L652 514"/>
+    </g>
+
+    <!-- document lines -->
+    <g fill="none" stroke="#C8DBFF" stroke-width="34" stroke-linecap="round">
+      <path d="M417 610 L663 610"/>
+      <path d="M417 686 L574 686"/>
+    </g>
+  </g>
+</svg>

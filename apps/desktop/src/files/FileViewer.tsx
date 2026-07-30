@@ -178,10 +178,10 @@ export function FileViewer({
   const parts = path.split("/");
 
   return (
-    <main className="content-surface flex min-w-0 flex-1 flex-col">
-      <header data-tauri-drag-region className="flex items-center gap-2 px-4 pb-2 pt-7">
+    <main className="surface-module animate-page-in m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden">
+      <header data-tauri-drag-region className="flex items-center gap-2 px-4 pb-2 pt-1">
         {/* Breadcrumb, not a raw path: the segments are how you know where you are. */}
-        <span data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-0.5 text-[12px]">
+        <span data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-0.5 text-hint">
           {parts.map((p, i) =>
             i === parts.length - 1 ? (
               <span key={i} className="truncate font-medium">
@@ -239,9 +239,9 @@ export function FileViewer({
       </header>
 
       {error ? (
-        <p className="px-6 py-4 text-[13px] text-destructive">{error}</p>
+        <p className="px-6 py-4 text-ui text-destructive">{error}</p>
       ) : content === null ? (
-        <p className="flex items-center gap-2 px-6 py-4 text-[13px] text-muted-foreground">
+        <p className="flex items-center gap-2 px-6 py-4 text-ui text-muted-foreground">
           <Loader2 className="size-3.5 animate-spin" />
           {t("files.loading")}
         </p>
@@ -250,11 +250,11 @@ export function FileViewer({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
-          className="min-h-0 flex-1 resize-none bg-transparent px-6 pb-6 font-mono text-[12.5px] leading-relaxed outline-none"
+          className="min-h-0 flex-1 resize-none bg-transparent px-6 pb-6 font-mono text-hint leading-relaxed outline-none"
         />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
-          <div className="px-2 pb-6 font-mono text-[12.5px] leading-relaxed" title={sel ? undefined : t("files.gutterHint")}>
+          <div className="px-2 pb-6 font-mono text-hint leading-relaxed" title={sel ? undefined : t("files.gutterHint")}>
             {lines.map((line, i) => {
               const selected = sel !== null && i >= lo && i <= hi;
               return (
@@ -302,11 +302,11 @@ export function FileViewer({
                   {/* The comment card sits right under the selection, where the eye already is. */}
                   {sel !== null && i === hi && (
                     <div className="glass-raised my-2 ml-14 max-w-md rounded-xl border p-3 font-sans shadow-lg">
-                      <div className="flex items-center gap-2 text-[12.5px] font-medium">
+                      <div className="flex items-center gap-2 text-hint font-medium">
                         <MessageSquarePlus className="size-3.5 text-primary" />
                         {t("files.commentTitle")}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      <div className="mt-0.5 text-fine text-muted-foreground">
                         {t("files.commentOn", { range })}
                       </div>
                       <textarea
@@ -318,13 +318,13 @@ export function FileViewer({
                           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
                         }}
                         placeholder={t("files.commentPlaceholder")}
-                        className="mt-2 min-h-16 w-full resize-y rounded-md border bg-transparent px-2.5 py-1.5 text-[12.5px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                        className="mt-2 min-h-16 w-full resize-y rounded-md border bg-transparent px-2.5 py-1.5 text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                       />
                       <div className="mt-2 flex justify-end gap-2">
-                        <Button variant="ghost" size="sm" className="h-7 text-[12px]" onClick={clearSel}>
+                        <Button variant="ghost" size="sm" className="h-7 text-hint" onClick={clearSel}>
                           {t("files.cancel")}
                         </Button>
-                        <Button size="sm" className="h-7 text-[12px]" disabled={!note.trim()} onClick={submit}>
+                        <Button size="sm" className="h-7 text-hint" disabled={!note.trim()} onClick={submit}>
                           {t("browser.addToPrompt")}
                         </Button>
                       </div>

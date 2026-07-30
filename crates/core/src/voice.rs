@@ -1,19 +1,27 @@
 //! Voice input — transcribing recorded audio.
 //!
-//! codeTwo ships no speech model and calls no hosted API. Instead you point it at a transcriber you
-//! already have via `CODETWO_TRANSCRIBE_CMD`, a shell command template containing `{file}`:
+//! codeTwo ships no speech model and calls no hosted API. It transcribes one of two ways, in this
+//! order:
 //!
-//! ```text
-//! CODETWO_TRANSCRIBE_CMD='whisper-cli -f {file} -nt -np'
-//! ```
+//! 1. **A transcriber you named.** `CODETWO_TRANSCRIBE_CMD` is a shell command template containing
+//!    `{file}`; an explicit choice always wins. We also auto-detect a few common whisper binaries.
 //!
-//! The only contract is: **print the transcript to stdout**. If the variable isn't set we try to
-//! auto-detect a couple of common local binaries. When nothing is available the UI falls back to the
-//! webview's built-in speech recognition instead.
+//!    ```text
+//!    CODETWO_TRANSCRIBE_CMD='whisper-cli -f {file} -nt -np'
+//!    ```
+//!
+//!    `{file}` is a 16 kHz mono WAV — what whisper.cpp and friends accept without conversion. The
+//!    only contract is: **print the transcript to stdout**.
+//!
+//! 2. **macOS's own on-device recognizer** ([`apple`]), which needs nothing installed. This is what
+//!    makes the mic button work out of the box; see that module for the privacy constraints.
 
 use std::path::Path;
 
 use tokio::process::Command;
+
+#[cfg(target_os = "macos")]
+pub mod apple;
 
 /// Command templates we try when `CODETWO_TRANSCRIBE_CMD` isn't set. Each prints to stdout.
 const AUTODETECT: [(&str, &str); 3] = [
@@ -29,15 +37,30 @@ pub fn transcriber_command() -> Option<String> {
             return Some(cmd);
         }
     }
-    AUTODETECT
-        .iter()
-        .find(|(bin, _)| crate::provider::which(bin).is_some())
-        .map(|(_, tmpl)| tmpl.to_string())
+    AUTODETECT.iter().find_map(|(bin, tmpl)| {
+        // Substitute the resolved absolute path: `sh -c` gets the same `PATH` we searched, but
+        // being explicit keeps the command working if that ever stops being true.
+        let path = crate::provider::which(bin)?;
+        Some(tmpl.replacen(bin, &shell_quote(path.to_string_lossy().as_ref()), 1))
+    })
 }
 
-/// Can codeTwo transcribe audio locally?
+/// Can codeTwo transcribe audio locally — by any route?
 pub fn is_available() -> bool {
-    transcriber_command().is_some()
+    // Short-circuits: probing the system recognizer builds objects and logs, so skip it when the
+    // user's own command already answers the question.
+    transcriber_command().is_some() || system_recognizer_available()
+}
+
+/// Is there a platform recognizer we can fall back to?
+#[cfg(target_os = "macos")]
+fn system_recognizer_available() -> bool {
+    apple::is_available()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn system_recognizer_available() -> bool {
+    false
 }
 
 /// Single-quote a path for `sh -c`.
@@ -54,7 +77,8 @@ pub fn build_command(template: &str, audio: &Path) -> String {
 /// without touching process-wide environment.
 pub async fn transcribe_with(template: &str, audio: &Path) -> std::io::Result<String> {
     let cmd = build_command(template, audio);
-    let out = Command::new("sh").arg("-c").arg(&cmd).output().await?;
+    // `/bin/sh` by absolute path: the shell itself shouldn't depend on how the app was launched.
+    let out = Command::new("/bin/sh").arg("-c").arg(&cmd).output().await?;
     if !out.status.success() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -64,15 +88,26 @@ pub async fn transcribe_with(template: &str, audio: &Path) -> std::io::Result<St
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Transcribe using the configured/auto-detected transcriber.
+/// Transcribe by whichever route is available, preferring a transcriber the user chose.
 pub async fn transcribe(audio: &Path) -> std::io::Result<String> {
-    let template = transcriber_command().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "no transcriber configured — set CODETWO_TRANSCRIBE_CMD (a command with {file} that prints text)",
-        )
-    })?;
-    transcribe_with(&template, audio).await
+    if let Some(template) = transcriber_command() {
+        return transcribe_with(&template, audio).await;
+    }
+    transcribe_with_system(audio).await
+}
+
+/// Fall back to the platform's own recognizer.
+#[cfg(target_os = "macos")]
+async fn transcribe_with_system(audio: &Path) -> std::io::Result<String> {
+    apple::transcribe(audio).await
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn transcribe_with_system(_audio: &Path) -> std::io::Result<String> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "no transcriber configured — set CODETWO_TRANSCRIBE_CMD (a command with {file} that prints text)",
+    ))
 }
 
 /// Persist recorded audio bytes to a temp file, returning its path.

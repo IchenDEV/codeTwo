@@ -115,6 +115,43 @@ pub fn default_registry() -> Vec<Provider> {
     ]
 }
 
+/// Directories a login shell puts on `PATH` but a GUI-launched app doesn't. macOS hands a bundle
+/// started from Finder or Spotlight the bare `/usr/bin:/bin:/usr/sbin:/sbin`, so Homebrew, cargo,
+/// and friends are invisible — every CLI we shell out to looks "not installed".
+const GUI_PATH_FALLBACKS: [&str; 5] =
+    ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "~/.local/bin", "~/.cargo/bin"];
+
+/// Append the directories above to this process's `PATH`, once, if they exist and aren't already
+/// there. Child processes inherit it, so this fixes both [`which`] and anything we spawn.
+///
+/// Call it early in `main`/setup. Appending (not prepending) keeps an explicitly configured `PATH`
+/// authoritative when the app *was* launched from a shell.
+pub fn augment_search_path() {
+    let current = std::env::var_os("PATH").unwrap_or_default();
+    let mut dirs: Vec<PathBuf> = std::env::split_paths(&current).collect();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let mut added = false;
+    for entry in GUI_PATH_FALLBACKS {
+        let dir = match entry.strip_prefix("~/") {
+            Some(rest) => match &home {
+                Some(h) => h.join(rest),
+                None => continue,
+            },
+            None => PathBuf::from(entry),
+        };
+        if dir.is_dir() && !dirs.contains(&dir) {
+            dirs.push(dir);
+            added = true;
+        }
+    }
+    if added {
+        if let Ok(joined) = std::env::join_paths(dirs) {
+            // Call this before spawning threads that read the environment.
+            std::env::set_var("PATH", joined);
+        }
+    }
+}
+
 /// Minimal `which`: resolve an executable name against `$PATH` (or treat a path-like arg directly).
 pub fn which(cmd: &str) -> Option<PathBuf> {
     if cmd.contains('/') {
@@ -134,6 +171,18 @@ pub fn which(cmd: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn augmenting_the_path_is_additive_and_idempotent() {
+        // Only ever appends, so running it can't cost us a directory we already had.
+        let before: Vec<_> = std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect();
+        augment_search_path();
+        let once: Vec<_> = std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect();
+        assert!(before.iter().all(|d| once.contains(d)));
+        augment_search_path();
+        let twice: Vec<_> = std::env::split_paths(&std::env::var_os("PATH").unwrap()).collect();
+        assert_eq!(once, twice, "second call must not duplicate entries");
+    }
 
     #[test]
     fn registry_has_all_providers() {

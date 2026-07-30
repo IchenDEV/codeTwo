@@ -95,8 +95,8 @@ export function SourceControlModal({
         </DialogHeader>
 
         <div className="flex h-[52vh] gap-3">
-          <div className="w-64 shrink-0 overflow-y-auto border-r pr-2.5">
-            <p className="pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="w-64 shrink-0 overflow-y-auto pr-2.5">
+            <p className="pb-1 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
               Changed files
             </p>
             <button
@@ -113,7 +113,7 @@ export function SourceControlModal({
               >
                 <span
                   className={cn(
-                    "inline-flex size-4 shrink-0 items-center justify-center rounded text-[9px] font-bold",
+                    "inline-flex size-4 shrink-0 items-center justify-center rounded text-cap font-bold",
                     f.staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
                   )}
                 >
@@ -127,7 +127,7 @@ export function SourceControlModal({
             )}
 
             <div className="flex items-center justify-between pb-1 pt-4">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <span className="text-cap font-semibold uppercase tracking-wider text-muted-foreground">
                 Checkpoints
               </span>
               <Button variant="ghost" size="icon" className="size-5" onClick={() => void onCheckpoint()} title="Checkpoint now">
@@ -141,13 +141,13 @@ export function SourceControlModal({
                   {c.message || c.id.slice(0, 8)}
                 </span>
                 <button
-                  className="rounded border px-1.5 py-px text-[10px] hover:text-primary"
+                  className="rounded bg-foreground/[0.06] px-1.5 py-px text-cap hover:text-primary"
                   onClick={() => gitDiffSince(cwd, c.commit).then(setDiff)}
                 >
                   diff
                 </button>
                 <button
-                  className="rounded border px-1.5 py-px text-[10px] hover:text-primary"
+                  className="rounded bg-foreground/[0.06] px-1.5 py-px text-cap hover:text-primary"
                   onClick={() => void onRevert(c.commit)}
                 >
                   revert
@@ -156,7 +156,7 @@ export function SourceControlModal({
             ))}
           </div>
 
-          <ScrollArea className="flex-1 rounded-md border bg-muted/40">
+          <ScrollArea className="flex-1 rounded-lg bg-muted/40">
             <DiffView text={diff} />
           </ScrollArea>
         </div>

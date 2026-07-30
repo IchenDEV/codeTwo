@@ -1,33 +1,62 @@
 # Voice input
 
-Dictate into the prompt document with the **🎤** button in the composer's control row. It works two
-ways and picks automatically.
+Dictate into the prompt document with the **🎤** button in the composer's control row. It works
+three ways and picks automatically — in this order.
 
-## 1. Live dictation (no setup)
+## 1. Live dictation, if the webview has it
 
 If the webview provides speech recognition (`SpeechRecognition` / `webkitSpeechRecognition`), codeTwo
 uses it directly. Click the mic, talk, and each finished phrase lands in your document. The button
 pulses while listening; click again to stop.
 
-Nothing is installed and nothing is configured — but availability depends on the platform webview.
+**macOS has no speech API in WKWebView**, so the desktop app never takes this route there.
 
-## 2. Record → local transcription
+## 2. A transcriber you named
 
-If the webview has no speech API, codeTwo records audio and hands it to **a transcriber you already
-have**. Point it at one with an environment variable:
+Otherwise codeTwo records audio and hands it to a command of your choosing — an explicit choice
+always wins over the built-in route below:
 
 ```sh
 export CODETWO_TRANSCRIBE_CMD='whisper-cli -f {file} -nt -np'
 ```
 
-- `{file}` is replaced with the recorded audio path (properly shell-quoted).
+- `{file}` is replaced with the recorded audio path (properly shell-quoted). It is always a
+  **16 kHz mono WAV** — the app resamples whatever the webview recorded, so whisper.cpp reads it
+  straight off.
 - The only contract is: **print the transcript to stdout**. Any wrapper script works.
 
-If the variable isn't set, codeTwo looks for `whisper-cli`, `whisper-cpp`, or `whisper` on your
+If the variable isn't set, codeTwo also looks for `whisper-cli`, `whisper-cpp`, or `whisper` on your
 `PATH` and builds a sensible command.
+
+## 3. macOS's own recognizer — nothing to install
+
+With no command configured, the Mac app hands the recording to the system speech recognizer. This
+needs no install, no model download, and no configuration.
+
+It runs **on-device only**. If macOS can't recognise your language locally, codeTwo says dictation is
+unavailable rather than quietly uploading your audio to Apple. Note that on-device models ship per
+language *and region*: `en_SG` and `en_GB` often have none while `en_US` does, so codeTwo falls back
+to another region of the same language before giving up.
+
+The first dictation raises two macOS prompts — microphone and speech recognition. Both are remembered.
+
+## If the mic button says nothing is available
+
+- **Speech recognition declined?** Re-enable codeTwo under System Settings → Privacy & Security →
+  Speech Recognition (and Microphone).
+- **No on-device model for your language?** Install one via System Settings → Keyboard → Dictation
+  (add the language, which downloads the offline asset), or configure route 2 instead.
+- **Launched from Finder and using route 2?** macOS gives a double-clicked app a bare `PATH`, so a
+  Homebrew whisper would be invisible. codeTwo adds `/opt/homebrew/bin`, `/usr/local/bin`,
+  `/opt/local/bin`, `~/.local/bin`, and `~/.cargo/bin` back on startup — anywhere else, set
+  `CODETWO_TRANSCRIBE_CMD` with an absolute path.
+- **`CODETWO_TRANSCRIBE_CMD` set in your shell profile?** A GUI app doesn't read that. Launch
+  codeTwo from a terminal, or rely on route 3.
+- **Running `tauri dev`?** The dev binary isn't bundled, so the OS prompts are attributed to your
+  terminal rather than to codeTwo. Route 3 needs the bundled app.
 
 ## Privacy
 
-codeTwo ships **no speech model and calls no hosted API**. Live dictation is handled by your
-webview; the fallback sends audio only to the local command you configured. If neither is available
-the button says so rather than silently doing nothing.
+codeTwo ships **no speech model and calls no hosted API**. Route 2 sends audio only to the local
+command you configured; route 3 is pinned to on-device recognition, so nothing is uploaded. If no
+route is available the button says so rather than silently doing nothing.

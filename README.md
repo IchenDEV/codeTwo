@@ -30,6 +30,13 @@ desktop app and a ratatui TUI over ACP. See `docs/architecture.md`.
 
 ## Develop
 
+**Prerequisite: Zig 0.15.2.** The core embeds Ghostty's terminal engine (`libghostty-vt`), which is
+built from source with Zig — and Ghostty pins that version exactly, so a newer Zig will not do:
+
+```sh
+brew install zig@0.15 && brew link --force zig@0.15   # macOS
+```
+
 ```sh
 # Rust core + TUI: build + test (offline; tests use a mock ACP agent, real git, real pty)
 cargo test -p codetwo-core -p codetwo-tui
