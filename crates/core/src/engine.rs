@@ -21,6 +21,7 @@ use crate::acp::wire::{
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
+use crate::models::builtin_models;
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
@@ -212,9 +213,14 @@ struct SessionRuntime {
     acp_session_id: Option<String>,
     cwd: String,
     policy: Arc<Mutex<PermissionPolicy>>,
-    /// What the agent reported at `session/new`. Empty when the provider doesn't implement the
-    /// (UNSTABLE) ACP model API — which is most of them today.
+    /// The models this session can be switched to: what the agent reported at `session/new`, or
+    /// [`builtin_models`] for its provider when it reports none — which is most of them today,
+    /// since the ACP model API is UNSTABLE and widely unimplemented.
     models: Vec<ModelChoice>,
+    /// Whether [`SessionRuntime::models`] came from the agent rather than our built-in list. A
+    /// built-in choice is one the agent never advertised, so it's applied on a best-effort
+    /// `session/set_model` and reported honestly when the agent won't take it.
+    models_reported: bool,
 }
 
 struct EngineState {
@@ -372,6 +378,8 @@ impl Engine {
         let mut sess = sess;
         sess.acp_session_id = None;
         let cwd = sess.cwd.clone();
+        let models = builtin_models(&prov.id);
+        let current = sess.model.clone().unwrap_or_default();
         self.state.sessions.lock().unwrap().insert(
             id.to_string(),
             SessionRuntime {
@@ -380,9 +388,13 @@ impl Engine {
                 acp_session_id: None,
                 cwd: cwd.clone(),
                 policy,
-                models: Vec::new(),
+                models: models.clone(),
+                models_reported: false,
             },
         );
+        if !models.is_empty() {
+            self.emit(Event::Models { session: id.to_string(), available: models, current });
+        }
         Ok((client, None, cwd))
     }
 
@@ -430,6 +442,10 @@ impl Engine {
 
                 let session_id = sess.id.clone();
                 let cwd_stored = sess.cwd.clone();
+                // Offer the provider's built-in models straight away. The agent's own list, if it
+                // has one, only arrives at `session/new` — i.e. after the first prompt — and until
+                // then the picker would otherwise have nothing in it at all.
+                let models = builtin_models(&prov.id);
                 self.state.sessions.lock().unwrap().insert(
                     session_id.clone(),
                     SessionRuntime {
@@ -438,10 +454,20 @@ impl Engine {
                         acp_session_id: None,
                         cwd: cwd_stored,
                         policy,
-                        models: Vec::new(),
+                        models: models.clone(),
+                        models_reported: false,
                     },
                 );
-                self.emit(Event::SessionCreated { session: session_id });
+                self.emit(Event::SessionCreated { session: session_id.clone() });
+                if !models.is_empty() {
+                    // No `current`: nothing has been chosen yet, and claiming a default the CLI
+                    // never told us about would be a guess at its config.
+                    self.emit(Event::Models {
+                        session: session_id,
+                        available: models,
+                        current: String::new(),
+                    });
+                }
             }
 
             Op::Prompt { session, doc } => {
@@ -512,7 +538,7 @@ impl Engine {
                             let id = resp.session_id;
                             // Models are optional in ACP and reported only here, so this is the one
                             // chance to learn them.
-                            let models: Vec<ModelChoice> = resp
+                            let reported: Vec<ModelChoice> = resp
                                 .models
                                 .as_ref()
                                 .map(|m| {
@@ -526,7 +552,7 @@ impl Engine {
                                         .collect()
                                 })
                                 .unwrap_or_default();
-                            let current = resp
+                            let mut current = resp
                                 .models
                                 .as_ref()
                                 .map(|m| m.current_model_id.clone())
@@ -540,25 +566,66 @@ impl Engine {
                                 .unwrap_or_default();
                             let option_model = current_model_from_options(&options);
 
-                            {
+                            // A model chosen before this point had no ACP session to be sent to,
+                            // so the choice is still only ours. Apply it below.
+                            let (models, pending) = {
                                 let mut map = self.state.sessions.lock().unwrap();
-                                if let Some(r) = map.get_mut(&session) {
+                                let pending = map.get(&session).and_then(|r| r.session.model.clone());
+                                let models = if let Some(r) = map.get_mut(&session) {
                                     r.acp_session_id = Some(id.clone());
                                     r.session.acp_session_id = Some(id.clone());
-                                    r.models = models.clone();
-                                    if !current.is_empty() {
-                                        r.session.model = Some(current.clone());
+                                    if !reported.is_empty() {
+                                        r.models = reported;
+                                        r.models_reported = true;
                                     }
                                     if let Some(m) = &option_model {
                                         r.session.model = Some(m.clone());
                                     }
-                                }
+                                    r.models.clone()
+                                } else {
+                                    Vec::new()
+                                };
                                 if let Some(store) = &self.state.store {
                                     if let Some(r) = map.get(&session) {
                                         let _ = store.upsert_session(&r.session);
                                     }
                                 }
+                                (models, pending)
+                            };
+
+                            // Unless the agent reported a model selector of its own, in which case
+                            // what it says is live wins and the pre-session pick was only ever a
+                            // guess at a list we didn't have.
+                            let pending = pending.filter(|_| option_model.is_none());
+                            if let Some(want) = pending.filter(|m| *m != current) {
+                                match client.set_model(&id, &want).await {
+                                    Ok(()) => {
+                                        current = want.clone();
+                                        let mut map = self.state.sessions.lock().unwrap();
+                                        if let Some(r) = map.get_mut(&session) {
+                                            r.session.model = Some(want);
+                                            if let Some(store) = &self.state.store {
+                                                let _ = store.upsert_session(&r.session);
+                                            }
+                                        }
+                                    }
+                                    // Not fatal — the turn runs on whatever the CLI is configured
+                                    // for. Say so rather than leave the chip claiming otherwise.
+                                    Err(e) => {
+                                        let mut map = self.state.sessions.lock().unwrap();
+                                        if let Some(r) = map.get_mut(&session) {
+                                            r.session.model =
+                                                (!current.is_empty()).then(|| current.clone());
+                                        }
+                                        drop(map);
+                                        self.emit(Event::Error {
+                                            session: Some(session.clone()),
+                                            message: format!("{want} wasn't accepted: {e}"),
+                                        });
+                                    }
+                                }
                             }
+
                             if !models.is_empty() {
                                 self.emit(Event::Models {
                                     session: session.clone(),
@@ -641,7 +708,8 @@ impl Engine {
 
             Op::SetModel { session, model } => {
                 // Tell the agent, then record it. Storing it without the ACP call would leave the
-                // UI claiming a model the agent never switched to.
+                // UI claiming a model the agent never switched to. Before the first prompt there's
+                // no ACP session to tell, so the choice is just recorded and `session/new` sends it.
                 let target = {
                     let map = self.state.sessions.lock().unwrap();
                     map.get(&session).map(|r| (r.client.clone(), r.acp_session_id.clone()))

@@ -6,6 +6,7 @@
 //! Module map:
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
+//! - [`models`] — built-in model lists for providers that don't report their own over ACP.
 //! - [`session`] — session / message / part model.
 //! - [`skill`] — skill library + the document → prompt compiler (the product differentiator).
 //! - [`permission`] — ask/allow/deny engine and permission modes (incl. YOLO).
@@ -23,6 +24,7 @@ pub mod git;
 pub mod issues;
 pub mod keymap;
 pub mod market;
+pub mod models;
 pub mod permission;
 pub mod project;
 pub mod provider;
@@ -46,6 +48,7 @@ pub use git::{Checkpoint, GitFile, GitStatus};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;
+pub use models::builtin_models;
 pub use context::{estimate_tokens, ContextUsage};
 pub use permission::{Action, PermissionMode, PermissionPolicy, Rule, SandboxPolicy};
 pub use project::{ProjectConfig, ProjectScript};

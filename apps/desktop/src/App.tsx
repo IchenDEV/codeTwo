@@ -487,16 +487,19 @@ export default function App() {
     async (id: string) => {
       activeSessionRef.current = id;
       setActiveSession(id);
-      // Models belong to a session. The agent only reports the menu at session/new, so for a
-      // session resumed from the store we know the chosen model but not the options it came from;
-      // the picker names the model and stays closed until the agent reports again.
-      setModels([]);
+      // Models belong to a session. The agent only reports its own menu at session/new — which for
+      // a session resumed from the store hasn't happened again yet — so start from the provider's
+      // built-in list and let the agent's own options replace it when the next turn revives the
+      // session.
+      const stored = sessions.find((s) => s.id === id);
+      const forProvider = providers.find((p) => p.id === providerLabel(stored?.provider ?? ""));
+      setModels(forProvider?.models ?? []);
       setConfigOptions([]);
-      setCurrentModel(sessions.find((s) => s.id === id)?.model ?? null);
+      setCurrentModel(stored?.model ?? null);
       setDefaultModel(null);
       setTurns(turnsFromTranscript(await getTranscript(id)));
     },
-    [sessions],
+    [sessions, providers],
   );
 
   const refreshSkills = useCallback(() => {

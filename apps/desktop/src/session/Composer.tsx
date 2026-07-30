@@ -250,9 +250,11 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
  * chip picks the family, the second the effort, and together they resolve to one of the adapter's
  * own ids.
  *
- * Either API is optional and most adapters skip both, so "no models" is a normal answer, not a
- * failure — the menu explains that instead of showing an empty list. Everything is hidden until a
- * session exists, because before that there's nothing to ask.
+ * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
+ * built-in one for that provider rather than the agent's own — same shape either way. Only a
+ * provider we have no list for (a custom one) falls through to the note explaining that its CLI
+ * config decides. Everything is hidden until a session exists, because before that there's nothing
+ * to ask.
  */
 function ModelPicker({
   models,

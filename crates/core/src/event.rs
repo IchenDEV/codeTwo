@@ -46,9 +46,10 @@ pub enum Event {
         options: Vec<(String, String)>,
     },
     Usage { session: SessionId, input_tokens: u64, output_tokens: u64 },
-    /// The models this session's agent offers, reported at `session/new` and after a switch.
-    /// Providers that don't implement the (UNSTABLE) ACP model API never emit this, which is how
-    /// the UI knows to say so instead of showing an empty picker.
+    /// The models this session can run on: the agent's own list (reported at `session/new` and
+    /// echoed after a switch), or [`crate::models::builtin_models`] for its provider — emitted as
+    /// soon as the session exists — when the agent doesn't implement the (UNSTABLE) ACP model API.
+    /// `current` is empty when nothing has been chosen yet.
     Models { session: SessionId, available: Vec<ModelChoice>, current: String },
     /// The agent's session config options (model selector, thought level, …), reported at
     /// `session/new`, echoed after every `set_config_option`, and pushed on agent-side changes.

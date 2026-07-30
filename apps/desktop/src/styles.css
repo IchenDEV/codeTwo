@@ -340,6 +340,17 @@
     will-change: transform, opacity;
   }
 
+  /* A folder's children in the file tree, opened and closed by height — see `Branch` in FilePanel,
+     which supplies the measured pixel value. Written here rather than as a utility because the
+     arbitrary-value form of a two-property transition didn't survive the class scanner, and a
+     transition that silently doesn't exist is the worst kind. */
+  .tree-branch {
+    overflow: hidden;
+    transition:
+      height 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.15s ease-out;
+  }
+
   /* The centred dialog: its -50% positioning translate has to live inside the keyframes, or the
      scale would override it and the panel would jump to the top-left corner mid-animation. */
   @keyframes dialog-in {

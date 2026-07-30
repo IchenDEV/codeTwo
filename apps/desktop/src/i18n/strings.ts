@@ -54,7 +54,7 @@ export const en = {
   "composer.worktree": "Worktree",
   "composer.model": "Model",
   "composer.noModels":
-    "This provider doesn't report selectable models over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
+    "We don't know this provider's models, and it doesn't report any over ACP, so the model is whatever its CLI is configured to use. Set it in the CLI's own config.",
   "composer.defaultModel": "Default model",
   "composer.reasoning": "Reasoning",
   "composer.default": "Default",
@@ -320,7 +320,7 @@ export const zhCN: Record<StringKey, string> = {
   "composer.worktree": "Worktree",
   "composer.model": "模型",
   "composer.noModels":
-    "这个供应商没有通过 ACP 报告可选模型，所以模型取决于它自己 CLI 的配置。请在那边设置。",
+    "我们没有这个供应商的内置模型列表，它也没有通过 ACP 报告可选模型，所以模型取决于它自己 CLI 的配置。请在那边设置。",
   "composer.defaultModel": "默认模型",
   "composer.reasoning": "推理强度",
   "composer.default": "默认",
