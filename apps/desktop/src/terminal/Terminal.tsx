@@ -244,7 +244,7 @@ export function TerminalPanel({
       }}
     >
       {finding && (
-        <div className="mb-1 flex items-center gap-1 rounded-md bg-term-bg px-2 py-1.5 ring-1 ring-white/10">
+        <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1.5">
           <input
             autoFocus
             value={query}
@@ -261,7 +261,7 @@ export function TerminalPanel({
                 termRef.current?.focus();
               }
             }}
-            className="min-w-0 flex-1 bg-transparent text-fine text-term-fg/80 outline-none placeholder:text-term-fg/35"
+            className="min-w-0 flex-1 bg-transparent text-fine outline-none placeholder:text-muted-foreground/60"
           />
           <FindButton title={t("terminal.findPrev")} onClick={() => find(false)}>
             <ArrowUp className="size-3" />
@@ -300,7 +300,7 @@ function FindButton({
       type="button"
       title={title}
       onClick={onClick}
-      className="rounded p-0.5 text-term-fg/60 hover:bg-term-fg/10 hover:text-term-fg/90"
+      className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       {children}
     </button>

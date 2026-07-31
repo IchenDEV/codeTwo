@@ -7,6 +7,9 @@
  * an English word appearing in the middle of a Chinese sentence at runtime.
  */
 export const en = {
+  // app
+  "app.name": "codeTwo",
+
   // rail — projects
   "rail.noProject": "No project selected",
   "rail.projectsEmpty": "No projects yet. Add a directory to work in — sessions and git status follow it.",
@@ -24,6 +27,19 @@ export const en = {
   "rail.rename": "Rename",
   "rail.archive": "Archive",
   "rail.resize": "Drag to resize the sidebar",
+  "rail.collapse": "Collapse the sidebar",
+  "rail.expand": "Expand the sidebar",
+
+  // rail — recent chats + status card
+  "rail.recent": "Recent chats",
+  "rail.groupActive": "Active",
+  "rail.groupArchived": "Archived",
+  "rail.unarchive": "Restore from archive",
+  "rail.branch": "Branch",
+  "rail.changes": "Changes",
+  "rail.status": "Status",
+  "rail.changedCount": "{count} changed",
+  "rail.stagedCount": "{count} staged",
 
   // rail — git (the dock's git tab shares these)
   "rail.notARepo": "Not a git repo.",
@@ -42,6 +58,10 @@ export const en = {
   "header.running": "Working…",
   "header.showTranscript": "Show the transcript ({count})",
   "header.turns": "{count} turns",
+  "header.addAction": "Add action",
+  "header.open": "Open",
+  "header.checkpoint": "Checkpoint now",
+  "header.push": "Push",
 
   // composer
   "composer.placeholder": "Write your prompt —  /  for skills,  @  for files",
@@ -50,6 +70,7 @@ export const en = {
   "composer.insertSkill": "Insert a skill",
   "composer.pullIssue": "Pull in an issue",
   "composer.market": "Skill market",
+  "composer.newSkill": "New skill",
   "composer.addHint": "Or type / for skills and @ for files, right in the document.",
   "composer.worktree": "Worktree",
   "composer.model": "Model",
@@ -76,9 +97,13 @@ export const en = {
   "composer.toSend": "{key} to send",
   "composer.grip": "Drag to resize · double-click for full page",
   "composer.cliNotFound": "CLI not found",
+  "composer.currentCheckout": "Current checkout",
 
   // transcript
   "transcript.greeting": "What should we build?",
+  // The hero heading wraps the project name: "{greetingIn} <project>{greetingEnd}".
+  "transcript.greetingIn": "What should we build in",
+  "transcript.greetingEnd": "?",
   "transcript.hint": "Write a prompt below — type / for skills, @ to pull in a file.",
   "transcript.hint2": "Send with {run}, or expand the document with {expand} for longer briefs.",
   "turn.working": "Working…",
@@ -92,6 +117,7 @@ export const en = {
   "settings.title": "Settings",
   "settings.back": "Back",
   "settings.general": "General",
+  "settings.generalHint": "Appearance and language for the app, and how the terminal renders.",
   "settings.providers": "Providers",
   "settings.restoreDefaults": "Restore defaults",
   "settings.providersHint":
@@ -206,7 +232,8 @@ export const en = {
   // file tree
   "files.searching": "Searching…",
   "files.noMatches": "No files match.",
-  "files.filter": "Filter files…",
+  "files.filter": "Search files",
+  "files.noneOpen": "Select a file in the tree to open it here.",
   "files.refresh": "Rescan the workspace",
   "files.insert": "Add to the prompt as an @ mention",
   "files.empty": "Nothing here.",
@@ -238,6 +265,7 @@ export const en = {
   "files.commentAdded": "Comment added to your prompt.",
   "files.gutterHint": "Click or drag the line numbers to comment",
   "session.running": "Working",
+  "session.completed": "Completed",
   "session.noMessages": "No messages yet",
 
   // toasts / errors
@@ -279,6 +307,7 @@ export type StringKey = keyof typeof en;
 
 /** Simplified Chinese. Typed against `en`, so an omission won't compile. */
 export const zhCN: Record<StringKey, string> = {
+  "app.name": "codeTwo",
   "rail.noProject": "未选择项目",
   "rail.projectsEmpty": "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
   "rail.addProject": "添加项目…",
@@ -294,6 +323,18 @@ export const zhCN: Record<StringKey, string> = {
   "rail.rename": "重命名",
   "rail.archive": "归档",
   "rail.resize": "拖动调整侧栏宽度",
+  "rail.collapse": "收起侧栏",
+  "rail.expand": "展开侧栏",
+
+  "rail.recent": "最近会话",
+  "rail.groupActive": "进行中",
+  "rail.groupArchived": "已归档",
+  "rail.unarchive": "从归档恢复",
+  "rail.branch": "分支",
+  "rail.changes": "改动",
+  "rail.status": "状态",
+  "rail.changedCount": "{count} 个文件改动",
+  "rail.stagedCount": "{count} 已暂存",
 
   "rail.notARepo": "不是 Git 仓库。",
   "rail.clean": "工作区干净",
@@ -309,6 +350,10 @@ export const zhCN: Record<StringKey, string> = {
   "header.running": "处理中…",
   "header.showTranscript": "查看对话（{count}）",
   "header.turns": "{count} 轮",
+  "header.addAction": "添加动作",
+  "header.open": "打开",
+  "header.checkpoint": "立即创建检查点",
+  "header.push": "推送",
 
   "composer.placeholder": "写下你的提示词 —  /  插入技能，  @  引用文件",
   "composer.add": "向文档添加内容",
@@ -316,6 +361,7 @@ export const zhCN: Record<StringKey, string> = {
   "composer.insertSkill": "插入技能",
   "composer.pullIssue": "引入 Issue",
   "composer.market": "技能市场",
+  "composer.newSkill": "新建技能",
   "composer.addHint": "也可以直接在文档里输入 / 插入技能、@ 引用文件。",
   "composer.worktree": "Worktree",
   "composer.model": "模型",
@@ -342,8 +388,11 @@ export const zhCN: Record<StringKey, string> = {
   "composer.toSend": "{key} 发送",
   "composer.grip": "拖动调整高度 · 双击整页",
   "composer.cliNotFound": "未找到 CLI",
+  "composer.currentCheckout": "当前检出",
 
   "transcript.greeting": "今天做点什么？",
+  "transcript.greetingIn": "在",
+  "transcript.greetingEnd": "里做点什么？",
   "transcript.hint": "在下面写提示词——输入 / 插入技能，@ 引用文件。",
   "transcript.hint2": "用 {run} 发送，或用 {expand} 展开成整页写长一点的说明。",
   "turn.working": "处理中…",
@@ -356,6 +405,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.title": "设置",
   "settings.back": "返回",
   "settings.general": "通用",
+  "settings.generalHint": "应用的外观与语言，以及终端的显示设置。",
   "settings.providers": "供应商",
   "settings.restoreDefaults": "恢复默认",
   "settings.providersHint": "codeTwo 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
@@ -463,7 +513,8 @@ export const zhCN: Record<StringKey, string> = {
 
   "files.searching": "搜索中…",
   "files.noMatches": "没有匹配的文件。",
-  "files.filter": "筛选文件…",
+  "files.filter": "搜索文件",
+  "files.noneOpen": "在右侧文件树里选择一个文件打开。",
   "files.refresh": "重新扫描工作区",
   "files.insert": "作为 @ 引用加入提示词",
   "files.empty": "这里没有内容。",
@@ -495,6 +546,7 @@ export const zhCN: Record<StringKey, string> = {
   "files.commentAdded": "评论已加入提示词。",
   "files.gutterHint": "点击或拖选行号来评论",
   "session.running": "处理中",
+  "session.completed": "已完成",
   "session.noMessages": "还没有消息",
 
   "toast.emptyDoc": "先写点什么——文档现在是空的。",

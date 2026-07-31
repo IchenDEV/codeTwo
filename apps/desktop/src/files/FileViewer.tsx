@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Pencil, Save, X } from "lucide-react";
+import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Pencil, Save } from "lucide-react";
 import { codeToTokens, type ThemedToken } from "shiki";
 
 import { readText, writeText } from "../bridge";
@@ -58,7 +58,7 @@ const MAX_HIGHLIGHT_LINES = 5_000;
 const MAX_HIGHLIGHT_BYTES = 400_000;
 
 /**
- * The built-in file view.
+ * The built-in file view — a pane inside the right panel, under the file tabs.
  *
  * Read-only until you ask for otherwise — a stray keystroke in a viewer must cost nothing. Reading
  * gets the full treatment: syntax colours, a breadcrumb, and a gutter you can click or drag to
@@ -71,7 +71,6 @@ export function FileViewer({
   path,
   editing,
   onEditing,
-  onClose,
   onInsert,
   onComment,
 }: {
@@ -79,7 +78,6 @@ export function FileViewer({
   path: string;
   editing: boolean;
   onEditing: (v: boolean) => void;
-  onClose: () => void;
   onInsert: (path: string) => void;
   /** Receives a ready-made markdown context block for the prompt document. */
   onComment: (text: string) => void;
@@ -175,13 +173,14 @@ export function FileViewer({
     setSaving(false);
   }, [cwd, path, draft, onEditing, toast, t]);
 
-  const parts = path.split("/");
+  // The project's own name leads the breadcrumb, reference-style: "project > docs > file.md".
+  const parts = [cwd.split("/").filter(Boolean).pop() ?? cwd, ...path.split("/")];
 
   return (
-    <main className="surface-module animate-page-in m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden">
-      <header data-tauri-drag-region className="flex items-center gap-2 px-4 pb-2 pt-1">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <header className="flex items-center gap-2 border-b px-3 py-1.5">
         {/* Breadcrumb, not a raw path: the segments are how you know where you are. */}
-        <span data-tauri-drag-region className="flex min-w-0 flex-1 items-center gap-0.5 text-hint">
+        <span className="flex min-w-0 flex-1 items-center gap-0.5 text-hint">
           {parts.map((p, i) =>
             i === parts.length - 1 ? (
               <span key={i} className="truncate font-medium">
@@ -199,8 +198,8 @@ export function FileViewer({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8" onClick={() => onInsert(path)}>
-              <AtSign className="size-4" />
+            <Button variant="ghost" size="icon" className="size-7" onClick={() => onInsert(path)}>
+              <AtSign className="size-3.5" />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{t("files.insert")}</TooltipContent>
@@ -208,10 +207,10 @@ export function FileViewer({
 
         {editing ? (
           <>
-            <Button variant="ghost" size="sm" onClick={() => { setDraft(content ?? ""); onEditing(false); }}>
+            <Button variant="ghost" size="sm" className="h-7 text-hint" onClick={() => { setDraft(content ?? ""); onEditing(false); }}>
               {t("files.cancel")}
             </Button>
-            <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
+            <Button size="sm" className="h-7 text-hint" disabled={!dirty || saving} onClick={() => void save()}>
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               {t("files.save")}
             </Button>
@@ -222,20 +221,16 @@ export function FileViewer({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className="size-7"
                 disabled={content === null}
                 onClick={() => onEditing(true)}
               >
-                <Pencil className="size-4" />
+                <Pencil className="size-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("files.edit")}</TooltipContent>
           </Tooltip>
         )}
-
-        <Button variant="ghost" size="icon" className="size-8" aria-label={t("files.close")} onClick={onClose}>
-          <X className="size-4" />
-        </Button>
       </header>
 
       {error ? (
@@ -336,6 +331,6 @@ export function FileViewer({
           </div>
         </ScrollArea>
       )}
-    </main>
+    </div>
   );
 }

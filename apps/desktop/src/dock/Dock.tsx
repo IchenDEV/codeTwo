@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CornerUpLeft,
+  FileText,
   FolderTree,
   GitBranch,
   Globe,
-  Maximize2,
-  Minimize2,
   Plus,
   TerminalIcon,
   X,
@@ -13,6 +12,7 @@ import {
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
+import { FileViewer } from "../files/FileViewer";
 import { onPtyTitle, ptyDump, ptyKill, type Annotation, type GitStatus } from "../bridge";
 import type { StringKey } from "../i18n/strings";
 import { Button } from "@/components/ui/button";
@@ -73,7 +73,12 @@ export function Dock({
   onInsertFile,
   onOpenFile,
   onSendText,
-  openFile,
+  openFiles,
+  activeFile,
+  onActiveFile,
+  onCloseFile,
+  fileEditing,
+  onFileEditing,
   width,
   onWidth,
 }: {
@@ -94,12 +99,18 @@ export function Dock({
   onAnnotate: (notes: Annotation[]) => void;
   /** Drops an `@` mention into the prompt document. */
   onInsertFile: (path: string) => void;
-  /** Shows a file in the built-in viewer. */
+  /** Opens a file as a tab in this panel's viewer. */
   onOpenFile: (path: string) => void;
   /** Appends a block to the prompt document — used to hand terminal output to the agent. */
   onSendText: (text: string) => void;
-  /** Which file the viewer has open, so the tree can mark it. */
-  openFile: string | null;
+  /** The viewer's open tabs, in open order, and which one is showing. */
+  openFiles: string[];
+  activeFile: string | null;
+  onActiveFile: (path: string) => void;
+  onCloseFile: (path: string) => void;
+  /** Whether the active file is in edit mode — a deliberate second step past viewing. */
+  fileEditing: boolean;
+  onFileEditing: (v: boolean) => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
@@ -161,31 +172,6 @@ export function Dock({
   }, []);
   const applied = Math.min(width, maxWidth);
 
-  // T3-style widen/restore: one click to take all the room the document can spare, one to give it
-  // back. The pre-max width is remembered so restore means *your* width, not a default.
-  const [preMax, setPreMax] = useState<number | null>(null);
-  const maximized = applied >= maxWidth - 4;
-  const toggleMax = () => {
-    if (maximized) onWidth(Math.min(preMax ?? 440, maxWidth));
-    else {
-      setPreMax(applied);
-      onWidth(maxWidth);
-    }
-    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-  };
-
-  const maxButton = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-6"
-      onClick={toggleMax}
-      title={maximized ? t("dock.restore") : t("dock.maximize")}
-    >
-      {maximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-    </Button>
-  );
-
   // A drag must track the pointer 1:1. The open/close width transition below would ease every
   // intermediate width instead, so the edge lags the cursor and then keeps travelling after the
   // mouse stops — and because the inner column is pinned to the new width immediately, the content
@@ -227,15 +213,15 @@ export function Dock({
           window.dispatchEvent(new Event("resize"));
       }}
       className={cn(
-        "dock-panel surface-module relative my-2 flex shrink-0 flex-col overflow-hidden",
+        "dock-panel relative flex shrink-0 flex-col overflow-hidden border-l bg-background",
         // The open/close sweep. Animating the real width moves the document column in the same
         // motion — the old mount-time slide left the layout to snap, which read as an animation
         // cut off halfway. It belongs to open/close only: while the grip is held, the width is the
         // pointer's to set directly.
-        !dragging && "transition-[width,margin-right] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         gone && "invisible",
       )}
-      style={{ width: open ? applied : 0, marginRight: open ? 8 : 0 }}
+      style={{ width: open ? applied : 0 }}
     >
       <div className="dock-grip" onMouseDown={startDrag} title={t("dock.resize")} />
 
@@ -243,10 +229,10 @@ export function Dock({
       <div className="flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
       {shown === "home" ? (
         <>
-          {/* Same titlebar inset and drag behaviour as the surface header below. */}
-          <div data-tauri-drag-region className="flex items-center gap-1 px-3 pb-2.5 pt-2">
+          {/* Same 40px bar as the surface header below; the explicit height keeps the border on
+              the same line even though this row only holds 24px buttons. */}
+          <div data-tauri-drag-region className="flex h-10 items-center gap-1 border-b px-3">
             <div data-tauri-drag-region className="flex-1" />
-            {maxButton}
             <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
               <X className="size-3.5" />
             </Button>
@@ -279,12 +265,15 @@ export function Dock({
         </>
       ) : (
       <Tabs value={shown} onValueChange={(v) => onTab(v as DockSurface)} className="flex min-h-0 flex-1 flex-col gap-0">
-        {/* pt-2 matches the main header's titlebar inset so the two rows line up, and it drags the
-            window for the same reason: the overlay title bar leaves nothing else to grab. */}
+        {/* pt/pb mirror the main header exactly, so this tab row and the breadcrumb sit on the
+            same 20px line and share one continuous bottom border. It drags the window for the
+            same reason: the overlay title bar leaves nothing else to grab. */}
         {/* Frameless tab pills rather than the boxed segmented control — the dock's chrome should
             weigh less than what's inside it. */}
-        <div data-tauri-drag-region className="flex items-center gap-1 px-3 pb-2 pt-1.5">
-          <TabsList className="h-7 gap-0.5 bg-transparent p-0">
+        <div data-tauri-drag-region className="flex items-center gap-1 border-b px-3 pb-1.5 pt-1.5">
+          {/* h-7! — the primitive pins horizontal lists to h-9 via a group variant that outranks a
+              plain h-7, and the extra 8px is exactly what pushed this row off the 28px title line. */}
+          <TabsList className="h-7! gap-0.5 bg-transparent p-0">
             {SURFACES.map(({ id, icon: Icon, titleKey }) => (
               <TabsTrigger
                 key={id}
@@ -296,15 +285,16 @@ export function Dock({
             ))}
           </TabsList>
           <div data-tauri-drag-region className="flex-1" />
-          {maxButton}
           <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
             <X className="size-3.5" />
           </Button>
         </div>
 
-        {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. */}
-        <TabsContent value="terminal" className="m-0 flex min-h-0 flex-1 flex-col bg-terminal p-1.5">
-          <div className="flex items-center gap-1 pb-1.5">
+        {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. The strip
+            is the same h-9 bordered bar as the files tabs; the emulator below follows the app's
+            scheme, so no dark slab and no frame around it. */}
+        <TabsContent value="terminal" className="m-0 flex min-h-0 flex-1 flex-col">
+          <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2">
             {terms.map((n) => (
               <button
                 key={n}
@@ -314,16 +304,14 @@ export function Dock({
                   setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
                 }}
                 className={cn(
-                  "flex max-w-40 items-center gap-1 rounded-md px-2 py-1 text-fine transition-colors",
-                  n === activeTerm
-                    ? "bg-term-bg text-term-fg/85"
-                    : "text-term-fg/45 hover:bg-term-fg/[0.07] hover:text-term-fg/70",
+                  "group relative flex h-full max-w-40 shrink-0 items-center gap-1.5 px-2.5 text-hint transition-colors",
+                  n === activeTerm ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span className="truncate">{tabLabel(termTitles[termId(sessionKey, n, tmux)], n)}</span>
                 {terms.length > 1 && (
                   <X
-                    className="size-3 shrink-0"
+                    className="size-3 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation();
                       const left = terms.filter((x) => x !== n);
@@ -337,10 +325,13 @@ export function Dock({
                     }}
                   />
                 )}
+                {n === activeTerm && (
+                  <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-primary" />
+                )}
               </button>
             ))}
             <button
-              className="rounded-md px-1.5 py-1 text-term-fg/45 transition-colors hover:bg-term-fg/[0.07] hover:text-term-fg/70"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title={t("dock.newTerminal")}
               onClick={() => {
                 setTerms((v) => [...v, nextTerm]);
@@ -350,18 +341,19 @@ export function Dock({
             >
               <Plus className="size-3" />
             </button>
+            <div className="min-w-0 flex-1" />
             <button
-              className="ml-auto rounded-md px-1.5 py-1 text-term-fg/45 transition-colors hover:bg-term-fg/[0.07] hover:text-term-fg/70"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               title={t("dock.sendTerminal")}
               onClick={() => void sendTerminalToAgent()}
             >
               <CornerUpLeft className="size-3" />
             </button>
-            <label className="flex cursor-pointer items-center gap-1.5 text-fine text-term-fg/60">
+            <label className="flex shrink-0 cursor-pointer items-center gap-1.5 px-1 text-fine text-muted-foreground">
               <Checkbox
                 checked={tmux}
                 onCheckedChange={(v) => setTmux(v === true)}
-                className="size-3.5 border-term-fg/30"
+                className="size-3.5"
               />
               {t("dock.tmux")}
             </label>
@@ -377,8 +369,65 @@ export function Dock({
           <BrowserPanel url={browserUrl} visible={open} onNavigate={onNavigate} onAnnotate={onAnnotate} />
         </TabsContent>
 
+        {/* Files, reference-style: tabs over the viewer, and the tree in its own column on the
+            far right with the search box on top. */}
         <TabsContent value="files" className="m-0 flex min-h-0 flex-1">
-          <FilePanel cwd={cwd} onInsert={onInsertFile} onOpen={onOpenFile} openPath={openFile} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/* One tab per open file. Active gets the primary underline. h-9 matches the tree's
+                search row on the other side of the border, so the two strips read as one bar. */}
+            <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2">
+              {openFiles.map((p) => {
+                const name = p.split("/").pop() ?? p;
+                const active = p === activeFile;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => onActiveFile(p)}
+                    title={p}
+                    className={cn(
+                      "group relative flex h-full max-w-48 shrink-0 items-center gap-1.5 px-2.5 text-hint transition-colors",
+                      active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <FileText className="size-3.5 shrink-0" />
+                    <span className="truncate">{name}</span>
+                    <X
+                      className="size-3 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCloseFile(p);
+                      }}
+                    />
+                    {active && (
+                      <span className="absolute inset-x-1.5 -bottom-px h-0.5 rounded-full bg-primary" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeFile && cwd ? (
+              <FileViewer
+                key={activeFile}
+                cwd={cwd}
+                path={activeFile}
+                editing={fileEditing}
+                onEditing={onFileEditing}
+                onInsert={onInsertFile}
+                onComment={onSendText}
+              />
+            ) : (
+              <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+                <p className="text-center text-hint leading-relaxed text-muted-foreground">
+                  {t("files.noneOpen")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex w-60 shrink-0 flex-col border-l">
+            <FilePanel cwd={cwd} onInsert={onInsertFile} onOpen={onOpenFile} openPath={activeFile} />
+          </div>
         </TabsContent>
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">

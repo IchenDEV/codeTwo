@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  CircleAlert,
-  EllipsisVertical,
-  Folder,
-  GitBranch,
-  Globe,
-  Keyboard,
-  PanelRight,
-  Settings as SettingsIcon,
-  TerminalIcon,
-} from "lucide-react";
+import { CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import {
@@ -29,10 +18,12 @@ import {
   gitCheckpoint,
   gitCheckpoints,
   gitCommit,
+  gitDiff,
   gitPush,
   gitRevert,
   gitStatus,
   issueContext,
+  listArchivedSessions,
   listProjectScripts,
   listProjects,
   listProviders,
@@ -85,7 +76,6 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
-import { FileViewer } from "./files/FileViewer";
 import { UsageModal } from "./usage/Usage";
 import type { SessionConfig } from "./session/config";
 import { SESSION_MODES, nextSessionMode, sessionMode, type SessionMode } from "./session/mode";
@@ -102,13 +92,6 @@ import { useLanguage, useT } from "./i18n";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
@@ -124,10 +107,22 @@ function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join(" ").slice(0, 400);
 }
 
+/** +/− line counts out of a unified diff — content lines only, not the +++/--- file headers. */
+function countDiff(diff: string): { added: number; deleted: number } {
+  let added = 0;
+  let deleted = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+") && !line.startsWith("+++")) added++;
+    else if (line.startsWith("-") && !line.startsWith("---")) deleted++;
+  }
+  return { added, deleted };
+}
+
 function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+/** A header icon with a tooltip — the always-visible way into a dock surface. */
 function IconAction({
   icon: Icon,
   label,
@@ -149,7 +144,7 @@ function IconAction({
           variant={active ? "secondary" : "ghost"}
           size="icon"
           aria-label={label}
-          className={cn("size-8 shrink-0", active && "text-primary")}
+          className={cn("size-7 shrink-0", active && "text-primary")}
           onClick={onClick}
         >
           <Icon className="size-4" />
@@ -167,6 +162,10 @@ export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [archivedSessions, setArchivedSessions] = useState<SessionInfo[]>([]);
+  // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
+  // preview is a glance, and requerying the transcript table on every token would be absurd.
+  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState("grok");
   const [cwd, setCwd] = useState(".");
   const [mode, setMode] = useState("ask");
@@ -179,6 +178,9 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
   const [git, setGit] = useState<GitStatus | null>(null);
+  // Working-tree +/− lines, for the rail's status table. Parsed here, not in the core: the diff
+  // text is already one call away and counting lines is nothing.
+  const [diffStat, setDiffStat] = useState<{ added: number; deleted: number }>({ added: 0, deleted: 0 });
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
   // A blank tab, not a landing page: this browser's job is your localhost dev server, which you
   // type in.
@@ -195,7 +197,6 @@ export default function App() {
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
-  const [tokens, setTokens] = useState<number>(0);
   const [showFiles, setShowFiles] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
@@ -211,22 +212,26 @@ export default function App() {
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
-  // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
-  // preview is a glance, and requerying the transcript table on every token would be absurd.
-  const [previews, setPreviews] = useState<Record<string, string>>({});
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  // The built-in file view. Opening is read-only; `fileEditing` is the deliberate second step.
-  const [openFile, setOpenFile] = useState<string | null>(null);
+  // The right panel's file viewer: open tabs in open order, and which one is showing. Opening is
+  // read-only; `fileEditing` is the deliberate second step.
+  const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [activeFile, setActiveFile] = useState<string | null>(null);
   const [fileEditing, setFileEditing] = useState(false);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
   const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
   const [railWidth, setRailWidth] = usePersistedNumber("codetwo.railWidth", 288);
-  // Full-page document is *the* mode of this app, not a temporary state it visits. Nothing here
-  // takes it away on your behalf — not sending, not switching sessions. It's a preference you set
-  // and the app keeps, because a document-first tool that keeps collapsing into a chat box isn't
-  // document-first. Only the ⤢ button and Mod+Shift+E change it.
+  const [railCollapsedRaw, setRailCollapsedRaw] = usePersistedNumber("codetwo.railCollapsed", 0);
+  const railCollapsed = railCollapsedRaw !== 0;
+  const toggleRail = useCallback(
+    () => setRailCollapsedRaw(railCollapsed ? 0 : 1),
+    [railCollapsed, setRailCollapsedRaw],
+  );
+  // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
+  // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
+  // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it.
   const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
   const docMode = docModeRaw !== 0;
   const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
@@ -263,6 +268,7 @@ export default function App() {
 
   const refreshSessions = useCallback(() => {
     listSessions().then(setSessions).catch(() => {});
+    listArchivedSessions().then(setArchivedSessions).catch(() => {});
     sessionPreviews().then(setPreviews).catch(() => {});
   }, []);
 
@@ -314,6 +320,17 @@ export default function App() {
     [projects, activeProject],
   );
 
+  // The rail's status card names the model the next turn runs on. Same two sources as the
+  // composer's picker, flattened to a label: config options first, then the flat model list,
+  // then the provider's display name when nothing has been reported yet.
+  const modelLabel = useMemo(() => {
+    const opt = configOptions.find((o) => o.category === "model" || o.id === "model");
+    if (opt) return opt.choices.find((c) => c.id === opt.current)?.name || opt.current;
+    const m = models.find((x) => x.id === currentModel);
+    if (m) return m.name;
+    return currentModel ?? providers.find((p) => p.id === provider)?.display_name ?? provider;
+  }, [configOptions, models, currentModel, providers, provider]);
+
   // Sessions store a provider id; show the registry's display name where we have one.
   const displayProvider = useCallback(
     (p: SessionInfo["provider"]) => {
@@ -355,10 +372,6 @@ export default function App() {
             void submitPrompt(ev.session, pendingDocRef.current);
             pendingDocRef.current = null;
           }
-          return;
-        }
-        if (ev.event === "usage") {
-          setTokens(ev.input_tokens);
           return;
         }
         if (ev.event === "models") {
@@ -491,7 +504,8 @@ export default function App() {
       // a session resumed from the store hasn't happened again yet — so start from the provider's
       // built-in list and let the agent's own options replace it when the next turn revives the
       // session.
-      const stored = sessions.find((s) => s.id === id);
+      const stored =
+        sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
       const forProvider = providers.find((p) => p.id === providerLabel(stored?.provider ?? ""));
       setModels(forProvider?.models ?? []);
       setConfigOptions([]);
@@ -499,7 +513,7 @@ export default function App() {
       setDefaultModel(null);
       setTurns(turnsFromTranscript(await getTranscript(id)));
     },
-    [sessions, providers],
+    [sessions, archivedSessions, providers],
   );
 
   const refreshSkills = useCallback(() => {
@@ -519,8 +533,28 @@ export default function App() {
     refreshSkills();
   }, [skillDraft, refreshSkills]);
 
+  // Mirrors `cwd` so an in-flight git fetch can tell it's stale. Without this, the mount-time
+  // fetch for the engine's own cwd (".") could resolve *after* the fetch for the project you
+  // switched to and paint another repo's branch and diff into the rail.
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
+
   const refreshGit = useCallback(() => {
-    gitStatus(cwd || ".").then(setGit).catch(() => setGit(null));
+    const target = cwd || ".";
+    const fresh = () => (cwdRef.current || ".") === target;
+    gitStatus(target)
+      .then((s) => {
+        if (!fresh()) return;
+        setGit(s);
+        if (s.is_repo && s.files.length > 0) {
+          gitDiff(target, null)
+            .then((d) => fresh() && setDiffStat(countDiff(d)))
+            .catch(() => fresh() && setDiffStat({ added: 0, deleted: 0 }));
+        } else {
+          setDiffStat({ added: 0, deleted: 0 });
+        }
+      })
+      .catch(() => fresh() && setGit(null));
   }, [cwd]);
 
   const openMarket = useCallback(() => {
@@ -580,20 +614,34 @@ export default function App() {
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
-  /**
-   * Insert into the prompt from the file viewer. The viewer replaces the editor column, and the
-   * editor nulls its insert refs on unmount — so "insert" must first close the viewer, then wait
-   * for the editor to remount and re-install them. Without this the button was a silent no-op.
-   */
-  const insertFromViewer = useCallback((run: () => boolean) => {
-    setOpenFile(null);
-    setFileEditing(false);
-    let tries = 0;
-    const tick = () => {
-      if (!run() && tries++ < 20) setTimeout(tick, 50);
-    };
-    setTimeout(tick, 0);
-  }, []);
+  /** Open a file as a tab in the right panel's viewer, and bring that panel to the front. */
+  const openFileTab = useCallback(
+    (p: string) => {
+      setOpenFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
+      setActiveFile(p);
+      setFileEditing(false);
+      setDockTab("files");
+      // The files surface is a viewer *and* a tree; at the dock's chat-sized default the code
+      // column is a sliver. Take the room the document can spare, up to a readable measure.
+      if (dockWidth < 640) setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    },
+    [dockWidth, setDockWidth],
+  );
+
+  const closeFileTab = useCallback(
+    (p: string) => {
+      const at = openFiles.indexOf(p);
+      const next = openFiles.filter((x) => x !== p);
+      setOpenFiles(next);
+      // Closing the visible tab lands on its neighbour, not on an empty pane, VS Code-style.
+      if (activeFile === p) {
+        setActiveFile(next[Math.min(Math.max(at, 0), next.length - 1)] ?? null);
+        setFileEditing(false);
+      }
+    },
+    [openFiles, activeFile],
+  );
 
   const stepSession = useCallback(
     (delta: number) => {
@@ -724,6 +772,7 @@ export default function App() {
       run: () => toggleDocMode(!docMode),
     },
     { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
+    { id: "rail", label: railCollapsed ? "Expand the sidebar" : "Collapse the sidebar", run: toggleRail },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: hint("open_settings"), run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: hint("toggle_terminal"), run: () => toggleDock("terminal") },
@@ -839,8 +888,6 @@ export default function App() {
       .catch((err) => toast(`Could not reset shortcuts: ${err}`, "error"));
   }, [toast]);
 
-  const currentProvider = providers.find((p) => p.id === provider);
-
   const sessionConfig: SessionConfig = {
     providers,
     provider,
@@ -902,97 +949,61 @@ export default function App() {
             });
           }}
           sessions={sessions}
-          activeSession={activeSession}
+          archivedSessions={archivedSessions}
           previews={previews}
+          activeSession={activeSession}
           running={running}
           onSelect={(id) => void selectSession(id)}
           onNew={() => void createSession()}
           onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
-          onArchive={(id) => void archiveSession(id, true).then(refreshSessions)}
+          onArchive={(id, archived) => void archiveSession(id, archived).then(refreshSessions)}
           displayProvider={displayProvider}
-          skills={skills}
+          model={modelLabel}
+          provider={provider}
+          git={git}
+          diffStat={diffStat}
+          onOpenSourceControl={openSourceControl}
           onOpenMarket={openMarket}
-          onNewSkill={() => setSkillDraft({ name: "", text: "" })}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}
           searchHint={hint("open_command_palette")}
           onOpenSearch={() => setShowPalette(true)}
           onOpenSettings={() => setShowSettings(true)}
-          status={
-            <>
-              <span
-                className={cn("size-1.5 shrink-0 rounded-full", currentProvider?.available ? "bg-success" : "bg-border")}
-              />
-              <span className="truncate">{currentProvider?.display_name ?? provider}</span>
-              {tokens > 0 && (
-                <button
-                  className="ml-auto shrink-0 font-mono hover:text-foreground"
-                  onClick={() => setShowUsage(true)}
-                  title="Usage"
-                >
-                  {(tokens / 1000).toFixed(1)}k
-                </button>
-              )}
-            </>
-          }
+          collapsed={railCollapsed}
+          onToggleCollapse={toggleRail}
         />
 
-        {/* ---------------- the file viewer, or the session ---------------- */}
-        {openFile && activeProject ? (
-          <FileViewer
-            cwd={activeProject}
-            path={openFile}
-            editing={fileEditing}
-            onEditing={setFileEditing}
-            onClose={() => {
-              setOpenFile(null);
-              setFileEditing(false);
-            }}
-            onInsert={(p) =>
-              insertFromViewer(() => {
-                if (!insertFileRef.current) return false;
-                insertFileRef.current(p);
-                return true;
-              })
-            }
-            onComment={(text) =>
-              insertFromViewer(() => {
-                if (!insertTextRef.current) return false;
-                insertTextRef.current(text);
-                return true;
-              })
-            }
-          />
-        ) : (
-        <main className="surface-module m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden" ref={mainRef}>
+        {/* ---------------- the session column ---------------- */}
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* pt-1 + the module's 8px top margin puts this row's centre at 28px from the window
-              top — the same line as the traffic lights and the rail's search box. */}
-          <header data-tauri-drag-region className="flex items-center gap-1.5 px-3 pb-2 pt-1">
+          {/* A 40px bar with content centred on the 20px line the traffic lights sit on — the same
+              line as the rail's wordmark and the dock's tabs. With the rail collapsed, the inset
+              clears the lights and the expand button takes the wordmark's place. */}
+          <header
+            data-tauri-drag-region
+            className={cn(
+              "flex items-center gap-1.5 border-b pb-1.5 pr-3 pt-1.5",
+              railCollapsed ? "pl-[78px]" : "pl-3",
+            )}
+          >
+            {railCollapsed && (
+              <IconAction icon={PanelLeft} label={t("rail.expand")} onClick={toggleRail} />
+            )}
+            {/* Breadcrumb, reference-style: project / thread. */}
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            <span data-tauri-drag-region className="max-w-96 truncate text-ui font-semibold">
+            {activeProjectName && (
+              <>
+                <span data-tauri-drag-region className="max-w-40 truncate text-ui text-muted-foreground">
+                  {activeProjectName}
+                </span>
+                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+              </>
+            )}
+            <span data-tauri-drag-region className="max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
-            {activeProjectName && (
-              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-fine text-muted-foreground">
-                {activeProjectName}
-              </span>
-            )}
-            {/* The rail no longer carries a git section, so this chip is the glance — and the
-                click-through to review & commit. */}
-            {git?.is_repo && (
-              <button
-                onClick={openSourceControl}
-                className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                title={t("action.open_source_control")}
-              >
-                <GitBranch className="size-3" />
-                {git.branch}
-                {git.files.length > 0 && <span className="text-warning">•{git.files.length}</span>}
-              </button>
-            )}
 
             <div data-tauri-drag-region className="flex-1" />
 
@@ -1009,93 +1020,66 @@ export default function App() {
               </button>
             )}
 
-            {/* The surfaces you reach for constantly get their own icons, t3code-style; everything
-                else lives behind the ⋮. */}
-            <IconAction
-              icon={TerminalIcon}
-              label={t("action.toggle_terminal")}
-              hint={hint("toggle_terminal")}
-              active={dockTab === "terminal"}
-              onClick={() => toggleDock("terminal")}
-            />
-            <IconAction
-              icon={Globe}
-              label={t("action.toggle_browser")}
-              hint={hint("toggle_browser")}
-              active={dockTab === "browser"}
-              onClick={() => toggleDock("browser")}
-            />
+            {/* One control, not a toolbar: the panel toggle. Opening lands on the surface picker;
+                the dock's own tabs and the keyboard shortcuts pick specific surfaces. */}
             <IconAction
               icon={PanelRight}
               label={t("header.panel")}
               active={dockTab !== null}
-              // Opening from here lands on the surface picker; the shortcuts still jump straight
-              // to a specific surface.
               onClick={() => {
                 setDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label={t("header.more")} className="size-8 shrink-0">
-                  <EllipsisVertical className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuItem onSelect={() => setShowPalette(true)}>
-                  <Keyboard />
-                  {t("header.palette")}
-                  <DropdownMenuShortcut>{hint("open_command_palette")}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowUsage(true)}>
-                  <Activity />
-                  {t("action.open_usage")}
-                  <DropdownMenuShortcut>{hint("open_usage")}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowSettings(true)}>
-                  <SettingsIcon />
-                  {t("header.settings")}
-                  <DropdownMenuShortcut>{hint("open_settings")}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </header>
 
-          {/* The transcript owns the column; the composer is docked under it. In document mode the
-              editor takes the column and the transcript moves to a side panel on the right. */}
-          {!docMode && (
+          {/* The transcript owns the column once it exists; in document mode the editor takes the
+              column and the transcript moves to a side panel on the right. */}
+          {!docMode && turns.length > 0 && (
             <section className="min-h-0 flex-1 overflow-y-auto">
-              {turns.length === 0 ? (
-                <div className="flex h-full items-center justify-center px-6 pb-10">
-                  <div className="animate-rise-in text-center">
-                    <p className="text-heading font-medium">{t("transcript.greeting")}</p>
-                    <p className="mt-2 text-hint leading-relaxed text-muted-foreground">
-                      {t("transcript.hint")}
-                      <br />
-                      {t("transcript.hint2", { run: hint("run"), expand: hint("toggle_doc_mode") })}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="mx-auto w-full max-w-[860px] px-6 pb-2">
-                  {turns.map((t) => (
-                    <TurnCard key={t.id} turn={t} />
-                  ))}
-                  <div ref={transcriptEndRef} />
-                </div>
-              )}
+              <div className="mx-auto w-full max-w-[860px] px-6 pb-2 pt-3">
+                {turns.map((t) => (
+                  <TurnCard key={t.id} turn={t} />
+                ))}
+                <div ref={transcriptEndRef} />
+              </div>
             </section>
           )}
 
           {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
               BlockNote unmounts (and takes the draft with it) if the structure around it changes.
               Compact, the wrapper is just the composer's slot; expanded, it's a row that gives the
-              document the column and hangs the conversation off its right. */}
-          <div className={cn("flex", docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 flex-col")}>
+              document the column and hangs the conversation off its right. An empty thread is the
+              hero state: the heading and the card sit together in the centre of the column. */}
+          <div
+            className={cn(
+              "flex",
+              docMode
+                ? "min-h-0 min-w-0 flex-1"
+                : turns.length === 0
+                  ? "min-h-0 flex-1 flex-col justify-center pb-20"
+                  : "shrink-0 flex-col",
+            )}
+          >
+          {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
+          {!docMode && turns.length === 0 && (
+            <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
+              {t("transcript.greetingIn")}{" "}
+              <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
+                {activeProjectName ?? t("rail.noProject")}
+              </span>
+              {t("transcript.greetingEnd")}
+            </h1>
+          )}
           <Composer
             config={sessionConfig}
+            hero={turns.length === 0}
+            checkout={{
+              project: activeProjectName ?? cwd,
+              branch: git?.is_repo ? git.branch : null,
+              dirty: git?.files.length ?? 0,
+              onOpen: openSourceControl,
+            }}
             docMode={docMode}
             onDocMode={toggleDocMode}
             height={composerH}
@@ -1133,6 +1117,7 @@ export default function App() {
             onInsertSkill={() => openSkillPickerRef.current?.()}
             onInsertIssue={() => setShowIssues(true)}
             onOpenMarket={openMarket}
+            onNewSkill={() => setSkillDraft({ name: "", text: "" })}
             onVoiceText={(t) => insertTextRef.current?.(t)}
             runHint={hint("run")}
             skillHint={hint("open_skill_picker")}
@@ -1156,7 +1141,7 @@ export default function App() {
           {/* Document mode's view of the conversation: beside the page, not instead of it. Only
               once there's something to show — a fresh document keeps the full width. */}
           {docMode && (turns.length > 0 || running) && (
-            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto bg-fill-quiet px-4 pb-4 pt-2">
+            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-fill-quiet px-4 pb-4 pt-2">
               {turns.map((t) => (
                 <TurnCard key={t.id} turn={t} />
               ))}
@@ -1165,7 +1150,6 @@ export default function App() {
           )}
           </div>
         </main>
-        )}
 
         {/* ---------------- side dock ---------------- */}
         {/* Always mounted: closing animates the width to zero instead of unmounting, which both
@@ -1185,11 +1169,16 @@ export default function App() {
             onAnnotate={(n) => void annotate(n)}
             onInsertFile={(p) => insertFileRef.current?.(p)}
             onSendText={(text) => insertTextRef.current?.(text)}
-            onOpenFile={(p) => {
-              setOpenFile(p);
+            onOpenFile={openFileTab}
+            openFiles={openFiles}
+            activeFile={activeFile}
+            onActiveFile={(p) => {
+              setActiveFile(p);
               setFileEditing(false);
             }}
-            openFile={openFile}
+            onCloseFile={closeFileTab}
+            fileEditing={fileEditing}
+            onFileEditing={setFileEditing}
             width={dockWidth}
             onWidth={setDockWidth}
           />

@@ -5,6 +5,10 @@ import {
   FileText,
   GitBranch,
   ListChecks,
+  Lock,
+  LockOpen,
+  Maximize2,
+  Minimize2,
   Plus,
   Sparkles,
   Square,
@@ -36,6 +40,15 @@ interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
   children: ReactNode;
   config: SessionConfig;
+  /** The "Current checkout" bar under the card — where the next turn runs, and its branch. */
+  checkout?: {
+    project: string | null;
+    branch: string | null;
+    dirty: number;
+    onOpen: () => void;
+  } | null;
+  /** Empty-thread centre stage: the card narrows to the reference's hero measure. */
+  hero?: boolean;
   /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
   docMode: boolean;
   onDocMode: (v: boolean) => void;
@@ -61,6 +74,7 @@ interface ComposerProps {
   onInsertSkill: () => void;
   onInsertIssue: () => void;
   onOpenMarket: () => void;
+  onNewSkill: () => void;
   onVoiceText: (text: string) => void;
   runHint: string;
   skillHint: string;
@@ -165,7 +179,11 @@ function ModePicker({ config }: { config: SessionConfig }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Chip tone={active === "full_access" ? "warning" : undefined} title={t("config.mode")}>
-          {active === "full_access" && <span className="size-1.5 shrink-0 rounded-full bg-warning" />}
+          {active === "full_access" ? (
+            <LockOpen className="size-3 shrink-0" />
+          ) : (
+            <Lock className="size-3 shrink-0" />
+          )}
           <span>{t(`mode.${active}` as "mode.ask")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>
@@ -425,6 +443,8 @@ function ModelPicker({
 export function Composer({
   children,
   config,
+  checkout,
+  hero,
   docMode,
   onDocMode,
   height,
@@ -444,6 +464,7 @@ export function Composer({
   onInsertSkill,
   onInsertIssue,
   onOpenMarket,
+  onNewSkill,
   onVoiceText,
   runHint,
   skillHint,
@@ -513,19 +534,18 @@ export function Composer({
             <Store />
             {t("composer.market")}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onNewSkill}>
+            <Sparkles />
+            {t("composer.newSkill")}
+          </DropdownMenuItem>
           <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
           </p>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Mode, provider and model read as a sentence about what this turn will do — and each one
-          opens only itself. Where it runs isn't here: that's the project you picked in the rail,
-          named in the title bar, rather than a path to retype. */}
-      <ModePicker config={config} />
-
-      <ProviderPicker config={config} />
-
+      {/* Model, effort, then access — the reference's reading order: what runs, how hard it
+          thinks, what it may touch. Each chip opens only itself. */}
       <ModelPicker
         models={models}
         current={currentModel}
@@ -536,6 +556,10 @@ export function Composer({
         onConfigOption={onConfigOption}
         hasSession={config.hasSession}
       />
+
+      <ModePicker config={config} />
+
+      <ProviderPicker config={config} />
 
       {/* A boolean needs no view to choose from: the chip *is* the control. */}
       <Chip
@@ -559,6 +583,23 @@ export function Composer({
       </Chip>
 
       <div className="flex-1" />
+
+      {/* Document mode is the app's own feature — it deserves a control you can see, not just a
+          chord and a grip gesture. */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
+            onClick={() => onDocMode(!docMode)}
+          >
+            {docMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
+      </Tooltip>
 
       <VoiceButton onText={onVoiceText} />
 
@@ -627,7 +668,9 @@ export function Composer({
       <div
         className={cn(
           "flex flex-col",
-          docMode ? "min-h-0 flex-1" : "mx-auto w-full max-w-[860px]",
+          docMode
+            ? "min-h-0 flex-1"
+            : cn("mx-auto w-full", hero ? "max-w-[680px]" : "max-w-[860px]"),
         )}
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
@@ -638,7 +681,9 @@ export function Composer({
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 "min-h-0 flex-1"
-              : "glass-raised rounded-2xl shadow-lg ring-1 ring-foreground/10 transition-[box-shadow] duration-200 focus-within:shadow-xl focus-within:ring-ring/40",
+              : // A plain white card on a plain page, T3-style: border + a soft shadow, and the
+                // ring only wakes up when the caret is inside.
+                "rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] transition-[box-shadow,border-color] duration-200 focus-within:border-ring/40 focus-within:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_28px_rgb(0_0_0/0.07)]",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -670,6 +715,26 @@ export function Composer({
             </div>
           </div>
         </div>
+
+        {/* "Current checkout" — where this document will run, and the branch it lands on. One
+            click through to source control. Compact mode only: expanded, the page is the page. */}
+        {!docMode && checkout && (
+          <button
+            onClick={checkout.onOpen}
+            className="mt-2 flex h-8 items-center gap-1.5 rounded-lg border bg-muted/30 px-3 text-hint text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <span className="shrink-0">{t("composer.currentCheckout")}</span>
+            <ChevronDown className="size-3 shrink-0 opacity-50" />
+            <span className="min-w-0 flex-1 truncate text-left">{checkout.project}</span>
+            {checkout.branch && (
+              <span className="flex shrink-0 items-center gap-1 font-mono text-fine">
+                <GitBranch className="size-3" />
+                {checkout.branch}
+                {checkout.dirty > 0 && <span className="text-warning">•{checkout.dirty}</span>}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </section>
   );
