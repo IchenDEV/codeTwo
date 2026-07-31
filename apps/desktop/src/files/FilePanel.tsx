@@ -408,7 +408,8 @@ export function FilePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-1 border-b p-2">
+      {/* h-9 matches the viewer's file-tab strip across the border — one continuous bar. */}
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
         <Input
           className="h-7 text-hint"
           placeholder={t("files.filter")}

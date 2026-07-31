@@ -1,11 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
+  ArchiveRestore,
+  Check,
+  ChevronDown,
   Folder,
-  FolderOpen,
   FolderPlus,
+  PanelLeft,
   Pencil,
-  Plus,
   Search,
   Settings,
   SquarePen,
@@ -13,17 +15,23 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { providerLabel, type Project, type SessionInfo, type SkillInfo } from "../bridge";
+import { providerLabel, type GitStatus, type Project, type SessionInfo } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
-/** "3h", "2d", "5w" — the glanceable age on a project row. Anything under a minute is "now". */
+/** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
 function shortAge(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 60) return "now";
@@ -34,9 +42,13 @@ function shortAge(ts: number): string {
 }
 
 /**
- * The rail as a project tree: search and compose on top, every project listed with the active
- * one's conversations nested under it, and settings anchored at the bottom. One glance answers
- * where you are, what you've been doing there, and where everything else is.
+ * The rail, three zones top to bottom:
+ *
+ * 1. Title — wordmark on the traffic-light line, search + compose under it.
+ * 2. Recent chats — the active project's sessions, newest first, with the project itself as a
+ *    switcher dropdown in the section header (selection, add, rename, remove all live there).
+ * 3. Status — the model this session runs on, and a small table of the working tree: branch,
+ *    +/− lines, and file status. The table is the click-through to source control.
  */
 export function SessionRail({
   projects,
@@ -46,22 +58,27 @@ export function SessionRail({
   onRenameProject,
   onRemoveProject,
   sessions,
-  activeSession,
+  archivedSessions,
   previews,
+  activeSession,
   running,
   onSelect,
   onNew,
   onRename,
   onArchive,
   displayProvider,
-  skills,
+  model,
+  provider,
+  git,
+  diffStat,
+  onOpenSourceControl,
   onOpenMarket,
-  onNewSkill,
   newHint,
   searchHint,
   onOpenSearch,
   onOpenSettings,
-  status,
+  collapsed,
+  onToggleCollapse,
   width,
   onWidth,
 }: {
@@ -71,40 +88,66 @@ export function SessionRail({
   onAddProject: () => void;
   onRenameProject: (path: string, name: string) => void;
   onRemoveProject: (path: string) => void;
-  /** Every session; the rail groups them under their project by cwd. */
+  /** Every live session; the rail shows the active project's, newest first. */
   sessions: SessionInfo[];
-  activeSession: string | null;
-  /** Newest text per session id — row 2. */
+  /** Archived sessions, shown as their own labelled group below the live ones. */
+  archivedSessions: SessionInfo[];
+  /** Newest text per session id — the row's description line. */
   previews: Record<string, string>;
-  /** Whether the active session has a turn in flight — row 3. */
+  activeSession: string | null;
+  /** Whether the active session has a turn in flight. */
   running: boolean;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, title: string) => void;
-  onArchive: (id: string) => void;
+  /** Flips a session's archived state — true to archive, false to restore. */
+  onArchive: (id: string, archived: boolean) => void;
+  /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
-  skills: SkillInfo[];
+  /** The model the next turn runs on — the agent's current pick, or the provider's name. */
+  model: string;
+  provider: string;
+  git: GitStatus | null;
+  /** Working-tree +/− line counts, parsed from the diff alongside the status. */
+  diffStat: { added: number; deleted: number };
+  onOpenSourceControl: () => void;
   onOpenMarket: () => void;
-  onNewSkill: () => void;
   newHint: string;
-  /** The palette's shortcut, shown in the search pill. */
+  /** The palette's shortcut, shown in the search box. */
   searchHint: string;
   onOpenSearch: () => void;
   onOpenSettings: () => void;
-  /** Foot-of-rail line: which provider is live. */
-  status: React.ReactNode;
+  /** Collapsed: the rail animates to zero width; the main header grows an expand button. */
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
-  const [renamingProject, setRenamingProject] = useState<{ path: string; name: string } | null>(null);
+  const [renamingProject, setRenamingProject] = useState<string | null>(null);
 
   // Clamped on every render, not just while dragging, so a width saved on one display comes back
-  // usable on another. 220 keeps the search row workable next to the traffic lights; 420 stops the
-  // rail from eating the document.
+  // usable on another.
   const applied = Math.min(420, Math.max(220, width));
+
+  // A grip drag must track the pointer 1:1 — the collapse transition below would ease every
+  // intermediate width instead, so it's dropped for the duration of the drag (the dock does the
+  // same, for the same reason).
+  const [dragging, setDragging] = useState(false);
+
+  // `invisible` only after the collapse lands: a zero-width pane still paints its border as a
+  // hairline, and hiding earlier would cut the animation off.
+  const [gone, setGone] = useState(collapsed);
+  useEffect(() => {
+    if (!collapsed) {
+      setGone(false);
+      return;
+    }
+    const id = window.setTimeout(() => setGone(true), 340);
+    return () => window.clearTimeout(id);
+  }, [collapsed]);
 
   const startDrag = useCallback(
     (e: React.MouseEvent) => {
@@ -117,125 +160,172 @@ export function SessionRail({
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
         document.body.classList.remove("resizing-h");
+        setDragging(false);
       };
       document.body.classList.add("resizing-h");
+      setDragging(true);
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
     [applied, onWidth],
   );
 
-  // A session belongs to whichever project its cwd is — a filter, not a stored relation.
-  const byProject = useMemo(() => {
-    const map = new Map<string, SessionInfo[]>();
-    for (const s of sessions) {
-      const list = map.get(s.cwd);
-      if (list) list.push(s);
-      else map.set(s.cwd, [s]);
-    }
-    return map;
-  }, [sessions]);
+  const activeProjectName = projects.find((p) => p.path === activeProject)?.name ?? null;
 
-  const sessionRow = (s: SessionInfo) => (
-    <div
-      key={s.id}
-      onClick={() => onSelect(s.id)}
-      className={cn(
-        "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
-        s.id === activeSession && "bg-accent",
-      )}
-    >
-      {/* 1 — the session's name */}
-      {renaming?.id === s.id ? (
-        <Input
-          autoFocus
-          className="h-6 text-ui"
-          value={renaming.title}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
-          onBlur={() => setRenaming(null)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              onRename(s.id, renaming.title);
-              setRenaming(null);
-            } else if (e.key === "Escape") setRenaming(null);
-          }}
-        />
-      ) : (
-        <div
-          className={cn("truncate text-ui font-medium", s.id === activeSession && "text-primary")}
-        >
-          {s.title}
-        </div>
-      )}
+  // "Recent" means what it says: the active project's sessions, newest first — per group.
+  const forProject = useCallback(
+    (list: SessionInfo[]) =>
+      list.filter((s) => s.cwd === activeProject).sort((a, b) => b.created_at - a.created_at),
+    [activeProject],
+  );
+  const recent = useMemo(() => forProject(sessions), [forProject, sessions]);
+  const archived = useMemo(() => forProject(archivedSessions), [forProject, archivedSessions]);
 
-      {/* 2 — the last thing said, so the title isn't the only way to tell two
-             "Untitled session" rows apart */}
-      <div className="truncate text-fine leading-snug text-muted-foreground/80">
-        {previews[s.id] ?? t("session.noMessages")}
-      </div>
-
-      {/* 3 — what it's doing and what it's running on */}
-      <div className="flex items-center gap-1 pt-0.5 text-fine text-muted-foreground">
-        {s.id === activeSession && running ? (
-          <>
-            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
-            <span className="shrink-0 text-primary">{t("session.running")}</span>
-          </>
-        ) : (
-          <ProviderIcon provider={providerLabel(s.provider)} className="size-3 shrink-0 opacity-70" />
-        )}
-        <span className="truncate">{displayProvider(s.provider)}</span>
-        {s.worktree_path && (
-          <Badge variant="secondary" className="h-4 px-1 text-cap">
-            wt
-          </Badge>
-        )}
-        <span className="ml-auto hidden shrink-0 gap-0.5 group-hover:flex">
-          <button
-            title={t("rail.rename")}
-            className="rounded p-0.5 hover:text-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              setRenaming({ id: s.id, title: s.title });
-            }}
-          >
-            <Pencil className="size-3" />
-          </button>
-          <button
-            title={t("rail.archive")}
-            className="rounded p-0.5 hover:text-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onArchive(s.id);
-            }}
-          >
-            <Archive className="size-3" />
-          </button>
-        </span>
-      </div>
-    </div>
+  /** Muted label over a group of rows — Active, Archived. */
+  const groupLabel = (label: string) => (
+    <p className="px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80">
+      {label}
+    </p>
   );
 
+  /**
+   * One thread, three lines: what it's called, the last thing said, and who's working it —
+   * with the live/finished state spelled out rather than implied.
+   */
+  const sessionRow = (s: SessionInfo, isArchived: boolean) => {
+    const isRunning = s.id === activeSession && running;
+    return (
+      <div
+        key={s.id}
+        onClick={() => onSelect(s.id)}
+        className={cn(
+          "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+          s.id === activeSession && "bg-accent",
+        )}
+      >
+        {/* 1 — title, with the age (or the actions, on hover) at its shoulder */}
+        <div className="flex items-center gap-2">
+          {renaming?.id === s.id ? (
+            <Input
+              autoFocus
+              className="h-6 flex-1 text-ui"
+              value={renaming.title}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
+              onBlur={() => setRenaming(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onRename(s.id, renaming.title);
+                  setRenaming(null);
+                } else if (e.key === "Escape") setRenaming(null);
+              }}
+            />
+          ) : (
+            <span className={cn("min-w-0 flex-1 truncate text-ui", s.id === activeSession && "font-medium")}>
+              {s.title}
+            </span>
+          )}
+          <span className="shrink-0 text-fine text-muted-foreground group-hover:hidden">
+            {shortAge(s.created_at)}
+          </span>
+          <span className="hidden shrink-0 gap-0.5 group-hover:flex">
+            <button
+              title={t("rail.rename")}
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRenaming({ id: s.id, title: s.title });
+              }}
+            >
+              <Pencil className="size-3" />
+            </button>
+            <button
+              title={isArchived ? t("rail.unarchive") : t("rail.archive")}
+              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(s.id, !isArchived);
+              }}
+            >
+              {isArchived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
+            </button>
+          </span>
+        </div>
+
+        {/* 2 — the last thing said, so two "Untitled session" rows are tellable apart */}
+        <div className="truncate text-fine leading-snug text-muted-foreground/80">
+          {previews[s.id] ?? t("session.noMessages")}
+        </div>
+
+        {/* 3 — the assigned agent, and whether it's still at work */}
+        <div className="flex items-center gap-1.5 pt-0.5 text-fine text-muted-foreground">
+          <ProviderIcon provider={providerLabel(s.provider)} className="size-3 shrink-0 opacity-70" />
+          <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
+          <span className="min-w-0 flex-1" />
+          {isRunning ? (
+            <span className="flex shrink-0 items-center gap-1 text-primary">
+              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+              {t("session.running")}
+            </span>
+          ) : (
+            <span className="flex shrink-0 items-center gap-1">
+              <Check className="size-3" />
+              {t("session.completed")}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const dirty = git?.is_repo ? git.files.length : 0;
+  const staged = git?.is_repo ? git.files.filter((f) => f.staged).length : 0;
+
   return (
-    <aside className="glass-rail relative flex shrink-0 flex-col" style={{ width: applied }}>
-      <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />
-      {/* ---- search + compose ------------------------------------------------------------- */}
-      {/* One line with the macOS traffic lights. Their y in tauri.conf.json is NOT a plain top
-          inset — tao grows the titlebar container to button-height + y with the buttons pinned to
-          its bottom — so the value (28, eyeballed against a real window) is tuned to centre the
-          lights on the 28px line this row's search box and the main module's header icons sit on.
-          The left padding starts the search box past them; the bar is transparent, so this row is
-          also what drags the window. */}
-      <div data-tauri-drag-region className="flex items-center gap-1.5 pb-2 pl-[78px] pr-3 pt-3">
+    <aside
+      aria-hidden={collapsed}
+      className={cn(
+        "glass-rail relative flex shrink-0 flex-col overflow-hidden",
+        !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        gone && "invisible",
+      )}
+      style={{ width: collapsed ? 0 : applied }}
+    >
+      {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
+      <div className="flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
+      {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
+
+      {/* ---- 1 · title ---------------------------------------------------------------------- */}
+      {/* h-10 centres the row on the 20px line the traffic lights sit on. */}
+      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2">
+        <span data-tauri-drag-region className="min-w-0 truncate text-ui font-semibold">
+          {t("app.name")}
+        </span>
+        <div data-tauri-drag-region className="min-w-0 flex-1" />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={t("rail.collapse")}
+              onClick={onToggleCollapse}
+            >
+              <PanelLeft className="size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
+        </Tooltip>
+      </div>
+      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
         <button
           onClick={onOpenSearch}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-foreground/[0.05] px-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent"
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
           {searchHint && (
-            <kbd className="shrink-0 rounded bg-foreground/[0.07] px-1 py-px font-mono text-cap text-muted-foreground/80">
+            <kbd className="shrink-0 rounded border bg-muted px-1 py-px font-mono text-cap text-muted-foreground/80">
               {searchHint}
             </kbd>
           )}
@@ -258,136 +348,115 @@ export function SessionRail({
         </Tooltip>
       </div>
 
-      {/* ---- all projects ----------------------------------------------------------------- */}
-      <div className="flex items-center gap-2 px-3 pb-0.5 pt-1.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-2 text-ui font-medium">
-          <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate">{t("rail.allProjects")}</span>
-        </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 shrink-0 text-muted-foreground"
-              aria-label={t("rail.addProject")}
-              onClick={onAddProject}
-            >
-              <FolderPlus className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t("rail.addProject")}</TooltipContent>
-        </Tooltip>
+      {/* ---- 2 · recent chats --------------------------------------------------------------- */}
+      {/* The section header carries the project switcher: which project's chats these are, and
+          every project operation, behind one chip instead of a whole tree. */}
+      <div className="flex items-center gap-1 px-3 pb-0.5 pt-2">
+        <span className="shrink-0 px-2 text-fine font-medium uppercase tracking-wide text-muted-foreground">
+          {t("rail.recent")}
+        </span>
+        <div className="min-w-0 flex-1" />
+        {renamingProject !== null && activeProject ? (
+          <Input
+            autoFocus
+            className="h-6 w-36 text-hint"
+            value={renamingProject}
+            onChange={(e) => setRenamingProject(e.target.value)}
+            onBlur={() => setRenamingProject(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onRenameProject(activeProject, renamingProject);
+                setRenamingProject(null);
+              } else if (e.key === "Escape") setRenamingProject(null);
+            }}
+          />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title={activeProject ?? undefined}
+              >
+                <Folder className="size-3.5 shrink-0" />
+                <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
+                <ChevronDown className="size-3 shrink-0 opacity-50" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {projects.map((p) => (
+                <DropdownMenuItem key={p.path} onSelect={() => onSelectProject(p.path)}>
+                  <Folder className={cn(p.path === activeProject && "text-primary")} />
+                  <span className="min-w-0 flex-1 truncate" title={p.path}>
+                    {p.name}
+                  </span>
+                  <span className="shrink-0 text-fine text-muted-foreground">
+                    {shortAge(p.last_opened_at)}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onAddProject}>
+                <FolderPlus />
+                {t("rail.addProject")}
+              </DropdownMenuItem>
+              {activeProject && (
+                <>
+                  <DropdownMenuItem onSelect={() => setRenamingProject(activeProjectName ?? "")}>
+                    <Pencil />
+                    {t("rail.renameProject")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => onRemoveProject(activeProject)}
+                  >
+                    <Trash2 />
+                    {t("rail.removeProject")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        {/* Same px-3 gutter as the header row above: with rows padding a further px-2, project
-            icons land exactly under the "All projects" icon instead of 4px adrift. */}
         <div className="px-3 pb-3">
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
             </p>
+          ) : recent.length === 0 && archived.length === 0 ? (
+            <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
+              {t("rail.empty")} {t("rail.emptyHint")}
+            </p>
           ) : (
-            projects.map((p) => {
-              const isActive = p.path === activeProject;
-              const list = byProject.get(p.path) ?? [];
-              return (
-                <div key={p.path} className="mb-0.5">
-                  {/* the project */}
-                  <div
-                    onClick={() => onSelectProject(p.path)}
-                    className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
-                      isActive && "text-foreground",
-                    )}
-                  >
-                    <Folder
-                      className={cn(
-                        "size-4 shrink-0",
-                        isActive ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    />
-                    {renamingProject?.path === p.path ? (
-                      <Input
-                        autoFocus
-                        className="h-6 flex-1 text-ui"
-                        value={renamingProject.name}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setRenamingProject({ path: p.path, name: e.target.value })}
-                        onBlur={() => setRenamingProject(null)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            onRenameProject(p.path, renamingProject.name);
-                            setRenamingProject(null);
-                          } else if (e.key === "Escape") setRenamingProject(null);
-                        }}
-                      />
-                    ) : (
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-ui",
-                          isActive ? "font-semibold" : "font-medium text-muted-foreground",
-                        )}
-                        title={p.path}
-                      >
-                        {p.name}
-                      </span>
-                    )}
-                    <span className="shrink-0 text-fine text-muted-foreground group-hover:hidden">
-                      {shortAge(p.last_opened_at)}
-                    </span>
-                    <span className="hidden shrink-0 gap-0.5 group-hover:flex">
-                      <button
-                        title={t("rail.renameProject")}
-                        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenamingProject({ path: p.path, name: p.name });
-                        }}
-                      >
-                        <Pencil className="size-3" />
-                      </button>
-                      <button
-                        title={t("rail.removeProject")}
-                        className="rounded p-0.5 text-muted-foreground hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveProject(p.path);
-                        }}
-                      >
-                        <Trash2 className="size-3" />
-                      </button>
-                    </span>
+            <>
+              {recent.length > 0 && (
+                <>
+                  {groupLabel(t("rail.groupActive"))}
+                  <div className="space-y-px">{recent.map((s) => sessionRow(s, false))}</div>
+                </>
+              )}
+              {archived.length > 0 && (
+                <>
+                  {groupLabel(t("rail.groupArchived"))}
+                  <div className="space-y-px opacity-80">
+                    {archived.map((s) => sessionRow(s, true))}
                   </div>
-
-                  {/* its conversations, only for the project you're in */}
-                  {isActive &&
-                    (list.length === 0 ? (
-                      <p className="py-2 pl-8 pr-2 text-fine leading-relaxed text-muted-foreground">
-                        {t("rail.empty")} {t("rail.emptyHint")}
-                      </p>
-                    ) : (
-                      <div className="mt-0.5 space-y-px pl-4">{list.map(sessionRow)}</div>
-                    ))}
-                </div>
-              );
-            })
+                </>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>
 
-      {/* ---- foot: what's live, and the way to settings ------------------------------------ */}
-      <div className="px-3 pb-2 pt-1">
-        <div className="flex h-7 items-center gap-2 px-2 text-fine text-muted-foreground">{status}</div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onOpenSettings}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-ui transition-colors hover:bg-accent"
-          >
-            <Settings className="size-4 shrink-0 text-muted-foreground" />
-            {t("header.settings")}
-          </button>
+      {/* ---- 3 · the model, and the working tree at a glance -------------------------------- */}
+      <div className="border-t border-sidebar-border px-3 pb-2.5 pt-2">
+        <div className="flex items-center gap-2 px-1 pb-1.5">
+          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate text-ui font-medium" title={t("composer.model")}>
+            {model}
+          </span>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -399,7 +468,7 @@ export function SessionRail({
                 <Store className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{t("rail.market", { count: skills.length })}</TooltipContent>
+            <TooltipContent>{t("composer.market")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -407,14 +476,53 @@ export function SessionRail({
                 variant="ghost"
                 size="icon"
                 className="size-7 shrink-0 text-muted-foreground"
-                onClick={onNewSkill}
+                onClick={onOpenSettings}
               >
-                <Plus className="size-3.5" />
+                <Settings className="size-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{t("rail.newSkill")}</TooltipContent>
+            <TooltipContent>{t("header.settings")}</TooltipContent>
           </Tooltip>
         </div>
+
+        {git?.is_repo && (
+          <button
+            onClick={onOpenSourceControl}
+            className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
+            title={t("action.open_source_control")}
+          >
+            <table className="w-full border-collapse text-fine">
+              <tbody>
+                <tr>
+                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.branch")}</td>
+                  <td className="max-w-0 truncate py-0.5 text-right font-mono">
+                    {git.branch}
+                    {git.ahead > 0 && <span className="ml-1 text-primary">↑{git.ahead}</span>}
+                    {git.behind > 0 && <span className="ml-1 text-primary">↓{git.behind}</span>}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.changes")}</td>
+                  <td className="py-0.5 text-right font-mono">
+                    <span className="text-success">+{diffStat.added}</span>{" "}
+                    <span className="text-destructive">−{diffStat.deleted}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.status")}</td>
+                  <td className="truncate py-0.5 text-right">
+                    {dirty === 0
+                      ? t("rail.clean")
+                      : staged > 0
+                        ? `${t("rail.changedCount", { count: dirty })} · ${t("rail.stagedCount", { count: staged })}`
+                        : t("rail.changedCount", { count: dirty })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </button>
+        )}
+      </div>
       </div>
     </aside>
   );

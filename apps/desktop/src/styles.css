@@ -27,10 +27,10 @@
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.546 0.215 262.881);
-  /* Distinctly greyer than the white content area. At the old 1.6% separation the two surfaces
-     read as one flat sheet, which is what made the window look like a web page no matter how
-     translucent it was — depth on macOS comes from the step between layers, not from alpha. */
-  --sidebar: oklch(0.945 0.005 250);
+  /* A near-white grey, one visible step off the white content area — the T3-style flat layout
+     separates panes with 1px borders rather than depth, so the sidebar only needs a whisper of
+     tint to read as chrome. */
+  --sidebar: oklch(0.975 0.002 250);
   --sidebar-foreground: oklch(0.129 0.042 264.695);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --terminal: oklch(0.19 0.012 264);
@@ -39,34 +39,30 @@
      colours are a fixed 16-slot convention rather than a perceptual scale, and the renderer parses
      these strings itself — it has no browser to resolve oklch() for it.
 
-     The terminal surface stays dark in both schemes (see --terminal above, dark in :root too), so
-     the palette is defined once and only the background shifts under .dark. Hues are pulled toward
-     the app's cool blue rather than the usual warm terminal defaults.
+     The terminal follows the app's scheme like every other surface: these are the light values
+     (One Light-derived), and `.dark` swaps in the dark set. Terminal.tsx re-reads them on every
+     scheme change and hands them to xterm live. */
+  --term-bg: #fafafa;
+  --term-fg: #383a42;
+  --term-cursor: #4078f2;
+  --term-selection: #4078f233;
 
-     --term-bg deliberately sits one step *above* --terminal so the terminal reads as a surface
-     resting on the panel rather than a hole cut in it — the same layering the sidebar and cards
-     use. Matching them exactly is what made the dock look like one flat slab. */
-  --term-bg: #23272f;
-  --term-fg: #c9cfd9;
-  --term-cursor: #79a9f0;
-  --term-selection: #3b6ea566;
-
-  --term-ansi-0: #3b4048;
-  --term-ansi-1: #e5707b;
-  --term-ansi-2: #8fbf7f;
-  --term-ansi-3: #e5c07b;
-  --term-ansi-4: #79a9f0;
-  --term-ansi-5: #c29bf0;
-  --term-ansi-6: #6fc1c9;
-  --term-ansi-7: #c3c8d1;
-  --term-ansi-8: #5a616e;
-  --term-ansi-9: #ff8b93;
-  --term-ansi-10: #a9d68f;
-  --term-ansi-11: #f2cf8c;
-  --term-ansi-12: #96bcff;
-  --term-ansi-13: #d4b3ff;
-  --term-ansi-14: #86d7df;
-  --term-ansi-15: #e7ebf2;
+  --term-ansi-0: #383a42;
+  --term-ansi-1: #e45649;
+  --term-ansi-2: #50a14f;
+  --term-ansi-3: #c18401;
+  --term-ansi-4: #4078f2;
+  --term-ansi-5: #a626a4;
+  --term-ansi-6: #0184bc;
+  --term-ansi-7: #a0a1a7;
+  --term-ansi-8: #696c77;
+  --term-ansi-9: #e45649;
+  --term-ansi-10: #50a14f;
+  --term-ansi-11: #c18401;
+  --term-ansi-12: #4078f2;
+  --term-ansi-13: #a626a4;
+  --term-ansi-14: #0184bc;
+  --term-ansi-15: #101216;
 }
 
 .dark {
@@ -105,8 +101,28 @@
   --sidebar-foreground: oklch(0.955 0.004 250);
   --sidebar-border: oklch(0.29 0.007 265);
   --terminal: oklch(0.135 0.005 265);
-  /* Only the surface moves; the 16 ANSI slots in :root already suit a dark background. */
+  /* Dark scheme: hues pulled toward the app's cool blue rather than warm terminal defaults. */
   --term-bg: #1b1d22;
+  --term-fg: #c9cfd9;
+  --term-cursor: #79a9f0;
+  --term-selection: #3b6ea566;
+
+  --term-ansi-0: #3b4048;
+  --term-ansi-1: #e5707b;
+  --term-ansi-2: #8fbf7f;
+  --term-ansi-3: #e5c07b;
+  --term-ansi-4: #79a9f0;
+  --term-ansi-5: #c29bf0;
+  --term-ansi-6: #6fc1c9;
+  --term-ansi-7: #c3c8d1;
+  --term-ansi-8: #5a616e;
+  --term-ansi-9: #ff8b93;
+  --term-ansi-10: #a9d68f;
+  --term-ansi-11: #f2cf8c;
+  --term-ansi-12: #96bcff;
+  --term-ansi-13: #d4b3ff;
+  --term-ansi-14: #86d7df;
+  --term-ansi-15: #e7ebf2;
 }
 
 @theme inline {
@@ -208,51 +224,19 @@
    viewer, the terminal surface, and the pane splitter.
    ------------------------------------------------------------------------ */
 @layer components {
-  /* ---- glass -------------------------------------------------------------------------------
-     Finder's arrangement, not "translucent everywhere": the glass is one continuous backdrop and
-     the content areas are solid sheets laid on it. Tinting the whole window *opaquely* was the
-     mistake — it flattened every surface to the same value, so nothing read as glass and the text
-     sat on an unpredictable backdrop.
-
-     The wash lives here, on the whole backdrop, rather than on the rail alone. The rail is not a
-     separate surface from the margin around the modules; it is the same glass, and giving only
-     the rail a tint drew a visible seam wherever its edge met the untinted margin — most obviously
-     straight above and below the main module, which sits flush against the rail (ml-0).
-
-     A tint over the material only subtracts from it: at 72% opaque only 28% of the vibrancy
-     survived, which in light mode meant painting light grey over a light frosted panel and seeing
-     nothing move behind it. What's left is thin enough to read as a tint of the material rather
-     than a lid on it, and thick enough that the backdrop is still a surface if the effect ever
-     fails to apply. The radius matches windowEffects.radius in tauri.conf.json — without it the
-     wash would paint square corners over the material's rounded ones. */
+  /* ---- flat shell --------------------------------------------------------------------------
+     T3-style layout: opaque panes separated by 1px borders, not floating modules on glass. The
+     shell is solid; the radius still matches windowEffects.radius in tauri.conf.json so nothing
+     paints square corners over the window's rounded ones. */
   .app-shell {
-    background: color-mix(in oklch, var(--sidebar) 18%, transparent);
-    border-radius: 12px;
-  }
-  /* Deliberately empty of background: the rail reads as glass because the shell under it does.
-     Re-tinting here would double the wash and put the seam back. */
-  .glass-rail {
-    background: transparent;
-  }
-  /* Where you read: a floating sheet on the window glass. The layout is borderless — modules are
-     cut out of the glass by shadow, not by drawn lines. The 0.5px ring is the edge: crisp enough
-     to define the sheet, too thin to read as a border; the two soft layers under it are contact
-     and ambient depth. */
-  .surface-module {
     background: var(--background);
     border-radius: 12px;
-    box-shadow:
-      0 0 0 0.5px color-mix(in oklch, var(--foreground) 10%, transparent),
-      0 1px 2px rgb(0 0 0 / 0.04),
-      0 8px 24px rgb(0 0 0 / 0.06);
+    overflow: hidden;
   }
-  /* Dark mode gets its depth from a light rim + heavier ambient shade — a dark shadow on a dark
-     glass does nothing, so the rim carries the edge. */
-  .dark .surface-module {
-    box-shadow:
-      0 0 0 0.5px color-mix(in oklch, var(--foreground) 18%, transparent),
-      0 1px 2px rgb(0 0 0 / 0.35),
-      0 12px 32px rgb(0 0 0 / 0.4);
+  /* The sidebar is its own pane — tinted, and cut off from the content by its border. */
+  .glass-rail {
+    background: var(--sidebar);
+    border-right: 1px solid var(--sidebar-border);
   }
   /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
      page content, so the blur does what it looks like it does. */
@@ -683,13 +667,14 @@
 
   /* xterm's defaults are a 2015 terminal: text hard against the edge, lines at 1.0, a scrollbar
      from the OS. The fit addon reads this padding out of the computed style, so insetting here is
-     safe — the grid is measured against the padded box, not the raw one. */
+     safe — the grid is measured against the padded box, not the raw one. The background matches
+     the renderer's own, so the padding ring is invisible rather than a frame around the canvas. */
   .terminal {
     flex: 1;
     height: 100%;
     width: 100%;
     padding: 6px 4px 6px 10px;
-    border-radius: 8px;
+    background: var(--term-bg);
   }
   .terminal .xterm-viewport {
     /* Overlay the gutter instead of reserving a column for it, and let it fade in on hover the way
@@ -776,15 +761,18 @@
 }
 
 /* Expanded ("document mode"): the composer is the page, not a panel on it. The editor centres its
-   own measure on the app background — no card, no border — with a real gutter for the drag/insert
-   handles and looser type for long-form writing. */
+   own measure on the app background — no card, no border — with a gutter for the drag/insert
+   handles and looser type for long-form writing. The gutter is the minimum the handles need, not
+   a mat around the page: at 54px + a 40px top pad the first line started a palm's width from the
+   chrome, which read as dead space rather than a margin. */
 .bn-doc-mode {
-  padding-block: 40px 24px;
+  padding-block: 14px 16px;
 }
+/* Full-bleed, editor-style: the page owns its column edge to edge. The inline padding is the
+   drag/insert handle gutter (left) and a matching breath on the right — not a centring mat; the
+   centred-measure look kept a third of a wide pane empty on each side. */
 .bn-doc-mode .bn-editor {
-  max-width: 880px;
-  margin-inline: auto;
-  padding-inline: 54px;
+  padding-inline: 36px 24px;
   font-size: 15px;
 }
 .bn-doc-mode .bn-block-content[data-content-type="paragraph"] {

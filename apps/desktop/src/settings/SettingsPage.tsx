@@ -45,15 +45,59 @@ const GROUPS: { title: string; labelKey: StringKey; actions: string[] }[] = [
   { title: "Modes", labelKey: "settings.groupModes", actions: ["cycle_permission_mode"] },
 ];
 
-/** One setting: name and explanation on the left, its control on the right. */
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+/**
+ * One setting, on any tab: optional leading icon, name + explanation on the left, the control (or
+ * status) on the right. Every settings page is built out of these — a page that hand-rolls its own
+ * rows drifts a few pixels from the others, which is exactly the bug this shape retired.
+ */
+function Row({
+  icon,
+  label,
+  hint,
+  compact,
+  children,
+}: {
+  icon?: ReactNode;
+  label: string;
+  hint?: ReactNode;
+  /** Dense lists (keybindings) — same anatomy, tighter rhythm. */
+  compact?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between gap-8 py-4">
-      <div className="min-w-0 max-w-[420px]">
-        <div className="text-ui font-medium">{label}</div>
-        {hint && <div className="mt-1 text-hint leading-relaxed text-muted-foreground">{hint}</div>}
+    <div className={cn("flex items-center justify-between gap-8", compact ? "py-2" : "py-3.5")}>
+      <div className="flex min-w-0 items-center gap-3">
+        {icon}
+        <div className="min-w-0 max-w-[420px]">
+          <div className="truncate text-ui font-medium">{label}</div>
+          {hint && <div className="mt-0.5 text-hint leading-relaxed text-muted-foreground">{hint}</div>}
+        </div>
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="flex shrink-0 items-center gap-1">{children}</div>
+    </div>
+  );
+}
+
+/** Muted uppercase divider between row groups on one page. */
+function GroupHeading({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="pt-5 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
+      {children}
+    </h3>
+  );
+}
+
+/**
+ * The frame every tab renders through: same title block, same description slot, same measure. The
+ * description is a slot rather than an afterthought so the first row starts at the same height on
+ * every page — General used to skip it and sat one line higher than the rest.
+ */
+function Page({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return (
+    <div>
+      <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
+      <p className="pb-3 pt-1.5 text-hint leading-relaxed text-muted-foreground">{description}</p>
+      {children}
     </div>
   );
 }
@@ -122,39 +166,36 @@ export function SettingsPage({
     const labelKey = `action.${action}` as StringKey;
     const label = labelKey in EN_STRINGS ? t(labelKey) : coreLabel;
     return (
-      <div key={action} className="flex items-center justify-between gap-4 py-2">
-        <span className="min-w-0 truncate text-ui">{label}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          {conflicts.has(key) && capturing !== action && (
-            <span className="text-cap text-warning" title={t("settings.conflictHint")}>
-              {t("settings.conflict")}
-            </span>
+      <Row key={action} compact label={label}>
+        {conflicts.has(key) && capturing !== action && (
+          <span className="text-cap text-warning" title={t("settings.conflictHint")}>
+            {t("settings.conflict")}
+          </span>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "min-w-24 justify-center font-mono text-fine",
+            capturing === action && "ring-1 ring-primary/60 text-primary",
+            conflicts.has(key) && capturing !== action && "ring-1 ring-warning/60",
           )}
+          onClick={() => onCapture(action)}
+        >
+          {capturing === action ? t("settings.capturing") : formatCombo(key)}
+        </Button>
+        {onReset && (
           <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "min-w-24 justify-center font-mono text-fine",
-              capturing === action && "ring-1 ring-primary/60 text-primary",
-              conflicts.has(key) && capturing !== action && "ring-1 ring-warning/60",
-            )}
-            onClick={() => onCapture(action)}
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground"
+            title={t("settings.reset")}
+            onClick={() => onReset(action)}
           >
-            {capturing === action ? t("settings.capturing") : formatCombo(key)}
+            <RotateCcw className="size-3.5" />
           </Button>
-          {onReset && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 text-muted-foreground"
-              title={t("settings.reset")}
-              onClick={() => onReset(action)}
-            >
-              <RotateCcw className="size-3.5" />
-            </Button>
-          )}
-        </div>
-      </div>
+        )}
+      </Row>
     );
   };
 
@@ -162,8 +203,8 @@ export function SettingsPage({
     <div className="animate-page-in flex min-h-0 min-w-0 flex-1">
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
       <aside className="glass-rail flex w-56 shrink-0 flex-col">
-        {/* Clears the traffic lights and gives the window something to drag by. */}
-        <div data-tauri-drag-region className="h-12 shrink-0" />
+        {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
+        <div data-tauri-drag-region className="h-10 shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
           {NAV.map(({ id, icon: Icon, labelKey }) => (
             <button
@@ -191,8 +232,9 @@ export function SettingsPage({
       </aside>
 
       {/* ---- the page ---- */}
-      <main className="surface-module m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header data-tauri-drag-region className="flex items-center px-6 pb-2 pt-2">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* The same 40px bar as the main shell's header, border and all. */}
+        <header data-tauri-drag-region className="flex items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5">
           <span data-tauri-drag-region className="text-ui font-medium text-muted-foreground">
             {t("settings.title")}
           </span>
@@ -201,7 +243,7 @@ export function SettingsPage({
             <Button
               variant="ghost"
               size="sm"
-              className="gap-1.5 text-hint text-muted-foreground hover:text-foreground"
+              className="h-7 gap-1.5 text-hint text-muted-foreground hover:text-foreground"
               onClick={restore}
             >
               <RotateCcw className="size-3.5" />
@@ -212,12 +254,8 @@ export function SettingsPage({
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="mx-auto w-full max-w-[680px] px-8 pb-20 pt-8">
-            <h1 className="pb-3 text-[22px] font-semibold tracking-tight">
-              {t(NAV.find((n) => n.id === tab)!.labelKey)}
-            </h1>
-
             {tab === "general" && (
-              <div>
+              <Page title={t("settings.general")} description={t("settings.generalHint")}>
                 <Row label={t("settings.theme")} hint={t("settings.themeHint")}>
                   <Select value={theme} onValueChange={(v) => setTheme(v as ThemePreference)}>
                     <SelectTrigger size="sm" className="w-44 justify-between">
@@ -247,9 +285,7 @@ export function SettingsPage({
                   </Select>
                 </Row>
 
-                <h3 className="pt-6 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t("settings.terminal")}
-                </h3>
+                <GroupHeading>{t("settings.terminal")}</GroupHeading>
 
                 <Row label={t("settings.termFont")} hint={t("settings.termFontHint")}>
                   <Input
@@ -282,51 +318,43 @@ export function SettingsPage({
                     className="h-8 w-44 text-hint"
                   />
                 </Row>
-              </div>
+              </Page>
             )}
 
             {tab === "keybindings" && (
-              <div>
-                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
-                  {t("settings.keysHint", { mod: MOD_LABEL })}
-                </p>
+              <Page title={t("settings.keybindings")} description={t("settings.keysHint", { mod: MOD_LABEL })}>
                 {groups.map((g) => (
-                  <div key={g.title} className="pt-4">
-                    <h3 className="pb-1 text-cap font-semibold uppercase tracking-wider text-muted-foreground">
-                      {g.title}
-                    </h3>
+                  <div key={g.title}>
+                    <GroupHeading>{g.title}</GroupHeading>
                     <div className="space-y-0.5">{g.actions.map(keyRow)}</div>
                   </div>
                 ))}
-              </div>
+              </Page>
             )}
 
             {tab === "providers" && (
-              <div>
-                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
-                  {t("settings.providersHint")}
-                </p>
-                <div className="space-y-0.5">
-                  {providers.map((p) => (
-                    <div key={p.id} className="flex items-center gap-3 py-3.5">
-                      <ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-ui font-medium">{p.display_name}</div>
-                        <div className="font-mono text-fine text-muted-foreground">
-                          {p.id}
-                          {p.needs_node && ` · ${t("settings.needsNode")}`}
-                        </div>
-                      </div>
-                      <span className="flex shrink-0 items-center gap-1.5 text-fine text-muted-foreground">
-                        <span
-                          className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
-                        />
-                        {p.available ? t("settings.installed") : t("settings.notInstalled")}
+              <Page title={t("settings.providers")} description={t("settings.providersHint")}>
+                {providers.map((p) => (
+                  <Row
+                    key={p.id}
+                    icon={<ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />}
+                    label={p.display_name}
+                    hint={
+                      <span className="font-mono">
+                        {p.id}
+                        {p.needs_node && ` · ${t("settings.needsNode")}`}
                       </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                    }
+                  >
+                    <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+                      <span
+                        className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
+                      />
+                      {p.available ? t("settings.installed") : t("settings.notInstalled")}
+                    </span>
+                  </Row>
+                ))}
+              </Page>
             )}
           </div>
         </ScrollArea>
