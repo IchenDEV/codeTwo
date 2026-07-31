@@ -27,6 +27,14 @@ codetwo-core.workspace = true
 codetwo-server = { path = "../../../crates/server" }
 tauri-plugin-dialog = "2"
 
+# `tauri dev` runs the bare executable, not a `.app`, so the bundler never merges Info.plist and
+# macOS sees no usage strings at all. TCC doesn't degrade politely when they're missing: it SIGABRTs
+# the process the moment voice input asks for speech recognition. Embedding the plist in the
+# binary's own `__TEXT,__info_plist` section is what makes those strings apply to an un-bundled
+# binary, so dev builds prompt for permission like the bundled app does instead of dying.
+[target.'cfg(target_os = "macos")'.dependencies]
+embed_plist = "1.2"
+
 [lib]
 name = "codetwo_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]

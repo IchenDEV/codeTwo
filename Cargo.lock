@@ -455,6 +455,7 @@ version = "0.0.0"
 dependencies = [
  "codetwo-core",
  "codetwo-server",
+ "embed_plist",
  "serde",
  "serde_json",
  "tauri",
