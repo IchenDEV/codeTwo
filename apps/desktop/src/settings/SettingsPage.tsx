@@ -173,7 +173,7 @@ export function SettingsPage({
                 "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors",
                 id === tab
                   ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -183,7 +183,7 @@ export function SettingsPage({
         </nav>
         <button
           onClick={onClose}
-          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <ArrowLeft className="size-4 shrink-0" />
           {t("settings.back")}
@@ -212,7 +212,7 @@ export function SettingsPage({
 
         <ScrollArea className="min-h-0 flex-1">
           <div className="mx-auto w-full max-w-[680px] px-8 pb-20 pt-8">
-            <h1 className="pb-3 text-[22px] font-semibold tracking-tight">
+            <h1 className="pb-3 text-display font-semibold tracking-tight">
               {t(NAV.find((n) => n.id === tab)!.labelKey)}
             </h1>
 

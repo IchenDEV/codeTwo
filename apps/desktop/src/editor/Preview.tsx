@@ -20,7 +20,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
         </DialogHeader>
 
         {unresolved.length > 0 && (
-          <p className="text-xs text-warning">Unresolved: {unresolved.join(", ")}</p>
+          <p className="text-hint text-warning">Unresolved: {unresolved.join(", ")}</p>
         )}
 
         {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0) && (

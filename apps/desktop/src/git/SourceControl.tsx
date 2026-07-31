@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 function DiffView({ text }: { text: string }) {
-  if (!text.trim()) return <p className="p-3.5 text-sm text-muted-foreground">No changes.</p>;
+  if (!text.trim()) return <p className="p-3.5 text-ui text-muted-foreground">No changes.</p>;
   return (
     <pre className="diff">
       {text.split("\n").map((line, i) => {
@@ -81,7 +81,7 @@ export function SourceControlModal({
           <DialogTitle className="flex items-center gap-3">
             Source Control
             {status?.is_repo && (
-              <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+              <span className="flex items-center gap-1 text-hint font-semibold text-primary">
                 <GitBranch className="size-3.5" />
                 {status.branch}
                 {status.ahead > 0 && ` ↑${status.ahead}`}
@@ -100,7 +100,7 @@ export function SourceControlModal({
               Changed files
             </p>
             <button
-              className="w-full rounded px-1.5 py-1 text-left text-xs hover:bg-accent"
+              className="w-full rounded px-1.5 py-1 text-left text-hint hover:bg-accent/50"
               onClick={() => gitDiff(cwd, null).then(setDiff)}
             >
               All changes
@@ -108,7 +108,7 @@ export function SourceControlModal({
             {(status?.files ?? []).map((f) => (
               <button
                 key={f.path}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs hover:bg-accent"
+                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-hint hover:bg-accent/50"
                 onClick={() => gitDiff(cwd, f.path).then(setDiff)}
               >
                 <span
@@ -123,7 +123,7 @@ export function SourceControlModal({
               </button>
             ))}
             {(!status || status.files.length === 0) && (
-              <p className="px-1.5 text-xs text-muted-foreground">working tree clean</p>
+              <p className="px-1.5 text-hint text-muted-foreground">working tree clean</p>
             )}
 
             <div className="flex items-center justify-between pb-1 pt-4">
@@ -134,20 +134,20 @@ export function SourceControlModal({
                 <Plus className="size-3" />
               </Button>
             </div>
-            {checkpoints.length === 0 && <p className="px-1.5 text-xs text-muted-foreground">none yet</p>}
+            {checkpoints.length === 0 && <p className="px-1.5 text-hint text-muted-foreground">none yet</p>}
             {checkpoints.map((c) => (
-              <div key={c.id} className="flex items-center gap-1 py-0.5 text-xs">
+              <div key={c.id} className="flex items-center gap-1 py-0.5 text-hint">
                 <span className="flex-1 truncate text-muted-foreground" title={c.message}>
                   {c.message || c.id.slice(0, 8)}
                 </span>
                 <button
-                  className="rounded bg-foreground/[0.06] px-1.5 py-px text-cap hover:text-primary"
+                  className="rounded bg-fill-rest px-1.5 py-px text-cap hover:text-primary"
                   onClick={() => gitDiffSince(cwd, c.commit).then(setDiff)}
                 >
                   diff
                 </button>
                 <button
-                  className="rounded bg-foreground/[0.06] px-1.5 py-px text-cap hover:text-primary"
+                  className="rounded bg-fill-rest px-1.5 py-px text-cap hover:text-primary"
                   onClick={() => void onRevert(c.commit)}
                 >
                   revert
@@ -201,7 +201,7 @@ export function SourceControlModal({
             Done
           </Button>
         </div>
-        {prUrl && <p className="text-xs text-muted-foreground">{prUrl}</p>}
+        {prUrl && <p className="text-hint text-muted-foreground">{prUrl}</p>}
       </DialogContent>
     </Dialog>
   );

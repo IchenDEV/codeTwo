@@ -28,8 +28,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold">Something broke while rendering</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-title font-semibold">Something broke while rendering</h1>
+          <p className="text-ui text-muted-foreground">
             Your sessions are stored on disk and are unaffected.
           </p>
         </div>

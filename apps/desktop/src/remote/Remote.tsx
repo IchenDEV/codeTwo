@@ -41,7 +41,7 @@ export function RemoteModal({
 
         {info ? (
           <>
-            <p className="text-xs text-muted-foreground">Open this on another device on the same network:</p>
+            <p className="text-hint text-muted-foreground">Open this on another device on the same network:</p>
             <div className="break-all rounded-md bg-primary/10 px-3 py-2.5 text-title font-semibold">
               <a href={info.url} target="_blank" rel="noreferrer" className="text-primary no-underline">
                 {info.url}
@@ -50,18 +50,18 @@ export function RemoteModal({
             <p className="text-ui text-muted-foreground">
               token: <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{info.token}</code>
             </p>
-            <p className="text-xs text-muted-foreground">The remote drives the same sessions as this app.</p>
+            <p className="text-hint text-muted-foreground">The remote drives the same sessions as this app.</p>
           </>
         ) : (
           <>
-            <p className="text-xs leading-relaxed text-muted-foreground">
+            <p className="text-hint leading-relaxed text-muted-foreground">
               Start a local server so you can drive codeTwo from your phone, tablet, or another machine on
               the same network.
             </p>
             <Button disabled={busy} onClick={() => void start()}>
               {busy ? "Starting…" : "Start remote server"}
             </Button>
-            {err && <p className="text-xs text-destructive">{err}</p>}
+            {err && <p className="text-hint text-destructive">{err}</p>}
           </>
         )}
 

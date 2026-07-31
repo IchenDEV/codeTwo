@@ -6,6 +6,22 @@
 :root {
   --radius: 0.625rem;
 
+  /* ---- motion (see docs/design.md) -------------------------------------------------------------
+     One curve and four durations, so that a hover and a page mount are recognisably the same app.
+     Kept here rather than in @theme because nothing generates a utility from them: the hand-written
+     layers below use them directly, and a component that needs one reaches for
+     `duration-[var(--motion-fast)]` / `ease-[var(--ease-standard)]`. A new duration needs a reason.
+
+       fast    120ms  colour and opacity feedback: hover, press, grabbers. Never moves layout.
+       layer   160ms  anchored surfaces: menus, popovers, tooltips.
+       normal  220ms  dialogs, dock sweeps, tree branches — motion you watch travel.
+       slow    280ms  full-page mounts. */
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-fast: 120ms;
+  --motion-layer: 160ms;
+  --motion-normal: 220ms;
+  --motion-slow: 280ms;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
   --card: oklch(1 0 0);
@@ -136,6 +152,24 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-terminal: var(--terminal);
 
+  /* ---- interaction fills ---------------------------------------------------------------------
+     Borderless controls get their shape from a fill, and that fill has to work in both schemes —
+     so it derives from the foreground rather than naming a colour. Three steps, no more: the
+     0.025/0.04/0.05/0.06/0.07/0.09 spread that had accumulated was six values doing three jobs.
+
+       quiet  list tiles, read-only chips — present but not clickable-looking
+       rest   fields and borderless buttons at rest
+       hover  the same surfaces under the pointer (and `accent` for rows, see design.md) */
+  --color-fill-quiet: color-mix(in oklch, var(--foreground) 4%, transparent);
+  --color-fill-rest: color-mix(in oklch, var(--foreground) 6%, transparent);
+  --color-fill-hover: color-mix(in oklch, var(--foreground) 9%, transparent);
+
+  /* The terminal surface stays dark in both schemes, so its chrome can't use --foreground: in
+     light mode that would paint near-black text on a near-black panel. These are the on-terminal
+     equivalents — everything drawn *over* the terminal reads from here, not from `white/…`. */
+  --color-term-bg: var(--term-bg);
+  --color-term-fg: var(--term-fg);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -157,6 +191,7 @@
   --text-ui: 13px; /* the default: rows, buttons, menu items, body */
   --text-title: 15px; /* panel + dialog titles */
   --text-heading: 17px; /* page headings, empty-state greetings */
+  --text-display: 22px; /* the one heading of a full-page surface (settings) */
 }
 
 @layer base {
@@ -286,10 +321,10 @@
     }
   }
   .animate-rise-in {
-    animation: rise-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: rise-in var(--motion-normal) var(--ease-standard) both;
   }
   .animate-slide-in-right {
-    animation: slide-in-right 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: slide-in-right var(--motion-normal) var(--ease-standard) both;
   }
 
   /* ---- floating layers ---------------------------------------------------------------------
@@ -328,10 +363,10 @@
   }
   .pop-layer[data-state="open"],
   .pop-layer[data-state="delayed-open"] {
-    animation: layer-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: layer-in var(--motion-layer) var(--ease-standard);
   }
   .pop-layer[data-state="closed"] {
-    animation: layer-out 0.12s ease-in forwards;
+    animation: layer-out var(--motion-fast) ease-in forwards;
   }
   /* These layers are glass, and re-sampling a 28px backdrop blur under a changing transform every
      frame is the expensive half of the jank. Promoting them gets the blur rasterised into its own
@@ -347,8 +382,8 @@
   .tree-branch {
     overflow: hidden;
     transition:
-      height 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-      opacity 0.15s ease-out;
+      height var(--motion-normal) var(--ease-standard),
+      opacity var(--motion-fast) ease-out;
   }
 
   /* The centred dialog: its -50% positioning translate has to live inside the keyframes, or the
@@ -374,10 +409,10 @@
     }
   }
   .dialog-layer[data-state="open"] {
-    animation: dialog-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: dialog-in var(--motion-normal) var(--ease-standard);
   }
   .dialog-layer[data-state="closed"] {
-    animation: dialog-out 0.15s ease-in forwards;
+    animation: dialog-out var(--motion-fast) ease-in forwards;
   }
 
   @keyframes veil-in {
@@ -397,10 +432,10 @@
     }
   }
   .overlay-layer[data-state="open"] {
-    animation: veil-in 0.2s ease-out;
+    animation: veil-in var(--motion-normal) ease-out;
   }
   .overlay-layer[data-state="closed"] {
-    animation: veil-out 0.15s ease-in forwards;
+    animation: veil-out var(--motion-fast) ease-in forwards;
   }
 
   /* Full-page swaps — settings, the file viewer, the shell itself. Each side mounts fresh, so a
@@ -417,7 +452,7 @@
     }
   }
   .animate-page-in {
-    animation: page-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: page-in var(--motion-slow) var(--ease-standard) both;
   }
 
   .skill-chip {
@@ -426,7 +461,7 @@
     gap: 4px;
     border-radius: var(--radius-md);
     padding: 0 6px;
-    font-size: 12.5px;
+    font-size: var(--text-hint);
     font-weight: 600;
     white-space: nowrap;
     user-select: none;
@@ -502,7 +537,7 @@
     color: var(--muted-foreground);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .bn-annotation:hover .bn-annotation-x {
     opacity: 1;
@@ -575,7 +610,7 @@
     border-radius: 999px;
     background: var(--muted-foreground);
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .composer-card:hover .composer-grip::after {
     opacity: 0.35;
@@ -594,7 +629,7 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
-    transition: background 0.12s ease;
+    transition: background var(--motion-fast) ease-out;
   }
   /* The hover affordance is a slim inset line, not a filled bar — a 6px full-height fill reads
      as a hard blue border on the module edge, which is exactly what this design removed. */
@@ -608,7 +643,7 @@
     border-radius: 999px;
     background: color-mix(in oklch, var(--primary) 55%, transparent);
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .dock-grip:hover::after {
     opacity: 1;
@@ -623,7 +658,7 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
-    transition: background 0.12s ease;
+    transition: background var(--motion-fast) ease-out;
   }
   .rail-grip::after {
     content: "";
@@ -635,7 +670,7 @@
     border-radius: 999px;
     background: color-mix(in oklch, var(--primary) 55%, transparent);
     opacity: 0;
-    transition: opacity 0.12s ease;
+    transition: opacity var(--motion-fast) ease-out;
   }
   .rail-grip:hover::after {
     opacity: 1;
@@ -657,7 +692,7 @@
   .diff {
     margin: 0;
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: var(--text-fine);
     line-height: 1.5;
   }
   .diff-line {
@@ -696,7 +731,7 @@
        the rest of the app's scroll surfaces do. */
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
-    transition: scrollbar-color 150ms ease;
+    transition: scrollbar-color var(--motion-fast) ease-out;
   }
   .terminal:hover .xterm-viewport {
     scrollbar-color: var(--term-ansi-8) transparent;
@@ -709,7 +744,7 @@
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
-    transition: background-color 150ms ease;
+    transition: background-color var(--motion-fast) ease-out;
   }
   .terminal:hover .xterm-viewport::-webkit-scrollbar-thumb {
     background: var(--term-ansi-8);
@@ -772,7 +807,7 @@
 .bn-block-content code,
 .bn-block-content pre {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--text-hint);
 }
 
 /* Expanded ("document mode"): the composer is the page, not a panel on it. The editor centres its

@@ -262,7 +262,7 @@ export function Dock({
                   <button
                     key={id}
                     onClick={() => onTab(id)}
-                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent hover:ring-primary/40"
+                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
                   >
                     <Icon className="size-5 text-muted-foreground" />
                     <span>
@@ -289,7 +289,7 @@ export function Dock({
               <TabsTrigger
                 key={id}
                 value={id}
-                className="gap-1.5 rounded-md px-2 text-xs text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
+                className="gap-1.5 rounded-md px-2 text-hint text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
               >
                 <Icon className="size-3.5" /> {t(titleKey)}
               </TabsTrigger>
@@ -316,8 +316,8 @@ export function Dock({
                 className={cn(
                   "flex max-w-40 items-center gap-1 rounded-md px-2 py-1 text-fine transition-colors",
                   n === activeTerm
-                    ? "bg-[var(--term-bg)] text-white/85"
-                    : "text-white/45 hover:bg-white/[0.07] hover:text-white/70",
+                    ? "bg-term-bg text-term-fg/85"
+                    : "text-term-fg/45 hover:bg-term-fg/[0.07] hover:text-term-fg/70",
                 )}
               >
                 <span className="truncate">{tabLabel(termTitles[termId(sessionKey, n, tmux)], n)}</span>
@@ -340,7 +340,7 @@ export function Dock({
               </button>
             ))}
             <button
-              className="rounded-md px-1.5 py-1 text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white/70"
+              className="rounded-md px-1.5 py-1 text-term-fg/45 transition-colors hover:bg-term-fg/[0.07] hover:text-term-fg/70"
               title={t("dock.newTerminal")}
               onClick={() => {
                 setTerms((v) => [...v, nextTerm]);
@@ -351,17 +351,17 @@ export function Dock({
               <Plus className="size-3" />
             </button>
             <button
-              className="ml-auto rounded-md px-1.5 py-1 text-white/45 transition-colors hover:bg-white/[0.07] hover:text-white/70"
+              className="ml-auto rounded-md px-1.5 py-1 text-term-fg/45 transition-colors hover:bg-term-fg/[0.07] hover:text-term-fg/70"
               title={t("dock.sendTerminal")}
               onClick={() => void sendTerminalToAgent()}
             >
               <CornerUpLeft className="size-3" />
             </button>
-            <label className="flex cursor-pointer items-center gap-1.5 text-fine text-white/60">
+            <label className="flex cursor-pointer items-center gap-1.5 text-fine text-term-fg/60">
               <Checkbox
                 checked={tmux}
                 onCheckedChange={(v) => setTmux(v === true)}
-                className="size-3.5 border-white/30"
+                className="size-3.5 border-term-fg/30"
               />
               {t("dock.tmux")}
             </label>
@@ -383,7 +383,7 @@ export function Dock({
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="space-y-2.5 p-4 text-xs">
+            <div className="space-y-2.5 p-4 text-hint">
               {git?.is_repo ? (
                 <>
                   <div className="flex items-center gap-2">

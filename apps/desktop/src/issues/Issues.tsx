@@ -39,18 +39,18 @@ export function IssuesModal({
           <DialogTitle>GitHub Issues</DialogTitle>
         </DialogHeader>
 
-        {loading && <p className="text-xs text-muted-foreground">Loading via gh…</p>}
-        {err && <p className="text-xs text-destructive">{err}</p>}
+        {loading && <p className="text-hint text-muted-foreground">Loading via gh…</p>}
+        {err && <p className="text-hint text-destructive">{err}</p>}
 
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-1.5">
             {issues.map((it) => (
-              <div key={`${it.source}-${it.id}`} className="flex items-center gap-3 rounded-xl bg-foreground/[0.04] p-2.5">
+              <div key={`${it.source}-${it.id}`} className="flex items-center gap-3 rounded-xl bg-fill-quiet p-2.5">
                 <a
                   href={it.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="shrink-0 font-mono text-sm font-semibold text-primary no-underline"
+                  className="shrink-0 font-mono text-ui font-semibold text-primary no-underline"
                 >
                   #{it.id}
                 </a>
@@ -62,7 +62,7 @@ export function IssuesModal({
               </div>
             ))}
             {!loading && !err && issues.length === 0 && (
-              <p className="p-2 text-sm text-muted-foreground">
+              <p className="p-2 text-ui text-muted-foreground">
                 No open issues (or this dir isn’t a GitHub repo).
               </p>
             )}
