@@ -58,6 +58,28 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
             choice("openai/gpt-5", "GPT-5", None),
             choice("google/gemini-2.5-pro", "Gemini 2.5 Pro", None),
         ],
+        // Pi is BYOK and resolves `provider/id` (plus an optional `:thinking` suffix) against
+        // whatever keys you've configured, so this is a starting point rather than a catalogue.
+        ProviderId::Pi => vec![
+            choice("anthropic/claude-sonnet-4-5", "Claude Sonnet 4.5", None),
+            choice("anthropic/claude-opus-4-1", "Claude Opus 4.1", None),
+            choice("openai/gpt-5.1", "GPT-5.1", None),
+            choice("google/gemini-2.5-pro", "Gemini 2.5 Pro", None),
+        ],
+        ProviderId::Kimi => vec![
+            choice("k3", "Kimi K3", Some("Flagship, 1M context")),
+            choice("k3-256k", "Kimi K3 (256K)", Some("Cheaper context window")),
+            choice("kimi-for-coding", "Kimi for Coding", None),
+            choice("kimi-for-coding-highspeed", "Kimi for Coding Highspeed", Some("Same ability, faster")),
+        ],
+        // The GLM ACP agent switches models mid-session, and these are the ids it accepts.
+        ProviderId::ZCode => vec![
+            choice("glm-5.2", "GLM-5.2", Some("Default")),
+            choice("glm-5.1", "GLM-5.1", None),
+            choice("glm-5-turbo", "GLM-5 Turbo", Some("Fastest")),
+            choice("glm-4.7", "GLM-4.7", None),
+            choice("glm-4.5-air", "GLM-4.5 Air", None),
+        ],
         ProviderId::Custom(_) => Vec::new(),
     }
 }

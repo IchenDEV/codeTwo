@@ -24,6 +24,9 @@ To run a real turn you need one agent CLI on your `PATH`:
 - **Codex** — Node/npx (`npx @zed-industries/codex-acp`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode** — `opencode`.
+- **Pi** — Node/npx (`npx -y pi-acp`, with `pi` on your `PATH` for its own config).
+- **Kimi** — `kimi` (speaks ACP natively).
+- **ZCode (GLM)** — Node/npx (`npx -y glm-acp-agent`) plus a `Z_AI_API_KEY`.
 
 codeTwo shows a health dot per provider so you can tell what's available. See
 [Providers](/guide/providers).

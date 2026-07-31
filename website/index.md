@@ -3,7 +3,7 @@ layout: home
 hero:
   name: codeTwo
   text: A document-first coding agent
-  tagline: Compose prompts as documents, weave in skills, and drive Claude Code, Codex, Grok, Cursor, and OpenCode over one protocol — desktop app, TUI, and remote.
+  tagline: Compose prompts as documents, weave in skills, and drive Claude Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi, and GLM over one protocol — desktop app, TUI, and remote.
   actions:
     - theme: brand
       text: Get started
@@ -20,8 +20,8 @@ features:
     details: Compose in a Notion-style block editor, not a chat box. Insert and combine reusable skills inline with a “/” picker, then submit the whole document as one turn.
     link: /guide/editor
   - icon: 🔌
-    title: Five agent CLIs, one interface
-    details: Claude Code, OpenAI Codex, Grok, Cursor, and OpenCode — all driven over the Agent Client Protocol (ACP). Add your own.
+    title: Eight agent CLIs, one interface
+    details: Claude Code, OpenAI Codex, Grok, Cursor, OpenCode, Pi, Kimi, and ZCode/GLM — all driven over the Agent Client Protocol (ACP). Add your own.
     link: /guide/providers
   - icon: 🛒
     title: Built-in skill market
@@ -59,7 +59,7 @@ checkpoints, and per-turn diffs.
 ```
                        core  (Rust — ACP client, engine, sessions, skills, git, pty)
    ┌──────────────────────────────────────────────────────────────────────┐
-   │  ACP over stdio → Claude Code · Codex · Grok · Cursor · OpenCode        │
+   │  ACP over stdio → Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM │
    └───────────▲───────────────────▲──────────────────────▲────────────────┘
         Tauri desktop           ratatui TUI          codetwo-server (remote)
 ```

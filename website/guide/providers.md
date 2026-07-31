@@ -25,6 +25,9 @@ Because everything is ACP, adding a provider is just a launch command.
 | **Grok** | `grok agent stdio` | no (native ACP) |
 | **Cursor** | `cursor-agent --acp` | no |
 | **OpenCode** | `opencode acp` | no |
+| **Pi** | `npx -y pi-acp` | yes |
+| **Kimi** | `kimi acp` | no (native ACP) |
+| **ZCode (GLM)** | `npx -y glm-acp-agent` | yes |
 
 ::: tip
 Grok is the simplest to start with — it speaks ACP natively, so there's no adapter and no Node
@@ -51,9 +54,15 @@ it can't actually switch.
 
 ## Adapter flags may vary
 
-The exact adapter invocation for Cursor and OpenCode can change between versions of those tools. If a
-provider fails to launch, check the adapter's own docs for its ACP/stdio flag — the launch spec is
-just a command, so it's easy to adjust.
+The exact adapter invocation for Cursor, OpenCode, and Pi can change between versions of those tools
+(Pi's is a community adapter — pi itself has no ACP mode of its own yet). If a provider fails to
+launch, check the adapter's own docs for its ACP/stdio flag — the launch spec is just a command, so
+it's easy to adjust.
+
+Z.ai's **ZCode** ships only as a desktop app, and a desktop app is an ACP *client* — there's no CLI
+for us to drive. The **ZCode (GLM)** entry therefore launches the GLM ACP agent, which speaks to the
+same GLM Coding Plan endpoint and offers the same models. It authenticates with `Z_AI_API_KEY`, or
+run `npx glm-acp-agent --setup` once to store a key.
 
 ## MCP tools
 

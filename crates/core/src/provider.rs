@@ -16,6 +16,9 @@ pub enum ProviderId {
     Grok,
     Cursor,
     OpenCode,
+    Pi,
+    Kimi,
+    ZCode,
     Custom(String),
 }
 
@@ -27,6 +30,9 @@ impl ProviderId {
             ProviderId::Grok => "grok",
             ProviderId::Cursor => "cursor",
             ProviderId::OpenCode => "opencode",
+            ProviderId::Pi => "pi",
+            ProviderId::Kimi => "kimi",
+            ProviderId::ZCode => "zcode",
             ProviderId::Custom(s) => s,
         }
     }
@@ -78,6 +84,9 @@ impl Provider {
 /// - Claude Code: official ACP adapter via npx (richest ACP surface).
 /// - Codex: official Rust ACP adapter via npx (npm wrapper fetches the platform binary).
 /// - Grok Build: speaks ACP natively (`grok agent stdio`) — no adapter needed.
+/// - Kimi Code: speaks ACP natively too (`kimi acp`).
+/// - Pi: community ACP adapter via npx (pi itself has no ACP mode yet).
+/// - ZCode: the GLM ACP agent via npx (ZCode ships only a desktop app).
 pub fn default_registry() -> Vec<Provider> {
     vec![
         Provider {
@@ -111,6 +120,30 @@ pub fn default_registry() -> Vec<Provider> {
             display_name: "OpenCode".into(),
             launch: LaunchSpec::new("opencode", ["acp"]),
             needs_node: false,
+        },
+        // Pi has no ACP mode of its own yet, so we go through the community adapter, which embeds
+        // pi's own SDK. It still wants `pi` on PATH for its config and credentials.
+        Provider {
+            id: ProviderId::Pi,
+            display_name: "Pi".into(),
+            launch: LaunchSpec::new("npx", ["-y", "pi-acp"]),
+            needs_node: true,
+        },
+        // Kimi Code CLI speaks ACP natively: `kimi acp` prints no banner and waits for `initialize`.
+        Provider {
+            id: ProviderId::Kimi,
+            display_name: "Kimi".into(),
+            launch: LaunchSpec::new("kimi", ["acp"]),
+            needs_node: false,
+        },
+        // Z.ai's ZCode is a desktop app, not a CLI — it's an ACP *client*, so there's nothing for us
+        // to drive. What we drive instead is the GLM ACP agent (the one Zed lists), which talks to
+        // the same GLM Coding Plan endpoint; it wants `Z_AI_API_KEY` or its own `--setup` login.
+        Provider {
+            id: ProviderId::ZCode,
+            display_name: "ZCode (GLM)".into(),
+            launch: LaunchSpec::new("npx", ["-y", "glm-acp-agent"]),
+            needs_node: true,
         },
     ]
 }
@@ -187,11 +220,14 @@ mod tests {
     #[test]
     fn registry_has_all_providers() {
         let reg = default_registry();
-        assert_eq!(reg.len(), 5);
+        assert_eq!(reg.len(), 8);
         assert!(reg.iter().any(|p| p.id == ProviderId::Grok && !p.needs_node));
         assert!(reg.iter().any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
         assert!(reg.iter().any(|p| p.id == ProviderId::Cursor));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode));
+        assert!(reg.iter().any(|p| p.id == ProviderId::Pi && p.needs_node));
+        assert!(reg.iter().any(|p| p.id == ProviderId::Kimi && !p.needs_node));
+        assert!(reg.iter().any(|p| p.id == ProviderId::ZCode && p.needs_node));
     }
 
     #[test]
@@ -200,5 +236,22 @@ mod tests {
         let grok = reg.iter().find(|p| p.id == ProviderId::Grok).unwrap();
         assert_eq!(grok.launch.command, "grok");
         assert_eq!(grok.launch.args, vec!["agent", "stdio"]);
+    }
+
+    #[test]
+    fn kimi_launch_is_native_acp() {
+        let reg = default_registry();
+        let kimi = reg.iter().find(|p| p.id == ProviderId::Kimi).unwrap();
+        assert_eq!(kimi.launch.command, "kimi");
+        assert_eq!(kimi.launch.args, vec!["acp"]);
+    }
+
+    #[test]
+    fn provider_ids_are_distinct() {
+        // The id string is the wire form the desktop and TUI parse back — a collision would silently
+        // route sessions to the wrong CLI.
+        let reg = default_registry();
+        let ids: std::collections::HashSet<_> = reg.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids.len(), reg.len());
     }
 }

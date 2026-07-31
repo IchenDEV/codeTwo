@@ -32,7 +32,8 @@ actions.
 
 ## What it shares with the category
 
-- One GUI (and TUI) over **five agent CLIs** — Claude Code, Codex, Grok, Cursor, OpenCode — via the
+- One GUI (and TUI) over **eight agent CLIs** — Claude Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi,
+  ZCode/GLM — via the
   [Agent Client Protocol](/guide/providers).
 - **Git worktree** isolation per session, **checkpoints/diff/revert**, and commit/push from the UI.
   See [Git](/guide/git).
