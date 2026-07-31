@@ -248,7 +248,7 @@ export function Dock({
                   <button
                     key={id}
                     onClick={() => onTab(id)}
-                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent hover:ring-primary/40"
+                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
                   >
                     <Icon className="size-5 text-muted-foreground" />
                     <span>
@@ -278,7 +278,7 @@ export function Dock({
               <TabsTrigger
                 key={id}
                 value={id}
-                className="gap-1.5 rounded-md px-2 text-xs text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
+                className="gap-1.5 rounded-md px-2 text-hint text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
               >
                 <Icon className="size-3.5" /> {t(titleKey)}
               </TabsTrigger>
@@ -432,7 +432,7 @@ export function Dock({
 
         <TabsContent value="git" className="m-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
-            <div className="space-y-2.5 p-4 text-xs">
+            <div className="space-y-2.5 p-4 text-hint">
               {git?.is_repo ? (
                 <>
                   <div className="flex items-center gap-2">

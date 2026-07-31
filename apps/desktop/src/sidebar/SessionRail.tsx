@@ -199,7 +199,7 @@ export function SessionRail({
         key={s.id}
         onClick={() => onSelect(s.id)}
         className={cn(
-          "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+          "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50",
           s.id === activeSession && "bg-accent",
         )}
       >
@@ -320,12 +320,12 @@ export function SessionRail({
       <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
         <button
           onClick={onOpenSearch}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
           {searchHint && (
-            <kbd className="shrink-0 rounded border bg-muted px-1 py-px font-mono text-cap text-muted-foreground/80">
+            <kbd className="shrink-0 rounded border bg-fill-rest px-1 py-px font-mono text-cap text-muted-foreground/80">
               {searchHint}
             </kbd>
           )}
@@ -374,7 +374,7 @@ export function SessionRail({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={activeProject ?? undefined}
               >
                 <Folder className="size-3.5 shrink-0" />
@@ -488,7 +488,7 @@ export function SessionRail({
         {git?.is_repo && (
           <button
             onClick={onOpenSourceControl}
-            className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent"
+            className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent/50"
             title={t("action.open_source_control")}
           >
             <table className="w-full border-collapse text-fine">

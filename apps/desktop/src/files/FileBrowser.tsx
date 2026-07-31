@@ -43,7 +43,7 @@ export function FileBrowserModal({
         </DialogHeader>
 
         <Input placeholder="Filter files…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
-        {loading && <p className="text-xs text-muted-foreground">Scanning…</p>}
+        {loading && <p className="text-hint text-muted-foreground">Scanning…</p>}
 
         <ScrollArea className="max-h-[52vh] pr-3">
           <div className="space-y-0.5">
@@ -52,14 +52,14 @@ export function FileBrowserModal({
                 key={p}
                 onClick={() => onInsert(p)}
                 title="Add to prompt"
-                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left font-mono text-xs hover:bg-accent"
+                className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left font-mono text-hint hover:bg-accent/50"
               >
                 <span className="truncate">{p}</span>
                 <AtSign className="size-3.5 shrink-0 text-primary" />
               </button>
             ))}
             {!loading && filtered.length === 0 && (
-              <p className="p-2 text-sm text-muted-foreground">No matching files.</p>
+              <p className="p-2 text-ui text-muted-foreground">No matching files.</p>
             )}
           </div>
         </ScrollArea>

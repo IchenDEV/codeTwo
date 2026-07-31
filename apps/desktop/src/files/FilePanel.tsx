@@ -342,7 +342,7 @@ export function FilePanel({
                     openPath === entry.path
                       ? "bg-accent"
                       : selected === entry.path
-                        ? "bg-accent/60"
+                        ? "bg-accent/70"
                         : "hover:bg-accent/50",
                   )}
                   style={{ paddingLeft: depth * 12 }}

@@ -94,7 +94,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
             onClick={() => onItemClick?.(item)}
             className={cn(
               "flex w-full items-baseline gap-2 rounded-md px-2 py-1 text-left transition-colors",
-              i === selectedIndex ? "bg-accent" : "hover:bg-accent/60",
+              i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
             )}
           >
             <Icon className="size-3.5 shrink-0 self-center text-muted-foreground" />

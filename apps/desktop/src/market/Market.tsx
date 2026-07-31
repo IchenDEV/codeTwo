@@ -43,10 +43,10 @@ export function MarketModal({
         <ScrollArea className="max-h-[55vh] pr-3">
           <div className="space-y-2">
             {filtered.map((it) => (
-              <div key={it.id} className="flex items-center gap-3 rounded-xl bg-foreground/[0.04] p-3">
+              <div key={it.id} className="flex items-center gap-3 rounded-xl bg-fill-quiet p-3">
                 <span className="w-7 text-center text-xl">{it.icon ?? "✦"}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-semibold">
+                  <div className="flex items-center gap-2 text-ui font-semibold">
                     {it.name}
                     <Badge variant="secondary" className="text-cap uppercase">
                       {it.kind}
@@ -69,7 +69,7 @@ export function MarketModal({
               </div>
             ))}
             {filtered.length === 0 && (
-              <p className="p-3 text-sm text-muted-foreground">No skills match “{q}”.</p>
+              <p className="p-3 text-ui text-muted-foreground">No skills match “{q}”.</p>
             )}
           </div>
         </ScrollArea>

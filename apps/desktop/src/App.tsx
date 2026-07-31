@@ -1012,7 +1012,7 @@ export default function App() {
             {docMode && (running || turns.length > 0) && (
               <button
                 onClick={() => toggleDocMode(false)}
-                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={t("header.showTranscript", { count: turns.length })}
               >
                 {running && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
@@ -1141,7 +1141,7 @@ export default function App() {
           {/* Document mode's view of the conversation: beside the page, not instead of it. Only
               once there's something to show — a fresh document keeps the full width. */}
           {docMode && (turns.length > 0 || running) && (
-            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-foreground/[0.02] px-4 pb-4 pt-2">
+            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-fill-quiet px-4 pb-4 pt-2">
               {turns.map((t) => (
                 <TurnCard key={t.id} turn={t} />
               ))}
@@ -1258,7 +1258,7 @@ export default function App() {
               onChange={(e) => setSkillDraft({ ...skillDraft, name: e.target.value })}
             />
             <textarea
-              className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-ui outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               placeholder="Prompt fragment inserted when this skill is picked"
               value={skillDraft.text}
               onChange={(e) => setSkillDraft({ ...skillDraft, text: e.target.value })}
