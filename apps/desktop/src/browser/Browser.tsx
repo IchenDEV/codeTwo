@@ -114,7 +114,7 @@ function MenuItem({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-hint transition-colors hover:bg-accent"
+      className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-hint transition-colors hover:bg-accent/50"
     >
       <Icon className="size-3.5 shrink-0 text-muted-foreground" />
       <span className="flex-1">{label}</span>
@@ -426,7 +426,7 @@ export function BrowserPanel({
         {/* A raw input: the shadcn one doesn't forward refs on React 18, and new-tab needs focus. */}
         <input
           ref={addrRef}
-          className="h-7 min-w-0 flex-1 rounded-lg bg-foreground/[0.05] px-2.5 text-hint text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:bg-transparent focus:ring-2 focus:ring-ring/50"
+          className="h-7 min-w-0 flex-1 rounded-lg bg-fill-quiet px-2.5 text-hint text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:bg-transparent focus:ring-2 focus:ring-ring/50"
           value={addr}
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addr.trim() && go(addr)}

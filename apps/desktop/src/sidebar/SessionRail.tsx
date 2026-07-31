@@ -141,7 +141,7 @@ export function SessionRail({
       key={s.id}
       onClick={() => onSelect(s.id)}
       className={cn(
-        "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+        "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50",
         s.id === activeSession && "bg-accent",
       )}
     >
@@ -230,12 +230,12 @@ export function SessionRail({
       <div data-tauri-drag-region className="flex items-center gap-1.5 pb-2 pl-[78px] pr-3 pt-3">
         <button
           onClick={onOpenSearch}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-foreground/[0.05] px-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent"
+          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg bg-fill-quiet px-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50"
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
           {searchHint && (
-            <kbd className="shrink-0 rounded bg-foreground/[0.07] px-1 py-px font-mono text-cap text-muted-foreground/80">
+            <kbd className="shrink-0 rounded bg-fill-rest px-1 py-px font-mono text-cap text-muted-foreground/80">
               {searchHint}
             </kbd>
           )}
@@ -298,7 +298,7 @@ export function SessionRail({
                   <div
                     onClick={() => onSelectProject(p.path)}
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent",
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50",
                       isActive && "text-foreground",
                     )}
                   >
@@ -383,7 +383,7 @@ export function SessionRail({
         <div className="flex items-center gap-1">
           <button
             onClick={onOpenSettings}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-ui transition-colors hover:bg-accent"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-ui transition-colors hover:bg-accent/50"
           >
             <Settings className="size-4 shrink-0 text-muted-foreground" />
             {t("header.settings")}

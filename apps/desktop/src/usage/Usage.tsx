@@ -52,7 +52,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
           </DialogTitle>
         </DialogHeader>
 
-        {loading && !report && <p className="text-xs text-muted-foreground">Scanning local transcripts…</p>}
+        {loading && !report && <p className="text-hint text-muted-foreground">Scanning local transcripts…</p>}
 
         {report && (
           <>
@@ -61,7 +61,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                 <div key={w.label}>
                   <div className="flex items-baseline justify-between text-ui">
                     <span className="font-semibold">{w.label}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="font-mono text-hint text-muted-foreground">
                       {fmtTokens(w.total_tokens)}
                       {w.limit != null && ` / ${fmtTokens(w.limit)}`}
                       {w.fraction != null && ` · ${Math.round(w.fraction * 100)}%`}
@@ -95,7 +95,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
 
             <div className="flex flex-wrap gap-1.5">
               {report.by_source.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-hint text-muted-foreground">
                   No local transcripts found (looked in ~/.codex/sessions and ~/.claude/projects).
                 </p>
               ) : (
@@ -106,7 +106,7 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                 ))
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-hint text-muted-foreground">
               Scanned {report.transcripts} transcript{report.transcripts === 1 ? "" : "s"}. Set
               CODETWO_LIMIT_5H / _WEEK / _MONTH to show percentages.
             </p>

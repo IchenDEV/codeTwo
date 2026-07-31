@@ -77,7 +77,7 @@ const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-hint transition-colors hover:bg-accent",
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-hint transition-colors hover:bg-accent/50",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -126,7 +126,7 @@ function MenuRow({
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
-        selected ? "bg-accent" : "hover:bg-accent/60",
+        selected ? "bg-accent" : "hover:bg-accent/50",
       )}
     >
       {leading}
