@@ -145,6 +145,9 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [] },
   { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [] },
   { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [] },
+  { id: "pi", display_name: "Pi", available: false, needs_node: true, models: [] },
+  { id: "kimi", display_name: "Kimi", available: false, needs_node: false, models: [] },
+  { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [] },
 ];
 
 const FALLBACK_SKILLS: SkillInfo[] = [

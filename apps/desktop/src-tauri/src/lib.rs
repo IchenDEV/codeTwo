@@ -114,6 +114,9 @@ fn parse_provider(s: &str) -> ProviderId {
         "grok" => ProviderId::Grok,
         "cursor" => ProviderId::Cursor,
         "opencode" => ProviderId::OpenCode,
+        "pi" => ProviderId::Pi,
+        "kimi" => ProviderId::Kimi,
+        "zcode" => ProviderId::ZCode,
         other => ProviderId::Custom(other.to_string()),
     }
 }

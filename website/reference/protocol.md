@@ -17,7 +17,8 @@ Tagged by `op`:
 | `set_permission_mode` | `session`, `mode` | `ask` / `accept_edits` / `yolo` |
 | `set_model` | `session`, `model` | set the session model |
 
-`provider` is one of `claude_code`, `codex`, `grok`, `cursor`, `opencode`, or `{"custom":"…"}`.
+`provider` is one of `claude_code`, `codex`, `grok`, `cursor`, `opencode`, `pi`, `kimi`, `zcode`, or
+`{"custom":"…"}`.
 `doc` is an array of blocks: `{"type":"text","text":"…"}` or
 `{"type":"skill","skill_id":"…","params":{}}`.
 

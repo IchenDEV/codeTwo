@@ -57,6 +57,31 @@ const OpenCodeMark = mark(
   </>,
 );
 
+// Pi and Kimi ship wordmarks rather than a glyph that survives 14px, so these are drawn from the
+// name itself: the letter π, and the crescent the Moonshot family is built around.
+const PiMark = mark(
+  "0 0 24 24",
+  <>
+    {/* Legs splay outward: straight ones read as "TT" once the bar overhangs them. */}
+    <path d="M3 5h18v2.6H3V5Zm3.8 2.6h2.4L8 19H5.6L6.8 7.6Zm8 0h2.4L18.4 19H16L14.8 7.6Z" />
+  </>,
+);
+
+const KimiMark = mark(
+  "0 0 24 24",
+  <>
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+  </>,
+);
+
+// Z.ai's Z, squared off so it holds its counters at 14px.
+const ZCodeMark = mark(
+  "0 0 24 24",
+  <>
+    <path d="M4 4h16v3.2L9.9 17.4H20V20H4v-3.2L14.1 6.6H4V4Z" />
+  </>,
+);
+
 /** Every provider the core knows. An id without a mark simply renders nothing. */
 export const PROVIDER_MARKS: Record<string, (p: IconProps) => ReactNode> = {
   claude_code: ClaudeMark,
@@ -64,6 +89,9 @@ export const PROVIDER_MARKS: Record<string, (p: IconProps) => ReactNode> = {
   grok: GrokMark,
   cursor: CursorMark,
   opencode: OpenCodeMark,
+  pi: PiMark,
+  kimi: KimiMark,
+  zcode: ZCodeMark,
 };
 
 /** The mark for a provider id, or null when we don't ship one. */

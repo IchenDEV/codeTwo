@@ -11,7 +11,7 @@ Ships two frontends over one shared Rust core:
 
 ## How it works
 
-All three provider CLIs are driven over the **Agent Client Protocol (ACP)** — JSON-RPC over stdio.
+Every provider CLI is driven over the **Agent Client Protocol (ACP)** — JSON-RPC over stdio.
 The core spawns each provider as a child process and speaks ACP to it. See
 [`docs/architecture.md`](docs/architecture.md) and the plan for the full design.
 
