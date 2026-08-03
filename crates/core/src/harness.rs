@@ -115,11 +115,13 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
         if description.chars().count() > MAX_DESCRIPTION_CHARS {
             description = description.chars().take(MAX_DESCRIPTION_CHARS).collect::<String>() + "…";
         }
+        // No icon: discovered skills take the picker's neutral fallback glyph rather than
+        // inventing an emoji per product.
         out.push(Skill {
             id,
             name: name.clone(),
             description,
-            icon: Some("🧩".into()),
+            icon: None,
             payload: SkillPayload::AgentSkill { skill_ref: name, inline_text: None },
         });
     }

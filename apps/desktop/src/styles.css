@@ -807,6 +807,18 @@
   font-family: var(--font-mono);
   font-size: var(--text-hint);
 }
+/* The `/` picker. Discovered harness skills carry paragraph-length frontmatter descriptions,
+   which stretched the menu to the window's width and a row to four lines: cap the menu and clamp
+   the description, so every row is its title plus one ellipsised line at the stock row height. */
+.bn-suggestion-menu {
+  max-width: 480px;
+}
+.bn-mt-suggestion-menu-item-subtitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 /* Expanded ("document mode"): the composer is the page, not a panel on it. The editor centres its
    own measure on the app background — no card, no border — with a gutter for the drag/insert
