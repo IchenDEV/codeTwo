@@ -47,7 +47,7 @@ fn main() {
     let now = codetwo_core::session::now_millis();
     let limits = Limits::from_env();
 
-    println!("\n  codeTwo usage — {} transcripts scanned\n", records.len());
+    println!("\n  Code2 usage — {} transcripts scanned\n", records.len());
     for w in windows(&records, now, &limits) {
         let pct = match w.fraction {
             Some(f) => format!("{:>4.0}%", f * 100.0),

@@ -1,6 +1,6 @@
 //! Voice input — transcribing recorded audio.
 //!
-//! codeTwo ships no speech model and calls no hosted API. It transcribes one of two ways, in this
+//! Code2 ships no speech model and calls no hosted API. It transcribes one of two ways, in this
 //! order:
 //!
 //! 1. **A transcriber you named.** `CODETWO_TRANSCRIBE_CMD` is a shell command template containing
@@ -45,7 +45,7 @@ pub fn transcriber_command() -> Option<String> {
     })
 }
 
-/// Can codeTwo transcribe audio locally — by any route?
+/// Can Code2 transcribe audio locally — by any route?
 pub fn is_available() -> bool {
     // Short-circuits: probing the system recognizer builds objects and logs, so skip it when the
     // user's own command already answers the question.

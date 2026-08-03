@@ -1,4 +1,4 @@
-# codeTwo
+# Code2
 
 A document-first coding-agent app. Compose prompts as a **structured document** (not a chat box),
 weave in reusable **skills** with a `/` picker, and run them against existing coding CLIs —

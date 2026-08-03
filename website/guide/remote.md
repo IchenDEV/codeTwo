@@ -1,13 +1,13 @@
 # Remote control
 
-Drive codeTwo from your phone, tablet, or another machine. A small headless server exposes the
+Drive Code2 from your phone, tablet, or another machine. A small headless server exposes the
 engine over WebSocket behind a t3code-style pairing flow and serves a mobile-friendly web client.
 
 ## How pairing works
 
 The remote device never needs a long-lived secret up front:
 
-1. codeTwo mints a **one-time pairing token** (15-minute lifetime) and shows it as a URL + QR code.
+1. Code2 mints a **one-time pairing token** (15-minute lifetime) and shows it as a URL + QR code.
    The token rides in the URL *fragment* (`/#token=…`), so it never appears in server logs.
 2. The device opens the link once and exchanges the token for a **per-device bearer**, stored in the
    browser. The pairing link is now dead.
@@ -39,7 +39,7 @@ It prints a pairing panel: a one-time **URL** (with its auto-detected LAN IP), t
 scannable **QR code**. Open the URL on another device on the same network, or scan the QR.
 
 ```
-  codeTwo remote is live.
+  Code2 remote is live.
 
   Open on another device (link is one-time, expires in 15 minutes):
     http://192.168.1.42:4599/#token=…

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Shared core for codeTwo: ACP client, provider registry, sessions, skills, permissions."
+description = "Shared core for Code2: ACP client, provider registry, sessions, skills, permissions."
 
 [dependencies]
 tokio.workspace = true

@@ -5,14 +5,14 @@
 No — you need **one** on your `PATH` to run a real turn. Grok is the simplest (native ACP, no Node).
 See [Providers](/guide/providers).
 
-### Where does codeTwo store data?
+### Where does Code2 store data?
 
 Sessions and transcripts live in a SQLite database under `~/.codetwo/` (a platform data dir); skills
 under `~/.config/codetwo/skills/`; keybindings in `~/.config/codetwo/keymap.json`.
 
-### Is my code sent anywhere by codeTwo itself?
+### Is my code sent anywhere by Code2 itself?
 
-codeTwo drives provider CLIs locally over stdio; whatever those providers do with your code is up to
+Code2 drives provider CLIs locally over stdio; whatever those providers do with your code is up to
 them and your model/API settings. The remote server only exposes the engine on your own network,
 gated by a pairing token.
 

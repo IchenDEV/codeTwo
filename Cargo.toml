@@ -1,4 +1,4 @@
-# codeTwo — a document-first coding-agent app.
+# Code2 — a document-first coding-agent app.
 # Cargo workspace. Members are added as each milestone lands:
 #   crates/core          (M0/M1) — the shared brain: ACP client, sessions, skills, ...
 #   crates/tui           (M3)    — ratatui frontend, links core

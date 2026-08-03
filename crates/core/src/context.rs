@@ -1,6 +1,6 @@
 //! Context-window accounting — the "how full is the prompt" meter.
 //!
-//! Providers don't consistently report token usage over ACP, so codeTwo estimates locally with the
+//! Providers don't consistently report token usage over ACP, so Code2 estimates locally with the
 //! usual ~4-chars-per-token heuristic. It's approximate by design: enough to warn you before you
 //! blow the window, never presented as exact.
 

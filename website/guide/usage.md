@@ -1,6 +1,6 @@
 # Usage tracking
 
-How much have you burned, and when does it free up? codeTwo scans the transcripts your provider CLIs
+How much have you burned, and when does it free up? Code2 scans the transcripts your provider CLIs
 already write locally and reports **rolling windows** — 5-hour session, week, and month.
 
 Open it from the command palette (**“Usage”**) or by clicking the context meter in the status bar. There's
@@ -11,7 +11,7 @@ cargo run -p codetwo-core --example usage
 ```
 
 ```
-  codeTwo usage — 373 transcripts scanned
+  Code2 usage — 373 transcripts scanned
 
   5h session  ████████████████████████    —     73.8M   frees up in 42m
               in 59.7M · out 14.1M · cache-read 2502.2M (not counted)
@@ -32,7 +32,7 @@ modification time, which is plenty precise for 5h/7d/30d buckets.
 
 ## Showing percentages
 
-Windows show raw totals until you tell codeTwo your plan's budget:
+Windows show raw totals until you tell Code2 your plan's budget:
 
 ```sh
 export CODETWO_LIMIT_5H=5000000
@@ -50,7 +50,7 @@ Two details matter, and getting them wrong produces wildly misleading numbers:
   the model already holds; summing it across a session yields totals in the billions. It's reported
   separately as “cache-read (not counted)”. Cache *writes* do count — they're fresh work.
 - **Codex totals are cumulative.** Codex restates a running `total_token_usage` on every line, so
-  codeTwo takes the maximum per transcript rather than summing (summing over-counts ~100×). Codex
+  Code2 takes the maximum per transcript rather than summing (summing over-counts ~100×). Codex
   also reports cached tokens as a *subset* of input, whereas Claude reports them alongside — both are
   handled.
 

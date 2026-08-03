@@ -1,4 +1,4 @@
-//! codeTwo core — the shared brain behind both the Tauri desktop app and the ratatui TUI.
+//! Code2 core — the shared brain behind both the Tauri desktop app and the ratatui TUI.
 //!
 //! Nothing in here knows about a UI. Frontends drive the core through the SQ/EQ interface
 //! ([`Op`] in, [`Event`] out) and render the [`Event`] stream however they like.

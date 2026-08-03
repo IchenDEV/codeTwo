@@ -1,6 +1,6 @@
 # Install & run
 
-codeTwo isn't published as a binary yet — you run it from source. It's a Cargo workspace plus a
+Code2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus a
 Bun-built frontend.
 
 ## Prerequisites
@@ -20,7 +20,7 @@ Linux). See [tauri.app prerequisites](https://tauri.app/start/prerequisites/).
 To run a real turn you need one agent CLI on your `PATH`:
 
 - **Grok** — `grok` (speaks ACP natively; simplest, no Node needed).
-- **Claude Code** — Node/npx (codeTwo launches `npx @agentclientprotocol/claude-agent-acp`).
+- **Claude Code** — Node/npx (Code2 launches `npx @agentclientprotocol/claude-agent-acp`).
 - **Codex** — Node/npx (`npx @zed-industries/codex-acp`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode** — `opencode`.
@@ -28,7 +28,7 @@ To run a real turn you need one agent CLI on your `PATH`:
 - **Kimi** — `kimi` (speaks ACP natively).
 - **ZCode (GLM)** — Node/npx (`npx -y glm-acp-agent`) plus a `Z_AI_API_KEY`.
 
-codeTwo shows a health dot per provider so you can tell what's available. See
+Code2 shows a health dot per provider so you can tell what's available. See
 [Providers](/guide/providers).
 
 ## Clone & test the core

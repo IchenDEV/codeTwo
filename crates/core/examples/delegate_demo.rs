@@ -97,7 +97,7 @@ fn main() {
     // ---- 5. when it pays -----------------------------------------------------------------
     //
     // The totals above say the manager loses at this catalog. That's worth taking apart rather
-    // than accepting, because it's an artifact of *these* skills: codeTwo's are one-liners, so a
+    // than accepting, because it's an artifact of *these* skills: Code2's are one-liners, so a
     // body costs barely more than its own index entry and there's nothing to save by choosing.
     let avg_body = dump.prompt.len() as f64 / catalog_size as f64;
     let avg_entry = digest.estimated_chars() as f64 / catalog_size as f64;
@@ -128,7 +128,7 @@ fn main() {
         println!("  {body:>6}      {:>4} skills{verdict}", n.ceil() as usize);
     }
     println!(
-        "\n  codeTwo's built-ins average {avg_body:.0} chars, which is why the manager loses here.\n  \
+        "\n  Code2's built-ins average {avg_body:.0} chars, which is why the manager loses here.\n  \
          A real catalog entry — a SKILL.md, a wiki page, a house style guide — is 1–4k, and at\n  \
          that size the pattern pays from a handful of skills onward."
     );

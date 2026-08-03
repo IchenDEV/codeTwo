@@ -1,6 +1,6 @@
 # Architecture
 
-codeTwo drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
+Code2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
 Protocol (ACP)** and presents them through a **document-first** UI. One Rust core; two frontends.
 
 ## Why this shape

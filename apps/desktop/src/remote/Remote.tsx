@@ -149,7 +149,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Drive codeTwo from your phone, tablet, or another machine on the same network. Turning
+              Drive Code2 from your phone, tablet, or another machine on the same network. Turning
               this on serves the app's live sessions on all network interfaces; access requires
               pairing with a one-time link.
             </p>
