@@ -1,4 +1,4 @@
-//! codeTwo remote-control server.
+//! Code2 remote-control server.
 //!
 //! Exposes the shared [`Engine`] over WebSocket so another device can drive it: clients send `Op`
 //! JSON, and the server streams `Event` JSON back. A pairing token gates access. The same engine can
@@ -150,7 +150,7 @@ pub fn pairing_url(port: u16, token: &str) -> String {
 /// Print a pairing panel (URL, token, and a scannable QR) to the terminal, t3code-style.
 pub fn print_pairing(port: u16, token: &str) {
     let url = pairing_url(port, token);
-    println!("\n  codeTwo remote is live.\n");
+    println!("\n  Code2 remote is live.\n");
     println!("  Open on another device:");
     println!("    {url}\n");
     println!("  Pairing token: {token}\n");

@@ -1,6 +1,6 @@
 # Git, checkpoints & worktrees
 
-codeTwo treats git as a first-class safety net and review surface. It shells out to the `git` CLI.
+Code2 treats git as a first-class safety net and review surface. It shells out to the `git` CLI.
 
 ## Quick-view status
 
@@ -14,7 +14,7 @@ see you have uncommitted work without opening anything.
 
 ## Checkpoints (per-turn snapshots)
 
-Before **every** prompt turn, codeTwo auto-checkpoints your entire working tree — including untracked
+Before **every** prompt turn, Code2 auto-checkpoints your entire working tree — including untracked
 files — into a hidden git ref (`refs/codetwo/checkpoints/…`). It does this without disturbing your
 index (it uses a throwaway `GIT_INDEX_FILE`), so your staged changes are untouched.
 
@@ -38,7 +38,7 @@ Open **Source Control** from the dock's **Review & commit** button, the command 
 
 ## Worktree isolation
 
-When creating a session you can enable **worktree** mode. codeTwo runs the session in an isolated
+When creating a session you can enable **worktree** mode. Code2 runs the session in an isolated
 `git worktree` (a separate checkout + branch sharing the repo's `.git`), so parallel sessions don't
 step on each other. The session's working directory becomes the worktree path.
 

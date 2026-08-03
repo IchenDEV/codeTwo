@@ -1,4 +1,4 @@
-//! codeTwo TUI entrypoint. Same core [`Engine`] as the desktop app; ratatui renders it.
+//! Code2 TUI entrypoint. Same core [`Engine`] as the desktop app; ratatui renders it.
 //!
 //! Two event sources feed one loop: a background thread reads terminal key events into a channel,
 //! and the engine streams domain events. `tokio::select!` merges them; every iteration redraws.

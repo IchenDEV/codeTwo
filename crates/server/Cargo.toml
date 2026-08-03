@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "codeTwo headless remote-control server: drive the engine over WebSocket from another device."
+description = "Code2 headless remote-control server: drive the engine over WebSocket from another device."
 
 [lib]
 name = "codetwo_server"

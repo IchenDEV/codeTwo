@@ -36,7 +36,7 @@ See [Models](/guide/providers#models).
 
 ## 3. Run
 
-Press the **send** button (or `Mod+Enter`). codeTwo:
+Press the **send** button (or `Mod+Enter`). Code2:
 
 1. Auto-checkpoints your workspace (a hidden git ref) so you can revert later.
 2. Compiles the document — text + skill fragments + macro substitutions — into the prompt, and
@@ -51,7 +51,7 @@ how long the turn took.
 
 ## 4. Answer permission prompts
 
-By default codeTwo is in **Ask** mode: when the agent wants to run a command or edit files, a
+By default Code2 is in **Ask** mode: when the agent wants to run a command or edit files, a
 permission dialog appears. Allow or reject it. Switch to **Accept edits** or **YOLO** in the config
 popover to reduce prompts — see [Permissions & YOLO](/guide/permissions).
 

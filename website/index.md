@@ -1,7 +1,7 @@
 ---
 layout: home
 hero:
-  name: codeTwo
+  name: Code2
   text: A document-first coding agent
   tagline: Compose prompts as documents, weave in skills, and drive Claude Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi, and GLM over one protocol — desktop app, TUI, and remote.
   actions:
@@ -9,7 +9,7 @@ hero:
       text: Get started
       link: /guide/getting-started
     - theme: alt
-      text: Why codeTwo?
+      text: Why Code2?
       link: /guide/introduction
     - theme: alt
       text: GitHub
@@ -37,7 +37,7 @@ features:
     link: /guide/browser
   - icon: 📱
     title: Remote control
-    details: Run a headless server and drive codeTwo from your phone or another machine. Pairing token + QR; the remote shares your live sessions.
+    details: Run a headless server and drive Code2 from your phone or another machine. Pairing token + QR; the remote shares your live sessions.
     link: /guide/remote
   - icon: ⌨️
     title: Command palette & keybindings
@@ -51,7 +51,7 @@ features:
 
 ## One core, many surfaces
 
-codeTwo is a single Rust core that speaks the **Agent Client Protocol** to real coding CLIs, exposed
+Code2 is a single Rust core that speaks the **Agent Client Protocol** to real coding CLIs, exposed
 through a desktop app, a terminal UI, and a remote WebSocket server. You compose prompts as
 structured documents, drop in skills, and keep the agent honest with permission modes, git
 checkpoints, and per-turn diffs.

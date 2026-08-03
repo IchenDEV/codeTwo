@@ -1,6 +1,6 @@
 # Introduction
 
-**codeTwo** is a coding-agent app with a different premise: instead of a chat box, you compose your
+**Code2** is a coding-agent app with a different premise: instead of a chat box, you compose your
 prompt as a **structured document** and weave in reusable **skills** with a `/` picker. It drives
 existing coding CLIs — you keep your models, tools, and auth — behind one consistent interface.
 
@@ -56,6 +56,6 @@ Read more in the [Architecture](/reference/architecture) reference.
 
 ## Status
 
-codeTwo is early but functional and heavily tested (offline test suite across the core, TUI, and
+Code2 is early but functional and heavily tested (offline test suite across the core, TUI, and
 server). Some things are intentionally out of scope today — a native mobile app, hosted/tunneled
 remote access, and a visual browser element-picker. See the [FAQ](/reference/faq).

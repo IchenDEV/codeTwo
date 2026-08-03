@@ -55,7 +55,7 @@ export function RemoteModal({
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Start a local server so you can drive codeTwo from your phone, tablet, or another machine on
+              Start a local server so you can drive Code2 from your phone, tablet, or another machine on
               the same network.
             </p>
             <Button disabled={busy} onClick={() => void start()}>

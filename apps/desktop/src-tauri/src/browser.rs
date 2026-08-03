@@ -25,7 +25,7 @@ use tauri::{
 /// The in-page annotator, injected into every page before its own scripts run. It is dormant until
 /// `browser_annotate` switches it on. Note what is *not* here: any way for the page to call the
 /// app. Data only ever leaves the page when we ask for it, which is what keeps a remote page from
-/// reaching into codeTwo.
+/// reaching into Code2.
 const ANNOTATE_JS: &str = include_str!("annotate.js");
 
 /// A navigation the page made on its own (a link, a redirect, a form post). The address bar follows

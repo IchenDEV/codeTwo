@@ -3,7 +3,7 @@
 ## GitHub Issues
 
 Command palette → **“GitHub issues”** lists the open issues for the repo in your working directory,
-read through the authenticated `gh` CLI (so it reuses your existing login — codeTwo stores no token).
+read through the authenticated `gh` CLI (so it reuses your existing login — Code2 stores no token).
 
 **Add to prompt** inserts the issue as a context block in your document:
 

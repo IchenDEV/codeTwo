@@ -1,13 +1,13 @@
 # Providers
 
-A **provider** is a coding CLI that codeTwo drives. codeTwo doesn't reimplement any agent logic — it
+A **provider** is a coding CLI that Code2 drives. Code2 doesn't reimplement any agent logic — it
 launches the CLI (or its ACP adapter) as a subprocess and speaks the **Agent Client Protocol (ACP)**
 over its stdin/stdout.
 
 ## The Agent Client Protocol
 
 ACP is an open, JSON-RPC-over-stdio protocol that decouples editors/apps from coding agents (think
-"LSP for agents"). codeTwo implements the client side of the standard loop:
+"LSP for agents"). Code2 implements the client side of the standard loop:
 
 ```
 initialize → session/new → session/prompt → stream session/update
@@ -36,7 +36,7 @@ dependency. Claude Code has the richest ACP surface (diffs, terminals, plans, sl
 
 ## Availability & health
 
-On startup codeTwo checks whether each provider's launch command resolves on your `PATH` and shows a
+On startup Code2 checks whether each provider's launch command resolves on your `PATH` and shows a
 health dot in the config popover and at the foot of the session rail (green = available); the
 composer's provider chip carries an amber dot when the picked CLI is missing. A missing CLI is a
 clear state, not a crash — install the CLI and it lights up.
@@ -44,12 +44,12 @@ clear state, not a crash — install the CLI and it lights up.
 ## Models
 
 When an agent reports its models at `session/new`, the composer grows a **model chip** next to the
-provider — click it to switch, and codeTwo sends `session/set_model` and remembers the choice with
+provider — click it to switch, and Code2 sends `session/set_model` and remembers the choice with
 the session.
 
 ACP's model API is marked **UNSTABLE** in the spec and most adapters don't implement it yet. That's
 a normal state, not a failure: the picker says the provider doesn't expose models and the model
-stays whatever the CLI itself is configured to use. Nothing is faked — codeTwo never shows a model
+stays whatever the CLI itself is configured to use. Nothing is faked — Code2 never shows a model
 it can't actually switch.
 
 ## Adapter flags may vary
@@ -66,6 +66,6 @@ run `npx glm-acp-agent --setup` once to store a key.
 
 ## MCP tools
 
-Providers that support MCP can be given extra tools at session start. In codeTwo, MCP servers come
+Providers that support MCP can be given extra tools at session start. In Code2, MCP servers come
 from **MCP skills** — see [Skills](/guide/editor#skill-kinds) and the
 [market](/guide/market)'s "Browser Tool" and "Filesystem Tool" entries.

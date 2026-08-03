@@ -8,7 +8,7 @@
  */
 export const en = {
   // app
-  "app.name": "codeTwo",
+  "app.name": "Code2",
 
   // rail — projects
   "rail.noProject": "No project selected",
@@ -121,7 +121,7 @@ export const en = {
   "settings.providers": "Providers",
   "settings.restoreDefaults": "Restore defaults",
   "settings.providersHint":
-    "The agent CLIs codeTwo can drive. Anything installed on your PATH shows a green dot.",
+    "The agent CLIs Code2 can drive. Anything installed on your PATH shows a green dot.",
   "settings.installed": "Installed",
   "settings.notInstalled": "CLI not found",
   "settings.needsNode": "Needs Node",
@@ -131,7 +131,7 @@ export const en = {
   "settings.themeDark": "Dark",
   "settings.themeSystem": "System",
   "settings.language": "Language",
-  "settings.languageHint": "System uses your OS language when codeTwo has a translation for it.",
+  "settings.languageHint": "System uses your OS language when Code2 has a translation for it.",
   "settings.terminal": "Terminal",
   "settings.termFont": "Font",
   "settings.termFontHint": "Any monospaced family installed on this machine.",
@@ -308,7 +308,7 @@ export type StringKey = keyof typeof en;
 
 /** Simplified Chinese. Typed against `en`, so an omission won't compile. */
 export const zhCN: Record<StringKey, string> = {
-  "app.name": "codeTwo",
+  "app.name": "Code2",
   "rail.noProject": "未选择项目",
   "rail.projectsEmpty": "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
   "rail.addProject": "添加项目…",
@@ -409,7 +409,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.generalHint": "应用的外观与语言，以及终端的显示设置。",
   "settings.providers": "供应商",
   "settings.restoreDefaults": "恢复默认",
-  "settings.providersHint": "codeTwo 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
+  "settings.providersHint": "Code2 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
   "settings.installed": "已安装",
   "settings.notInstalled": "未找到 CLI",
   "settings.needsNode": "需要 Node",
@@ -419,7 +419,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.themeDark": "深色",
   "settings.themeSystem": "跟随系统",
   "settings.language": "语言",
-  "settings.languageHint": "「跟随系统」会在 codeTwo 有对应翻译时使用系统语言。",
+  "settings.languageHint": "「跟随系统」会在 Code2 有对应翻译时使用系统语言。",
   "settings.terminal": "终端",
   "settings.termFont": "字体",
   "settings.termFontHint": "本机安装的任意等宽字体。",

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- codeTwo app icon: a document sheet carrying a shell prompt, backed by a
+  <!-- Code2 app icon: a document sheet carrying a shell prompt, backed by a
        second sheet (the "two" - one document, many agents).
        Geometry follows the classic macOS icon grid: the squircle occupies
        824x824 centred in a 1024 canvas. macOS 26 upscales legacy .icns art by

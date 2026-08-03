@@ -1,6 +1,6 @@
 # Permissions & YOLO
 
-When an agent wants to run a command or edit files, ACP asks the client for permission. codeTwo
+When an agent wants to run a command or edit files, ACP asks the client for permission. Code2
 decides how to respond based on the session's **permission mode** and any rules.
 
 ## Modes
@@ -35,7 +35,7 @@ This mirrors Codex's approval-policy × sandbox split.
 ## The permission prompt
 
 In Ask mode, a modal appears with the tool's summary and the agent's offered options (e.g. *Allow* /
-*Reject*). The turn stays paused until you answer — codeTwo parks the request and resumes the moment
+*Reject*). The turn stays paused until you answer — Code2 parks the request and resumes the moment
 you decide.
 
 ## How decisions are made
