@@ -4,6 +4,7 @@ import {
   ArchiveRestore,
   Check,
   ChevronDown,
+  ChevronRight,
   Folder,
   FolderPlus,
   PanelLeft,
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
+import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
@@ -90,7 +92,7 @@ export function SessionRail({
   onRemoveProject: (path: string) => void;
   /** Every live session; the rail shows the active project's, newest first. */
   sessions: SessionInfo[];
-  /** Archived sessions, shown as their own labelled group below the live ones. */
+  /** Archived sessions, shown as their own collapsible group below the live ones. */
   archivedSessions: SessionInfo[];
   /** Newest text per session id — the row's description line. */
   previews: Record<string, string>;
@@ -180,6 +182,10 @@ export function SessionRail({
   );
   const recent = useMemo(() => forProject(sessions), [forProject, sessions]);
   const archived = useMemo(() => forProject(archivedSessions), [forProject, archivedSessions]);
+
+  // Folded by default: archived threads are reference material, not the working set, so they
+  // shouldn't compete with the live rows for attention. The fold survives a restart.
+  const [archivedOpen, setArchivedOpen] = usePersistedBoolean("rail.archivedOpen", false);
 
   /** Muted label over a group of rows — Active, Archived. */
   const groupLabel = (label: string) => (
@@ -439,10 +445,25 @@ export function SessionRail({
               )}
               {archived.length > 0 && (
                 <>
-                  {groupLabel(t("rail.groupArchived"))}
-                  <div className="space-y-px opacity-80">
-                    {archived.map((s) => sessionRow(s, true))}
-                  </div>
+                  {/* Same face as a group label, but it folds — archived rows only take space
+                      (and attention) when asked for. */}
+                  <button
+                    aria-expanded={archivedOpen}
+                    title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
+                    onClick={() => setArchivedOpen(!archivedOpen)}
+                    className="flex w-full items-center gap-1 rounded px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80 transition-colors hover:text-foreground"
+                  >
+                    <span>{t("rail.groupArchived")}</span>
+                    <span className="font-normal text-muted-foreground/60">{archived.length}</span>
+                    <ChevronRight
+                      className={cn("size-3 shrink-0 transition-transform", archivedOpen && "rotate-90")}
+                    />
+                  </button>
+                  {archivedOpen && (
+                    <div className="space-y-px opacity-80">
+                      {archived.map((s) => sessionRow(s, true))}
+                    </div>
+                  )}
                 </>
               )}
             </>
