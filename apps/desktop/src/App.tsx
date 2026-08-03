@@ -8,6 +8,7 @@ import {
   browserContext,
   cancelTurn,
   compileDoc,
+  confirmNative,
   addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
@@ -76,6 +77,7 @@ import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
+import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { UsageModal } from "./usage/Usage";
 import type { SessionConfig } from "./session/config";
 import { SESSION_MODES, nextSessionMode, sessionMode, type SessionMode } from "./session/mode";
@@ -213,11 +215,10 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  // The right panel's file viewer: open tabs in open order, and which one is showing. Opening is
-  // read-only; `fileEditing` is the deliberate second step.
+  // The right panel's file editor: open tabs in open order, and which one is showing. Every tab
+  // is directly editable — unsaved-ness lives in files/dirty.ts, which the close guard reads.
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [fileEditing, setFileEditing] = useState(false);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
@@ -614,14 +615,13 @@ export default function App() {
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
-  /** Open a file as a tab in the right panel's viewer, and bring that panel to the front. */
+  /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
     (p: string) => {
       setOpenFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
       setActiveFile(p);
-      setFileEditing(false);
       setDockTab("files");
-      // The files surface is a viewer *and* a tree; at the dock's chat-sized default the code
+      // The files surface is an editor *and* a tree; at the dock's chat-sized default the code
       // column is a sliver. Take the room the document can spare, up to a readable measure.
       if (dockWidth < 640) setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
@@ -630,17 +630,22 @@ export default function App() {
   );
 
   const closeFileTab = useCallback(
-    (p: string) => {
+    async (p: string) => {
+      // Unsaved edits die with the tab — say so first, like any editor would.
+      if (isFileDirty(dirtyKey(cwd, p))) {
+        const name = p.split("/").pop() ?? p;
+        if (!(await confirmNative(t("files.confirmClose", { name })))) return;
+        markDirty(dirtyKey(cwd, p), false);
+      }
       const at = openFiles.indexOf(p);
       const next = openFiles.filter((x) => x !== p);
       setOpenFiles(next);
       // Closing the visible tab lands on its neighbour, not on an empty pane, VS Code-style.
       if (activeFile === p) {
         setActiveFile(next[Math.min(Math.max(at, 0), next.length - 1)] ?? null);
-        setFileEditing(false);
       }
     },
-    [openFiles, activeFile],
+    [openFiles, activeFile, cwd, t],
   );
 
   const stepSession = useCallback(
@@ -1172,13 +1177,8 @@ export default function App() {
             onOpenFile={openFileTab}
             openFiles={openFiles}
             activeFile={activeFile}
-            onActiveFile={(p) => {
-              setActiveFile(p);
-              setFileEditing(false);
-            }}
+            onActiveFile={setActiveFile}
             onCloseFile={closeFileTab}
-            fileEditing={fileEditing}
-            onFileEditing={setFileEditing}
             width={dockWidth}
             onWidth={setDockWidth}
           />

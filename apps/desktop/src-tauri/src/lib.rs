@@ -6,6 +6,7 @@
 //! `pty-output`.
 
 mod browser;
+mod lsp;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -871,6 +872,7 @@ pub fn run() {
                 ptys: Mutex::new(HashMap::new()),
                 remote: Mutex::new(None),
             });
+            app.manage(lsp::LspState(Mutex::new(HashMap::new())));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -955,8 +957,19 @@ pub fn run() {
             browser::browser_annotation_count,
             browser::browser_annotations_clear,
             browser::browser_close,
-            browser::browser_close_all
+            browser::browser_close_all,
+            lsp::lsp_start,
+            lsp::lsp_send
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running codeTwo");
+        .build(tauri::generate_context!())
+        .expect("error while running codeTwo")
+        .run(|app, event| {
+            // Language servers are real children with real index threads; leaving them orphaned
+            // on quit is how a machine ends up with four rust-analyzers and no editor.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app.try_state::<lsp::LspState>() {
+                    state.kill_all();
+                }
+            }
+        });
 }

@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { copyPath, createDir, createFile, deletePath, listDir, renamePath, type DirEntry } from "../bridge";
+import { confirmNative, copyPath, createDir, createFile, deletePath, listDir, renamePath, type DirEntry } from "../bridge";
 import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
@@ -294,12 +294,13 @@ export function FilePanel({
 
       <ContextMenuItem
         variant="destructive"
-        onSelect={() => {
+        onSelect={async () => {
           // Deleting a folder takes everything in it, so the confirmation says which and how much.
+          // Native dialog, not window.confirm — wry's stub would silently answer "yes".
           const message = entry.is_dir
             ? t("files.confirmDeleteFolder", { name: entry.name })
             : t("files.confirmDelete", { name: entry.name });
-          if (!window.confirm(message)) return;
+          if (!(await confirmNative(message))) return;
           if (cwd) void run(deletePath(cwd, entry.path), t("files.deleted", { name: entry.name }));
         }}
       >
