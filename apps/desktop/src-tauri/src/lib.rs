@@ -21,6 +21,7 @@ use codetwo_core::models::builtin_models;
 use codetwo_core::permission::{PermissionMode, SandboxPolicy};
 use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
+use codetwo_core::harness;
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::store::Project;
 use codetwo_core::workspace::DirEntry;
@@ -62,6 +63,9 @@ struct AppState {
     engine: Arc<Engine>,
     events: broadcast::Sender<Event>,
     skills_dir: PathBuf,
+    /// Last workspace the frontend listed skills for; harness skill discovery scans its
+    /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
+    skills_cwd: Mutex<Option<PathBuf>>,
     keymap: Mutex<Keymap>,
     keymap_path: PathBuf,
     ptys: Mutex<HashMap<String, TerminalHandle>>,
@@ -70,12 +74,15 @@ struct AppState {
     remote_auth_path: PathBuf,
 }
 
-/// Rebuild the live skill library from built-ins + `<data>/skills/*.json` after an add/remove.
+/// Rebuild the live skill library: built-ins + `<data>/skills/*.json` + skills auto-discovered
+/// from the harness directories (~/.claude/skills, .codex/skills, …) of the current workspace.
 fn reload_skills(state: &AppState) {
     let mut v = builtin_skills();
     if let Ok(loaded) = SkillLibrary::load_dir(&state.skills_dir) {
         v.extend(loaded.all().cloned());
     }
+    let cwd = state.skills_cwd.lock().unwrap().clone();
+    v.extend(harness::discover(cwd.as_deref()));
     state.engine.set_skills(SkillLibrary::new(v));
 }
 
@@ -97,6 +104,8 @@ struct SkillInfo {
     description: String,
     icon: Option<String>,
     kind: String,
+    /// Harness display name ("Claude Code" …) for auto-discovered skills; `None` for library ones.
+    source: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -185,18 +194,29 @@ fn list_sessions(state: State<'_, AppState>) -> Vec<Session> {
 }
 
 #[tauri::command]
-fn list_skills(state: State<'_, AppState>) -> Vec<SkillInfo> {
+fn list_skills(state: State<'_, AppState>, cwd: Option<String>) -> Vec<SkillInfo> {
+    // A cwd means the frontend switched (or confirmed) its workspace: rescan the harness skill
+    // directories so project-level skills track the project the user is actually in.
+    if let Some(c) = cwd {
+        *state.skills_cwd.lock().unwrap() = Some(PathBuf::from(c));
+        reload_skills(&state);
+    }
     let lib = state.engine.skills();
     let lib = lib.lock().unwrap();
-    lib.all()
+    let mut out: Vec<SkillInfo> = lib
+        .all()
         .map(|s| SkillInfo {
             id: s.id.clone(),
             name: s.name.clone(),
             description: s.description.clone(),
             icon: s.icon.clone(),
             kind: kind_str(s.kind()),
+            source: harness::source_label(&s.id).map(str::to_string),
         })
-        .collect()
+        .collect();
+    // Library skills first, then each harness's group, name-sorted — the map iterates randomly.
+    out.sort_by(|a, b| (a.source.as_deref(), &a.name).cmp(&(b.source.as_deref(), &b.name)));
+    out
 }
 
 #[tauri::command]
@@ -919,6 +939,9 @@ pub fn run() {
             if let Ok(loaded) = SkillLibrary::load_dir(&skills_dir) {
                 skill_vec.extend(loaded.all().cloned());
             }
+            // User-level harness skills only for now; project-level ones join on the first
+            // `list_skills` call that carries a workspace.
+            skill_vec.extend(harness::discover(None));
             let skills = SkillLibrary::new(skill_vec);
 
             let (engine, mut rx) = Engine::with_store(default_registry(), skills, store);
@@ -959,6 +982,7 @@ pub fn run() {
                 engine,
                 events,
                 skills_dir,
+                skills_cwd: Mutex::new(None),
                 keymap: Mutex::new(keymap),
                 keymap_path,
                 ptys: Mutex::new(HashMap::new()),

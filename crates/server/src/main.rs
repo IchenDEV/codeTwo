@@ -32,7 +32,10 @@ async fn main() -> std::io::Result<()> {
     let dir = data_dir();
     std::fs::create_dir_all(&dir).ok();
     let store = Store::open(dir.join("codetwo.db").to_string_lossy().as_ref()).ok().map(Arc::new);
-    let skills = SkillLibrary::new(builtin_skills());
+    // Headless: sessions pick their cwd later, so only user-level harness skill dirs are scanned.
+    let mut skill_vec = builtin_skills();
+    skill_vec.extend(codetwo_core::harness::discover(None));
+    let skills = SkillLibrary::new(skill_vec);
     let (engine, rx) = match store {
         Some(s) => Engine::with_store(default_registry(), skills, s),
         None => Engine::new(default_registry(), skills),

@@ -356,7 +356,6 @@ export default function App() {
         }
       })
       .catch(() => {});
-    listSkills().then(setSkills).catch(() => {});
     refreshSessions();
 
     let unlisten: (() => void) | null = null;
@@ -514,9 +513,15 @@ export default function App() {
     [sessions, archivedSessions, providers],
   );
 
+  // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
+  // for the project the user is in, so the list refreshes on mount and on every project switch.
   const refreshSkills = useCallback(() => {
-    listSkills().then(setSkills).catch(() => {});
-  }, []);
+    listSkills(cwd || ".").then(setSkills).catch(() => {});
+  }, [cwd]);
+
+  useEffect(() => {
+    refreshSkills();
+  }, [refreshSkills]);
 
   const saveDraft = useCallback(async () => {
     if (!skillDraft || skillDraft.name.trim().length === 0) return;
