@@ -29,6 +29,10 @@
       #sessions { display: flex; gap: 6px; overflow-x: auto; padding: 6px 8px; background: #12151b; }
       .sess { border: 1px solid #2b2f38; border-radius: 999px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
       .sess.active { background: #1e2a4a; border-color: #2563eb; }
+      #pairing { position: fixed; inset: 0; background: #0f1115; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
+      #pairing.show { display: flex; }
+      #pairing h2 { margin: 0; }
+      #pairing p { color: #9ca3af; max-width: 420px; line-height: 1.5; margin: 0; }
     </style>
   </head>
   <body>
@@ -51,16 +55,26 @@
         <button class="run" id="run">Run ▸</button>
       </div>
     </main>
+    <div id="pairing">
+      <h2>Not paired</h2>
+      <p id="pairing-msg">
+        This device isn't paired with the codeTwo server. Open the one-time pairing link (or scan
+        the QR code) shown in the desktop app under <b>Remote control</b>, or by <code>codetwo-server</code>
+        in the terminal.
+      </p>
+    </div>
     <script>
-      const token = new URLSearchParams(location.search).get("token") || "";
+      const BEARER_KEY = "codetwo.remote.bearer";
       const log = document.getElementById("log");
       const statusDot = document.getElementById("status");
       const sessionsEl = document.getElementById("sessions");
       const permEl = document.getElementById("perm");
+      const pairingEl = document.getElementById("pairing");
       let active = null;
       let pending = null;
       let sessions = [];
       let ws;
+      let retryTimer = null;
 
       function add(text, cls) {
         const d = document.createElement("div");
@@ -75,19 +89,108 @@
           const b = document.createElement("div");
           b.className = "sess" + (s.id === active ? " active" : "");
           b.textContent = s.title || s.id.slice(0, 6);
-          b.onclick = () => { active = s.id; renderSessions(); };
+          b.onclick = () => selectSession(s.id);
           sessionsEl.appendChild(b);
         });
       }
-      function send(op) { ws && ws.readyState === 1 && ws.send(JSON.stringify(op)); }
+      function selectSession(id) {
+        active = id;
+        renderSessions();
+        log.innerHTML = "";
+        send({ req: "transcript", session: id });
+      }
+      function renderPart(role, part) {
+        switch (part.kind) {
+          case "text": add(part.text, role === "user" ? "user" : "agent"); break;
+          case "reasoning": add(part.text, "thought"); break;
+          case "tool_call": add(`⚙ ${part.title || part.id} — ${part.status}`, "tool"); break;
+          case "plan": add("☰ " + (part.entries || []).join("\n"), "tool"); break;
+        }
+      }
+      function send(msg) { ws && ws.readyState === 1 && ws.send(JSON.stringify(msg)); }
 
-      function connect() {
-        ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(token)}`);
-        ws.onopen = () => { statusDot.classList.add("on"); add("connected", "sys"); };
-        ws.onclose = () => { statusDot.classList.remove("on"); add("disconnected — retrying…", "sys"); setTimeout(connect, 1500); };
+      function deviceName() {
+        const ua = navigator.userAgent;
+        if (/iPhone/.test(ua)) return "iPhone";
+        if (/iPad/.test(ua)) return "iPad";
+        if (/Android/.test(ua)) return "Android";
+        if (/Macintosh/.test(ua)) return "Mac browser";
+        if (/Windows/.test(ua)) return "Windows browser";
+        if (/Linux/.test(ua)) return "Linux browser";
+        return "Browser";
+      }
+      function showPairing(msg) {
+        statusDot.classList.remove("on");
+        if (msg) document.getElementById("pairing-msg").textContent = msg;
+        pairingEl.classList.add("show");
+      }
+
+      // Pairing: a one-time token arrives in the URL fragment, is exchanged once for a per-device
+      // bearer, and the fragment is scrubbed from the address bar / history.
+      async function maybePair() {
+        const m = location.hash.match(/token=([^&]+)/);
+        if (!m) return false;
+        history.replaceState(null, "", location.pathname);
+        try {
+          const r = await fetch("/api/pair", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: decodeURIComponent(m[1]), device_name: deviceName() }),
+          });
+          if (!r.ok) { showPairing("That pairing link is invalid or has expired. Generate a fresh one from the desktop app."); return true; }
+          const { bearer } = await r.json();
+          localStorage.setItem(BEARER_KEY, bearer);
+          add("paired ✓", "sys");
+        } catch (e) {
+          showPairing("Pairing failed: " + e);
+        }
+        return true;
+      }
+
+      // Connecting: the stored bearer buys a short-lived single-use ticket; only the ticket ever
+      // appears in the socket URL.
+      async function connect() {
+        retryTimer = null;
+        const bearer = localStorage.getItem(BEARER_KEY);
+        if (!bearer) { showPairing(); return; }
+        let ticket;
+        try {
+          const r = await fetch("/api/ws-ticket", { method: "POST", headers: { Authorization: "Bearer " + bearer } });
+          if (r.status === 401) {
+            localStorage.removeItem(BEARER_KEY);
+            showPairing("This device's access was revoked or reset. Pair again with a fresh link from the desktop app.");
+            return;
+          }
+          if (!r.ok) throw new Error("ticket request failed: " + r.status);
+          ticket = (await r.json()).ticket;
+        } catch (e) {
+          statusDot.classList.remove("on");
+          scheduleRetry();
+          return;
+        }
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(`${proto}//${location.host}/ws?ticket=${encodeURIComponent(ticket)}`);
+        ws.onopen = () => { pairingEl.classList.remove("show"); statusDot.classList.add("on"); add("connected", "sys"); };
+        ws.onclose = () => { statusDot.classList.remove("on"); add("disconnected — retrying…", "sys"); scheduleRetry(); };
         ws.onmessage = (m) => {
           const msg = JSON.parse(m.data);
-          if (msg.kind === "sessions") { sessions = msg.sessions || []; if (!active && sessions[0]) active = sessions[0].id; renderSessions(); return; }
+          if (msg.kind === "sessions") {
+            sessions = msg.sessions || [];
+            if (!active && sessions[0]) selectSession(sessions[0].id);
+            else renderSessions();
+            return;
+          }
+          if (msg.kind === "transcript") {
+            if (msg.session !== active) return;
+            log.innerHTML = "";
+            (msg.parts || []).forEach((p) => renderPart(p.role, p.part));
+            return;
+          }
+          if (msg.kind === "lagged") {
+            add(`⚠ connection lagged — ${msg.missed} event(s) dropped, resyncing…`, "sys");
+            if (active) send({ req: "transcript", session: active });
+            return;
+          }
           if (msg.kind !== "event") return;
           const ev = msg.event;
           switch (ev.event) {
@@ -95,15 +198,18 @@
               active = ev.session; sessions.unshift({ id: ev.session, title: "session" }); renderSessions();
               if (pending) { send({ op: "prompt", session: ev.session, doc: pending }); pending = null; }
               break;
-            case "agent_text": add(ev.text, "agent"); break;
-            case "agent_thought": add(ev.text, "thought"); break;
-            case "tool_call": add(`⚙ ${ev.title || ev.id} — ${ev.status}`, "tool"); break;
-            case "plan": add("☰ " + (ev.entries || []).join("\n"), "tool"); break;
+            case "agent_text": if (ev.session === active) add(ev.text, "agent"); break;
+            case "agent_thought": if (ev.session === active) add(ev.text, "thought"); break;
+            case "tool_call": if (ev.session === active) add(`⚙ ${ev.title || ev.id} — ${ev.status}`, "tool"); break;
+            case "plan": if (ev.session === active) add("☰ " + (ev.entries || []).join("\n"), "tool"); break;
             case "permission_request": showPerm(ev); break;
-            case "turn_ended": add(`— turn ended: ${ev.stop_reason}`, "sys"); break;
+            case "turn_ended": if (ev.session === active) add(`— turn ended: ${ev.stop_reason}`, "sys"); break;
             case "error": add("✗ " + ev.message, "err"); break;
           }
         };
+      }
+      function scheduleRetry() {
+        if (!retryTimer) retryTimer = setTimeout(connect, 1500);
       }
       function showPerm(ev) {
         permEl.classList.add("show");
@@ -136,7 +242,8 @@
       document.getElementById("run").onclick = run;
       document.getElementById("new").onclick = () => newSession(null);
       document.getElementById("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); });
-      connect();
+
+      maybePair().then(() => connect());
     </script>
   </body>
 </html>

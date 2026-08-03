@@ -1,38 +1,93 @@
-//! The remote-control server, tested offline: token auth (wrong token rejected) and a full
-//! Op-in → Event-out round-trip over a real WebSocket, driving the real engine.
+//! The remote-control server, tested offline against the real engine: the full pairing flow
+//! (one-time token → bearer → single-use ws ticket), revocation, and an Op-in → Event-out
+//! round-trip over a real WebSocket.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::Engine;
-use codetwo_server::{bind_and_serve, fanout};
+use codetwo_server::{bind_and_serve, fanout, AuthState, DEFAULT_PAIRING_TTL};
 use futures_util::{SinkExt, StreamExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message;
 
+/// Minimal HTTP/1.1 request over a raw socket — enough for the tiny JSON API, no client dep.
+async fn http(addr: SocketAddr, method: &str, path: &str, auth: Option<&str>, body: &str) -> (u16, String) {
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let auth_header = auth.map(|b| format!("Authorization: Bearer {b}\r\n")).unwrap_or_default();
+    let req = format!(
+        "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\nContent-Type: application/json\r\n{auth_header}Content-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(req.as_bytes()).await.unwrap();
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.unwrap();
+    let text = String::from_utf8_lossy(&raw).to_string();
+    let status: u16 = text.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let body = text.split_once("\r\n\r\n").map(|(_, b)| b.to_string()).unwrap_or_default();
+    (status, body)
+}
+
+fn json_field(body: &str, field: &str) -> String {
+    let v: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+    v.get(field).and_then(|x| x.as_str()).unwrap_or_default().to_string()
+}
+
 #[tokio::test]
-async fn ws_auth_and_op_event_roundtrip() {
+async fn pairing_ticket_and_op_event_roundtrip() {
     let (engine, rx) = Engine::new(default_registry(), SkillLibrary::new(builtin_skills()));
     let events = fanout(rx);
+    let auth = Arc::new(AuthState::load(None));
+    let pairing_token = auth.issue_pairing_token(DEFAULT_PAIRING_TTL);
     let (addr, _handle) = bind_and_serve(
         Arc::new(engine),
         events,
         "127.0.0.1:0".parse().unwrap(),
-        "secret".into(),
+        auth.clone(),
     )
     .await
     .unwrap();
 
-    // Wrong token → handshake rejected.
-    let bad = format!("ws://{addr}/ws?token=nope");
+    // Bad pairing token → 401.
+    let (status, _) = http(addr, "POST", "/api/pair", None, r#"{"token":"nope","device_name":"x"}"#).await;
+    assert_eq!(status, 401);
+
+    // Good pairing token → bearer. Second use of the same token → 401 (single use).
+    let body = format!(r#"{{"token":"{pairing_token}","device_name":"Test phone"}}"#);
+    let (status, reply) = http(addr, "POST", "/api/pair", None, &body).await;
+    assert_eq!(status, 200, "pairing failed: {reply}");
+    let bearer = json_field(&reply, "bearer");
+    assert!(!bearer.is_empty());
+    let (status, _) = http(addr, "POST", "/api/pair", None, &body).await;
+    assert_eq!(status, 401, "pairing token must be single use");
+
+    // Bad bearer → 401; good bearer → ticket.
+    let (status, _) = http(addr, "POST", "/api/ws-ticket", Some("wrong"), "").await;
+    assert_eq!(status, 401);
+    let (status, reply) = http(addr, "POST", "/api/ws-ticket", Some(&bearer), "").await;
+    assert_eq!(status, 200);
+    let ticket = json_field(&reply, "ticket");
+
+    // No/stale ticket → handshake rejected.
+    let bad = format!("ws://{addr}/ws?ticket=nope");
     assert!(tokio_tungstenite::connect_async(bad.as_str()).await.is_err());
 
-    // Right token → welcome, then an Op that yields an Event.
-    let good = format!("ws://{addr}/ws?token=secret");
+    // Fresh ticket → welcome, then an Op that yields an Event.
+    let good = format!("ws://{addr}/ws?ticket={ticket}");
     let (mut ws, _) = tokio_tungstenite::connect_async(good.as_str()).await.unwrap();
+
+    // The ticket is consumed — reusing it must fail.
+    assert!(tokio_tungstenite::connect_async(good.as_str()).await.is_err(), "ws ticket must be single use");
 
     let first = ws.next().await.unwrap().unwrap().into_text().unwrap();
     assert!(first.contains("\"kind\":\"sessions\""), "expected welcome, got: {first}");
+
+    // A transcript request round-trips (empty transcript for an unknown session).
+    ws.send(Message::Text(r#"{"req":"transcript","session":"none"}"#.into())).await.unwrap();
+    let reply = ws.next().await.unwrap().unwrap().into_text().unwrap();
+    assert!(reply.contains("\"kind\":\"transcript\""), "expected transcript, got: {reply}");
 
     // Unknown provider → the engine emits Event::Error synchronously.
     let op = serde_json::json!({
@@ -55,4 +110,10 @@ async fn ws_auth_and_op_event_roundtrip() {
         }
     }
     assert!(got_error, "expected an error event for the unknown provider");
+
+    // Revoking the device kills its bearer.
+    let device_id = auth.list_devices()[0].id.clone();
+    assert!(auth.revoke_device(&device_id));
+    let (status, _) = http(addr, "POST", "/api/ws-ticket", Some(&bearer), "").await;
+    assert_eq!(status, 401, "revoked device must not get tickets");
 }

@@ -30,10 +30,31 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::broadcast;
 
 #[derive(Serialize, Clone)]
-struct RemoteInfo {
+struct RemoteEndpoint {
+    label: String,
+    url: String,
+}
+
+#[derive(Serialize, Clone)]
+struct RemoteStatus {
+    port: u16,
+    endpoints: Vec<RemoteEndpoint>,
+}
+
+#[derive(Serialize)]
+struct RemotePairingLink {
     url: String,
     token: String,
+    expires_in: u64,
+    qr_svg: String,
+}
+
+/// The running remote server: its port, the live auth state (shared with the axum routes so we can
+/// mint pairing tokens and revoke devices while it runs), and the serve task for teardown.
+struct RemoteHandle {
     port: u16,
+    auth: Arc<codetwo_server::AuthState>,
+    task: tokio::task::JoinHandle<()>,
 }
 
 struct AppState {
@@ -43,7 +64,9 @@ struct AppState {
     keymap: Mutex<Keymap>,
     keymap_path: PathBuf,
     ptys: Mutex<HashMap<String, TerminalHandle>>,
-    remote: Mutex<Option<RemoteInfo>>,
+    remote: Mutex<Option<RemoteHandle>>,
+    /// Where paired remote devices persist (survives app restarts and server stop/start).
+    remote_auth_path: PathBuf,
 }
 
 /// Rebuild the live skill library from built-ins + `<data>/skills/*.json` after an add/remove.
@@ -306,36 +329,87 @@ fn market_install(state: State<'_, AppState>, id: String) -> Result<(), String> 
 
 // ---- remote control (F10) --------------------------------------------------------------------
 
-/// Start the remote-control server (idempotent), sharing this app's live engine so remote and local
-/// see the same sessions. Returns the pairing URL + token to open on another device.
+fn remote_endpoints(port: u16) -> Vec<RemoteEndpoint> {
+    let mut v = Vec::new();
+    if let Some(ip) = codetwo_server::local_ip() {
+        v.push(RemoteEndpoint { label: "LAN".into(), url: format!("http://{ip}:{port}/") });
+    }
+    v.push(RemoteEndpoint { label: "Loopback".into(), url: format!("http://127.0.0.1:{port}/") });
+    v
+}
+
+/// The auth state to operate on: the running server's live one, or (when stopped) a fresh view of
+/// the persisted device list so pairing management still works.
+fn remote_auth(state: &AppState) -> Arc<codetwo_server::AuthState> {
+    if let Some(h) = &*state.remote.lock().unwrap() {
+        return h.auth.clone();
+    }
+    Arc::new(codetwo_server::AuthState::load(Some(state.remote_auth_path.clone())))
+}
+
+/// Turn on network access (idempotent): serve this app's live engine on all interfaces so a paired
+/// device can drive the same sessions. Pairing links are minted separately (`remote_pairing_link`).
 #[tauri::command]
-async fn start_remote(state: State<'_, AppState>, port: Option<u16>) -> Result<RemoteInfo, String> {
+async fn start_remote(state: State<'_, AppState>, port: Option<u16>) -> Result<RemoteStatus, String> {
     {
-        let existing = state.remote.lock().unwrap().clone();
-        if let Some(info) = existing {
-            return Ok(info);
+        let guard = state.remote.lock().unwrap();
+        if let Some(h) = &*guard {
+            return Ok(RemoteStatus { port: h.port, endpoints: remote_endpoints(h.port) });
         }
     }
     let port = port.unwrap_or(4599);
     let addr: std::net::SocketAddr =
         format!("0.0.0.0:{port}").parse().map_err(|e: std::net::AddrParseError| e.to_string())?;
-    let token = uuid::Uuid::new_v4().simple().to_string();
-    let (local, _handle) =
-        codetwo_server::bind_and_serve(state.engine.clone(), state.events.clone(), addr, token.clone())
+    let auth = Arc::new(codetwo_server::AuthState::load(Some(state.remote_auth_path.clone())));
+    let (local, task) =
+        codetwo_server::bind_and_serve(state.engine.clone(), state.events.clone(), addr, auth.clone())
             .await
             .map_err(|e| e.to_string())?;
-    let info = RemoteInfo {
-        url: codetwo_server::pairing_url(local.port(), &token),
-        token,
-        port: local.port(),
-    };
-    *state.remote.lock().unwrap() = Some(info.clone());
-    Ok(info)
+    let status = RemoteStatus { port: local.port(), endpoints: remote_endpoints(local.port()) };
+    *state.remote.lock().unwrap() = Some(RemoteHandle { port: local.port(), auth, task });
+    Ok(status)
+}
+
+/// Turn off network access. Paired devices stay on disk and reconnect next time it's turned on.
+#[tauri::command]
+fn stop_remote(state: State<'_, AppState>) {
+    if let Some(h) = state.remote.lock().unwrap().take() {
+        h.task.abort();
+    }
 }
 
 #[tauri::command]
-fn remote_status(state: State<'_, AppState>) -> Option<RemoteInfo> {
-    state.remote.lock().unwrap().clone()
+fn remote_status(state: State<'_, AppState>) -> Option<RemoteStatus> {
+    state
+        .remote
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|h| RemoteStatus { port: h.port, endpoints: remote_endpoints(h.port) })
+}
+
+/// Mint a fresh one-time pairing link (URL with the token in the fragment + QR SVG). Each call is a
+/// new token; old links keep working until they expire or get used.
+#[tauri::command]
+fn remote_pairing_link(state: State<'_, AppState>, ttl_secs: Option<u64>) -> Result<RemotePairingLink, String> {
+    let guard = state.remote.lock().unwrap();
+    let h = guard.as_ref().ok_or("turn on network access first")?;
+    let ttl = std::time::Duration::from_secs(ttl_secs.unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()));
+    let token = h.auth.issue_pairing_token(ttl);
+    let url = codetwo_server::pairing_url(h.port, &token);
+    let qr_svg = codetwo_server::pairing_qr_svg(&url).unwrap_or_default();
+    Ok(RemotePairingLink { url, token, expires_in: ttl.as_secs(), qr_svg })
+}
+
+#[tauri::command]
+fn remote_devices(state: State<'_, AppState>) -> Vec<codetwo_server::DeviceInfo> {
+    remote_auth(&state).list_devices()
+}
+
+/// Revoke a paired device: its bearer (and any pending tickets) stop working immediately.
+#[tauri::command]
+fn remote_revoke_device(state: State<'_, AppState>, id: String) -> bool {
+    remote_auth(&state).revoke_device(&id)
 }
 
 // ---- issues (F14) ----------------------------------------------------------------------------
@@ -850,12 +924,21 @@ pub fn run() {
                 }
             });
 
-            // Pump broadcast events to the frontend.
+            // Pump broadcast events to the frontend. A lag burst must not kill the pump — skip the
+            // dropped events and keep going (the webview re-syncs from the store on next load).
             let handle = app.handle().clone();
             let mut sub = events.subscribe();
             tauri::async_runtime::spawn(async move {
-                while let Ok(ev) = sub.recv().await {
-                    let _ = handle.emit("engine-event", ev);
+                loop {
+                    match sub.recv().await {
+                        Ok(ev) => {
+                            let _ = handle.emit("engine-event", ev);
+                        }
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            eprintln!("engine-event pump lagged; dropped {n} events");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
                 }
             });
 
@@ -870,6 +953,7 @@ pub fn run() {
                 keymap_path,
                 ptys: Mutex::new(HashMap::new()),
                 remote: Mutex::new(None),
+                remote_auth_path: data_dir.join("remote-devices.json"),
             });
             Ok(())
         })
@@ -895,7 +979,11 @@ pub fn run() {
             market_catalog,
             market_install,
             start_remote,
+            stop_remote,
             remote_status,
+            remote_pairing_link,
+            remote_devices,
+            remote_revoke_device,
             tmux_available,
             gh_available,
             list_github_issues,

@@ -15,7 +15,9 @@ Tagged by `op`:
 | `cancel` | `session` | interrupt the current turn |
 | `answer_permission` | `session`, `request_id`, `option_id` | answer a permission request (`option_id: null` = cancel) |
 | `set_permission_mode` | `session`, `mode` | `ask` / `accept_edits` / `yolo` |
+| `set_sandbox` | `session`, `sandbox` | what the agent may touch (Codex-style sandbox axis) |
 | `set_model` | `session`, `model` | set the session model |
+| `set_config_option` | `session`, `config_id`, `value` | set an agent-reported session config option |
 
 `provider` is one of `claude_code`, `codex`, `grok`, `cursor`, `opencode`, `pi`, `kimi`, `zcode`, or
 `{"custom":"…"}`.
@@ -45,8 +47,18 @@ Tagged by `event`:
 | `plan` | `session`, `entries` |
 | `permission_request` | `session`, `request_id`, `title`, `options` (`[id, label]` pairs) |
 | `usage` | `session`, `input_tokens`, `output_tokens` |
+| `models` | `session`, `available`, `current` |
+| `config_options` | `session`, `options` |
 | `turn_ended` | `session`, `stop_reason` |
 | `error` | `session`, `message` |
+
+## Over the wire (remote server)
+
+The remote server speaks this same protocol over WebSocket, wrapped in a thin envelope: events
+arrive as `{"kind":"event","event":{…}}`, and clients send bare `Op` objects. Clients can also send
+`{"req":"transcript","session":"…"}` or `{"req":"sessions"}` to fetch a session's persisted
+transcript or a fresh session list. See [`codetwo-server`](/reference/server) for the framing and
+the pairing/auth flow.
 
 ## Permission parking
 
