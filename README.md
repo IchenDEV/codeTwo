@@ -45,8 +45,8 @@ cargo test -p codetwo-core -p codetwo-tui
 cargo run -p codetwo-tui
 
 # Remote control: run the headless server, then open the printed URL/QR on another device
-cargo run -p codetwo-server            # prints a pairing URL + token + QR
-#   env: CODETWO_HOST (0.0.0.0), CODETWO_PORT (4599), CODETWO_TOKEN (random)
+cargo run -p codetwo-server            # prints a one-time pairing URL + token + QR
+#   env: CODETWO_HOST (0.0.0.0), CODETWO_PORT (4599), CODETWO_PAIR_TTL (900)
 
 # Desktop app (needs a display; spawns the frontend via Bun)
 cd apps/desktop && bun install && bun run tauri dev
@@ -54,10 +54,12 @@ cd apps/desktop && bun install && bun run tauri dev
 
 ## Remote control
 
-`codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a pairing token,
-and serves a small mobile web client at `/`. It shares `~/.codetwo/codetwo.db`, so it sees the same
-sessions as the desktop app. From the desktop you can also start it in-process (Command palette →
-"Remote control") sharing the *live* engine, so remote and local drive the same running sessions.
+`codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a t3code-style
+pairing flow — a one-time pairing link (QR) is exchanged for a per-device bearer, which buys
+single-use WebSocket tickets; devices persist and can be revoked — and serves a small mobile web
+client at `/`. It shares `~/.codetwo/codetwo.db`, so it sees the same sessions as the desktop app.
+From the desktop you can also start it in-process (Command palette → "Remote control" → turn on
+network access) sharing the *live* engine, so remote and local drive the same running sessions.
 
 To actually drive an agent, one provider must be on PATH: `grok` (native ACP), or Node for
 `npx @agentclientprotocol/claude-agent-acp` (Claude Code) / `npx @zed-industries/codex-acp` (Codex).

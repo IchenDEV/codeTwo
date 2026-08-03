@@ -652,18 +652,55 @@ export async function marketInstall(id: string): Promise<void> {
 
 // ---- remote control (F10) --------------------------------------------------------------------
 
-export interface RemoteInfo {
+export interface RemoteEndpoint {
+  label: string;
+  url: string;
+}
+
+export interface RemoteStatus {
+  port: number;
+  endpoints: RemoteEndpoint[];
+}
+
+export interface RemotePairingLink {
   url: string;
   token: string;
-  port: number;
+  expires_in: number;
+  qr_svg: string;
 }
 
-export async function startRemote(port?: number): Promise<RemoteInfo | null> {
-  return inTauri ? invoke<RemoteInfo>("start_remote", { port: port ?? null }) : null;
+export interface RemoteDevice {
+  id: string;
+  name: string;
+  created_at: number;
+  last_seen: number;
 }
 
-export async function remoteStatus(): Promise<RemoteInfo | null> {
-  return inTauri ? invoke<RemoteInfo | null>("remote_status") : null;
+/** Turn on network access: serve the live engine on all interfaces (idempotent). */
+export async function startRemote(port?: number): Promise<RemoteStatus | null> {
+  return inTauri ? invoke<RemoteStatus>("start_remote", { port: port ?? null }) : null;
+}
+
+/** Turn off network access. Paired devices persist and reconnect next time. */
+export async function stopRemote(): Promise<void> {
+  if (inTauri) await invoke("stop_remote");
+}
+
+export async function remoteStatus(): Promise<RemoteStatus | null> {
+  return inTauri ? invoke<RemoteStatus | null>("remote_status") : null;
+}
+
+/** Mint a fresh one-time pairing link (URL + QR SVG). */
+export async function remotePairingLink(ttlSecs?: number): Promise<RemotePairingLink | null> {
+  return inTauri ? invoke<RemotePairingLink>("remote_pairing_link", { ttlSecs: ttlSecs ?? null }) : null;
+}
+
+export async function remoteDevices(): Promise<RemoteDevice[]> {
+  return inTauri ? invoke<RemoteDevice[]>("remote_devices") : [];
+}
+
+export async function remoteRevokeDevice(id: string): Promise<boolean> {
+  return inTauri ? invoke<boolean>("remote_revoke_device", { id }) : false;
 }
 
 // ---- issues (F14) ----------------------------------------------------------------------------

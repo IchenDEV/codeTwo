@@ -37,7 +37,6 @@ import {
   openProject,
   pickDirectory,
   providerLabel,
-  remoteStatus,
   removeProject,
   renameProject,
   renameSession,
@@ -64,7 +63,6 @@ import {
   type Project,
   type ProjectScript,
   type ProviderInfo,
-  type RemoteInfo,
   type Sandbox,
   type SessionInfo,
   type SkillInfo,
@@ -195,7 +193,6 @@ export default function App() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [showPalette, setShowPalette] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
-  const [remoteInfo, setRemoteInfo] = useState<RemoteInfo | null>(null);
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
@@ -807,7 +804,6 @@ export default function App() {
 
   useEffect(() => {
     getKeymap().then(setBindings).catch(() => {});
-    remoteStatus().then(setRemoteInfo).catch(() => {});
     // Open on the project used last. Failing that, register the directory the app started in, so
     // the picker is never empty and the first session has somewhere real to run.
     listProjects()
@@ -1229,7 +1225,7 @@ export default function App() {
         />
       )}
       {showPalette && <CommandPalette commands={paletteCommands} onClose={() => setShowPalette(false)} />}
-      {showRemote && <RemoteModal info={remoteInfo} onStarted={setRemoteInfo} onClose={() => setShowRemote(false)} />}
+      {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
       {showIssues && (
         <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
       )}
