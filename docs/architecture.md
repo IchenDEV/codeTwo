@@ -53,6 +53,27 @@ Prompt-turn loop: `initialize` → `session/new` → `session/prompt` → stream
 answer `session/request_permission` → read `StopReason`. Proven end-to-end offline by
 `crates/core/tests/acp_prompt_turn.rs` against a mock agent (no provider binary needed).
 
+## Context sync: whose memory is it?
+
+Two transcripts exist per conversation, and they are not the same thing (a distinction t3code's
+server makes explicit, and we adopt):
+
+- **The app-owned transcript** — messages/parts in SQLite. Canonical for *display*: it's what the
+  rail, the transcript pane, and any future remote frontend render, and it survives anything.
+- **The provider-native context** — the agent CLI's own session state (Claude Code's session
+  files, Codex's rollouts, …). Canonical for *the model's memory*: we never reconstruct or replay
+  it ourselves; we only hold a cursor to it — the ACP session id, persisted per session.
+
+On revive (a session prompted after an app restart), the engine re-attaches to that cursor with
+`session/load` when the agent advertised `loadSession` at `initialize` — the agent replays its
+history (dropped by the handler: the store already has it) and the conversation continues with the
+model's memory intact. No capability → straight to `session/new`, as before. A *failed* load falls
+back to `session/new` and emits a notice: the transcript is kept, the memory is not — degrade
+loudly, never silently. Model switches stay in-session (`session/set_model` /
+`session/set_config_option`); an agent that refuses gets an actionable error ("start a new session
+to use X") rather than a bare protocol failure. Cross-provider switches are not attempted at all:
+a session is bound to its provider, because no provider can read another's native context.
+
 ## Skills (the differentiator) — `core::skill`
 
 A skill has one of four kinds: `Fragment`, `AgentSkill`, `Mcp`, `Macro`. The document editor

@@ -9,13 +9,14 @@
 //! channel; the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::acp::wire::{
-    ContentBlock, PermissionOption, PermissionOutcome, RequestPermissionRequest,
+    AgentCaps, ContentBlock, PermissionOption, PermissionOutcome, RequestPermissionRequest,
     RequestPermissionResponse, SessionNotification, SessionUpdate,
 };
 use crate::acp::{self, AcpClient, ClientHandler};
@@ -59,6 +60,10 @@ pub struct SessionHandler {
     policy: Arc<Mutex<PermissionPolicy>>,
     router: PermissionRouter,
     store: Option<Arc<Store>>,
+    /// True while a `session/load` replay is in flight. The replayed history already lives in the
+    /// store and the UI, so updates arriving under this flag are dropped — neither re-persisted
+    /// nor re-emitted. Set/cleared by the engine around the `session/load` call.
+    replaying: Arc<AtomicBool>,
 }
 
 impl SessionHandler {
@@ -69,7 +74,12 @@ impl SessionHandler {
         router: PermissionRouter,
         store: Option<Arc<Store>>,
     ) -> Self {
-        Self { session_id, events, policy, router, store }
+        Self { session_id, events, policy, router, store, replaying: Arc::default() }
+    }
+
+    /// The shared flag that mutes this handler during a `session/load` replay.
+    pub fn replay_flag(&self) -> Arc<AtomicBool> {
+        self.replaying.clone()
     }
 
     fn emit(&self, event: Event) {
@@ -128,6 +138,10 @@ fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome 
 #[async_trait]
 impl ClientHandler for SessionHandler {
     async fn session_update(&self, note: SessionNotification) {
+        // History replayed by `session/load` is already persisted and rendered; drop it.
+        if self.replaying.load(Ordering::SeqCst) {
+            return;
+        }
         let session = self.session_id.clone();
         // Build the UI event and the persisted transcript part together, then emit + persist.
         let (event, part): (Option<Event>, Option<Part>) = match note.update {
@@ -211,6 +225,15 @@ struct SessionRuntime {
     /// `None` until the first prompt creates the ACP session (so MCP servers from the document
     /// attach at `session/new`).
     acp_session_id: Option<String>,
+    /// The resume cursor (t3code-style): a previous process's ACP session id, carried by a revived
+    /// session. When [`SessionRuntime::caps`] says the agent supports `session/load`, the first
+    /// prompt re-attaches to it — restoring the agent's conversation context — instead of running
+    /// `session/new` with a blank memory. Cleared once consumed (either way).
+    resume_acp_session_id: Option<String>,
+    /// What the agent advertised at `initialize`.
+    caps: AgentCaps,
+    /// Mutes this session's [`SessionHandler`] while `session/load` replays history.
+    replaying: Arc<AtomicBool>,
     cwd: String,
     policy: Arc<Mutex<PermissionPolicy>>,
     /// The models this session can be switched to: what the agent reported at `session/new`, or
@@ -334,10 +357,13 @@ impl Engine {
     }
 
     /// Re-arm a stored session whose runtime died with a previous process: respawn its provider
-    /// CLI and re-insert a [`SessionRuntime`]. The old ACP session id is dropped — the agent side
-    /// of that conversation died with its process — so the next prompt runs `session/new` again in
-    /// the session's cwd, and the app-side transcript carries the history. Without this, every
-    /// session in the rail is stranded the moment the app restarts.
+    /// CLI and re-insert a [`SessionRuntime`]. The stored ACP session id is kept as a resume
+    /// cursor — when the respawned agent advertises `session/load`, the next prompt re-attaches to
+    /// that session and the agent's own context survives the restart. When it doesn't (or the load
+    /// fails), the prompt falls back to `session/new`: the app-side transcript still carries the
+    /// history, but the agent starts with a clean memory — and the UI is told so, rather than
+    /// silently degrading. Without this, every session in the rail is stranded the moment the app
+    /// restarts.
     async fn revive_session(
         &self,
         id: &str,
@@ -366,17 +392,19 @@ impl Engine {
             self.state.router.clone(),
             self.state.store.clone(),
         ));
+        let replaying = handler.replay_flag();
         let client = acp::spawn(&prov.launch, handler)
             .await
             .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
-        client
+        let init = client
             .initialize(serde_json::json!({}))
             .await
             .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
         let client = Arc::new(client);
 
-        let mut sess = sess;
-        sess.acp_session_id = None;
+        // The stored ACP session id becomes the resume cursor; the live id stays unset until the
+        // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
+        let resume = sess.acp_session_id.clone();
         let cwd = sess.cwd.clone();
         let models = builtin_models(&prov.id);
         let current = sess.model.clone().unwrap_or_default();
@@ -386,6 +414,9 @@ impl Engine {
                 session: sess,
                 client: client.clone(),
                 acp_session_id: None,
+                resume_acp_session_id: resume,
+                caps: init.caps(),
+                replaying,
                 cwd: cwd.clone(),
                 policy,
                 models: models.clone(),
@@ -429,8 +460,9 @@ impl Engine {
                     self.state.store.clone(),
                 ));
 
+                let replaying = handler.replay_flag();
                 let client = acp::spawn(&prov.launch, handler).await?;
-                client.initialize(serde_json::json!({})).await?;
+                let init = client.initialize(serde_json::json!({})).await?;
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
@@ -452,6 +484,9 @@ impl Engine {
                         session: sess,
                         client: Arc::new(client),
                         acp_session_id: None,
+                        resume_acp_session_id: None,
+                        caps: init.caps(),
+                        replaying,
                         cwd: cwd_stored,
                         policy,
                         models: models.clone(),
@@ -526,6 +561,99 @@ impl Engine {
                             let _ = crate::git::checkpoint(p, &cp_msg).await;
                         }
                     });
+                }
+
+                // A revived session first tries to re-attach the previous process's ACP session
+                // (`session/load`) so the agent's own context survives the restart — the
+                // t3code-style resume cursor. Gated on the agent advertising `loadSession`;
+                // anything else falls through to `session/new` below.
+                if acp_sid.is_none() {
+                    let resume = {
+                        let map = self.state.sessions.lock().unwrap();
+                        map.get(&session).and_then(|r| {
+                            r.caps
+                                .load_session
+                                .then(|| r.resume_acp_session_id.clone())
+                                .flatten()
+                                .map(|id| (id, r.replaying.clone()))
+                        })
+                    };
+                    if let Some((resume_id, replaying)) = resume {
+                        let mcp: Vec<serde_json::Value> =
+                            compiled.mcp_servers.iter().map(|s| s.to_acp_json()).collect();
+                        // The agent replays the whole history before answering; the handler drops
+                        // it (it's already in the store and on screen).
+                        replaying.store(true, Ordering::SeqCst);
+                        let loaded = client.load_session(&resume_id, cwd.clone(), mcp).await;
+                        replaying.store(false, Ordering::SeqCst);
+                        match loaded {
+                            Ok(resp) => {
+                                let (models, current, options) = {
+                                    let mut map = self.state.sessions.lock().unwrap();
+                                    let mut models = Vec::new();
+                                    let mut current = String::new();
+                                    if let Some(r) = map.get_mut(&session) {
+                                        r.acp_session_id = Some(resume_id.clone());
+                                        r.session.acp_session_id = Some(resume_id.clone());
+                                        r.resume_acp_session_id = None;
+                                        if let Some(m) = &resp.models {
+                                            r.models = m
+                                                .available_models
+                                                .iter()
+                                                .map(|x| ModelChoice {
+                                                    id: x.model_id.clone(),
+                                                    name: x.name.clone(),
+                                                    description: x.description.clone(),
+                                                })
+                                                .collect();
+                                            r.models_reported = true;
+                                            current = m.current_model_id.clone();
+                                        }
+                                        models = r.models.clone();
+                                    }
+                                    let options = resp
+                                        .config_options
+                                        .as_deref()
+                                        .map(config_option_infos)
+                                        .unwrap_or_default();
+                                    (models, current, options)
+                                };
+                                if !models.is_empty() {
+                                    self.emit(Event::Models {
+                                        session: session.clone(),
+                                        available: models,
+                                        current,
+                                    });
+                                }
+                                if !options.is_empty() {
+                                    self.emit(Event::ConfigOptions {
+                                        session: session.clone(),
+                                        options,
+                                    });
+                                }
+                                acp_sid = Some(resume_id);
+                            }
+                            Err(e) => {
+                                // The cursor is dead (agent pruned the session, different install,
+                                // …). Fall back to `session/new`, and say so — the transcript is
+                                // kept, but the agent's memory of it is not. Never degrade
+                                // silently.
+                                {
+                                    let mut map = self.state.sessions.lock().unwrap();
+                                    if let Some(r) = map.get_mut(&session) {
+                                        r.resume_acp_session_id = None;
+                                    }
+                                }
+                                self.emit(Event::Error {
+                                    session: Some(session.clone()),
+                                    message: format!(
+                                        "couldn't restore this session's saved context (session/load: {e}); \
+                                         the transcript is kept, but the agent is starting with a fresh memory"
+                                    ),
+                                });
+                            }
+                        }
+                    }
                 }
 
                 // Lazily create the ACP session on the first prompt, attaching the document's MCP
@@ -716,9 +844,14 @@ impl Engine {
                 };
                 if let Some((client, Some(acp_sid))) = target {
                     if let Err(e) = client.set_model(&acp_sid, &model).await {
+                        // t3code's `requiresNewThreadForModelChange` honesty: the agent can't
+                        // change models mid-conversation, so say what *would* work instead of
+                        // leaving a bare protocol error.
                         self.emit(Event::Error {
                             session: Some(session),
-                            message: format!("{} doesn't support switching models: {e}", model),
+                            message: format!(
+                                "this agent can't switch models mid-session ({e}); start a new session to use {model}"
+                            ),
                         });
                         return Ok(());
                     }

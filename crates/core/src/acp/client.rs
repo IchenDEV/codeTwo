@@ -60,6 +60,31 @@ impl AcpClient {
             .await
     }
 
+    /// Re-attach a previous session by id (`session/load`), restoring the agent's conversation
+    /// context. Only meaningful when the agent advertised [`AgentCaps::load_session`] at
+    /// `initialize`. The agent replays the history as `session/update` notifications before this
+    /// resolves — callers that already hold the transcript should suppress their handler for the
+    /// duration. A `null` result is a success with nothing reported (older adapters).
+    pub async fn load_session(
+        &self,
+        session_id: &str,
+        cwd: impl Into<String>,
+        mcp_servers: Vec<Value>,
+    ) -> Result<LoadSessionResponse, AcpError> {
+        let r: Option<LoadSessionResponse> = self
+            .conn
+            .request(
+                "session/load",
+                LoadSessionRequest {
+                    session_id: session_id.to_string(),
+                    cwd: cwd.into(),
+                    mcp_servers,
+                },
+            )
+            .await?;
+        Ok(r.unwrap_or_default())
+    }
+
     /// Switch the session's model. `session/set_model` is UNSTABLE in the ACP spec and adapters
     /// that don't implement it answer with a method-not-found error — the caller is expected to
     /// surface that rather than treat it as fatal.
