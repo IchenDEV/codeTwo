@@ -211,6 +211,16 @@ export async function readText(cwd: string, path: string): Promise<string> {
   return inTauri ? invoke<string>("read_text", { cwd, path }) : "";
 }
 
+/**
+ * Raw bytes, for the image preview. Comes back over Tauri's binary IPC channel as an ArrayBuffer;
+ * older/other shapes (a plain number array) are normalized here so callers always get bytes.
+ */
+export async function readBinary(cwd: string, path: string): Promise<Uint8Array> {
+  if (!inTauri) return new Uint8Array();
+  const res = await invoke<ArrayBuffer | number[]>("read_binary", { cwd, path });
+  return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
+}
+
 export async function writeText(cwd: string, path: string, content: string): Promise<void> {
   if (inTauri) await invoke("write_text", { cwd, path, content });
 }
@@ -342,6 +352,23 @@ export async function onBrowserPopup(cb: (p: BrowserNav) => void): Promise<() =>
   return listen<BrowserNav>("browser-popup", (e) => cb(e.payload));
 }
 
+/**
+ * Native yes/no dialog. `window.confirm` is a silent always-true stub in wry's WKWebView (no
+ * JS-confirm delegate), which turns every "are you sure?" into "yes" — so anything destructive
+ * must come through here instead.
+ */
+export async function confirmNative(message: string): Promise<boolean> {
+  if (!inTauri) return window.confirm(message);
+  try {
+    const { confirm } = await import("@tauri-apps/plugin-dialog");
+    return await confirm(message, { kind: "warning" });
+  } catch (e) {
+    // A missing capability must fail closed: "no" loses nothing, "yes" can destroy work.
+    console.error("confirmNative:", e);
+    return false;
+  }
+}
+
 /** Hand a URL to the system's default browser. Outside Tauri, a plain new tab. */
 export async function openExternal(url: string): Promise<void> {
   if (inTauri) {
@@ -350,6 +377,37 @@ export async function openExternal(url: string): Promise<void> {
   } else {
     window.open(url, "_blank", "noopener");
   }
+}
+
+// ---- LSP bridge --------------------------------------------------------------------------------
+// The Rust side spawns real language servers (rust-analyzer, pyright, gopls, …) as children and
+// frames their stdio JSON-RPC; the frontend LSP client in src/lsp speaks the protocol. One server
+// per (binary, project) pair — the key names that pair.
+
+/** Spawn (or reuse) a language server for `lang` rooted at `cwd`. Null when none is installed. */
+export async function lspStart(cwd: string, lang: string): Promise<string | null> {
+  return inTauri ? invoke<string | null>("lsp_start", { cwd, lang }) : null;
+}
+
+/** Send one raw JSON-RPC message (already serialized) to the server behind `key`. */
+export async function lspSend(key: string, payload: string): Promise<void> {
+  if (inTauri) await invoke("lsp_send", { key, payload });
+}
+
+export interface LspMessage {
+  key: string;
+  payload: string;
+}
+
+export async function onLspMessage(cb: (p: LspMessage) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<LspMessage>("lsp-message", (e) => cb(e.payload));
+}
+
+/** The server process died or closed its pipe — the client for `key` is gone. */
+export async function onLspExit(cb: (key: string) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<string>("lsp-exit", (e) => cb(e.payload));
 }
 
 /** Newest text per session id, for the rail's preview line. */

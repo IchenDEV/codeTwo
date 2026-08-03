@@ -118,6 +118,24 @@ pub fn read_text(cwd: &Path, rel: &str) -> Result<String, std::io::Error> {
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "not valid UTF-8"))
 }
 
+/// Images are the one binary the file pane renders rather than refuses, so they get their own cap:
+/// a screenshot or a design export is routinely bigger than any text file we'd open.
+pub const MAX_IMAGE_BYTES: usize = 16_000_000;
+
+/// Read a file as raw bytes, for the image preview. Same path guard as everything else; no text
+/// check, because "this isn't text" is precisely the case this exists to serve.
+pub fn read_binary(cwd: &Path, rel: &str) -> Result<Vec<u8>, std::io::Error> {
+    let path = safe_path(cwd, rel)?;
+    let bytes = std::fs::read(&path)?;
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("file is {} MB — too large to preview here", bytes.len() / 1_000_000),
+        ));
+    }
+    Ok(bytes)
+}
+
 /// Overwrite a file's contents. The file must already exist — this saves an edit, it doesn't
 /// create, so a typo'd path fails loudly instead of leaving a stray file behind.
 pub fn write_text(cwd: &Path, rel: &str, content: &str) -> Result<(), std::io::Error> {

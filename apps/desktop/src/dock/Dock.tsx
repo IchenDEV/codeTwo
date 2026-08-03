@@ -13,6 +13,7 @@ import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
 import { FileViewer } from "../files/FileViewer";
+import { dirtyKey, useDirtyPaths } from "../files/dirty";
 import { onPtyTitle, ptyDump, ptyKill, type Annotation, type GitStatus } from "../bridge";
 import type { StringKey } from "../i18n/strings";
 import { Button } from "@/components/ui/button";
@@ -77,8 +78,6 @@ export function Dock({
   activeFile,
   onActiveFile,
   onCloseFile,
-  fileEditing,
-  onFileEditing,
   width,
   onWidth,
 }: {
@@ -108,14 +107,12 @@ export function Dock({
   activeFile: string | null;
   onActiveFile: (path: string) => void;
   onCloseFile: (path: string) => void;
-  /** Whether the active file is in edit mode — a deliberate second step past viewing. */
-  fileEditing: boolean;
-  onFileEditing: (v: boolean) => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
 }) {
   const t = useT();
+  const dirtyPaths = useDirtyPaths();
   const [terms, setTerms] = useState<number[]>([1]);
   const [activeTerm, setActiveTerm] = useState(1);
   const [nextTerm, setNextTerm] = useState(2);
@@ -391,6 +388,9 @@ export function Dock({
                   >
                     <FileText className="size-3.5 shrink-0" />
                     <span className="truncate">{name}</span>
+                    {cwd && dirtyPaths.has(dirtyKey(cwd, p)) && (
+                      <span className="size-1.5 shrink-0 rounded-full bg-warning" />
+                    )}
                     <X
                       className="size-3 shrink-0 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                       onClick={(e) => {
@@ -411,9 +411,8 @@ export function Dock({
                 key={activeFile}
                 cwd={cwd}
                 path={activeFile}
-                editing={fileEditing}
-                onEditing={onFileEditing}
                 onInsert={onInsertFile}
+                onOpen={onOpenFile}
                 onComment={onSendText}
               />
             ) : (
