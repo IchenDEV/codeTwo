@@ -21,6 +21,7 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod git;
+pub mod harness;
 pub mod issues;
 pub mod keymap;
 pub mod market;

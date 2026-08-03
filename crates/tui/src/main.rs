@@ -28,7 +28,11 @@ async fn main() -> std::io::Result<()> {
     let dir = data_dir();
     std::fs::create_dir_all(&dir).ok();
     let store = Store::open(dir.join("codetwo.db").to_string_lossy().as_ref()).ok().map(Arc::new);
-    let skills = SkillLibrary::new(builtin_skills());
+    // Built-ins plus whatever harness skill directories (~/.claude/skills, .codex/skills, …) exist
+    // here — the TUI runs inside the project, so its cwd is the workspace.
+    let mut skill_vec = builtin_skills();
+    skill_vec.extend(codetwo_core::harness::discover(std::env::current_dir().ok().as_deref()));
+    let skills = SkillLibrary::new(skill_vec.clone());
 
     let (engine, mut engine_rx) = match store {
         Some(store) => Engine::with_store(default_registry(), skills, store),
@@ -52,7 +56,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     let mut terminal = ratatui::init();
-    let mut app = App::new(default_registry(), builtin_skills());
+    let mut app = App::new(default_registry(), skill_vec);
     let result = run(&mut terminal, &mut app, &engine, &mut in_rx, &mut engine_rx).await;
     ratatui::restore();
     result

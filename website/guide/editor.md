@@ -33,6 +33,16 @@ cursor. You can insert several and interleave them with your own text.
 Each chip is a real document element carrying a `skillId`, so the document serializes deterministically
 — text runs become text, skill chips become skill blocks, in order.
 
+### Harness skills are discovered automatically
+
+The picker also lists the Agent Skills your installed harnesses already keep on disk, grouped per
+product: Claude Code's `~/.claude/skills/` and the project's `.claude/skills/`, Codex's
+`.codex/skills/`, OpenCode's `.opencode/skill/`, Cursor's `.cursor/skills/`. Each
+`<name>/SKILL.md` found becomes an **Agent Skill** entry (name and description read from its
+frontmatter) — type the skill's name after `/` and reference it without registering anything. A
+project-level skill shadows a user-level one of the same name, the directories are rescanned when
+you switch projects, and a product that isn't installed simply contributes nothing.
+
 ## `@` — mentioning files
 
 Type `@` to search the workspace and insert a **file mention**. At compile time the core reads that

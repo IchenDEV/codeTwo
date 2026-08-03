@@ -37,12 +37,14 @@ interface EditorProps {
   onEmptyChange: (empty: boolean) => void;
 }
 
-// The `/` "Skills" group, built from the live library. Picking one inserts a real inline skill node.
+// The `/` "Skills" group, built from the live library. Skills auto-discovered from a harness's
+// skill directory (~/.claude/skills, .codex/skills, …) carry a `source` and get their own group
+// per product. Picking one inserts a real inline skill node either way.
 function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSuggestionItem[] {
   return skills.map((s) => ({
     title: `Skill: ${s.name}`,
     subtext: s.description,
-    group: "Skills",
+    group: s.source ? `${s.source} skills` : "Skills",
     icon: <span style={{ fontSize: 18 }}>{s.icon ?? "✦"}</span>,
     onItemClick: () => {
       editor.insertInlineContent([

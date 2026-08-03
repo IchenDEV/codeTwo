@@ -19,6 +19,9 @@ export interface SkillInfo {
   description: string;
   icon: string | null;
   kind: string;
+  /// Harness display name ("Claude Code" …) for skills auto-discovered from a product's skill
+  /// directory; null for library skills.
+  source: string | null;
 }
 
 export interface SessionInfo {
@@ -151,18 +154,20 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
 ];
 
 const FALLBACK_SKILLS: SkillInfo[] = [
-  { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment" },
-  { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment" },
-  { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment" },
-  { id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro" },
+  { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment", source: null },
+  { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
+  { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment", source: null },
+  { id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null },
 ];
 
 export async function listProviders(): Promise<ProviderInfo[]> {
   return inTauri ? invoke<ProviderInfo[]>("list_providers") : FALLBACK_PROVIDERS;
 }
 
-export async function listSkills(): Promise<SkillInfo[]> {
-  return inTauri ? invoke<SkillInfo[]>("list_skills") : FALLBACK_SKILLS;
+/// Passing a cwd makes the core rescan that workspace's harness skill directories
+/// (.claude/skills, .codex/skills, …) before answering.
+export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
+  return inTauri ? invoke<SkillInfo[]>("list_skills", { cwd: cwd ?? null }) : FALLBACK_SKILLS;
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
