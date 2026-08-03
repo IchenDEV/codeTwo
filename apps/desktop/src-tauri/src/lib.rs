@@ -420,6 +420,15 @@ fn read_text(cwd: String, path: String) -> Result<String, String> {
     codetwo_core::workspace::read_text(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
 }
 
+/// Raw bytes for the image preview, over Tauri's binary IPC channel rather than as a JSON array —
+/// a 2 MB PNG serialized as numbers is ~12 MB of text to parse.
+#[tauri::command]
+fn read_binary(cwd: String, path: String) -> Result<tauri::ipc::Response, String> {
+    codetwo_core::workspace::read_binary(std::path::Path::new(&cwd), &path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn write_text(cwd: String, path: String, content: String) -> Result<(), String> {
     codetwo_core::workspace::write_text(std::path::Path::new(&cwd), &path, &content)
@@ -909,6 +918,7 @@ pub fn run() {
             create_file,
             create_dir,
             read_text,
+            read_binary,
             write_text,
             rename_path,
             copy_path,

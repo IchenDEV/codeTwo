@@ -105,12 +105,25 @@ let boot: Promise<Highlighter> | null = null;
 const loadedLangs = new Set<string>();
 
 /**
- * The github theme, renamed and with the editor chrome made transparent so the code pane sits on
- * the app's own background instead of github's — the app's light/dark surfaces aren't quite
- * github's, and a mismatched slab of colour would read as an embedded foreign widget.
+ * The github theme, renamed, with the code surface made transparent so the pane sits on the app's
+ * own background instead of github's — the app's light/dark surfaces aren't quite github's, and a
+ * mismatched slab of colour would read as an embedded foreign widget.
+ *
+ * Transparency is why the rest of the chrome is spelled out rather than left to the theme. Monaco
+ * registers these with `inherit: false`, so any colour github's dict omits falls back to the *base*
+ * theme's default — and those defaults assume an opaque editor background. The line highlight is
+ * the one that gives it away: unset, it lands as a solid band across the current line.
+ *
+ * Floating widgets (hover cards, the suggest list) go the other way and are pinned *opaque*: a
+ * see-through popup over code is unreadable no matter which theme is on.
  */
 async function customTheme(id: "github-light" | "github-dark", name: string): Promise<ThemeRegistration> {
   const theme = (await bundledThemes[id]()).default;
+  const dark = id === "github-dark";
+  const surface = theme.colors?.["editor.background"] ?? (dark ? "#0d1117" : "#ffffff");
+  const text = theme.colors?.["editor.foreground"] ?? (dark ? "#e6edf3" : "#1f2328");
+  // Overlays as alpha on the app's own backdrop, so they read the same on any surface beneath.
+  const wash = (alpha: string) => (dark ? `#ffffff${alpha}` : `#1f2328${alpha}`);
   return {
     ...theme,
     name,
@@ -118,6 +131,24 @@ async function customTheme(id: "github-light" | "github-dark", name: string): Pr
       ...theme.colors,
       "editor.background": "#00000000",
       "editorGutter.background": "#00000000",
+      "minimap.background": "#00000000",
+      "editorLineNumber.foreground": wash("59"),
+      "editorLineNumber.activeForeground": text,
+      "editor.lineHighlightBackground": wash("0d"),
+      "editor.lineHighlightBorder": "#00000000",
+      "editor.selectionBackground": wash("2b"),
+      "editor.inactiveSelectionBackground": wash("1a"),
+      "editor.selectionHighlightBackground": wash("1a"),
+      "editor.wordHighlightBackground": wash("1a"),
+      "editor.wordHighlightStrongBackground": wash("26"),
+      "editor.findMatchBackground": wash("40"),
+      "editor.findMatchHighlightBackground": wash("26"),
+      "editorCursor.foreground": text,
+      "editorIndentGuide.background1": wash("14"),
+      "editorIndentGuide.activeBackground1": wash("2b"),
+      "editorWidget.background": surface,
+      "editorSuggestWidget.background": surface,
+      "editorHoverWidget.background": surface,
     },
   };
 }
@@ -170,6 +201,9 @@ async function ensureBoot(): Promise<Highlighter> {
   return boot;
 }
 
+/** The scheme the app last asked for, so anything that resets the theme can be corrected back. */
+let scheme: "light" | "dark" = "light";
+
 /** Load a language's grammar (once) and hand its tokenizer to Monaco. Safe for "plaintext". */
 export async function ensureLanguage(langId: string): Promise<void> {
   const highlighter = await ensureBoot();
@@ -182,11 +216,16 @@ export async function ensureLanguage(langId: string): Promise<void> {
   if (!grammar) return;
   await highlighter.loadLanguage(...grammar);
   // Re-applying is how new grammars reach Monaco; providers and themes are replaced, not stacked.
+  // It also ends by setting the theme to the first one shiki loaded, so whichever theme is on gets
+  // clobbered every time a new language appears — that is what painted a dark editor in light
+  // colours (an opaque near-white band across the current line). Re-assert ours right after.
   shikiToMonaco(highlighter, monaco);
+  applyTheme();
 }
 
-export function applyTheme(scheme: "light" | "dark"): void {
-  monaco.editor.setTheme(scheme === "dark" ? THEME_DARK : THEME_LIGHT);
+export function applyTheme(next: "light" | "dark" = scheme): void {
+  scheme = next;
+  monaco.editor.setTheme(next === "dark" ? THEME_DARK : THEME_LIGHT);
 }
 
 // ---- models ------------------------------------------------------------------------------------

@@ -211,6 +211,16 @@ export async function readText(cwd: string, path: string): Promise<string> {
   return inTauri ? invoke<string>("read_text", { cwd, path }) : "";
 }
 
+/**
+ * Raw bytes, for the image preview. Comes back over Tauri's binary IPC channel as an ArrayBuffer;
+ * older/other shapes (a plain number array) are normalized here so callers always get bytes.
+ */
+export async function readBinary(cwd: string, path: string): Promise<Uint8Array> {
+  if (!inTauri) return new Uint8Array();
+  const res = await invoke<ArrayBuffer | number[]>("read_binary", { cwd, path });
+  return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
+}
+
 export async function writeText(cwd: string, path: string, content: string): Promise<void> {
   if (inTauri) await invoke("write_text", { cwd, path, content });
 }

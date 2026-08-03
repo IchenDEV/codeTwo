@@ -5,6 +5,7 @@ import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
 import { useToast } from "../ui/toast";
+import { ImagePreview, imageTypeOf } from "./ImagePreview";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -49,6 +50,8 @@ export function FileViewer({
   const t = useT();
   const toast = useToast();
   const scheme = useColorScheme();
+  // Pictures take the preview path instead of the editor — there's no text to put in a buffer.
+  const isImage = imageTypeOf(path) !== null;
   const container = useRef<HTMLDivElement | null>(null);
   const [mod, setMod] = useState<MonacoModule | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +101,7 @@ export function FileViewer({
   openDraftRef.current = openDraft;
 
   useEffect(() => {
+    if (isImage) return;
     let alive = true;
     let editor: Editor | null = null;
     const disposables: { dispose(): void }[] = [];
@@ -107,11 +111,12 @@ export function FileViewer({
 
     (async () => {
       const [m, text] = await Promise.all([import("./monaco"), readText(cwd, path)]);
-      const lang = m.languageOf(path);
-      await m.ensureLanguage(lang);
+      // Set the scheme before loading a grammar: `ensureLanguage` re-asserts whatever it's told,
+      // which is how it undoes the theme reset shiki's Monaco bridge performs on every load.
+      m.applyTheme(scheme);
+      await m.ensureLanguage(m.languageOf(path));
       if (!alive || !container.current) return;
 
-      m.applyTheme(scheme);
       const model = m.getOrCreateModel(cwd, path, text);
       modRef.current = m;
       modelRef.current = model;
@@ -186,7 +191,7 @@ export function FileViewer({
       modelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once per file; key remounts us
-  }, [cwd, path]);
+  }, [cwd, path, isImage]);
 
   useEffect(() => {
     mod?.applyTheme(scheme);
@@ -236,20 +241,22 @@ export function FileViewer({
           )}
         </span>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              disabled={!hasSelection}
-              onClick={openDraft}
-            >
-              <MessageSquarePlus className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t("files.comment")}</TooltipContent>
-        </Tooltip>
+        {!isImage && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                disabled={!hasSelection}
+                onClick={openDraft}
+              >
+                <MessageSquarePlus className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{t("files.comment")}</TooltipContent>
+          </Tooltip>
+        )}
 
         <Tooltip>
           <TooltipTrigger asChild>
@@ -268,6 +275,9 @@ export function FileViewer({
         )}
       </header>
 
+      {isImage ? (
+        <ImagePreview cwd={cwd} path={path} />
+      ) : (
       <div
         className="relative min-h-0 flex-1"
         // The app's keymap binds bare Escape to "close side panel". Monaco consumes Escape when it
@@ -326,6 +336,7 @@ export function FileViewer({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
