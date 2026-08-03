@@ -34,6 +34,28 @@ pub struct InitializeResponse {
     pub auth_methods: Value,
 }
 
+/// The agent capabilities we act on, lifted out of the raw `agentCapabilities` object. Everything
+/// defaults to "not supported" — an agent earns a capability by advertising it, never by omission.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AgentCaps {
+    /// `session/load`: the agent can re-attach a previous session, replaying its history and
+    /// restoring the conversation context. This is the provider-native resume cursor — the only
+    /// way an agent's context survives its process.
+    pub load_session: bool,
+}
+
+impl InitializeResponse {
+    pub fn caps(&self) -> AgentCaps {
+        AgentCaps {
+            load_session: self
+                .agent_capabilities
+                .get("loadSession")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        }
+    }
+}
+
 // ---- session/new ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +77,31 @@ pub struct NewSessionResponse {
     /// Session config options (UNSTABLE) — where current adapters report the model selector and
     /// the thought/reasoning level. Newer than (and superseding) the `models` field above; both
     /// are read so either generation of adapter works.
+    #[serde(rename = "configOptions", default)]
+    pub config_options: Option<Vec<SessionConfigOption>>,
+}
+
+// ---- session/load --------------------------------------------------------------------------
+
+/// Re-attach a previous session (`session/load`). Gated on [`AgentCaps::load_session`]. The agent
+/// replays the whole conversation as `session/update` notifications before answering, then the
+/// session accepts prompts with its context intact.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoadSessionRequest {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub cwd: String,
+    #[serde(rename = "mcpServers", default)]
+    pub mcp_servers: Vec<Value>,
+}
+
+/// `session/load` reports models/config the same way `session/new` does; agents that predate those
+/// (UNSTABLE) fields answer with nothing at all, so every field — and the response itself — is
+/// optional at the call site.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LoadSessionResponse {
+    #[serde(default)]
+    pub models: Option<SessionModelState>,
     #[serde(rename = "configOptions", default)]
     pub config_options: Option<Vec<SessionConfigOption>>,
 }
@@ -339,4 +386,32 @@ pub struct WriteTextFileRequest {
     pub session_id: String,
     pub path: String,
     pub content: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn caps_default_to_unsupported() {
+        // An agent earns a capability by advertising it — absence, null, and non-bool all mean no.
+        let none: InitializeResponse =
+            serde_json::from_value(json!({"protocolVersion": 1})).unwrap();
+        assert!(!none.caps().load_session);
+        let odd: InitializeResponse = serde_json::from_value(
+            json!({"protocolVersion": 1, "agentCapabilities": {"loadSession": "yes"}}),
+        )
+        .unwrap();
+        assert!(!odd.caps().load_session);
+    }
+
+    #[test]
+    fn caps_read_load_session() {
+        let r: InitializeResponse = serde_json::from_value(
+            json!({"protocolVersion": 1, "agentCapabilities": {"loadSession": true}}),
+        )
+        .unwrap();
+        assert!(r.caps().load_session);
+    }
 }
