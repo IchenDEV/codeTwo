@@ -427,6 +427,7 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
         })
         .collect::<Vec<_>>()
         .join(" ")

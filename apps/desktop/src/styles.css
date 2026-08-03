@@ -480,6 +480,22 @@
     color: var(--success);
     border: 1px solid color-mix(in oklch, var(--success) 30%, transparent);
   }
+  /* An `@`-mentioned past chat (see SessionMentionInline). Same anatomy as the file chip — it *is*
+     a mention — in the warning hue so the three chip kinds stay tellable at a glance. */
+  .chat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: var(--radius-md);
+    padding: 0 6px;
+    font-size: var(--text-hint);
+    font-weight: 500;
+    white-space: nowrap;
+    user-select: none;
+    background: color-mix(in oklch, var(--warning) 14%, transparent);
+    color: var(--warning);
+    border: 1px solid color-mix(in oklch, var(--warning) 30%, transparent);
+  }
 
   /* ---- browser annotation cards (see BrowserNoteBlock in skillInline.tsx) ------------------
      A quiet card, not a callout: the document is the star and three of these in a row must read
@@ -826,7 +842,9 @@
    a mat around the page: at 54px + a 40px top pad the first line started a palm's width from the
    chrome, which read as dead space rather than a margin. */
 .bn-doc-mode {
-  padding-block: 14px 16px;
+  /* The fat bottom pad is the floating control bar's landing strip: the last lines of the
+     document must be able to scroll up out from under it. */
+  padding-block: 14px 96px;
 }
 /* Full-bleed, editor-style: the page owns its column edge to edge. The inline padding is the
    drag/insert handle gutter (left) and a matching breath on the right — not a centring mat; the

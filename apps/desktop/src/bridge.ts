@@ -67,7 +67,8 @@ export type DocBlock =
   | { type: "text"; text: string }
   | { type: "skill"; skill_id: string; params: Record<string, string> }
   | { type: "file"; path: string }
-  | { type: "image"; path: string };
+  | { type: "image"; path: string }
+  | { type: "session"; session_id: string };
 
 /// One-line description of a doc block, used for summaries and browser-mode previews.
 export function describeBlock(b: DocBlock): string {
@@ -80,6 +81,8 @@ export function describeBlock(b: DocBlock): string {
       return `[@${b.path}]`;
     case "image":
       return `[img:${b.path}]`;
+    case "session":
+      return `[chat:${b.session_id.slice(0, 8)}]`;
   }
 }
 
@@ -741,6 +744,7 @@ export interface CompiledPreview {
   agent_skills: string[];
   files: string[];
   images: string[];
+  sessions: string[];
   unresolved: string[];
 }
 
@@ -752,6 +756,7 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
     agent_skills: [],
     files: doc.flatMap((b) => (b.type === "file" ? [b.path] : [])),
     images: doc.flatMap((b) => (b.type === "image" ? [b.path] : [])),
+    sessions: doc.flatMap((b) => (b.type === "session" ? [b.session_id] : [])),
     unresolved: [],
   };
 }

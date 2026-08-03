@@ -184,7 +184,8 @@ function ModePicker({ config }: { config: SessionConfig }) {
           ) : (
             <Lock className="size-3 shrink-0" />
           )}
-          <span>{t(`mode.${active}` as "mode.ask")}</span>
+          {/* Narrow, the lock alone carries the meaning — the label is spelt out in the menu. */}
+          <span className="hidden @lg/composer:inline">{t(`mode.${active}` as "mode.ask")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>
       </PopoverTrigger>
@@ -216,7 +217,11 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Chip title={t("config.provider")}>
+        {/* The provider also reads in the sidebar footer; squeezed, this chip is the detail to
+            shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
+            already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
+            send" hint (worth more to a first run than a name the sidebar already shows). */}
+        <Chip title={t("config.provider")} className="hidden @3xl/composer:flex">
           {active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}
@@ -238,9 +243,16 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
             // answers "why can't I use that one?" without a paragraph of warning text.
             detail={p.available ? null : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")}
             leading={
-              <span
-                className={cn("size-1.5 shrink-0 rounded-full", p.available ? "bg-success" : "bg-border")}
-              />
+              <>
+                <span
+                  className={cn("size-1.5 shrink-0 rounded-full", p.available ? "bg-success" : "bg-border")}
+                />
+                {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
+                <ProviderIcon
+                  provider={p.id}
+                  className={cn("size-3.5 shrink-0", !p.available && "opacity-40")}
+                />
+              </>
             }
             onClick={() => {
               config.onProvider(p.id);
@@ -368,7 +380,9 @@ function ModelPicker({
         <PopoverTrigger asChild>
           <Chip title={t("composer.model")}>
             <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-            <span className="max-w-44 truncate text-foreground/80">{modelLabel}</span>
+            <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
+              {modelLabel}
+            </span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
           </Chip>
         </PopoverTrigger>
@@ -544,8 +558,11 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Model, effort, then access — the reference's reading order: what runs, how hard it
-          thinks, what it may touch. Each chip opens only itself. */}
+      {/* Provider, model, effort, then access — cause before effect: the provider decides which
+          models exist, the model decides which efforts exist, and access frames the run. Each
+          chip opens only itself. */}
+      <ProviderPicker config={config} />
+
       <ModelPicker
         models={models}
         current={currentModel}
@@ -559,8 +576,6 @@ export function Composer({
 
       <ModePicker config={config} />
 
-      <ProviderPicker config={config} />
-
       {/* A boolean needs no view to choose from: the chip *is* the control. */}
       <Chip
         title={t("config.planFirstHint")}
@@ -569,7 +584,7 @@ export function Composer({
         onClick={() => config.onPlan(!config.planMode)}
       >
         <ListChecks className="size-3.5 shrink-0" />
-        {t("config.planFirst")}
+        <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
       </Chip>
 
       <Chip
@@ -579,7 +594,7 @@ export function Composer({
         onClick={() => config.onWorktree(!config.useWorktree)}
       >
         <GitBranch className="size-3.5 shrink-0" />
-        {t("composer.worktree")}
+        <span className="hidden @lg/composer:inline">{t("composer.worktree")}</span>
       </Chip>
 
       <div className="flex-1" />
@@ -606,7 +621,7 @@ export function Composer({
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
       {docEmpty && !running && runHint && (
-        <span className="mx-1 shrink-0 whitespace-nowrap text-fine text-muted-foreground">
+        <span className="mx-1 hidden shrink-0 whitespace-nowrap text-fine text-muted-foreground @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
         </span>
       )}
@@ -667,7 +682,10 @@ export function Composer({
     >
       <div
         className={cn(
-          "flex flex-col",
+          // The width container the control row compresses against (see the chip labels below):
+          // in compact mode this is the card's own measure, expanded it's the page column — either
+          // way, the width the controls actually have.
+          "@container/composer flex flex-col",
           docMode
             ? "min-h-0 flex-1"
             : cn("mx-auto w-full", hero ? "max-w-[680px]" : "max-w-[860px]"),
@@ -680,7 +698,8 @@ export function Composer({
             "composer-card flex flex-col",
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
-                "min-h-0 flex-1"
+                // `relative` anchors the floating control bar below.
+                "relative min-h-0 flex-1"
               : // A plain white card on a plain page, T3-style: border + a soft shadow, and the
                 // ring only wakes up when the caret is inside.
                 "rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] transition-[box-shadow,border-color] duration-200 focus-within:border-ring/40 focus-within:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_28px_rgb(0_0_0/0.07)]",
@@ -702,13 +721,26 @@ export function Composer({
             {children}
           </div>
 
-          {/* Expanded, the control row spans the window and lines up with the text measure, so it
-              reads as the page's own footer rather than a bar floating over it. */}
-          <div>
+          {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
+              In normal flow it sat at the column's bottom edge, where the transcript panel beside
+              the page ended up over the run button and swallowed its clicks; floating on its own
+              z-plane keeps every control clickable no matter what the layout around the page does.
+              Sized to its content (`w-fit`), not the column: a page squeezed by the panel would
+              otherwise cap the card while the non-wrapping controls spill out of it — grown to fit,
+              the card carries its own surface over the panel instead of leaking naked buttons.
+              `pointer-events-none` on the strip, `auto` on the card: the page stays clickable
+              either side of the floating bar. */}
+          <div className={cn(docMode && "pointer-events-none absolute inset-x-0 bottom-5 z-20 px-6")}>
             <div
               className={cn(
                 "flex items-center gap-0.5",
-                docMode ? "mx-auto w-full max-w-[860px] px-6 py-2" : "px-2 pb-1.5 pt-1",
+                docMode
+                  ? // `w-max`, not `w-fit`: fit-content clamps to the column, and a clamped box
+                    // lets the send button spill outside the card. Max-content always wraps every
+                    // control — worst case the card floats a little over whatever sits beside it,
+                    // which its own z-plane makes safe.
+                    "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-[0_2px_6px_rgb(0_0_0/0.06),0_16px_40px_rgb(0_0_0/0.16)]"
+                  : "px-2 pb-1.5 pt-1",
               )}
             >
               {controls}
@@ -723,13 +755,15 @@ export function Composer({
             onClick={checkout.onOpen}
             className="mt-2 flex h-8 items-center gap-1.5 rounded-lg border bg-muted/30 px-3 text-hint text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <span className="shrink-0">{t("composer.currentCheckout")}</span>
+            {/* Squeezed, the row keeps what identifies the checkout (project, dirty count) and
+                sheds the caption and branch name — both one click away. */}
+            <span className="hidden shrink-0 @md/composer:inline">{t("composer.currentCheckout")}</span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
             <span className="min-w-0 flex-1 truncate text-left">{checkout.project}</span>
             {checkout.branch && (
               <span className="flex shrink-0 items-center gap-1 font-mono text-fine">
                 <GitBranch className="size-3" />
-                {checkout.branch}
+                <span className="hidden max-w-40 truncate @lg/composer:inline">{checkout.branch}</span>
                 {checkout.dirty > 0 && <span className="text-warning">•{checkout.dirty}</span>}
               </span>
             )}

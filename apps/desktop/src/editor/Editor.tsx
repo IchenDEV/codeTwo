@@ -10,8 +10,15 @@ import {
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
-import { FileMenu, type FileItem } from "./FileMenu";
-import { listFiles, type Annotation, type DocBlock, type SkillInfo } from "../bridge";
+import { FileMenu, type AtItem, type ChatItem, type FileItem } from "./FileMenu";
+import {
+  listArchivedSessions,
+  listFiles,
+  listSessions,
+  type Annotation,
+  type DocBlock,
+  type SkillInfo,
+} from "../bridge";
 import { useColorScheme } from "../theme";
 import { useT } from "../i18n";
 
@@ -19,6 +26,8 @@ interface EditorProps {
   skills: SkillInfo[];
   /// Working directory used to resolve `@`-file mentions.
   cwd: string;
+  /// The session this document sends to — kept out of the `@` chat picker (it's already context).
+  sessionId: string | null;
   // App reads the composed document out of the editor on Run.
   getBlocksRef: MutableRefObject<(() => DocBlock[]) | null>;
   // App appends plain text (voice, terminal sends) through this.
@@ -71,6 +80,7 @@ async function fileMenuItems(cwd: string, query: string): Promise<FileItem[]> {
     const name = cut < 0 ? path : path.slice(cut + 1);
     const at = q ? name.toLowerCase().indexOf(q) : -1;
     return {
+      kind: "file" as const,
       path,
       name,
       dir: cut < 0 ? "" : path.slice(0, cut + 1),
@@ -79,9 +89,28 @@ async function fileMenuItems(cwd: string, query: string): Promise<FileItem[]> {
   });
 }
 
+// Past chats for the same picker: mentioning one inlines its transcript as context, so a planning
+// conversation is citable from the document that implements it. Archived chats are included on
+// purpose — mentioning reads a transcript, it doesn't continue the chat, and a finished planning
+// conversation is precisely the kind that gets archived. The current session is excluded — the
+// agent already has that history. A few recent chats show unprompted; typing filters by title.
+async function chatMenuItems(query: string, excludeSession: string | null): Promise<ChatItem[]> {
+  const [active, archived] = await Promise.all([
+    listSessions().catch(() => []),
+    listArchivedSessions().catch(() => []),
+  ]);
+  const q = query.toLowerCase();
+  return [...active, ...archived]
+    .sort((a, b) => b.created_at - a.created_at)
+    .filter((s) => s.id !== excludeSession && (!q || s.title.toLowerCase().includes(q)))
+    .slice(0, q ? 6 : 3)
+    .map((s) => ({ kind: "chat" as const, id: s.id, title: s.title, when: s.created_at }));
+}
+
 export function DocEditor({
   skills,
   cwd,
+  sessionId,
   getBlocksRef,
   insertTextRef,
   insertAnnotationRef,
@@ -167,7 +196,13 @@ export function DocEditor({
   }, [editor, getBlocksRef, insertTextRef, insertAnnotationRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
 
   const scheme = useColorScheme();
-  const getFileItems = (query: string) => fileMenuItems(cwd, query);
+  const getAtItems = async (query: string): Promise<AtItem[]> => {
+    const [chats, files] = await Promise.all([
+      chatMenuItems(query, sessionId),
+      fileMenuItems(cwd, query),
+    ]);
+    return [...chats, ...files];
+  };
 
   return (
     <BlockNoteView
@@ -193,15 +228,21 @@ export function DocEditor({
           )
         }
       />
-      {/* `@` mentions workspace files — their contents are inlined into the compiled prompt. */}
+      {/* `@` mentions workspace files and past chats — file contents and chat transcripts are
+          inlined into the compiled prompt. */}
       {/* The type argument is explicit because the controller infers its item type from `getItems`,
           and an inline lambda lets it fall back to BlockNote's default item instead. */}
-      <SuggestionMenuController<typeof getFileItems>
+      <SuggestionMenuController<typeof getAtItems>
         triggerCharacter={"@"}
-        getItems={getFileItems}
+        getItems={getAtItems}
         suggestionMenuComponent={FileMenu}
         onItemClick={(item) => {
-          editor.insertInlineContent([{ type: "fileMention", props: { path: item.path } }, " "]);
+          editor.insertInlineContent([
+            item.kind === "chat"
+              ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
+              : { type: "fileMention", props: { path: item.path } },
+            " ",
+          ]);
         }}
       />
     </BlockNoteView>

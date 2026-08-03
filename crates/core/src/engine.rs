@@ -26,7 +26,7 @@ use crate::models::builtin_models;
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
-use crate::skill::{compile_with_context, SkillLibrary};
+use crate::skill::{compile_with_sessions, SkillLibrary};
 use crate::store::Store;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -530,7 +530,15 @@ impl Engine {
 
                 let compiled = {
                     let lib = self.state.skills.lock().unwrap();
-                    compile_with_context(&doc, &lib, Some(std::path::Path::new(&cwd)))
+                    // `@`-mentioned past chats resolve against the store; without one (tests,
+                    // in-memory runs) they surface as unresolved rather than silently vanishing.
+                    let resolve = |id: &str| -> Option<String> {
+                        let store = self.state.store.as_ref()?;
+                        let sess = store.get_session(id).ok().flatten()?;
+                        let transcript = store.transcript(id).ok()?;
+                        Some(crate::session::transcript_context(&sess.title, &transcript))
+                    };
+                    compile_with_sessions(&doc, &lib, Some(std::path::Path::new(&cwd)), Some(&resolve))
                 };
                 for id in &compiled.unresolved {
                     self.emit(Event::Error {
