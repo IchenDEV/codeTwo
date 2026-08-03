@@ -1,7 +1,7 @@
 //! Project rules — the "always-on" instructions a repo ships for coding agents.
 //!
 //! Codex reads `AGENTS.md`, Cursor reads `.cursorrules` / `.cursor/rules/*`, Claude Code reads
-//! `CLAUDE.md`. codeTwo loads whichever of these exist in the working directory and prepends them to
+//! `CLAUDE.md`. Code2 loads whichever of these exist in the working directory and prepends them to
 //! every compiled prompt, so a repo's conventions travel with the session regardless of provider.
 
 use std::path::{Path, PathBuf};

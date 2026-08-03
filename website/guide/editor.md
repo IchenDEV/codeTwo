@@ -1,6 +1,6 @@
 # Document editor & skills
 
-codeTwo's core idea: **compose your prompt as a document**, and combine reusable **skills** inline.
+Code2's core idea: **compose your prompt as a document**, and combine reusable **skills** inline.
 
 ## The document editor
 
@@ -77,7 +77,7 @@ A skill is one of four kinds:
 
 ## How compilation works
 
-When you run, codeTwo compiles the document into a `CompiledPrompt`:
+When you run, Code2 compiles the document into a `CompiledPrompt`:
 
 - **prompt** — text blocks + fragment/macro/agent-skill blocks, concatenated as markdown.
 - **mcpServers** — servers from MCP skills, attached when the session is created.

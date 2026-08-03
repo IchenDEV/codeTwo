@@ -98,7 +98,7 @@ fn authorize() -> io::Result<()> {
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "speech recognition is off for codeTwo — turn it back on in System Settings → \
+                "speech recognition is off for Code2 — turn it back on in System Settings → \
                  Privacy & Security → Speech Recognition",
             ))
         }

@@ -1,4 +1,4 @@
-//! codeTwo desktop bridge: a thin Tauri layer over `codetwo-core`.
+//! Code2 desktop bridge: a thin Tauri layer over `codetwo-core`.
 //!
 //! The core `Engine` is managed in Tauri state. Frontends push `Op`s through commands and receive
 //! `Event`s streamed over the `engine-event` channel. Terminals live in the core as real emulators
@@ -972,7 +972,7 @@ pub fn run() {
             lsp::lsp_send
         ])
         .build(tauri::generate_context!())
-        .expect("error while running codeTwo")
+        .expect("error while running Code2")
         .run(|app, event| {
             // Language servers are real children with real index threads; leaving them orphaned
             // on quit is how a machine ends up with four rust-analyzers and no editor.

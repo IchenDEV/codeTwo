@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress";
 
 // Project page served at https://IchenDEV.github.io/codeTwo/
 export default defineConfig({
-  title: "codeTwo",
+  title: "Code2",
   description:
     "A document-first coding agent. Compose prompts as documents, weave in skills, and drive Claude Code / Codex / Grok / Cursor / OpenCode over ACP — desktop, TUI, and remote.",
   base: "/codeTwo/",
@@ -65,7 +65,7 @@ export default defineConfig({
     },
     footer: {
       message: "Apache-2.0 licensed.",
-      copyright: "codeTwo",
+      copyright: "Code2",
     },
   },
 });

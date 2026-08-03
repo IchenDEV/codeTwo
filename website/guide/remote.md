@@ -1,6 +1,6 @@
 # Remote control
 
-Drive codeTwo from your phone, tablet, or another machine. A small headless server exposes the engine
+Drive Code2 from your phone, tablet, or another machine. A small headless server exposes the engine
 over WebSocket behind a pairing token and serves a mobile-friendly web client.
 
 ## Two ways to start it
@@ -15,7 +15,7 @@ It prints a pairing panel: a connection **URL** (with its auto-detected LAN IP),
 scannable **QR code**. Open the URL on another device on the same network, or scan the QR.
 
 ```
-  codeTwo remote is live.
+  Code2 remote is live.
 
   Open on another device:
     http://192.168.1.42:4599/?token=…

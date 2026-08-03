@@ -92,7 +92,7 @@ export class LspClient {
     const name = this.cwd.split("/").filter(Boolean).pop() ?? this.cwd;
     const result = await this.request("initialize", {
       processId: null,
-      clientInfo: { name: "codeTwo" },
+      clientInfo: { name: "Code2" },
       rootUri: pathToUri(this.cwd),
       rootPath: this.cwd,
       workspaceFolders: [{ uri: pathToUri(this.cwd), name }],
