@@ -465,22 +465,32 @@ struct CompiledPromptDto {
     mcp_servers: Vec<String>,
     agent_skills: Vec<String>,
     files: Vec<String>,
+    sessions: Vec<String>,
     unresolved: Vec<String>,
 }
 
 /// Compile the current document into the prompt that would actually be sent — skills expanded,
-/// project rules prepended, `@`-mentioned files inlined.
+/// project rules prepended, `@`-mentioned files and past chats inlined.
 #[tauri::command]
 fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>, cwd: Option<String>) -> CompiledPromptDto {
     let lib = state.engine.skills();
     let lib = lib.lock().unwrap();
     let path = cwd.as_deref().map(std::path::Path::new);
-    let c = codetwo_core::skill::compile_with_context(&doc, &lib, path);
+    // The preview resolves `@`-mentioned chats exactly like the real send in the engine does.
+    let store = state.engine.store();
+    let resolve = |id: &str| -> Option<String> {
+        let store = store.as_ref()?;
+        let sess = store.get_session(id).ok().flatten()?;
+        let transcript = store.transcript(id).ok()?;
+        Some(codetwo_core::session::transcript_context(&sess.title, &transcript))
+    };
+    let c = codetwo_core::skill::compile_with_sessions(&doc, &lib, path, Some(&resolve));
     CompiledPromptDto {
         prompt: c.prompt,
         mcp_servers: c.mcp_servers.into_iter().map(|s| s.name).collect(),
         agent_skills: c.agent_skills,
         files: c.files,
+        sessions: c.sessions,
         unresolved: c.unresolved,
     }
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
+import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import {
@@ -229,7 +229,8 @@ export default function App() {
   );
   // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
   // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
-  // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it.
+  // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it,
+  // and the choice persists.
   const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
   const docMode = docModeRaw !== 0;
   const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
@@ -308,8 +309,17 @@ export default function App() {
   }, [refreshProjects, selectProject, toast]);
 
   const activeTitle = useMemo(
-    () => sessions.find((s) => s.id === activeSession)?.title ?? "New session",
-    [sessions, activeSession],
+    () =>
+      (sessions.find((s) => s.id === activeSession) ??
+        archivedSessions.find((s) => s.id === activeSession))?.title ?? "New session",
+    [sessions, archivedSessions, activeSession],
+  );
+
+  // An archived chat is read-only: browsing it is fine, continuing it is not. The composer steps
+  // aside for a notice until the session is restored.
+  const activeArchived = useMemo(
+    () => archivedSessions.some((s) => s.id === activeSession),
+    [archivedSessions, activeSession],
   );
 
   // The title bar's project badge — the workspace this session lives in, at a glance.
@@ -417,6 +427,11 @@ export default function App() {
   }, [turns]);
 
   const run = useCallback(async () => {
+    // The banner is the primary gate; this backstop catches the keyboard path (⌘⏎ and friends).
+    if (activeArchived) {
+      toast(t("archived.notice"));
+      return;
+    }
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
     let doc = getBlocks();
@@ -449,7 +464,7 @@ export default function App() {
       setRunning(false);
       toast(t("toast.turnFailed", { error: String(e) }), "error");
     }
-  }, [provider, cwd, useWorktree, planMode, running, toast]);
+  }, [provider, cwd, useWorktree, planMode, running, toast, activeArchived, t]);
 
   const createSession = useCallback(async () => {
     pendingDocRef.current = null;
@@ -1077,6 +1092,28 @@ export default function App() {
               {t("transcript.greetingEnd")}
             </h1>
           )}
+          {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
+              until the session is restored. The composer stays mounted (hidden) — unmounting
+              BlockNote would take an in-progress draft with it. */}
+          {activeArchived && (
+            <div className="shrink-0 px-4 pb-3.5 pt-1">
+              <div className="mx-auto flex w-full max-w-[860px] items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
+                <Archive className="size-4 shrink-0 text-muted-foreground" />
+                <p className="min-w-0 flex-1 text-ui text-muted-foreground">{t("archived.notice")}</p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={() =>
+                    activeSession && void archiveSession(activeSession, false).then(refreshSessions)
+                  }
+                >
+                  {t("archived.restore")}
+                </Button>
+              </div>
+            </div>
+          )}
+          <div className={cn("contents", activeArchived && "hidden")}>
           <Composer
             config={sessionConfig}
             hero={turns.length === 0}
@@ -1133,6 +1170,7 @@ export default function App() {
               key={editorKey}
               skills={skills}
               cwd={cwd || "."}
+              sessionId={activeSession}
               getBlocksRef={getBlocksRef}
               insertTextRef={insertTextRef}
               insertAnnotationRef={insertAnnotationRef}
@@ -1143,6 +1181,7 @@ export default function App() {
               onEmptyChange={setDocEmpty}
             />
           </Composer>
+          </div>
 
           {/* Document mode's view of the conversation: beside the page, not instead of it. Only
               once there's something to show — a fresh document keeps the full width. */}

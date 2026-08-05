@@ -47,6 +47,27 @@ export const FileInline = createReactInlineContentSpec(
   },
 );
 
+// An inline `@chat` mention of a past session. At compile time the core inlines that chat's
+// transcript as context, so a planning conversation can be referenced from the document that
+// implements it ("we discussed this — here's the discussion").
+export const SessionMentionInline = createReactInlineContentSpec(
+  {
+    type: "sessionMention",
+    propSchema: {
+      sessionId: { default: "" },
+      title: { default: "" },
+    },
+    content: "none",
+  } as const,
+  {
+    render: (props) => (
+      <span className="chat-chip" contentEditable={false}>
+        @{props.inlineContent.props.title || props.inlineContent.props.sessionId.slice(0, 8)}
+      </span>
+    ),
+  },
+);
+
 // A browser annotation as a first-class document block, not a paragraph of markdown. The raw
 // context text (`**Browser context** — …`) is what the *agent* needs; a person composing a prompt
 // around three of them needs a card: where, which element, what was said, what was dialled in.
@@ -126,6 +147,7 @@ export const schema = BlockNoteSchema.create({
     ...defaultInlineContentSpecs,
     skill: SkillInline,
     fileMention: FileInline,
+    sessionMention: SessionMentionInline,
   },
 });
 
@@ -162,6 +184,10 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           flush();
           const props = inline.props as { path: string };
           out.push({ type: "file", path: props.path });
+        } else if (inline.type === "sessionMention") {
+          flush();
+          const props = inline.props as { sessionId: string };
+          out.push({ type: "session", session_id: props.sessionId });
         } else if (inline.type === "link") {
           const parts = (inline.content as Array<{ text?: string }> | undefined) ?? [];
           buf += parts.map((c) => c.text ?? "").join("");

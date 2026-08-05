@@ -165,6 +165,9 @@ pub enum DocBlock {
     File { path: String },
     /// An attached image; sent to the agent as an ACP image content block.
     Image { path: String },
+    /// An `@`-mentioned past chat; its transcript is inlined as context at compile time, so a
+    /// planning conversation can be referenced from the document that implements it.
+    Session { session_id: String },
 }
 
 /// The result of compiling a document: what to send and how to configure the session.
@@ -180,6 +183,9 @@ pub struct CompiledPrompt {
     pub files: Vec<String>,
     /// Attached image paths, sent as ACP image content blocks alongside the prompt.
     pub images: Vec<String>,
+    /// Past chats inlined via `@`-mentions (session ids).
+    #[serde(default)]
+    pub sessions: Vec<String>,
     /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
 }
@@ -197,6 +203,18 @@ pub fn compile_with_context(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
+) -> CompiledPrompt {
+    compile_with_sessions(doc, library, cwd, None)
+}
+
+/// Like [`compile_with_context`], but able to resolve `@`-mentioned past chats: `resolve_session`
+/// maps a session id to its rendered transcript context (`None` for an unknown id). The compiler
+/// stays store-agnostic — callers with a [`crate::store::Store`] pass a closure over it.
+pub fn compile_with_sessions(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
 ) -> CompiledPrompt {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
@@ -229,6 +247,15 @@ pub fn compile_with_context(
                         ));
                     }
                     _ => out.unresolved.push(format!("file:{path}")),
+                }
+            }
+            DocBlock::Session { session_id } => {
+                match resolve_session.and_then(|resolve| resolve(session_id)) {
+                    Some(ctx) if !ctx.trim().is_empty() => {
+                        out.sessions.push(session_id.clone());
+                        parts.push(ctx);
+                    }
+                    _ => out.unresolved.push(format!("session:{session_id}")),
                 }
             }
             DocBlock::Text { text } => {
@@ -421,6 +448,32 @@ mod tests {
         let doc = vec![DocBlock::Skill { skill_id: "nope".into(), params: HashMap::new() }];
         let compiled = compile(&doc, &lib);
         assert_eq!(compiled.unresolved, vec!["nope".to_string()]);
+    }
+
+    #[test]
+    fn session_mention_inlines_resolved_transcript() {
+        let lib = sample_library();
+        let doc = vec![
+            DocBlock::Session { session_id: "abc".into() },
+            DocBlock::Text { text: "Implement what we planned.".into() },
+        ];
+        let resolve = |id: &str| -> Option<String> {
+            (id == "abc").then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
+        };
+        let compiled = compile_with_sessions(&doc, &lib, None, Some(&resolve));
+        assert_eq!(compiled.sessions, vec!["abc".to_string()]);
+        assert!(compiled.prompt.contains("Referenced chat"));
+        assert!(compiled.prompt.contains("Implement what we planned."));
+        assert!(compiled.unresolved.is_empty());
+    }
+
+    #[test]
+    fn session_mention_without_resolver_is_unresolved() {
+        let lib = sample_library();
+        let doc = vec![DocBlock::Session { session_id: "ghost".into() }];
+        let compiled = compile(&doc, &lib);
+        assert!(compiled.sessions.is_empty());
+        assert_eq!(compiled.unresolved, vec!["session:ghost".to_string()]);
     }
 
     #[test]
