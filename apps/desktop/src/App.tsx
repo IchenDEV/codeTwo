@@ -25,6 +25,7 @@ import {
   gitStatus,
   issueContext,
   listArchivedSessions,
+  listMemoryReceipts,
   listProjectScripts,
   listProjects,
   listProviders,
@@ -46,6 +47,7 @@ import {
   setConfigOption,
   setKeymap,
   setModel,
+  setSessionMemoryPolicy,
   setPermissionMode,
   setSandbox,
   submitPrompt,
@@ -59,6 +61,7 @@ import {
   type Issue,
   type KeymapEntry,
   type MarketItem,
+  type MemoryAccess,
   type ModelChoice,
   type Project,
   type ProjectScript,
@@ -172,6 +175,8 @@ export default function App() {
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
   const [useWorktree, setUseWorktree] = useState(false);
   const [planMode, setPlanMode] = useState(false);
+  const [memoryRead, setMemoryRead] = useState<MemoryAccess>("inherit");
+  const [memoryWrite, setMemoryWrite] = useState<MemoryAccess>("inherit");
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [permission, setPermission] = useState<PermissionState | null>(null);
@@ -250,6 +255,8 @@ export default function App() {
   // Mirrors `activeProject` so `selectProject` can tell a real switch from a re-click without
   // remaking its callback (and the rail rows' props) on every project change.
   const activeProjectRef = useRef<string | null>(null);
+  const memoryReadRef = useRef<MemoryAccess>("inherit");
+  const memoryWriteRef = useRef<MemoryAccess>("inherit");
   const pendingDocRef = useRef<DocBlock[] | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -290,6 +297,10 @@ export default function App() {
         setModels([]);
         setCurrentModel(null);
         setDefaultModel(null);
+        memoryReadRef.current = "inherit";
+        memoryWriteRef.current = "inherit";
+        setMemoryRead("inherit");
+        setMemoryWrite("inherit");
       }
       void openProject(path).then(refreshProjects);
     },
@@ -374,10 +385,27 @@ export default function App() {
         if (ev.event === "session_created") {
           activeSessionRef.current = ev.session;
           setActiveSession(ev.session);
-          refreshSessions();
+          const policySaved = setSessionMemoryPolicy(
+            ev.session,
+            memoryReadRef.current,
+            memoryWriteRef.current,
+          );
           if (pendingDocRef.current) {
-            void submitPrompt(ev.session, pendingDocRef.current);
+            const doc = pendingDocRef.current;
             pendingDocRef.current = null;
+            void policySaved
+              .then(() => {
+                refreshSessions();
+                return submitPrompt(ev.session, doc);
+              })
+              .catch((error) => {
+                setRunning(false);
+                toast(t("toast.turnFailed", { error: String(error) }), "error");
+              });
+          } else {
+            void policySaved
+              .then(refreshSessions)
+              .catch((error) => toast(String(error), "error"));
           }
           return;
         }
@@ -451,6 +479,11 @@ export default function App() {
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc))]);
     try {
       if (activeSessionRef.current) {
+        await setSessionMemoryPolicy(
+          activeSessionRef.current,
+          memoryReadRef.current,
+          memoryWriteRef.current,
+        );
         await submitPrompt(activeSessionRef.current, doc);
       } else {
         pendingDocRef.current = doc;
@@ -473,6 +506,10 @@ export default function App() {
     setCurrentModel(null);
     setDefaultModel(null);
     setConfigOptions([]);
+    memoryReadRef.current = "inherit";
+    memoryWriteRef.current = "inherit";
+    setMemoryRead("inherit");
+    setMemoryWrite("inherit");
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
     try {
@@ -508,6 +545,35 @@ export default function App() {
     }
   }, []);
 
+  const onMemoryPolicyChange = useCallback((read: MemoryAccess, write: MemoryAccess) => {
+    const previousRead = memoryReadRef.current;
+    const previousWrite = memoryWriteRef.current;
+    memoryReadRef.current = read;
+    memoryWriteRef.current = write;
+    setMemoryRead(read);
+    setMemoryWrite(write);
+    const session = activeSessionRef.current;
+    if (session) {
+      const update = (nextRead: MemoryAccess, nextWrite: MemoryAccess) => (items: SessionInfo[]) =>
+        items.map((item) =>
+          item.id === session
+            ? { ...item, memory_read: nextRead, memory_write: nextWrite }
+            : item,
+        );
+      setSessions(update(read, write));
+      setArchivedSessions(update(read, write));
+      void setSessionMemoryPolicy(session, read, write).catch((error) => {
+        memoryReadRef.current = previousRead;
+        memoryWriteRef.current = previousWrite;
+        setMemoryRead(previousRead);
+        setMemoryWrite(previousWrite);
+        setSessions(update(previousRead, previousWrite));
+        setArchivedSessions(update(previousRead, previousWrite));
+        toast(String(error), "error");
+      });
+    }
+  }, [toast]);
+
   const selectSession = useCallback(
     async (id: string) => {
       activeSessionRef.current = id;
@@ -523,7 +589,17 @@ export default function App() {
       setConfigOptions([]);
       setCurrentModel(stored?.model ?? null);
       setDefaultModel(null);
-      setTurns(turnsFromTranscript(await getTranscript(id)));
+      const nextRead = stored?.memory_read ?? "inherit";
+      const nextWrite = stored?.memory_write ?? "inherit";
+      memoryReadRef.current = nextRead;
+      memoryWriteRef.current = nextWrite;
+      setMemoryRead(nextRead);
+      setMemoryWrite(nextWrite);
+      const [transcript, receipts] = await Promise.all([
+        getTranscript(id),
+        listMemoryReceipts(id),
+      ]);
+      setTurns(turnsFromTranscript(transcript, receipts));
     },
     [sessions, archivedSessions, providers],
   );
@@ -923,6 +999,9 @@ export default function App() {
     onWorktree: setUseWorktree,
     planMode,
     onPlan: setPlanMode,
+    memoryRead,
+    memoryWrite,
+    onMemoryPolicy: onMemoryPolicyChange,
     hasSession: activeSession !== null,
   };
 
@@ -938,6 +1017,7 @@ export default function App() {
           onReset={resetBinding}
           onResetAll={resetAllBindings}
           providers={providers}
+          projectPath={activeProject ?? cwd}
           onClose={() => {
             setShowSettings(false);
             setCapturing(null);

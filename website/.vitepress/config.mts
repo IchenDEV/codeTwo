@@ -29,6 +29,7 @@ export default defineConfig({
           text: "Features",
           items: [
             { text: "Providers", link: "/guide/providers" },
+            { text: "Project memory", link: "/guide/memory" },
             { text: "Document editor & skills", link: "/guide/editor" },
             { text: "Project rules", link: "/guide/rules" },
             { text: "Skill market", link: "/guide/market" },

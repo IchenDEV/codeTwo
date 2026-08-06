@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 use thiserror::Error;
 
-use crate::session::{Part, Role, Session};
+use crate::session::{MemoryAccess, Part, Role, Session};
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   worktree_path   TEXT,
   permission_mode TEXT NOT NULL,
   acp_session_id  TEXT,
+  memory_read     TEXT NOT NULL DEFAULT 'inherit',
+  memory_write    TEXT NOT NULL DEFAULT 'inherit',
   created_at      INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS parts (
@@ -58,12 +60,20 @@ pub struct Project {
 }
 
 pub struct Store {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
 }
 
 /// Additive migrations for stores created by older versions. Each is ignored if already applied.
 fn migrate(conn: &Connection) {
     let _ = conn.execute("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
+    let _ = conn.execute(
+        "ALTER TABLE sessions ADD COLUMN memory_read TEXT NOT NULL DEFAULT 'inherit'",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE sessions ADD COLUMN memory_write TEXT NOT NULL DEFAULT 'inherit'",
+        [],
+    );
     // Ordering used to come from `last_opened_at`, which meant the rail resorted itself under the
     // cursor every time you clicked a project. Backfilling `added_at` from it keeps the order an
     // existing store already shows, and freezes it there.
@@ -104,7 +114,11 @@ impl Store {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn);
-        Ok(Self { conn: Mutex::new(conn) })
+        crate::memory::install(&conn)?;
+        let store = Self { conn: Mutex::new(conn) };
+        // A delayed candidate may have become eligible while Code2 was closed.
+        store.run_memory_maintenance()?;
+        Ok(store)
     }
 
     /// In-memory store, used by tests.
@@ -112,7 +126,10 @@ impl Store {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn);
-        Ok(Self { conn: Mutex::new(conn) })
+        crate::memory::install(&conn)?;
+        let store = Self { conn: Mutex::new(conn) };
+        store.run_memory_maintenance()?;
+        Ok(store)
     }
 
     // ---- projects -----------------------------------------------------------------------------
@@ -224,7 +241,8 @@ impl Store {
     fn query_sessions(&self, archived: bool) -> Result<Vec<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at
+            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
+                    memory_read,memory_write,created_at
              FROM sessions WHERE archived=?1 ORDER BY created_at DESC",
         )?;
         let rows = stmt.query_map([if archived { 1 } else { 0 }], row_to_session_parts)?;
@@ -239,8 +257,9 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO sessions
-               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
+                memory_read,memory_write,created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
              ON CONFLICT(id) DO UPDATE SET
                title=excluded.title, provider=excluded.provider, model=excluded.model,
                cwd=excluded.cwd, worktree_path=excluded.worktree_path,
@@ -254,6 +273,8 @@ impl Store {
                 s.worktree_path,
                 serde_json::to_string(&s.permission_mode)?,
                 s.acp_session_id,
+                s.memory_read.as_db(),
+                s.memory_write.as_db(),
                 s.created_at,
             ],
         )?;
@@ -268,7 +289,8 @@ impl Store {
     pub fn get_session(&self, id: &str) -> Result<Option<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at
+            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
+                    memory_read,memory_write,created_at
              FROM sessions WHERE id=?1",
         )?;
         let mut rows = stmt.query_map([id], row_to_session_parts)?;
@@ -293,6 +315,33 @@ impl Store {
         Ok(seq)
     }
 
+    pub fn set_session_memory_policy(
+        &self,
+        session_id: &str,
+        read: MemoryAccess,
+        write: MemoryAccess,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET memory_read=?2,memory_write=?3 WHERE id=?1",
+            rusqlite::params![session_id, read.as_db(), write.as_db()],
+        )?;
+        Ok(())
+    }
+
+    pub fn session_memory_policy(
+        &self,
+        session_id: &str,
+    ) -> Result<(MemoryAccess, MemoryAccess), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let (read, write): (String, String) = conn.query_row(
+            "SELECT memory_read,memory_write FROM sessions WHERE id=?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok((MemoryAccess::from_db(&read), MemoryAccess::from_db(&write)))
+    }
+
     pub fn transcript(&self, session_id: &str) -> Result<Vec<(Role, Part)>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
@@ -307,10 +356,47 @@ impl Store {
         }
         Ok(out)
     }
+
+    /// Transcript with stable sequence ids, used to attach non-transcript turn metadata such as
+    /// memory injection receipts after an app restart.
+    pub fn transcript_with_seq(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<(i64, Role, Part)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT seq,role,part_json FROM parts WHERE session_id=?1 ORDER BY seq",
+        )?;
+        let rows = stmt.query_map([session_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (seq, role, part) = row?;
+            out.push((seq, serde_json::from_str(&role)?, serde_json::from_str(&part)?));
+        }
+        Ok(out)
+    }
 }
 
 /// Raw column tuple for a session row (JSON columns still stringified).
-type SessionCols = (String, String, String, Option<String>, String, Option<String>, String, Option<String>, i64);
+type SessionCols = (
+    String,
+    String,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    String,
+    Option<String>,
+    String,
+    String,
+    i64,
+);
 
 fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols> {
     Ok((
@@ -323,6 +409,8 @@ fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols
         row.get(6)?,
         row.get(7)?,
         row.get(8)?,
+        row.get(9)?,
+        row.get(10)?,
     ))
 }
 
@@ -336,7 +424,9 @@ fn build_session(c: SessionCols) -> Result<Session, StoreError> {
         worktree_path: c.5,
         permission_mode: serde_json::from_str(&c.6)?,
         acp_session_id: c.7,
-        created_at: c.8,
+        memory_read: MemoryAccess::from_db(&c.8),
+        memory_write: MemoryAccess::from_db(&c.9),
+        created_at: c.10,
     })
 }
 
@@ -507,6 +597,19 @@ mod tests {
         store.upsert_session(&a2).unwrap();
         assert_eq!(store.list_sessions().unwrap().len(), 2);
         assert_eq!(store.get_session(&a.id).unwrap().unwrap().model.as_deref(), Some("grok-build"));
+
+        store
+            .set_session_memory_policy(&a.id, MemoryAccess::Allow, MemoryAccess::Deny)
+            .unwrap();
+        let saved = store.get_session(&a.id).unwrap().unwrap();
+        assert_eq!(saved.memory_read, MemoryAccess::Allow);
+        assert_eq!(saved.memory_write, MemoryAccess::Deny);
+        // A later runtime upsert must not overwrite a policy changed directly by the UI.
+        store.upsert_session(&a2).unwrap();
+        assert_eq!(
+            store.session_memory_policy(&a.id).unwrap(),
+            (MemoryAccess::Allow, MemoryAccess::Deny)
+        );
     }
 
     #[test]

@@ -98,6 +98,9 @@ impl App {
                 self.permission = Some(PermReq { session, request_id, title, options });
             }
             Event::Usage { .. } => {}
+            Event::MemoryContext { receipt, .. } => {
+                self.status = format!("memory: {} recalled", receipt.items.len());
+            }
             // The TUI has no picker yet, but the agent's choice belongs in the status line rather
             // than being dropped on the floor.
             Event::Models { available, current, .. } => {

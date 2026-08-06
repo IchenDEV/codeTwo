@@ -7,6 +7,7 @@
 //! stable types both sides code against.
 
 use crate::provider::ProviderId;
+use crate::memory::MemoryReceipt;
 use crate::session::SessionId;
 use crate::skill::DocBlock;
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,9 @@ pub enum Op {
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
     SessionCreated { session: SessionId },
+    /// Exact, inspectable record of the recalled items injected into this turn. Emitted only after
+    /// the matching user part is persisted, and never represented as user-authored transcript.
+    MemoryContext { session: SessionId, receipt: MemoryReceipt },
     AgentText { session: SessionId, message_id: String, text: String },
     AgentThought { session: SessionId, text: String },
     ToolCall { session: SessionId, id: String, title: String, status: String },

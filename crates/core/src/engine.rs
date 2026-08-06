@@ -23,6 +23,7 @@ use crate::acp::{self, AcpClient, ClientHandler};
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
 use crate::models::builtin_models;
+use crate::memory::{prompt_source, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS};
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
@@ -323,6 +324,13 @@ impl Engine {
         }
     }
 
+    pub fn transcript_with_seq(&self, session_id: &str) -> Vec<(i64, Role, Part)> {
+        match &self.state.store {
+            Some(store) => store.transcript_with_seq(session_id).unwrap_or_default(),
+            None => Vec::new(),
+        }
+    }
+
     /// Rename a session (persisted).
     pub fn rename_session(&self, id: &str, title: &str) {
         if let Some(store) = &self.state.store {
@@ -506,6 +514,9 @@ impl Engine {
             }
 
             Op::Prompt { session, doc } => {
+                // Memory observes the user's document, not its expanded files, rules, skills, or a
+                // previous memory block. Keeping this source separate prevents feedback loops.
+                let memory_source = prompt_source(&doc);
                 // Resolve the session first so the compiler has the workspace: project rules and
                 // `@`-mentioned file contents are pulled in relative to the session's cwd.
                 let looked = {
@@ -546,16 +557,71 @@ impl Engine {
                         message: format!("unresolved: {id}"),
                     });
                 }
+                let memory_context = self
+                    .state
+                    .store
+                    .as_ref()
+                    .and_then(|store| {
+                        match store.memory_context_with_receipt(&cwd, &session, &memory_source) {
+                            Ok(context) => Some(context),
+                            Err(e) => {
+                                tracing::warn!("load memory context failed: {e}");
+                                None
+                            }
+                        }
+                    })
+                    .unwrap_or_default();
+                let provider_prompt = if memory_context.block.is_empty() {
+                    compiled.prompt.clone()
+                } else {
+                    format!("{}\n\n{}", memory_context.block, compiled.prompt)
+                };
+                let provenance = MemoryTurnProvenance {
+                    used_mcp: !compiled.mcp_servers.is_empty(),
+                    used_files: !compiled.files.is_empty(),
+                    used_images: !compiled.images.is_empty(),
+                    used_session_refs: !compiled.sessions.is_empty(),
+                    used_web: doc.iter().any(|block| {
+                        matches!(block, crate::skill::DocBlock::Text { text }
+                            if text.contains("**Browser context**"))
+                    }),
+                    used_tools: false,
+                    used_recalled_memory: !memory_context.items.is_empty(),
+                };
                 // Estimate how much of the context window this prompt uses (the UI meter).
-                let usage = crate::context::usage(&compiled.prompt, crate::context::DEFAULT_CONTEXT_WINDOW);
+                let usage = crate::context::usage(&provider_prompt, crate::context::DEFAULT_CONTEXT_WINDOW);
                 self.emit(Event::Usage {
                     session: session.clone(),
                     input_tokens: usage.input_tokens,
                     output_tokens: 0,
                 });
 
-                if let Some(store) = &self.state.store {
-                    let _ = store.append_part(&session, Role::User, &Part::Text { text: compiled.prompt.clone() });
+                // Persist only the compiled user document. The transient recalled block must not
+                // appear as user-authored transcript or become a future extraction source.
+                let user_part_seq = self.state.store.as_ref().and_then(|store| {
+                    match store.append_part(&session, Role::User, &Part::Text { text: compiled.prompt.clone() }) {
+                        Ok(seq) => Some(seq),
+                        Err(e) => {
+                            tracing::warn!("persist prompt failed: {e}");
+                            None
+                        }
+                    }
+                });
+                if let (Some(store), Some(seq)) = (&self.state.store, user_part_seq) {
+                    match store.save_memory_receipt(
+                        &cwd,
+                        &session,
+                        seq,
+                        &memory_source,
+                        &memory_context,
+                    ) {
+                        Ok(Some(receipt)) => self.emit(Event::MemoryContext {
+                            session: session.clone(),
+                            receipt,
+                        }),
+                        Ok(None) => {}
+                        Err(e) => tracing::warn!("persist memory receipt failed: {e}"),
+                    }
                 }
 
                 // Auto-checkpoint the workspace before the turn (best-effort), t3code-style: a
@@ -784,8 +850,10 @@ impl Engine {
                 let events = self.state.events.clone();
                 let sess_for_task = session.clone();
                 let images_cwd = cwd_for_images;
+                let memory_store = self.state.store.clone();
+                let memory_project = images_cwd.clone();
                 tokio::spawn(async move {
-                    let mut blocks = vec![ContentBlock::text(compiled.prompt)];
+                    let mut blocks = vec![ContentBlock::text(provider_prompt)];
                     // Attached images ride along as ACP image content blocks.
                     for path in &compiled.images {
                         if let Ok((mime_type, data)) =
@@ -796,6 +864,34 @@ impl Engine {
                     }
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
+                            // A cancelled turn is intentionally incomplete; do not memorialize its
+                            // partial outcome. Other terminal stop reasons still describe a
+                            // completed provider response, even when it was bounded or refused.
+                            if !matches!(stop, acp::StopReason::Cancelled) {
+                                if let (Some(store), Some(seq)) = (memory_store, user_part_seq) {
+                                    match store.capture_completed_turn_with_provenance(
+                                        &memory_project,
+                                        &sess_for_task,
+                                        &memory_source,
+                                        seq,
+                                        provenance,
+                                    ) {
+                                        Ok(_) => {
+                                            let maintenance_store = store.clone();
+                                            tokio::spawn(async move {
+                                                tokio::time::sleep(std::time::Duration::from_secs(
+                                                    MEMORY_SETTLE_DELAY_SECS,
+                                                ))
+                                                .await;
+                                                if let Err(e) = maintenance_store.run_memory_maintenance() {
+                                                    tracing::warn!("memory maintenance failed: {e}");
+                                                }
+                                            });
+                                        }
+                                        Err(e) => tracing::warn!("capture memory failed: {e}"),
+                                    }
+                                }
+                            }
                             let _ = events.send(Event::TurnEnded {
                                 session: sess_for_task,
                                 stop_reason: format!("{stop:?}"),

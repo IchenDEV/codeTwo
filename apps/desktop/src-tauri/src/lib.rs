@@ -26,7 +26,10 @@ use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibra
 use codetwo_core::store::Project;
 use codetwo_core::workspace::DirEntry;
 use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
-use codetwo_core::{Engine, Event, Op, Part, Role, Session, Store};
+use codetwo_core::{
+    Engine, Event, MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op, Part,
+    Role, Session, Store,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::broadcast;
@@ -234,8 +237,133 @@ fn delete_skill(state: State<'_, AppState>, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_transcript(state: State<'_, AppState>, session: String) -> Vec<(Role, Part)> {
-    state.engine.transcript(&session)
+fn get_transcript(state: State<'_, AppState>, session: String) -> Vec<(i64, Role, Part)> {
+    state.engine.transcript_with_seq(&session)
+}
+
+// ---- provider-neutral memory ----------------------------------------------------------------
+
+#[tauri::command]
+fn memory_settings(state: State<'_, AppState>) -> Result<MemorySettings, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .memory_settings()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_memory_settings(state: State<'_, AppState>, settings: MemorySettings) -> Result<(), String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .set_memory_settings(settings)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_memories(
+    state: State<'_, AppState>,
+    project_path: String,
+    limit: Option<usize>,
+) -> Result<Vec<MemoryRecord>, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .list_memories(&project_path, limit.unwrap_or(100).min(500))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn search_memories(
+    state: State<'_, AppState>,
+    project_path: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<MemoryRecord>, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .search_memories(&project_path, &query, limit.unwrap_or(50).min(100))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn memory_stats(state: State<'_, AppState>, project_path: String) -> Result<MemoryStats, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .memory_stats(&project_path)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn add_memory(
+    state: State<'_, AppState>,
+    project_path: String,
+    category: String,
+    content: String,
+    pinned: bool,
+) -> Result<MemoryRecord, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .add_memory(&project_path, &category, &content, pinned)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_memory_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> Result<(), String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .set_memory_pinned(&id, pinned)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_memory_active(state: State<'_, AppState>, id: String, active: bool) -> Result<(), String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .set_memory_active(&id, active)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_session_memory_policy(
+    state: State<'_, AppState>,
+    session: String,
+    read: MemoryAccess,
+    write: MemoryAccess,
+) -> Result<(), String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .set_session_memory_policy(&session, read, write)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_memory_receipts(
+    state: State<'_, AppState>,
+    session: String,
+) -> Result<Vec<MemoryReceipt>, String> {
+    state
+        .engine
+        .store()
+        .ok_or_else(|| "memory store unavailable".to_string())?
+        .list_memory_receipts(&session)
+        .map_err(|e| e.to_string())
 }
 
 // ---- git quick-view (F1) ---------------------------------------------------------------------
@@ -1009,6 +1137,16 @@ pub fn run() {
             save_skill,
             delete_skill,
             get_transcript,
+            memory_settings,
+            set_memory_settings,
+            list_memories,
+            search_memories,
+            memory_stats,
+            add_memory,
+            set_memory_pinned,
+            set_memory_active,
+            set_session_memory_policy,
+            list_memory_receipts,
             git_status,
             git_checkpoint,
             git_checkpoints,

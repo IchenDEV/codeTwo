@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ArrowUp,
+  BrainCircuit,
   ChevronDown,
   FileText,
   GitBranch,
@@ -200,6 +201,55 @@ function ModePicker({ config }: { config: SessionConfig }) {
             detail={t(`mode.${m.id}Hint` as "mode.askHint")}
             onClick={() => {
               config.onSessionMode(m.id);
+              setOpen(false);
+            }}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const MEMORY_PRESETS = [
+  { id: "standard", read: "inherit", write: "inherit" },
+  { id: "read_only", read: "allow", write: "deny" },
+  { id: "private", read: "deny", write: "deny" },
+  { id: "learn_only", read: "deny", write: "allow" },
+] as const;
+
+function MemoryPicker({ config }: { config: SessionConfig }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const active =
+    MEMORY_PRESETS.find(
+      (preset) => preset.read === config.memoryRead && preset.write === config.memoryWrite,
+    ) ?? MEMORY_PRESETS[0];
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Chip
+          title={t("config.memory")}
+          aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}` as "memory.preset.standard")}`}
+        >
+          <BrainCircuit className="size-3.5 shrink-0" />
+          <span className="hidden @xl/composer:inline">
+            {t(`memory.preset.${active.id}` as "memory.preset.standard")}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" className="w-72 p-1.5">
+        <MenuSection>{t("config.memory")}</MenuSection>
+        {MEMORY_PRESETS.map((preset) => (
+          <MenuRow
+            key={preset.id}
+            selected={preset.id === active.id}
+            isDefault={preset.id === "standard"}
+            label={t(`memory.preset.${preset.id}` as "memory.preset.standard")}
+            detail={t(`memory.preset.${preset.id}Hint` as "memory.preset.standardHint")}
+            onClick={() => {
+              config.onMemoryPolicy(preset.read, preset.write);
               setOpen(false);
             }}
           />
@@ -575,6 +625,8 @@ export function Composer({
       />
 
       <ModePicker config={config} />
+
+      <MemoryPicker config={config} />
 
       {/* A boolean needs no view to choose from: the chip *is* the control. */}
       <Chip

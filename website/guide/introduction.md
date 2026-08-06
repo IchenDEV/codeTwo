@@ -12,6 +12,9 @@ existing coding CLIs — you keep your models, tools, and auth — behind one co
 - **Skills, not snippets.** A skill is a typed, reusable building block — a persona/fragment, a
   parameterized macro, a reference to a provider-native Agent Skill, or an MCP tool. Browse and
   install more from the built-in [skill market](/guide/market).
+- **Inspectable project memory.** Stable rules and earlier outcomes can carry across sessions and
+  providers through a bounded, local recall layer. Every derived item retains its source and can be
+  pinned or forgotten. See [Project memory](/guide/memory).
 
 ## The layout
 

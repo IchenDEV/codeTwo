@@ -1,4 +1,4 @@
-import type { CoreEvent, Part, TranscriptEntry } from "../bridge";
+import type { CoreEvent, MemoryReceipt, Part, TranscriptEntry } from "../bridge";
 
 export interface ToolEntry {
   id: string;
@@ -17,6 +17,7 @@ export interface Turn {
   thoughts: string[];
   tools: ToolEntry[];
   plan: string[];
+  memory?: MemoryReceipt;
   error?: string;
   stopReason?: string;
   startedAt: number;
@@ -56,6 +57,9 @@ export function applyEvent(turns: Turn[], ev: CoreEvent): Turn[] {
   const cur = { ...list[i] };
 
   switch (ev.event) {
+    case "memory_context":
+      cur.memory = ev.receipt;
+      break;
     case "agent_text":
       cur.text += ev.text;
       break;
@@ -88,11 +92,15 @@ export function applyEvent(turns: Turn[], ev: CoreEvent): Turn[] {
 }
 
 /** Rebuild turns from a persisted transcript: each user message starts a new turn. */
-export function turnsFromTranscript(entries: TranscriptEntry[]): Turn[] {
+export function turnsFromTranscript(
+  entries: TranscriptEntry[],
+  receipts: MemoryReceipt[] = [],
+): Turn[] {
   const out: Turn[] = [];
-  const push = (part: Part, role: string) => {
+  const receiptBySeq = new Map(receipts.map((receipt) => [receipt.user_part_seq, receipt]));
+  const push = (seq: number, part: Part, role: string) => {
     if (role === "user" && part.kind === "text") {
-      out.push({ ...newTurn(part.text), endedAt: Date.now() });
+      out.push({ ...newTurn(part.text), memory: receiptBySeq.get(seq), endedAt: Date.now() });
       return;
     }
     if (out.length === 0) out.push({ ...newTurn("(earlier)"), endedAt: Date.now() });
@@ -112,6 +120,6 @@ export function turnsFromTranscript(entries: TranscriptEntry[]): Turn[] {
         break;
     }
   };
-  for (const [role, part] of entries) push(part, role);
+  for (const [seq, role, part] of entries) push(seq, part, role);
   return out;
 }
