@@ -48,8 +48,8 @@ cargo run -p codetwo-tui
 cargo run -p codetwo-server            # prints a one-time pairing URL + token + QR
 #   env: CODETWO_HOST (0.0.0.0), CODETWO_PORT (4599), CODETWO_PAIR_TTL (900)
 
-# Desktop app (needs a display; spawns the frontend via Bun)
-cd apps/desktop && bun install && bun run tauri dev
+# Desktop app (needs a display; builds a real .app so macOS privacy prompts work)
+./script/build_and_run.sh
 ```
 
 ## Remote control
