@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { providerLabel, type GitStatus, type Project, type SessionInfo } from "../bridge";
+import { providerLabel, type Project, type SessionInfo } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,8 +49,8 @@ function shortAge(ts: number): string {
  * 1. Title — wordmark on the traffic-light line, search + compose under it.
  * 2. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
- * 3. Status — the model this session runs on, and a small table of the working tree: branch,
- *    +/− lines, and file status. The table is the click-through to source control.
+ * 3. Utilities — the model this session runs on, plus market and settings shortcuts. Project Git
+ *    status lives in the header's environment popover, beside the related right-panel shortcuts.
  */
 export function SessionRail({
   projects,
@@ -71,9 +71,6 @@ export function SessionRail({
   displayProvider,
   model,
   provider,
-  git,
-  diffStat,
-  onOpenSourceControl,
   onOpenMarket,
   newHint,
   searchHint,
@@ -109,10 +106,6 @@ export function SessionRail({
   /** The model the next turn runs on — the agent's current pick, or the provider's name. */
   model: string;
   provider: string;
-  git: GitStatus | null;
-  /** Working-tree +/− line counts, parsed from the diff alongside the status. */
-  diffStat: { added: number; deleted: number };
-  onOpenSourceControl: () => void;
   onOpenMarket: () => void;
   newHint: string;
   /** The palette's shortcut, shown in the search box. */
@@ -283,9 +276,6 @@ export function SessionRail({
       </div>
     );
   };
-
-  const dirty = git?.is_repo ? git.files.length : 0;
-  const staged = git?.is_repo ? git.files.filter((f) => f.staged).length : 0;
 
   return (
     <aside
@@ -471,7 +461,7 @@ export function SessionRail({
         </div>
       </ScrollArea>
 
-      {/* ---- 3 · the model, and the working tree at a glance -------------------------------- */}
+      {/* ---- 3 · session utilities ---------------------------------------------------------- */}
       <div className="border-t border-sidebar-border px-3 pb-2.5 pt-2">
         <div className="flex items-center gap-2 px-1 pb-1.5">
           <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
@@ -505,44 +495,6 @@ export function SessionRail({
             <TooltipContent>{t("header.settings")}</TooltipContent>
           </Tooltip>
         </div>
-
-        {git?.is_repo && (
-          <button
-            onClick={onOpenSourceControl}
-            className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-left transition-colors hover:bg-accent/50"
-            title={t("action.open_source_control")}
-          >
-            <table className="w-full border-collapse text-fine">
-              <tbody>
-                <tr>
-                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.branch")}</td>
-                  <td className="max-w-0 truncate py-0.5 text-right font-mono">
-                    {git.branch}
-                    {git.ahead > 0 && <span className="ml-1 text-primary">↑{git.ahead}</span>}
-                    {git.behind > 0 && <span className="ml-1 text-primary">↓{git.behind}</span>}
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.changes")}</td>
-                  <td className="py-0.5 text-right font-mono">
-                    <span className="text-success">+{diffStat.added}</span>{" "}
-                    <span className="text-destructive">−{diffStat.deleted}</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-0.5 pr-2 text-muted-foreground">{t("rail.status")}</td>
-                  <td className="truncate py-0.5 text-right">
-                    {dirty === 0
-                      ? t("rail.clean")
-                      : staged > 0
-                        ? `${t("rail.changedCount", { count: dirty })} · ${t("rail.stagedCount", { count: staged })}`
-                        : t("rail.changedCount", { count: dirty })}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </button>
-        )}
       </div>
       </div>
     </aside>

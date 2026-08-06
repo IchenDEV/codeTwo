@@ -84,6 +84,7 @@ import { TurnCard } from "./session/TurnCard";
 import { applyEvent, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
+import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
 import { useToast } from "./ui/toast";
@@ -981,9 +982,6 @@ export default function App() {
           displayProvider={displayProvider}
           model={modelLabel}
           provider={provider}
-          git={git}
-          diffStat={diffStat}
-          onOpenSourceControl={openSourceControl}
           onOpenMarket={openMarket}
           width={railWidth}
           onWidth={setRailWidth}
@@ -1040,6 +1038,23 @@ export default function App() {
                 {running ? t("header.running") : t("header.turns", { count: turns.length })}
               </button>
             )}
+
+            <EnvironmentPopover
+              project={activeProjectName}
+              projectPath={activeProjectName ? activeProject : null}
+              projects={projects}
+              git={git}
+              diffStat={diffStat}
+              onRefresh={refreshGit}
+              onSelectProject={selectProject}
+              onAddProject={() => void addProjectFolder()}
+              onCheckpoint={() => void doCheckpoint()}
+              onOpenSourceControl={openSourceControl}
+              onOpenIssues={() => setShowIssues(true)}
+              onOpenUsage={() => setShowUsage(true)}
+              onOpenMarket={openMarket}
+              onOpenSettings={() => setShowSettings(true)}
+            />
 
             {/* One control, not a toolbar: the panel toggle. Opening lands on the surface picker;
                 the dock's own tabs and the keyboard shortcuts pick specific surfaces. */}

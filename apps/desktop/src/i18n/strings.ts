@@ -66,6 +66,19 @@ export const en = {
   "header.open": "Open",
   "header.checkpoint": "Checkpoint now",
   "header.push": "Push",
+  "header.environment": "Project environment",
+
+  // project environment popover
+  "environment.title": "Environment",
+  "environment.local": "Local",
+  "environment.project": "Project",
+  "environment.commitOrPush": "Commit or push",
+  "environment.tools": "Tools",
+  "environment.issues": "Issues",
+  "environment.usage": "Usage",
+  "environment.moreChanges": "{count} more changes",
+  "environment.pathCopied": "Project path copied.",
+  "environment.copyFailed": "Could not copy the project path.",
 
   // composer
   "composer.placeholder": "Write your prompt —  /  for skills,  @  for files",
@@ -365,6 +378,18 @@ export const zhCN: Record<StringKey, string> = {
   "header.open": "打开",
   "header.checkpoint": "立即创建检查点",
   "header.push": "推送",
+  "header.environment": "项目环境",
+
+  "environment.title": "环境",
+  "environment.local": "本地",
+  "environment.project": "项目",
+  "environment.commitOrPush": "提交或推送",
+  "environment.tools": "工具",
+  "environment.issues": "Issues",
+  "environment.usage": "用量",
+  "environment.moreChanges": "另有 {count} 个改动",
+  "environment.pathCopied": "已复制项目路径。",
+  "environment.copyFailed": "无法复制项目路径。",
 
   "composer.placeholder": "写下你的提示词 —  /  插入技能，  @  引用文件",
   "composer.add": "向文档添加内容",
