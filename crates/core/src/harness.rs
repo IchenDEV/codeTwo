@@ -122,6 +122,7 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
             name: name.clone(),
             description,
             icon: None,
+            source: Some(spec.label.to_string()),
             payload: SkillPayload::AgentSkill { skill_ref: name, inline_text: None },
         });
     }
@@ -131,7 +132,7 @@ fn scan_root(root: &Path, spec: &HarnessSpec, out: &mut Vec<Skill>) {
 /// top-level `key: value` pairs (plain or quoted) plus indented continuation lines / `>`-style
 /// block scalars for multi-line descriptions. Anything fancier still loads — unknown keys are
 /// ignored and missing ones fall back to the directory name / empty.
-fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) {
+pub(crate) fn parse_frontmatter(text: &str) -> (Option<String>, Option<String>) {
     let mut lines = text.lines();
     if lines.next().map(str::trim_end) != Some("---") {
         return (None, None);

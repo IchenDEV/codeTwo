@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use codetwo_core::acp::{AcpClient, Connection, RecordingHandler};
-use codetwo_core::skill::McpServer;
+use codetwo_core::skill::{McpServer, McpTransport};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
@@ -54,9 +54,11 @@ async fn new_session_forwards_mcp_servers() {
 
     let server = McpServer {
         name: "fs".into(),
-        command: "mcp-fs".into(),
-        args: vec![],
-        env: vec![],
+        transport: McpTransport::Stdio {
+            command: "mcp-fs".into(),
+            args: vec![],
+            env: vec![],
+        },
     };
     let sid = client.new_session("/tmp", vec![server.to_acp_json()]).await.unwrap();
     assert_eq!(sid, "with-mcp");

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
-import { transcribeAudio, voiceAvailable } from "../bridge";
+import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { preferredRecordingType, toWav16kMono } from "./wav";
+import { shouldUseWebSpeech } from "./platform";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "../ui/toast";
@@ -15,7 +16,8 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
     SpeechRecognition?: new () => SpeechRecognitionLike;
     webkitSpeechRecognition?: new () => SpeechRecognitionLike;
   };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  const SpeechRecognition = w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+  return shouldUseWebSpeech(isDesktop, SpeechRecognition !== null) ? SpeechRecognition : null;
 }
 
 interface SpeechRecognitionLike {

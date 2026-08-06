@@ -33,6 +33,36 @@ use objc2_speech::{
 const AUTH_TIMEOUT: Duration = Duration::from_secs(120);
 const RECOGNIZE_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Privacy frameworks attribute permission prompts to an application bundle, not a loose Mach-O
+/// executable. Tauri's normal development runner starts `target/debug/codetwo-desktop` directly;
+/// asking Speech for authorization from that process makes TCC abort before Rust can return an
+/// error, even when the binary contains an unbound `__info_plist` section.
+fn is_app_bundle_executable(path: &Path) -> bool {
+    let Some(macos_dir) = path.parent() else {
+        return false;
+    };
+    let Some(contents_dir) = macos_dir.parent() else {
+        return false;
+    };
+    let Some(app_dir) = contents_dir.parent() else {
+        return false;
+    };
+
+    macos_dir.file_name().is_some_and(|name| name == "MacOS")
+        && contents_dir
+            .file_name()
+            .is_some_and(|name| name == "Contents")
+        && app_dir
+            .extension()
+            .is_some_and(|extension| extension == "app")
+}
+
+fn running_from_app_bundle() -> bool {
+    std::env::current_exe()
+        .map(|path| is_app_bundle_executable(&path))
+        .unwrap_or(false)
+}
+
 /// A recognizer that can work offline, if this Mac has one.
 ///
 /// The user's own locale first. Failing that, another region of the same language: on-device assets
@@ -76,6 +106,9 @@ fn locale_language(identifier: &str) -> &str {
 /// the user hasn't refused it — a denial should surface the configure-a-transcriber message rather
 /// than an authorization error on every click.
 pub fn is_available() -> bool {
+    if !running_from_app_bundle() {
+        return false;
+    }
     if recognizer().is_none() {
         return false;
     }
@@ -126,6 +159,12 @@ fn authorize() -> io::Result<()> {
 
 /// Transcribe an audio file on this machine. Blocking; callers run it off the async runtime.
 fn transcribe_blocking(audio: &Path) -> io::Result<String> {
+    if !running_from_app_bundle() {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "system speech recognition requires Code2 to run from its macOS app bundle",
+        ));
+    }
     let rec = recognizer().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::Unsupported,
@@ -189,6 +228,19 @@ mod tests {
         assert_eq!(locale_language("en-GB"), "en");
         assert_eq!(locale_language("zh_Hans_CN"), "zh");
         assert_eq!(locale_language("en"), "en");
+    }
+
+    #[test]
+    fn privacy_frameworks_are_only_used_from_an_app_bundle() {
+        assert!(is_app_bundle_executable(Path::new(
+            "/Applications/Code2.app/Contents/MacOS/codetwo-desktop"
+        )));
+        assert!(!is_app_bundle_executable(Path::new(
+            "/tmp/target/debug/codetwo-desktop"
+        )));
+        assert!(!is_app_bundle_executable(Path::new(
+            "/tmp/not-an-app.app/codetwo-desktop"
+        )));
     }
 
     /// The probe has to be answerable without a bundle, a prompt, or a network round-trip — it runs

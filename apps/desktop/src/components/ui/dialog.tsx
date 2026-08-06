@@ -32,8 +32,8 @@ function DialogClose({
 }
 
 const DialogOverlay = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentProps<typeof DialogPrimitive.Overlay>
+  React.ElementRef<typeof DialogPrimitive.Overlay>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
@@ -45,7 +45,7 @@ const DialogOverlay = React.forwardRef<
     {...props}
   />
 ))
-DialogOverlay.displayName = "DialogOverlay"
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 function DialogContent({
   className,

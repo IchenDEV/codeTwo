@@ -136,6 +136,7 @@ export interface Skill {
   name: string;
   description: string;
   icon: string | null;
+  source?: string | null;
   payload: SkillPayload;
 }
 
@@ -161,6 +162,9 @@ const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
   { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment", source: null },
   { id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null },
+  { id: "demo:skill:review", name: "Release Review", description: "Review a release against its acceptance criteria", icon: null, kind: "agent_skill", source: "Plugin · Developer Toolkit" },
+  { id: "demo:agent:research", name: "Researcher", description: "Collect primary evidence before implementation", icon: null, kind: "subagent", source: "Plugin · Developer Toolkit" },
+  { id: "demo:mcp:docs", name: "docs-search", description: "MCP server from Developer Toolkit", icon: null, kind: "mcp", source: "Plugin · Developer Toolkit" },
 ];
 
 export async function listProviders(): Promise<ProviderInfo[]> {
@@ -595,7 +599,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["toggle_doc_mode", "Mod+Shift+E", "Expand document to full height"],
   ["open_command_palette", "Mod+K", "Command palette"],
   ["open_source_control", "Mod+Shift+G", "Source control"],
-  ["open_market", "Mod+Shift+M", "Open skill market"],
+  ["open_market", "Mod+Shift+M", "Open Plugin Hub"],
   ["open_files", "Mod+P", "Browse workspace files"],
   ["open_issues", "Mod+Shift+I", "Open issues"],
   ["open_usage", "Mod+Shift+U", "Open usage"],
@@ -631,7 +635,7 @@ export interface Annotation {
   styles: StyleChange[];
 }
 
-// ---- skill market (F5) -----------------------------------------------------------------------
+// ---- Plugin Hub + component market (F5) -------------------------------------------------------
 
 export interface MarketItem {
   id: string;
@@ -656,6 +660,87 @@ export async function marketCatalog(): Promise<MarketItem[]> {
 
 export async function marketInstall(id: string): Promise<void> {
   if (inTauri) await invoke("market_install", { id });
+}
+
+export interface PluginCounts {
+  skills: number;
+  subagents: number;
+  mcp_servers: number;
+  scaffolds: number;
+}
+
+export interface PluginScaffoldInfo {
+  id: string;
+  name: string;
+  description: string;
+  files: number;
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  source: string;
+  repository: string;
+  counts: PluginCounts;
+  scaffolds: PluginScaffoldInfo[];
+}
+
+export interface GitHubImportResult {
+  plugin: PluginInfo;
+}
+
+export interface ScaffoldInstallResult {
+  plugin: string;
+  scaffold: string;
+  destination: string;
+  files: number;
+}
+
+export async function listPlugins(): Promise<PluginInfo[]> {
+  return inTauri
+    ? invoke<PluginInfo[]>("list_plugins")
+    : [
+        {
+          id: "developer-toolkit-demo",
+          name: "Developer Toolkit",
+          version: "1.4.0",
+          description: "A complete development workflow with review, research, tools, and starter projects.",
+          author: "Code2 Community",
+          source: "GitHub · example/developer-toolkit",
+          repository: "https://github.com/example/developer-toolkit",
+          counts: { skills: 1, subagents: 1, mcp_servers: 1, scaffolds: 1 },
+          scaffolds: [
+            {
+              id: "vite-react-demo",
+              name: "Vite React app",
+              description: "TypeScript, tests, and a production-ready project structure",
+              files: 12,
+            },
+          ],
+        },
+      ];
+}
+
+/** Install a complete plugin from a GitHub repository or a selected /tree/ path. */
+export async function githubImportPlugin(repository: string): Promise<GitHubImportResult> {
+  if (!inTauri) throw new Error("Plugin installation requires the Code2 desktop app.");
+  return invoke<GitHubImportResult>("github_import_plugin", { repository });
+}
+
+export async function uninstallPlugin(id: string): Promise<void> {
+  if (inTauri) await invoke("uninstall_plugin", { id });
+}
+
+export async function applyPluginScaffold(
+  pluginId: string,
+  scaffoldId: string,
+  cwd: string,
+): Promise<ScaffoldInstallResult> {
+  if (!inTauri) throw new Error("Scaffold installation requires the Code2 desktop app.");
+  return invoke<ScaffoldInstallResult>("apply_plugin_scaffold", { pluginId, scaffoldId, cwd });
 }
 
 // ---- remote control (F10) --------------------------------------------------------------------
@@ -742,6 +827,7 @@ export interface CompiledPreview {
   prompt: string;
   mcp_servers: string[];
   agent_skills: string[];
+  subagents: string[];
   files: string[];
   images: string[];
   sessions: string[];
@@ -754,6 +840,7 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
     prompt: doc.map(describeBlock).join("\n\n"),
     mcp_servers: [],
     agent_skills: [],
+    subagents: [],
     files: doc.flatMap((b) => (b.type === "file" ? [b.path] : [])),
     images: doc.flatMap((b) => (b.type === "image" ? [b.path] : [])),
     sessions: doc.flatMap((b) => (b.type === "session" ? [b.session_id] : [])),

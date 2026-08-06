@@ -11,6 +11,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
   const files = preview.files ?? [];
   const mcp = preview.mcp_servers ?? [];
   const agentSkills = preview.agent_skills ?? [];
+  const subagents = preview.subagents ?? [];
   const unresolved = preview.unresolved ?? [];
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -23,7 +24,7 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
           <p className="text-hint text-warning">Unresolved: {unresolved.join(", ")}</p>
         )}
 
-        {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0) && (
+        {(files.length > 0 || mcp.length > 0 || agentSkills.length > 0 || subagents.length > 0) && (
           <div className="flex flex-wrap gap-1.5">
             {files.map((f) => (
               <Badge key={f} variant="outline" className="font-mono text-cap">
@@ -38,6 +39,11 @@ export function PreviewModal({ preview, onClose }: { preview: CompiledPreview; o
             {agentSkills.map((s) => (
               <Badge key={s} variant="secondary" className="text-cap">
                 skill: {s}
+              </Badge>
+            ))}
+            {subagents.map((agent) => (
+              <Badge key={agent} variant="secondary" className="text-cap">
+                subagent: {agent}
               </Badge>
             ))}
           </div>

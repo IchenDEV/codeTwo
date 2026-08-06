@@ -23,7 +23,7 @@ A rendered context block looks like:
 ## Giving the agent its own browser
 
 Beyond passing context, you can give the *agent* a browser tool: install **Browser Tool (MCP)** from
-the [skill market](/guide/market) and add it to your prompt. That attaches a browser MCP server to
+the [Plugin Hub market](/guide/market) and add it to your prompt. That attaches a browser MCP server to
 the session so the agent can drive a browser itself (the MCP server binary must be installed).
 
 ::: info Limits

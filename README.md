@@ -4,6 +4,9 @@ A document-first coding-agent app. Compose prompts as a **structured document** 
 weave in reusable **skills** with a `/` picker, and run them against existing coding CLIs —
 **Claude Code**, **OpenAI Codex**, and **Grok** — behind one interface.
 
+Its **Plugin Hub** installs complete GitHub packages: standard Skills, Subagent definitions,
+stdio/HTTP/SSE MCP servers, and conflict-safe project scaffolds.
+
 Ships two frontends over one shared Rust core:
 
 - **Desktop** — Tauri v2 + React + BlockNote (the document editor).
@@ -48,8 +51,8 @@ cargo run -p codetwo-tui
 cargo run -p codetwo-server            # prints a one-time pairing URL + token + QR
 #   env: CODETWO_HOST (0.0.0.0), CODETWO_PORT (4599), CODETWO_PAIR_TTL (900)
 
-# Desktop app (needs a display; spawns the frontend via Bun)
-cd apps/desktop && bun install && bun run tauri dev
+# Desktop app (needs a display; builds a real .app so macOS privacy prompts work)
+./script/build_and_run.sh
 ```
 
 ## Remote control

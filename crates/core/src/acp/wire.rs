@@ -42,6 +42,9 @@ pub struct AgentCaps {
     /// restoring the conversation context. This is the provider-native resume cursor — the only
     /// way an agent's context survives its process.
     pub load_session: bool,
+    /// Remote MCP transports are optional; stdio is the ACP baseline.
+    pub mcp_http: bool,
+    pub mcp_sse: bool,
 }
 
 impl InitializeResponse {
@@ -52,6 +55,12 @@ impl InitializeResponse {
                 .get("loadSession")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            mcp_http: self
+                .agent_capabilities
+                .pointer("/mcpCapabilities/http")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            mcp_sse: self.agent_capabilities.pointer("/mcpCapabilities/sse").and_then(Value::as_bool).unwrap_or(false),
         }
     }
 }
@@ -399,6 +408,8 @@ mod tests {
         let none: InitializeResponse =
             serde_json::from_value(json!({"protocolVersion": 1})).unwrap();
         assert!(!none.caps().load_session);
+        assert!(!none.caps().mcp_http);
+        assert!(!none.caps().mcp_sse);
         let odd: InitializeResponse = serde_json::from_value(
             json!({"protocolVersion": 1, "agentCapabilities": {"loadSession": "yes"}}),
         )
@@ -408,10 +419,13 @@ mod tests {
 
     #[test]
     fn caps_read_load_session() {
-        let r: InitializeResponse = serde_json::from_value(
-            json!({"protocolVersion": 1, "agentCapabilities": {"loadSession": true}}),
-        )
+        let r: InitializeResponse = serde_json::from_value(json!({"protocolVersion": 1, "agentCapabilities": {
+            "loadSession": true,
+            "mcpCapabilities": {"http": true, "sse": true}
+        }}))
         .unwrap();
         assert!(r.caps().load_session);
+        assert!(r.caps().mcp_http);
+        assert!(r.caps().mcp_sse);
     }
 }
