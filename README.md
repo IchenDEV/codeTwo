@@ -20,7 +20,7 @@ The core spawns each provider as a child process and speaks ACP to it. See
 
 ```
 crates/core    the brain: ACP client, engine, providers, sessions, skills + market, permissions,
-               worktrees, git (status/checkpoints/diff/commit), keymap, browser, pty
+               project memory, worktrees, git (status/checkpoints/diff/commit), keymap, browser, pty
 crates/tui     ratatui frontend (links core)
 crates/server  headless remote-control server (WebSocket + pairing token + QR; links core)
 apps/desktop   Tauri desktop app + React/BlockNote UI (links core + server)

@@ -1,4 +1,4 @@
-import type { ProviderInfo, Sandbox } from "../bridge";
+import type { MemoryAccess, ProviderInfo, Sandbox } from "../bridge";
 import type { SessionMode } from "./mode";
 
 /**
@@ -20,6 +20,9 @@ export interface SessionConfig {
   onWorktree: (v: boolean) => void;
   planMode: boolean;
   onPlan: (v: boolean) => void;
+  memoryRead: MemoryAccess;
+  memoryWrite: MemoryAccess;
+  onMemoryPolicy: (read: MemoryAccess, write: MemoryAccess) => void;
   /** Whether a session exists yet — some controls have nothing to act on before that. */
   hasSession: boolean;
 }

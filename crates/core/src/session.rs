@@ -11,6 +11,36 @@ use serde::{Deserialize, Serialize};
 /// separately so we can resume via ACP `session/load`.
 pub type SessionId = String;
 
+/// Whether one side of long-term memory follows the global setting, is explicitly allowed, or is
+/// denied for this session. The global master switch still wins; `Allow` expresses session intent
+/// and does not bypass a disabled global feature.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryAccess {
+    #[default]
+    Inherit,
+    Allow,
+    Deny,
+}
+
+impl MemoryAccess {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Inherit => "inherit",
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Self {
+        match value {
+            "allow" => Self::Allow,
+            "deny" => Self::Deny,
+            _ => Self::Inherit,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
@@ -48,6 +78,10 @@ pub struct Session {
     pub permission_mode: PermissionMode,
     /// The provider's ACP session id, once `session/new` (or `session/load`) has run.
     pub acp_session_id: Option<String>,
+    /// Per-session narrowing of prompt-time recall.
+    pub memory_read: MemoryAccess,
+    /// Per-session narrowing of completed-turn learning.
+    pub memory_write: MemoryAccess,
     pub created_at: i64,
 }
 
@@ -62,6 +96,8 @@ impl Session {
             worktree_path: None,
             permission_mode: PermissionMode::Ask,
             acp_session_id: None,
+            memory_read: MemoryAccess::Inherit,
+            memory_write: MemoryAccess::Inherit,
             created_at: now_millis(),
         }
     }

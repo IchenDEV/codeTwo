@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, Keyboard, Package, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Keyboard, Package, RotateCcw, SlidersHorizontal } from "lucide-react";
 
 import type { KeymapEntry, ProviderInfo } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
@@ -8,16 +8,18 @@ import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
 import { useTheme, type ThemePreference } from "../theme";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
+import { MemorySettingsPage } from "./MemorySettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "general" | "keybindings" | "providers";
+type SettingsTab = "general" | "memory" | "keybindings" | "providers";
 
 const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey: StringKey }[] = [
   { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+  { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
 ];
@@ -95,7 +97,7 @@ function GroupHeading({ children }: { children: ReactNode }) {
 function Page({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <div>
-      <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
+      <h1 className="text-display font-semibold tracking-tight">{title}</h1>
       <p className="pb-3 pt-1.5 text-hint leading-relaxed text-muted-foreground">{description}</p>
       {children}
     </div>
@@ -103,7 +105,8 @@ function Page({ title, description, children }: { title: string; description: st
 }
 
 /**
- * Settings as a full-window page: its own nav rail on the left (General, Keybindings, Providers)
+ * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
+ * Providers)
  * with a Back row at the bottom, and one scrolling column of rows per category. The window-wide
  * takeover is deliberate — a settings surface with its own sidebar reads as a *place* you went to,
  * which is what earns the explicit way back.
@@ -115,6 +118,7 @@ export function SettingsPage({
   onReset,
   onResetAll,
   providers,
+  projectPath,
   onClose,
 }: {
   bindings: KeymapEntry[];
@@ -124,6 +128,7 @@ export function SettingsPage({
   /** Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab. */
   onResetAll?: () => void;
   providers: ProviderInfo[];
+  projectPath: string;
   onClose: () => void;
 }) {
   const t = useT();
@@ -239,7 +244,7 @@ export function SettingsPage({
             {t("settings.title")}
           </span>
           <div data-tauri-drag-region className="flex-1" />
-          {tab !== "providers" && (
+          {(tab === "general" || tab === "keybindings") && (
             <Button
               variant="ghost"
               size="sm"
@@ -331,6 +336,8 @@ export function SettingsPage({
                 ))}
               </Page>
             )}
+
+            {tab === "memory" && <MemorySettingsPage projectPath={projectPath} />}
 
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>

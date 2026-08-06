@@ -33,14 +33,72 @@ export interface SessionInfo {
   worktree_path: string | null;
   permission_mode: string;
   acp_session_id: string | null;
+  memory_read: MemoryAccess;
+  memory_write: MemoryAccess;
   created_at: number;
 }
+
+export type MemoryAccess = "inherit" | "allow" | "deny";
 
 /// A workspace the user works in. The path is the identity — one directory is one project.
 export interface Project {
   path: string;
   name: string;
   last_opened_at: number;
+}
+
+export interface MemorySettings {
+  enabled: boolean;
+  capture: boolean;
+  inject: boolean;
+  include_external_context: boolean;
+}
+
+export interface MemorySourceRef {
+  session_id: string;
+  part_seq: number;
+}
+
+export interface MemoryRecord {
+  id: string;
+  project_path: string;
+  session_id: string | null;
+  layer: "L0" | "L1" | "L2" | "L3";
+  category: string;
+  content: string;
+  confidence: number;
+  sources: MemorySourceRef[];
+  pinned: boolean;
+  active: boolean;
+  created_at: number;
+  updated_at: number;
+  relevance: number | null;
+  editable: boolean;
+}
+
+export interface MemoryStats {
+  l0: number;
+  l1: number;
+  l2: number;
+  l3: number;
+  pending: number;
+}
+
+export interface MemoryReceiptItem {
+  id: string;
+  layer: "L0" | "L1" | "L2" | "L3";
+  category: string;
+  content: string;
+  source: MemorySourceRef | null;
+  relevance: number | null;
+}
+
+export interface MemoryReceipt {
+  session_id: string;
+  user_part_seq: number;
+  estimated_tokens: number;
+  items: MemoryReceiptItem[];
+  created_at: number;
 }
 
 /// One model a session can run on. ACP's model API is UNSTABLE and most adapters don't report a
@@ -89,6 +147,7 @@ export function describeBlock(b: DocBlock): string {
 /// Mirrors core `Event` (tagged by `event`, snake_case).
 export type CoreEvent =
   | { event: "session_created"; session: string }
+  | { event: "memory_context"; session: string; receipt: MemoryReceipt }
   | { event: "agent_text"; session: string; message_id: string; text: string }
   | { event: "agent_thought"; session: string; text: string }
   | { event: "tool_call"; session: string; id: string; title: string; status: string }
@@ -125,7 +184,7 @@ export type Part =
   | { kind: "tool_call"; id: string; title: string; status: string }
   | { kind: "plan"; entries: string[] };
 
-export type TranscriptEntry = [string, Part]; // [role, part]
+export type TranscriptEntry = [number, string, Part]; // [sequence, role, part]
 
 export type SkillPayload =
   | { kind: "fragment"; text: string }
@@ -179,6 +238,59 @@ export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
 
 export async function listSessions(): Promise<SessionInfo[]> {
   return inTauri ? invoke<SessionInfo[]>("list_sessions") : [];
+}
+
+export async function getMemorySettings(): Promise<MemorySettings> {
+  return inTauri
+    ? invoke<MemorySettings>("memory_settings")
+    : { enabled: true, capture: true, inject: true, include_external_context: true };
+}
+
+export async function saveMemorySettings(settings: MemorySettings): Promise<void> {
+  if (inTauri) await invoke("set_memory_settings", { settings });
+}
+
+export async function listMemories(projectPath: string, limit = 100): Promise<MemoryRecord[]> {
+  return inTauri ? invoke<MemoryRecord[]>("list_memories", { projectPath, limit }) : [];
+}
+
+export async function searchMemories(projectPath: string, query: string, limit = 50): Promise<MemoryRecord[]> {
+  return inTauri ? invoke<MemoryRecord[]>("search_memories", { projectPath, query, limit }) : [];
+}
+
+export async function getMemoryStats(projectPath: string): Promise<MemoryStats> {
+  return inTauri
+    ? invoke<MemoryStats>("memory_stats", { projectPath })
+    : { l0: 0, l1: 0, l2: 0, l3: 0, pending: 0 };
+}
+
+export async function addMemory(
+  projectPath: string,
+  category: string,
+  content: string,
+  pinned = true,
+): Promise<MemoryRecord> {
+  return invoke<MemoryRecord>("add_memory", { projectPath, category, content, pinned });
+}
+
+export async function setMemoryPinned(id: string, pinned: boolean): Promise<void> {
+  if (inTauri) await invoke("set_memory_pinned", { id, pinned });
+}
+
+export async function setMemoryActive(id: string, active: boolean): Promise<void> {
+  if (inTauri) await invoke("set_memory_active", { id, active });
+}
+
+export async function setSessionMemoryPolicy(
+  session: string,
+  read: MemoryAccess,
+  write: MemoryAccess,
+): Promise<void> {
+  if (inTauri) await invoke("set_session_memory_policy", { session, read, write });
+}
+
+export async function listMemoryReceipts(session: string): Promise<MemoryReceipt[]> {
+  return inTauri ? invoke<MemoryReceipt[]>("list_memory_receipts", { session }) : [];
 }
 
 export async function newSession(provider: string, cwd: string, useWorktree: boolean): Promise<void> {

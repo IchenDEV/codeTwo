@@ -26,6 +26,7 @@ pub mod harness;
 pub mod issues;
 pub mod keymap;
 pub mod market;
+pub mod memory;
 pub mod models;
 pub mod permission;
 pub mod plugin;
@@ -51,13 +52,17 @@ pub use git::{Checkpoint, GitFile, GitStatus};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;
+pub use memory::{
+    MemoryContext, MemoryReceipt, MemoryReceiptItem, MemoryRecord, MemorySettings, MemorySourceRef,
+    MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
+};
 pub use models::builtin_models;
 pub use context::{estimate_tokens, ContextUsage};
 pub use permission::{Action, PermissionMode, PermissionPolicy, Rule, SandboxPolicy};
 pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{default_registry, LaunchSpec, Provider, ProviderId};
 pub use pty::PtySession;
-pub use session::{Message, Part, Role, Session, SessionId};
+pub use session::{MemoryAccess, Message, Part, Role, Session, SessionId};
 pub use skill::{
     compile, CompiledPrompt, DocBlock, McpServer, McpTransport, Skill, SkillKind, SkillLibrary,
     SkillPayload, SubagentDefinition,

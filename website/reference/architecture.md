@@ -13,6 +13,7 @@ it through a small submission/event interface.
    │  provider   registry: launch spec + availability per backend           │
    │  session    session / message / part model                            │
    │  store      SQLite persistence (sessions + transcripts)               │
+   │  memory     project-scoped L0–L3 capture, search, recall               │
    │  skill      skill library + market + document→prompt compiler          │
    │  permission ask/allow/deny × tool+glob; modes incl. YOLO               │
    │  git        status · checkpoints · diff · commit/push                  │
@@ -58,6 +59,13 @@ version churn; unknown update variants are logged and dropped rather than fatal.
 A single SQLite database (`~/.codetwo/codetwo.db` / a platform data dir): sessions as rows, the
 transcript as an ordered list of parts. The session list and history are shared across every surface
 that opens the same file.
+
+The database also holds provider-neutral [project memory](/guide/memory). Raw L0 evidence remains
+in the transcript; L2 episodes are immediate while stable L1/L3 knowledge is consolidated from a
+delayed candidate queue. Session read/write policy and external-context provenance gate learning.
+Each bounded, untrusted recall block added outside the persisted user transcript gets an
+inspectable turn receipt. Provider-native ACP context remains the source of continuity within a
+single provider session.
 
 ## Testing
 

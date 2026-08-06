@@ -1,8 +1,8 @@
-import { Brain, ChevronRight, CircleAlert, Loader2, ListTodo, Wrench } from "lucide-react";
+import { Brain, BrainCircuit, ChevronRight, CircleAlert, Loader2, ListTodo, Wrench } from "lucide-react";
 import { isRunning, type Turn } from "./turns";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useT } from "../i18n";
+import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
 function duration(t: Turn): string | null {
@@ -45,9 +45,10 @@ function Detail({
  */
 export function TurnCard({ turn }: { turn: Turn }) {
   const t = useT();
+  const { locale } = useLanguage();
   const running = isRunning(turn);
   const dur = duration(turn);
-  const hasDetail = turn.tools.length + turn.thoughts.length + turn.plan.length > 0;
+  const hasDetail = turn.tools.length + turn.thoughts.length + turn.plan.length + (turn.memory?.items.length ?? 0) > 0;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
@@ -121,6 +122,38 @@ export function TurnCard({ turn }: { turn: Turn }) {
                 <li key={i}>{p}</li>
               ))}
             </ol>
+          </Detail>
+
+          <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>
+            {turn.memory && (
+              <div className="space-y-2 text-fine">
+                <p className="text-muted-foreground">
+                  {t("turn.memoryTokens", {
+                    count: new Intl.NumberFormat(locale).format(turn.memory.estimated_tokens),
+                  })}
+                </p>
+                <ul className="space-y-1.5">
+                  {turn.memory.items.map((item) => {
+                    const source = item.source
+                      ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
+                      : t("memory.manual");
+                    return (
+                      <li key={item.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
+                        <div className="flex items-center gap-1.5 text-cap text-muted-foreground">
+                          <span className="font-mono">{item.layer}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{item.category}</span>
+                          <span className="ms-auto font-mono">{source}</span>
+                        </div>
+                        <p dir="auto" className="mt-1 whitespace-pre-wrap break-words text-foreground/80">
+                          {item.content}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </Detail>
 
           <span className="ml-auto flex shrink-0 items-center gap-1.5">

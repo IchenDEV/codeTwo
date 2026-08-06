@@ -27,6 +27,10 @@ features:
     title: Complete plugins from GitHub
     details: Browse a curated catalog and install skills in one click — personas, macros, and MCP tools (browser, filesystem). Author your own.
     link: /guide/market
+  - icon: 🧠
+    title: Provider-neutral project memory
+    details: Recall stable decisions and earlier outcomes across sessions and providers. Local, evidence-linked, bounded, inspectable, and forgettable.
+    link: /guide/memory
   - icon: ⏱️
     title: Checkpoints, diffs & revert
     details: Every turn is auto-checkpointed to a hidden git ref. Review the diff, revert to any point, and commit/push from the UI.

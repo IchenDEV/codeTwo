@@ -55,14 +55,20 @@ answer `session/request_permission` → read `StopReason`. Proven end-to-end off
 
 ## Context sync: whose memory is it?
 
-Two transcripts exist per conversation, and they are not the same thing (a distinction t3code's
-server makes explicit, and we adopt):
+Two transcripts and one recall layer can participate in a turn. They are not the same thing:
 
 - **The app-owned transcript** — messages/parts in SQLite. Canonical for *display*: it's what the
   rail, the transcript pane, and any future remote frontend render, and it survives anything.
 - **The provider-native context** — the agent CLI's own session state (Claude Code's session
-  files, Codex's rollouts, …). Canonical for *the model's memory*: we never reconstruct or replay
-  it ourselves; we only hold a cursor to it — the ACP session id, persisted per session.
+  files, Codex's rollouts, …). Canonical for continuity *inside that provider session*: we never
+  reconstruct or replay it ourselves; we only hold a cursor to it — the ACP session id, persisted
+  per session.
+- **Code2 project memory** — provider-neutral L0–L3 recall in SQLite. It reuses raw transcript
+  evidence and derives stable notes, earlier work episodes, and a project profile. It is canonical
+  for none of the facts it contains: every derived row keeps evidence and is injected as untrusted,
+  potentially stale reference data. L1/L3 consolidation is delayed, session read/write policy can
+  narrow global controls, external-context provenance can gate learning, and every injection gets
+  a separately persisted turn receipt. See [`docs/memory.md`](memory.md).
 
 On revive (a session prompted after an app restart), the engine re-attaches to that cursor with
 `session/load` when the agent advertised `loadSession` at `initialize` — the agent replays its
@@ -73,6 +79,13 @@ loudly, never silently. Model switches stay in-session (`session/set_model` /
 `session/set_config_option`); an agent that refuses gets an actionable error ("start a new session
 to use X") rather than a bare protocol failure. Cross-provider switches are not attempted at all:
 a session is bound to its provider, because no provider can read another's native context.
+
+Project memory is the intentionally small bridge across that boundary. Before prompt compilation
+is sent, the engine retrieves a bounded project-scoped block and prepends it transiently. The
+stored user transcript never contains that block. After a successful turn, capture examines the
+original user document and the stored agent outcome. L2 is immediate; stable L1 candidates wait
+for background maintenance. Expanded context is tracked as provenance and can be excluded from
+durable learning.
 
 ## Skills (the differentiator) — `core::skill`
 
