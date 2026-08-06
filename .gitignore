@@ -24,3 +24,4 @@ apps/desktop/src-tauri/gen
 # Agent scratch: throwaway worktrees and per-machine settings. launch.json is shared.
 .claude/worktrees/
 .claude/settings.local.json
+.codex/run/

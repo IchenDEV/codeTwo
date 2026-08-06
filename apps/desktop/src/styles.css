@@ -383,26 +383,27 @@
       opacity var(--motion-fast) ease-out;
   }
 
-  /* The centred dialog: its -50% positioning translate has to live inside the keyframes, or the
-     scale would override it and the panel would jump to the top-left corner mid-animation. */
+  /* Tailwind 4's translate utilities use the individual `translate` property, so centring remains
+     active while these keyframes animate `transform`. Keep positioning out of the keyframes: a
+     second translate here would be applied on top of the utility and make the dialog drift. */
   @keyframes dialog-in {
     from {
       opacity: 0;
-      transform: translate(-50%, -49%) scale(0.97);
+      transform: scale(0.97);
     }
     to {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
+      transform: scale(1);
     }
   }
   @keyframes dialog-out {
     from {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
+      transform: scale(1);
     }
     to {
       opacity: 0;
-      transform: translate(-50%, -49.5%) scale(0.98);
+      transform: scale(0.98);
     }
   }
   .dialog-layer[data-state="open"] {

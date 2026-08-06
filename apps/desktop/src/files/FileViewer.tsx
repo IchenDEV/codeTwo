@@ -152,7 +152,7 @@ export function FileViewer({
       );
 
       editor.addCommand(m.monaco.KeyMod.CtrlCmd | m.monaco.KeyCode.KeyS, () => void saveRef.current());
-      // ⌘⇧C, not ⌘⇧M: the app keymap owns ⌘⇧M (skill market), and a binding the shell already
+      // ⌘⇧C, not ⌘⇧M: the app keymap owns ⌘⇧M (Plugin Hub), and a binding the shell already
       // claims would be a coin-flip depending on focus.
       editor.addAction({
         id: "codetwo.commentSelection",

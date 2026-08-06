@@ -92,6 +92,7 @@ fn kind_word(k: SkillKind) -> &'static str {
         SkillKind::Fragment => "fragment",
         SkillKind::Macro => "macro",
         SkillKind::AgentSkill => "agent-skill",
+        SkillKind::Subagent => "subagent",
         SkillKind::Mcp => "tool",
     }
 }

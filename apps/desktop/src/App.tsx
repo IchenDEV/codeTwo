@@ -4,6 +4,7 @@ import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "l
 import { DocEditor } from "./editor/Editor";
 import {
   answerPermission,
+  applyPluginScaffold,
   archiveSession,
   browserContext,
   cancelTurn,
@@ -23,9 +24,11 @@ import {
   gitPush,
   gitRevert,
   gitStatus,
+  githubImportPlugin,
   issueContext,
   listArchivedSessions,
   listMemoryReceipts,
+  listPlugins,
   listProjectScripts,
   listProjects,
   listProviders,
@@ -51,6 +54,7 @@ import {
   setPermissionMode,
   setSandbox,
   submitPrompt,
+  uninstallPlugin,
   type Checkpoint,
   type CompiledPreview,
   type ConfigOptionInfo,
@@ -63,6 +67,7 @@ import {
   type MarketItem,
   type MemoryAccess,
   type ModelChoice,
+  type PluginInfo,
   type Project,
   type ProjectScript,
   type ProviderInfo,
@@ -70,7 +75,7 @@ import {
   type SessionInfo,
   type SkillInfo,
 } from "./bridge";
-import { MarketModal } from "./market/Market";
+import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
@@ -164,6 +169,7 @@ function IconAction({
 export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [archivedSessions, setArchivedSessions] = useState<SessionInfo[]>([]);
   // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
@@ -192,7 +198,7 @@ export default function App() {
   const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
-  const [showMarket, setShowMarket] = useState(false);
+  const [showPluginHub, setShowPluginHub] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [showSourceControl, setShowSourceControl] = useState(false);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
@@ -251,6 +257,7 @@ export default function App() {
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
+  const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   // Mirrors `activeProject` so `selectProject` can tell a real switch from a re-click without
   // remaking its callback (and the rail rows' props) on every project change.
@@ -606,8 +613,14 @@ export default function App() {
 
   // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
   // for the project the user is in, so the list refreshes on mount and on every project switch.
-  const refreshSkills = useCallback(() => {
-    listSkills(cwd || ".").then(setSkills).catch(() => {});
+  const refreshSkills = useCallback(async () => {
+    try {
+      const next = await listSkills(cwd || ".");
+      setSkills(next);
+      return next;
+    } catch {
+      return [];
+    }
   }, [cwd]);
 
   useEffect(() => {
@@ -651,10 +664,12 @@ export default function App() {
       .catch(() => fresh() && setGit(null));
   }, [cwd]);
 
-  const openMarket = useCallback(() => {
+  const openPluginHub = useCallback(() => {
     marketCatalog().then(setMarket).catch(() => {});
-    setShowMarket(true);
-  }, []);
+    listPlugins().then(setPlugins).catch(() => {});
+    refreshSkills();
+    setShowPluginHub(true);
+  }, [refreshSkills]);
 
   const openSourceControl = useCallback(() => {
     refreshGit();
@@ -799,7 +814,7 @@ export default function App() {
           openSourceControl();
           break;
         case "open_market":
-          openMarket();
+          openPluginHub();
           break;
         case "open_usage":
           setShowUsage(true);
@@ -841,7 +856,7 @@ export default function App() {
       t,
       refreshGit,
       openSourceControl,
-      openMarket,
+      openPluginHub,
       toggleDock,
       toggleDocMode,
       docMode,
@@ -858,7 +873,7 @@ export default function App() {
     { id: "new", label: "New session", hint: hint("new_session"), run: () => void createSession() },
     { id: "sc", label: "Source control", hint: hint("open_source_control"), run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
-    { id: "market", label: "Open skill market", hint: hint("open_market"), run: openMarket },
+    { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
     { id: "usage", label: "Usage (5h / week / month)", hint: hint("open_usage"), run: () => setShowUsage(true) },
@@ -1064,7 +1079,7 @@ export default function App() {
           git={git}
           diffStat={diffStat}
           onOpenSourceControl={openSourceControl}
-          onOpenMarket={openMarket}
+          onOpenMarket={openPluginHub}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}
@@ -1239,7 +1254,7 @@ export default function App() {
             onAttachFile={() => setShowFiles(true)}
             onInsertSkill={() => openSkillPickerRef.current?.()}
             onInsertIssue={() => setShowIssues(true)}
-            onOpenMarket={openMarket}
+            onOpenMarket={openPluginHub}
             onNewSkill={() => setSkillDraft({ name: "", text: "" })}
             onVoiceText={(t) => insertTextRef.current?.(t)}
             runHint={hint("run")}
@@ -1258,6 +1273,7 @@ export default function App() {
               focusRef={focusEditorRef}
               clearRef={clearEditorRef}
               openSkillPickerRef={openSkillPickerRef}
+              insertSkillRef={insertSkillRef}
               onEmptyChange={setDocEmpty}
             />
           </Composer>
@@ -1306,12 +1322,68 @@ export default function App() {
       )}
 
       {/* ---------------- dialogs ---------------- */}
-      {showMarket && (
-        <MarketModal
+      {showPluginHub && (
+        <PluginHub
+          plugins={plugins}
+          skills={skills}
           items={market}
-          onInstall={(id) => void marketInstall(id).then(() => { marketCatalog().then(setMarket); refreshSkills(); })}
-          onUninstall={(id) => void deleteSkill(id).then(() => { marketCatalog().then(setMarket); refreshSkills(); })}
-          onClose={() => setShowMarket(false)}
+          cwd={cwd || "."}
+          onUse={(skill) => {
+            setShowPluginHub(false);
+            setTimeout(() => insertSkillRef.current?.(skill), 0);
+          }}
+          onInstallMarket={async (id) => {
+            try {
+              await marketInstall(id);
+              setMarket(await marketCatalog());
+              await refreshSkills();
+              toast(t("pluginHub.componentInstalledToast"), "success");
+            } catch (error) {
+              toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onUninstallSkill={async (id) => {
+            try {
+              await deleteSkill(id);
+              setMarket(await marketCatalog());
+              await refreshSkills();
+              toast(t("pluginHub.componentUninstalledToast"), "success");
+            } catch (error) {
+              toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onImportGithub={async (repository) => {
+            const result = await githubImportPlugin(repository);
+            setPlugins(await listPlugins());
+            await refreshSkills();
+            toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+            return result;
+          }}
+          onUninstallPlugin={async (id) => {
+            try {
+              await uninstallPlugin(id);
+              setPlugins(await listPlugins());
+              await refreshSkills();
+              toast(t("pluginHub.pluginUninstalledToast"), "success");
+            } catch (error) {
+              toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onApplyScaffold={async (pluginId, scaffoldId) => {
+            try {
+              const result = await applyPluginScaffold(pluginId, scaffoldId, cwd || ".");
+              toast(t("pluginHub.scaffoldInstalledToast", { count: result.files }), "success");
+              return result;
+            } catch (error) {
+              toast(t("pluginHub.scaffoldFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onNew={() => setSkillDraft({ name: "", text: "" })}
+          onClose={() => setShowPluginHub(false)}
         />
       )}
       {showSourceControl && (

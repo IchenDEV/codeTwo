@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::skill::{McpServer, Skill, SkillKind, SkillPayload};
+use crate::skill::{McpServer, McpTransport, Skill, SkillKind, SkillPayload};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MarketEntry {
@@ -31,6 +31,7 @@ impl MarketEntry {
             name: self.name.clone(),
             description: self.description.clone(),
             icon: self.icon.clone(),
+            source: Some(format!("Market · {}", self.author)),
             payload: self.payload.clone(),
         }
     }
@@ -168,9 +169,11 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "browser".into(),
-                    command: "codetwo-browser-mcp".into(),
-                    args: vec![],
-                    env: vec![],
+                    transport: McpTransport::Stdio {
+                        command: "codetwo-browser-mcp".into(),
+                        args: vec![],
+                        env: vec![],
+                    },
                 },
             },
         },
@@ -184,9 +187,11 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "web-search".into(),
-                    command: "mcp-server-web-search".into(),
-                    args: vec![],
-                    env: vec![],
+                    transport: McpTransport::Stdio {
+                        command: "mcp-server-web-search".into(),
+                        args: vec![],
+                        env: vec![],
+                    },
                 },
             },
         },
@@ -200,9 +205,11 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "filesystem".into(),
-                    command: "mcp-server-filesystem".into(),
-                    args: vec![".".into()],
-                    env: vec![],
+                    transport: McpTransport::Stdio {
+                        command: "mcp-server-filesystem".into(),
+                        args: vec![".".into()],
+                        env: vec![],
+                    },
                 },
             },
         },

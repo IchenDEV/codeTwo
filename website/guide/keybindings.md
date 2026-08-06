@@ -4,7 +4,7 @@
 
 Press `Mod+K` (⌘K on macOS, Ctrl+K elsewhere) to open the command palette. Fuzzy-search across:
 
-- **actions** — Run, New session, Source control, Checkpoint now, Skill market, Insert a skill,
+- **actions** — Run, New session, Source control, Checkpoint now, Plugin Hub, Insert a skill,
   Remote control, Settings, Toggle terminal/browser/git, Refresh git, Cycle approval mode…
 - **project scripts** — anything defined in your project's setup config.
 - **sessions** — jump to any session.
@@ -50,7 +50,7 @@ silently do nothing.
 | --- | --- |
 | Command palette | `Mod+K` |
 | Source control | `Mod+Shift+G` |
-| Skill market | `Mod+Shift+M` |
+| Plugin Hub | `Mod+Shift+M` |
 | Browse workspace files | `Mod+P` |
 | Issues (GitHub / Linear) | `Mod+Shift+I` |
 | Usage | `Mod+Shift+U` |

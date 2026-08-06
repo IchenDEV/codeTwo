@@ -12,7 +12,7 @@
 //! the markdown prompt to send in ACP `session/prompt`, plus the MCP servers and agent-skills to
 //! configure on `session/new`. Keeping the compiler in the Rust core means the TUI reuses it verbatim.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,6 +20,7 @@ use std::collections::HashMap;
 pub enum SkillKind {
     Fragment,
     AgentSkill,
+    Subagent,
     Mcp,
     Macro,
 }
@@ -28,26 +29,128 @@ pub enum SkillKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpServer {
     pub name: String,
-    pub command: String,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
-    pub env: Vec<(String, String)>,
+    #[serde(flatten)]
+    pub transport: McpTransport,
+}
+
+/// `untagged` preserves the legacy saved stdio shape while adding remote HTTP/SSE servers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum McpTransport {
+    Stdio { command: String, args: Vec<String>, env: Vec<(String, String)> },
+    Http { url: String, headers: Vec<(String, String)> },
+    Sse { url: String, headers: Vec<(String, String)> },
+}
+
+impl Serialize for McpTransport {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        struct Stdio<'a> {
+            command: &'a str,
+            args: &'a [String],
+            env: &'a [(String, String)],
+        }
+        #[derive(Serialize)]
+        struct Remote<'a> {
+            #[serde(rename = "type")]
+            transport: &'a str,
+            url: &'a str,
+            headers: &'a [(String, String)],
+        }
+
+        match self {
+            McpTransport::Stdio { command, args, env } => Stdio { command, args, env }.serialize(serializer),
+            McpTransport::Http { url, headers } => Remote { transport: "http", url, headers }.serialize(serializer),
+            McpTransport::Sse { url, headers } => Remote { transport: "sse", url, headers }.serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for McpTransport {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Stored {
+            Stdio {
+                command: String,
+                #[serde(default)]
+                args: Vec<String>,
+                #[serde(default)]
+                env: Vec<(String, String)>,
+            },
+            Remote {
+                #[serde(rename = "type", default = "default_http_transport")]
+                transport: String,
+                url: String,
+                #[serde(default)]
+                headers: Vec<(String, String)>,
+            },
+        }
+
+        match Stored::deserialize(deserializer)? {
+            Stored::Stdio { command, args, env } => Ok(McpTransport::Stdio { command, args, env }),
+            Stored::Remote { transport, url, headers } => match transport.as_str() {
+                "http" | "streamable-http" => Ok(McpTransport::Http { url, headers }),
+                "sse" => Ok(McpTransport::Sse { url, headers }),
+                other => Err(serde::de::Error::custom(format!("unsupported MCP transport {other}"))),
+            },
+        }
+    }
+}
+
+fn default_http_transport() -> String {
+    "http".into()
 }
 
 impl McpServer {
-    /// Shape this server the way ACP `session/new` expects (`mcpServers[]`): stdio transport with
-    /// `env` as `{name,value}` objects.
+    /// Shape this server the way ACP `session/new` expects (`mcpServers[]`).
     pub fn to_acp_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "name": self.name,
-            "command": self.command,
-            "args": self.args,
-            "env": self.env.iter()
-                .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
-                .collect::<Vec<_>>(),
-        })
+        match &self.transport {
+            McpTransport::Stdio { command, args, env } => serde_json::json!({
+                "name": self.name,
+                "command": command,
+                "args": args,
+                "env": env.iter()
+                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
+                    .collect::<Vec<_>>(),
+            }),
+            McpTransport::Http { url, headers } => serde_json::json!({
+                "name": self.name,
+                "type": "http",
+                "url": url,
+                "headers": headers.iter()
+                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
+                    .collect::<Vec<_>>(),
+            }),
+            McpTransport::Sse { url, headers } => serde_json::json!({
+                "name": self.name,
+                "type": "sse",
+                "url": url,
+                "headers": headers.iter()
+                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
+                    .collect::<Vec<_>>(),
+            }),
+        }
     }
+}
+
+/// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
+/// registration, so Code2 also keeps a deterministic inline delegation fallback.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubagentDefinition {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub prompt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub tools: Vec<String>,
 }
 
 /// Kind-specific payload for a skill.
@@ -56,6 +159,7 @@ impl McpServer {
 pub enum SkillPayload {
     Fragment { text: String },
     AgentSkill { skill_ref: String, inline_text: Option<String> },
+    Subagent { agent: SubagentDefinition },
     Mcp { server: McpServer },
     Macro { template: String, slots: Vec<String> },
 }
@@ -65,6 +169,7 @@ impl SkillPayload {
         match self {
             SkillPayload::Fragment { .. } => SkillKind::Fragment,
             SkillPayload::AgentSkill { .. } => SkillKind::AgentSkill,
+            SkillPayload::Subagent { .. } => SkillKind::Subagent,
             SkillPayload::Mcp { .. } => SkillKind::Mcp,
             SkillPayload::Macro { .. } => SkillKind::Macro,
         }
@@ -80,6 +185,9 @@ pub struct Skill {
     pub description: String,
     #[serde(default)]
     pub icon: Option<String>,
+    /// Where this skill came from (for example `GitHub · owner/repo`). Old on-disk skills omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
     pub payload: SkillPayload,
 }
 
@@ -179,6 +287,9 @@ pub struct CompiledPrompt {
     pub mcp_servers: Vec<McpServer>,
     /// Provider-native Agent Skills referenced (from `AgentSkill` skills).
     pub agent_skills: Vec<String>,
+    /// Plugin-supplied specialists requested by this document.
+    #[serde(default)]
+    pub subagents: Vec<String>,
     /// Workspace files inlined via `@`-mentions.
     pub files: Vec<String>,
     /// Attached image paths, sent as ACP image content blocks alongside the prompt.
@@ -279,6 +390,21 @@ pub fn compile_with_sessions(
                             None => parts.push(format!("Use the **{}** skill.", skill.name)),
                         }
                     }
+                    SkillPayload::Subagent { agent } => {
+                        out.subagents.push(agent.name.clone());
+                        let mut contract = format!(
+                            "## Subagent: {}\n\nDelegate a focused subtask to this specialist when the provider supports delegation. Otherwise, follow the specialist instructions directly.\n\n{}",
+                            agent.name,
+                            agent.prompt.trim()
+                        );
+                        if !agent.tools.is_empty() {
+                            contract.push_str(&format!("\n\nAllowed tools: {}", agent.tools.join(", ")));
+                        }
+                        if let Some(model) = &agent.model {
+                            contract.push_str(&format!("\nPreferred model: {model}"));
+                        }
+                        parts.push(contract);
+                    }
                     SkillPayload::Mcp { server } => {
                         if !out.mcp_servers.iter().any(|m| m.name == server.name) {
                             out.mcp_servers.push(server.clone());
@@ -302,6 +428,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             name: "Plan first".into(),
             description: "Propose a plan and wait for approval before editing".into(),
             icon: Some("🗺️".into()),
+            source: None,
             payload: SkillPayload::Fragment {
                 text: "Before changing anything, produce a short numbered plan of the steps you \
                        intend to take, and wait for my approval. Do not edit files or run \
@@ -314,6 +441,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             name: "Code Reviewer".into(),
             description: "Meticulous senior reviewer persona".into(),
             icon: Some("🔍".into()),
+            source: None,
             payload: SkillPayload::Fragment {
                 text: "Act as a meticulous senior code reviewer. Flag bugs, unsafe patterns, and \
                        missing tests. Explain the risk of each finding."
@@ -325,6 +453,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             name: "Test Writer".into(),
             description: "Write thorough tests".into(),
             icon: Some("🧪".into()),
+            source: None,
             payload: SkillPayload::Fragment {
                 text: "Write thorough, isolated unit tests covering happy paths and edge cases. \
                        Prefer deterministic tests with no network."
@@ -336,6 +465,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             name: "Security Audit".into(),
             description: "Audit for vulnerabilities".into(),
             icon: Some("🛡️".into()),
+            source: None,
             payload: SkillPayload::Fragment {
                 text: "Audit the code for security vulnerabilities: injection, auth gaps, unsafe \
                        deserialization, secrets in code. Rank findings by severity."
@@ -347,6 +477,7 @@ pub fn builtin_skills() -> Vec<Skill> {
             name: "Commit Message".into(),
             description: "Parameterized commit message".into(),
             icon: Some("📝".into()),
+            source: None,
             payload: SkillPayload::Macro {
                 template: "Write a {{style}} commit message for changes to {{scope}}.".into(),
                 slots: vec!["style".into(), "scope".into()],
@@ -375,6 +506,7 @@ mod tests {
                 name: "Code Reviewer".into(),
                 description: "Careful review persona".into(),
                 icon: None,
+                source: None,
                 payload: SkillPayload::Fragment {
                     text: "Act as a meticulous code reviewer. Flag bugs and unsafe patterns.".into(),
                 },
@@ -384,6 +516,7 @@ mod tests {
                 name: "Commit Macro".into(),
                 description: String::new(),
                 icon: None,
+                source: None,
                 payload: SkillPayload::Macro {
                     template: "Write a commit message for {{scope}} in {{style}} style.".into(),
                     slots: vec!["scope".into(), "style".into()],
@@ -394,12 +527,11 @@ mod tests {
                 name: "Filesystem MCP".into(),
                 description: String::new(),
                 icon: None,
+                source: None,
                 payload: SkillPayload::Mcp {
                     server: McpServer {
                         name: "filesystem".into(),
-                        command: "mcp-fs".into(),
-                        args: vec![],
-                        env: vec![],
+                        transport: McpTransport::Stdio { command: "mcp-fs".into(), args: vec![], env: vec![] },
                     },
                 },
             },
@@ -440,6 +572,31 @@ mod tests {
         assert_eq!(compiled.mcp_servers.len(), 1);
         assert_eq!(compiled.mcp_servers[0].name, "filesystem");
         assert!(compiled.prompt.is_empty());
+    }
+
+    #[test]
+    fn subagent_compiles_to_delegation_contract_and_preview_metadata() {
+        let lib = SkillLibrary::new([Skill {
+            id: "researcher".into(),
+            name: "Researcher".into(),
+            description: "Find primary evidence".into(),
+            icon: None,
+            source: Some("Plugin · Research".into()),
+            payload: SkillPayload::Subagent {
+                agent: SubagentDefinition {
+                    name: "Researcher".into(),
+                    description: "Find primary evidence".into(),
+                    prompt: "Use primary sources and separate facts from inference.".into(),
+                    model: Some("fast".into()),
+                    tools: vec!["web".into(), "files".into()],
+                },
+            },
+        }]);
+        let compiled = compile(&[DocBlock::Skill { skill_id: "researcher".into(), params: HashMap::new() }], &lib);
+        assert_eq!(compiled.subagents, vec!["Researcher"]);
+        assert!(compiled.prompt.contains("## Subagent: Researcher"));
+        assert!(compiled.prompt.contains("Allowed tools: web, files"));
+        assert!(compiled.prompt.contains("Preferred model: fast"));
     }
 
     #[test]
@@ -485,6 +642,7 @@ mod tests {
             name: "Planner".into(),
             description: "Plan first".into(),
             icon: None,
+            source: None,
             payload: SkillPayload::Fragment { text: "Make a plan before coding.".into() },
         };
         std::fs::write(dir.join("planner.json"), serde_json::to_string(&skill).unwrap()).unwrap();
@@ -509,6 +667,7 @@ mod tests {
             name: "Mine".into(),
             description: String::new(),
             icon: None,
+            source: None,
             payload: SkillPayload::Fragment { text: "x".into() },
         };
         SkillLibrary::save_to_dir(&dir, &skill).unwrap();
@@ -559,9 +718,11 @@ mod tests {
     fn mcp_to_acp_json_shape() {
         let server = McpServer {
             name: "fs".into(),
-            command: "mcp-fs".into(),
-            args: vec!["--root".into(), "/tmp".into()],
-            env: vec![("TOKEN".into(), "abc".into())],
+            transport: McpTransport::Stdio {
+                command: "mcp-fs".into(),
+                args: vec!["--root".into(), "/tmp".into()],
+                env: vec![("TOKEN".into(), "abc".into())],
+            },
         };
         let v = server.to_acp_json();
         assert_eq!(v["name"], "fs");
@@ -569,5 +730,35 @@ mod tests {
         assert_eq!(v["args"][0], "--root");
         assert_eq!(v["env"][0]["name"], "TOKEN");
         assert_eq!(v["env"][0]["value"], "abc");
+
+        let remote = McpServer {
+            name: "remote".into(),
+            transport: McpTransport::Http {
+                url: "https://mcp.example.test".into(),
+                headers: vec![("Authorization".into(), "Bearer token".into())],
+            },
+        };
+        let v = remote.to_acp_json();
+        assert_eq!(v["type"], "http");
+        assert_eq!(v["url"], "https://mcp.example.test");
+        assert_eq!(v["headers"][0]["name"], "Authorization");
+
+        let events = McpServer {
+            name: "events".into(),
+            transport: McpTransport::Sse { url: "https://mcp.example.test/sse".into(), headers: Vec::new() },
+        };
+        let v = events.to_acp_json();
+        assert_eq!(v["type"], "sse");
+        assert_eq!(v["url"], "https://mcp.example.test/sse");
+
+        let stored = serde_json::to_string(&events).unwrap();
+        assert!(stored.contains(r#""type":"sse""#));
+        let round_trip: McpServer = serde_json::from_str(&stored).unwrap();
+        assert!(matches!(round_trip.transport, McpTransport::Sse { .. }));
+
+        // Records written before remote transports were tagged remain readable as HTTP.
+        let legacy: McpServer =
+            serde_json::from_str(r#"{"name":"legacy","url":"https://mcp.example.test","headers":[]}"#).unwrap();
+        assert!(matches!(legacy.transport, McpTransport::Http { .. }));
     }
 }

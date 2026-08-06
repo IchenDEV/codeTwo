@@ -27,7 +27,7 @@ use crate::memory::{prompt_source, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SEC
 use crate::permission::{Action, PermissionMode, PermissionPolicy};
 use crate::provider::Provider;
 use crate::session::{Part, Role, Session, SessionId};
-use crate::skill::{compile_with_sessions, SkillLibrary};
+use crate::skill::{compile_with_sessions, McpServer, McpTransport, SkillLibrary};
 use crate::store::Store;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -126,6 +126,32 @@ fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
         return None;
     }
     Some(model.current.clone())
+}
+
+fn encode_mcp_servers(servers: &[McpServer], caps: AgentCaps) -> Result<Vec<serde_json::Value>, String> {
+    servers
+        .iter()
+        .map(|server| {
+            let supported = match &server.transport {
+                McpTransport::Stdio { .. } => true,
+                McpTransport::Http { .. } => caps.mcp_http,
+                McpTransport::Sse { .. } => caps.mcp_sse,
+            };
+            if supported {
+                Ok(server.to_acp_json())
+            } else {
+                let transport = match &server.transport {
+                    McpTransport::Http { .. } => "HTTP",
+                    McpTransport::Sse { .. } => "SSE",
+                    McpTransport::Stdio { .. } => unreachable!(),
+                };
+                Err(format!(
+                    "MCP server '{}' needs {transport} transport, but this agent did not advertise that ACP capability",
+                    server.name
+                ))
+            }
+        })
+        .collect()
 }
 
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
@@ -233,6 +259,9 @@ struct SessionRuntime {
     resume_acp_session_id: Option<String>,
     /// What the agent advertised at `initialize`.
     caps: AgentCaps,
+    /// MCP servers already attached to the live ACP session. ACP only accepts them on session
+    /// creation/load, so later turns may reuse but cannot silently add a new server.
+    mcp_servers: Vec<McpServer>,
     /// Mutes this session's [`SessionHandler`] while `session/load` replays history.
     replaying: Arc<AtomicBool>,
     cwd: String,
@@ -424,6 +453,7 @@ impl Engine {
                 acp_session_id: None,
                 resume_acp_session_id: resume,
                 caps: init.caps(),
+                mcp_servers: Vec::new(),
                 replaying,
                 cwd: cwd.clone(),
                 policy,
@@ -494,6 +524,7 @@ impl Engine {
                         acp_session_id: None,
                         resume_acp_session_id: None,
                         caps: init.caps(),
+                        mcp_servers: Vec::new(),
                         replaying,
                         cwd: cwd_stored,
                         policy,
@@ -588,6 +619,30 @@ impl Engine {
                     used_tools: false,
                     used_recalled_memory: !memory_context.items.is_empty(),
                 };
+                let (caps, attached_mcp) = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session).map(|runtime| (runtime.caps, runtime.mcp_servers.clone())).unwrap_or_default()
+                };
+                if acp_sid.is_some() {
+                    let late = compiled.mcp_servers.iter().find(|server| !attached_mcp.contains(server));
+                    if let Some(server) = late {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!(
+                                "MCP server '{}' must be attached when the session starts; open a new session to use it",
+                                server.name
+                            ),
+                        });
+                        return Ok(());
+                    }
+                }
+                let mcp = match encode_mcp_servers(&compiled.mcp_servers, caps) {
+                    Ok(mcp) => mcp,
+                    Err(message) => {
+                        self.emit(Event::Error { session: Some(session), message });
+                        return Ok(());
+                    }
+                };
                 // Estimate how much of the context window this prompt uses (the UI meter).
                 let usage = crate::context::usage(&provider_prompt, crate::context::DEFAULT_CONTEXT_WINDOW);
                 self.emit(Event::Usage {
@@ -653,12 +708,10 @@ impl Engine {
                         })
                     };
                     if let Some((resume_id, replaying)) = resume {
-                        let mcp: Vec<serde_json::Value> =
-                            compiled.mcp_servers.iter().map(|s| s.to_acp_json()).collect();
                         // The agent replays the whole history before answering; the handler drops
                         // it (it's already in the store and on screen).
                         replaying.store(true, Ordering::SeqCst);
-                        let loaded = client.load_session(&resume_id, cwd.clone(), mcp).await;
+                        let loaded = client.load_session(&resume_id, cwd.clone(), mcp.clone()).await;
                         replaying.store(false, Ordering::SeqCst);
                         match loaded {
                             Ok(resp) => {
@@ -670,6 +723,7 @@ impl Engine {
                                         r.acp_session_id = Some(resume_id.clone());
                                         r.session.acp_session_id = Some(resume_id.clone());
                                         r.resume_acp_session_id = None;
+                                        r.mcp_servers = compiled.mcp_servers.clone();
                                         if let Some(m) = &resp.models {
                                             r.models = m
                                                 .available_models
@@ -733,8 +787,6 @@ impl Engine {
                 // Lazily create the ACP session on the first prompt, attaching the document's MCP
                 // servers at `session/new`.
                 if acp_sid.is_none() {
-                    let mcp: Vec<serde_json::Value> =
-                        compiled.mcp_servers.iter().map(|s| s.to_acp_json()).collect();
                     match client.new_session_full(cwd, mcp).await {
                         Ok(resp) => {
                             let id = resp.session_id;
@@ -776,6 +828,7 @@ impl Engine {
                                 let models = if let Some(r) = map.get_mut(&session) {
                                     r.acp_session_id = Some(id.clone());
                                     r.session.acp_session_id = Some(id.clone());
+                                    r.mcp_servers = compiled.mcp_servers.clone();
                                     if !reported.is_empty() {
                                         r.models = reported;
                                         r.models_reported = true;
@@ -1080,5 +1133,23 @@ mod cwd_tests {
     fn missing_directory_names_itself() {
         let err = resolve_cwd("/definitely/not/a/real/directory").unwrap_err();
         assert!(err.contains("/definitely/not/a/real/directory"), "got {err}");
+    }
+}
+
+#[cfg(test)]
+mod mcp_tests {
+    use super::encode_mcp_servers;
+    use crate::acp::wire::AgentCaps;
+    use crate::skill::{McpServer, McpTransport};
+
+    #[test]
+    fn remote_transport_requires_advertised_capability() {
+        let server = McpServer {
+            name: "remote".into(),
+            transport: McpTransport::Http { url: "https://example.test/mcp".into(), headers: Vec::new() },
+        };
+        assert!(encode_mcp_servers(&[server.clone()], AgentCaps::default()).is_err());
+        let encoded = encode_mcp_servers(&[server], AgentCaps { mcp_http: true, ..AgentCaps::default() }).unwrap();
+        assert_eq!(encoded[0]["type"], "http");
     }
 }
