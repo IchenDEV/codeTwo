@@ -22,12 +22,12 @@ Four regions, each with one job:
 
 | Region | Holds |
 | --- | --- |
-| **Session rail** (left) | Your sessions, grouped by recency and filterable. Skill-library management and the live provider sit at its foot. |
-| **Transcript** (centre) | One **turn** per exchange — your prompt in a bubble, the answer full width, tools/thinking/plan collapsed underneath. |
+| **Session rail** (left) | Your sessions, with pinned work above the recency list and archived reference chats folded below it. Search spans actions and sessions; skill-library management and the live provider sit at the foot. |
+| **Transcript** (centre) | One **turn** per exchange — your prompt in a bubble, the answer full width, tools/thinking/plan collapsed underneath. Recognizable subagents and workflows get their own read-only roster. |
 | **Prompt** | The document you're composing: `/` inserts a skill, `@` pulls in a file. A new session opens it as a **full page**; sending docks it under the transcript, and `Mod+Shift+E` expands it again for a longer brief. |
 | **Side dock** (right) | Terminal, browser, and git status — *beside* the document, not under it. Drag its edge to resize. |
 
-Per-session setup (provider, working directory, approvals, sandbox, worktree, plan mode) lives in one
+Per-session setup (provider, working directory, approvals, ACP tool scope, worktree, plan mode) lives in one
 config popover, reached from the status chips along the bottom of the composer — plus a
 [model picker](/guide/providers#models) when the agent reports one. So what this turn is allowed to
 do, and what it runs on, is readable right where you fire it; the header carries only per-moment

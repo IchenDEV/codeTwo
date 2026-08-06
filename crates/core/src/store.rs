@@ -5,12 +5,17 @@
 //! codex's JSONL rollouts). Access is synchronous behind a `Mutex` — SQLite writes are fast and the
 //! engine only touches the store at turn boundaries and per streamed part.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
-use crate::session::{MemoryAccess, Part, Role, Session};
+use crate::session::{
+    MemoryAccess, Part, Role, RunFailureReason, Session, SessionActivity, SessionRunState,
+    SessionTitleOrigin, TranscriptCursor, TranscriptEntry, TranscriptPage, MAX_TRANSCRIPT_TURNS,
+    UNTITLED_SESSION_TITLE,
+};
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -18,17 +23,36 @@ pub enum StoreError {
     Sqlite(#[from] rusqlite::Error),
     #[error("serde: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("invalid transcript cursor {before} for session {session_id}")]
+    InvalidTranscriptCursor { session_id: String, before: i64 },
+    #[error(
+        "session activity revision conflict for {session_id}: expected {expected}, found {actual}"
+    )]
+    ActivityConflict {
+        session_id: String,
+        expected: u64,
+        actual: u64,
+    },
 }
 
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
   id              TEXT PRIMARY KEY,
   title           TEXT NOT NULL,
+  title_origin    TEXT NOT NULL DEFAULT 'default',
+  pinned          INTEGER NOT NULL DEFAULT 0,
+  activity_json   TEXT,
   provider        TEXT NOT NULL,
   model           TEXT,
   cwd             TEXT NOT NULL,
+  project_path    TEXT,
   worktree_path   TEXT,
+  worktree_baseline_json TEXT,
+  worktree_common_dir TEXT,
+  worktree_git_dir TEXT,
+  worktree_identity_json TEXT,
   permission_mode TEXT NOT NULL,
+  sandbox_policy TEXT NOT NULL DEFAULT '\"workspace_write\"',
   acp_session_id  TEXT,
   memory_read     TEXT NOT NULL DEFAULT 'inherit',
   memory_write    TEXT NOT NULL DEFAULT 'inherit',
@@ -39,9 +63,14 @@ CREATE TABLE IF NOT EXISTS parts (
   seq        INTEGER NOT NULL,
   role       TEXT NOT NULL,
   part_json  TEXT NOT NULL,
+  search_text TEXT,
   PRIMARY KEY (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
+CREATE INDEX IF NOT EXISTS parts_session_role_seq ON parts(session_id, role, seq);
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id TEXT PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS projects (
   path           TEXT PRIMARY KEY,
   name           TEXT NOT NULL,
@@ -50,7 +79,7 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 ";
 
-/// A workspace the user works in. Sessions belong to one by their `cwd`.
+/// A workspace the user works in. Sessions belong to one by their source `project_path`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Project {
     /// Absolute path. Also the identity — one directory is one project.
@@ -59,45 +88,365 @@ pub struct Project {
     pub last_opened_at: i64,
 }
 
+/// One best conversation-content match per session.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SessionSearchHit {
+    pub session_id: String,
+    pub title: String,
+    pub cwd: String,
+    pub archived: bool,
+    pub role: Role,
+    pub snippet: String,
+    pub seq: i64,
+}
+
 pub struct Store {
     pub(crate) conn: Mutex<Connection>,
 }
 
-/// Additive migrations for stores created by older versions. Each is ignored if already applied.
-fn migrate(conn: &Connection) {
-    let _ = conn.execute("ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", []);
-    let _ = conn.execute(
-        "ALTER TABLE sessions ADD COLUMN memory_read TEXT NOT NULL DEFAULT 'inherit'",
+/// Snapshot-only projection mirroring the client tool fold: once a later terminal row exists for
+/// the same explicit call id in the same user turn, earlier in-flight rows no longer add visible
+/// state. Live events remain untouched. Metadata absent from a status-only terminal update is
+/// carried forward so slimming cannot erase launch observability.
+fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<TranscriptEntry> {
+    fn terminal(status: &str) -> bool {
+        matches!(
+            status.trim().to_ascii_lowercase().as_str(),
+            "completed" | "failed"
+        )
+    }
+
+    let mut keep = vec![true; entries.len()];
+    let mut later_terminal: HashMap<String, usize> = HashMap::new();
+    for index in (0..entries.len()).rev() {
+        if entries[index].role == Role::User {
+            later_terminal.clear();
+            continue;
+        }
+        let Part::ToolCall {
+            id,
+            title,
+            status,
+            tool_kind,
+            agent_input,
+        } = &entries[index].part
+        else {
+            continue;
+        };
+        let id = id.clone();
+        if terminal(status) {
+            later_terminal.insert(id, index);
+            continue;
+        }
+        let Some(&terminal_index) = later_terminal.get(&id) else {
+            continue;
+        };
+        let prior_title = title.clone();
+        let prior_kind = tool_kind.clone();
+        let prior_input = agent_input.clone();
+        if let Part::ToolCall {
+            title,
+            tool_kind,
+            agent_input,
+            ..
+        } = &mut entries[terminal_index].part
+        {
+            if title.trim().is_empty() && !prior_title.trim().is_empty() {
+                *title = prior_title;
+            }
+            if tool_kind.is_none() {
+                *tool_kind = prior_kind;
+            }
+            if agent_input.is_none() {
+                *agent_input = prior_input;
+            }
+        }
+        keep[index] = false;
+    }
+
+    entries
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(entry, keep)| keep.then_some(entry))
+        .collect()
+}
+
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let names = statement.query_map([], |row| row.get::<_, String>(1))?;
+    for name in names {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Add a known internal column exactly once. Unlike swallowing every ALTER error, checking the
+/// schema first preserves idempotence while still surfacing disk, locking, and corruption errors.
+fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> rusqlite::Result<bool> {
+    if table_has_column(conn, table, column)? {
+        return Ok(false);
+    }
+    conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {definition}"), [])?;
+    Ok(true)
+}
+
+/// Additive migrations for stores created by older versions.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    // Every schema addition, semantic backfill, and project seed below is one unit. SQLite makes
+    // ALTER TABLE transactional, so an interrupted backfill cannot leave a column present while a
+    // future open incorrectly assumes its data migration already completed.
+    let tx = conn.unchecked_transaction()?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "archived",
+        "archived INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "pinned",
+        "pinned INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(&tx, "sessions", "activity_json", "activity_json TEXT")?;
+    let idle = serde_json::to_string(&SessionActivity::default()).unwrap_or_default();
+    tx.execute(
+        "UPDATE sessions SET activity_json=?1 WHERE activity_json IS NULL",
+        [idle],
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "title_origin",
+        "title_origin TEXT NOT NULL DEFAULT 'default'",
+    )?;
+    // Before automatic titles existed, every non-placeholder title necessarily came from the
+    // user. The predicate is intentionally re-runnable so a database from an interrupted older
+    // migration (column present, backfill absent) repairs itself on the next open.
+    tx.execute(
+        "UPDATE sessions SET title_origin='manual'
+         WHERE title_origin='default' AND title<>?1",
+        [UNTITLED_SESSION_TITLE],
+    )?;
+    ensure_column(&tx, "sessions", "project_path", "project_path TEXT")?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "worktree_baseline_json",
+        "worktree_baseline_json TEXT",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "worktree_common_dir",
+        "worktree_common_dir TEXT",
+    )?;
+    ensure_column(&tx, "sessions", "worktree_git_dir", "worktree_git_dir TEXT")?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "worktree_identity_json",
+        "worktree_identity_json TEXT",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "sandbox_policy",
+        "sandbox_policy TEXT NOT NULL DEFAULT '\"workspace_write\"'",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "memory_read",
+        "memory_read TEXT NOT NULL DEFAULT 'inherit'",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "memory_write",
+        "memory_write TEXT NOT NULL DEFAULT 'inherit'",
+    )?;
+    // A legacy local session's cwd is its source project. A legacy worktree row no longer contains
+    // enough information to recover the source safely, so leave it unknown instead of
+    // misidentifying the isolated checkout as a project. Keep this idempotent in case a previous
+    // migration added the column but stopped before completing the backfill.
+    tx.execute(
+        "UPDATE sessions SET project_path=cwd
+         WHERE project_path IS NULL AND worktree_path IS NULL",
         [],
-    );
-    let _ = conn.execute(
-        "ALTER TABLE sessions ADD COLUMN memory_write TEXT NOT NULL DEFAULT 'inherit'",
-        [],
-    );
+    )?;
+    ensure_column(&tx, "parts", "search_text", "search_text TEXT")?;
     // Ordering used to come from `last_opened_at`, which meant the rail resorted itself under the
     // cursor every time you clicked a project. Backfilling `added_at` from it keeps the order an
     // existing store already shows, and freezes it there.
-    if conn.execute("ALTER TABLE projects ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0", []).is_ok()
-    {
-        let _ = conn.execute("UPDATE projects SET added_at=last_opened_at", []);
-    }
+    ensure_column(
+        &tx,
+        "projects",
+        "added_at",
+        "added_at INTEGER NOT NULL DEFAULT 0",
+    )?;
+    // `0` is the additive-column sentinel; current writes always use their positive timestamp.
+    // Re-running this also heals a database interrupted between an old ALTER and UPDATE.
+    tx.execute(
+        "UPDATE projects SET added_at=last_opened_at WHERE added_at=0",
+        [],
+    )?;
     // Stores that predate the projects table already hold the answer to "what projects are there?"
     // in the sessions they contain — seed from those rather than opening to an empty list on a
     // machine that's been in use for months. Names come from the path's last component, so the
     // list reads like a project list instead of a column of absolute paths.
-    if let Ok(mut stmt) = conn.prepare("SELECT cwd, MAX(created_at) FROM sessions GROUP BY cwd") {
-        let rows: Vec<(String, i64)> = stmt
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
-            .map(|rs| rs.filter_map(|r| r.ok()).collect())
-            .unwrap_or_default();
-        for (path, at) in rows {
-            let _ = conn.execute(
+    {
+        let mut stmt = tx.prepare(
+            "SELECT project_path, MAX(created_at) FROM sessions
+             WHERE project_path IS NOT NULL GROUP BY project_path",
+        )?;
+        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        for row in rows {
+            let (path, at): (String, i64) = row?;
+            tx.execute(
                 "INSERT OR IGNORE INTO projects (path, name, last_opened_at, added_at)
                  VALUES (?1,?2,?3,?3)",
                 rusqlite::params![path, default_project_name(&path), at],
-            );
+            )?;
         }
     }
+    tx.commit()?;
+
+    // This derived FTS projection has its own marker and transaction because SQLite does not allow
+    // the helper to nest a transaction inside the additive migration above.
+    migrate_session_search(conn)
+}
+
+/// Build the content-search projection once for an older database, then keep it current with
+/// triggers. Legacy user rows are deliberately not backfilled: older Code2 versions stored the
+/// fully compiled prompt there (project rules, file contents, expanded skills), not just what the
+/// user authored. Agent text is safe to recover; new user prompts arrive with canonical text.
+fn migrate_session_search(conn: &Connection) -> rusqlite::Result<()> {
+    let applied: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE id='session_search_v2')",
+        [],
+        |row| row.get(0),
+    )?;
+    if applied {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    // v1 used unicode61, which treats a Chinese sentence as one token and cannot match incremental
+    // English prefixes. The search table is derived data, so replace it atomically with a trigram
+    // projection. Queries shorter than three characters use a bounded-result substring fallback.
+    tx.execute_batch(
+        "DROP TRIGGER IF EXISTS parts_fts_ai;
+         DROP TRIGGER IF EXISTS parts_fts_ad;
+         DROP TRIGGER IF EXISTS parts_fts_au;
+         DROP TABLE IF EXISTS parts_fts;
+         UPDATE parts SET search_text=NULL;
+         CREATE VIRTUAL TABLE parts_fts USING fts5(
+           search_text,
+           content='parts',
+           content_rowid='rowid',
+           tokenize='trigram'
+         );
+         CREATE TRIGGER parts_fts_ai AFTER INSERT ON parts
+         WHEN new.search_text IS NOT NULL BEGIN
+           INSERT INTO parts_fts(rowid,search_text) VALUES(new.rowid,new.search_text);
+         END;
+         CREATE TRIGGER parts_fts_ad AFTER DELETE ON parts
+         WHEN old.search_text IS NOT NULL BEGIN
+           INSERT INTO parts_fts(parts_fts,rowid,search_text)
+           VALUES('delete',old.rowid,old.search_text);
+         END;
+         CREATE TRIGGER parts_fts_au AFTER UPDATE OF search_text ON parts BEGIN
+           INSERT INTO parts_fts(parts_fts,rowid,search_text)
+           SELECT 'delete',old.rowid,old.search_text WHERE old.search_text IS NOT NULL;
+           INSERT INTO parts_fts(rowid,search_text)
+           SELECT new.rowid,new.search_text WHERE new.search_text IS NOT NULL;
+         END;",
+    )?;
+
+    // Recover safe text from old stores while preserving turn boundaries. Legacy user Text rows
+    // contained compiled rules/files and remain excluded; canonical Prompt rows are safe. Agent
+    // chunks are concatenated once per user turn so phrases spanning chunks stay searchable.
+    let persisted: Vec<(i64, String, String, String)> = {
+        let mut stmt = tx
+            .prepare("SELECT rowid,session_id,role,part_json FROM parts ORDER BY session_id,seq")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    let mut updates: Vec<(i64, String)> = Vec::new();
+    let mut active_session = String::new();
+    let mut agent_row: Option<i64> = None;
+    let mut agent_text = String::new();
+    let mut agent_chars = 0usize;
+    let flush_agent = |updates: &mut Vec<(i64, String)>,
+                       agent_row: &mut Option<i64>,
+                       agent_text: &mut String,
+                       agent_chars: &mut usize| {
+        if let Some(rowid) = agent_row.take() {
+            updates.push((rowid, std::mem::take(agent_text)));
+        }
+        *agent_chars = 0;
+    };
+    for (rowid, session_id, role, json) in persisted {
+        if session_id != active_session {
+            flush_agent(
+                &mut updates,
+                &mut agent_row,
+                &mut agent_text,
+                &mut agent_chars,
+            );
+            active_session = session_id;
+        }
+        let part = serde_json::from_str::<Part>(&json).ok();
+        if role == "\"user\"" {
+            flush_agent(
+                &mut updates,
+                &mut agent_row,
+                &mut agent_text,
+                &mut agent_chars,
+            );
+            if let Some(Part::Prompt { text, .. }) = part {
+                updates.push((rowid, text.chars().take(262_144).collect()));
+            }
+        } else if let Some(Part::Text { text }) = part {
+            if agent_row.is_none() {
+                agent_row = Some(rowid);
+            }
+            let remaining = 262_144usize.saturating_sub(agent_chars);
+            agent_text.extend(text.chars().take(remaining));
+            agent_chars += text.chars().take(remaining).count();
+        }
+    }
+    flush_agent(
+        &mut updates,
+        &mut agent_row,
+        &mut agent_text,
+        &mut agent_chars,
+    );
+    for (rowid, text) in updates {
+        tx.execute(
+            "UPDATE parts SET search_text=?2 WHERE rowid=?1",
+            rusqlite::params![rowid, text],
+        )?;
+    }
+
+    // Rebuild after the projection so an interrupted migration can retry without duplicate rows.
+    // The tokenizer swap, projection, index and marker commit atomically.
+    tx.execute("INSERT INTO parts_fts(parts_fts) VALUES('rebuild')", [])?;
+    tx.execute(
+        "INSERT INTO schema_migrations(id) VALUES('session_search_v2')",
+        [],
+    )?;
+    tx.commit()
 }
 
 /// A project's display name when the user hasn't set one: the directory's own name.
@@ -113,9 +462,11 @@ impl Store {
     pub fn open(path: &str) -> Result<Self, StoreError> {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
-        migrate(&conn);
+        migrate(&conn)?;
         crate::memory::install(&conn)?;
-        let store = Self { conn: Mutex::new(conn) };
+        let store = Self {
+            conn: Mutex::new(conn),
+        };
         // A delayed candidate may have become eligible while Code2 was closed.
         store.run_memory_maintenance()?;
         Ok(store)
@@ -125,9 +476,11 @@ impl Store {
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
-        migrate(&conn);
+        migrate(&conn)?;
         crate::memory::install(&conn)?;
-        let store = Self { conn: Mutex::new(conn) };
+        let store = Self {
+            conn: Mutex::new(conn),
+        };
         store.run_memory_maintenance()?;
         Ok(store)
     }
@@ -143,7 +496,11 @@ impl Store {
             "SELECT path, name, last_opened_at FROM projects ORDER BY added_at DESC, path ASC",
         )?;
         let rows = stmt.query_map([], |r| {
-            Ok(Project { path: r.get(0)?, name: r.get(1)?, last_opened_at: r.get(2)? })
+            Ok(Project {
+                path: r.get(0)?,
+                name: r.get(1)?,
+                last_opened_at: r.get(2)?,
+            })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
@@ -153,7 +510,9 @@ impl Store {
     /// keeps its original `added_at`, so re-adding doesn't move a row the user has learned to find.
     pub fn add_project(&self, path: &str, name: Option<&str>, now: i64) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
-        let name = name.map(|s| s.to_string()).unwrap_or_else(|| default_project_name(path));
+        let name = name
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| default_project_name(path));
         conn.execute(
             "INSERT INTO projects (path, name, last_opened_at, added_at) VALUES (?1,?2,?3,?3)
              ON CONFLICT(path) DO UPDATE SET last_opened_at=excluded.last_opened_at",
@@ -175,7 +534,10 @@ impl Store {
 
     pub fn rename_project(&self, path: &str, name: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE projects SET name=?2 WHERE path=?1", rusqlite::params![path, name])?;
+        conn.execute(
+            "UPDATE projects SET name=?2 WHERE path=?1",
+            rusqlite::params![path, name],
+        )?;
         Ok(())
     }
 
@@ -198,7 +560,8 @@ impl Store {
             "SELECT p.session_id, p.part_json FROM parts p
              WHERE p.seq = (
                SELECT MAX(q.seq) FROM parts q
-               WHERE q.session_id = p.session_id AND q.part_json LIKE '%\"kind\":\"text\"%'
+               WHERE q.session_id = p.session_id
+                 AND json_extract(q.part_json,'$.kind') IN ('text','prompt')
              )",
         )?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
@@ -206,7 +569,12 @@ impl Store {
         let mut out = Vec::new();
         for row in rows.flatten() {
             let (id, json) = row;
-            if let Ok(Part::Text { text }) = serde_json::from_str::<Part>(&json) {
+            if let Ok(part) = serde_json::from_str::<Part>(&json) {
+                let text = match part {
+                    Part::Text { text } => text,
+                    Part::Prompt { display, .. } => display,
+                    _ => continue,
+                };
                 let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
                 if !flat.is_empty() {
                     out.push((id, flat.chars().take(160).collect()));
@@ -219,16 +587,44 @@ impl Store {
     /// Rename a session (the sidebar title).
     pub fn rename_session(&self, id: &str, title: &str) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("UPDATE sessions SET title=?2 WHERE id=?1", rusqlite::params![id, title])?;
+        conn.execute(
+            "UPDATE sessions SET title=?2,title_origin='manual' WHERE id=?1",
+            rusqlite::params![id, title],
+        )?;
         Ok(())
     }
 
+    /// Set the first automatic title only while the session still owns the placeholder.
+    /// Returns whether a row changed, allowing the in-memory runtime to mirror the durable result.
+    pub fn set_initial_title(&self, id: &str, title: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE sessions SET title=?2,title_origin='automatic'
+             WHERE id=?1 AND title_origin='default'",
+            rusqlite::params![id, title],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// Archive / unarchive a session (archived ones drop out of the main list).
+    /// Archiving also clears pinning: a pin only has meaning in the active-session list.
     pub fn set_archived(&self, id: &str, archived: bool) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE sessions SET archived=?2 WHERE id=?1",
+            "UPDATE sessions
+             SET archived=?2, pinned=CASE WHEN ?2=1 THEN 0 ELSE pinned END
+             WHERE id=?1",
             rusqlite::params![id, if archived { 1 } else { 0 }],
+        )?;
+        Ok(())
+    }
+
+    /// Pin or unpin an active session. Archived sessions deliberately ignore pin requests.
+    pub fn set_pinned(&self, id: &str, pinned: bool) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET pinned=?2 WHERE id=?1 AND archived=0",
+            rusqlite::params![id, if pinned { 1 } else { 0 }],
         )?;
         Ok(())
     }
@@ -240,11 +636,16 @@ impl Store {
 
     fn query_sessions(&self, archived: bool) -> Result<Vec<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
-                    memory_read,memory_write,created_at
-             FROM sessions WHERE archived=?1 ORDER BY created_at DESC",
-        )?;
+        let order = if archived {
+            "created_at DESC"
+        } else {
+            "pinned DESC, created_at DESC"
+        };
+        let sql = format!(
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write
+             FROM sessions WHERE archived=?1 ORDER BY {order}"
+        );
+        let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map([if archived { 1 } else { 0 }], row_to_session_parts)?;
         let mut out = Vec::new();
         for r in rows {
@@ -257,31 +658,52 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO sessions
-               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
-                memory_read,memory_write,created_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
+               (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)
              ON CONFLICT(id) DO UPDATE SET
-               title=excluded.title, provider=excluded.provider, model=excluded.model,
-               cwd=excluded.cwd, worktree_path=excluded.worktree_path,
-               permission_mode=excluded.permission_mode, acp_session_id=excluded.acp_session_id",
+               provider=excluded.provider, model=excluded.model,
+               cwd=excluded.cwd, project_path=excluded.project_path,
+               worktree_path=excluded.worktree_path,
+               worktree_baseline_json=excluded.worktree_baseline_json,
+               worktree_common_dir=excluded.worktree_common_dir,
+               worktree_git_dir=excluded.worktree_git_dir,
+               worktree_identity_json=excluded.worktree_identity_json,
+               permission_mode=excluded.permission_mode,
+               sandbox_policy=excluded.sandbox_policy,
+               acp_session_id=excluded.acp_session_id",
             rusqlite::params![
                 s.id,
                 s.title,
                 serde_json::to_string(&s.provider)?,
                 s.model,
                 s.cwd,
+                s.project_path,
                 s.worktree_path,
                 serde_json::to_string(&s.permission_mode)?,
+                serde_json::to_string(&s.sandbox_policy)?,
                 s.acp_session_id,
+                s.created_at,
+                if s.pinned { 1 } else { 0 },
+                title_origin_str(s.title_origin),
+                serde_json::to_string(&s.activity)?,
+                s.worktree_baseline
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                s.worktree_common_dir,
+                s.worktree_git_dir,
+                s.worktree_identity
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
                 s.memory_read.as_db(),
                 s.memory_write.as_db(),
-                s.created_at,
             ],
         )?;
         Ok(())
     }
 
-    /// Active (non-archived) sessions, newest first.
+    /// Active (non-archived) sessions, pinned first and newest within each group.
     pub fn list_sessions(&self) -> Result<Vec<Session>, StoreError> {
         self.query_sessions(false)
     }
@@ -289,8 +711,7 @@ impl Store {
     pub fn get_session(&self, id: &str) -> Result<Option<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,
-                    memory_read,memory_write,created_at
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write
              FROM sessions WHERE id=?1",
         )?;
         let mut rows = stmt.query_map([id], row_to_session_parts)?;
@@ -300,17 +721,232 @@ impl Store {
         }
     }
 
+    /// Persist the permission mode even when this process has not revived the session runtime yet.
+    pub fn set_permission_mode(
+        &self,
+        id: &str,
+        mode: crate::permission::PermissionMode,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE sessions SET permission_mode=?2 WHERE id=?1",
+            rusqlite::params![id, serde_json::to_string(&mode)?],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Persist both execution-policy axes with one SQLite statement.
+    pub fn set_execution_policy(
+        &self,
+        id: &str,
+        mode: crate::permission::PermissionMode,
+        sandbox: crate::permission::SandboxPolicy,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE sessions SET permission_mode=?2, sandbox_policy=?3 WHERE id=?1",
+            rusqlite::params![
+                id,
+                serde_json::to_string(&mode)?,
+                serde_json::to_string(&sandbox)?,
+            ],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Compatibility path for older single-axis clients.
+    pub fn set_sandbox_policy(
+        &self,
+        id: &str,
+        sandbox: crate::permission::SandboxPolicy,
+    ) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE sessions SET sandbox_policy=?2 WHERE id=?1",
+            rusqlite::params![id, serde_json::to_string(&sandbox)?],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Revision-aware activity persistence. A stale writer returns `false` and never overwrites a
+    /// newer lifecycle state.
+    pub fn update_session_activity(
+        &self,
+        session_id: &str,
+        expected_revision: u64,
+        activity: &SessionActivity,
+    ) -> Result<bool, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let stored: Option<Option<String>> = tx
+            .query_row(
+                "SELECT activity_json FROM sessions WHERE id=?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(stored) = stored else {
+            tx.commit()?;
+            return Ok(false);
+        };
+        let current: SessionActivity = stored
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or_default();
+        if current.revision != expected_revision
+            || activity.revision != expected_revision.saturating_add(1)
+        {
+            tx.commit()?;
+            return Ok(false);
+        }
+        tx.execute(
+            "UPDATE sessions SET activity_json=?2 WHERE id=?1",
+            rusqlite::params![session_id, serde_json::to_string(activity)?],
+        )?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// Atomically accept a user prompt and its Running activity. This is the durable seam behind
+    /// `TurnStarted`: either both rows commit or neither does.
+    pub fn append_prompt_and_activity(
+        &self,
+        session_id: &str,
+        prompt: &Part,
+        expected_revision: u64,
+        activity: &SessionActivity,
+    ) -> Result<i64, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let stored: Option<Option<String>> = tx
+            .query_row(
+                "SELECT activity_json FROM sessions WHERE id=?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let stored = stored.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        let current: SessionActivity = stored
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or_default();
+        if current.revision != expected_revision
+            || activity.revision != expected_revision.saturating_add(1)
+        {
+            return Err(StoreError::ActivityConflict {
+                session_id: session_id.to_string(),
+                expected: expected_revision,
+                actual: current.revision,
+            });
+        }
+
+        let seq: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(seq), -1) + 1 FROM parts WHERE session_id=?1",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        let search_text = match prompt {
+            Part::Prompt { text, .. } => Some(text.chars().take(262_144).collect::<String>()),
+            _ => None,
+        };
+        tx.execute(
+            "INSERT INTO parts (session_id,seq,role,part_json,search_text)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                session_id,
+                seq,
+                serde_json::to_string(&Role::User)?,
+                serde_json::to_string(prompt)?,
+                search_text.as_deref(),
+            ],
+        )?;
+        tx.execute(
+            "UPDATE sessions SET activity_json=?2 WHERE id=?1",
+            rusqlite::params![session_id, serde_json::to_string(activity)?],
+        )?;
+        tx.commit()?;
+        Ok(seq)
+    }
+
+    /// A new process cannot recover provider children or parked oneshots. Convert every persisted
+    /// in-flight state to an honest, non-actionable interruption before any session list is shown.
+    pub fn normalize_interrupted_activities(&self) -> Result<usize, StoreError> {
+        const MESSAGE: &str = "Code2 stopped before the turn finished";
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let rows: Vec<(String, Option<String>)> = {
+            let mut stmt = tx.prepare("SELECT id,activity_json FROM sessions")?;
+            let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut changed = 0;
+        for (session_id, json) in rows {
+            let activity: SessionActivity = json
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()?
+                .unwrap_or_default();
+            let turn_id = match &activity.state {
+                SessionRunState::Running { turn_id, .. }
+                | SessionRunState::AwaitingInput { turn_id, .. } => Some(turn_id.clone()),
+                SessionRunState::Idle | SessionRunState::Failed { .. } => None,
+            };
+            let Some(turn_id) = turn_id else {
+                continue;
+            };
+            let interrupted = SessionActivity {
+                revision: activity.revision.saturating_add(1),
+                state: SessionRunState::Failed {
+                    turn_id: Some(turn_id),
+                    reason: RunFailureReason::Interrupted,
+                    message: MESSAGE.into(),
+                },
+            };
+            tx.execute(
+                "UPDATE sessions SET activity_json=?2 WHERE id=?1",
+                rusqlite::params![session_id, serde_json::to_string(&interrupted)?],
+            )?;
+            changed += 1;
+        }
+        tx.commit()?;
+        Ok(changed)
+    }
+
     /// Append one transcript part, returning its sequence number.
-    pub fn append_part(&self, session_id: &str, role: Role, part: &Part) -> Result<i64, StoreError> {
+    pub fn append_part(
+        &self,
+        session_id: &str,
+        role: Role,
+        part: &Part,
+    ) -> Result<i64, StoreError> {
         let conn = self.conn.lock().unwrap();
         let seq: i64 = conn.query_row(
             "SELECT COALESCE(MAX(seq), -1) + 1 FROM parts WHERE session_id=?1",
             [session_id],
             |r| r.get(0),
         )?;
+
+        // User prompts are complete at append time. Agent chunks are deliberately left out until
+        // `finalize_agent_search`: indexing every streamed fragment would repeatedly re-tokenize
+        // the whole accumulated answer and expose cancelled/failed partial output as final text.
+        let search_text = match (role, part) {
+            (Role::User, Part::Prompt { text, .. }) => {
+                Some(text.chars().take(262_144).collect::<String>())
+            }
+            _ => None,
+        };
         conn.execute(
-            "INSERT INTO parts (session_id,seq,role,part_json) VALUES (?1,?2,?3,?4)",
-            rusqlite::params![session_id, seq, serde_json::to_string(&role)?, serde_json::to_string(part)?],
+            "INSERT INTO parts (session_id,seq,role,part_json,search_text)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                session_id,
+                seq,
+                serde_json::to_string(&role)?,
+                serde_json::to_string(part)?,
+                search_text.as_deref(),
+            ],
         )?;
         Ok(seq)
     }
@@ -342,6 +978,45 @@ impl Store {
         Ok((MemoryAccess::from_db(&read), MemoryAccess::from_db(&write)))
     }
 
+    /// Publish the completed assistant answer into FTS exactly once. Stored chunks remain the
+    /// transcript source of truth; only the first text row of the current turn owns the derived
+    /// projection, keeping one searchable document per assistant turn.
+    pub fn finalize_agent_search(&self, session_id: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let rows: Vec<(i64, String)> = {
+            let mut stmt = conn.prepare(
+                "SELECT rowid,part_json FROM parts
+                 WHERE session_id=?1 AND role='\"agent\"'
+                   AND seq>COALESCE((
+                     SELECT MAX(seq) FROM parts WHERE session_id=?1 AND role='\"user\"'
+                   ),-1)
+                 ORDER BY seq",
+            )?;
+            let mapped = stmt.query_map([session_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            mapped.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut first_row = None;
+        let mut text = String::new();
+        let mut chars = 0usize;
+        for (rowid, json) in rows {
+            let Ok(Part::Text { text: chunk }) = serde_json::from_str::<Part>(&json) else {
+                continue;
+            };
+            first_row.get_or_insert(rowid);
+            let remaining = 262_144usize.saturating_sub(chars);
+            let bounded: String = chunk.chars().take(remaining).collect();
+            chars += bounded.chars().count();
+            text.push_str(&bounded);
+        }
+        if let Some(rowid) = first_row {
+            conn.execute(
+                "UPDATE parts SET search_text=?2 WHERE rowid=?1",
+                rusqlite::params![rowid, text],
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn transcript(&self, session_id: &str) -> Result<Vec<(Role, Part)>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
@@ -352,7 +1027,243 @@ impl Store {
         let mut out = Vec::new();
         for r in rows {
             let (role_s, part_s) = r?;
-            out.push((serde_json::from_str(&role_s)?, serde_json::from_str(&part_s)?));
+            out.push((
+                serde_json::from_str(&role_s)?,
+                serde_json::from_str(&part_s)?,
+            ));
+        }
+        Ok(out)
+    }
+
+    /// Read a newest-first-windowed but ascending transcript page whose boundaries always land on
+    /// user rows. `before` is exclusive and must identify a user row in this session; rejecting
+    /// arbitrary sequence numbers prevents a caller from splitting a turn in half.
+    pub fn transcript_page(
+        &self,
+        session_id: &str,
+        before: Option<TranscriptCursor>,
+        limit: usize,
+    ) -> Result<TranscriptPage, StoreError> {
+        let limit = limit.clamp(1, MAX_TRANSCRIPT_TURNS) as i64;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        // This first read establishes the transaction's snapshot. Every boundary and entry query
+        // below sees exactly this high-water mark even if a running turn appends concurrently.
+        let snapshot_through: Option<i64> = tx.query_row(
+            "SELECT MAX(seq) FROM parts WHERE session_id=?1",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        let Some(snapshot_through) = snapshot_through else {
+            tx.commit()?;
+            return Ok(TranscriptPage::empty());
+        };
+
+        if let Some(TranscriptCursor(cursor)) = before {
+            let role: Option<String> = tx
+                .query_row(
+                    "SELECT role FROM parts WHERE session_id=?1 AND seq=?2",
+                    rusqlite::params![session_id, cursor],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            let valid_user = role
+                .as_deref()
+                .and_then(|role| serde_json::from_str::<Role>(role).ok())
+                == Some(Role::User);
+            if !valid_user {
+                return Err(StoreError::InvalidTranscriptCursor {
+                    session_id: session_id.to_string(),
+                    before: cursor,
+                });
+            }
+        }
+
+        let user_role = serde_json::to_string(&Role::User)?;
+        let user_seqs: Vec<i64> = if let Some(TranscriptCursor(cursor)) = before {
+            let mut stmt = tx.prepare(
+                "SELECT seq FROM parts
+                 WHERE session_id=?1 AND role=?2 AND seq<?3 AND seq<=?4
+                 ORDER BY seq DESC LIMIT ?5",
+            )?;
+            let rows = stmt.query_map(
+                rusqlite::params![session_id, user_role, cursor, snapshot_through, limit],
+                |row| row.get(0),
+            )?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        } else {
+            let mut stmt = tx.prepare(
+                "SELECT seq FROM parts
+                 WHERE session_id=?1 AND role=?2 AND seq<=?3
+                 ORDER BY seq DESC LIMIT ?4",
+            )?;
+            let rows = stmt.query_map(
+                rusqlite::params![session_id, user_role, snapshot_through, limit],
+                |row| row.get(0),
+            )?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+
+        let min_seq: i64 = tx.query_row(
+            "SELECT MIN(seq) FROM parts WHERE session_id=?1 AND seq<=?2",
+            rusqlite::params![session_id, snapshot_through],
+            |row| row.get(0),
+        )?;
+        let (start_seq, next_before) = match user_seqs.last().copied() {
+            Some(earliest_user) => {
+                let has_earlier_user: bool = tx.query_row(
+                    "SELECT EXISTS(
+                       SELECT 1 FROM parts
+                       WHERE session_id=?1 AND role=?2 AND seq<?3 AND seq<=?4
+                     )",
+                    rusqlite::params![session_id, user_role, earliest_user, snapshot_through],
+                    |row| row.get(0),
+                )?;
+                if has_earlier_user {
+                    (earliest_user, Some(TranscriptCursor(earliest_user)))
+                } else {
+                    // The oldest turn owns any legacy agent preamble that predates the first user
+                    // row. It is returned once, never stranded behind a non-user cursor.
+                    (min_seq, None)
+                }
+            }
+            // Legacy transcripts with no earlier user marker form one bounded-by-snapshot page.
+            None => (min_seq, None),
+        };
+
+        let raw_entries: Vec<(i64, String, String)> = if let Some(TranscriptCursor(cursor)) = before
+        {
+            let mut stmt = tx.prepare(
+                "SELECT seq,role,part_json FROM parts
+                     WHERE session_id=?1 AND seq>=?2 AND seq<?3 AND seq<=?4
+                     ORDER BY seq",
+            )?;
+            let rows = stmt.query_map(
+                rusqlite::params![session_id, start_seq, cursor, snapshot_through],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        } else {
+            let mut stmt = tx.prepare(
+                "SELECT seq,role,part_json FROM parts
+                     WHERE session_id=?1 AND seq>=?2 AND seq<=?3
+                     ORDER BY seq",
+            )?;
+            let rows = stmt.query_map(
+                rusqlite::params![session_id, start_seq, snapshot_through],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+
+        let mut entries = Vec::with_capacity(raw_entries.len());
+        for (seq, role, part) in raw_entries {
+            entries.push(TranscriptEntry {
+                seq,
+                role: serde_json::from_str(&role)?,
+                part: serde_json::from_str(&part)?,
+            });
+        }
+        tx.commit()?;
+        Ok(TranscriptPage {
+            entries: drop_superseded_tool_updates(entries),
+            next_before,
+            snapshot_through: Some(TranscriptCursor(snapshot_through)),
+        })
+    }
+
+    /// Search canonical user prompts and agent text, returning at most one bounded snippet per
+    /// session. Tool payloads, reasoning, plans and legacy compiled user prompts are not indexed.
+    pub fn search_sessions(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SessionSearchHit>, StoreError> {
+        let query: String = query.trim().chars().take(200).collect();
+        let query = query.as_str();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let limit = limit.clamp(1, 50);
+        let terms: Vec<String> = query
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|term| !term.is_empty())
+            .map(str::to_string)
+            .collect();
+
+        let conn = self.conn.lock().unwrap();
+        let mut rows: Vec<SessionSearchHit> = Vec::new();
+        if terms.is_empty() || terms.iter().any(|term| term.chars().count() < 3) {
+            // Trigram FTS cannot represent a one/two-character token. Use literal substring AND
+            // semantics for those incremental/CJK inputs; parameters, not SQL text, carry values.
+            let needles = if terms.is_empty() {
+                vec![query.to_string()]
+            } else {
+                terms
+            };
+            let conditions = (1..=needles.len())
+                .map(|index| format!("instr(lower(p.search_text),lower(?{index}))>0"))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            let limit_param = needles.len() + 1;
+            let sql = format!(
+                "WITH ranked AS (
+                   SELECT p.session_id,p.seq,p.role,s.title,s.cwd,s.archived,
+                          substr(p.search_text,MAX(1,instr(lower(p.search_text),lower(?1))-60),180) AS snippet,
+                          ROW_NUMBER() OVER (PARTITION BY p.session_id ORDER BY p.seq DESC) AS rn
+                   FROM parts p JOIN sessions s ON s.id=p.session_id
+                   WHERE p.search_text IS NOT NULL AND {conditions}
+                 )
+                 SELECT session_id,seq,role,title,cwd,archived,snippet
+                 FROM ranked WHERE rn=1 ORDER BY seq DESC LIMIT ?{limit_param}"
+            );
+            let mut params = needles
+                .into_iter()
+                .map(rusqlite::types::Value::Text)
+                .collect::<Vec<_>>();
+            params.push(rusqlite::types::Value::Integer(limit as i64));
+            let mut stmt = conn.prepare(&sql)?;
+            let mapped =
+                stmt.query_map(rusqlite::params_from_iter(params.iter()), search_hit_row)?;
+            for row in mapped {
+                rows.push(row?);
+            }
+        } else {
+            let match_query = terms
+                .iter()
+                .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            let mut stmt = conn.prepare(
+                "WITH best AS (
+                   SELECT p.session_id,MAX(p.seq) AS seq
+                   FROM parts_fts JOIN parts p ON p.rowid=parts_fts.rowid
+                   WHERE parts_fts MATCH ?1
+                   GROUP BY p.session_id
+                   ORDER BY MAX(p.seq) DESC LIMIT ?2
+                 )
+                 SELECT p.session_id,p.seq,p.role,s.title,s.cwd,s.archived,
+                        snippet(parts_fts,0,'','', ' … ',24)
+                 FROM best
+                 JOIN parts p ON p.session_id=best.session_id AND p.seq=best.seq
+                 JOIN parts_fts ON parts_fts.rowid=p.rowid
+                 JOIN sessions s ON s.id=p.session_id
+                 WHERE parts_fts MATCH ?1
+                 ORDER BY p.seq DESC",
+            )?;
+            let mapped =
+                stmt.query_map(rusqlite::params![match_query, limit as i64], search_hit_row)?;
+            for row in mapped {
+                rows.push(row?);
+            }
+        }
+
+        let mut out = Vec::new();
+        for mut hit in rows {
+            hit.snippet = hit.snippet.split_whitespace().collect::<Vec<_>>().join(" ");
+            hit.snippet = hit.snippet.chars().take(240).collect();
+            out.push(hit);
         }
         Ok(out)
     }
@@ -364,9 +1275,8 @@ impl Store {
         session_id: &str,
     ) -> Result<Vec<(i64, Role, Part)>, StoreError> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT seq,role,part_json FROM parts WHERE session_id=?1 ORDER BY seq",
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT seq,role,part_json FROM parts WHERE session_id=?1 ORDER BY seq")?;
         let rows = stmt.query_map([session_id], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -377,7 +1287,11 @@ impl Store {
         let mut out = Vec::new();
         for row in rows {
             let (seq, role, part) = row?;
-            out.push((seq, serde_json::from_str(&role)?, serde_json::from_str(&part)?));
+            out.push((
+                seq,
+                serde_json::from_str(&role)?,
+                serde_json::from_str(&part)?,
+            ));
         }
         Ok(out)
     }
@@ -391,11 +1305,20 @@ type SessionCols = (
     Option<String>,
     String,
     Option<String>,
-    String,
     Option<String>,
     String,
     String,
+    Option<String>,
     i64,
+    i64,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+    String,
 );
 
 fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols> {
@@ -411,6 +1334,15 @@ fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols
         row.get(8)?,
         row.get(9)?,
         row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
+        row.get(14)?,
+        row.get(15)?,
+        row.get(16)?,
+        row.get(17)?,
+        row.get(18)?,
+        row.get(19)?,
     ))
 }
 
@@ -418,22 +1350,218 @@ fn build_session(c: SessionCols) -> Result<Session, StoreError> {
     Ok(Session {
         id: c.0,
         title: c.1,
+        title_origin: parse_title_origin(&c.12),
+        pinned: c.11 != 0,
+        activity: c
+            .13
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or_default(),
         provider: serde_json::from_str(&c.2)?,
         model: c.3,
         cwd: c.4,
-        worktree_path: c.5,
-        permission_mode: serde_json::from_str(&c.6)?,
-        acp_session_id: c.7,
-        memory_read: MemoryAccess::from_db(&c.8),
-        memory_write: MemoryAccess::from_db(&c.9),
+        project_path: c.5,
+        worktree_path: c.6,
+        worktree_common_dir: c.15,
+        worktree_git_dir: c.16,
+        worktree_identity: c.17.as_deref().map(serde_json::from_str).transpose()?,
+        worktree_baseline: c.14.as_deref().map(serde_json::from_str).transpose()?,
+        permission_mode: serde_json::from_str(&c.7)?,
+        sandbox_policy: serde_json::from_str(&c.8)?,
+        acp_session_id: c.9,
+        memory_read: MemoryAccess::from_db(&c.18),
+        memory_write: MemoryAccess::from_db(&c.19),
         created_at: c.10,
+    })
+}
+
+fn title_origin_str(origin: SessionTitleOrigin) -> &'static str {
+    match origin {
+        SessionTitleOrigin::Default => "default",
+        SessionTitleOrigin::Automatic => "automatic",
+        SessionTitleOrigin::Manual => "manual",
+    }
+}
+
+fn parse_title_origin(value: &str) -> SessionTitleOrigin {
+    match value {
+        "automatic" => SessionTitleOrigin::Automatic,
+        "manual" => SessionTitleOrigin::Manual,
+        _ => SessionTitleOrigin::Default,
+    }
+}
+
+fn search_hit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSearchHit> {
+    let role: String = row.get(2)?;
+    let role = serde_json::from_str(&role).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(e))
+    })?;
+    Ok(SessionSearchHit {
+        session_id: row.get(0)?,
+        seq: row.get(1)?,
+        role,
+        title: row.get(3)?,
+        cwd: row.get(4)?,
+        archived: row.get::<_, i64>(5)? != 0,
+        snippet: row.get(6)?,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::permission::{PermissionMode, SandboxPolicy};
     use crate::provider::ProviderId;
+    use crate::session::{PendingInput, PendingInputKind, DEFAULT_TRANSCRIPT_TURNS};
+    use crate::worktree::{DirectoryIdentity, ResolvedWorktreeBaseline, WorktreeBaseline};
+
+    #[test]
+    fn migration_adds_pinned_with_an_unpinned_default() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+               id TEXT PRIMARY KEY, title TEXT NOT NULL, provider TEXT NOT NULL, model TEXT,
+               cwd TEXT NOT NULL, worktree_path TEXT, permission_mode TEXT NOT NULL,
+               acp_session_id TEXT, created_at INTEGER NOT NULL
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sessions
+               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at)
+             VALUES (?1,?2,?3,NULL,?4,NULL,?5,NULL,?6)",
+            rusqlite::params!["legacy", "Legacy", "\"grok\"", "/work", "\"ask\"", 100],
+        )
+        .unwrap();
+
+        conn.execute_batch(SCHEMA).unwrap();
+        migrate(&conn).unwrap();
+        let store = Store {
+            conn: Mutex::new(conn),
+        };
+        let restored = store.get_session("legacy").unwrap().unwrap();
+        assert!(!restored.pinned);
+        assert!(restored.worktree_baseline.is_none());
+        assert!(restored.worktree_identity.is_none());
+        assert_eq!(restored.activity, SessionActivity::default());
+        assert_eq!(restored.title_origin, SessionTitleOrigin::Manual);
+        assert_eq!(restored.project_path.as_deref(), Some("/work"));
+        assert_eq!(restored.sandbox_policy, SandboxPolicy::WorkspaceWrite);
+    }
+
+    #[test]
+    fn migration_repairs_columns_left_present_before_their_backfills() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+               id TEXT PRIMARY KEY, title TEXT NOT NULL,
+               title_origin TEXT NOT NULL DEFAULT 'default',
+               provider TEXT NOT NULL, model TEXT, cwd TEXT NOT NULL,
+               worktree_path TEXT, permission_mode TEXT NOT NULL,
+               acp_session_id TEXT, created_at INTEGER NOT NULL
+             );
+             INSERT INTO sessions
+               (id,title,title_origin,provider,cwd,permission_mode,created_at)
+             VALUES ('legacy-title','My title','default','\"grok\"','/work/legacy','\"ask\"',100);
+             CREATE TABLE projects (
+               path TEXT PRIMARY KEY, name TEXT NOT NULL,
+               last_opened_at INTEGER NOT NULL,
+               added_at INTEGER NOT NULL DEFAULT 0
+             );
+             INSERT INTO projects VALUES ('/work/older','older',100,0),
+                                         ('/work/newer','newer',200,0);",
+        )
+        .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+
+        migrate(&conn).unwrap();
+
+        let origin: String = conn
+            .query_row(
+                "SELECT title_origin FROM sessions WHERE id='legacy-title'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(origin, "manual");
+        for (path, expected) in [("/work/older", 100), ("/work/newer", 200)] {
+            let added: i64 = conn
+                .query_row(
+                    "SELECT added_at FROM projects WHERE path=?1",
+                    [path],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(added, expected);
+        }
+    }
+
+    #[test]
+    fn additive_schema_and_backfills_roll_back_together() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+               id TEXT PRIMARY KEY, title TEXT NOT NULL, provider TEXT NOT NULL, model TEXT,
+               cwd TEXT NOT NULL, worktree_path TEXT, permission_mode TEXT NOT NULL,
+               acp_session_id TEXT, created_at INTEGER NOT NULL
+             );
+             INSERT INTO sessions
+               (id,title,provider,cwd,permission_mode,created_at)
+             VALUES ('legacy','Legacy','\"grok\"','/work','\"ask\"',100);
+             CREATE TRIGGER reject_session_backfill BEFORE UPDATE ON sessions
+             BEGIN SELECT RAISE(ABORT, 'simulated backfill failure'); END;",
+        )
+        .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+
+        let error = migrate(&conn).unwrap_err();
+        assert!(error.to_string().contains("simulated backfill failure"));
+        assert!(
+            !table_has_column(&conn, "sessions", "archived").unwrap(),
+            "ALTER TABLE must roll back with its failed backfill"
+        );
+        assert!(!table_has_column(&conn, "sessions", "activity_json").unwrap());
+    }
+
+    #[test]
+    fn migration_leaves_a_legacy_worktree_source_unknown() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+               id TEXT PRIMARY KEY, title TEXT NOT NULL, provider TEXT NOT NULL, model TEXT,
+               cwd TEXT NOT NULL, worktree_path TEXT, permission_mode TEXT NOT NULL,
+               acp_session_id TEXT, created_at INTEGER NOT NULL
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sessions
+               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at)
+             VALUES (?1,?2,?3,NULL,?4,?5,?6,NULL,?7)",
+            rusqlite::params![
+                "legacy-worktree",
+                "Legacy",
+                "\"grok\"",
+                "/isolated/repo/packages/app",
+                "/isolated/repo",
+                "\"ask\"",
+                100
+            ],
+        )
+        .unwrap();
+
+        conn.execute_batch(SCHEMA).unwrap();
+        migrate(&conn).unwrap();
+        let store = Store {
+            conn: Mutex::new(conn),
+        };
+        let restored = store.get_session("legacy-worktree").unwrap().unwrap();
+        assert!(restored.project_path.is_none());
+        assert!(restored.worktree_common_dir.is_none());
+        assert!(restored.worktree_git_dir.is_none());
+        assert!(restored.worktree_identity.is_none());
+    }
 
     #[test]
     fn projects_are_listed_newest_added_first() {
@@ -453,7 +1581,12 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         store.add_project("/work/alpha", None, 100).unwrap();
         store.add_project("/work/beta", None, 200).unwrap();
-        let before: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
+        let before: Vec<String> = store
+            .list_projects()
+            .unwrap()
+            .into_iter()
+            .map(|p| p.path)
+            .collect();
 
         // Clicking the bottom row must not walk it to the top under the cursor.
         store.touch_project("/work/alpha", 300).unwrap();
@@ -461,15 +1594,27 @@ mod tests {
         store.add_project("/work/alpha", None, 400).unwrap();
 
         let after = store.list_projects().unwrap();
-        assert_eq!(after.iter().map(|p| p.path.clone()).collect::<Vec<_>>(), before);
+        assert_eq!(
+            after.iter().map(|p| p.path.clone()).collect::<Vec<_>>(),
+            before
+        );
         // The age on the row still tracks use, even though the position doesn't.
-        assert_eq!(after.iter().find(|p| p.path == "/work/alpha").unwrap().last_opened_at, 400);
+        assert_eq!(
+            after
+                .iter()
+                .find(|p| p.path == "/work/alpha")
+                .unwrap()
+                .last_opened_at,
+            400
+        );
     }
 
     #[test]
     fn adding_a_known_project_reopens_it_rather_than_duplicating() {
         let store = Store::open_in_memory().unwrap();
-        store.add_project("/work/alpha", Some("Alpha"), 100).unwrap();
+        store
+            .add_project("/work/alpha", Some("Alpha"), 100)
+            .unwrap();
         store.add_project("/work/alpha", None, 400).unwrap();
 
         let list = store.list_projects().unwrap();
@@ -488,7 +1633,11 @@ mod tests {
 
         store.remove_project("/work/alpha").unwrap();
         assert!(store.list_projects().unwrap().is_empty());
-        assert_eq!(store.list_sessions().unwrap().len(), 1, "transcripts are not the bookkeeping");
+        assert_eq!(
+            store.list_sessions().unwrap().len(),
+            1,
+            "transcripts are not the bookkeeping"
+        );
     }
 
     #[test]
@@ -496,7 +1645,9 @@ mod tests {
         // A store that predates the projects table shouldn't open to an empty picker.
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute_batch(SCHEMA).unwrap();
-        let store = Store { conn: Mutex::new(conn) };
+        let store = Store {
+            conn: Mutex::new(conn),
+        };
         let mut a = Session::new(ProviderId::Grok, "/work/alpha");
         a.created_at = 100;
         let mut b = Session::new(ProviderId::Grok, "/work/beta");
@@ -504,11 +1655,14 @@ mod tests {
         store.upsert_session(&a).unwrap();
         store.upsert_session(&b).unwrap();
 
-        migrate(&store.conn.lock().unwrap());
+        migrate(&store.conn.lock().unwrap()).unwrap();
 
         let list = store.list_projects().unwrap();
         assert_eq!(list.len(), 2);
-        assert_eq!(list[0].path, "/work/beta", "ordered by the newest session in each");
+        assert_eq!(
+            list[0].path, "/work/beta",
+            "ordered by the newest session in each"
+        );
         assert_eq!(list[0].name, "beta");
     }
 
@@ -525,15 +1679,30 @@ mod tests {
         )
         .unwrap();
         conn.execute_batch(SCHEMA).unwrap();
-        migrate(&conn);
-        let store = Store { conn: Mutex::new(conn) };
+        migrate(&conn).unwrap();
+        let store = Store {
+            conn: Mutex::new(conn),
+        };
 
-        let paths: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
+        let paths: Vec<String> = store
+            .list_projects()
+            .unwrap()
+            .into_iter()
+            .map(|p| p.path)
+            .collect();
         assert_eq!(paths, ["/work/beta", "/work/alpha"]);
 
         store.touch_project("/work/alpha", 999).unwrap();
-        let after: Vec<String> = store.list_projects().unwrap().into_iter().map(|p| p.path).collect();
-        assert_eq!(after, paths, "frozen after the migration, not re-derived from use");
+        let after: Vec<String> = store
+            .list_projects()
+            .unwrap()
+            .into_iter()
+            .map(|p| p.path)
+            .collect();
+        assert_eq!(
+            after, paths,
+            "frozen after the migration, not re-derived from use"
+        );
     }
 
     #[test]
@@ -542,16 +1711,36 @@ mod tests {
         let a = Session::new(ProviderId::Grok, "/a");
         store.upsert_session(&a).unwrap();
 
-        store.append_part(&a.id, Role::User, &Part::Text { text: "first".into() }).unwrap();
         store
-            .append_part(&a.id, Role::Agent, &Part::Text { text: "  second\n  answer  ".into() })
+            .append_part(
+                &a.id,
+                Role::User,
+                &Part::Text {
+                    text: "first".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "  second\n  answer  ".into(),
+                },
+            )
             .unwrap();
         // A tool call lands last, but "ran a command" is not a conversation preview.
         store
             .append_part(
                 &a.id,
                 Role::Agent,
-                &Part::ToolCall { id: "t".into(), title: "ls".into(), status: "completed".into() },
+                &Part::ToolCall {
+                    id: "t".into(),
+                    title: "ls".into(),
+                    status: "completed".into(),
+                    tool_kind: None,
+                    agent_input: None,
+                },
             )
             .unwrap();
 
@@ -567,7 +1756,15 @@ mod tests {
         let store = Store::open_in_memory().unwrap();
         let a = Session::new(ProviderId::Grok, "/a");
         store.upsert_session(&a).unwrap();
-        store.append_part(&a.id, Role::Agent, &Part::Plan { entries: vec!["x".into()] }).unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Plan {
+                    entries: vec!["x".into()],
+                },
+            )
+            .unwrap();
 
         assert!(store.last_texts().unwrap().is_empty());
     }
@@ -596,7 +1793,10 @@ mod tests {
         a2.model = Some("grok-build".into());
         store.upsert_session(&a2).unwrap();
         assert_eq!(store.list_sessions().unwrap().len(), 2);
-        assert_eq!(store.get_session(&a.id).unwrap().unwrap().model.as_deref(), Some("grok-build"));
+        assert_eq!(
+            store.get_session(&a.id).unwrap().unwrap().model.as_deref(),
+            Some("grok-build")
+        );
 
         store
             .set_session_memory_policy(&a.id, MemoryAccess::Allow, MemoryAccess::Deny)
@@ -613,6 +1813,324 @@ mod tests {
     }
 
     #[test]
+    fn session_activity_round_trips_and_rejects_stale_cas_writers() {
+        let store = Store::open_in_memory().unwrap();
+        let mut session = Session::new(ProviderId::Grok, "/work");
+        session.activity = SessionActivity {
+            revision: 4,
+            state: SessionRunState::Running {
+                turn_id: "turn-4".into(),
+                prompt_request_id: Some("prompt-4".into()),
+            },
+        };
+        store.upsert_session(&session).unwrap();
+        assert_eq!(
+            store.get_session(&session.id).unwrap().unwrap().activity,
+            session.activity
+        );
+
+        let awaiting = SessionActivity {
+            revision: 5,
+            state: SessionRunState::AwaitingInput {
+                turn_id: "turn-4".into(),
+                prompt_request_id: Some("prompt-4".into()),
+                pending: vec![PendingInput {
+                    input_id: "permission-1".into(),
+                    kind: PendingInputKind::Permission,
+                    title: "Run tests".into(),
+                    options: vec![("allow".into(), "Allow".into())],
+                    sequence: 1,
+                }],
+            },
+        };
+        assert!(store
+            .update_session_activity(&session.id, 4, &awaiting)
+            .unwrap());
+
+        let stale = SessionActivity {
+            revision: 5,
+            state: SessionRunState::Idle,
+        };
+        assert!(!store
+            .update_session_activity(&session.id, 4, &stale)
+            .unwrap());
+        assert_eq!(
+            store.get_session(&session.id).unwrap().unwrap().activity,
+            awaiting
+        );
+    }
+
+    #[test]
+    fn prompt_and_running_activity_commit_atomically() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        let running = SessionActivity {
+            revision: 1,
+            state: SessionRunState::Running {
+                turn_id: "turn-1".into(),
+                prompt_request_id: Some("prompt-1".into()),
+            },
+        };
+        let prompt = Part::Prompt {
+            text: "canonical prompt".into(),
+            display: "canonical prompt".into(),
+        };
+
+        assert_eq!(
+            store
+                .append_prompt_and_activity(&session.id, &prompt, 0, &running)
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            store.get_session(&session.id).unwrap().unwrap().activity,
+            running
+        );
+        assert!(matches!(
+            store.transcript(&session.id).unwrap().as_slice(),
+            [(Role::User, Part::Prompt { text, .. })] if text == "canonical prompt"
+        ));
+
+        let stale_prompt = Part::Prompt {
+            text: "must roll back".into(),
+            display: "must roll back".into(),
+        };
+        assert!(matches!(
+            store.append_prompt_and_activity(&session.id, &stale_prompt, 0, &running),
+            Err(StoreError::ActivityConflict {
+                expected: 0,
+                actual: 1,
+                ..
+            })
+        ));
+        assert_eq!(
+            store.transcript(&session.id).unwrap().len(),
+            1,
+            "a failed activity CAS must not append the prompt"
+        );
+    }
+
+    #[test]
+    fn startup_normalizes_only_in_flight_activity_as_interrupted() {
+        let store = Store::open_in_memory().unwrap();
+        let mut running = Session::new(ProviderId::Grok, "/running");
+        running.activity = SessionActivity {
+            revision: 3,
+            state: SessionRunState::Running {
+                turn_id: "running-turn".into(),
+                prompt_request_id: None,
+            },
+        };
+        let mut awaiting = Session::new(ProviderId::Grok, "/awaiting");
+        awaiting.activity = SessionActivity {
+            revision: 8,
+            state: SessionRunState::AwaitingInput {
+                turn_id: "awaiting-turn".into(),
+                prompt_request_id: Some("prompt".into()),
+                pending: vec![PendingInput {
+                    input_id: "permission".into(),
+                    kind: PendingInputKind::Permission,
+                    title: "Approve".into(),
+                    options: vec![],
+                    sequence: 9,
+                }],
+            },
+        };
+        let idle = Session::new(ProviderId::Grok, "/idle");
+        let mut failed = Session::new(ProviderId::Grok, "/failed");
+        failed.activity = SessionActivity {
+            revision: 2,
+            state: SessionRunState::Failed {
+                turn_id: Some("old-turn".into()),
+                reason: RunFailureReason::ProviderError,
+                message: "already terminal".into(),
+            },
+        };
+        for session in [&running, &awaiting, &idle, &failed] {
+            store.upsert_session(session).unwrap();
+        }
+
+        assert_eq!(store.normalize_interrupted_activities().unwrap(), 2);
+        for (session_id, revision, turn_id) in [
+            (&running.id, 4, "running-turn"),
+            (&awaiting.id, 9, "awaiting-turn"),
+        ] {
+            let activity = store.get_session(session_id).unwrap().unwrap().activity;
+            assert_eq!(activity.revision, revision);
+            assert!(matches!(
+                activity.state,
+                SessionRunState::Failed {
+                    turn_id: Some(ref actual_turn),
+                    reason: RunFailureReason::Interrupted,
+                    ref message,
+                } if actual_turn == turn_id
+                    && message == "Code2 stopped before the turn finished"
+            ));
+        }
+        assert_eq!(
+            store.get_session(&idle.id).unwrap().unwrap().activity,
+            idle.activity
+        );
+        assert_eq!(
+            store.get_session(&failed.id).unwrap().unwrap().activity,
+            failed.activity
+        );
+        assert_eq!(store.normalize_interrupted_activities().unwrap(), 0);
+    }
+
+    #[test]
+    fn permission_mode_updates_without_requiring_a_live_runtime() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+
+        assert!(store
+            .set_permission_mode(&session.id, PermissionMode::Yolo)
+            .unwrap());
+        assert_eq!(
+            store
+                .get_session(&session.id)
+                .unwrap()
+                .unwrap()
+                .permission_mode,
+            PermissionMode::Yolo
+        );
+        assert!(!store
+            .set_permission_mode("missing", PermissionMode::AcceptEdits)
+            .unwrap());
+    }
+
+    #[test]
+    fn execution_policy_round_trips_atomically() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+
+        assert!(store
+            .set_execution_policy(
+                &session.id,
+                PermissionMode::AcceptEdits,
+                SandboxPolicy::ReadOnly,
+            )
+            .unwrap());
+        let restored = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(restored.permission_mode, PermissionMode::AcceptEdits);
+        assert_eq!(restored.sandbox_policy, SandboxPolicy::ReadOnly);
+
+        // A failed write cannot leave one axis updated and the other stale because both columns
+        // are assigned by the same SQLite statement.
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TRIGGER reject_execution_policy BEFORE UPDATE OF permission_mode, sandbox_policy ON sessions
+                 BEGIN SELECT RAISE(ABORT, 'simulated policy write failure'); END;",
+            )
+            .unwrap();
+        let error = store
+            .set_execution_policy(
+                &session.id,
+                PermissionMode::Yolo,
+                SandboxPolicy::DangerFullAccess,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("simulated policy write failure"));
+        let unchanged = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(unchanged.permission_mode, PermissionMode::AcceptEdits);
+        assert_eq!(unchanged.sandbox_policy, SandboxPolicy::ReadOnly);
+    }
+
+    #[test]
+    fn worktree_session_paths_round_trip_independently() {
+        let store = Store::open_in_memory().unwrap();
+        let mut session = Session::new(ProviderId::Grok, "/source/repo/packages/app");
+        session.cwd = "/isolated/repo/packages/app".into();
+        session.worktree_path = Some("/isolated/repo".into());
+        session.worktree_identity = Some(DirectoryIdentity::Unix {
+            device: 42,
+            inode: 108,
+        });
+        session.worktree_common_dir = Some("/source/repo/.git".into());
+        session.worktree_git_dir = Some("/source/repo/.git/worktrees/isolated".into());
+        session.worktree_baseline = Some(ResolvedWorktreeBaseline {
+            kind: WorktreeBaseline::OriginDefault,
+            reference: "refs/remotes/origin/main".into(),
+            sha: "0123456789abcdef0123456789abcdef01234567".into(),
+            display: "origin/main @ 01234567".into(),
+        });
+        store.upsert_session(&session).unwrap();
+
+        let restored = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(
+            restored.project_path.as_deref(),
+            Some("/source/repo/packages/app")
+        );
+        assert_eq!(restored.cwd, "/isolated/repo/packages/app");
+        assert_eq!(restored.worktree_path.as_deref(), Some("/isolated/repo"));
+        assert_eq!(restored.worktree_identity, session.worktree_identity);
+        assert_eq!(restored.worktree_common_dir, session.worktree_common_dir);
+        assert_eq!(restored.worktree_git_dir, session.worktree_git_dir);
+        assert_eq!(restored.worktree_baseline, session.worktree_baseline);
+    }
+
+    #[test]
+    fn pinned_sessions_persist_and_sort_before_newer_sessions() {
+        let store = Store::open_in_memory().unwrap();
+        let mut pinned = Session::new(ProviderId::Grok, "/pinned");
+        pinned.title = "Pinned".into();
+        pinned.created_at = 100;
+        pinned.pinned = true;
+        let mut newer_pinned = Session::new(ProviderId::Grok, "/newer-pinned");
+        newer_pinned.title = "Newer pinned".into();
+        newer_pinned.created_at = 150;
+        newer_pinned.pinned = true;
+        let mut newest = Session::new(ProviderId::Codex, "/newest");
+        newest.title = "Newest".into();
+        newest.created_at = 200;
+
+        store.upsert_session(&pinned).unwrap();
+        store.upsert_session(&newer_pinned).unwrap();
+        store.upsert_session(&newest).unwrap();
+
+        let list = store.list_sessions().unwrap();
+        assert_eq!(
+            list.iter().map(|s| s.title.as_str()).collect::<Vec<_>>(),
+            ["Newer pinned", "Pinned", "Newest"],
+        );
+        assert!(store.get_session(&pinned.id).unwrap().unwrap().pinned);
+
+        let mut updated = pinned.clone();
+        updated.title = "Still pinned".into();
+        store.upsert_session(&updated).unwrap();
+        assert!(store.get_session(&pinned.id).unwrap().unwrap().pinned);
+    }
+
+    #[test]
+    fn archiving_clears_and_blocks_pinning() {
+        let store = Store::open_in_memory().unwrap();
+        let mut session = Session::new(ProviderId::Grok, "/work");
+        session.pinned = true;
+        store.upsert_session(&session).unwrap();
+
+        store.set_archived(&session.id, true).unwrap();
+        let archived = store.list_archived_sessions().unwrap();
+        assert_eq!(archived.len(), 1);
+        assert!(
+            !archived[0].pinned,
+            "archived sessions must not surface as pinned"
+        );
+
+        store.set_pinned(&session.id, true).unwrap();
+        store.upsert_session(&session).unwrap();
+        assert!(!store.get_session(&session.id).unwrap().unwrap().pinned);
+
+        store.set_archived(&session.id, false).unwrap();
+        assert!(!store.get_session(&session.id).unwrap().unwrap().pinned);
+    }
+
+    #[test]
     fn rename_and_archive_sessions() {
         let store = Store::open_in_memory().unwrap();
         let a = Session::new(ProviderId::Grok, "/a");
@@ -622,6 +2140,13 @@ mod tests {
         assert_eq!(store.list_sessions().unwrap().len(), 2);
 
         store.rename_session(&a.id, "Renamed").unwrap();
+        let renamed = store.get_session(&a.id).unwrap().unwrap();
+        assert_eq!(renamed.title, "Renamed");
+        assert_eq!(renamed.title_origin, SessionTitleOrigin::Manual);
+
+        assert!(!store
+            .set_initial_title(&a.id, "Automatic replacement")
+            .unwrap());
         assert_eq!(store.get_session(&a.id).unwrap().unwrap().title, "Renamed");
 
         store.set_archived(&b.id, true).unwrap();
@@ -637,7 +2162,11 @@ mod tests {
         assert_eq!(store.list_sessions().unwrap().len(), 2);
         store.set_archived(&b.id, true).unwrap();
         store.upsert_session(&b).unwrap();
-        assert_eq!(store.list_sessions().unwrap().len(), 1, "upsert must preserve archived");
+        assert_eq!(
+            store.list_sessions().unwrap().len(),
+            1,
+            "upsert must preserve archived"
+        );
     }
 
     #[test]
@@ -646,15 +2175,678 @@ mod tests {
         let s = Session::new(ProviderId::Grok, "/a");
         store.upsert_session(&s).unwrap();
 
-        store.append_part(&s.id, Role::User, &Part::Text { text: "hi".into() }).unwrap();
-        store.append_part(&s.id, Role::Agent, &Part::Text { text: "hello".into() }).unwrap();
         store
-            .append_part(&s.id, Role::Agent, &Part::ToolCall { id: "t1".into(), title: "ls".into(), status: "completed".into() })
+            .append_part(
+                &s.id,
+                Role::User,
+                &Part::Prompt {
+                    text: "hi".into(),
+                    display: "hi".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &s.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "hello".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &s.id,
+                Role::Agent,
+                &Part::ToolCall {
+                    id: "t1".into(),
+                    title: "ls".into(),
+                    status: "completed".into(),
+                    tool_kind: None,
+                    agent_input: None,
+                },
+            )
             .unwrap();
 
         let t = store.transcript(&s.id).unwrap();
         assert_eq!(t.len(), 3);
-        assert!(matches!(t[0], (Role::User, Part::Text { .. })));
+        assert!(matches!(t[0], (Role::User, Part::Prompt { .. })));
         assert!(matches!(t[2], (Role::Agent, Part::ToolCall { .. })));
+    }
+
+    fn append_numbered_turn(store: &Store, session_id: &str, number: usize) -> (i64, i64) {
+        let user = store
+            .append_part(
+                session_id,
+                Role::User,
+                &Part::Prompt {
+                    text: format!("user-{number}"),
+                    display: format!("user-{number}"),
+                },
+            )
+            .unwrap();
+        let agent = store
+            .append_part(
+                session_id,
+                Role::Agent,
+                &Part::Text {
+                    text: format!("agent-{number}"),
+                },
+            )
+            .unwrap();
+        (user, agent)
+    }
+
+    fn page_user_numbers(page: &TranscriptPage) -> Vec<usize> {
+        page.entries
+            .iter()
+            .filter_map(|entry| match (&entry.role, &entry.part) {
+                (Role::User, Part::Prompt { text, .. }) | (Role::User, Part::Text { text }) => {
+                    text.strip_prefix("user-")?.parse::<usize>().ok()
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn transcript_pages_stitch_fifty_five_turns_as_twenty_twenty_fifteen() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        for turn in 0..55 {
+            append_numbered_turn(&store, &session.id, turn);
+        }
+
+        let latest = store
+            .transcript_page(&session.id, None, DEFAULT_TRANSCRIPT_TURNS)
+            .unwrap();
+        assert_eq!(page_user_numbers(&latest), (35..55).collect::<Vec<_>>());
+        assert_eq!(latest.entries.len(), 40);
+        assert_eq!(latest.snapshot_through, Some(TranscriptCursor(109)));
+
+        let middle = store
+            .transcript_page(&session.id, latest.next_before, DEFAULT_TRANSCRIPT_TURNS)
+            .unwrap();
+        assert_eq!(page_user_numbers(&middle), (15..35).collect::<Vec<_>>());
+        assert_eq!(middle.entries.len(), 40);
+
+        let oldest = store
+            .transcript_page(&session.id, middle.next_before, DEFAULT_TRANSCRIPT_TURNS)
+            .unwrap();
+        assert_eq!(page_user_numbers(&oldest), (0..15).collect::<Vec<_>>());
+        assert_eq!(oldest.entries.len(), 30);
+        assert_eq!(oldest.next_before, None);
+
+        let mut stitched = oldest.entries;
+        stitched.extend(middle.entries);
+        stitched.extend(latest.entries);
+        assert_eq!(stitched.len(), 110);
+        assert_eq!(
+            stitched.iter().map(|entry| entry.seq).collect::<Vec<_>>(),
+            (0..110).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn transcript_cursor_must_be_a_user_row_in_the_same_session() {
+        let store = Store::open_in_memory().unwrap();
+        let a = Session::new(ProviderId::Grok, "/a");
+        let b = Session::new(ProviderId::Grok, "/b");
+        store.upsert_session(&a).unwrap();
+        store.upsert_session(&b).unwrap();
+        append_numbered_turn(&store, &a.id, 0); // user 0, agent 1
+        store
+            .append_part(
+                &b.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "legacy preamble".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &b.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "another preamble".into(),
+                },
+            )
+            .unwrap();
+        let cross_session_user = store
+            .append_part(
+                &b.id,
+                Role::User,
+                &Part::Text {
+                    text: "legacy user".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(cross_session_user, 2);
+
+        for cursor in [
+            TranscriptCursor(1),
+            TranscriptCursor(2),
+            TranscriptCursor(999),
+        ] {
+            assert!(matches!(
+                store.transcript_page(&a.id, Some(cursor), 20),
+                Err(StoreError::InvalidTranscriptCursor { before, .. }) if before == cursor.0
+            ));
+        }
+    }
+
+    #[test]
+    fn transcript_limit_is_clamped_between_one_and_fifty_turns() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        for turn in 0..55 {
+            append_numbered_turn(&store, &session.id, turn);
+        }
+
+        let minimum = store.transcript_page(&session.id, None, 0).unwrap();
+        assert_eq!(page_user_numbers(&minimum), vec![54]);
+        let maximum = store
+            .transcript_page(&session.id, None, usize::MAX)
+            .unwrap();
+        assert_eq!(page_user_numbers(&maximum), (5..55).collect::<Vec<_>>());
+        assert!(maximum.next_before.is_some());
+    }
+
+    #[test]
+    fn oldest_page_includes_legacy_agent_preamble_and_user_text() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        store
+            .append_part(
+                &session.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "legacy preamble".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &session.id,
+                Role::User,
+                &Part::Text {
+                    text: "user-0".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &session.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "legacy answer".into(),
+                },
+            )
+            .unwrap();
+
+        let page = store.transcript_page(&session.id, None, 20).unwrap();
+        assert_eq!(
+            page.entries
+                .iter()
+                .map(|entry| entry.seq)
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(page.next_before, None);
+        assert_eq!(page_user_numbers(&page), vec![0]);
+    }
+
+    #[test]
+    fn agent_only_and_empty_legacy_transcripts_are_single_sensible_pages() {
+        let store = Store::open_in_memory().unwrap();
+        let agent_only = Session::new(ProviderId::Grok, "/agent-only");
+        let empty = Session::new(ProviderId::Grok, "/empty");
+        store.upsert_session(&agent_only).unwrap();
+        store.upsert_session(&empty).unwrap();
+        for text in ["one", "two", "three"] {
+            store
+                .append_part(
+                    &agent_only.id,
+                    Role::Agent,
+                    &Part::Text { text: text.into() },
+                )
+                .unwrap();
+        }
+
+        let page = store.transcript_page(&agent_only.id, None, 1).unwrap();
+        assert_eq!(page.entries.len(), 3);
+        assert_eq!(page.next_before, None);
+        assert_eq!(page.snapshot_through, Some(TranscriptCursor(2)));
+        let empty_page = store.transcript_page(&empty.id, None, 20).unwrap();
+        assert!(empty_page.entries.is_empty());
+        assert_eq!(empty_page.snapshot_through, None);
+    }
+
+    #[test]
+    fn snapshot_high_water_mark_keeps_running_appends_out_of_an_existing_page() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        for turn in 0..21 {
+            append_numbered_turn(&store, &session.id, turn);
+        }
+
+        let first = store.transcript_page(&session.id, None, 20).unwrap();
+        assert_eq!(first.snapshot_through, Some(TranscriptCursor(41)));
+        let live_seq = store
+            .append_part(
+                &session.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "live tail".into(),
+                },
+            )
+            .unwrap();
+        assert_eq!(live_seq, 42);
+        assert!(first.entries.iter().all(|entry| entry.seq <= 41));
+
+        let older = store
+            .transcript_page(&session.id, first.next_before, 20)
+            .unwrap();
+        assert_eq!(page_user_numbers(&older), vec![0]);
+        assert!(older
+            .entries
+            .iter()
+            .all(|entry| entry.seq < first.next_before.unwrap().0));
+
+        let refreshed = store.transcript_page(&session.id, None, 20).unwrap();
+        assert_eq!(refreshed.snapshot_through, Some(TranscriptCursor(42)));
+        assert_eq!(refreshed.entries.last().unwrap().seq, 42);
+    }
+
+    #[test]
+    fn automatic_title_is_one_shot_and_manual_rename_wins() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+
+        assert!(store
+            .set_initial_title(&session.id, "Search conversations")
+            .unwrap());
+        let automatic = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(automatic.title, "Search conversations");
+        assert_eq!(automatic.title_origin, SessionTitleOrigin::Automatic);
+
+        store.rename_session(&session.id, "My research").unwrap();
+        assert!(!store
+            .set_initial_title(&session.id, "Do not use this")
+            .unwrap());
+        let manual = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(manual.title, "My research");
+        assert_eq!(manual.title_origin, SessionTitleOrigin::Manual);
+
+        // A concurrent operation may still hold the pre-rename runtime snapshot. Generic upserts
+        // update provider/session mechanics, never the title fields owned by the dedicated APIs.
+        store.upsert_session(&automatic).unwrap();
+        let after_stale_upsert = store.get_session(&session.id).unwrap().unwrap();
+        assert_eq!(after_stale_upsert.title, "My research");
+        assert_eq!(after_stale_upsert.title_origin, SessionTitleOrigin::Manual);
+    }
+
+    #[test]
+    fn search_uses_canonical_prompts_coalesces_agent_chunks_and_deduplicates_sessions() {
+        let store = Store::open_in_memory().unwrap();
+        let mut a = Session::new(ProviderId::Grok, "/alpha");
+        a.title = "Palette work".into();
+        let mut b = Session::new(ProviderId::Codex, "/beta");
+        b.title = "Archived percent bug".into();
+        store.upsert_session(&a).unwrap();
+        store.upsert_session(&b).unwrap();
+
+        store
+            .append_part(
+                &a.id,
+                Role::User,
+                &Part::Prompt {
+                    text: "Build conversation search for the command palette".into(),
+                    display: "Build conversation search".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::User,
+                &Part::Text {
+                    text: "hidden expanded project rule".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Reasoning {
+                    text: "private reasoning needle".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "Index ".into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::ToolCall {
+                    id: "tool".into(),
+                    title: "secret tool needle".into(),
+                    status: "completed".into(),
+                    tool_kind: None,
+                    agent_input: None,
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &a.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "migration safely".into(),
+                },
+            )
+            .unwrap();
+        assert!(store
+            .search_sessions("index migration", 10)
+            .unwrap()
+            .is_empty());
+        store.finalize_agent_search(&a.id).unwrap();
+
+        store
+            .append_part(
+                &b.id,
+                Role::User,
+                &Part::Prompt {
+                    text: "Fix the literal % wildcard in search".into(),
+                    display: "Fix literal wildcard".into(),
+                },
+            )
+            .unwrap();
+        store.set_archived(&b.id, true).unwrap();
+
+        let palette = store.search_sessions("palette", 10).unwrap();
+        assert_eq!(palette.len(), 1, "one result per session");
+        assert_eq!(palette[0].session_id, a.id);
+        assert_eq!(palette[0].role, Role::User);
+
+        let chunks = store.search_sessions("index migration", 10).unwrap();
+        assert_eq!(chunks.len(), 1, "agent chunks form one searchable turn");
+        assert_eq!(chunks[0].role, Role::Agent);
+        assert!(chunks[0].snippet.contains("Index migration"));
+
+        for excluded in ["expanded", "reasoning", "secret"] {
+            assert!(
+                store.search_sessions(excluded, 10).unwrap().is_empty(),
+                "indexed {excluded}"
+            );
+        }
+
+        let wildcard = store.search_sessions("%", 10).unwrap();
+        assert_eq!(wildcard.len(), 1);
+        assert_eq!(wildcard[0].session_id, b.id);
+        assert!(wildcard[0].archived);
+    }
+
+    #[test]
+    fn search_supports_cjk_incremental_prefixes_and_one_result_per_session() {
+        let store = Store::open_in_memory().unwrap();
+        let a = Session::new(ProviderId::Grok, "/alpha");
+        let b = Session::new(ProviderId::Codex, "/beta");
+        store.upsert_session(&a).unwrap();
+        store.upsert_session(&b).unwrap();
+
+        for index in 0..90 {
+            store
+                .append_part(
+                    &a.id,
+                    Role::User,
+                    &Part::Prompt {
+                        text: format!("conversation search repeated {index}"),
+                        display: "repeat".into(),
+                    },
+                )
+                .unwrap();
+        }
+        store
+            .append_part(
+                &b.id,
+                Role::User,
+                &Part::Prompt {
+                    text: "调研并吸纳 conversation search".into(),
+                    display: "中文搜索".into(),
+                },
+            )
+            .unwrap();
+
+        let prefix = store.search_sessions("convers", 10).unwrap();
+        assert_eq!(
+            prefix.len(),
+            2,
+            "a long session must not starve another match"
+        );
+        let cjk = store.search_sessions("吸纳", 10).unwrap();
+        assert_eq!(cjk.len(), 1);
+        assert_eq!(cjk[0].session_id, b.id);
+    }
+
+    #[test]
+    fn prompt_projection_survives_file_reopen() {
+        let path = std::env::temp_dir().join(format!("codetwo-search-{}.db", uuid::Uuid::new_v4()));
+        let path_text = path.to_string_lossy().into_owned();
+        let session = Session::new(ProviderId::Grok, "/work");
+        {
+            let store = Store::open(&path_text).unwrap();
+            store.upsert_session(&session).unwrap();
+            store
+                .append_part(
+                    &session.id,
+                    Role::User,
+                    &Part::Prompt {
+                        text: "First line\n  preserved indent".into(),
+                        display: "First line…".into(),
+                    },
+                )
+                .unwrap();
+        }
+        let reopened = Store::open(&path_text).unwrap();
+        let transcript = reopened.transcript(&session.id).unwrap();
+        assert!(matches!(
+            &transcript[0],
+            (Role::User, Part::Prompt { text, .. }) if text == "First line\n  preserved indent"
+        ));
+        assert_eq!(reopened.search_sessions("preserved", 10).unwrap().len(), 1);
+        drop(reopened);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn transcript_snapshot_drops_only_updates_superseded_by_a_later_terminal_in_the_turn() {
+        let tool = |seq, status: &str, title: &str, metadata: bool| TranscriptEntry {
+            seq,
+            role: Role::Agent,
+            part: Part::ToolCall {
+                id: "call-1".into(),
+                title: title.into(),
+                status: status.into(),
+                tool_kind: metadata.then(|| "agent".into()),
+                agent_input: metadata.then(|| serde_json::json!({ "role": "researcher" })),
+            },
+        };
+        let entries = vec![
+            TranscriptEntry {
+                seq: 0,
+                role: Role::User,
+                part: Part::Text { text: "one".into() },
+            },
+            tool(1, "pending", "Delegate researcher", true),
+            tool(2, "in_progress", "", false),
+            tool(3, "completed", "", false),
+            // Same identity after its completion is a new in-flight call and must survive.
+            tool(4, "in_progress", "Next call", false),
+            TranscriptEntry {
+                seq: 5,
+                role: Role::User,
+                part: Part::Text { text: "two".into() },
+            },
+            // A later turn cannot supersede the prior turn's row.
+            tool(6, "failed", "Other turn", false),
+        ];
+
+        let projected = drop_superseded_tool_updates(entries);
+        assert_eq!(
+            projected.iter().map(|entry| entry.seq).collect::<Vec<_>>(),
+            vec![0, 3, 4, 5, 6]
+        );
+        let Part::ToolCall {
+            title,
+            status,
+            tool_kind,
+            agent_input,
+            ..
+        } = &projected[1].part
+        else {
+            panic!("terminal tool row")
+        };
+        assert_eq!(title, "Delegate researcher");
+        assert_eq!(status, "completed");
+        assert_eq!(tool_kind.as_deref(), Some("agent"));
+        assert_eq!(
+            agent_input,
+            &Some(serde_json::json!({ "role": "researcher" }))
+        );
+    }
+
+    #[test]
+    fn transcript_snapshot_keeps_in_flight_updates_without_a_terminal() {
+        let entries = vec![
+            TranscriptEntry {
+                seq: 0,
+                role: Role::User,
+                part: Part::Text { text: "run".into() },
+            },
+            TranscriptEntry {
+                seq: 1,
+                role: Role::Agent,
+                part: Part::ToolCall {
+                    id: "call".into(),
+                    title: "Read".into(),
+                    status: "pending".into(),
+                    tool_kind: None,
+                    agent_input: None,
+                },
+            },
+            TranscriptEntry {
+                seq: 2,
+                role: Role::Agent,
+                part: Part::ToolCall {
+                    id: "call".into(),
+                    title: "Read".into(),
+                    status: "in_progress".into(),
+                    tool_kind: None,
+                    agent_input: None,
+                },
+            },
+        ];
+
+        assert_eq!(drop_superseded_tool_updates(entries).len(), 3);
+    }
+
+    #[test]
+    fn migration_indexes_agent_text_but_not_legacy_compiled_user_prompts() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+               id TEXT PRIMARY KEY, title TEXT NOT NULL, provider TEXT NOT NULL, model TEXT,
+               cwd TEXT NOT NULL, worktree_path TEXT, permission_mode TEXT NOT NULL,
+               acp_session_id TEXT, created_at INTEGER NOT NULL
+             );
+             CREATE TABLE parts (
+               session_id TEXT NOT NULL, seq INTEGER NOT NULL, role TEXT NOT NULL,
+               part_json TEXT NOT NULL, PRIMARY KEY(session_id,seq)
+             );",
+        )
+        .unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE parts_fts USING fts5(
+               search_text,content='parts',content_rowid='rowid',tokenize='unicode61'
+             );
+             INSERT INTO schema_migrations(id) VALUES('session_search_v1');",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO sessions
+               (id,title,provider,model,cwd,worktree_path,permission_mode,acp_session_id,created_at)
+             VALUES ('legacy','Legacy','\"grok\"',NULL,'/work',NULL,'\"ask\"',NULL,1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO parts(session_id,seq,role,part_json) VALUES (?1,0,?2,?3)",
+            rusqlite::params![
+                "legacy",
+                "\"user\"",
+                serde_json::to_string(&Part::Text {
+                    text: "private_file_rule_marker".into()
+                })
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO parts(session_id,seq,role,part_json) VALUES (?1,1,?2,?3)",
+            rusqlite::params![
+                "legacy",
+                "\"agent\"",
+                serde_json::to_string(&Part::Text {
+                    text: "safe_agent_".into()
+                })
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO parts(session_id,seq,role,part_json) VALUES (?1,2,?2,?3)",
+            rusqlite::params![
+                "legacy",
+                "\"agent\"",
+                serde_json::to_string(&Part::Text {
+                    text: "answer_marker".into()
+                })
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+        let store = Store {
+            conn: Mutex::new(conn),
+        };
+        assert!(store
+            .search_sessions("private_file_rule_marker", 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store
+                .search_sessions("safe_agent_answer_marker", 10)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

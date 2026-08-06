@@ -559,10 +559,7 @@ impl Store {
         Ok(Some(receipt))
     }
 
-    pub fn list_memory_receipts(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<MemoryReceipt>, StoreError> {
+    pub fn list_memory_receipts(&self, session_id: &str) -> Result<Vec<MemoryReceipt>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT user_part_seq,estimated_tokens,items_json,created_at
@@ -1935,6 +1932,8 @@ mod tests {
                     id: "tool-1".into(),
                     title: "cargo fmt".into(),
                     status: "completed".into(),
+                    tool_kind: None,
+                    agent_input: None,
                 },
             )
             .unwrap();
@@ -1942,7 +1941,9 @@ mod tests {
             .append_part(
                 &s.id,
                 Role::Agent,
-                &Part::Text { text: "Done".into() },
+                &Part::Text {
+                    text: "Done".into(),
+                },
             )
             .unwrap();
 
@@ -1988,11 +1989,9 @@ mod tests {
         assert_eq!(receipt.items.len(), 1);
         assert!(receipt.estimated_tokens > 0);
         assert_eq!(store.list_memory_receipts(&s.id).unwrap(), vec![receipt]);
-        assert!(!store
-            .transcript(&s.id)
-            .unwrap()
-            .iter()
-            .any(|(_, part)| matches!(part, Part::Text { text } if text.contains("Prefer concise"))));
+        assert!(!store.transcript(&s.id).unwrap().iter().any(
+            |(_, part)| matches!(part, Part::Text { text } if text.contains("Prefer concise"))
+        ));
     }
 
     #[test]

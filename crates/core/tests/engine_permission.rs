@@ -34,10 +34,18 @@ where
         let v: Value = serde_json::from_str(&line).unwrap();
         match v.get("method").and_then(|m| m.as_str()) {
             Some("initialize") => {
-                write_line(&mut writer, json!({"jsonrpc":"2.0","id":v["id"],"result":{"protocolVersion":1}})).await;
+                write_line(
+                    &mut writer,
+                    json!({"jsonrpc":"2.0","id":v["id"],"result":{"protocolVersion":1}}),
+                )
+                .await;
             }
             Some("session/new") => {
-                write_line(&mut writer, json!({"jsonrpc":"2.0","id":v["id"],"result":{"sessionId":"sess-1"}})).await;
+                write_line(
+                    &mut writer,
+                    json!({"jsonrpc":"2.0","id":v["id"],"result":{"sessionId":"sess-1"}}),
+                )
+                .await;
             }
             Some("session/prompt") => {
                 prompt_id = Some(v["id"].clone());
@@ -61,7 +69,11 @@ where
             Some(_) => {}
             None => {
                 if let Some(pid) = prompt_id.take() {
-                    write_line(&mut writer, json!({"jsonrpc":"2.0","id":pid,"result":{"stopReason":"end_turn"}})).await;
+                    write_line(
+                        &mut writer,
+                        json!({"jsonrpc":"2.0","id":pid,"result":{"stopReason":"end_turn"}}),
+                    )
+                    .await;
                 }
             }
         }
@@ -74,7 +86,13 @@ async fn permission_is_parked_then_answered() {
     let router = PermissionRouter::default();
     // Ask mode → the permission must be surfaced, not auto-answered.
     let policy = Arc::new(Mutex::new(PermissionPolicy::default()));
-    let handler = Arc::new(SessionHandler::new("s1".into(), events_tx, policy, router.clone(), None));
+    let handler = Arc::new(SessionHandler::new(
+        "s1".into(),
+        events_tx,
+        policy,
+        router.clone(),
+        None,
+    ));
 
     let (client_end, agent_end) = tokio::io::duplex(64 * 1024);
     let (cr, cw) = tokio::io::split(client_end);
@@ -87,18 +105,29 @@ async fn permission_is_parked_then_answered() {
     let sid = client.new_session("/tmp", vec![]).await.unwrap();
 
     // Run the turn concurrently; it will block inside request_permission until we answer.
-    let turn = tokio::spawn(async move { client.prompt(&sid, vec![ContentBlock::text("go")]).await });
+    let turn =
+        tokio::spawn(async move { client.prompt(&sid, vec![ContentBlock::text("go")]).await });
 
     // Collect events until the permission ask surfaces.
     let mut saw_text = false;
     let mut request_id = None;
     while let Some(ev) = events_rx.recv().await {
         match ev {
-            Event::AgentText { text, .. } => {
+            Event::AgentText {
+                text,
+                transcript_seq,
+                ..
+            } => {
                 assert_eq!(text, "working");
+                assert_eq!(transcript_seq, None);
                 saw_text = true;
             }
-            Event::PermissionRequest { request_id: rid, title, options, .. } => {
+            Event::PermissionRequest {
+                request_id: rid,
+                title,
+                options,
+                ..
+            } => {
                 assert_eq!(title, "rm build/");
                 assert_eq!(options.len(), 2);
                 request_id = Some(rid);
@@ -107,14 +136,25 @@ async fn permission_is_parked_then_answered() {
             _ => {}
         }
     }
-    assert!(saw_text, "agent text should stream before the permission ask");
+    assert!(
+        saw_text,
+        "agent text should stream before the permission ask"
+    );
     let request_id = request_id.expect("permission request should have surfaced");
 
     // The turn must still be pending (parked on our answer).
-    assert!(!turn.is_finished(), "turn must wait for the permission decision");
+    assert!(
+        !turn.is_finished(),
+        "turn must wait for the permission decision"
+    );
 
     // Answer allow → the turn completes.
-    assert!(router.answer(&request_id, PermissionOutcome::Selected { option_id: "allow".into() }));
+    assert!(router.answer(
+        &request_id,
+        PermissionOutcome::Selected {
+            option_id: "allow".into()
+        }
+    ));
     let stop = turn.await.unwrap().unwrap();
     assert_eq!(stop, StopReason::EndTurn);
 }

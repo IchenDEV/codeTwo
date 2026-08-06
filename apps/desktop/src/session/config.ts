@@ -1,4 +1,12 @@
-import type { MemoryAccess, ProviderInfo, Sandbox } from "../bridge";
+import type {
+  MemoryAccess,
+  ProviderInfo,
+  PermissionMode,
+  ResolvedWorktreeBaseline,
+  Sandbox,
+  WorktreeBaselineKind,
+  WorktreeBaselineOption,
+} from "../bridge";
 import type { SessionMode } from "./mode";
 
 /**
@@ -13,11 +21,19 @@ export interface SessionConfig {
   provider: string;
   onProvider: (v: string) => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
-  mode: string;
+  mode: PermissionMode;
   sandbox: Sandbox;
+  /** Creation/persistence is in flight; another choice would not describe the next turn yet. */
+  modeChangeDisabled: boolean;
   onSessionMode: (v: SessionMode) => void;
-  useWorktree: boolean;
-  onWorktree: (v: boolean) => void;
+  worktreeBase: WorktreeBaselineKind | null;
+  /** Immutable baseline recorded for the active session; null also covers a non-worktree session. */
+  activeWorktreeBaseline: ResolvedWorktreeBaseline | null;
+  /** A pre-provenance worktree session must be shown as unknown, never as Off. */
+  activeWorktreeUnknown: boolean;
+  worktreeOptions: WorktreeBaselineOption[];
+  worktreeOptionsLoading: boolean;
+  onWorktreeBase: (v: WorktreeBaselineKind | null) => void;
   planMode: boolean;
   onPlan: (v: boolean) => void;
   memoryRead: MemoryAccess;

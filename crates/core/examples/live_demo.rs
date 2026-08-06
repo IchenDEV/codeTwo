@@ -64,7 +64,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(&script, STUB_AGENT_JS)?;
 
     // Persist to a temp SQLite store so we can print the saved transcript afterward.
-    let store = Arc::new(Store::open(tmp.join("codetwo.db").to_string_lossy().as_ref())?);
+    let store = Arc::new(Store::open(
+        tmp.join("codetwo.db").to_string_lossy().as_ref(),
+    )?);
 
     // Register the stub as a custom provider and build the engine.
     let stub = Provider {
@@ -85,33 +87,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start a session; the rest is driven by the event stream.
     engine
-        .submit(Op::NewSession { provider: ProviderId::Custom("stub".into()), cwd: ".".into(), use_worktree: false })
+        .submit(Op::NewSession {
+            provider: ProviderId::Custom("stub".into()),
+            cwd: ".".into(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: None,
+            initial_policy: None,
+        })
         .await?;
 
     let mut session_id = String::new();
     let drive = async {
         while let Some(ev) = rx.recv().await {
             match &ev {
-                Event::SessionCreated { session } => {
+                Event::SessionCreated { session, .. } => {
                     session_id = session.clone();
                     println!("● session created: {}", short(session));
                     // Compose a document: the built-in "reviewer" skill + a line of text.
                     let doc = vec![
-                        DocBlock::Skill { skill_id: "reviewer".into(), params: HashMap::new() },
-                        DocBlock::Text { text: "Now refactor the login handler for clarity.".into() },
+                        DocBlock::Skill {
+                            skill_id: "reviewer".into(),
+                            params: HashMap::new(),
+                        },
+                        DocBlock::Text {
+                            text: "Now refactor the login handler for clarity.".into(),
+                        },
                     ];
                     println!("▶ submitting a document (skill:reviewer + text)\n");
-                    engine.submit(Op::Prompt { session: session.clone(), doc }).await.ok();
+                    engine
+                        .submit(Op::Prompt {
+                            session: session.clone(),
+                            doc,
+                            request_id: None,
+                        })
+                        .await
+                        .ok();
                 }
+                Event::SessionTitleChanged { title, .. } => {
+                    println!("session title: {title}")
+                }
+                Event::SessionActivityChanged { activity, .. } => {
+                    println!("activity r{}: {:?}", activity.revision, activity.state)
+                }
+                Event::TurnStarted { .. } => println!("turn started"),
                 Event::AgentText { text, .. } => println!("  🟢 agent: {text}"),
                 Event::AgentThought { text, .. } => println!("  💭 thinking: {text}"),
                 Event::ToolCall { title, status, .. } => println!("  ⚙  tool: {title} [{status}]"),
-                Event::PermissionRequest { session, request_id, title, options } => {
-                    println!("  🔐 permission: {title}  options={:?}", options.iter().map(|(_, l)| l).collect::<Vec<_>>());
-                    let opt = options.iter().find(|(id, _)| id.contains("allow")).map(|(id, _)| id.clone());
+                Event::PermissionRequest {
+                    session,
+                    request_id,
+                    title,
+                    options,
+                } => {
+                    println!(
+                        "  🔐 permission: {title}  options={:?}",
+                        options.iter().map(|(_, l)| l).collect::<Vec<_>>()
+                    );
+                    let opt = options
+                        .iter()
+                        .find(|(id, _)| id.contains("allow"))
+                        .map(|(id, _)| id.clone());
                     println!("  → auto-answering: allow");
                     engine
-                        .submit(Op::AnswerPermission { session: session.clone(), request_id: request_id.clone(), option_id: opt })
+                        .submit(Op::AnswerPermission {
+                            session: session.clone(),
+                            request_id: request_id.clone(),
+                            option_id: opt,
+                        })
                         .await
                         .ok();
                 }
@@ -128,18 +172,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::MemoryContext { receipt, .. } => {
                     println!("memory: {} recalled items", receipt.items.len());
                 }
-                Event::Models { available, current, .. } => {
+                Event::Models {
+                    available, current, ..
+                } => {
                     println!("models: {} available, current = {current}", available.len());
                 }
                 Event::ConfigOptions { options, .. } => {
-                    println!("config options: {}", options.iter().map(|o| o.id.as_str()).collect::<Vec<_>>().join(", "));
+                    println!(
+                        "config options: {}",
+                        options
+                            .iter()
+                            .map(|o| o.id.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                Event::ExecutionPolicyChanged { policy, .. } => {
+                    println!("execution policy: {:?} / {:?}", policy.mode, policy.sandbox);
                 }
             }
         }
     };
 
     // Guard against a hang.
-    if tokio::time::timeout(Duration::from_secs(20), drive).await.is_err() {
+    if tokio::time::timeout(Duration::from_secs(20), drive)
+        .await
+        .is_err()
+    {
         eprintln!("timed out waiting for the turn to complete");
     }
 

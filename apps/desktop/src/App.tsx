@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Archive, CircleAlert, Folder, Keyboard, Loader2, PanelLeft, PanelRight } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import {
@@ -16,11 +16,11 @@ import {
   deleteSkill,
   describeBlock,
   getKeymap,
-  getTranscript,
+  getTranscriptPage,
   gitCheckpoint,
   gitCheckpoints,
   gitCommit,
-  gitDiff,
+  gitDiffStat,
   gitPush,
   gitRevert,
   gitStatus,
@@ -34,11 +34,13 @@ import {
   listProviders,
   listSessions,
   listSkills,
+  listWorktreeBaselines,
   marketCatalog,
   marketInstall,
   newSession,
   onEngineEvent,
   openProject,
+  pinSession,
   pickDirectory,
   providerLabel,
   removeProject,
@@ -46,13 +48,13 @@ import {
   renameSession,
   runProjectScript,
   saveSkill,
+  searchSessions,
   sessionPreviews,
   setConfigOption,
   setKeymap,
   setModel,
   setSessionMemoryPolicy,
-  setPermissionMode,
-  setSandbox,
+  setExecutionPolicy,
   submitPrompt,
   uninstallPlugin,
   type Checkpoint,
@@ -60,36 +62,84 @@ import {
   type ConfigOptionInfo,
   type CoreEvent,
   type DocBlock,
+  type ExecutionPolicy,
   type Annotation,
   type GitStatus,
   type Issue,
   type KeymapEntry,
   type MarketItem,
   type MemoryAccess,
+  type MemoryReceipt,
   type ModelChoice,
   type PluginInfo,
   type Project,
   type ProjectScript,
   type ProviderInfo,
+  type PermissionMode,
   type Sandbox,
+  type SessionActivity,
   type SessionInfo,
   type SkillInfo,
+  type WorktreeBaselineKind,
+  type WorktreeBaselineOption,
+  type WorkspaceContentMatch,
 } from "./bridge";
 import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
+import { workspaceStateForCwd, type WorkspaceLoadState } from "./git/state";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
 import { RemoteModal } from "./remote/Remote";
 import { IssuesModal } from "./issues/Issues";
 import { PreviewModal } from "./editor/Preview";
 import { FileBrowserModal } from "./files/FileBrowser";
+import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
+import type { FileRevealTarget } from "./files/FileViewer";
 import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { UsageModal } from "./usage/Usage";
 import type { SessionConfig } from "./session/config";
-import { SESSION_MODES, nextSessionMode, sessionMode, type SessionMode } from "./session/mode";
+import {
+  SESSION_MODES,
+  executionPolicyChangeDisabled,
+  nextSessionMode,
+  sessionExecutionPolicy,
+  sessionMode,
+  withSessionExecutionPolicy,
+  type SessionMode,
+} from "./session/mode";
 import { Composer } from "./session/Composer";
 import { TurnCard } from "./session/TurnCard";
-import { applyEvent, newTurn, turnsFromTranscript, type Turn } from "./session/turns";
+import {
+  applyEvent,
+  matchesSubmittedEditorRevision,
+  mergeLoadedTurns,
+  newTurn,
+  prependTranscriptTurns,
+  transcriptTailState,
+  turnsFromTranscript,
+  withRunningSession,
+  withoutUnacceptedTurn,
+  type Turn,
+} from "./session/turns";
+import {
+  activeSessionWorktreeState,
+  enqueuePermission,
+  activityIsBusy,
+  isTerminalSessionEvent,
+  latestActivity,
+  matchesSessionCreation,
+  permissionsFromSessions,
+  sessionCreationBaseline,
+  sessionCreationBaselineSha,
+  sessionCreationReceipt,
+  sessionCreationSource,
+  sessionActivity,
+  sessionProjectPath,
+  sessionShellWithReceipt,
+  shouldRenderSessionEvent,
+  type PermissionQueueItem,
+  type SessionCreationShell,
+} from "./session/sessionEvents";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
@@ -105,27 +155,40 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 
-interface PermissionState {
-  session: string;
-  requestId: string;
-  title: string;
-  options: [string, string][];
-}
-
 function summarizeDoc(doc: DocBlock[]): string {
-  return doc.map(describeBlock).join(" ").slice(0, 400);
+  return doc.map(describeBlock).join("\n\n");
 }
 
-/** +/− line counts out of a unified diff — content lines only, not the +++/--- file headers. */
-function countDiff(diff: string): { added: number; deleted: number } {
-  let added = 0;
-  let deleted = 0;
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) added++;
-    else if (line.startsWith("-") && !line.startsWith("---")) deleted++;
-  }
-  return { added, deleted };
+interface PendingPromptRequest {
+  requestId: string;
+  /** Raw editor revision before plan-mode or other synthetic blocks are injected. */
+  editorSnapshot: DocBlock[];
+  editorRevision: number;
 }
+
+interface PendingCreation {
+  doc: DocBlock[];
+  promptRequestId: string;
+  editorSnapshot: DocBlock[];
+  editorRevision: number;
+}
+
+interface PendingPolicyRequest {
+  session: string;
+  authoritative: ExecutionPolicy;
+}
+
+interface GitWorkspaceData {
+  status: GitStatus | null;
+  diffStat: { added: number; deleted: number; truncated: boolean };
+}
+
+const EMPTY_DIFF_STAT = { added: 0, deleted: 0, truncated: false } as const;
+const EMPTY_GIT_WORKSPACE: GitWorkspaceData = {
+  status: null,
+  diffStat: EMPTY_DIFF_STAT,
+};
+const EMPTY_CHECKPOINTS: Checkpoint[] = [];
 
 function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -178,21 +241,37 @@ export default function App() {
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState("grok");
   const [cwd, setCwd] = useState(".");
-  const [mode, setMode] = useState("ask");
+  const [mode, setMode] = useState<PermissionMode>("ask");
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
-  const [useWorktree, setUseWorktree] = useState(false);
+  const [pendingPolicySessions, setPendingPolicySessions] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [worktreeBase, setWorktreeBase] = useState<WorktreeBaselineKind | null>(null);
+  const [worktreeOptions, setWorktreeOptions] = useState<WorktreeBaselineOption[]>([]);
+  const [worktreeOptionsLoading, setWorktreeOptionsLoading] = useState(false);
+  const worktreeOptionsRequestRef = useRef(0);
   const [planMode, setPlanMode] = useState(false);
   const [memoryRead, setMemoryRead] = useState<MemoryAccess>("inherit");
   const [memoryWrite, setMemoryWrite] = useState<MemoryAccess>("inherit");
   const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [activeSessionReceipt, setActiveSessionReceipt] = useState<{
+    session: string;
+    shell: SessionCreationShell;
+  } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [permission, setPermission] = useState<PermissionState | null>(null);
-  const [running, setRunning] = useState(false);
+  const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>([]);
+  const [runningSessions, setRunningSessions] = useState<Set<string>>(() => new Set());
+  const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [transcriptNextBefore, setTranscriptNextBefore] = useState<number | null>(null);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const permission = permissionQueue[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
-  const [git, setGit] = useState<GitStatus | null>(null);
-  // Working-tree +/− lines, for the rail's status table. Parsed here, not in the core: the diff
-  // text is already one call away and counting lines is nothing.
-  const [diffStat, setDiffStat] = useState<{ added: number; deleted: number }>({ added: 0, deleted: 0 });
+  const [gitWorkspace, setGitWorkspace] = useState<WorkspaceLoadState<GitWorkspaceData>>({
+    cwd: ".",
+    loading: true,
+    value: EMPTY_GIT_WORKSPACE,
+  });
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
   // A blank tab, not a landing page: this browser's job is your localhost dev server, which you
   // type in.
@@ -202,13 +281,16 @@ export default function App() {
   const [showPluginHub, setShowPluginHub] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [showSourceControl, setShowSourceControl] = useState(false);
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [checkpointWorkspace, setCheckpointWorkspace] = useState<
+    WorkspaceLoadState<Checkpoint[]>
+  >({ cwd: ".", loading: true, value: EMPTY_CHECKPOINTS });
   const [showPalette, setShowPalette] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
   const [showFiles, setShowFiles] = useState(false);
+  const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
@@ -224,10 +306,41 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const workspaceCwd = cwd || ".";
+  const currentGitWorkspace = workspaceStateForCwd(
+    gitWorkspace,
+    workspaceCwd,
+    EMPTY_GIT_WORKSPACE,
+  );
+  const git = currentGitWorkspace.value.status;
+  const diffStat = currentGitWorkspace.value.diffStat;
+  const currentCheckpointWorkspace = workspaceStateForCwd(
+    checkpointWorkspace,
+    workspaceCwd,
+    EMPTY_CHECKPOINTS,
+  );
+  const checkpoints = currentCheckpointWorkspace.value;
+  const running = activeSession
+    ? runningSessions.has(activeSession)
+    : pendingSessionRunning;
+  const policyChangeDisabled = executionPolicyChangeDisabled(
+    pendingSessionRunning,
+    activeSession,
+    pendingPolicySessions,
+  );
+  const awaitingInput = activeSession
+    ? sessionActivity(
+        sessions.find((session) => session.id === activeSession) ??
+          archivedSessions.find((session) => session.id === activeSession) ??
+          {},
+      ).state.kind === "awaiting_input"
+    : false;
   // The right panel's file editor: open tabs in open order, and which one is showing. Every tab
   // is directly editable — unsaved-ness lives in files/dirty.ts, which the close guard reads.
   const [openFiles, setOpenFiles] = useState<string[]>([]);
   const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [fileReveal, setFileReveal] = useState<FileRevealTarget | null>(null);
+  const fileRevealRequestRef = useRef(0);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
   const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
@@ -239,6 +352,24 @@ export default function App() {
     () => setRailCollapsedRaw(railCollapsed ? 0 : 1),
     [railCollapsed, setRailCollapsedRaw],
   );
+  const [narrowLayout, setNarrowLayout] = useState(() => window.innerWidth < 720);
+  const [narrowRailOpen, setNarrowRailOpen] = useState(false);
+  const wasNarrowLayoutRef = useRef(narrowLayout);
+  useEffect(() => {
+    const measure = () => {
+      const next = window.innerWidth < 720;
+      if (next && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
+      wasNarrowLayoutRef.current = next;
+      setNarrowLayout(next);
+    };
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const displayedRailCollapsed = narrowLayout ? !narrowRailOpen : railCollapsed;
+  const toggleDisplayedRail = useCallback(() => {
+    if (narrowLayout) setNarrowRailOpen((open) => !open);
+    else toggleRail();
+  }, [narrowLayout, toggleRail]);
   // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
   // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
   // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it,
@@ -252,6 +383,7 @@ export default function App() {
   const { locale } = useLanguage();
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
+  const editorRevisionRef = useRef(0);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
   const insertAnnotationRef = useRef<((a: Annotation, context: string) => void) | null>(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
@@ -260,13 +392,159 @@ export default function App() {
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  // A correlated creation event is already durable even if the best-effort rail refresh fails.
+  // Keep its source/worktree receipt beside the active id so New never treats isolated cwd as a
+  // source checkout while React state or the backend list is temporarily unavailable.
+  const activeSessionProvenanceRef = useRef<{
+    session: string;
+    shell: SessionCreationShell;
+  } | null>(null);
   // Mirrors `activeProject` so `selectProject` can tell a real switch from a re-click without
   // remaking its callback (and the rail rows' props) on every project change.
   const activeProjectRef = useRef<string | null>(null);
   const memoryReadRef = useRef<MemoryAccess>("inherit");
   const memoryWriteRef = useRef<MemoryAccess>("inherit");
-  const pendingDocRef = useRef<DocBlock[] | null>(null);
+  const memoryReceiptsRef = useRef<MemoryReceipt[]>([]);
+  const pendingCreationRef = useRef<PendingCreation | null>(null);
+  // A picker change is provisional until the core publishes its durable correlated receipt.
+  const pendingPolicyRequestsRef = useRef<Map<string, PendingPolicyRequest>>(new Map());
+  const pendingPolicyBySessionRef = useRef<Map<string, string>>(new Map());
+  // Preserve a policy event that races a list refresh; the event is newer than that request's
+  // snapshot and must remain the authoritative rail/session projection.
+  const authoritativePoliciesRef = useRef<Map<string, ExecutionPolicy>>(new Map());
+  const policyVersionsRef = useRef<Map<string, number>>(new Map());
+  // Prompt acknowledgements are broadcast to every client. Only the exact request initiated by
+  // this window may clear its editor draft.
+  const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(new Map());
+  // Only session/new calls initiated by this window may take over its active conversation. A
+  // remote client can create sessions on the same engine without stealing desktop focus.
+  const awaitingSessionRef = useRef<string | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptScrollRef = useRef<HTMLElement | null>(null);
+  const transcriptNextBeforeRef = useRef<number | null>(null);
+  const earlierLoadRef = useRef(false);
+  const earlierLoadSeqRef = useRef(0);
+  const olderScrollAnchorRef = useRef<{
+    element: HTMLElement;
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
+  const skipNextAutoScrollRef = useRef(false);
+  // Monotonic request id: a slow transcript response for A can never overwrite B after a rapid
+  // session switch.
+  const sessionLoadSeq = useRef(0);
+  const runningSessionsRef = useRef(runningSessions);
+  const sessionActivitiesRef = useRef<Map<string, SessionActivity>>(new Map());
+  // A null value means an authoritative TurnStarted arrived without a correlation id. Presence in
+  // the map still matters: a later rejection for some local request must not stop that foreign turn.
+  const runningPromptRequestsRef = useRef<Map<string, string | null>>(new Map());
+  const latestTurnRequestIdsRef = useRef<Map<string, string>>(new Map());
+  const turnStartVersionsRef = useRef<Map<string, number>>(new Map());
+  const gitRefreshSeq = useRef(0);
+  const checkpointRefreshSeq = useRef(0);
+
+  const finishPolicyRequest = useCallback((requestId: string): PendingPolicyRequest | null => {
+    const pending = pendingPolicyRequestsRef.current.get(requestId);
+    if (!pending) return null;
+    pendingPolicyRequestsRef.current.delete(requestId);
+    if (pendingPolicyBySessionRef.current.get(pending.session) === requestId) {
+      pendingPolicyBySessionRef.current.delete(pending.session);
+      setPendingPolicySessions((current) => {
+        if (!current.has(pending.session)) return current;
+        const next = new Set(current);
+        next.delete(pending.session);
+        return next;
+      });
+    }
+    return pending;
+  }, []);
+
+  const applyAuthoritativeExecutionPolicy = useCallback(
+    (session: string, policy: ExecutionPolicy) => {
+      authoritativePoliciesRef.current.set(session, policy);
+      policyVersionsRef.current.set(session, (policyVersionsRef.current.get(session) ?? 0) + 1);
+      // If another client wins while our request is in flight, a later local rejection restores
+      // this newest acknowledged value, not the value that preceded the remote change.
+      for (const pending of pendingPolicyRequestsRef.current.values()) {
+        if (pending.session === session) pending.authoritative = policy;
+      }
+      setSessions((current) => withSessionExecutionPolicy(current, session, policy));
+      setArchivedSessions((current) => withSessionExecutionPolicy(current, session, policy));
+      if (activeSessionRef.current === session) {
+        setMode(policy.mode);
+        setSandboxState(policy.sandbox);
+      }
+    },
+    [],
+  );
+
+  const restoreRejectedExecutionPolicy = useCallback((pending: PendingPolicyRequest) => {
+    if (activeSessionRef.current !== pending.session) return;
+    setMode(pending.authoritative.mode);
+    setSandboxState(pending.authoritative.sandbox);
+  }, []);
+
+  // Refs are updated before React schedules the render so transcript promises always see the same
+  // running truth as the event handler that just mutated it.
+  const updateRunningSession = useCallback((session: string, isRunning: boolean) => {
+    const next = withRunningSession(runningSessionsRef.current, session, isRunning);
+    runningSessionsRef.current = next;
+    setRunningSessions(next);
+  }, []);
+
+  const updateTranscriptCursor = useCallback((nextBefore: number | null) => {
+    transcriptNextBeforeRef.current = nextBefore;
+    setTranscriptNextBefore(nextBefore);
+  }, []);
+
+  const markSessionStarted = useCallback(
+    (session: string, requestId?: string | null) => {
+      runningPromptRequestsRef.current.set(session, requestId ?? null);
+      if (requestId) {
+        latestTurnRequestIdsRef.current.set(session, requestId);
+      } else {
+        latestTurnRequestIdsRef.current.delete(session);
+      }
+      turnStartVersionsRef.current.set(
+        session,
+        (turnStartVersionsRef.current.get(session) ?? 0) + 1,
+      );
+      updateRunningSession(session, true);
+    },
+    [updateRunningSession],
+  );
+
+  const markSessionStopped = useCallback(
+    (session: string, requestId?: string | null): boolean => {
+      const current = runningPromptRequestsRef.current.get(session);
+      if (
+        requestId &&
+        runningPromptRequestsRef.current.has(session) &&
+        requestId !== current
+      ) {
+        return false;
+      }
+      runningPromptRequestsRef.current.delete(session);
+      updateRunningSession(session, false);
+      return true;
+    },
+    [updateRunningSession],
+  );
+
+  const invalidatePendingCreation = useCallback(() => {
+    const pending = pendingCreationRef.current;
+    awaitingSessionRef.current = null;
+    pendingCreationRef.current = null;
+    setPendingSessionRunning(false);
+    if (pending) {
+      setTurns((turns) => withoutUnacceptedTurn(turns, pending.promptRequestId));
+    }
+  }, []);
+
+  const handleEditorEmptyChange = useCallback((empty: boolean) => {
+    editorRevisionRef.current += 1;
+    setDocEmpty(empty);
+  }, []);
 
   // BlockNote bakes its dictionary in at creation, so the placeholder only changes language on a
   // remount — and a remount discards whatever is in the document. Wait for the document to be empty
@@ -280,11 +558,71 @@ export default function App() {
     setEditorKey((k) => k + 1);
   }, [locale, docEmpty]);
 
-  const refreshSessions = useCallback(() => {
-    listSessions().then(setSessions).catch(() => {});
-    listArchivedSessions().then(setArchivedSessions).catch(() => {});
-    sessionPreviews().then(setPreviews).catch(() => {});
-  }, []);
+  const refreshSessions = useCallback(async () => {
+    const policyVersionsAtStart = new Map(policyVersionsRef.current);
+    try {
+      const [active, archived, nextPreviews] = await Promise.all([
+        listSessions(),
+        listArchivedSessions(),
+        sessionPreviews(),
+      ]);
+      const allIncoming = [...active, ...archived];
+      const hasAuthoritativeActivity = allIncoming.some((session) => session.activity !== undefined);
+      const merge = (items: SessionInfo[]) =>
+        items.map((session) => {
+          let next = session;
+          if (hasAuthoritativeActivity) {
+            const activity = latestActivity(
+              sessionActivitiesRef.current.get(session.id),
+              session.activity,
+            );
+            sessionActivitiesRef.current.set(session.id, activity);
+            next = { ...next, activity };
+          }
+
+          const versionAtStart = policyVersionsAtStart.get(session.id) ?? 0;
+          const currentVersion = policyVersionsRef.current.get(session.id) ?? 0;
+          const eventPolicy = authoritativePoliciesRef.current.get(session.id);
+          if (currentVersion !== versionAtStart && eventPolicy) {
+            return {
+              ...next,
+              permission_mode: eventPolicy.mode,
+              sandbox_policy: eventPolicy.sandbox,
+            };
+          }
+          authoritativePoliciesRef.current.set(session.id, {
+            mode: next.permission_mode,
+            sandbox: next.sandbox_policy,
+          });
+          return next;
+        });
+      const nextActive = merge(active);
+      const nextArchived = merge(archived);
+      setSessions(nextActive);
+      setArchivedSessions(nextArchived);
+      setPreviews(nextPreviews);
+
+      const all = [...nextActive, ...nextArchived];
+      if (hasAuthoritativeActivity) {
+        const busy = new Set(
+          all.filter((session) => activityIsBusy(session.activity)).map((session) => session.id),
+        );
+        // A locally submitted draft remains optimistic until the core publishes its first
+        // activity revision / TurnStarted; a concurrent stale list read cannot undo that shell.
+        for (const session of pendingPromptRequestsRef.current.keys()) busy.add(session);
+        runningSessionsRef.current = busy;
+        setRunningSessions(busy);
+        setPermissionQueue(permissionsFromSessions(all));
+      }
+      return all;
+    } catch (error) {
+      // Preserve the last good rail. Returning null distinguishes failure from an authoritative
+      // empty list, and the visible error prevents stale session state masquerading as success.
+      console.error("Could not refresh sessions", error);
+      toast(t("toast.sessionLoadFailed", { error: String(error) }), "error");
+      return null;
+    }
+  }, [t, toast]);
 
   const refreshProjects = useCallback(() => {
     listProjects().then(setProjects).catch(() => {});
@@ -293,26 +631,34 @@ export default function App() {
   /** Switch projects: the working directory, the conversation list and the git section all follow. */
   const selectProject = useCallback(
     (path: string) => {
+      // Re-clicking the current project is still an explicit navigation choice: a late creation
+      // request must not take focus or submit the draft it captured before that choice.
+      invalidatePendingCreation();
       setActiveProject(path);
       setCwd(path);
-      // Switching projects means composing into a different workspace — carrying the previous
-      // session across would silently send the next prompt to the old project's cwd.
-      if (path !== activeProjectRef.current) {
-        activeProjectRef.current = path;
-        activeSessionRef.current = null;
-        setActiveSession(null);
-        setTurns([]);
-        setModels([]);
-        setCurrentModel(null);
-        setDefaultModel(null);
-        memoryReadRef.current = "inherit";
-        memoryWriteRef.current = "inherit";
-        setMemoryRead("inherit");
-        setMemoryWrite("inherit");
-      }
+      // Selecting a project always opens a blank source-checkout draft, including a re-click of the
+      // current project. Keeping an active worktree session while `cwd` switches to the source would
+      // make file/Git/terminal surfaces show one checkout while the agent keeps editing another.
+      sessionLoadSeq.current += 1;
+      setSessionLoading(false);
+      activeProjectRef.current = path;
+      activeSessionRef.current = null;
+      activeSessionProvenanceRef.current = null;
+      setActiveSessionReceipt(null);
+      setActiveSession(null);
+      setTurns([]);
+      setModels([]);
+      setCurrentModel(null);
+      setDefaultModel(null);
+      setConfigOptions([]);
+      memoryReadRef.current = "inherit";
+      memoryWriteRef.current = "inherit";
+      memoryReceiptsRef.current = [];
+      setMemoryRead("inherit");
+      setMemoryWrite("inherit");
       void openProject(path).then(refreshProjects);
     },
-    [refreshProjects],
+    [invalidatePendingCreation, refreshProjects],
   );
 
   const addProjectFolder = useCallback(async () => {
@@ -340,6 +686,18 @@ export default function App() {
     () => archivedSessions.some((s) => s.id === activeSession),
     [archivedSessions, activeSession],
   );
+
+  const activeWorktreeState = useMemo(
+    () => {
+      const stored =
+        sessions.find((session) => session.id === activeSession) ??
+        archivedSessions.find((session) => session.id === activeSession);
+      return activeSessionWorktreeState(activeSession, stored, activeSessionReceipt);
+    },
+    [sessions, archivedSessions, activeSession, activeSessionReceipt],
+  );
+  const activeWorktreeBaseline = activeWorktreeState.baseline;
+  const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
 
   // The title bar's project badge — the workspace this session lives in, at a glance.
   const activeProjectName = useMemo(
@@ -391,33 +749,130 @@ export default function App() {
     void (async () => {
       unlisten = await onEngineEvent((ev: CoreEvent) => {
         if (ev.event === "session_created") {
+          const refreshed = refreshSessions();
+          if (!matchesSessionCreation(ev, awaitingSessionRef.current)) return;
+          awaitingSessionRef.current = null;
+          sessionLoadSeq.current += 1;
+          setSessionLoading(false);
           activeSessionRef.current = ev.session;
+          const receipt = sessionCreationReceipt(ev);
+          const provenance = receipt
+            ? { session: ev.session, shell: receipt }
+            : null;
+          activeSessionProvenanceRef.current = provenance;
+          setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
-          const policySaved = setSessionMemoryPolicy(
-            ev.session,
-            memoryReadRef.current,
-            memoryWriteRef.current,
-          );
-          if (pendingDocRef.current) {
-            const doc = pendingDocRef.current;
-            pendingDocRef.current = null;
-            void policySaved
+          memoryReceiptsRef.current = [];
+          // The creation event carries the cwd that was persisted before publication. File, Git,
+          // terminal and hook surfaces switch with the active id even if a best-effort list/preview
+          // refresh fails independently. Older event producers fall back to the list shell.
+          if (ev.cwd) setCwd(ev.cwd);
+          void refreshed.then((items) => {
+            if (!items || activeSessionRef.current !== ev.session) return;
+            const created = items.find((session) => session.id === ev.session);
+            if (!created) return;
+            if (!ev.cwd) setCwd(created.cwd);
+            if (activeSessionProvenanceRef.current?.session !== ev.session) {
+              const provenance = { session: ev.session, shell: created };
+              activeSessionProvenanceRef.current = provenance;
+              setActiveSessionReceipt(provenance);
+            }
+          });
+          if (pendingCreationRef.current) {
+            const pending = pendingCreationRef.current;
+            pendingCreationRef.current = null;
+            setPendingSessionRunning(false);
+            updateRunningSession(ev.session, true);
+            pendingPromptRequestsRef.current.set(ev.session, {
+              requestId: pending.promptRequestId,
+              editorSnapshot: pending.editorSnapshot,
+              editorRevision: pending.editorRevision,
+            });
+            void setSessionMemoryPolicy(
+              ev.session,
+              memoryReadRef.current,
+              memoryWriteRef.current,
+            )
+              .then(() => submitPrompt(ev.session, pending.doc, pending.promptRequestId))
               .then(() => {
                 refreshSessions();
-                return submitPrompt(ev.session, doc);
               })
               .catch((error) => {
-                setRunning(false);
-                toast(t("toast.turnFailed", { error: String(error) }), "error");
+                if (
+                  pendingPromptRequestsRef.current.get(ev.session)?.requestId ===
+                  pending.promptRequestId
+                ) {
+                  pendingPromptRequestsRef.current.delete(ev.session);
+                }
+                markSessionStopped(ev.session, pending.promptRequestId);
+                const message = String(error);
+                if (activeSessionRef.current === ev.session) {
+                  setTurns((previous) =>
+                    applyEvent(previous, {
+                      event: "error",
+                      session: ev.session,
+                      message,
+                      terminal: true,
+                      request_id: pending.promptRequestId,
+                    }),
+                  );
+                }
+                toast(t("toast.turnFailed", { error: message }), "error");
               });
           } else {
-            void policySaved
+            void setSessionMemoryPolicy(
+              ev.session,
+              memoryReadRef.current,
+              memoryWriteRef.current,
+            )
               .then(refreshSessions)
               .catch((error) => toast(String(error), "error"));
           }
           return;
         }
+        if (ev.event === "session_title_changed") {
+          const rename = (items: SessionInfo[]) =>
+            items.map((session) =>
+              session.id === ev.session
+                ? { ...session, title: ev.title, title_origin: "automatic" as const }
+                : session,
+            );
+          setSessions(rename);
+          setArchivedSessions(rename);
+          return;
+        }
+        if (ev.event === "session_activity_changed") {
+          const current = sessionActivitiesRef.current.get(ev.session);
+          if (current && ev.activity.revision < current.revision) return;
+          sessionActivitiesRef.current.set(ev.session, ev.activity);
+          const applyActivity = (items: SessionInfo[]) =>
+            items.map((session) =>
+              session.id === ev.session ? { ...session, activity: ev.activity } : session,
+            );
+          setSessions(applyActivity);
+          setArchivedSessions(applyActivity);
+          updateRunningSession(ev.session, activityIsBusy(ev.activity));
+
+          const state = ev.activity.state;
+          const pending = state.kind === "awaiting_input"
+            ? state.pending.map((input) => ({
+                session: ev.session,
+                requestId: input.input_id,
+                title: input.title,
+                options: input.options,
+                sequence: input.sequence,
+              }))
+            : [];
+          setPermissionQueue((previous) =>
+            [
+              ...previous.filter((request) => request.session !== ev.session),
+              ...pending,
+            ].sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0)),
+          );
+          return;
+        }
         if (ev.event === "models") {
+          if (ev.session !== activeSessionRef.current) return;
           // A switch echoes back the same list; only session/new carries a fresh one.
           if (ev.available.length > 0) setModels(ev.available);
           setCurrentModel(ev.current || null);
@@ -425,6 +880,7 @@ export default function App() {
           return;
         }
         if (ev.event === "config_options") {
+          if (ev.session !== activeSessionRef.current) return;
           // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
           setConfigOptions(ev.options);
           const model = ev.options.find((o) => o.category === "model" || o.id === "model");
@@ -435,34 +891,129 @@ export default function App() {
           }
           return;
         }
+        if (ev.event === "execution_policy_changed") {
+          if (ev.request_id) finishPolicyRequest(ev.request_id);
+          applyAuthoritativeExecutionPolicy(ev.session, ev.policy);
+          return;
+        }
+        if (ev.event === "error" && ev.request_id) {
+          const rejectedPolicy = finishPolicyRequest(ev.request_id);
+          if (rejectedPolicy) {
+            restoreRejectedExecutionPolicy(rejectedPolicy);
+            toast(`Could not update execution policy: ${ev.message}`, "error");
+            return;
+          }
+        }
         if (ev.event === "permission_request") {
-          setPermission({
+          const request = {
             session: ev.session,
             requestId: ev.request_id,
             title: ev.title,
             options: ev.options,
-          });
+          };
+          setPermissionQueue((previous) => enqueuePermission(previous, request));
           return;
         }
-        setTurns((prev) => applyEvent(prev, ev));
-        if (ev.event === "turn_ended" || ev.event === "error") {
-          setRunning(false);
+        if (ev.event === "turn_started") {
+          markSessionStarted(ev.session, ev.request_id);
+          const pendingRequest = pendingPromptRequestsRef.current.get(ev.session);
+          if (pendingRequest && ev.request_id === pendingRequest.requestId) {
+            pendingPromptRequestsRef.current.delete(ev.session);
+            const currentEditor = getBlocksRef.current?.();
+            if (
+              currentEditor &&
+              matchesSubmittedEditorRevision(
+                currentEditor,
+                editorRevisionRef.current,
+                pendingRequest.editorSnapshot,
+                pendingRequest.editorRevision,
+              )
+            ) {
+              clearEditorRef.current?.();
+            }
+          }
+        }
+        const awaitingCreationRequest = awaitingSessionRef.current;
+        const eventSession = ev.session;
+        // Capture before a terminal event clears the authoritative running request. Deltas do not
+        // carry request ids themselves, so this is how a transcript load that began after
+        // TurnStarted still assigns them to the correct live turn.
+        const activeTurnRequestId = eventSession
+          ? runningPromptRequestsRef.current.get(eventSession)
+          : undefined;
+        if (
+          ev.event === "error" &&
+          eventSession &&
+          ev.request_id != null &&
+          pendingPromptRequestsRef.current.get(eventSession)?.requestId === ev.request_id
+        ) {
+          // No matching TurnStarted arrived, so the core did not durably accept this draft.
+          pendingPromptRequestsRef.current.delete(eventSession);
+        }
+        const ended = isTerminalSessionEvent(ev);
+        if (ended) {
+          if (eventSession) {
+            const terminalRequestId = ev.event === "error" ? ev.request_id : undefined;
+            if (markSessionStopped(eventSession, terminalRequestId)) {
+              setPermissionQueue((previous) =>
+                previous.filter((request) => request.session !== eventSession),
+              );
+            }
+          } else if (
+            ev.event === "error" &&
+            ev.request_id != null &&
+            ev.request_id === awaitingSessionRef.current
+          ) {
+            invalidatePendingCreation();
+          }
           refreshSessions();
         }
+        if (!shouldRenderSessionEvent(ev, activeSessionRef.current, awaitingCreationRequest)) return;
+        setTurns((prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined));
       });
     })();
 
     return () => {
       if (unlisten) unlisten();
     };
-  }, [refreshSessions]);
+  }, [
+    applyAuthoritativeExecutionPolicy,
+    finishPolicyRequest,
+    invalidatePendingCreation,
+    markSessionStarted,
+    markSessionStopped,
+    refreshSessions,
+    restoreRejectedExecutionPolicy,
+    toast,
+    t,
+    updateRunningSession,
+  ]);
 
-  // Keep the newest turn in view while streaming.
+  // Prepending an older page must keep the same content under the pointer. Do this before paint;
+  // the following passive effect then consumes the one-shot auto-scroll suppression.
+  useLayoutEffect(() => {
+    const anchor = olderScrollAnchorRef.current;
+    if (!anchor) return;
+    olderScrollAnchorRef.current = null;
+    const element = anchor.element.isConnected ? anchor.element : transcriptScrollRef.current;
+    if (!element) return;
+    element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+  }, [turns]);
+
+  // Keep the newest turn in view while streaming, but never undo an older-page scroll anchor.
   useEffect(() => {
+    if (skipNextAutoScrollRef.current) {
+      skipNextAutoScrollRef.current = false;
+      return;
+    }
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
 
   const run = useCallback(async () => {
+    if (sessionLoading) {
+      toast(t("toast.sessionLoading"));
+      return;
+    }
     // The banner is the primary gate; this backstop catches the keyboard path (⌘⏎ and friends).
     if (activeArchived) {
       toast(t("archived.notice"));
@@ -470,7 +1021,9 @@ export default function App() {
     }
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
-    let doc = getBlocks();
+    const editorSnapshot = getBlocks();
+    const editorRevision = editorRevisionRef.current;
+    let doc = editorSnapshot;
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
     if (doc.length === 0) {
@@ -483,32 +1036,134 @@ export default function App() {
       return;
     }
     if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
-    setRunning(true);
-    setTurns((prev) => [...prev, newTurn(summarizeDoc(doc))]);
+    const targetSession = activeSessionRef.current;
+    const worktreeBaseSha = targetSession
+      ? null
+      : sessionCreationBaselineSha(worktreeBase, worktreeOptions, worktreeOptionsLoading);
+    if (worktreeBaseSha === undefined) {
+      toast(
+        t(worktreeOptionsLoading ? "worktree.resolving" : "worktree.unavailable"),
+        "error",
+      );
+      return;
+    }
+    const promptRequestId = globalThis.crypto.randomUUID();
+    const creationRequestId = targetSession ? null : promptRequestId;
+    if (targetSession) {
+      pendingPromptRequestsRef.current.set(targetSession, {
+        requestId: promptRequestId,
+        editorSnapshot,
+        editorRevision,
+      });
+      updateRunningSession(targetSession, true);
+    } else {
+      awaitingSessionRef.current = creationRequestId;
+      pendingCreationRef.current = { doc, promptRequestId, editorSnapshot, editorRevision };
+      setPendingSessionRunning(true);
+    }
+    setTurns((prev) => [...prev, newTurn(summarizeDoc(doc), promptRequestId)]);
     try {
-      if (activeSessionRef.current) {
+      if (targetSession) {
         await setSessionMemoryPolicy(
-          activeSessionRef.current,
+          targetSession,
           memoryReadRef.current,
           memoryWriteRef.current,
         );
-        await submitPrompt(activeSessionRef.current, doc);
+        await submitPrompt(targetSession, doc, promptRequestId);
+        refreshSessions();
       } else {
-        pendingDocRef.current = doc;
-        await newSession(provider, cwd || ".", useWorktree);
+        await newSession(
+          provider,
+          (activeProjectRef.current ?? cwd) || ".",
+          worktreeBase,
+          creationRequestId!,
+          worktreeBaseSha,
+          { mode, sandbox },
+        );
       }
-      // Only after the submit is accepted. Clearing first would lose the draft if it threw, and in
-      // full-page mode there's no collapse to signal the send happened — an empty page is the
-      // signal.
-      clearEditorRef.current?.();
     } catch (e) {
-      setRunning(false);
-      toast(t("toast.turnFailed", { error: String(e) }), "error");
+      const message = String(e);
+      if (targetSession) {
+        if (pendingPromptRequestsRef.current.get(targetSession)?.requestId === promptRequestId) {
+          pendingPromptRequestsRef.current.delete(targetSession);
+        }
+        markSessionStopped(targetSession, promptRequestId);
+        if (activeSessionRef.current === targetSession) {
+          setTurns((previous) =>
+            applyEvent(previous, {
+              event: "error",
+              session: targetSession,
+              message,
+              terminal: true,
+              request_id: promptRequestId,
+            }),
+          );
+        }
+      } else {
+        const stillOwned = awaitingSessionRef.current === creationRequestId;
+        if (!stillOwned) return;
+        invalidatePendingCreation();
+        setTurns((previous) =>
+          applyEvent(previous, {
+            event: "error",
+            session: null,
+            message,
+            terminal: true,
+            request_id: promptRequestId,
+          }),
+        );
+      }
+      toast(t("toast.turnFailed", { error: message }), "error");
     }
-  }, [provider, cwd, useWorktree, planMode, running, toast, activeArchived, t]);
+  }, [
+    provider,
+    cwd,
+    worktreeBase,
+    worktreeOptions,
+    worktreeOptionsLoading,
+    mode,
+    sandbox,
+    planMode,
+    running,
+    toast,
+    activeArchived,
+    sessionLoading,
+    t,
+    refreshSessions,
+    invalidatePendingCreation,
+    markSessionStopped,
+    updateRunningSession,
+  ]);
 
-  const createSession = useCallback(async () => {
-    pendingDocRef.current = null;
+  const createSession = useCallback(() => {
+    const currentSessionId = activeSessionRef.current;
+    const storedSession =
+      sessions.find((session) => session.id === currentSessionId) ??
+      archivedSessions.find((session) => session.id === currentSessionId);
+    const currentSession = sessionShellWithReceipt(
+      currentSessionId,
+      storedSession,
+      activeSessionProvenanceRef.current,
+    );
+    const source = sessionCreationSource(
+      activeProjectRef.current,
+      cwd,
+      currentSession,
+      currentSessionId !== null,
+    );
+    if (source === null) {
+      toast(t("toast.worktreeSourceUnknown"), "error");
+      return;
+    }
+
+    invalidatePendingCreation();
+    sessionLoadSeq.current += 1;
+    setSessionLoading(false);
+    setPendingSessionRunning(false);
+    activeSessionRef.current = null;
+    activeSessionProvenanceRef.current = null;
+    setActiveSessionReceipt(null);
+    setActiveSession(null);
     setTurns([]);
     setModels([]);
     setCurrentModel(null);
@@ -516,22 +1171,35 @@ export default function App() {
     setConfigOptions([]);
     memoryReadRef.current = "inherit";
     memoryWriteRef.current = "inherit";
+    memoryReceiptsRef.current = [];
     setMemoryRead("inherit");
     setMemoryWrite("inherit");
+    setCwd(source);
+    const baseline = sessionCreationBaseline(currentSession);
+    if (baseline !== undefined) setWorktreeBase(baseline);
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
-    try {
-      await newSession(provider, cwd || ".", useWorktree);
-    } catch (e) {
-      toast(t("toast.sessionFailed", { error: String(e) }), "error");
-    }
-  }, [provider, cwd, useWorktree, toast]);
+    // A New action opens a configurable blank draft. The first Run creates the durable session,
+    // after the now-visible baseline picker has had a chance to tell the truth and be changed.
+  }, [
+    cwd,
+    sessions,
+    archivedSessions,
+    toast,
+    t,
+    invalidatePendingCreation,
+  ]);
 
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
       await answerPermission(permission.session, permission.requestId, optionId);
-      setPermission(null);
+      setPermissionQueue((previous) =>
+        previous.filter(
+          (request) =>
+            request.session !== permission.session || request.requestId !== permission.requestId,
+        ),
+      );
     },
     [permission],
   );
@@ -541,17 +1209,46 @@ export default function App() {
    * becomes the two — both are always set together, so a session can't drift into a combination the
    * picker can't name (an "auto-edit" that a read-only sandbox silently vetoes).
    */
-  const onSessionModeChange = useCallback((id: SessionMode) => {
-    const preset = SESSION_MODES.find((m) => m.id === id);
-    if (!preset) return;
-    setMode(preset.mode);
-    setSandboxState(preset.sandbox);
-    const session = activeSessionRef.current;
-    if (session) {
-      void setPermissionMode(session, preset.mode);
-      void setSandbox(session, preset.sandbox);
-    }
-  }, []);
+  const onSessionModeChange = useCallback(
+    (id: SessionMode): boolean => {
+      const session = activeSessionRef.current;
+      // `newSession` has already captured its first-turn policy, or this session is awaiting an
+      // authoritative receipt. In both cases painting another choice would lie about what runs.
+      if (
+        executionPolicyChangeDisabled(
+          pendingCreationRef.current !== null,
+          session,
+          pendingPolicyBySessionRef.current,
+        )
+      ) return false;
+      const preset = SESSION_MODES.find((item) => item.id === id);
+      if (!preset) return false;
+
+      if (session) {
+        const requestId = globalThis.crypto.randomUUID();
+        const authoritative = authoritativePoliciesRef.current.get(session) ?? { mode, sandbox };
+        pendingPolicyRequestsRef.current.set(requestId, { session, authoritative });
+        pendingPolicyBySessionRef.current.set(session, requestId);
+        setPendingPolicySessions((current) => {
+          if (current.has(session)) return current;
+          const next = new Set(current);
+          next.add(session);
+          return next;
+        });
+        void setExecutionPolicy(session, preset.mode, preset.sandbox, requestId).catch((error) => {
+          const rejected = finishPolicyRequest(requestId);
+          if (!rejected) return;
+          restoreRejectedExecutionPolicy(rejected);
+          toast(`Could not update execution policy: ${error}`, "error");
+        });
+      }
+
+      setMode(preset.mode);
+      setSandboxState(preset.sandbox);
+      return true;
+    },
+    [finishPolicyRequest, mode, restoreRejectedExecutionPolicy, sandbox, toast],
+  );
 
   const onMemoryPolicyChange = useCallback((read: MemoryAccess, write: MemoryAccess) => {
     const previousRead = memoryReadRef.current;
@@ -584,14 +1281,48 @@ export default function App() {
 
   const selectSession = useCallback(
     async (id: string) => {
+      // An explicit navigation wins over any in-flight session creation. Its late SessionCreated
+      // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
+      invalidatePendingCreation();
+      const stored =
+        sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
+      if (stored) {
+        setCwd(stored.cwd);
+        const policy = sessionExecutionPolicy(stored);
+        if (policy) {
+          setMode(policy.mode);
+          setSandboxState(policy.sandbox);
+        }
+      }
+      const storedProjectPath = stored ? sessionProjectPath(stored) : null;
+      const projectPath = storedProjectPath
+        ? projects.find((project) => project.path === storedProjectPath)?.path ?? null
+        : null;
+      if (projectPath && projectPath !== activeProjectRef.current) {
+        activeProjectRef.current = projectPath;
+        setActiveProject(projectPath);
+        void openProject(projectPath).then(refreshProjects);
+      } else if (stored && !projectPath) {
+        activeProjectRef.current = null;
+        setActiveProject(null);
+      }
+
+      const request = ++sessionLoadSeq.current;
+      earlierLoadSeqRef.current += 1;
+      earlierLoadRef.current = false;
+      setLoadingEarlier(false);
+      updateTranscriptCursor(null);
       activeSessionRef.current = id;
+      const provenance = stored ? { session: id, shell: stored } : null;
+      activeSessionProvenanceRef.current = provenance;
+      setActiveSessionReceipt(provenance);
       setActiveSession(id);
+      setSessionLoading(true);
+      setTurns([]);
       // Models belong to a session. The agent only reports its own menu at session/new — which for
       // a session resumed from the store hasn't happened again yet — so start from the provider's
       // built-in list and let the agent's own options replace it when the next turn revives the
       // session.
-      const stored =
-        sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
       const forProvider = providers.find((p) => p.id === providerLabel(stored?.provider ?? ""));
       setModels(forProvider?.models ?? []);
       setConfigOptions([]);
@@ -601,15 +1332,147 @@ export default function App() {
       const nextWrite = stored?.memory_write ?? "inherit";
       memoryReadRef.current = nextRead;
       memoryWriteRef.current = nextWrite;
+      memoryReceiptsRef.current = [];
       setMemoryRead(nextRead);
       setMemoryWrite(nextWrite);
-      const [transcript, receipts] = await Promise.all([
-        getTranscript(id),
-        listMemoryReceipts(id),
-      ]);
-      setTurns(turnsFromTranscript(transcript, receipts));
+      let observedTurnVersion = turnStartVersionsRef.current.get(id) ?? 0;
+      try {
+        let [page, receipts] = await Promise.all([
+          getTranscriptPage(id),
+          listMemoryReceipts(id),
+        ]);
+        // The core persists the prompt before broadcasting TurnStarted. If that boundary arrived
+        // during this read, fetch once more so the persisted tail and live event buffer share an
+        // explicit request identity instead of guessing from text content or array position.
+        while (request === sessionLoadSeq.current) {
+          const currentTurnVersion = turnStartVersionsRef.current.get(id) ?? 0;
+          if (currentTurnVersion === observedTurnVersion) break;
+          observedTurnVersion = currentTurnVersion;
+          page = await getTranscriptPage(id);
+        }
+        if (request !== sessionLoadSeq.current) return;
+        memoryReceiptsRef.current = receipts;
+        // Optimistic running state exists before TurnStarted/prompt persistence. It must not reopen
+        // the previous persisted tail when the user re-selects this session during that window.
+        const hasAuthoritativeTurn = runningPromptRequestsRef.current.has(id);
+        const sessionIsRunning = runningSessionsRef.current.has(id);
+        const tailState = transcriptTailState(
+          sessionIsRunning,
+          hasAuthoritativeTurn,
+          latestTurnRequestIdsRef.current.get(id),
+        );
+        const loaded = turnsFromTranscript(
+          page.entries,
+          tailState.running,
+          tailState.requestId,
+          receipts,
+        );
+        updateTranscriptCursor(page.next_before);
+        setTurns((live) =>
+          mergeLoadedTurns(
+            loaded,
+            live,
+            runningSessionsRef.current.has(id) && runningPromptRequestsRef.current.has(id),
+          ),
+        );
+      } catch (error) {
+        if (request !== sessionLoadSeq.current) return;
+        memoryReceiptsRef.current = [];
+        setTurns([]);
+        updateTranscriptCursor(null);
+        toast(t("toast.sessionLoadFailed", { error: String(error) }), "error");
+      } finally {
+        if (request === sessionLoadSeq.current) setSessionLoading(false);
+      }
     },
-    [sessions, archivedSessions, providers],
+    [
+      sessions,
+      archivedSessions,
+      providers,
+      projects,
+      refreshProjects,
+      toast,
+      t,
+      invalidatePendingCreation,
+      updateTranscriptCursor,
+    ],
+  );
+
+  const loadEarlierTranscript = useCallback(async () => {
+    const session = activeSessionRef.current;
+    const before = transcriptNextBeforeRef.current;
+    if (!session || before === null || earlierLoadRef.current) return;
+
+    const sessionGeneration = sessionLoadSeq.current;
+    const loadGeneration = ++earlierLoadSeqRef.current;
+    const scrollElement = transcriptScrollRef.current;
+    const anchor = scrollElement
+      ? {
+          element: scrollElement,
+          scrollHeight: scrollElement.scrollHeight,
+          scrollTop: scrollElement.scrollTop,
+        }
+      : null;
+    earlierLoadRef.current = true;
+    setLoadingEarlier(true);
+    try {
+      const page = await getTranscriptPage(session, before);
+      if (
+        sessionGeneration !== sessionLoadSeq.current ||
+        loadGeneration !== earlierLoadSeqRef.current ||
+        session !== activeSessionRef.current ||
+        before !== transcriptNextBeforeRef.current
+      ) {
+        return;
+      }
+      const older = turnsFromTranscript(
+        page.entries,
+        false,
+        undefined,
+        memoryReceiptsRef.current,
+      );
+      if (older.length > 0) {
+        olderScrollAnchorRef.current = anchor;
+        skipNextAutoScrollRef.current = true;
+        setTurns((current) => prependTranscriptTurns(current, older));
+      }
+      updateTranscriptCursor(page.next_before);
+    } catch (error) {
+      if (
+        sessionGeneration === sessionLoadSeq.current &&
+        loadGeneration === earlierLoadSeqRef.current
+      ) {
+        toast(t("toast.transcriptEarlierFailed", { error: String(error) }), "error");
+      }
+    } finally {
+      if (loadGeneration === earlierLoadSeqRef.current) {
+        earlierLoadRef.current = false;
+        setLoadingEarlier(false);
+      }
+    }
+  }, [t, toast, updateTranscriptCursor]);
+
+  const searchPaletteCommands = useCallback(
+    async (query: string): Promise<Command[]> => {
+      const hits = await searchSessions(query, 12);
+      return hits.map((hit) => {
+        const stored =
+          sessions.find((session) => session.id === hit.session_id) ??
+          archivedSessions.find((session) => session.id === hit.session_id);
+        const sourcePath = stored ? sessionProjectPath(stored) ?? hit.cwd : hit.cwd;
+        const project = projects.find((item) => item.path === sourcePath)?.name ?? sourcePath;
+        return {
+          id: `conversation-${hit.session_id}-${hit.seq}`,
+          identity: `session-${hit.session_id}`,
+          label: hit.title,
+          detail: `${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
+          hint: hit.archived ? t("palette.archived") : project,
+          keywords: `${sourcePath} ${hit.cwd}`,
+          run: () => void selectSession(hit.session_id),
+        };
+      });
+    },
+    [projects, sessions, archivedSessions, selectSession, t],
   );
 
   // Skills depend on the workspace: harness skill directories (.claude/skills …) are rescanned
@@ -647,22 +1510,78 @@ export default function App() {
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
 
+  useEffect(() => {
+    gitRefreshSeq.current += 1;
+    checkpointRefreshSeq.current += 1;
+  }, [cwd]);
+
   const refreshGit = useCallback(() => {
     const target = cwd || ".";
-    const fresh = () => (cwdRef.current || ".") === target;
+    const request = ++gitRefreshSeq.current;
+    const fresh = () =>
+      gitRefreshSeq.current === request && (cwdRef.current || ".") === target;
+    setGitWorkspace({ cwd: target, loading: true, value: EMPTY_GIT_WORKSPACE });
     gitStatus(target)
       .then((s) => {
         if (!fresh()) return;
-        setGit(s);
+        setGitWorkspace({
+          cwd: target,
+          loading: false,
+          value: { status: s, diffStat: EMPTY_DIFF_STAT },
+        });
         if (s.is_repo && s.files.length > 0) {
-          gitDiff(target, null)
-            .then((d) => fresh() && setDiffStat(countDiff(d)))
-            .catch(() => fresh() && setDiffStat({ added: 0, deleted: 0 }));
-        } else {
-          setDiffStat({ added: 0, deleted: 0 });
+          gitDiffStat(target)
+            .then((stat) => {
+              if (!fresh()) return;
+              setGitWorkspace((current) =>
+                current.cwd === target
+                  ? {
+                      ...current,
+                      value: {
+                        ...current.value,
+                        diffStat: {
+                          added: stat.added,
+                          deleted: stat.deleted,
+                          truncated: stat.truncated,
+                        },
+                      },
+                    }
+                  : current,
+              );
+            })
+            .catch(() => {});
         }
       })
-      .catch(() => fresh() && setGit(null));
+      .catch(() => {
+        if (fresh()) {
+          setGitWorkspace({ cwd: target, loading: false, value: EMPTY_GIT_WORKSPACE });
+        }
+      });
+  }, [cwd]);
+
+  const refreshCheckpoints = useCallback(() => {
+    const target = cwd || ".";
+    // A callback captured before a project switch must not invalidate the current project's load.
+    if ((cwdRef.current || ".") !== target) return;
+    const request = ++checkpointRefreshSeq.current;
+    setCheckpointWorkspace({ cwd: target, loading: true, value: EMPTY_CHECKPOINTS });
+    gitCheckpoints(target)
+      .then((next) => {
+        if (
+          checkpointRefreshSeq.current === request &&
+          (cwdRef.current || ".") === target
+        ) {
+          setCheckpointWorkspace({ cwd: target, loading: false, value: next });
+        }
+      })
+      .catch(() => {
+        if (
+          checkpointRefreshSeq.current === request &&
+          (cwdRef.current || ".") === target
+        ) {
+          setCheckpointWorkspace({ cwd: target, loading: false, value: EMPTY_CHECKPOINTS });
+        }
+      });
   }, [cwd]);
 
   const openPluginHub = useCallback(() => {
@@ -673,10 +1592,8 @@ export default function App() {
   }, [refreshSkills]);
 
   const openSourceControl = useCallback(() => {
-    refreshGit();
-    gitCheckpoints(cwd || ".").then(setCheckpoints).catch(() => {});
     setShowSourceControl(true);
-  }, [cwd, refreshGit]);
+  }, []);
 
   const doCheckpoint = useCallback(async () => {
     try {
@@ -685,8 +1602,8 @@ export default function App() {
     } catch (e) {
       toast(`Checkpoint failed: ${e}`, "error");
     }
-    gitCheckpoints(cwd || ".").then(setCheckpoints).catch(() => {});
-  }, [cwd, toast]);
+    refreshCheckpoints();
+  }, [cwd, refreshCheckpoints, toast]);
 
   const doPreview = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
@@ -726,9 +1643,19 @@ export default function App() {
 
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
-    (p: string) => {
+    (p: string, position?: Pick<WorkspaceContentMatch, "line" | "column">) => {
       setOpenFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
       setActiveFile(p);
+      setFileReveal(
+        position
+          ? {
+              path: p,
+              line: position.line,
+              column: position.column,
+              requestId: ++fileRevealRequestRef.current,
+            }
+          : null,
+      );
       setDockTab("files");
       // The files surface is an editor *and* a tree; at the dock's chat-sized default the code
       // column is a sliver. Take the room the document can spare, up to a readable measure.
@@ -823,6 +1750,9 @@ export default function App() {
         case "open_files":
           setShowFiles(true);
           break;
+        case "search_workspace":
+          setShowWorkspaceSearch(true);
+          break;
         case "open_issues":
           setShowIssues(true);
           break;
@@ -833,9 +1763,11 @@ export default function App() {
           stepSession(1);
           break;
         case "cycle_permission_mode": {
+          if (policyChangeDisabled) break;
           const next = nextSessionMode(sessionMode(mode, sandbox));
-          onSessionModeChange(next);
-          toast(`Mode: ${t(`mode.${next}` as "mode.ask")}`);
+          if (onSessionModeChange(next)) {
+            toast(`Mode: ${t(`mode.${next}` as "mode.ask")}`);
+          }
           break;
         }
         case "refresh_git":
@@ -853,6 +1785,7 @@ export default function App() {
       running,
       mode,
       sandbox,
+      policyChangeDisabled,
       onSessionModeChange,
       t,
       refreshGit,
@@ -877,6 +1810,7 @@ export default function App() {
     { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
+    { id: "search", label: "Search workspace contents", hint: hint("search_workspace"), run: () => setShowWorkspaceSearch(true) },
     { id: "usage", label: "Usage (5h / week / month)", hint: hint("open_usage"), run: () => setShowUsage(true) },
     { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
     {
@@ -886,7 +1820,11 @@ export default function App() {
       run: () => toggleDocMode(!docMode),
     },
     { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
-    { id: "rail", label: railCollapsed ? "Expand the sidebar" : "Collapse the sidebar", run: toggleRail },
+    {
+      id: "rail",
+      label: displayedRailCollapsed ? "Expand the sidebar" : "Collapse the sidebar",
+      run: toggleDisplayedRail,
+    },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     { id: "settings", label: "Open settings", hint: hint("open_settings"), run: () => setShowSettings(true) },
     { id: "terminal", label: "Toggle terminal", hint: hint("toggle_terminal"), run: () => toggleDock("terminal") },
@@ -908,6 +1846,7 @@ export default function App() {
     })),
     ...sessions.map((s) => ({
       id: `sess-${s.id}`,
+      identity: `session-${s.id}`,
       label: `Session: ${s.title}`,
       hint: displayProvider(s.provider),
       run: () => void selectSession(s.id),
@@ -949,11 +1888,29 @@ export default function App() {
 
   useEffect(() => {
     refreshGit();
-  }, [refreshGit, activeSession]);
+    if (showSourceControl) refreshCheckpoints();
+  }, [refreshGit, refreshCheckpoints, activeSession, showSourceControl]);
 
   useEffect(() => {
     listProjectScripts(cwd || ".").then(setScripts).catch(() => setScripts([]));
   }, [cwd]);
+
+  useEffect(() => {
+    const request = ++worktreeOptionsRequestRef.current;
+    const source = (activeProject ?? cwd) || ".";
+    setWorktreeOptions([]);
+    setWorktreeOptionsLoading(true);
+    void listWorktreeBaselines(source)
+      .then((options) => {
+        if (request === worktreeOptionsRequestRef.current) setWorktreeOptions(options);
+      })
+      .catch(() => {
+        if (request === worktreeOptionsRequestRef.current) setWorktreeOptions([]);
+      })
+      .finally(() => {
+        if (request === worktreeOptionsRequestRef.current) setWorktreeOptionsLoading(false);
+      });
+  }, [activeProject, cwd]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1010,9 +1967,14 @@ export default function App() {
     },
     mode,
     sandbox,
+    modeChangeDisabled: policyChangeDisabled,
     onSessionMode: onSessionModeChange,
-    useWorktree,
-    onWorktree: setUseWorktree,
+    worktreeBase,
+    activeWorktreeBaseline,
+    activeWorktreeUnknown,
+    worktreeOptions,
+    worktreeOptionsLoading,
+    onWorktreeBase: setWorktreeBase,
     planMode,
     onPlan: setPlanMode,
     memoryRead,
@@ -1044,10 +2006,21 @@ export default function App() {
       // rather than a cut, and doubles as the app's own opening animation.
       <div className="animate-page-in flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
+        {narrowLayout && narrowRailOpen && (
+          <button
+            type="button"
+            aria-label={t("rail.collapse")}
+            className="fixed inset-0 z-40 bg-black/35"
+            onClick={() => setNarrowRailOpen(false)}
+          />
+        )}
         <SessionRail
           projects={projects}
           activeProject={activeProject}
-          onSelectProject={selectProject}
+          onSelectProject={(path) => {
+            selectProject(path);
+            if (narrowLayout) setNarrowRailOpen(false);
+          }}
           onAddProject={() => void addProjectFolder()}
           onRenameProject={(p, name) => void renameProject(p, name).then(refreshProjects)}
           onRemoveProject={(p) => {
@@ -1069,10 +2042,17 @@ export default function App() {
           archivedSessions={archivedSessions}
           previews={previews}
           activeSession={activeSession}
-          running={running}
-          onSelect={(id) => void selectSession(id)}
-          onNew={() => void createSession()}
+          runningSessions={runningSessions}
+          onSelect={(id) => {
+            void selectSession(id);
+            if (narrowLayout) setNarrowRailOpen(false);
+          }}
+          onNew={() => {
+            void createSession();
+            if (narrowLayout) setNarrowRailOpen(false);
+          }}
           onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
+          onPin={(id, pinned) => void pinSession(id, pinned).then(refreshSessions)}
           onArchive={(id, archived) => void archiveSession(id, archived).then(refreshSessions)}
           displayProvider={displayProvider}
           model={modelLabel}
@@ -1084,8 +2064,9 @@ export default function App() {
           searchHint={hint("open_command_palette")}
           onOpenSearch={() => setShowPalette(true)}
           onOpenSettings={() => setShowSettings(true)}
-          collapsed={railCollapsed}
-          onToggleCollapse={toggleRail}
+          collapsed={displayedRailCollapsed}
+          overlay={narrowLayout}
+          onToggleCollapse={toggleDisplayedRail}
         />
 
         {/* ---------------- the session column ---------------- */}
@@ -1099,11 +2080,11 @@ export default function App() {
             data-tauri-drag-region
             className={cn(
               "flex items-center gap-1.5 border-b pb-1.5 pr-3 pt-1.5",
-              railCollapsed ? "pl-[78px]" : "pl-3",
+              displayedRailCollapsed ? "pl-[78px]" : "pl-3",
             )}
           >
-            {railCollapsed && (
-              <IconAction icon={PanelLeft} label={t("rail.expand")} onClick={toggleRail} />
+            {displayedRailCollapsed && (
+              <IconAction icon={PanelLeft} label={t("rail.expand")} onClick={toggleDisplayedRail} />
             )}
             {/* Breadcrumb, reference-style: project / thread. */}
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1123,14 +2104,22 @@ export default function App() {
 
             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                 is in flight — and the way back to the answer without leaving the mode for good. */}
-            {docMode && (running || turns.length > 0) && (
+            {docMode && (running || turns.length > 0 || sessionLoading) && (
               <button
                 onClick={() => toggleDocMode(false)}
                 className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={t("header.showTranscript", { count: turns.length })}
               >
-                {running && <span className="size-1.5 animate-pulse rounded-full bg-primary" />}
-                {running ? t("header.running") : t("header.turns", { count: turns.length })}
+                {(running || sessionLoading) && (
+                  <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                )}
+                {sessionLoading
+                  ? t("session.loading")
+                  : awaitingInput
+                    ? t("session.awaitingInput")
+                    : running
+                      ? t("header.running")
+                    : t("header.turns", { count: turns.length })}
               </button>
             )}
 
@@ -1166,12 +2155,44 @@ export default function App() {
 
           {/* The transcript owns the column once it exists; in document mode the editor takes the
               column and the transcript moves to a side panel on the right. */}
-          {!docMode && turns.length > 0 && (
-            <section className="min-h-0 flex-1 overflow-y-auto">
+          {!docMode && (turns.length > 0 || sessionLoading) && (
+            <section
+              ref={transcriptScrollRef}
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
               <div className="mx-auto w-full max-w-[860px] px-6 pb-2 pt-3">
-                {turns.map((t) => (
-                  <TurnCard key={t.id} turn={t} />
-                ))}
+                {sessionLoading ? (
+                  <p role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    {t("session.loading")}
+                  </p>
+                ) : (
+                  <>
+                    {transcriptNextBefore !== null && (
+                      <div className="flex justify-center pb-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={loadingEarlier}
+                          onClick={() => void loadEarlierTranscript()}
+                        >
+                          {loadingEarlier
+                            ? t("transcript.loadingEarlier")
+                            : t("transcript.loadEarlier")}
+                        </Button>
+                      </div>
+                    )}
+                    {turns.map((turn) => (
+                      <div
+                        key={turn.transcriptStartSeq ?? turn.id}
+                        style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
+                      >
+                        <TurnCard turn={turn} />
+                      </div>
+                    ))}
+                  </>
+                )}
                 <div ref={transcriptEndRef} />
               </div>
             </section>
@@ -1187,13 +2208,13 @@ export default function App() {
               "flex",
               docMode
                 ? "min-h-0 min-w-0 flex-1"
-                : turns.length === 0
+                : turns.length === 0 && !sessionLoading
                   ? "min-h-0 flex-1 flex-col justify-center pb-20"
                   : "shrink-0 flex-col",
             )}
           >
           {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
-          {!docMode && turns.length === 0 && (
+          {!docMode && turns.length === 0 && !sessionLoading && (
             <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
               {t("transcript.greetingIn")}{" "}
               <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
@@ -1226,7 +2247,7 @@ export default function App() {
           <div className={cn("contents", activeArchived && "hidden")}>
           <Composer
             config={sessionConfig}
-            hero={turns.length === 0}
+            hero={turns.length === 0 && !sessionLoading}
             checkout={{
               project: activeProjectName ?? cwd,
               branch: git?.is_repo ? git.branch : null,
@@ -1263,6 +2284,7 @@ export default function App() {
               );
             }}
             running={running}
+            loading={sessionLoading}
             docEmpty={docEmpty}
             onRun={() => void run()}
             onStop={() => activeSession && void cancelTurn(activeSession)}
@@ -1289,18 +2311,50 @@ export default function App() {
               clearRef={clearEditorRef}
               openSkillPickerRef={openSkillPickerRef}
               insertSkillRef={insertSkillRef}
-              onEmptyChange={setDocEmpty}
+              onEmptyChange={handleEditorEmptyChange}
             />
           </Composer>
           </div>
 
           {/* Document mode's view of the conversation: beside the page, not instead of it. Only
               once there's something to show — a fresh document keeps the full width. */}
-          {docMode && (turns.length > 0 || running) && (
-            <aside className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-fill-quiet px-4 pb-4 pt-2">
-              {turns.map((t) => (
-                <TurnCard key={t.id} turn={t} />
-              ))}
+          {docMode && (turns.length > 0 || running || sessionLoading) && (
+            <aside
+              ref={transcriptScrollRef}
+              className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-fill-quiet px-4 pb-4 pt-2"
+            >
+              {sessionLoading ? (
+                <p role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  {t("session.loading")}
+                </p>
+              ) : (
+                <>
+                  {transcriptNextBefore !== null && (
+                    <div className="flex justify-center pb-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={loadingEarlier}
+                        onClick={() => void loadEarlierTranscript()}
+                      >
+                        {loadingEarlier
+                          ? t("transcript.loadingEarlier")
+                          : t("transcript.loadEarlier")}
+                      </Button>
+                    </div>
+                  )}
+                  {turns.map((turn) => (
+                    <div
+                      key={turn.transcriptStartSeq ?? turn.id}
+                      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
+                    >
+                      <TurnCard turn={turn} />
+                    </div>
+                  ))}
+                </>
+              )}
               <div ref={transcriptEndRef} />
             </aside>
           )}
@@ -1328,7 +2382,11 @@ export default function App() {
             onOpenFile={openFileTab}
             openFiles={openFiles}
             activeFile={activeFile}
-            onActiveFile={setActiveFile}
+            fileReveal={fileReveal}
+            onActiveFile={(path) => {
+              setActiveFile(path);
+              setFileReveal(null);
+            }}
             onCloseFile={closeFileTab}
             width={dockWidth}
             onWidth={setDockWidth}
@@ -1403,17 +2461,22 @@ export default function App() {
       )}
       {showSourceControl && (
         <SourceControlModal
+          key={cwd || "."}
           cwd={cwd || "."}
           status={git}
+          statusLoading={currentGitWorkspace.loading}
           checkpoints={checkpoints}
+          checkpointsLoading={currentCheckpointWorkspace.loading}
           onCommit={async (m) => {
             try {
               await gitCommit(cwd || ".", m);
               toast("Committed.", "success");
             } catch (e) {
               toast(`Commit failed: ${e}`, "error");
+              throw e;
+            } finally {
+              refreshGit();
             }
-            refreshGit();
           }}
           onPush={async () => {
             try {
@@ -1421,6 +2484,9 @@ export default function App() {
               toast("Pushed.", "success");
             } catch (e) {
               toast(`Push failed: ${e}`, "error");
+              throw e;
+            } finally {
+              refreshGit();
             }
           }}
           onCheckpoint={doCheckpoint}
@@ -1430,12 +2496,18 @@ export default function App() {
           }}
           onRefresh={() => {
             refreshGit();
-            gitCheckpoints(cwd || ".").then(setCheckpoints).catch(() => {});
+            refreshCheckpoints();
           }}
           onClose={() => setShowSourceControl(false)}
         />
       )}
-      {showPalette && <CommandPalette commands={paletteCommands} onClose={() => setShowPalette(false)} />}
+      {showPalette && (
+        <CommandPalette
+          commands={paletteCommands}
+          search={searchPaletteCommands}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
       {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
       {showIssues && (
         <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
@@ -1450,6 +2522,13 @@ export default function App() {
             setShowFiles(false);
           }}
           onClose={() => setShowFiles(false)}
+        />
+      )}
+      {showWorkspaceSearch && (
+        <WorkspaceSearchModal
+          cwd={cwd || "."}
+          onOpen={(match) => openFileTab(match.path, match)}
+          onClose={() => setShowWorkspaceSearch(false)}
         />
       )}
 

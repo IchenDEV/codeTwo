@@ -19,7 +19,9 @@ use ratatui::DefaultTerminal;
 use tokio::sync::mpsc;
 
 fn data_dir() -> PathBuf {
-    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir());
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
     home.join(".codetwo")
 }
 
@@ -27,14 +29,18 @@ fn data_dir() -> PathBuf {
 async fn main() -> std::io::Result<()> {
     let dir = data_dir();
     std::fs::create_dir_all(&dir).ok();
-    let store = Store::open(dir.join("codetwo.db").to_string_lossy().as_ref()).ok().map(Arc::new);
+    let store = Store::open(dir.join("codetwo.db").to_string_lossy().as_ref())
+        .ok()
+        .map(Arc::new);
     // Built-ins plus whatever harness skill directories (~/.claude/skills, .codex/skills, …) exist
     // here — the TUI runs inside the project, so its cwd is the workspace.
     let mut skill_vec = builtin_skills();
     if let Ok(plugins) = codetwo_core::plugin::load_dir(&dir.join("plugins")) {
         skill_vec.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
     }
-    skill_vec.extend(codetwo_core::harness::discover(std::env::current_dir().ok().as_deref()));
+    skill_vec.extend(codetwo_core::harness::discover(
+        std::env::current_dir().ok().as_deref(),
+    ));
     let skills = SkillLibrary::new(skill_vec.clone());
 
     let (engine, mut engine_rx) = match store {
@@ -60,6 +66,7 @@ async fn main() -> std::io::Result<()> {
 
     let mut terminal = ratatui::init();
     let mut app = App::new(default_registry(), skill_vec);
+    app.set_sessions(engine.list_sessions().map_err(std::io::Error::other)?);
     let result = run(&mut terminal, &mut app, &engine, &mut in_rx, &mut engine_rx).await;
     ratatui::restore();
     result
@@ -81,9 +88,22 @@ async fn run(
                 }
             }
             Some(ev) = engine_rx.recv() => {
+                let refresh_sessions = matches!(&ev, codetwo_core::Event::SessionCreated { .. });
                 app.on_engine_event(ev);
-                if let Some((session, doc)) = app.take_pending_send() {
-                    let _ = engine.submit(Op::Prompt { session, doc }).await;
+                if refresh_sessions {
+                    app.set_sessions(engine.list_sessions().map_err(std::io::Error::other)?);
+                }
+                if let Some((session, doc, request_id)) = app.take_pending_send() {
+                    if let Err(error) = engine
+                        .submit(Op::Prompt {
+                            session,
+                            doc,
+                            request_id: Some(request_id.clone()),
+                        })
+                        .await
+                    {
+                        app.on_prompt_submit_error(&request_id, &error.to_string());
+                    }
                 }
             }
         }

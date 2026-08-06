@@ -13,47 +13,54 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use codetwo_core::browser::Annotation;
-use codetwo_core::git::{self, Checkpoint, GitStatus};
+use codetwo_core::event::ModelChoice;
+use codetwo_core::git::{self, Checkpoint, DiffResult, DiffScope, DiffStat, GitStatus};
 use codetwo_core::github_skills;
+use codetwo_core::harness;
 use codetwo_core::issues::{self, Issue};
 use codetwo_core::keymap::{Action as KeyAction, Keymap};
-use codetwo_core::event::ModelChoice;
 use codetwo_core::models::builtin_models;
-use codetwo_core::permission::{PermissionMode, SandboxPolicy};
+use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
 use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
-use codetwo_core::harness;
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
+use codetwo_core::source_control::{self, SourceControlInfo};
 use codetwo_core::store::Project;
-use codetwo_core::workspace::DirEntry;
 use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+use codetwo_core::workspace::DirEntry;
+use codetwo_core::workspace_search::{
+    self, WorkspaceSearchCancellation, WorkspaceSearchOptions, WorkspaceSearchResult,
+};
+use codetwo_core::worktree::{ResolvedWorktreeBaseline, WorktreeBaseline};
 use codetwo_core::{
-    Engine, Event, MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op, Part,
-    Role, Session, Store,
+    Engine, Event, MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op,
+    Session, SessionSearchHit, Store, TranscriptCursor, TranscriptPage,
 };
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tokio::sync::broadcast;
-
-#[derive(Serialize, Clone)]
-struct RemoteEndpoint {
-    label: String,
-    url: String,
-}
 
 #[derive(Serialize, Clone)]
 struct RemoteStatus {
     port: u16,
-    endpoints: Vec<RemoteEndpoint>,
+    endpoints: Vec<codetwo_server::PairingEndpoint>,
 }
 
 #[derive(Serialize)]
 struct RemotePairingLink {
+    endpoint_id: String,
     url: String,
     token: String,
     expires_in: u64,
     qr_svg: String,
+}
+
+#[derive(Serialize)]
+struct WorktreeBaselineOption {
+    kind: WorktreeBaseline,
+    resolved: Option<ResolvedWorktreeBaseline>,
+    unavailable_reason: Option<String>,
 }
 
 /// The running remote server: its port, the live auth state (shared with the axum routes so we can
@@ -75,6 +82,9 @@ struct AppState {
     keymap: Mutex<Keymap>,
     keymap_path: PathBuf,
     ptys: Mutex<HashMap<String, TerminalHandle>>,
+    /// Request-scoped search cancellation handles. IDs come from the invoking webview, so one
+    /// window never has to cancel another window's latest request implicitly.
+    workspace_searches: Mutex<HashMap<(String, String), WorkspaceSearchCancellation>>,
     remote: Mutex<Option<RemoteHandle>>,
     /// Where paired remote devices persist (survives app restarts and server stop/start).
     remote_auth_path: PathBuf,
@@ -224,6 +234,15 @@ fn parse_mode(s: &str) -> PermissionMode {
     }
 }
 
+fn parse_sandbox(s: &str) -> Result<SandboxPolicy, String> {
+    match s {
+        "read_only" => Ok(SandboxPolicy::ReadOnly),
+        "workspace_write" => Ok(SandboxPolicy::WorkspaceWrite),
+        "danger_full_access" => Ok(SandboxPolicy::DangerFullAccess),
+        other => Err(format!("unknown sandbox policy: {other}")),
+    }
+}
+
 fn kind_str(k: SkillKind) -> String {
     match k {
         SkillKind::Fragment => "fragment",
@@ -252,8 +271,39 @@ fn list_providers() -> Vec<ProviderInfo> {
 }
 
 #[tauri::command]
-fn list_sessions(state: State<'_, AppState>) -> Vec<Session> {
-    state.engine.list_sessions()
+fn list_sessions(state: State<'_, AppState>) -> Result<Vec<Session>, String> {
+    state
+        .engine
+        .list_sessions()
+        .map_err(|error| error.to_string())
+}
+
+/// Resolve both choices from local refs only. The core resolver deliberately has no fetch path.
+#[tauri::command]
+async fn list_worktree_baselines(cwd: String) -> Vec<WorktreeBaselineOption> {
+    let path = std::path::Path::new(&cwd);
+    let (current, origin_default) = tokio::join!(
+        codetwo_core::worktree::resolve_baseline(path, WorktreeBaseline::Current),
+        codetwo_core::worktree::resolve_baseline(path, WorktreeBaseline::OriginDefault),
+    );
+    [
+        (WorktreeBaseline::Current, current),
+        (WorktreeBaseline::OriginDefault, origin_default),
+    ]
+    .into_iter()
+    .map(|(kind, result)| match result {
+        Ok(resolved) => WorktreeBaselineOption {
+            kind,
+            resolved: Some(resolved),
+            unavailable_reason: None,
+        },
+        Err(error) => WorktreeBaselineOption {
+            kind,
+            resolved: None,
+            unavailable_reason: Some(error.to_string()),
+        },
+    })
+    .collect()
 }
 
 #[tauri::command]
@@ -274,7 +324,10 @@ fn list_skills(state: State<'_, AppState>, cwd: Option<String>) -> Vec<SkillInfo
             description: s.description.clone(),
             icon: s.icon.clone(),
             kind: kind_str(s.kind()),
-            source: s.source.clone().or_else(|| harness::source_label(&s.id).map(str::to_string)),
+            source: s
+                .source
+                .clone()
+                .or_else(|| harness::source_label(&s.id).map(str::to_string)),
         })
         .collect();
     // Library skills first, then each harness's group, name-sorted — the map iterates randomly.
@@ -294,11 +347,6 @@ fn delete_skill(state: State<'_, AppState>, id: String) -> Result<(), String> {
     SkillLibrary::delete_from_dir(&state.skills_dir, &id).map_err(|e| e.to_string())?;
     reload_skills(&state);
     Ok(())
-}
-
-#[tauri::command]
-fn get_transcript(state: State<'_, AppState>, session: String) -> Vec<(i64, Role, Part)> {
-    state.engine.transcript_with_seq(&session)
 }
 
 // ---- provider-neutral memory ----------------------------------------------------------------
@@ -426,6 +474,19 @@ fn list_memory_receipts(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_transcript_page(
+    state: State<'_, AppState>,
+    session: String,
+    before: Option<i64>,
+    limit: usize,
+) -> Result<TranscriptPage, String> {
+    state
+        .engine
+        .transcript_page(&session, before.map(TranscriptCursor), limit)
+        .map_err(|error| error.to_string())
+}
+
 // ---- git quick-view (F1) ---------------------------------------------------------------------
 
 #[tauri::command]
@@ -437,7 +498,9 @@ async fn git_status(cwd: String) -> GitStatus {
 
 #[tauri::command]
 async fn git_checkpoint(cwd: String, message: String) -> Result<Checkpoint, String> {
-    git::checkpoint(std::path::Path::new(&cwd), &message).await.map_err(|e| e.to_string())
+    git::checkpoint(std::path::Path::new(&cwd), &message)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -446,28 +509,63 @@ async fn git_checkpoints(cwd: String) -> Vec<Checkpoint> {
 }
 
 #[tauri::command]
-async fn git_diff(cwd: String, path: Option<String>) -> Result<String, String> {
-    git::diff(std::path::Path::new(&cwd), path.as_deref()).await.map_err(|e| e.to_string())
+async fn git_diff(
+    cwd: String,
+    path: Option<String>,
+    scope: DiffScope,
+) -> Result<DiffResult, String> {
+    git::diff(std::path::Path::new(&cwd), path.as_deref(), scope)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn git_diff_since(cwd: String, commit: String) -> Result<String, String> {
-    git::diff_since(std::path::Path::new(&cwd), &commit).await.map_err(|e| e.to_string())
+async fn git_diff_since(cwd: String, commit: String) -> Result<DiffResult, String> {
+    git::diff_since(std::path::Path::new(&cwd), &commit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_diff_stat(cwd: String) -> Result<DiffStat, String> {
+    git::diff_stat(std::path::Path::new(&cwd))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_stage_paths(cwd: String, paths: Vec<String>) -> Result<(), String> {
+    git::stage_paths(std::path::Path::new(&cwd), &paths)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_unstage_paths(cwd: String, paths: Vec<String>) -> Result<(), String> {
+    git::unstage_paths(std::path::Path::new(&cwd), &paths)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn git_revert(cwd: String, commit: String) -> Result<(), String> {
-    git::revert_to(std::path::Path::new(&cwd), &commit).await.map_err(|e| e.to_string())
+    git::revert_to(std::path::Path::new(&cwd), &commit)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn git_commit(cwd: String, message: String) -> Result<String, String> {
-    git::commit(std::path::Path::new(&cwd), &message, true).await.map_err(|e| e.to_string())
+    git::commit(std::path::Path::new(&cwd), &message)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn git_push(cwd: String) -> Result<String, String> {
-    git::push(std::path::Path::new(&cwd)).await.map_err(|e| e.to_string())
+    git::push(std::path::Path::new(&cwd))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---- keybindings (F2) ------------------------------------------------------------------------
@@ -552,11 +650,16 @@ async fn github_import_plugin(
     state: State<'_, AppState>,
     repository: String,
 ) -> Result<GitHubImportResult, String> {
-    let checkout = github_skills::checkout(&repository).await.map_err(|error| error.to_string())?;
+    let checkout = github_skills::checkout(&repository)
+        .await
+        .map_err(|error| error.to_string())?;
     let bundle = plugin::from_github(&checkout).map_err(|error| error.to_string())?;
-    let installed = plugin::install(&state.plugins_dir, bundle).map_err(|error| error.to_string())?;
+    let installed =
+        plugin::install(&state.plugins_dir, bundle).map_err(|error| error.to_string())?;
     reload_skills(&state);
-    Ok(GitHubImportResult { plugin: installed.into() })
+    Ok(GitHubImportResult {
+        plugin: installed.into(),
+    })
 }
 
 #[tauri::command]
@@ -584,13 +687,8 @@ fn apply_plugin_scaffold(
 
 // ---- remote control (F10) --------------------------------------------------------------------
 
-fn remote_endpoints(port: u16) -> Vec<RemoteEndpoint> {
-    let mut v = Vec::new();
-    if let Some(ip) = codetwo_server::local_ip() {
-        v.push(RemoteEndpoint { label: "LAN".into(), url: format!("http://{ip}:{port}/") });
-    }
-    v.push(RemoteEndpoint { label: "Loopback".into(), url: format!("http://127.0.0.1:{port}/") });
-    v
+fn remote_endpoints(port: u16) -> Vec<codetwo_server::PairingEndpoint> {
+    codetwo_server::pairing_endpoints(port)
 }
 
 /// The auth state to operate on: the running server's live one, or (when stopped) a fresh view of
@@ -599,29 +697,51 @@ fn remote_auth(state: &AppState) -> Arc<codetwo_server::AuthState> {
     if let Some(h) = &*state.remote.lock().unwrap() {
         return h.auth.clone();
     }
-    Arc::new(codetwo_server::AuthState::load(Some(state.remote_auth_path.clone())))
+    Arc::new(codetwo_server::AuthState::load(Some(
+        state.remote_auth_path.clone(),
+    )))
 }
 
 /// Turn on network access (idempotent): serve this app's live engine on all interfaces so a paired
 /// device can drive the same sessions. Pairing links are minted separately (`remote_pairing_link`).
 #[tauri::command]
-async fn start_remote(state: State<'_, AppState>, port: Option<u16>) -> Result<RemoteStatus, String> {
+async fn start_remote(
+    state: State<'_, AppState>,
+    port: Option<u16>,
+) -> Result<RemoteStatus, String> {
     {
         let guard = state.remote.lock().unwrap();
         if let Some(h) = &*guard {
-            return Ok(RemoteStatus { port: h.port, endpoints: remote_endpoints(h.port) });
+            return Ok(RemoteStatus {
+                port: h.port,
+                endpoints: remote_endpoints(h.port),
+            });
         }
     }
     let port = port.unwrap_or(4599);
-    let addr: std::net::SocketAddr =
-        format!("0.0.0.0:{port}").parse().map_err(|e: std::net::AddrParseError| e.to_string())?;
-    let auth = Arc::new(codetwo_server::AuthState::load(Some(state.remote_auth_path.clone())));
-    let (local, task) =
-        codetwo_server::bind_and_serve(state.engine.clone(), state.events.clone(), addr, auth.clone())
-            .await
-            .map_err(|e| e.to_string())?;
-    let status = RemoteStatus { port: local.port(), endpoints: remote_endpoints(local.port()) };
-    *state.remote.lock().unwrap() = Some(RemoteHandle { port: local.port(), auth, task });
+    let addr: std::net::SocketAddr = format!("0.0.0.0:{port}")
+        .parse()
+        .map_err(|e: std::net::AddrParseError| e.to_string())?;
+    let auth = Arc::new(codetwo_server::AuthState::load(Some(
+        state.remote_auth_path.clone(),
+    )));
+    let (local, task) = codetwo_server::bind_and_serve(
+        state.engine.clone(),
+        state.events.clone(),
+        addr,
+        auth.clone(),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    let status = RemoteStatus {
+        port: local.port(),
+        endpoints: remote_endpoints(local.port()),
+    };
+    *state.remote.lock().unwrap() = Some(RemoteHandle {
+        port: local.port(),
+        auth,
+        task,
+    });
     Ok(status)
 }
 
@@ -635,25 +755,41 @@ fn stop_remote(state: State<'_, AppState>) {
 
 #[tauri::command]
 fn remote_status(state: State<'_, AppState>) -> Option<RemoteStatus> {
-    state
-        .remote
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|h| RemoteStatus { port: h.port, endpoints: remote_endpoints(h.port) })
+    state.remote.lock().unwrap().as_ref().map(|h| RemoteStatus {
+        port: h.port,
+        endpoints: remote_endpoints(h.port),
+    })
 }
 
-/// Mint a fresh one-time pairing link (URL with the token in the fragment + QR SVG). Each call is a
-/// new token; old links keep working until they expire or get used.
+/// Mint a fresh one-time pairing link for a validated advertised endpoint. The token is issued only
+/// after endpoint validation, rides in the URL fragment, and is never sent in a request path.
 #[tauri::command]
-fn remote_pairing_link(state: State<'_, AppState>, ttl_secs: Option<u64>) -> Result<RemotePairingLink, String> {
+fn remote_pairing_link(
+    state: State<'_, AppState>,
+    ttl_secs: Option<u64>,
+    endpoint_id: Option<String>,
+) -> Result<RemotePairingLink, String> {
     let guard = state.remote.lock().unwrap();
     let h = guard.as_ref().ok_or("turn on network access first")?;
-    let ttl = std::time::Duration::from_secs(ttl_secs.unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()));
+    let endpoints = remote_endpoints(h.port);
+    let endpoint = codetwo_server::select_pairing_endpoint(&endpoints, endpoint_id.as_deref())?;
+    let ttl = std::time::Duration::from_secs(
+        ttl_secs.unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
+    );
     let token = h.auth.issue_pairing_token(ttl);
-    let url = codetwo_server::pairing_url(h.port, &token);
-    let qr_svg = codetwo_server::pairing_qr_svg(&url).unwrap_or_default();
-    Ok(RemotePairingLink { url, token, expires_in: ttl.as_secs(), qr_svg })
+    let url = codetwo_server::pairing_url_for_endpoint(&endpoint.url, &token);
+    let qr_svg = if endpoint.qr_shareable {
+        codetwo_server::pairing_qr_svg(&url).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    Ok(RemotePairingLink {
+        endpoint_id: endpoint.id.clone(),
+        url,
+        token,
+        expires_in: ttl.as_secs(),
+        qr_svg,
+    })
 }
 
 #[tauri::command]
@@ -683,7 +819,9 @@ async fn list_github_issues(cwd: String, limit: Option<u32>) -> Result<Vec<Issue
 
 #[tauri::command]
 async fn list_linear_issues(token: String, limit: Option<u32>) -> Result<Vec<Issue>, String> {
-    issues::list_linear(&token, limit.unwrap_or(30)).await.map_err(|e| e.to_string())
+    issues::list_linear(&token, limit.unwrap_or(30))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -707,18 +845,17 @@ struct CompiledPromptDto {
 /// Compile the current document into the prompt that would actually be sent — skills expanded,
 /// project rules prepended, `@`-mentioned files and past chats inlined.
 #[tauri::command]
-fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>, cwd: Option<String>) -> CompiledPromptDto {
+fn compile_doc(
+    state: State<'_, AppState>,
+    doc: Vec<DocBlock>,
+    cwd: Option<String>,
+) -> CompiledPromptDto {
     let lib = state.engine.skills();
     let lib = lib.lock().unwrap();
     let path = cwd.as_deref().map(std::path::Path::new);
     // The preview resolves `@`-mentioned chats exactly like the real send in the engine does.
-    let store = state.engine.store();
-    let resolve = |id: &str| -> Option<String> {
-        let store = store.as_ref()?;
-        let sess = store.get_session(id).ok().flatten()?;
-        let transcript = store.transcript(id).ok()?;
-        Some(codetwo_core::session::transcript_context(&sess.title, &transcript))
-    };
+    let resolve =
+        |id: &str| -> Option<String> { state.engine.referenced_session_context(id).ok().flatten() };
     let c = codetwo_core::skill::compile_with_sessions(&doc, &lib, path, Some(&resolve));
     CompiledPromptDto {
         prompt: c.prompt,
@@ -737,6 +874,116 @@ fn list_files(cwd: String, query: String, limit: Option<usize>) -> Vec<String> {
     codetwo_core::workspace::list_files(std::path::Path::new(&cwd), &query, limit.unwrap_or(50))
 }
 
+fn resolve_known_workspace_root(cwd: &str, roots: &[String]) -> Result<PathBuf, String> {
+    let requested = std::path::Path::new(cwd)
+        .canonicalize()
+        .map_err(|error| format!("can't open workspace {cwd}: {error}"))?;
+    let authorized = roots.iter().any(|root| {
+        let root = std::path::Path::new(root);
+        // Project and session roots are canonicalized before they are persisted. Treat that
+        // recorded spelling as the identity anchor: canonicalizing it again would follow a root
+        // that was deleted and replaced by a symlink, authorizing the replacement target.
+        std::fs::symlink_metadata(root).is_ok_and(|metadata| {
+            metadata.is_dir() && !metadata.file_type().is_symlink() && root == requested
+        })
+    });
+    if !authorized {
+        return Err(
+            "workspace content search is limited to project and session roots known to CodeTwo"
+                .to_string(),
+        );
+    }
+    Ok(requested)
+}
+
+/// Bounded workspace content search. This never follows symlinks or invokes a shell.
+fn authorized_workspace_root(state: &AppState, cwd: &str) -> Result<PathBuf, String> {
+    let mut roots = Vec::new();
+    if let Some(store) = state.engine.store() {
+        let projects = store
+            .list_projects()
+            .map_err(|error| format!("couldn't read known projects: {error}"))?;
+        roots.extend(projects.into_iter().map(|project| project.path));
+    }
+    let sessions = state
+        .engine
+        .list_sessions()
+        .map_err(|error| format!("couldn't read workspace sessions: {error}"))?;
+    let archived = state
+        .engine
+        .list_archived()
+        .map_err(|error| format!("couldn't read archived workspaces: {error}"))?;
+    for session in sessions.into_iter().chain(archived) {
+        roots.push(session.cwd);
+        roots.extend(session.project_path);
+        roots.extend(session.worktree_path);
+    }
+    resolve_known_workspace_root(cwd, &roots)
+}
+
+#[tauri::command]
+async fn search_workspace_contents(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    cwd: String,
+    query: String,
+    options: WorkspaceSearchOptions,
+    limit: Option<usize>,
+    request_id: String,
+) -> Result<WorkspaceSearchResult, String> {
+    if request_id.is_empty() || request_id.len() > 128 || request_id.chars().any(char::is_control) {
+        return Err("workspace search request id is invalid".to_string());
+    }
+    let root = authorized_workspace_root(&state, &cwd)?;
+    let cancellation = WorkspaceSearchCancellation::new();
+    let request_key = (window.label().to_string(), request_id.clone());
+    {
+        let mut searches = state.workspace_searches.lock().unwrap();
+        if searches.contains_key(&request_key) {
+            return Err("workspace search request id is already active".to_string());
+        }
+        if searches.len() >= 8 {
+            return Err("too many workspace searches are active".to_string());
+        }
+        searches.insert(request_key.clone(), cancellation.clone());
+    }
+
+    let result = workspace_search::search_contents_with_cancellation(
+        &root,
+        &query,
+        options,
+        limit.unwrap_or(200),
+        &cancellation,
+    )
+    .await;
+    state
+        .workspace_searches
+        .lock()
+        .unwrap()
+        .remove(&request_key);
+    result.map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn cancel_workspace_content_search(
+    state: State<'_, AppState>,
+    window: WebviewWindow,
+    request_id: String,
+) -> bool {
+    let request_key = (window.label().to_string(), request_id);
+    let cancellation = state
+        .workspace_searches
+        .lock()
+        .unwrap()
+        .remove(&request_key);
+    if let Some(cancellation) = cancellation {
+        cancellation.cancel();
+        true
+    } else {
+        false
+    }
+}
+
 /// One directory level, for the file tree in the side dock.
 #[tauri::command]
 fn list_dir(cwd: String, path: String) -> Result<Vec<DirEntry>, String> {
@@ -746,12 +993,14 @@ fn list_dir(cwd: String, path: String) -> Result<Vec<DirEntry>, String> {
 /// Create an empty file in the workspace. Errors rather than overwriting.
 #[tauri::command]
 fn create_file(cwd: String, path: String) -> Result<(), String> {
-    codetwo_core::workspace::create_file(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+    codetwo_core::workspace::create_file(std::path::Path::new(&cwd), &path)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn create_dir(cwd: String, path: String) -> Result<(), String> {
-    codetwo_core::workspace::create_dir(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+    codetwo_core::workspace::create_dir(std::path::Path::new(&cwd), &path)
+        .map_err(|e| e.to_string())
 }
 
 /// Read a file for the built-in viewer. Refuses binaries and anything oversized.
@@ -790,13 +1039,31 @@ fn copy_path(cwd: String, from: String, to: String) -> Result<(), String> {
 
 #[tauri::command]
 fn delete_path(cwd: String, path: String) -> Result<(), String> {
-    codetwo_core::workspace::delete_path(std::path::Path::new(&cwd), &path).map_err(|e| e.to_string())
+    codetwo_core::workspace::delete_path(std::path::Path::new(&cwd), &path)
+        .map_err(|e| e.to_string())
 }
 
 /// Newest text per session, for the rail's preview line.
 #[tauri::command]
 fn session_previews(state: State<'_, AppState>) -> Vec<(String, String)> {
-    state.engine.store().and_then(|s| s.last_texts().ok()).unwrap_or_default()
+    state
+        .engine
+        .store()
+        .and_then(|s| s.last_texts().ok())
+        .unwrap_or_default()
+}
+
+/// Search canonical conversation text. Core clamps both query and result sizes.
+#[tauri::command]
+fn search_sessions(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<SessionSearchHit>, String> {
+    state
+        .engine
+        .search_sessions(&query, limit.unwrap_or(12))
+        .map_err(|error| error.to_string())
 }
 
 /// Project rule files detected in the workspace (AGENTS.md, .cursorrules, CLAUDE.md, …).
@@ -819,13 +1086,21 @@ fn now_millis() -> i64 {
 
 #[tauri::command]
 fn list_projects(state: State<'_, AppState>) -> Vec<Project> {
-    state.engine.store().and_then(|s| s.list_projects().ok()).unwrap_or_default()
+    state
+        .engine
+        .store()
+        .and_then(|s| s.list_projects().ok())
+        .unwrap_or_default()
 }
 
 /// Add a directory to the project list. The path is resolved first so that the same project can't
 /// enter the list twice under two spellings of one directory.
 #[tauri::command]
-fn add_project(state: State<'_, AppState>, path: String, name: Option<String>) -> Result<String, String> {
+fn add_project(
+    state: State<'_, AppState>,
+    path: String,
+    name: Option<String>,
+) -> Result<String, String> {
     let resolved = std::path::Path::new(&path)
         .canonicalize()
         .map_err(|e| format!("can't open “{path}”: {e}"))?;
@@ -851,7 +1126,9 @@ fn open_project(state: State<'_, AppState>, path: String) {
 #[tauri::command]
 fn rename_project(state: State<'_, AppState>, path: String, name: String) -> Result<(), String> {
     match state.engine.store() {
-        Some(store) => store.rename_project(&path, &name).map_err(|e| e.to_string()),
+        Some(store) => store
+            .rename_project(&path, &name)
+            .map_err(|e| e.to_string()),
         None => Ok(()),
     }
 }
@@ -877,15 +1154,32 @@ fn archive_session(state: State<'_, AppState>, session: String, archived: bool) 
 }
 
 #[tauri::command]
-fn list_archived_sessions(state: State<'_, AppState>) -> Vec<Session> {
-    state.engine.list_archived()
+fn pin_session(state: State<'_, AppState>, session: String, pinned: bool) {
+    state.engine.set_pinned(&session, pinned);
+}
+
+#[tauri::command]
+fn list_archived_sessions(state: State<'_, AppState>) -> Result<Vec<Session>, String> {
+    state
+        .engine
+        .list_archived()
+        .map_err(|error| error.to_string())
 }
 
 // ---- PR + commit message (G6) ------------------------------------------------------------------
 
 #[tauri::command]
+async fn git_source_control_info(cwd: String) -> Result<Option<SourceControlInfo>, String> {
+    source_control::inspect(std::path::Path::new(&cwd))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn git_create_pr(cwd: String, title: String, body: String) -> Result<String, String> {
-    git::create_pr(std::path::Path::new(&cwd), &title, &body).await.map_err(|e| e.to_string())
+    git::create_pr(std::path::Path::new(&cwd), &title, &body)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -896,15 +1190,38 @@ async fn git_suggest_commit(cwd: String) -> String {
 // ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
 
 #[tauri::command]
-async fn set_sandbox(state: State<'_, AppState>, session: String, sandbox: String) -> Result<(), String> {
-    let policy = match sandbox.as_str() {
-        "read_only" => SandboxPolicy::ReadOnly,
-        "danger_full_access" => SandboxPolicy::DangerFullAccess,
-        _ => SandboxPolicy::WorkspaceWrite,
-    };
+async fn set_sandbox(
+    state: State<'_, AppState>,
+    session: String,
+    sandbox: String,
+) -> Result<(), String> {
+    let policy = parse_sandbox(&sandbox)?;
     state
         .engine
-        .submit(Op::SetSandbox { session, sandbox: policy })
+        .submit(Op::SetSandbox {
+            session,
+            sandbox: policy,
+        })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn set_execution_policy(
+    state: State<'_, AppState>,
+    session: String,
+    mode: String,
+    sandbox: String,
+    request_id: Option<String>,
+) -> Result<(), String> {
+    state
+        .engine
+        .submit(Op::SetExecutionPolicy {
+            session,
+            mode: parse_mode(&mode),
+            sandbox: parse_sandbox(&sandbox)?,
+            request_id,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -931,7 +1248,11 @@ fn dirs_home() -> Option<std::path::PathBuf> {
 /// Switch the session's model. The engine forwards it to the agent over ACP and answers with a
 /// `models` event; a provider that doesn't implement the call reports an `error` event instead.
 #[tauri::command]
-async fn set_model(state: State<'_, AppState>, session: String, model: String) -> Result<(), String> {
+async fn set_model(
+    state: State<'_, AppState>,
+    session: String,
+    model: String,
+) -> Result<(), String> {
     state
         .engine
         .submit(Op::SetModel { session, model })
@@ -951,7 +1272,11 @@ async fn set_config_option(
 ) -> Result<(), String> {
     state
         .engine
-        .submit(Op::SetConfigOption { session, config_id, value })
+        .submit(Op::SetConfigOption {
+            session,
+            config_id,
+            value,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -997,7 +1322,9 @@ fn voice_available() -> bool {
 async fn transcribe_audio(bytes: Vec<u8>, ext: Option<String>) -> Result<String, String> {
     let path = codetwo_core::voice::save_audio(&bytes, ext.as_deref().unwrap_or("webm"))
         .map_err(|e| e.to_string())?;
-    let result = codetwo_core::voice::transcribe(&path).await.map_err(|e| e.to_string());
+    let result = codetwo_core::voice::transcribe(&path)
+        .await
+        .map_err(|e| e.to_string());
     let _ = std::fs::remove_file(&path);
     result
 }
@@ -1010,7 +1337,9 @@ async fn run_project_script(cwd: String, id: String) -> Result<String, String> {
         .into_iter()
         .find(|s| s.id == id)
         .ok_or_else(|| format!("unknown script: {id}"))?;
-    project::run_script(std::path::Path::new(&cwd), &script).await.map_err(|e| e.to_string())
+    project::run_script(std::path::Path::new(&cwd), &script)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1019,10 +1348,22 @@ async fn new_session(
     provider: String,
     cwd: String,
     use_worktree: bool,
+    worktree_base: Option<WorktreeBaseline>,
+    worktree_base_sha: Option<String>,
+    request_id: Option<String>,
+    initial_policy: Option<ExecutionPolicy>,
 ) -> Result<(), String> {
     state
         .engine
-        .submit(Op::NewSession { provider: parse_provider(&provider), cwd, use_worktree })
+        .submit(Op::NewSession {
+            provider: parse_provider(&provider),
+            cwd,
+            use_worktree,
+            worktree_base,
+            worktree_base_sha,
+            request_id,
+            initial_policy,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -1032,8 +1373,17 @@ async fn submit_prompt(
     state: State<'_, AppState>,
     session: String,
     doc: Vec<DocBlock>,
+    request_id: Option<String>,
 ) -> Result<(), String> {
-    state.engine.submit(Op::Prompt { session, doc }).await.map_err(|e| e.to_string())
+    state
+        .engine
+        .submit(Op::Prompt {
+            session,
+            doc,
+            request_id,
+        })
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1045,7 +1395,11 @@ async fn answer_permission(
 ) -> Result<(), String> {
     state
         .engine
-        .submit(Op::AnswerPermission { session, request_id, option_id })
+        .submit(Op::AnswerPermission {
+            session,
+            request_id,
+            option_id,
+        })
         .await
         .map_err(|e| e.to_string())
 }
@@ -1058,14 +1412,21 @@ async fn set_permission_mode(
 ) -> Result<(), String> {
     state
         .engine
-        .submit(Op::SetPermissionMode { session, mode: parse_mode(&mode) })
+        .submit(Op::SetPermissionMode {
+            session,
+            mode: parse_mode(&mode),
+        })
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 async fn cancel_turn(state: State<'_, AppState>, session: String) -> Result<(), String> {
-    state.engine.submit(Op::Cancel { session }).await.map_err(|e| e.to_string())
+    state
+        .engine
+        .submit(Op::Cancel { session })
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ---- terminal --------------------------------------------------------------------------------
@@ -1095,7 +1456,10 @@ fn pty_spawn(
         // The renderer may have been resized while detached.
         let _ = existing.resize(rows, cols);
         let restore = existing.restore().map_err(|e| e.to_string())?;
-        return Ok(PtyAttach { created: false, restore });
+        return Ok(PtyAttach {
+            created: false,
+            restore,
+        });
     }
 
     let cfg = TerminalConfig {
@@ -1112,19 +1476,30 @@ fn pty_spawn(
     tauri::async_runtime::spawn(async move {
         while let Some(out) = rx.recv().await {
             let _ = match out {
-                TerminalOutput::Data(data) => {
-                    handle.emit("pty-output", PtyOutput { id: stream_id.clone(), data })
-                }
-                TerminalOutput::Title(title) => {
-                    handle.emit("pty-title", PtyTitle { id: stream_id.clone(), title })
-                }
+                TerminalOutput::Data(data) => handle.emit(
+                    "pty-output",
+                    PtyOutput {
+                        id: stream_id.clone(),
+                        data,
+                    },
+                ),
+                TerminalOutput::Title(title) => handle.emit(
+                    "pty-title",
+                    PtyTitle {
+                        id: stream_id.clone(),
+                        title,
+                    },
+                ),
             };
         }
         let _ = handle.emit("pty-exit", stream_id);
     });
 
     state.ptys.lock().unwrap().insert(id, term);
-    Ok(PtyAttach { created: true, restore: String::new() })
+    Ok(PtyAttach {
+        created: true,
+        restore: String::new(),
+    })
 }
 
 #[tauri::command]
@@ -1237,6 +1612,7 @@ pub fn run() {
                 keymap: Mutex::new(keymap),
                 keymap_path,
                 ptys: Mutex::new(HashMap::new()),
+                workspace_searches: Mutex::new(HashMap::new()),
                 remote: Mutex::new(None),
                 remote_auth_path: data_dir.join("remote-devices.json"),
             });
@@ -1246,10 +1622,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_providers,
             list_sessions,
+            list_worktree_baselines,
             list_skills,
             save_skill,
             delete_skill,
-            get_transcript,
+            get_transcript_page,
             memory_settings,
             set_memory_settings,
             list_memories,
@@ -1265,6 +1642,9 @@ pub fn run() {
             git_checkpoints,
             git_diff,
             git_diff_since,
+            git_diff_stat,
+            git_stage_paths,
+            git_unstage_paths,
             git_revert,
             git_commit,
             git_push,
@@ -1291,6 +1671,8 @@ pub fn run() {
             issue_context,
             compile_doc,
             list_files,
+            search_workspace_contents,
+            cancel_workspace_content_search,
             list_dir,
             create_file,
             create_dir,
@@ -1301,13 +1683,17 @@ pub fn run() {
             copy_path,
             delete_path,
             session_previews,
+            search_sessions,
             list_rules,
             rename_session,
             archive_session,
+            pin_session,
             list_archived_sessions,
+            git_source_control_info,
             git_create_pr,
             git_suggest_commit,
             set_sandbox,
+            set_execution_policy,
             list_project_scripts,
             run_project_script,
             voice_available,
@@ -1359,4 +1745,116 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_sandbox, resolve_known_workspace_root};
+    use codetwo_core::permission::{ExecutionPolicy, SandboxPolicy};
+
+    #[test]
+    fn workspace_search_accepts_only_an_exact_known_canonical_root() {
+        let base = std::env::temp_dir().join(format!(
+            "codetwo-desktop-search-root-{}-{}",
+            std::process::id(),
+            codetwo_core::session::now_millis()
+        ));
+        let project = base.join("project");
+        let child = project.join("src");
+        let sibling = base.join("sibling");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(&sibling).unwrap();
+        let known = vec![project
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()];
+
+        assert_eq!(
+            resolve_known_workspace_root(project.to_str().unwrap(), &known).unwrap(),
+            project.canonicalize().unwrap()
+        );
+        assert!(resolve_known_workspace_root(child.to_str().unwrap(), &known).is_err());
+        assert!(resolve_known_workspace_root(sibling.to_str().unwrap(), &known).is_err());
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_search_rejects_a_known_root_replaced_by_a_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!(
+            "codetwo-desktop-search-symlink-{}-{}",
+            std::process::id(),
+            codetwo_core::session::now_millis()
+        ));
+        let project = base.join("project");
+        let replacement = base.join("replacement");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&replacement).unwrap();
+        let known = vec![project
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned()];
+
+        std::fs::remove_dir(&project).unwrap();
+        symlink(&replacement, &project).unwrap();
+
+        assert!(resolve_known_workspace_root(project.to_str().unwrap(), &known).is_err());
+        assert!(resolve_known_workspace_root(replacement.to_str().unwrap(), &known).is_err());
+
+        std::fs::remove_file(project).unwrap();
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn workspace_search_accepts_a_linked_worktree_directory() {
+        let base = std::env::temp_dir().join(format!(
+            "codetwo-desktop-search-worktree-{}-{}",
+            std::process::id(),
+            codetwo_core::session::now_millis()
+        ));
+        let worktree = base.join("linked-worktree");
+        std::fs::create_dir_all(&worktree).unwrap();
+        std::fs::write(
+            worktree.join(".git"),
+            "gitdir: ../repo/.git/worktrees/linked\n",
+        )
+        .unwrap();
+        let canonical = worktree.canonicalize().unwrap();
+        let known = vec![canonical.to_string_lossy().into_owned()];
+
+        assert_eq!(
+            resolve_known_workspace_root(worktree.to_str().unwrap(), &known).unwrap(),
+            canonical
+        );
+
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn sandbox_policy_parsing_rejects_unknown_values() {
+        assert_eq!(parse_sandbox("read_only").unwrap(), SandboxPolicy::ReadOnly);
+        assert_eq!(
+            parse_sandbox("workspace_write").unwrap(),
+            SandboxPolicy::WorkspaceWrite
+        );
+        assert_eq!(
+            parse_sandbox("danger_full_access").unwrap(),
+            SandboxPolicy::DangerFullAccess
+        );
+        assert_eq!(
+            parse_sandbox("future_policy").unwrap_err(),
+            "unknown sandbox policy: future_policy"
+        );
+
+        let initial_policy = serde_json::json!({
+            "mode": "ask",
+            "sandbox": "future_policy"
+        });
+        assert!(serde_json::from_value::<ExecutionPolicy>(initial_policy).is_err());
+    }
 }
