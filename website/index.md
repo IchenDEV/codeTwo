@@ -24,7 +24,7 @@ features:
     details: Claude Code, OpenAI Codex, Grok, Cursor, OpenCode, Pi, Kimi, and ZCode/GLM — all driven over the Agent Client Protocol (ACP). Add your own.
     link: /guide/providers
   - icon: 🛒
-    title: Built-in skill market
+    title: Complete plugins from GitHub
     details: Browse a curated catalog and install skills in one click — personas, macros, and MCP tools (browser, filesystem). Author your own.
     link: /guide/market
   - icon: ⏱️

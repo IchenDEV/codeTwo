@@ -4,6 +4,9 @@ A document-first coding-agent app. Compose prompts as a **structured document** 
 weave in reusable **skills** with a `/` picker, and run them against existing coding CLIs —
 **Claude Code**, **OpenAI Codex**, and **Grok** — behind one interface.
 
+Its **Plugin Hub** installs complete GitHub packages: standard Skills, Subagent definitions,
+stdio/HTTP/SSE MCP servers, and conflict-safe project scaffolds.
+
 Ships two frontends over one shared Rust core:
 
 - **Desktop** — Tauri v2 + React + BlockNote (the document editor).

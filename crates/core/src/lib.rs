@@ -21,12 +21,14 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod git;
+pub mod github_skills;
 pub mod harness;
 pub mod issues;
 pub mod keymap;
 pub mod market;
 pub mod models;
 pub mod permission;
+pub mod plugin;
 pub mod project;
 pub mod provider;
 pub mod pty;
@@ -56,6 +58,9 @@ pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{default_registry, LaunchSpec, Provider, ProviderId};
 pub use pty::PtySession;
 pub use session::{Message, Part, Role, Session, SessionId};
-pub use skill::{compile, CompiledPrompt, DocBlock, McpServer, Skill, SkillKind, SkillLibrary, SkillPayload};
+pub use skill::{
+    compile, CompiledPrompt, DocBlock, McpServer, McpTransport, Skill, SkillKind, SkillLibrary,
+    SkillPayload, SubagentDefinition,
+};
 pub use store::{Store, StoreError};
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};

@@ -14,11 +14,13 @@ use std::sync::{Arc, Mutex};
 
 use codetwo_core::browser::Annotation;
 use codetwo_core::git::{self, Checkpoint, GitStatus};
+use codetwo_core::github_skills;
 use codetwo_core::issues::{self, Issue};
 use codetwo_core::keymap::{Action as KeyAction, Keymap};
 use codetwo_core::event::ModelChoice;
 use codetwo_core::models::builtin_models;
 use codetwo_core::permission::{PermissionMode, SandboxPolicy};
+use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
 use codetwo_core::project::{self, ProjectScript};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::harness;
@@ -63,6 +65,7 @@ struct AppState {
     engine: Arc<Engine>,
     events: broadcast::Sender<Event>,
     skills_dir: PathBuf,
+    plugins_dir: PathBuf,
     /// Last workspace the frontend listed skills for; harness skill discovery scans its
     /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
     skills_cwd: Mutex<Option<PathBuf>>,
@@ -80,6 +83,9 @@ fn reload_skills(state: &AppState) {
     let mut v = builtin_skills();
     if let Ok(loaded) = SkillLibrary::load_dir(&state.skills_dir) {
         v.extend(loaded.all().cloned());
+    }
+    if let Ok(plugins) = plugin::load_dir(&state.plugins_dir) {
+        v.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
     }
     let cwd = state.skills_cwd.lock().unwrap().clone();
     v.extend(harness::discover(cwd.as_deref()));
@@ -140,6 +146,59 @@ struct MarketItem {
     installed: bool,
 }
 
+#[derive(Serialize)]
+struct GitHubImportResult {
+    plugin: PluginInfo,
+}
+
+#[derive(Serialize)]
+struct PluginScaffoldInfo {
+    id: String,
+    name: String,
+    description: String,
+    files: usize,
+}
+
+#[derive(Serialize)]
+struct PluginInfo {
+    id: String,
+    name: String,
+    version: String,
+    description: String,
+    author: String,
+    source: String,
+    repository: String,
+    counts: PluginCounts,
+    scaffolds: Vec<PluginScaffoldInfo>,
+}
+
+impl From<PluginScaffold> for PluginScaffoldInfo {
+    fn from(scaffold: PluginScaffold) -> Self {
+        Self {
+            id: scaffold.id,
+            name: scaffold.name,
+            description: scaffold.description,
+            files: scaffold.files,
+        }
+    }
+}
+
+impl From<InstalledPlugin> for PluginInfo {
+    fn from(plugin: InstalledPlugin) -> Self {
+        Self {
+            id: plugin.id,
+            name: plugin.name,
+            version: plugin.version,
+            description: plugin.description,
+            author: plugin.author,
+            source: plugin.source,
+            repository: plugin.repository,
+            counts: plugin.counts,
+            scaffolds: plugin.scaffolds.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 fn parse_provider(s: &str) -> ProviderId {
     match s {
         "claude_code" => ProviderId::ClaudeCode,
@@ -166,6 +225,7 @@ fn kind_str(k: SkillKind) -> String {
     match k {
         SkillKind::Fragment => "fragment",
         SkillKind::AgentSkill => "agent_skill",
+        SkillKind::Subagent => "subagent",
         SkillKind::Mcp => "mcp",
         SkillKind::Macro => "macro",
     }
@@ -211,7 +271,7 @@ fn list_skills(state: State<'_, AppState>, cwd: Option<String>) -> Vec<SkillInfo
             description: s.description.clone(),
             icon: s.icon.clone(),
             kind: kind_str(s.kind()),
-            source: harness::source_label(&s.id).map(str::to_string),
+            source: s.source.clone().or_else(|| harness::source_label(&s.id).map(str::to_string)),
         })
         .collect();
     // Library skills first, then each harness's group, name-sorted — the map iterates randomly.
@@ -316,7 +376,7 @@ fn open_devtools(window: tauri::WebviewWindow) {
     window.open_devtools();
 }
 
-// ---- skill market (F5) -----------------------------------------------------------------------
+// ---- Plugin Hub + component market (F5) -------------------------------------------------------
 
 #[tauri::command]
 fn market_catalog(state: State<'_, AppState>) -> Vec<MarketItem> {
@@ -346,6 +406,52 @@ fn market_install(state: State<'_, AppState>, id: String) -> Result<(), String> 
     SkillLibrary::save_to_dir(&state.skills_dir, &entry.to_skill()).map_err(|e| e.to_string())?;
     reload_skills(&state);
     Ok(())
+}
+
+#[tauri::command]
+fn list_plugins(state: State<'_, AppState>) -> Vec<PluginInfo> {
+    plugin::load_dir(&state.plugins_dir)
+        .unwrap_or_default()
+        .into_iter()
+        .map(Into::into)
+        .collect()
+}
+
+/// Install a complete plugin from a public GitHub repository (or selected tree path). The core
+/// validates the manifest and preserves its files without executing repository code.
+#[tauri::command]
+async fn github_import_plugin(
+    state: State<'_, AppState>,
+    repository: String,
+) -> Result<GitHubImportResult, String> {
+    let checkout = github_skills::checkout(&repository).await.map_err(|error| error.to_string())?;
+    let bundle = plugin::from_github(&checkout).map_err(|error| error.to_string())?;
+    let installed = plugin::install(&state.plugins_dir, bundle).map_err(|error| error.to_string())?;
+    reload_skills(&state);
+    Ok(GitHubImportResult { plugin: installed.into() })
+}
+
+#[tauri::command]
+fn uninstall_plugin(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    plugin::uninstall(&state.plugins_dir, &id).map_err(|error| error.to_string())?;
+    reload_skills(&state);
+    Ok(())
+}
+
+#[tauri::command]
+fn apply_plugin_scaffold(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    scaffold_id: String,
+    cwd: String,
+) -> Result<plugin::ScaffoldInstallResult, String> {
+    plugin::apply_scaffold(
+        &state.plugins_dir,
+        &plugin_id,
+        &scaffold_id,
+        std::path::Path::new(&cwd),
+    )
+    .map_err(|error| error.to_string())
 }
 
 // ---- remote control (F10) --------------------------------------------------------------------
@@ -464,6 +570,7 @@ struct CompiledPromptDto {
     prompt: String,
     mcp_servers: Vec<String>,
     agent_skills: Vec<String>,
+    subagents: Vec<String>,
     files: Vec<String>,
     sessions: Vec<String>,
     unresolved: Vec<String>,
@@ -489,6 +596,7 @@ fn compile_doc(state: State<'_, AppState>, doc: Vec<DocBlock>, cwd: Option<Strin
         prompt: c.prompt,
         mcp_servers: c.mcp_servers.into_iter().map(|s| s.name).collect(),
         agent_skills: c.agent_skills,
+        subagents: c.subagents,
         files: c.files,
         sessions: c.sessions,
         unresolved: c.unresolved,
@@ -945,9 +1053,13 @@ pub fn run() {
             let store = Arc::new(Store::open(db_path.to_string_lossy().as_ref())?);
 
             let skills_dir = data_dir.join("skills");
+            let plugins_dir = data_dir.join("plugins");
             let mut skill_vec = builtin_skills();
             if let Ok(loaded) = SkillLibrary::load_dir(&skills_dir) {
                 skill_vec.extend(loaded.all().cloned());
+            }
+            if let Ok(plugins) = plugin::load_dir(&plugins_dir) {
+                skill_vec.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
             }
             // User-level harness skills only for now; project-level ones join on the first
             // `list_skills` call that carries a workspace.
@@ -992,6 +1104,7 @@ pub fn run() {
                 engine,
                 events,
                 skills_dir,
+                plugins_dir,
                 skills_cwd: Mutex::new(None),
                 keymap: Mutex::new(keymap),
                 keymap_path,
@@ -1023,6 +1136,10 @@ pub fn run() {
             open_devtools,
             market_catalog,
             market_install,
+            list_plugins,
+            github_import_plugin,
+            uninstall_plugin,
+            apply_plugin_scaffold,
             start_remote,
             stop_remote,
             remote_status,
