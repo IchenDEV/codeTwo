@@ -101,7 +101,7 @@ blocks. Unknown skill ids are surfaced as a warning rather than silently dropped
 At the foot of the session rail:
 
 - **＋** — author a new fragment skill (name + text).
-- **🛒** — open the [skill market](/guide/market) to install or remove skills.
+- **🛒** — open [Plugin Hub](/guide/market) to manage plugins, components, and scaffolds.
 
 You pick skills with `/` inside the document, so the rail only carries the library management — it
 doesn't list every skill and compete with your sessions for space.

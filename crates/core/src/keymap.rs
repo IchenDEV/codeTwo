@@ -102,7 +102,7 @@ impl Action {
             Action::CyclePermissionMode => "Cycle permission mode",
             Action::RefreshGit => "Refresh git status",
             Action::ToggleGit => "Toggle git panel",
-            Action::OpenMarket => "Open skill market",
+            Action::OpenMarket => "Open Plugin Hub",
             Action::OpenUsage => "Open usage",
             Action::OpenFiles => "Browse workspace files",
             Action::OpenIssues => "Open issues",

@@ -31,6 +31,9 @@ async fn main() -> std::io::Result<()> {
     // Built-ins plus whatever harness skill directories (~/.claude/skills, .codex/skills, …) exist
     // here — the TUI runs inside the project, so its cwd is the workspace.
     let mut skill_vec = builtin_skills();
+    if let Ok(plugins) = codetwo_core::plugin::load_dir(&dir.join("plugins")) {
+        skill_vec.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
+    }
     skill_vec.extend(codetwo_core::harness::discover(std::env::current_dir().ok().as_deref()));
     let skills = SkillLibrary::new(skill_vec.clone());
 

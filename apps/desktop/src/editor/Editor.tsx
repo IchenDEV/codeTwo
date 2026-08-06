@@ -9,6 +9,7 @@ import {
 } from "@blocknote/react";
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useEffect, type MutableRefObject } from "react";
+import { Bot, Server, Sparkles } from "lucide-react";
 import { schema, docToBlocks, type CodeTwoEditor } from "../skillInline";
 import { FileMenu, type AtItem, type ChatItem, type FileItem } from "./FileMenu";
 import {
@@ -42,6 +43,8 @@ interface EditorProps {
   // App empties the document after a successful send.
   clearRef: MutableRefObject<(() => void) | null>;
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
+  // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
+  insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
 }
@@ -52,18 +55,25 @@ interface EditorProps {
 // neutral ✦ glyph — a column of assorted emoji read as noise, and the group label already says
 // what a row is; the skill's own icon still shows on the inserted chip.
 function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSuggestionItem[] {
-  return skills.map((s) => ({
-    title: `Skill: ${s.name}`,
-    subtext: s.description,
-    group: s.source ? `${s.source} skills` : "Skills",
-    icon: <span style={{ fontSize: 14 }}>✦</span>,
-    onItemClick: () => {
-      editor.insertInlineContent([
-        { type: "skill", props: { skillId: s.id, name: s.name, icon: s.icon ?? "✦" } },
-        " ",
-      ]);
-    },
-  }));
+  return skills.map((s) => {
+    const kind = s.kind === "subagent" ? "Subagent" : s.kind === "mcp" ? "MCP" : "Skill";
+    const icon =
+      s.kind === "subagent" ? <Bot className="size-3.5" /> :
+      s.kind === "mcp" ? <Server className="size-3.5" /> :
+      <Sparkles className="size-3.5" />;
+    return {
+      title: `${kind}: ${s.name}`,
+      subtext: s.description,
+      group: s.source ?? "Code2 components",
+      icon,
+      onItemClick: () => {
+        editor.insertInlineContent([
+          { type: "skill", props: { skillId: s.id, name: s.name, icon: s.icon ?? "✦" } },
+          " ",
+        ]);
+      },
+    };
+  });
 }
 
 // The `@` picker: workspace files, searched live and ranked by the core. Picking one inserts a file
@@ -118,6 +128,7 @@ export function DocEditor({
   focusRef,
   clearRef,
   openSkillPickerRef,
+  insertSkillRef,
   onEmptyChange,
 }: EditorProps) {
   const t = useT();
@@ -184,6 +195,14 @@ export function DocEditor({
       editor.focus();
       editor.openSuggestionMenu("/");
     };
+    insertSkillRef.current = (skill: SkillInfo) => {
+      editor.focus();
+      editor.insertInlineContent([
+        { type: "skill", props: { skillId: skill.id, name: skill.name, icon: skill.icon ?? "✦" } },
+        " ",
+      ]);
+      onEmptyChange(false);
+    };
     return () => {
       getBlocksRef.current = null;
       insertTextRef.current = null;
@@ -192,8 +211,9 @@ export function DocEditor({
       focusRef.current = null;
       clearRef.current = null;
       openSkillPickerRef.current = null;
+      insertSkillRef.current = null;
     };
-  }, [editor, getBlocksRef, insertTextRef, insertAnnotationRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, onEmptyChange]);
+  }, [editor, getBlocksRef, insertTextRef, insertAnnotationRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   const scheme = useColorScheme();
   const getAtItems = async (query: string): Promise<AtItem[]> => {

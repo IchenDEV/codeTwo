@@ -11,7 +11,7 @@ existing coding CLIs — you keep your models, tools, and auth — behind one co
   [Document editor & skills](/guide/editor).
 - **Skills, not snippets.** A skill is a typed, reusable building block — a persona/fragment, a
   parameterized macro, a reference to a provider-native Agent Skill, or an MCP tool. Browse and
-  install more from the built-in [skill market](/guide/market).
+  install full packages or individual components from [Plugin Hub](/guide/market).
 
 ## The layout
 
