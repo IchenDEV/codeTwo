@@ -1,10 +1,11 @@
 {
   "fill" : {
     "linear-gradient" : {
-      "angle" : 90,
+      "angle" : 135,
       "colors" : [
-        "extended-srgb:0.35686,0.57647,1.00000,1.00000",
-        "extended-srgb:0.11765,0.30980,0.84706,1.00000"
+        "extended-srgb:0.19216,0.18039,0.50588,1.00000",
+        "extended-srgb:0.12549,0.10588,0.32157,1.00000",
+        "extended-srgb:0.06667,0.08235,0.18431,1.00000"
       ]
     }
   },
@@ -12,40 +13,28 @@
     {
       "layers" : [
         {
-          "image-name" : "back-sheet.svg",
-          "name" : "Back Sheet",
-          "fill" : "extended-srgb:1.00000,1.00000,1.00000,0.34000"
+          "image-name" : "c-mark.svg",
+          "name" : "C"
         }
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.35
+        "opacity" : 0.32
       },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
+      "specular" : true
     },
     {
       "layers" : [
         {
-          "image-name" : "prompt.svg",
-          "name" : "Prompt"
-        },
-        {
-          "image-name" : "front-sheet.svg",
-          "name" : "Front Sheet"
+          "image-name" : "two-mark.svg",
+          "name" : "2"
         }
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.38
       },
-      "specular" : true,
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
+      "specular" : true
     }
   ],
   "supported-platforms" : {

@@ -28,7 +28,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "glass-raised pop-layer z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md p-4 text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-hidden",
+          "glass-raised pop-layer z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md p-4 text-popover-foreground shadow-raised ring-1 ring-foreground/10 outline-hidden",
           className
         )}
         {...props}

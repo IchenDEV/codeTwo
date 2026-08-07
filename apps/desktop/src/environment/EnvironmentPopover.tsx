@@ -65,7 +65,7 @@ function EnvironmentRow({
   );
 
   if (!onClick) {
-    return <div className="flex min-h-9 items-center gap-2.5 px-2 py-1.5">{content}</div>;
+    return <div className="flex min-h-8 items-center gap-2 px-2 py-1">{content}</div>;
   }
 
   return (
@@ -74,7 +74,7 @@ function EnvironmentRow({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex min-h-9 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+        "flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
         active && "bg-accent/70",
       )}
     >
@@ -191,11 +191,11 @@ export function EnvironmentPopover({
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-80 rounded-xl p-2"
+        className="w-80 rounded-lg p-2"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
       >
-        <div className="flex h-9 items-center gap-2 px-2">
+        <div className="mb-1 flex h-8 items-center gap-2 px-2">
           <h2 className="min-w-0 flex-1 truncate text-title font-semibold">
             {t("environment.title")}
           </h2>
@@ -226,7 +226,7 @@ export function EnvironmentPopover({
           onClick={openSourceControl}
         />
         {isRepo && git.files.length > 0 && (
-          <div className="mb-1 ml-4 rounded-md bg-fill-quiet p-1">
+          <div className="mb-1 ml-4 mr-1 rounded-md bg-fill-quiet p-1">
             {git.files.slice(0, 3).map((file) => (
               <button
                 key={file.path}
@@ -259,7 +259,7 @@ export function EnvironmentPopover({
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
               title={projectPath ?? undefined}
             >
               <Laptop className="size-4 shrink-0 text-muted-foreground" />
@@ -276,12 +276,12 @@ export function EnvironmentPopover({
               )}
             </button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="pl-4">
+          <CollapsibleContent className="pl-3">
             <Collapsible open={projectsOpen} onOpenChange={setProjectsOpen}>
               <CollapsibleTrigger asChild>
                 <button
                   type="button"
-                  className="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   <Folder className="size-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">
@@ -297,7 +297,7 @@ export function EnvironmentPopover({
                   )}
                 </button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="max-h-48 overflow-y-auto pl-4">
+              <CollapsibleContent className="max-h-48 overflow-y-auto pl-3">
                 {projects.map((item) => (
                   <EnvironmentRow
                     key={item.path}
@@ -346,8 +346,8 @@ export function EnvironmentPopover({
           </CollapsibleContent>
         </Collapsible>
 
-        <Separator className="my-2" />
-        <div className="flex h-7 items-center px-2 text-hint font-medium text-muted-foreground">
+        <Separator className="my-1" />
+        <div className="flex h-6 items-center px-2 text-hint font-medium text-muted-foreground">
           {t("environment.tools")}
         </div>
         <div className="grid grid-cols-2 gap-1">
