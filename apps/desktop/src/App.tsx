@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, CircleAlert, Folder, Keyboard, Loader2, PanelLeft, PanelRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import {
@@ -108,7 +108,8 @@ import {
   type SessionMode,
 } from "./session/mode";
 import { Composer } from "./session/Composer";
-import { TurnCard } from "./session/TurnCard";
+import { TranscriptPane } from "./session/TranscriptPane";
+import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import {
   applyEvent,
   matchesSubmittedEditorRevision,
@@ -265,6 +266,8 @@ export default function App() {
   const [sessionLoading, setSessionLoading] = useState(false);
   const [transcriptNextBefore, setTranscriptNextBefore] = useState<number | null>(null);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const transcriptScroll = useTranscriptScroll(activeSession, turns);
+  const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
   const permission = permissionQueue[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
   const [gitWorkspace, setGitWorkspace] = useState<WorkspaceLoadState<GitWorkspaceData>>({
@@ -419,17 +422,9 @@ export default function App() {
   // Only session/new calls initiated by this window may take over its active conversation. A
   // remote client can create sessions on the same engine without stealing desktop focus.
   const awaitingSessionRef = useRef<string | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement | null>(null);
-  const transcriptScrollRef = useRef<HTMLElement | null>(null);
   const transcriptNextBeforeRef = useRef<number | null>(null);
   const earlierLoadRef = useRef(false);
   const earlierLoadSeqRef = useRef(0);
-  const olderScrollAnchorRef = useRef<{
-    element: HTMLElement;
-    scrollHeight: number;
-    scrollTop: number;
-  } | null>(null);
-  const skipNextAutoScrollRef = useRef(false);
   // Monotonic request id: a slow transcript response for A can never overwrite B after a rapid
   // session switch.
   const sessionLoadSeq = useRef(0);
@@ -989,26 +984,6 @@ export default function App() {
     updateRunningSession,
   ]);
 
-  // Prepending an older page must keep the same content under the pointer. Do this before paint;
-  // the following passive effect then consumes the one-shot auto-scroll suppression.
-  useLayoutEffect(() => {
-    const anchor = olderScrollAnchorRef.current;
-    if (!anchor) return;
-    olderScrollAnchorRef.current = null;
-    const element = anchor.element.isConnected ? anchor.element : transcriptScrollRef.current;
-    if (!element) return;
-    element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
-  }, [turns]);
-
-  // Keep the newest turn in view while streaming, but never undo an older-page scroll anchor.
-  useEffect(() => {
-    if (skipNextAutoScrollRef.current) {
-      skipNextAutoScrollRef.current = false;
-      return;
-    }
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [turns]);
-
   const run = useCallback(async () => {
     if (sessionLoading) {
       toast(t("toast.sessionLoading"));
@@ -1405,14 +1380,7 @@ export default function App() {
 
     const sessionGeneration = sessionLoadSeq.current;
     const loadGeneration = ++earlierLoadSeqRef.current;
-    const scrollElement = transcriptScrollRef.current;
-    const anchor = scrollElement
-      ? {
-          element: scrollElement,
-          scrollHeight: scrollElement.scrollHeight,
-          scrollTop: scrollElement.scrollTop,
-        }
-      : null;
+    const anchor = capturePrependAnchor();
     earlierLoadRef.current = true;
     setLoadingEarlier(true);
     try {
@@ -1432,8 +1400,7 @@ export default function App() {
         memoryReceiptsRef.current,
       );
       if (older.length > 0) {
-        olderScrollAnchorRef.current = anchor;
-        skipNextAutoScrollRef.current = true;
+        prepareForPrepend(anchor);
         setTurns((current) => prependTranscriptTurns(current, older));
       }
       updateTranscriptCursor(page.next_before);
@@ -1450,7 +1417,7 @@ export default function App() {
         setLoadingEarlier(false);
       }
     }
-  }, [t, toast, updateTranscriptCursor]);
+  }, [capturePrependAnchor, prepareForPrepend, t, toast, updateTranscriptCursor]);
 
   const searchPaletteCommands = useCallback(
     async (query: string): Promise<Command[]> => {
@@ -2153,211 +2120,143 @@ export default function App() {
             />
           </header>
 
-          {/* The transcript owns the column once it exists; in document mode the editor takes the
-              column and the transcript moves to a side panel on the right. */}
-          {!docMode && (turns.length > 0 || sessionLoading) && (
-            <section
-              ref={transcriptScrollRef}
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
-              <div className="mx-auto w-full max-w-[860px] px-6 pb-2 pt-3">
-                {sessionLoading ? (
-                  <p role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    {t("session.loading")}
-                  </p>
-                ) : (
-                  <>
-                    {transcriptNextBefore !== null && (
-                      <div className="flex justify-center pb-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={loadingEarlier}
-                          onClick={() => void loadEarlierTranscript()}
-                        >
-                          {loadingEarlier
-                            ? t("transcript.loadingEarlier")
-                            : t("transcript.loadEarlier")}
-                        </Button>
-                      </div>
-                    )}
-                    {turns.map((turn) => (
-                      <div
-                        key={turn.transcriptStartSeq ?? turn.id}
-                        style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
-                      >
-                        <TurnCard turn={turn} />
-                      </div>
-                    ))}
-                  </>
-                )}
-                <div ref={transcriptEndRef} />
-              </div>
-            </section>
-          )}
-
-          {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
-              BlockNote unmounts (and takes the draft with it) if the structure around it changes.
-              Compact, the wrapper is just the composer's slot; expanded, it's a row that gives the
-              document the column and hangs the conversation off its right. An empty thread is the
-              hero state: the heading and the card sit together in the centre of the column. */}
-          <div
-            className={cn(
-              "flex",
-              docMode
-                ? "min-h-0 min-w-0 flex-1"
-                : turns.length === 0 && !sessionLoading
-                  ? "min-h-0 flex-1 flex-col justify-center pb-20"
-                  : "shrink-0 flex-col",
+          {/* The same transcript tree serves the main column and document side panel. Keeping the
+              rendering path unified prevents the two modes from drifting, while the scroll
+              controller preserves the reader's position as streamed content arrives. */}
+          <div className={cn("flex min-h-0 flex-1", docMode ? "flex-row" : "flex-col")}>
+            {(turns.length > 0 || running || sessionLoading) && (
+              <TranscriptPane
+                variant={docMode ? "side" : "main"}
+                turns={turns}
+                loading={sessionLoading}
+                hasEarlier={transcriptNextBefore !== null}
+                loadingEarlier={loadingEarlier}
+                onLoadEarlier={() => void loadEarlierTranscript()}
+                scroll={transcriptScroll}
+              />
             )}
-          >
-          {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
-          {!docMode && turns.length === 0 && !sessionLoading && (
-            <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
-              {t("transcript.greetingIn")}{" "}
-              <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
-                {activeProjectName ?? t("rail.noProject")}
-              </span>
-              {t("transcript.greetingEnd")}
-            </h1>
-          )}
-          {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
-              until the session is restored. The composer stays mounted (hidden) — unmounting
-              BlockNote would take an in-progress draft with it. */}
-          {activeArchived && (
-            <div className="shrink-0 px-4 pb-3.5 pt-1">
-              <div className="mx-auto flex w-full max-w-[860px] items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
-                <Archive className="size-4 shrink-0 text-muted-foreground" />
-                <p className="min-w-0 flex-1 text-ui text-muted-foreground">{t("archived.notice")}</p>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="shrink-0"
-                  onClick={() =>
-                    activeSession && void archiveSession(activeSession, false).then(refreshSessions)
-                  }
+
+            {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
+                BlockNote unmounts (and takes the draft with it) if the structure around it changes.
+                Compact, the wrapper is just the composer's slot; expanded, it's a row that gives the
+                document the column. An empty thread is the hero state: the heading and the card sit
+                together in the centre of the column. */}
+            <div
+              className={cn(
+                "flex",
+                docMode
+                  ? "order-1 min-h-0 min-w-0 flex-1"
+                  : turns.length === 0 && !sessionLoading
+                    ? "order-2 min-h-0 flex-1 flex-col justify-center pb-20"
+                    : "order-2 shrink-0 flex-col",
+              )}
+            >
+              {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
+              {!docMode && turns.length === 0 && !sessionLoading && (
+                <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
+                  {t("transcript.greetingIn")}{" "}
+                  <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
+                    {activeProjectName ?? t("rail.noProject")}
+                  </span>
+                  {t("transcript.greetingEnd")}
+                </h1>
+              )}
+              {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
+                  until the session is restored. The composer stays mounted (hidden) — unmounting
+                  BlockNote would take an in-progress draft with it. */}
+              {activeArchived && (
+                <div className="shrink-0 px-4 pb-3.5 pt-1">
+                  <div className="mx-auto flex w-full max-w-[860px] items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
+                    <Archive className="size-4 shrink-0 text-muted-foreground" />
+                    <p className="min-w-0 flex-1 text-ui text-muted-foreground">
+                      {t("archived.notice")}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="shrink-0"
+                      onClick={() =>
+                        activeSession &&
+                        void archiveSession(activeSession, false).then(refreshSessions)
+                      }
+                    >
+                      {t("archived.restore")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className={cn("contents", activeArchived && "hidden")}>
+                <Composer
+                  config={sessionConfig}
+                  hero={turns.length === 0 && !sessionLoading}
+                  checkout={{
+                    project: activeProjectName ?? cwd,
+                    branch: git?.is_repo ? git.branch : null,
+                    dirty: git?.files.length ?? 0,
+                    onOpen: openSourceControl,
+                  }}
+                  docMode={docMode}
+                  onDocMode={toggleDocMode}
+                  height={composerH}
+                  onHeight={setComposerH}
+                  boundsRef={mainRef}
+                  models={models}
+                  currentModel={currentModel}
+                  defaultModel={defaultModel}
+                  onModel={(id) => {
+                    if (!activeSessionRef.current) return;
+                    // Optimistic: the engine answers with a `models` event, or an `error` if the provider
+                    // doesn't implement the switch.
+                    setCurrentModel(id);
+                    void setModel(activeSessionRef.current, id).catch((e) =>
+                      toast(t("toast.modelFailed", { error: String(e) }), "error"),
+                    );
+                  }}
+                  configOptions={configOptions}
+                  onConfigOption={(configId, value) => {
+                    if (!activeSessionRef.current) return;
+                    // Optimistic: the engine echoes the agent's authoritative `config_options` set, or
+                    // an `error` event if the option isn't supported — either replaces this state.
+                    setConfigOptions((prev) =>
+                      prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
+                    );
+                    void setConfigOption(activeSessionRef.current, configId, value).catch((e) =>
+                      toast(t("toast.modelFailed", { error: String(e) }), "error"),
+                    );
+                  }}
+                  running={running}
+                  loading={sessionLoading}
+                  docEmpty={docEmpty}
+                  onRun={() => void run()}
+                  onStop={() => activeSession && void cancelTurn(activeSession)}
+                  onAttachFile={() => setShowFiles(true)}
+                  onInsertSkill={() => openSkillPickerRef.current?.()}
+                  onInsertIssue={() => setShowIssues(true)}
+                  onOpenMarket={openPluginHub}
+                  onNewSkill={() => setSkillDraft({ name: "", text: "" })}
+                  onVoiceText={(t) => insertTextRef.current?.(t)}
+                  runHint={hint("run")}
+                  skillHint={hint("open_skill_picker")}
+                  filesHint={hint("open_files")}
                 >
-                  {t("archived.restore")}
-                </Button>
+                  <DocEditor
+                    key={editorKey}
+                    skills={skills}
+                    cwd={cwd || "."}
+                    sessionId={activeSession}
+                    getBlocksRef={getBlocksRef}
+                    insertTextRef={insertTextRef}
+                    insertAnnotationRef={insertAnnotationRef}
+                    insertFileRef={insertFileRef}
+                    focusRef={focusEditorRef}
+                    clearRef={clearEditorRef}
+                    openSkillPickerRef={openSkillPickerRef}
+                    insertSkillRef={insertSkillRef}
+                    onEmptyChange={handleEditorEmptyChange}
+                  />
+                </Composer>
               </div>
             </div>
-          )}
-          <div className={cn("contents", activeArchived && "hidden")}>
-          <Composer
-            config={sessionConfig}
-            hero={turns.length === 0 && !sessionLoading}
-            checkout={{
-              project: activeProjectName ?? cwd,
-              branch: git?.is_repo ? git.branch : null,
-              dirty: git?.files.length ?? 0,
-              onOpen: openSourceControl,
-            }}
-            docMode={docMode}
-            onDocMode={toggleDocMode}
-            height={composerH}
-            onHeight={setComposerH}
-            boundsRef={mainRef}
-            models={models}
-            currentModel={currentModel}
-            defaultModel={defaultModel}
-            onModel={(id) => {
-              if (!activeSessionRef.current) return;
-              // Optimistic: the engine answers with a `models` event, or an `error` if the provider
-              // doesn't implement the switch.
-              setCurrentModel(id);
-              void setModel(activeSessionRef.current, id).catch((e) =>
-                toast(t("toast.modelFailed", { error: String(e) }), "error"),
-              );
-            }}
-            configOptions={configOptions}
-            onConfigOption={(configId, value) => {
-              if (!activeSessionRef.current) return;
-              // Optimistic: the engine echoes the agent's authoritative `config_options` set, or
-              // an `error` event if the option isn't supported — either replaces this state.
-              setConfigOptions((prev) =>
-                prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
-              );
-              void setConfigOption(activeSessionRef.current, configId, value).catch((e) =>
-                toast(t("toast.modelFailed", { error: String(e) }), "error"),
-              );
-            }}
-            running={running}
-            loading={sessionLoading}
-            docEmpty={docEmpty}
-            onRun={() => void run()}
-            onStop={() => activeSession && void cancelTurn(activeSession)}
-            onAttachFile={() => setShowFiles(true)}
-            onInsertSkill={() => openSkillPickerRef.current?.()}
-            onInsertIssue={() => setShowIssues(true)}
-            onOpenMarket={openPluginHub}
-            onNewSkill={() => setSkillDraft({ name: "", text: "" })}
-            onVoiceText={(t) => insertTextRef.current?.(t)}
-            runHint={hint("run")}
-            skillHint={hint("open_skill_picker")}
-            filesHint={hint("open_files")}
-          >
-            <DocEditor
-              key={editorKey}
-              skills={skills}
-              cwd={cwd || "."}
-              sessionId={activeSession}
-              getBlocksRef={getBlocksRef}
-              insertTextRef={insertTextRef}
-              insertAnnotationRef={insertAnnotationRef}
-              insertFileRef={insertFileRef}
-              focusRef={focusEditorRef}
-              clearRef={clearEditorRef}
-              openSkillPickerRef={openSkillPickerRef}
-              insertSkillRef={insertSkillRef}
-              onEmptyChange={handleEditorEmptyChange}
-            />
-          </Composer>
-          </div>
-
-          {/* Document mode's view of the conversation: beside the page, not instead of it. Only
-              once there's something to show — a fresh document keeps the full width. */}
-          {docMode && (turns.length > 0 || running || sessionLoading) && (
-            <aside
-              ref={transcriptScrollRef}
-              className="animate-slide-in-right min-h-0 w-[360px] max-w-[38%] shrink-0 overflow-y-auto border-l bg-fill-quiet px-4 pb-4 pt-2"
-            >
-              {sessionLoading ? (
-                <p role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  {t("session.loading")}
-                </p>
-              ) : (
-                <>
-                  {transcriptNextBefore !== null && (
-                    <div className="flex justify-center pb-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={loadingEarlier}
-                        onClick={() => void loadEarlierTranscript()}
-                      >
-                        {loadingEarlier
-                          ? t("transcript.loadingEarlier")
-                          : t("transcript.loadEarlier")}
-                      </Button>
-                    </div>
-                  )}
-                  {turns.map((turn) => (
-                    <div
-                      key={turn.transcriptStartSeq ?? turn.id}
-                      style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
-                    >
-                      <TurnCard turn={turn} />
-                    </div>
-                  ))}
-                </>
-              )}
-              <div ref={transcriptEndRef} />
-            </aside>
-          )}
           </div>
         </main>
 
