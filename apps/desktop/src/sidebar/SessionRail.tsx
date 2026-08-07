@@ -342,8 +342,9 @@ export function SessionRail({
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* h-10 centres the row on the 20px line the traffic lights sit on. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2">
+      {/* The configured traffic lights sit about 6px below the 40px web title row's midpoint.
+          Top padding moves the title and sidebar control onto that native optical center. */}
+      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2 pt-3">
         <span data-tauri-drag-region className="min-w-0 truncate text-ui font-semibold">
           {t("app.name")}
         </span>

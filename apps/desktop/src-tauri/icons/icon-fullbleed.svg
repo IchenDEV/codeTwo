@@ -1,42 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- Code2 app icon, full-bleed variant: same art as icon.svg but run edge-to-edge with no
-       baked corner radius. Modern macOS applies its own squircle mask to app icons; shipping a
-       pre-rounded icon gets it shrunk onto the system's white plate instead — the "white edge"
-       look. All bundled icons are generated from THIS file (`npx tauri icon`); icon.svg remains
-       the framed artwork for anywhere that wants a standalone mark. -->
+  <!-- Full-bleed source for platforms that apply their own icon mask. Keep this
+       composition in sync with icon.svg, which supplies the standalone squircle. -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#5B93FF"/>
-      <stop offset="1" stop-color="#1E4FD8"/>
+    <linearGradient id="background" x1="0.12" y1="0.04" x2="0.88" y2="0.96">
+      <stop offset="0" stop-color="#312E81"/>
+      <stop offset="0.52" stop-color="#201B52"/>
+      <stop offset="1" stop-color="#11152F"/>
     </linearGradient>
-    <filter id="sheetShadow" x="-25%" y="-25%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#0B2A78" flood-opacity="0.28"/>
+    <radialGradient id="glow" cx="0.74" cy="0.18" r="0.78">
+      <stop offset="0" stop-color="#7C6DFF" stop-opacity="0.46"/>
+      <stop offset="0.48" stop-color="#5B4DE8" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#161A38" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="two" x1="0.22" y1="0.08" x2="0.78" y2="0.92">
+      <stop offset="0" stop-color="#9EF0FF"/>
+      <stop offset="1" stop-color="#48B9F2"/>
+    </linearGradient>
+    <filter id="mark-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#070A1C" flood-opacity="0.32"/>
     </filter>
   </defs>
 
-  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
-
-  <!-- Content scaled 1024/824 about the centre so the composition inside the old squircle frame
-       is reproduced exactly at full bleed. -->
-  <g transform="translate(512 512) scale(1.2427) translate(-512 -512)">
-    <!-- back sheet -->
-    <rect x="288" y="232" width="380" height="470" rx="52" ry="52" fill="#FFFFFF" opacity="0.34"/>
-
-    <!-- front sheet -->
-    <g filter="url(#sheetShadow)">
-      <rect x="344" y="288" width="392" height="482" rx="54" ry="54" fill="#FFFFFF"/>
-    </g>
-
-    <!-- prompt: >_ -->
-    <g fill="none" stroke="#1E4FD8" stroke-width="38" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M417 396 L476 455 L417 514"/>
-      <path d="M534 514 L652 514"/>
-    </g>
-
-    <!-- document lines -->
-    <g fill="none" stroke="#C8DBFF" stroke-width="34" stroke-linecap="round">
-      <path d="M417 610 L663 610"/>
-      <path d="M417 686 L574 686"/>
-    </g>
+  <rect width="1024" height="1024" fill="url(#background)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#mark-shadow)">
+    <path d="M594 328C545 284 470 268 404 291C319 321 263 401 263 500C263 616 342 713 448 737C508 751 567 738 612 706"
+          stroke="#FFFFFF" stroke-width="96"/>
+    <path d="M592 383C616 328 674 300 731 320C790 341 821 406 802 463C792 493 771 517 747 541L590 696H805"
+          stroke="url(#two)" stroke-width="82"/>
   </g>
 </svg>

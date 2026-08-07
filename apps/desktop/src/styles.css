@@ -191,6 +191,10 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
+  /* One restrained elevation for transient UI. The hairline ring defines the edge; the shadow
+     only separates the layer from the page instead of drawing a dark halo around it. */
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 3%), 0 4px 16px rgb(0 0 0 / 5%);
+
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   /* ---- type roles (see docs/design.md) -------------------------------------------------------
@@ -219,6 +223,16 @@
   #root {
     height: 100%;
     margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  /* WKWebView can rubber-band its visual viewport even when the root document has no scroll
+     range. Pinning the body to the window removes that outer scrolling surface; intentional
+     overflow containers inside the app remain independently scrollable. */
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
   }
   /* The window is transparent and macOS paints an NSVisualEffectView underneath it, so every layer
      above has to stay out of the way — an opaque body would hide the material completely. The app
@@ -277,8 +291,8 @@
      page content, so the blur does what it looks like it does. */
   .glass-raised {
     background: color-mix(in oklch, var(--card) 82%, transparent);
-    backdrop-filter: blur(28px) saturate(160%);
-    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(135%);
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
   }
 
   /* Behind an image preview. Most of what a UI project stores is transparent PNGs, and a white

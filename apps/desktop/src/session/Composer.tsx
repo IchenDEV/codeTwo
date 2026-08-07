@@ -916,7 +916,7 @@ export function Composer({
                     // lets the send button spill outside the card. Max-content always wraps every
                     // control — worst case the card floats a little over whatever sits beside it,
                     // which its own z-plane makes safe.
-                    "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-[0_2px_6px_rgb(0_0_0/0.06),0_16px_40px_rgb(0_0_0/0.16)]"
+                    "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-raised"
                   : "px-2 pb-1.5 pt-1",
               )}
             >
