@@ -122,6 +122,15 @@ classes cover most cases: `pop-layer`, `dialog-layer`, `overlay-layer`, `animate
 that the UI can move: no bounce, no spring, no scaling a card on hover. All motion collapses
 under `prefers-reduced-motion`.
 
+## Transcript
+
+The main conversation and the document-mode side panel share one renderer; their variants may
+change layout, never behavior or content. Live output follows the bottom only while the reader is
+already at the latest content. Pointer or keyboard interaction pauses following, exposes a visible
+“Jump to latest” action, and leaves the reading position untouched as new chunks arrive. Loading an
+earlier page preserves the content under the reader instead of moving the viewport. Never start a
+new smooth-scroll animation for each streamed chunk.
+
 ## Feedback & recovery
 
 Every action needs a perceptible result, and the result is not always a dialog.

@@ -10,7 +10,7 @@ import {
   ListTodo,
   Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { deriveAgentRoster } from "./agentActivity";
 import { collapsedPrompt, isLongPrompt } from "./promptPreview";
 import { isRunning, type Turn } from "./turns";
@@ -57,12 +57,12 @@ function Detail({
   if (count === 0) return null;
   return (
     <Collapsible className={cn("min-w-0", wide && "basis-full")}>
-      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
       </CollapsibleTrigger>
-      <CollapsibleContent className="py-1 pl-4">{children}</CollapsibleContent>
+      <CollapsibleContent className="py-1 ps-4">{children}</CollapsibleContent>
     </Collapsible>
   );
 }
@@ -74,7 +74,7 @@ function Detail({
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Thinking, tool
  * calls and the plan stay collapsed underneath.
  */
-export function TurnCard({ turn }: { turn: Turn }) {
+export const TurnCard = memo(function TurnCard({ turn }: { turn: Turn }) {
   const t = useT();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
@@ -94,7 +94,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <div className="animate-rise-in py-5">
+    <article aria-busy={running} className="animate-rise-in py-5">
       {/* prompt */}
       <div className="flex justify-end">
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
@@ -142,7 +142,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
       {(hasDetail || dur || turn.stopReason || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <Detail icon={Bot} label={t("turn.agents")} count={agents.length} wide>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               {agents.map((agent) => (
                 <div key={agent.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
                   <div className="flex min-w-0 items-center gap-2 text-fine">
@@ -152,7 +152,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
                     <span className="shrink-0 text-muted-foreground">{agent.status}</span>
                   </div>
                   {agent.task && (
-                    <p className="mt-0.5 line-clamp-2 pl-3.5 text-fine leading-relaxed text-muted-foreground">
+                    <p className="mt-0.5 line-clamp-2 ps-3.5 text-fine leading-relaxed text-muted-foreground">
                       {agent.task}
                     </p>
                   )}
@@ -162,19 +162,19 @@ export function TurnCard({ turn }: { turn: Turn }) {
           </Detail>
 
           <Detail icon={Wrench} label={t("turn.tools")} count={turn.tools.length}>
-            <div className="space-y-0.5">
+            <div className="flex flex-col gap-0.5">
               {turn.tools.map((tool) => (
                 <div key={tool.id} className="flex items-center gap-2 text-fine">
                   <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(tool.status))} />
                   <span className="truncate font-mono">{tool.title}</span>
-                  <span className="ml-auto shrink-0 text-muted-foreground">{tool.status}</span>
+                  <span className="ms-auto shrink-0 text-muted-foreground">{tool.status}</span>
                 </div>
               ))}
             </div>
           </Detail>
 
           <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
-            <div className="space-y-1 text-fine italic text-muted-foreground">
+            <div className="flex flex-col gap-1 text-fine italic text-muted-foreground">
               {turn.thoughts.map((thought, i) => (
                 <p key={i} className="whitespace-pre-wrap">
                   {thought}
@@ -184,7 +184,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
           </Detail>
 
           <Detail icon={ListTodo} label={t("turn.plan")} count={turn.plan.length}>
-            <ol className="list-decimal space-y-0.5 pl-4 text-fine text-muted-foreground">
+            <ol className="grid list-decimal gap-0.5 ps-4 text-fine text-muted-foreground">
               {turn.plan.map((p, i) => (
                 <li key={i}>{p}</li>
               ))}
@@ -193,13 +193,13 @@ export function TurnCard({ turn }: { turn: Turn }) {
 
           <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>
             {turn.memory && (
-              <div className="space-y-2 text-fine">
+              <div className="flex flex-col gap-2 text-fine">
                 <p className="text-muted-foreground">
                   {t("turn.memoryTokens", {
                     count: new Intl.NumberFormat(locale).format(turn.memory.estimated_tokens),
                   })}
                 </p>
-                <ul className="space-y-1.5">
+                <ul className="flex flex-col gap-1.5">
                   {turn.memory.items.map((item) => {
                     const source = item.source
                       ? `${item.source.session_id.slice(0, 8)}:${item.source.part_seq}`
@@ -223,7 +223,7 @@ export function TurnCard({ turn }: { turn: Turn }) {
             )}
           </Detail>
 
-          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <span className="ms-auto flex shrink-0 items-center gap-1.5">
             {running ? (
               <Badge variant="secondary" className="gap-1 text-cap uppercase">
                 <Loader2 className="size-2.5 animate-spin" /> {t("turn.running")}
@@ -243,6 +243,6 @@ export function TurnCard({ turn }: { turn: Turn }) {
           </span>
         </div>
       )}
-    </div>
+    </article>
   );
-}
+});

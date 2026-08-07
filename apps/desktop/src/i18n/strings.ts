@@ -171,6 +171,8 @@ export const en = {
   // The hero heading wraps the project name: "{greetingIn} <project>{greetingEnd}".
   "transcript.greetingIn": "What should we build in",
   "transcript.greetingEnd": "?",
+  "transcript.label": "Conversation transcript",
+  "transcript.jumpLatest": "Jump to latest",
   "transcript.hint": "Write a prompt below — type / for skills, @ to pull in a file.",
   "transcript.hint2": "Send with {run}, or expand the document with {expand} for longer briefs.",
   "transcript.loadEarlier": "Load earlier turns",
@@ -608,6 +610,8 @@ export const zhCN: Record<StringKey, string> = {
   "transcript.greeting": "今天做点什么？",
   "transcript.greetingIn": "在",
   "transcript.greetingEnd": "里做点什么？",
+  "transcript.label": "对话记录",
+  "transcript.jumpLatest": "回到最新",
   "transcript.hint": "在下面写提示词——输入 / 插入技能，@ 引用文件。",
   "transcript.hint2": "用 {run} 发送，或用 {expand} 展开成整页写长一点的说明。",
   "transcript.loadEarlier": "加载更早回合",
