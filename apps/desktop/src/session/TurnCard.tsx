@@ -1,4 +1,18 @@
-import { Brain, BrainCircuit, ChevronRight, CircleAlert, Loader2, ListTodo, Wrench } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  BrainCircuit,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleAlert,
+  Loader2,
+  ListTodo,
+  Wrench,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { deriveAgentRoster } from "./agentActivity";
+import { collapsedPrompt, isLongPrompt } from "./promptPreview";
 import { isRunning, type Turn } from "./turns";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -11,22 +25,39 @@ function duration(t: Turn): string | null {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-/** A collapsible group of secondary detail (thinking / tools / plan). */
+function agentStatusDot(status: string): string {
+  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
+  if (["completed", "done", "success", "succeeded"].includes(value)) return "bg-success";
+  if (["cancelled", "canceled", "denied", "error", "failed", "rejected"].includes(value)) {
+    return "bg-destructive";
+  }
+  return "bg-warning";
+}
+
+function toolStatusDot(status: string): string {
+  if (status === "completed") return "bg-success";
+  if (status === "failed") return "bg-destructive";
+  return "bg-warning";
+}
+
+/** A collapsible group of secondary detail (agents / thinking / tools / plan). */
 function Detail({
   icon: Icon,
   label,
   count,
   children,
+  wide = false,
 }: {
   icon: typeof Brain;
   label: string;
   count: number;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   if (count === 0) return null;
   return (
-    <Collapsible>
-      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground">
+    <Collapsible className={cn("min-w-0", wide && "basis-full")}>
+      <CollapsibleTrigger className="group -ml-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
         {label} ({count})
@@ -46,9 +77,19 @@ function Detail({
 export function TurnCard({ turn }: { turn: Turn }) {
   const t = useT();
   const { locale } = useLanguage();
+  const [promptExpanded, setPromptExpanded] = useState(false);
   const running = isRunning(turn);
   const dur = duration(turn);
-  const hasDetail = turn.tools.length + turn.thoughts.length + turn.plan.length + (turn.memory?.items.length ?? 0) > 0;
+  const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const hasDetail =
+    agents.length +
+      turn.tools.length +
+      turn.thoughts.length +
+      turn.plan.length +
+      (turn.memory?.items.length ?? 0) >
+    0;
+  const promptIsLong = isLongPrompt(turn.prompt);
+  const visiblePrompt = promptIsLong && !promptExpanded ? collapsedPrompt(turn.prompt) : turn.prompt;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
@@ -56,8 +97,23 @@ export function TurnCard({ turn }: { turn: Turn }) {
     <div className="animate-rise-in py-5">
       {/* prompt */}
       <div className="flex justify-end">
-        <div className="max-w-[86%] whitespace-pre-wrap break-words rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
-          {turn.prompt}
+        <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
+          <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
+          {promptIsLong && (
+            <button
+              type="button"
+              aria-expanded={promptExpanded}
+              onClick={() => setPromptExpanded((value) => !value)}
+              className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              {promptExpanded ? (
+                <ChevronUp className="size-3" aria-hidden />
+              ) : (
+                <ChevronDown className="size-3" aria-hidden />
+              )}
+              {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
+            </button>
+          )}
         </div>
       </div>
 
@@ -85,20 +141,31 @@ export function TurnCard({ turn }: { turn: Turn }) {
       {/* secondary detail + outcome, on one quiet line */}
       {(hasDetail || dur || turn.stopReason || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <Detail icon={Bot} label={t("turn.agents")} count={agents.length} wide>
+            <div className="space-y-1">
+              {agents.map((agent) => (
+                <div key={agent.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
+                  <div className="flex min-w-0 items-center gap-2 text-fine">
+                    <span className={cn("size-1.5 shrink-0 rounded-full", agentStatusDot(agent.status))} />
+                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{agent.title}</span>
+                    <span className="shrink-0 text-cap uppercase text-muted-foreground">{agent.role}</span>
+                    <span className="shrink-0 text-muted-foreground">{agent.status}</span>
+                  </div>
+                  {agent.task && (
+                    <p className="mt-0.5 line-clamp-2 pl-3.5 text-fine leading-relaxed text-muted-foreground">
+                      {agent.task}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Detail>
+
           <Detail icon={Wrench} label={t("turn.tools")} count={turn.tools.length}>
             <div className="space-y-0.5">
               {turn.tools.map((tool) => (
                 <div key={tool.id} className="flex items-center gap-2 text-fine">
-                  <span
-                    className={cn(
-                      "size-1.5 shrink-0 rounded-full",
-                      tool.status === "completed"
-                        ? "bg-success"
-                        : tool.status === "failed"
-                          ? "bg-destructive"
-                          : "bg-warning",
-                    )}
-                  />
+                  <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(tool.status))} />
                   <span className="truncate font-mono">{tool.title}</span>
                   <span className="ml-auto shrink-0 text-muted-foreground">{tool.status}</span>
                 </div>

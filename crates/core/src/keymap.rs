@@ -29,6 +29,7 @@ pub enum Action {
     OpenMarket,
     OpenUsage,
     OpenFiles,
+    SearchWorkspace,
     OpenIssues,
     ClosePanel,
     PrevSession,
@@ -36,7 +37,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 21] = [
+    pub const ALL: [Action; 22] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
@@ -51,6 +52,7 @@ impl Action {
         Action::OpenSourceControl,
         Action::OpenMarket,
         Action::OpenFiles,
+        Action::SearchWorkspace,
         Action::OpenIssues,
         Action::OpenUsage,
         Action::OpenSettings,
@@ -79,6 +81,7 @@ impl Action {
             Action::OpenMarket => "open_market",
             Action::OpenUsage => "open_usage",
             Action::OpenFiles => "open_files",
+            Action::SearchWorkspace => "search_workspace",
             Action::OpenIssues => "open_issues",
             Action::ClosePanel => "close_panel",
             Action::PrevSession => "prev_session",
@@ -105,6 +108,7 @@ impl Action {
             Action::OpenMarket => "Open Plugin Hub",
             Action::OpenUsage => "Open usage",
             Action::OpenFiles => "Browse workspace files",
+            Action::SearchWorkspace => "Search workspace contents",
             Action::OpenIssues => "Open issues",
             Action::ClosePanel => "Close side panel",
             Action::PrevSession => "Previous session",
@@ -131,6 +135,7 @@ impl Action {
             Action::OpenMarket => "Mod+Shift+M",
             Action::OpenUsage => "Mod+Shift+U",
             Action::OpenFiles => "Mod+P",
+            Action::SearchWorkspace => "Mod+Shift+F",
             Action::OpenIssues => "Mod+Shift+I",
             Action::ClosePanel => "Escape",
             Action::PrevSession => "Mod+Alt+ArrowUp",
@@ -147,14 +152,20 @@ pub struct Keymap {
 
 impl Default for Keymap {
     fn default() -> Self {
-        let map = Action::ALL.iter().map(|a| (*a, a.default_key().to_string())).collect();
+        let map = Action::ALL
+            .iter()
+            .map(|a| (*a, a.default_key().to_string()))
+            .collect();
         Keymap { map }
     }
 }
 
 impl Keymap {
     pub fn key(&self, action: Action) -> String {
-        self.map.get(&action).cloned().unwrap_or_else(|| action.default_key().to_string())
+        self.map
+            .get(&action)
+            .cloned()
+            .unwrap_or_else(|| action.default_key().to_string())
     }
 
     pub fn set(&mut self, action: Action, key: impl Into<String>) {

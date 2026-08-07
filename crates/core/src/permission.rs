@@ -13,24 +13,56 @@ use serde::{Deserialize, Serialize};
 pub enum PermissionMode {
     /// Prompt for anything not explicitly allowed.
     Ask,
-    /// Auto-approve edit-class tools in the working dir; still ask for the rest.
+    /// Auto-approve standardized edit-class ACP requests; still ask for the rest. This does not
+    /// verify the request's filesystem path.
     AcceptEdits,
-    /// Bypass everything. Gated in the UI behind an "isolated worktree/sandbox" warning.
+    /// Bypass approval for tool kinds permitted by the selected ceiling.
     Yolo,
 }
 
-/// What the agent is physically allowed to touch, independent of who approves it. Mirrors Codex's
-/// sandbox axis (`read-only` / `workspace-write` / `danger-full-access`), which is orthogonal to the
-/// approval mode: the sandbox can veto an action even when the mode would allow it.
+/// The tool-kind ceiling enforced by Code2's ACP permission mediation. Its compatibility values
+/// (`read-only` / `workspace-write` / `danger-full-access`) are orthogonal to the approval mode:
+/// this ceiling can veto an ACP permission request even when the mode would allow it.
+///
+/// This is not an OS/container sandbox. An agent that mutates state without sending an ACP
+/// permission request is outside this module's enforcement; callers must not present this value as
+/// filesystem or process isolation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SandboxPolicy {
-    /// No mutations at all — reads/searches only.
+    /// Only standardized read/search/fetch/think tool kinds may pass permission mediation.
     ReadOnly,
-    /// Edits inside the workspace are permitted; commands still follow the approval mode.
+    /// Standardized tool kinds may pass permission mediation; unknown kinds fail closed.
+    /// Workspace path containment is not enforced by this enum.
     WorkspaceWrite,
-    /// No sandbox restrictions (approvals still apply unless the mode bypasses them).
+    /// Unknown tool kinds may also proceed to rules/the approval mode. This still installs no
+    /// operating-system sandbox and grants no capability by itself.
     DangerFullAccess,
+}
+
+impl Default for SandboxPolicy {
+    fn default() -> Self {
+        Self::WorkspaceWrite
+    }
+}
+
+/// The two orthogonal controls that govern one session's ACP permission decisions.
+///
+/// Keeping them together at API boundaries prevents a frontend or persistence layer from
+/// temporarily applying a permission mode with the wrong sandbox (or vice versa).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecutionPolicy {
+    pub mode: PermissionMode,
+    pub sandbox: SandboxPolicy,
+}
+
+impl Default for ExecutionPolicy {
+    fn default() -> Self {
+        Self {
+            mode: PermissionMode::Ask,
+            sandbox: SandboxPolicy::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,35 +85,51 @@ pub struct Rule {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PermissionPolicy {
     pub mode: PermissionMode,
-    /// What the agent may touch at all. Vetoes before the mode is consulted.
-    #[serde(default = "default_sandbox")]
+    /// ACP tool-kind ceiling. Vetoes before the mode is consulted, but does not install isolation.
+    #[serde(default)]
     pub sandbox: SandboxPolicy,
     /// Evaluated in order; an explicit `Deny` always wins over a later `Allow`.
     pub rules: Vec<Rule>,
 }
 
-fn default_sandbox() -> SandboxPolicy {
-    SandboxPolicy::WorkspaceWrite
-}
-
 impl Default for PermissionPolicy {
     fn default() -> Self {
-        Self { mode: PermissionMode::Ask, sandbox: default_sandbox(), rules: Vec::new() }
+        Self {
+            mode: PermissionMode::Ask,
+            sandbox: SandboxPolicy::default(),
+            rules: Vec::new(),
+        }
     }
 }
 
-/// Tool kinds that mutate state (vs read/search/fetch/think).
-fn is_mutating(kind: &str) -> bool {
-    matches!(kind, "edit" | "delete" | "move" | "execute")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ToolKindClass {
+    ReadOnly,
+    Mutating,
+    Unknown,
+}
+
+/// Classify only ACP's standardized tool kinds. `other`, an absent kind (normalized to `other` by
+/// the handler), and future provider-specific strings stay unknown so restrictive ceilings fail
+/// closed instead of guessing that they are reads.
+fn classify_tool_kind(kind: &str) -> ToolKindClass {
+    match kind {
+        "read" | "search" | "fetch" | "think" => ToolKindClass::ReadOnly,
+        "edit" | "delete" | "move" | "execute" | "switch_mode" => ToolKindClass::Mutating,
+        _ => ToolKindClass::Unknown,
+    }
 }
 
 impl PermissionPolicy {
     /// Resolve an action for a tool invocation. `tool_kind` is the ACP tool kind
     /// (e.g. "edit", "execute", "read"); `input` is a stringified summary of the call.
     pub fn decide(&self, tool_kind: &str, input: &str) -> Action {
-        // The sandbox vetoes first — a read-only sandbox denies mutations even in YOLO mode.
-        if self.sandbox == SandboxPolicy::ReadOnly && is_mutating(tool_kind) {
-            return Action::Deny;
+        // The ceiling vetoes before rules or mode. Restrictive policies never allow an explicit
+        // rule or YOLO to turn an unknown provider kind into an assumed-safe operation.
+        match (self.sandbox, classify_tool_kind(tool_kind)) {
+            (SandboxPolicy::ReadOnly, ToolKindClass::Mutating | ToolKindClass::Unknown)
+            | (SandboxPolicy::WorkspaceWrite, ToolKindClass::Unknown) => return Action::Deny,
+            _ => {}
         }
 
         // Explicit rules next: any matching Deny short-circuits.
@@ -157,14 +205,20 @@ mod tests {
     }
 
     #[test]
-    fn yolo_allows_everything() {
-        let p = PermissionPolicy { mode: PermissionMode::Yolo, ..Default::default() };
+    fn yolo_allows_known_execution_under_the_default_ceiling() {
+        let p = PermissionPolicy {
+            mode: PermissionMode::Yolo,
+            ..Default::default()
+        };
         assert_eq!(p.decide("execute", "anything"), Action::Allow);
     }
 
     #[test]
     fn accept_edits_allows_edits_only() {
-        let p = PermissionPolicy { mode: PermissionMode::AcceptEdits, ..Default::default() };
+        let p = PermissionPolicy {
+            mode: PermissionMode::AcceptEdits,
+            ..Default::default()
+        };
         assert_eq!(p.decide("edit", "src/main.rs"), Action::Allow);
         assert_eq!(p.decide("execute", "ls"), Action::Ask);
     }
@@ -173,7 +227,11 @@ mod tests {
     fn deny_rule_wins_over_mode() {
         let p = PermissionPolicy {
             mode: PermissionMode::Yolo,
-            rules: vec![Rule { tool: "execute".into(), pattern: "git push*".into(), action: Action::Deny }],
+            rules: vec![Rule {
+                tool: "execute".into(),
+                pattern: "git push*".into(),
+                action: Action::Deny,
+            }],
             ..Default::default()
         };
         assert_eq!(p.decide("execute", "git push origin main"), Action::Deny);
@@ -181,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn read_only_sandbox_vetoes_even_yolo() {
+    fn read_only_ceiling_vetoes_mutation_even_in_yolo() {
         let p = PermissionPolicy {
             mode: PermissionMode::Yolo,
             sandbox: SandboxPolicy::ReadOnly,
@@ -191,12 +249,54 @@ mod tests {
         assert_eq!(p.decide("edit", "src/main.rs"), Action::Deny);
         assert_eq!(p.decide("execute", "rm -rf /"), Action::Deny);
         assert_eq!(p.decide("delete", "x"), Action::Deny);
+        assert_eq!(p.decide("switch_mode", "agent"), Action::Deny);
         // …while reads still follow the mode.
         assert_eq!(p.decide("read", "src/main.rs"), Action::Allow);
+        assert_eq!(p.decide("search", "needle"), Action::Allow);
+        assert_eq!(p.decide("fetch", "https://example.test"), Action::Allow);
+        assert_eq!(p.decide("think", "plan"), Action::Allow);
     }
 
     #[test]
-    fn workspace_write_and_danger_do_not_veto() {
+    fn restrictive_sandboxes_fail_closed_for_missing_or_unknown_kinds() {
+        for sandbox in [SandboxPolicy::ReadOnly, SandboxPolicy::WorkspaceWrite] {
+            let policy = PermissionPolicy {
+                mode: PermissionMode::Yolo,
+                sandbox,
+                rules: vec![Rule {
+                    tool: "*".into(),
+                    pattern: "*".into(),
+                    action: Action::Allow,
+                }],
+            };
+
+            // ACP's `other`, the handler's missing-kind normalization, and provider extensions
+            // cannot bypass the restrictive ceiling through YOLO or an explicit allow rule.
+            assert_eq!(policy.decide("other", "opaque call"), Action::Deny);
+            assert_eq!(policy.decide("", "missing kind"), Action::Deny);
+            assert_eq!(policy.decide("provider_magic", "opaque call"), Action::Deny);
+        }
+    }
+
+    #[test]
+    fn danger_full_access_defers_unknown_kinds_to_rules_and_mode() {
+        let yolo = PermissionPolicy {
+            mode: PermissionMode::Yolo,
+            sandbox: SandboxPolicy::DangerFullAccess,
+            rules: vec![],
+        };
+        assert_eq!(yolo.decide("other", "opaque call"), Action::Allow);
+
+        let ask = PermissionPolicy {
+            mode: PermissionMode::Ask,
+            sandbox: SandboxPolicy::DangerFullAccess,
+            rules: vec![],
+        };
+        assert_eq!(ask.decide("provider_magic", "opaque call"), Action::Ask);
+    }
+
+    #[test]
+    fn workspace_write_and_danger_preserve_known_tool_behavior() {
         let ws = PermissionPolicy {
             mode: PermissionMode::AcceptEdits,
             sandbox: SandboxPolicy::WorkspaceWrite,
@@ -204,6 +304,13 @@ mod tests {
         };
         assert_eq!(ws.decide("edit", "src/main.rs"), Action::Allow);
         assert_eq!(ws.decide("execute", "ls"), Action::Ask);
+
+        let ws_yolo = PermissionPolicy {
+            mode: PermissionMode::Yolo,
+            sandbox: SandboxPolicy::WorkspaceWrite,
+            rules: vec![],
+        };
+        assert_eq!(ws_yolo.decide("switch_mode", "agent"), Action::Allow);
 
         let danger = PermissionPolicy {
             mode: PermissionMode::Yolo,

@@ -24,18 +24,86 @@ export interface SkillInfo {
   source: string | null;
 }
 
+export type PermissionMode = "ask" | "accept_edits" | "yolo";
+export type Sandbox = "read_only" | "workspace_write" | "danger_full_access";
+
+export interface ExecutionPolicy {
+  mode: PermissionMode;
+  sandbox: Sandbox;
+}
+
 export interface SessionInfo {
   id: string;
   title: string;
+  title_origin: "default" | "automatic" | "manual";
+  /** Pinned sessions stay above the active recency list for their project. */
+  pinned: boolean;
   provider: string | { custom: string };
   model: string | null;
   cwd: string;
   worktree_path: string | null;
-  permission_mode: string;
+  /** Original selected project directory; `cwd` may instead point into an isolated worktree. */
+  project_path: string | null;
+  /** Exact local ref + commit used to create the isolated checkout. */
+  worktree_baseline?: ResolvedWorktreeBaseline | null;
+  /** Opaque persisted filesystem identity. Its presence distinguishes strongly verified rows. */
+  worktree_identity?: Record<string, unknown> | null;
+  permission_mode: PermissionMode;
+  sandbox_policy: Sandbox;
   acp_session_id: string | null;
   memory_read: MemoryAccess;
   memory_write: MemoryAccess;
   created_at: number;
+  /** Core-owned, revisioned run/input state; survives renderer and remote reconnects. */
+  activity?: SessionActivity;
+}
+
+export type PendingInputKind = "permission";
+
+export interface PendingInput {
+  input_id: string;
+  kind: PendingInputKind;
+  title: string;
+  options: [string, string][];
+  sequence: number;
+}
+
+export type RunFailureReason = "provider_error" | "interrupted";
+
+export type SessionRunState =
+  | { kind: "idle" }
+  | { kind: "running"; turn_id: string; prompt_request_id?: string | null }
+  | {
+      kind: "awaiting_input";
+      turn_id: string;
+      prompt_request_id?: string | null;
+      pending: PendingInput[];
+    }
+  | {
+      kind: "failed";
+      turn_id?: string | null;
+      reason: RunFailureReason;
+      message: string;
+    };
+
+export interface SessionActivity {
+  revision: number;
+  state: SessionRunState;
+}
+
+export type WorktreeBaselineKind = "current" | "origin_default";
+
+export interface ResolvedWorktreeBaseline {
+  kind: WorktreeBaselineKind;
+  ref: string;
+  sha: string;
+  display: string;
+}
+
+export interface WorktreeBaselineOption {
+  kind: WorktreeBaselineKind;
+  resolved: ResolvedWorktreeBaseline | null;
+  unavailable_reason: string | null;
 }
 
 export type MemoryAccess = "inherit" | "allow" | "deny";
@@ -146,18 +214,71 @@ export function describeBlock(b: DocBlock): string {
 
 /// Mirrors core `Event` (tagged by `event`, snake_case).
 export type CoreEvent =
-  | { event: "session_created"; session: string }
+  | {
+      event: "session_created";
+      session: string;
+      cwd?: string;
+      project_path?: string | null;
+      worktree_path?: string | null;
+      worktree_baseline?: ResolvedWorktreeBaseline | null;
+      request_id?: string | null;
+    }
   | { event: "memory_context"; session: string; receipt: MemoryReceipt }
-  | { event: "agent_text"; session: string; message_id: string; text: string }
-  | { event: "agent_thought"; session: string; text: string }
-  | { event: "tool_call"; session: string; id: string; title: string; status: string }
-  | { event: "plan"; session: string; entries: string[] }
+  | { event: "session_title_changed"; session: string; title: string }
+  | { event: "session_activity_changed"; session: string; activity: SessionActivity }
+  | {
+      event: "turn_started";
+      session: string;
+      request_id?: string | null;
+      transcript_seq?: number | null;
+    }
+  | {
+      event: "agent_text";
+      session: string;
+      message_id: string;
+      text: string;
+      transcript_seq?: number | null;
+    }
+  | {
+      event: "agent_thought";
+      session: string;
+      text: string;
+      transcript_seq?: number | null;
+    }
+  | {
+      event: "tool_call";
+      session: string;
+      id: string;
+      title: string;
+      status: string;
+      kind?: string | null;
+      agent_input?: unknown;
+      transcript_seq?: number | null;
+    }
+  | {
+      event: "plan";
+      session: string;
+      entries: string[];
+      transcript_seq?: number | null;
+    }
   | { event: "permission_request"; session: string; request_id: string; title: string; options: [string, string][] }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
+  | {
+      event: "execution_policy_changed";
+      session: string;
+      policy: ExecutionPolicy;
+      request_id?: string | null;
+    }
   | { event: "turn_ended"; session: string; stop_reason: string }
-  | { event: "error"; session: string | null; message: string };
+  | {
+      event: "error";
+      session: string | null;
+      message: string;
+      terminal: boolean;
+      request_id?: string | null;
+    };
 
 export interface PtyOutput {
   id: string;
@@ -180,11 +301,31 @@ export interface PtyAttach {
 /// Mirrors core `Part` (tagged by `kind`).
 export type Part =
   | { kind: "text"; text: string }
+  | { kind: "prompt"; text: string; display: string }
   | { kind: "reasoning"; text: string }
-  | { kind: "tool_call"; id: string; title: string; status: string }
+  | {
+      kind: "tool_call";
+      id: string;
+      title: string;
+      status: string;
+      tool_kind?: string | null;
+      agent_input?: unknown;
+    }
   | { kind: "plan"; entries: string[] };
 
-export type TranscriptEntry = [number, string, Part]; // [sequence, role, part]
+/** One durable transcript row. `seq` is stable within a session and orders snapshot/live merge. */
+export interface TranscriptEntry {
+  seq: number;
+  role: "user" | "agent";
+  part: Part;
+}
+
+/** A page never begins in the middle of a user turn. `next_before` is exclusive. */
+export interface TranscriptPage {
+  entries: TranscriptEntry[];
+  next_before: number | null;
+  snapshot_through: number | null;
+}
 
 export type SkillPayload =
   | { kind: "fragment"; text: string }
@@ -293,12 +434,38 @@ export async function listMemoryReceipts(session: string): Promise<MemoryReceipt
   return inTauri ? invoke<MemoryReceipt[]>("list_memory_receipts", { session }) : [];
 }
 
-export async function newSession(provider: string, cwd: string, useWorktree: boolean): Promise<void> {
-  if (inTauri) await invoke("new_session", { provider, cwd, useWorktree });
+export async function newSession(
+  provider: string,
+  cwd: string,
+  worktreeBase: WorktreeBaselineKind | null,
+  requestId: string,
+  worktreeBaseSha?: string | null,
+  initialPolicy?: ExecutionPolicy | null,
+): Promise<void> {
+  if (inTauri) {
+    await invoke("new_session", {
+      provider,
+      cwd,
+      useWorktree: worktreeBase !== null,
+      worktreeBase,
+      worktreeBaseSha: worktreeBaseSha ?? null,
+      requestId,
+      initialPolicy: initialPolicy ?? null,
+    });
+  }
 }
 
-export async function submitPrompt(session: string, doc: DocBlock[]): Promise<void> {
-  if (inTauri) await invoke("submit_prompt", { session, doc });
+/** Resolve selectable baselines from local refs only. This command never fetches. */
+export async function listWorktreeBaselines(cwd: string): Promise<WorktreeBaselineOption[]> {
+  return inTauri ? invoke<WorktreeBaselineOption[]>("list_worktree_baselines", { cwd }) : [];
+}
+
+export async function submitPrompt(
+  session: string,
+  doc: DocBlock[],
+  requestId: string,
+): Promise<void> {
+  if (inTauri) await invoke("submit_prompt", { session, doc, requestId });
 }
 
 export async function answerPermission(session: string, requestId: string, optionId: string | null): Promise<void> {
@@ -307,6 +474,15 @@ export async function answerPermission(session: string, requestId: string, optio
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {
   if (inTauri) await invoke("set_permission_mode", { session, mode });
+}
+
+export async function setExecutionPolicy(
+  session: string,
+  mode: PermissionMode,
+  sandbox: Sandbox,
+  requestId: string,
+): Promise<void> {
+  if (inTauri) await invoke("set_execution_policy", { session, mode, sandbox, requestId });
 }
 
 /// One entry in a directory listing, for the file tree in the side dock.
@@ -541,6 +717,21 @@ export async function sessionPreviews(): Promise<Record<string, string>> {
   return Object.fromEntries(rows);
 }
 
+export interface SessionSearchHit {
+  session_id: string;
+  title: string;
+  cwd: string;
+  archived: boolean;
+  role: "user" | "agent";
+  snippet: string;
+  seq: number;
+}
+
+/** Bounded full-text search over canonical user prompts and agent output. */
+export async function searchSessions(query: string, limit = 12): Promise<SessionSearchHit[]> {
+  return inTauri ? invoke<SessionSearchHit[]>("search_sessions", { query, limit }) : [];
+}
+
 // ---- projects ----------------------------------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {
@@ -638,16 +829,26 @@ export async function ptyKill(id: string): Promise<void> {
   if (inTauri) await invoke("pty_kill", { id });
 }
 
-export async function getTranscript(session: string): Promise<TranscriptEntry[]> {
-  return inTauri ? invoke<TranscriptEntry[]>("get_transcript", { session }) : [];
+export async function getTranscriptPage(
+  session: string,
+  before: number | null = null,
+  limit = 20,
+): Promise<TranscriptPage> {
+  return inTauri
+    ? invoke<TranscriptPage>("get_transcript_page", { session, before, limit })
+    : { entries: [], next_before: null, snapshot_through: null };
 }
 
 // ---- git (F1) --------------------------------------------------------------------------------
 
 export interface GitFile {
   path: string;
+  original_path: string | null;
   staged: boolean;
+  unstaged: boolean;
   state: string;
+  staged_state: string | null;
+  unstaged_state: string | null;
 }
 export interface GitStatus {
   is_repo: boolean;
@@ -655,6 +856,29 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   files: GitFile[];
+}
+
+export type SourceControlProviderKind =
+  | "github"
+  | "gitlab"
+  | "azure-devops"
+  | "bitbucket"
+  | "unknown";
+
+export interface SourceControlInfo {
+  remote_name: string;
+  provider: SourceControlProviderKind;
+  provider_name: string;
+  host: string;
+  web_url: string | null;
+  change_request_label: "PR" | "MR" | "change request";
+  create_change_request_supported: boolean;
+  required_cli: string | null;
+  required_cli_available: boolean;
+}
+
+export async function gitSourceControlInfo(cwd: string): Promise<SourceControlInfo | null> {
+  return inTauri ? invoke<SourceControlInfo | null>("git_source_control_info", { cwd }) : null;
 }
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {
@@ -676,11 +900,55 @@ export async function gitCheckpoint(cwd: string, message: string): Promise<Check
 export async function gitCheckpoints(cwd: string): Promise<Checkpoint[]> {
   return inTauri ? invoke<Checkpoint[]>("git_checkpoints", { cwd }) : [];
 }
-export async function gitDiff(cwd: string, path: string | null): Promise<string> {
-  return inTauri ? invoke<string>("git_diff", { cwd, path }) : "";
+
+export type GitDiffScope = "all" | "staged" | "unstaged";
+
+export interface GitDiffResult {
+  text: string;
+  truncated: boolean;
+  truncation_reason: string | null;
+  returned_bytes: number;
+  files: number;
 }
-export async function gitDiffSince(cwd: string, commit: string): Promise<string> {
-  return inTauri ? invoke<string>("git_diff_since", { cwd, commit }) : "";
+
+export interface GitDiffStat {
+  added: number;
+  deleted: number;
+  files: number;
+  truncated: boolean;
+  truncation_reason: string | null;
+}
+
+const EMPTY_DIFF: GitDiffResult = {
+  text: "",
+  truncated: false,
+  truncation_reason: null,
+  returned_bytes: 0,
+  files: 0,
+};
+
+export async function gitDiff(
+  cwd: string,
+  path: string | null,
+  scope: GitDiffScope = "all",
+): Promise<GitDiffResult> {
+  return inTauri ? invoke<GitDiffResult>("git_diff", { cwd, path, scope }) : EMPTY_DIFF;
+}
+export async function gitDiffSince(cwd: string, commit: string): Promise<GitDiffResult> {
+  return inTauri
+    ? invoke<GitDiffResult>("git_diff_since", { cwd, commit })
+    : EMPTY_DIFF;
+}
+export async function gitDiffStat(cwd: string): Promise<GitDiffStat> {
+  return inTauri
+    ? invoke<GitDiffStat>("git_diff_stat", { cwd })
+    : { added: 0, deleted: 0, files: 0, truncated: false, truncation_reason: null };
+}
+export async function gitStagePaths(cwd: string, paths: string[]): Promise<void> {
+  if (inTauri) await invoke("git_stage_paths", { cwd, paths });
+}
+export async function gitUnstagePaths(cwd: string, paths: string[]): Promise<void> {
+  if (inTauri) await invoke("git_unstage_paths", { cwd, paths });
 }
 export async function gitRevert(cwd: string, commit: string): Promise<void> {
   if (inTauri) await invoke("git_revert", { cwd, commit });
@@ -713,6 +981,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["open_source_control", "Mod+Shift+G", "Source control"],
   ["open_market", "Mod+Shift+M", "Open Plugin Hub"],
   ["open_files", "Mod+P", "Browse workspace files"],
+  ["search_workspace", "Mod+Shift+F", "Search workspace contents"],
   ["open_issues", "Mod+Shift+I", "Open issues"],
   ["open_usage", "Mod+Shift+U", "Open usage"],
   ["open_settings", "Mod+,", "Open settings"],
@@ -858,8 +1127,11 @@ export async function applyPluginScaffold(
 // ---- remote control (F10) --------------------------------------------------------------------
 
 export interface RemoteEndpoint {
+  id: string;
   label: string;
   url: string;
+  /** Loopback remains copyable for this Mac, but must never be encoded for another device. */
+  qr_shareable: boolean;
 }
 
 export interface RemoteStatus {
@@ -868,6 +1140,7 @@ export interface RemoteStatus {
 }
 
 export interface RemotePairingLink {
+  endpoint_id: string;
   url: string;
   token: string;
   expires_in: number;
@@ -895,9 +1168,17 @@ export async function remoteStatus(): Promise<RemoteStatus | null> {
   return inTauri ? invoke<RemoteStatus | null>("remote_status") : null;
 }
 
-/** Mint a fresh one-time pairing link (URL + QR SVG). */
-export async function remotePairingLink(ttlSecs?: number): Promise<RemotePairingLink | null> {
-  return inTauri ? invoke<RemotePairingLink>("remote_pairing_link", { ttlSecs: ttlSecs ?? null }) : null;
+/** Mint a fresh one-time pairing link for an advertised endpoint (URL + optional QR SVG). */
+export async function remotePairingLink(
+  endpointId?: string,
+  ttlSecs?: number,
+): Promise<RemotePairingLink | null> {
+  return inTauri
+    ? invoke<RemotePairingLink>("remote_pairing_link", {
+        endpointId: endpointId ?? null,
+        ttlSecs: ttlSecs ?? null,
+      })
+    : null;
 }
 
 export async function remoteDevices(): Promise<RemoteDevice[]> {
@@ -961,8 +1242,6 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
 }
 
 // ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
-
-export type Sandbox = "read_only" | "workspace_write" | "danger_full_access";
 
 export async function setSandbox(session: string, sandbox: Sandbox): Promise<void> {
   if (inTauri) await invoke("set_sandbox", { session, sandbox });
@@ -1040,6 +1319,48 @@ export async function listFiles(cwd: string, query: string, limit = 50): Promise
   return invoke<string[]>("list_files", { cwd, query, limit });
 }
 
+export interface WorkspaceSearchOptions {
+  regex: boolean;
+  case_sensitive: boolean;
+  whole_word: boolean;
+}
+
+export interface WorkspaceContentMatch {
+  path: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
+export interface WorkspaceSearchResult {
+  matches: WorkspaceContentMatch[];
+  truncated: boolean;
+  truncation_reason: string | null;
+}
+
+export async function searchWorkspaceContents(
+  cwd: string,
+  query: string,
+  options: WorkspaceSearchOptions,
+  requestId: string,
+  limit = 200,
+): Promise<WorkspaceSearchResult> {
+  if (!inTauri) return { matches: [], truncated: false, truncation_reason: null };
+  return invoke<WorkspaceSearchResult>("search_workspace_contents", {
+    cwd,
+    query,
+    options,
+    limit,
+    requestId,
+  });
+}
+
+export async function cancelWorkspaceContentSearch(requestId: string): Promise<boolean> {
+  return inTauri
+    ? invoke<boolean>("cancel_workspace_content_search", { requestId })
+    : false;
+}
+
 export async function listRules(cwd: string): Promise<string[]> {
   return inTauri ? invoke<string[]>("list_rules", { cwd }) : [];
 }
@@ -1051,6 +1372,9 @@ export async function renameSession(session: string, title: string): Promise<voi
 }
 export async function archiveSession(session: string, archived: boolean): Promise<void> {
   if (inTauri) await invoke("archive_session", { session, archived });
+}
+export async function pinSession(session: string, pinned: boolean): Promise<void> {
+  if (inTauri) await invoke("pin_session", { session, pinned });
 }
 export async function listArchivedSessions(): Promise<SessionInfo[]> {
   return inTauri ? invoke<SessionInfo[]>("list_archived_sessions") : [];

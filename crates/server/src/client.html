@@ -13,6 +13,9 @@
       .dot.on { background: #16a34a; }
       main { display: flex; flex-direction: column; height: calc(100vh - 42px); }
       #log { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 14px; line-height: 1.5; }
+      #older-row { display: none; justify-content: center; padding-bottom: 6px; }
+      #older-row.show { display: flex; }
+      #older { color: #9ca3af; padding: 5px 9px; font-size: 12px; }
       .msg { margin: 6px 0; white-space: pre-wrap; }
       .msg.user { color: #fff; font-weight: 600; }
       .msg.tool { color: #eab308; }
@@ -23,12 +26,16 @@
       select, input, textarea, button { font: inherit; border-radius: 8px; border: 1px solid #2b2f38; background: #0f1115; color: #e8e8ea; padding: 8px 10px; }
       textarea { flex: 1 1 100%; min-height: 54px; resize: vertical; }
       button.run { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
       #perm { padding: 10px 14px; background: #24202b; display: none; }
       #perm.show { display: block; }
       #perm button { margin-right: 8px; margin-top: 6px; }
       #sessions { display: flex; gap: 6px; overflow-x: auto; padding: 6px 8px; background: #12151b; }
       .sess { border: 1px solid #2b2f38; border-radius: 999px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
       .sess.active { background: #1e2a4a; border-color: #2563eb; }
+      .sess.running { border-color: #2563eb; }
+      .sess.awaiting_input { border-color: #eab308; color: #fde68a; }
+      .sess.failed { border-color: #ef4444; color: #fecaca; }
       #pairing { position: fixed; inset: 0; background: #0f1115; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
       #pairing.show { display: flex; }
       #pairing h2 { margin: 0; }
@@ -40,7 +47,10 @@
     <div id="sessions"></div>
     <div id="perm"></div>
     <main>
-      <div id="log"></div>
+      <div id="log">
+        <div id="older-row"><button id="older" type="button">Load earlier turns</button></div>
+        <div id="messages"></div>
+      </div>
       <div class="bar">
         <select id="provider">
           <option value="grok">Grok</option>
@@ -66,48 +76,301 @@
     <script>
       const BEARER_KEY = "codetwo.remote.bearer";
       const log = document.getElementById("log");
+      const messagesEl = document.getElementById("messages");
+      const olderRow = document.getElementById("older-row");
+      const olderButton = document.getElementById("older");
       const statusDot = document.getElementById("status");
       const sessionsEl = document.getElementById("sessions");
       const permEl = document.getElementById("perm");
       const pairingEl = document.getElementById("pairing");
+      const runButton = document.getElementById("run");
       let active = null;
       let pending = null;
+      let pendingRequestId = null;
+      let permissionQueue = [];
+      const runningSessions = new Set();
+      const pendingPrompts = new Map();
+      const acceptedPromptRequests = new Map();
       let sessions = [];
+      const sessionActivities = new Map();
+      let transcriptRequest = null;
+      let transcriptGeneration = 0;
+      let transcriptNextBefore = null;
+      const renderedTranscriptSeqs = new Set();
       let ws;
       let retryTimer = null;
 
-      function add(text, cls) {
+      function messageNode(text, cls) {
         const d = document.createElement("div");
         d.className = "msg " + (cls || "");
         d.textContent = text;
-        log.appendChild(d);
+        return d;
+      }
+      function add(text, cls) {
+        messagesEl.appendChild(messageNode(text, cls));
         log.scrollTop = log.scrollHeight;
       }
       function renderSessions() {
         sessionsEl.innerHTML = "";
         sessions.forEach((s) => {
           const b = document.createElement("div");
-          b.className = "sess" + (s.id === active ? " active" : "");
-          b.textContent = s.title || s.id.slice(0, 6);
+          const activity = s.activity?.state?.kind || "idle";
+          b.className = "sess" + (s.id === active ? " active" : "") + ` ${activity}`;
+          const marker = activity === "awaiting_input"
+            ? "?"
+            : activity === "failed"
+              ? "!"
+              : activity === "running"
+                ? "•"
+                : "";
+          b.textContent = `${marker ? marker + " " : ""}${s.title || s.id.slice(0, 6)}`;
+          if (activity === "failed" && s.activity?.state?.message) b.title = s.activity.state.message;
           b.onclick = () => selectSession(s.id);
           sessionsEl.appendChild(b);
         });
+        renderRunState();
+      }
+      function syncActivitySnapshot() {
+        if (!sessions.some((session) => session.activity != null)) return;
+        runningSessions.clear();
+        const restoredPermissions = [];
+        for (const session of sessions) {
+          const state = session.activity?.state;
+          if (state?.kind === "running" || state?.kind === "awaiting_input") {
+            runningSessions.add(session.id);
+          }
+          if (state?.kind === "awaiting_input") {
+            for (const pendingInput of state.pending || []) {
+              restoredPermissions.push({
+                session: session.id,
+                request_id: pendingInput.input_id,
+                title: pendingInput.title,
+                options: pendingInput.options,
+                sequence: pendingInput.sequence,
+              });
+            }
+          }
+        }
+        for (const pendingPrompt of pendingPrompts.values()) runningSessions.add(pendingPrompt.session);
+        permissionQueue = restoredPermissions.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+        renderPermission();
+      }
+      function renderRunState() {
+        const running = pendingRequestId !== null || (active && isSessionBusy(active));
+        runButton.disabled = running;
+        runButton.textContent = running ? "Running…" : "Run ▸";
       }
       function selectSession(id) {
+        transcriptGeneration += 1;
+        transcriptRequest = null;
         active = id;
         renderSessions();
-        log.innerHTML = "";
-        send({ req: "transcript", session: id });
+        messagesEl.replaceChildren();
+        renderedTranscriptSeqs.clear();
+        transcriptNextBefore = null;
+        renderOlderState();
+        requestTranscript(null);
       }
-      function renderPart(role, part) {
+      function renderPart(role, part, target = messagesEl) {
+        let node = null;
         switch (part.kind) {
-          case "text": add(part.text, role === "user" ? "user" : "agent"); break;
-          case "reasoning": add(part.text, "thought"); break;
-          case "tool_call": add(`⚙ ${part.title || part.id} — ${part.status}`, "tool"); break;
-          case "plan": add("☰ " + (part.entries || []).join("\n"), "tool"); break;
+          case "text": node = messageNode(part.text, role === "user" ? "user" : "agent"); break;
+          case "prompt": node = messageNode(part.text || part.display, "user"); break;
+          case "reasoning": node = messageNode(part.text, "thought"); break;
+          case "tool_call": node = messageNode(`⚙ ${part.title || part.id} — ${part.status}`, "tool"); break;
+          case "plan": node = messageNode("☰ " + (part.entries || []).join("\n"), "tool"); break;
+        }
+        if (node) target.appendChild(node);
+      }
+      function renderOlderState() {
+        const loadingOlder = transcriptRequest?.before != null;
+        olderRow.classList.toggle("show", transcriptNextBefore != null || loadingOlder);
+        olderButton.disabled = transcriptRequest != null;
+        olderButton.textContent = loadingOlder ? "Loading earlier turns…" : "Load earlier turns";
+      }
+      function requestTranscript(before) {
+        if (!active || transcriptRequest) return false;
+        const requestId = crypto.randomUUID();
+        const request = {
+          id: requestId,
+          session: active,
+          before,
+          generation: ++transcriptGeneration,
+          events: [],
+          turnStartSeqs: [],
+          scrollHeight: log.scrollHeight,
+          scrollTop: log.scrollTop,
+        };
+        transcriptRequest = request;
+        renderOlderState();
+        if (send({
+          req: "transcript",
+          session: active,
+          before,
+          limit: 20,
+          request_id: requestId,
+        })) return true;
+        transcriptRequest = null;
+        renderOlderState();
+        return false;
+      }
+      function appendTranscriptEvent(ev, scroll = true) {
+        const seq = ev.transcript_seq;
+        if (seq != null && renderedTranscriptSeqs.has(seq)) return;
+        switch (ev.event) {
+          case "agent_text": renderPart("agent", { kind: "text", text: ev.text }); break;
+          case "agent_thought": renderPart("agent", { kind: "reasoning", text: ev.text }); break;
+          case "tool_call": renderPart("agent", {
+            kind: "tool_call",
+            id: ev.id,
+            title: ev.title,
+            status: ev.status,
+          }); break;
+          case "plan": renderPart("agent", { kind: "plan", entries: ev.entries }); break;
+          default: return;
+        }
+        if (seq != null) renderedTranscriptSeqs.add(seq);
+        if (scroll) log.scrollTop = log.scrollHeight;
+      }
+      function renderTranscriptPage(msg, request) {
+        if (request.before == null) renderedTranscriptSeqs.clear();
+        const fragment = document.createDocumentFragment();
+        for (const entry of msg.entries || []) {
+          if (renderedTranscriptSeqs.has(entry.seq)) continue;
+          renderPart(entry.role, entry.part, fragment);
+          renderedTranscriptSeqs.add(entry.seq);
+        }
+        if (request.before == null) {
+          messagesEl.replaceChildren(fragment);
+        } else {
+          messagesEl.insertBefore(fragment, messagesEl.firstChild);
+          log.scrollTop = request.scrollTop + (log.scrollHeight - request.scrollHeight);
+        }
+        transcriptNextBefore = msg.next_before ?? null;
+        const snapshotThrough = msg.snapshot_through ?? -1;
+        for (const ev of request.events) {
+          // A latest page covers every durable row through its high-water mark, including rows a
+          // snapshot projection intentionally slimmed. Older pages exclude the live tail, so they
+          // use the explicit rendered-seq set instead of this range shortcut.
+          if (request.before == null && ev.transcript_seq != null && ev.transcript_seq <= snapshotThrough) {
+            continue;
+          }
+          appendTranscriptEvent(ev, request.before == null);
+        }
+        renderOlderState();
+      }
+      function send(msg) {
+        if (!ws || ws.readyState !== 1) return false;
+        try {
+          ws.send(JSON.stringify(msg));
+          return true;
+        } catch {
+          return false;
         }
       }
-      function send(msg) { ws && ws.readyState === 1 && ws.send(JSON.stringify(msg)); }
+
+      function ownsCreationResult(ev) {
+        return pendingRequestId !== null && ev.request_id === pendingRequestId;
+      }
+
+      function promptText(doc) {
+        return (doc || [])
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("\n\n");
+      }
+
+      function restorePromptDocs(docs) {
+        const restored = docs.map(promptText).filter(Boolean);
+        if (restored.length === 0) return;
+        const prompt = document.getElementById("prompt");
+        if (prompt.value) restored.push(prompt.value);
+        prompt.value = restored.join("\n\n");
+      }
+
+      function isSessionBusy(session) {
+        if (runningSessions.has(session)) return true;
+        return Array.from(pendingPrompts.values()).some((item) => item.session === session);
+      }
+
+      function clearAcceptedPromptsForSession(session) {
+        for (const [requestId, acceptedSession] of acceptedPromptRequests) {
+          if (acceptedSession === session) acceptedPromptRequests.delete(requestId);
+        }
+      }
+
+      function submitPrompt(session, doc, restoreOnFailure) {
+        const requestId = crypto.randomUUID();
+        pendingPrompts.set(requestId, { session, doc });
+        // The request is visibly in flight before the socket send. A synchronous send failure rolls
+        // this optimistic state back below; TurnStarted is the authority that promotes it to live.
+        renderSessions();
+        if (send({ op: "prompt", session, doc, request_id: requestId })) return true;
+        const wasPending = pendingPrompts.delete(requestId);
+        if (restoreOnFailure && wasPending) restorePromptDocs([doc]);
+        renderSessions();
+        return false;
+      }
+
+      function permissionIndex(ev) {
+        return permissionQueue.findIndex(
+          (item) => item.session === ev.session && item.request_id === ev.request_id,
+        );
+      }
+
+      function renderPermission() {
+        permEl.replaceChildren();
+        const ev = permissionQueue[0];
+        if (!ev) {
+          permEl.classList.remove("show");
+          return;
+        }
+
+        permEl.classList.add("show");
+        const label = document.createElement("b");
+        label.textContent = "Permission:";
+        permEl.appendChild(label);
+        permEl.appendChild(document.createTextNode(` ${ev.title} `));
+        if (permissionQueue.length > 1) {
+          permEl.appendChild(document.createTextNode(`(1 of ${permissionQueue.length}) `));
+        }
+
+        const answer = (optionId) => {
+          if (!send({
+            op: "answer_permission",
+            session: ev.session,
+            request_id: ev.request_id,
+            option_id: optionId,
+          })) return;
+          const index = permissionIndex(ev);
+          if (index >= 0) permissionQueue.splice(index, 1);
+          renderPermission();
+        };
+        (ev.options || []).forEach(([id, optionLabel]) => {
+          const button = document.createElement("button");
+          button.textContent = optionLabel;
+          button.onclick = () => answer(id);
+          permEl.appendChild(button);
+        });
+        const cancel = document.createElement("button");
+        cancel.textContent = "Cancel";
+        cancel.onclick = () => answer(null);
+        permEl.appendChild(cancel);
+      }
+
+      function enqueuePermission(ev) {
+        const index = permissionIndex(ev);
+        if (index >= 0) permissionQueue[index] = ev;
+        else permissionQueue.push(ev);
+        renderPermission();
+      }
+
+      function clearPermissionsForSession(session) {
+        const remaining = permissionQueue.filter((item) => item.session !== session);
+        if (remaining.length === permissionQueue.length) return;
+        permissionQueue = remaining;
+        renderPermission();
+      }
 
       function deviceName() {
         const ua = navigator.userAgent;
@@ -147,6 +410,217 @@
         return true;
       }
 
+      function handleMessage(msg) {
+        if (msg.kind === "sessions") {
+          sessions = (msg.sessions || []).map((session) => {
+            const current = sessionActivities.get(session.id);
+            const incoming = session.activity;
+            const activity = current && (!incoming || current.revision > incoming.revision)
+              ? current
+              : incoming;
+            if (activity) sessionActivities.set(session.id, activity);
+            return activity ? { ...session, activity } : session;
+          });
+          syncActivitySnapshot();
+          if (!active && sessions[0]) selectSession(sessions[0].id);
+          else renderSessions();
+          return;
+        }
+        if (msg.kind === "sessions_error") {
+          add("⚠ sessions unavailable: " + msg.message, "sys");
+          return;
+        }
+        if (msg.kind === "transcript") {
+          const request = transcriptRequest;
+          if (
+            !request ||
+            msg.session !== active ||
+            msg.session !== request.session ||
+            msg.request_id !== request.id ||
+            request.generation !== transcriptGeneration
+          ) return;
+          transcriptRequest = null;
+          renderTranscriptPage(msg, request);
+          const snapshotThrough = msg.snapshot_through ?? -1;
+          if (request.turnStartSeqs.some((seq) => seq > snapshotThrough)) {
+            requestTranscript(null);
+          }
+          return;
+        }
+        if (msg.kind === "transcript_error") {
+          const request = transcriptRequest;
+          if (!request || msg.request_id !== request.id || msg.session !== request.session) return;
+          transcriptRequest = null;
+          renderOlderState();
+          add("⚠ transcript unavailable: " + msg.message, "sys");
+          return;
+        }
+        if (msg.kind === "lagged") {
+          add(`⚠ connection lagged — ${msg.missed} event(s) dropped, resyncing…`, "sys");
+          transcriptGeneration += 1;
+          transcriptRequest = null;
+          send({ req: "sessions" });
+          if (active) requestTranscript(null);
+          return;
+        }
+        if (msg.kind !== "event") return;
+        const ev = msg.event;
+        const transcriptEvent = ["agent_text", "agent_thought", "tool_call", "plan"].includes(ev.event);
+        const bufferTranscriptEvent = transcriptEvent
+          && ev.session === active
+          && transcriptRequest?.session === active;
+        if (bufferTranscriptEvent) transcriptRequest.events.push(ev);
+        if (
+          ev.event === "turn_started" &&
+          ev.session === active &&
+          transcriptRequest?.session === active &&
+          ev.transcript_seq != null
+        ) {
+          transcriptRequest.turnStartSeqs.push(ev.transcript_seq);
+        }
+        switch (ev.event) {
+          case "session_created":
+            if (!sessions.some((item) => item.id === ev.session)) sessions.unshift({ id: ev.session, title: "session" });
+            if (!ownsCreationResult(ev)) { renderSessions(); break; }
+            {
+              const pendingDoc = pending;
+              pending = null;
+              pendingRequestId = null;
+              active = ev.session;
+              // Registering the prompt before render/send makes the newly created session visibly
+              // busy without pretending the core has accepted it yet.
+              if (pendingDoc) submitPrompt(ev.session, pendingDoc, true);
+              else renderSessions();
+            }
+            break;
+          case "session_title_changed": {
+            const session = sessions.find((item) => item.id === ev.session);
+            if (session) session.title = ev.title;
+            renderSessions();
+            break;
+          }
+          case "session_activity_changed": {
+            let session = sessions.find((item) => item.id === ev.session);
+            if (!session) {
+              session = { id: ev.session, title: "session", activity: ev.activity };
+              sessions.unshift(session);
+            }
+            const currentRevision = session.activity?.revision ?? -1;
+            if (ev.activity.revision < currentRevision) break;
+            session.activity = ev.activity;
+            sessionActivities.set(ev.session, ev.activity);
+            syncActivitySnapshot();
+            renderSessions();
+            break;
+          }
+          case "turn_started": {
+            runningSessions.add(ev.session);
+            let ownedPrompt = false;
+            if (ev.request_id != null) {
+              const prompt = pendingPrompts.get(ev.request_id);
+              if (prompt?.session === ev.session) {
+                pendingPrompts.delete(ev.request_id);
+                acceptedPromptRequests.set(ev.request_id, ev.session);
+                ownedPrompt = true;
+              }
+            }
+            renderSessions();
+            if (ev.session === active && !ownedPrompt && !transcriptRequest) requestTranscript(null);
+            break;
+          }
+          case "agent_text":
+          case "agent_thought":
+          case "tool_call":
+          case "plan":
+            if (ev.session === active && !bufferTranscriptEvent) appendTranscriptEvent(ev);
+            break;
+          case "permission_request": enqueuePermission(ev); break;
+          case "turn_ended":
+            runningSessions.delete(ev.session);
+            clearAcceptedPromptsForSession(ev.session);
+            clearPermissionsForSession(ev.session);
+            renderSessions();
+            if (ev.session === active) add(`— turn ended: ${ev.stop_reason}`, "sys");
+            break;
+          case "error": {
+            const pendingPrompt = ev.request_id == null
+              ? null
+              : pendingPrompts.get(ev.request_id);
+            const ownsPendingPrompt = pendingPrompt != null
+              && (ev.session == null || pendingPrompt.session === ev.session);
+            const acceptedSession = ev.request_id == null
+              ? null
+              : acceptedPromptRequests.get(ev.request_id);
+            const ownsAcceptedPrompt = acceptedSession != null
+              && (ev.session == null || acceptedSession === ev.session);
+            const ownsCreation = ownsCreationResult(ev);
+            const requestScoped = ev.request_id != null;
+            const foreignRequestError = requestScoped
+              && !ownsCreation
+              && !ownsPendingPrompt
+              && !ownsAcceptedPrompt;
+            if (foreignRequestError) {
+              // A foreign terminal prompt error still ends shared session state; it just does not
+              // belong in this client's log or draft state.
+              if (ev.terminal && ev.session) {
+                runningSessions.delete(ev.session);
+                clearAcceptedPromptsForSession(ev.session);
+                clearPermissionsForSession(ev.session);
+                renderSessions();
+              }
+              break;
+            }
+            add("✗ " + ev.message, "err");
+
+            // A correlated error before TurnStarted means the prompt was rejected. Restore its
+            // exact user text and roll back only this client's optimistic request state.
+            if (ownsPendingPrompt) {
+              pendingPrompts.delete(ev.request_id);
+              restorePromptDocs([pendingPrompt.doc]);
+              renderSessions();
+            }
+            const terminalSession = ev.session
+              || (ownsPendingPrompt ? pendingPrompt.session : null)
+              || (ownsAcceptedPrompt ? acceptedSession : null);
+            if (ev.terminal && terminalSession) {
+              runningSessions.delete(terminalSession);
+              clearAcceptedPromptsForSession(terminalSession);
+              clearPermissionsForSession(terminalSession);
+              renderSessions();
+            }
+            if (ev.terminal && ownsCreation) {
+              restorePromptDocs([pending]);
+              pending = null; pendingRequestId = null;
+              renderRunState();
+            }
+            break;
+          }
+        }
+      }
+
+      function handleSocketClose() {
+        statusDot.classList.remove("on");
+        add("disconnected — retrying…", "sys");
+        const drafts = [];
+        if (pending) drafts.push(pending);
+        for (const prompt of pendingPrompts.values()) drafts.push(prompt.doc);
+        restorePromptDocs(drafts);
+        pending = null;
+        pendingRequestId = null;
+        pendingPrompts.clear();
+        acceptedPromptRequests.clear();
+        runningSessions.clear();
+        permissionQueue = [];
+        renderPermission();
+        transcriptGeneration += 1;
+        transcriptRequest = null;
+        transcriptNextBefore = null;
+        renderOlderState();
+        ws = null;
+        renderSessions();
+        scheduleRetry();
+      }
+
       // Connecting: the stored bearer buys a short-lived single-use ticket; only the ticket ever
       // appears in the socket URL.
       async function connect() {
@@ -171,76 +645,38 @@
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
         ws = new WebSocket(`${proto}//${location.host}/ws?ticket=${encodeURIComponent(ticket)}`);
         ws.onopen = () => { pairingEl.classList.remove("show"); statusDot.classList.add("on"); add("connected", "sys"); };
-        ws.onclose = () => { statusDot.classList.remove("on"); add("disconnected — retrying…", "sys"); scheduleRetry(); };
-        ws.onmessage = (m) => {
-          const msg = JSON.parse(m.data);
-          if (msg.kind === "sessions") {
-            sessions = msg.sessions || [];
-            if (!active && sessions[0]) selectSession(sessions[0].id);
-            else renderSessions();
-            return;
-          }
-          if (msg.kind === "transcript") {
-            if (msg.session !== active) return;
-            log.innerHTML = "";
-            (msg.parts || []).forEach((p) => renderPart(p.role, p.part));
-            return;
-          }
-          if (msg.kind === "lagged") {
-            add(`⚠ connection lagged — ${msg.missed} event(s) dropped, resyncing…`, "sys");
-            if (active) send({ req: "transcript", session: active });
-            return;
-          }
-          if (msg.kind !== "event") return;
-          const ev = msg.event;
-          switch (ev.event) {
-            case "session_created":
-              active = ev.session; sessions.unshift({ id: ev.session, title: "session" }); renderSessions();
-              if (pending) { send({ op: "prompt", session: ev.session, doc: pending }); pending = null; }
-              break;
-            case "agent_text": if (ev.session === active) add(ev.text, "agent"); break;
-            case "agent_thought": if (ev.session === active) add(ev.text, "thought"); break;
-            case "tool_call": if (ev.session === active) add(`⚙ ${ev.title || ev.id} — ${ev.status}`, "tool"); break;
-            case "plan": if (ev.session === active) add("☰ " + (ev.entries || []).join("\n"), "tool"); break;
-            case "permission_request": showPerm(ev); break;
-            case "turn_ended": if (ev.session === active) add(`— turn ended: ${ev.stop_reason}`, "sys"); break;
-            case "error": add("✗ " + ev.message, "err"); break;
-          }
-        };
+        ws.onclose = handleSocketClose;
+        ws.onmessage = (message) => handleMessage(JSON.parse(message.data));
       }
       function scheduleRetry() {
         if (!retryTimer) retryTimer = setTimeout(connect, 1500);
       }
-      function showPerm(ev) {
-        permEl.classList.add("show");
-        permEl.innerHTML = `<b>Permission:</b> ${ev.title} `;
-        (ev.options || []).forEach(([id, label]) => {
-          const b = document.createElement("button");
-          b.textContent = label;
-          b.onclick = () => { send({ op: "answer_permission", session: ev.session, request_id: ev.request_id, option_id: id }); permEl.classList.remove("show"); };
-          permEl.appendChild(b);
-        });
-        const c = document.createElement("button");
-        c.textContent = "Cancel";
-        c.onclick = () => { send({ op: "answer_permission", session: ev.session, request_id: ev.request_id, option_id: null }); permEl.classList.remove("show"); };
-        permEl.appendChild(c);
-      }
-
       function run() {
-        const text = document.getElementById("prompt").value.trim();
+        if (pendingRequestId !== null || (active && isSessionBusy(active))) return;
+        const prompt = document.getElementById("prompt");
+        const text = prompt.value.trim();
         if (!text) return;
-        add(text, "user");
-        document.getElementById("prompt").value = "";
         const doc = [{ type: "text", text }];
-        if (active) send({ op: "prompt", session: active, doc });
-        else newSession(doc);
+        if (active) {
+          if (!submitPrompt(active, doc, false)) return;
+        } else if (!newSession(doc)) return;
+        add(text, "user");
+        prompt.value = "";
       }
       function newSession(doc) {
+        if (pendingRequestId !== null) return false;
+        const requestId = crypto.randomUUID();
+        if (!send({ op: "new_session", provider: document.getElementById("provider").value, cwd: document.getElementById("cwd").value || ".", use_worktree: false, request_id: requestId })) return false;
         pending = doc || null;
-        send({ op: "new_session", provider: document.getElementById("provider").value, cwd: document.getElementById("cwd").value || ".", use_worktree: false });
+        pendingRequestId = requestId;
+        renderRunState();
+        return true;
       }
       document.getElementById("run").onclick = run;
       document.getElementById("new").onclick = () => newSession(null);
+      olderButton.onclick = () => {
+        if (transcriptNextBefore != null) requestTranscript(transcriptNextBefore);
+      };
       document.getElementById("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); });
 
       maybePair().then(() => connect());

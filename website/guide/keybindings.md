@@ -52,6 +52,7 @@ silently do nothing.
 | Source control | `Mod+Shift+G` |
 | Plugin Hub | `Mod+Shift+M` |
 | Browse workspace files | `Mod+P` |
+| Search workspace contents | `Mod+Shift+F` |
 | Issues (GitHub / Linear) | `Mod+Shift+I` |
 | Usage | `Mod+Shift+U` |
 | Settings | `Mod+,` |

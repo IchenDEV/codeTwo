@@ -43,7 +43,11 @@ fn parse_args() -> Result<Args, String> {
             "--provider" | "-p" => provider = it.next().ok_or("--provider needs a value")?,
             "--cwd" | "-C" => cwd = it.next().ok_or("--cwd needs a value")?,
             "--timeout" => {
-                timeout = it.next().ok_or("--timeout needs a value")?.parse().map_err(|_| "bad --timeout")?
+                timeout = it
+                    .next()
+                    .ok_or("--timeout needs a value")?
+                    .parse()
+                    .map_err(|_| "bad --timeout")?
             }
             "--yolo" => yolo = true,
             "--json" => json = true,
@@ -55,7 +59,14 @@ fn parse_args() -> Result<Args, String> {
     if prompt.is_empty() {
         return Err("no prompt given".into());
     }
-    Ok(Args { provider, cwd, prompt, yolo, json, timeout })
+    Ok(Args {
+        provider,
+        cwd,
+        prompt,
+        yolo,
+        json,
+        timeout,
+    })
 }
 
 fn parse_provider(s: &str) -> ProviderId {
@@ -104,6 +115,10 @@ async fn main() -> std::process::ExitCode {
             provider: parse_provider(&args.provider),
             cwd: args.cwd.clone(),
             use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: None,
+            initial_policy: None,
         })
         .await
     {
@@ -118,7 +133,7 @@ async fn main() -> std::process::ExitCode {
                 println!("{}", serde_json::to_string(&ev).unwrap_or_default());
             }
             match &ev {
-                Event::SessionCreated { session } => {
+                Event::SessionCreated { session, .. } => {
                     if args.yolo {
                         let _ = engine
                             .submit(Op::SetPermissionMode {
@@ -127,8 +142,16 @@ async fn main() -> std::process::ExitCode {
                             })
                             .await;
                     }
-                    let doc = vec![DocBlock::Text { text: args.prompt.clone() }];
-                    let _ = engine.submit(Op::Prompt { session: session.clone(), doc }).await;
+                    let doc = vec![DocBlock::Text {
+                        text: args.prompt.clone(),
+                    }];
+                    let _ = engine
+                        .submit(Op::Prompt {
+                            session: session.clone(),
+                            doc,
+                            request_id: None,
+                        })
+                        .await;
                 }
                 Event::AgentText { text, .. } => {
                     if !args.json {
@@ -142,10 +165,18 @@ async fn main() -> std::process::ExitCode {
                         eprintln!("[tool] {title} — {status}");
                     }
                 }
-                Event::PermissionRequest { session, request_id, title, options } => {
+                Event::PermissionRequest {
+                    session,
+                    request_id,
+                    title,
+                    options,
+                } => {
                     // Headless: approve when --yolo, otherwise decline and keep going.
                     let option_id = if args.yolo {
-                        options.iter().find(|(id, _)| id.contains("allow")).map(|(id, _)| id.clone())
+                        options
+                            .iter()
+                            .find(|(id, _)| id.contains("allow"))
+                            .map(|(id, _)| id.clone())
                     } else {
                         eprintln!("[permission denied — rerun with --yolo] {title}");
                         None
@@ -169,7 +200,10 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    if tokio::time::timeout(Duration::from_secs(args.timeout), drive).await.is_err() {
+    if tokio::time::timeout(Duration::from_secs(args.timeout), drive)
+        .await
+        .is_err()
+    {
         eprintln!("timed out after {}s", args.timeout);
         return std::process::ExitCode::FAILURE;
     }

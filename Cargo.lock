@@ -489,6 +489,7 @@ dependencies = [
  "codetwo-core",
  "ratatui",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

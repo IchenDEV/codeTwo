@@ -14,6 +14,7 @@
 //! - [`error`] — shared error types.
 
 pub mod acp;
+pub mod activity;
 pub mod browser;
 pub mod context;
 pub mod delegate;
@@ -36,15 +37,19 @@ pub mod pty;
 pub mod rules;
 pub mod session;
 pub mod skill;
+pub mod source_control;
 pub mod store;
 pub mod term;
 pub mod tmux;
 pub mod usage;
 pub mod voice;
 pub mod workspace;
+pub mod workspace_search;
 pub mod worktree;
 
+pub use activity::{ActivityTracker, TurnLease};
 pub use browser::Annotation;
+pub use context::{estimate_tokens, ContextUsage};
 pub use engine::{Engine, PermissionRouter, SessionHandler};
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
@@ -57,15 +62,22 @@ pub use memory::{
     MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
 };
 pub use models::builtin_models;
-pub use context::{estimate_tokens, ContextUsage};
-pub use permission::{Action, PermissionMode, PermissionPolicy, Rule, SandboxPolicy};
+pub use permission::{
+    Action, ExecutionPolicy, PermissionMode, PermissionPolicy, Rule, SandboxPolicy,
+};
 pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{default_registry, LaunchSpec, Provider, ProviderId};
 pub use pty::PtySession;
-pub use session::{MemoryAccess, Message, Part, Role, Session, SessionId};
-pub use skill::{
-    compile, CompiledPrompt, DocBlock, McpServer, McpTransport, Skill, SkillKind, SkillLibrary,
-    SkillPayload, SubagentDefinition,
+pub use session::{
+    MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,
+    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
+    TranscriptEntry, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS,
 };
-pub use store::{Store, StoreError};
+pub use skill::{
+    canonical_doc_text, compile, CompiledPrompt, DocBlock, McpServer, McpTransport, Skill,
+    SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
+};
+pub use source_control::{SourceControlInfo, SourceControlProviderKind};
+pub use store::{SessionSearchHit, Store, StoreError};
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};

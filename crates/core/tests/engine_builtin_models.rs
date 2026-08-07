@@ -38,16 +38,22 @@ async fn a_silent_provider_still_gets_a_model_list() {
             provider: ProviderId::Grok,
             cwd: std::env::temp_dir().to_string_lossy().to_string(),
             use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("desktop-request".into()),
+            initial_policy: None,
         })
         .await
         .unwrap();
 
-    let mut created = false;
+    let mut created_request = None;
     let mut listed: Option<(Vec<String>, String)> = None;
     while let Some(ev) = rx.recv().await {
         match ev {
-            Event::SessionCreated { .. } => created = true,
-            Event::Models { available, current, .. } => {
+            Event::SessionCreated { request_id, .. } => created_request = request_id,
+            Event::Models {
+                available, current, ..
+            } => {
                 listed = Some((available.into_iter().map(|m| m.id).collect(), current));
                 break;
             }
@@ -56,9 +62,12 @@ async fn a_silent_provider_still_gets_a_model_list() {
         }
     }
 
-    assert!(created, "the session is announced before its models");
+    assert_eq!(created_request.as_deref(), Some("desktop-request"));
     let (ids, current) = listed.expect("a models event");
-    let expected: Vec<String> = builtin_models(&ProviderId::Grok).into_iter().map(|m| m.id).collect();
+    let expected: Vec<String> = builtin_models(&ProviderId::Grok)
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
     assert_eq!(ids, expected);
     // Nothing has been chosen yet, and the CLI's own default isn't ours to guess.
     assert_eq!(current, "");

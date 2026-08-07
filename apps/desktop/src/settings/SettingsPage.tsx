@@ -24,7 +24,7 @@ const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey: StringKey }[] = [
   { id: "providers", icon: Package, labelKey: "settings.providers" },
 ];
 
-// Actions grouped by what they touch — a flat list of twenty-one is hard to scan. Anything not
+// Actions grouped by what they touch — a flat list of twenty-two is hard to scan. Anything not
 // listed still shows under "Other", so a new binding is never hidden.
 const GROUPS: { title: string; labelKey: StringKey; actions: string[] }[] = [
   {
@@ -42,7 +42,7 @@ const GROUPS: { title: string; labelKey: StringKey; actions: string[] }[] = [
   {
     title: "Open",
     labelKey: "settings.groupOpen",
-    actions: ["open_command_palette", "open_market", "open_files", "open_issues", "open_usage", "open_settings"],
+    actions: ["open_command_palette", "open_market", "open_files", "search_workspace", "open_issues", "open_usage", "open_settings"],
   },
   { title: "Modes", labelKey: "settings.groupModes", actions: ["cycle_permission_mode"] },
 ];

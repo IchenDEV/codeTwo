@@ -90,7 +90,14 @@ for line in sys.stdin:
 
 /// Build an engine over `script`, with a stored session that carries `sess-old` as its resume
 /// cursor — i.e. exactly what a restart leaves behind.
-fn engine_with_stored_session(script: &'static str) -> (Engine, tokio::sync::mpsc::UnboundedReceiver<Event>, Arc<Store>, String) {
+fn engine_with_stored_session(
+    script: &'static str,
+) -> (
+    Engine,
+    tokio::sync::mpsc::UnboundedReceiver<Event>,
+    Arc<Store>,
+    String,
+) {
     let provider = Provider {
         id: ProviderId::Grok,
         display_name: "Mock".into(),
@@ -98,7 +105,10 @@ fn engine_with_stored_session(script: &'static str) -> (Engine, tokio::sync::mps
         needs_node: false,
     };
     let store = Arc::new(Store::open_in_memory().unwrap());
-    let mut sess = Session::new(ProviderId::Grok, std::env::temp_dir().to_string_lossy().to_string());
+    let mut sess = Session::new(
+        ProviderId::Grok,
+        std::env::temp_dir().to_string_lossy().to_string(),
+    );
     sess.acp_session_id = Some("sess-old".into());
     store.upsert_session(&sess).unwrap();
     let id = sess.id.clone();
@@ -107,9 +117,17 @@ fn engine_with_stored_session(script: &'static str) -> (Engine, tokio::sync::mps
 }
 
 /// Drive one prompt and collect events until the turn ends (or errors out).
-async fn run_turn(engine: &Engine, rx: &mut tokio::sync::mpsc::UnboundedReceiver<Event>, id: &str) -> Vec<Event> {
+async fn run_turn(
+    engine: &Engine,
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Event>,
+    id: &str,
+) -> Vec<Event> {
     engine
-        .submit(Op::Prompt { session: id.to_string(), doc: vec![DocBlock::Text { text: "go".into() }] })
+        .submit(Op::Prompt {
+            session: id.to_string(),
+            doc: vec![DocBlock::Text { text: "go".into() }],
+            request_id: Some("resume-turn".into()),
+        })
         .await
         .unwrap();
     let mut seen = Vec::new();
@@ -144,16 +162,25 @@ async fn a_revived_session_resumes_via_session_load() {
 
     // The live turn ran under the *old* ACP session id: context carried across the restart.
     let texts = agent_texts(&events);
-    assert!(texts.contains(&"live:sess-old".to_string()), "expected a resumed turn, got {texts:?}");
+    assert!(
+        texts.contains(&"live:sess-old".to_string()),
+        "expected a resumed turn, got {texts:?}"
+    );
     // The replayed history was dropped, not re-rendered…
-    assert!(!texts.contains(&"replayed history".to_string()), "replay leaked into events: {texts:?}");
+    assert!(
+        !texts.contains(&"replayed history".to_string()),
+        "replay leaked into events: {texts:?}"
+    );
     // …and not re-persisted either.
     let transcript = store.transcript(&id).unwrap();
     assert!(
         !transcript.iter().any(|(_, p)| matches!(p, codetwo_core::session::Part::Text { text } if text == "replayed history")),
         "replay leaked into the store: {transcript:?}",
     );
-    assert!(!events.iter().any(|e| matches!(e, Event::Error { .. })), "resume should be quiet");
+    assert!(
+        !events.iter().any(|e| matches!(e, Event::Error { .. })),
+        "resume should be quiet"
+    );
 }
 
 #[tokio::test]
@@ -163,10 +190,15 @@ async fn a_dead_cursor_falls_back_to_a_fresh_session_and_says_so() {
 
     // The turn still ran — on a fresh ACP session.
     let texts = agent_texts(&events);
-    assert!(texts.contains(&"live:sess-new".to_string()), "expected fallback turn, got {texts:?}");
+    assert!(
+        texts.contains(&"live:sess-new".to_string()),
+        "expected fallback turn, got {texts:?}"
+    );
     // And the degradation was surfaced, not swallowed.
     assert!(
-        events.iter().any(|e| matches!(e, Event::Error { message, .. } if message.contains("fresh memory"))),
+        events
+            .iter()
+            .any(|e| matches!(e, Event::Error { message, .. } if message.contains("fresh memory"))),
         "expected an honest fallback notice, got {events:?}",
     );
 }
@@ -177,8 +209,14 @@ async fn an_agent_without_load_session_goes_straight_to_session_new() {
     let events = run_turn(&engine, &mut rx, &id).await;
 
     let texts = agent_texts(&events);
-    assert!(texts.contains(&"live:sess-new".to_string()), "expected a fresh session, got {texts:?}");
+    assert!(
+        texts.contains(&"live:sess-new".to_string()),
+        "expected a fresh session, got {texts:?}"
+    );
     // No load was attempted (the mock would have answered with an error event's worth of noise);
     // the quiet path is the correct path for agents that never advertised the capability.
-    assert!(!events.iter().any(|e| matches!(e, Event::Error { .. })), "no errors expected: {events:?}");
+    assert!(
+        !events.iter().any(|e| matches!(e, Event::Error { .. })),
+        "no errors expected: {events:?}"
+    );
 }

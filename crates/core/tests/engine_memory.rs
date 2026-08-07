@@ -59,6 +59,7 @@ async fn recall_is_transient_and_completed_turn_is_captured() {
             doc: vec![DocBlock::Text {
                 text: prompt.into(),
             }],
+            request_id: None,
         })
         .await
         .unwrap();
@@ -82,13 +83,16 @@ async fn recall_is_transient_and_completed_turn_is_captured() {
         agent_text, "memory-seen",
         "provider should receive pinned memory"
     );
-    assert_eq!(receipt_items, 1, "the turn should disclose the injected item");
+    assert_eq!(
+        receipt_items, 1,
+        "the turn should disclose the injected item"
+    );
 
     let transcript = store.transcript(&session_id).unwrap();
     let user_texts: Vec<_> = transcript
         .iter()
         .filter_map(|(role, part)| match (role, part) {
-            (Role::User, Part::Text { text }) => Some(text.as_str()),
+            (Role::User, Part::Prompt { text, .. }) => Some(text.as_str()),
             _ => None,
         })
         .collect();
@@ -101,15 +105,17 @@ async fn recall_is_transient_and_completed_turn_is_captured() {
         .unwrap()
         .into_iter()
         .find_map(|(seq, role, part)| {
-            matches!((role, part), (Role::User, Part::Text { .. })).then_some(seq)
+            matches!((role, part), (Role::User, Part::Prompt { .. })).then_some(seq)
         })
         .unwrap();
-    assert!(store
-        .memory_turn_audit(&session_id, user_seq)
-        .unwrap()
-        .unwrap()
-        .provenance
-        .used_recalled_memory);
+    assert!(
+        store
+            .memory_turn_audit(&session_id, user_seq)
+            .unwrap()
+            .unwrap()
+            .provenance
+            .used_recalled_memory
+    );
     store.run_memory_maintenance_at(i64::MAX).unwrap();
     let stats = store.memory_stats(&project).unwrap();
     assert_eq!(stats.l1, 2, "manual and newly captured stable notes");

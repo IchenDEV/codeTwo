@@ -20,6 +20,26 @@ interface Draft {
   note: string;
 }
 
+/** A request to put the editor caret on an exact workspace-search/LSP position. */
+export interface FileRevealTarget {
+  path: string;
+  line: number;
+  column: number;
+  requestId: number;
+}
+
+function revealTarget(editor: Editor, model: TextModel, target: FileRevealTarget) {
+  const lineNumber = Math.min(Math.max(target.line, 1), model.getLineCount());
+  const column = Math.min(
+    Math.max(target.column, 1),
+    model.getLineMaxColumn(lineNumber),
+  );
+  const position = { lineNumber, column };
+  editor.setPosition(position);
+  editor.revealPositionInCenter(position);
+  editor.focus();
+}
+
 /**
  * The built-in file editor — a pane inside the right panel, under the file tabs.
  *
@@ -38,6 +58,7 @@ export function FileViewer({
   onInsert,
   onOpen,
   onComment,
+  reveal,
 }: {
   cwd: string;
   path: string;
@@ -46,6 +67,8 @@ export function FileViewer({
   onOpen: (path: string) => void;
   /** Receives a ready-made markdown context block for the prompt document. */
   onComment: (text: string) => void;
+  /** A token makes repeated jumps to the same path and position observable. */
+  reveal: FileRevealTarget | null;
 }) {
   const t = useT();
   const toast = useToast();
@@ -63,6 +86,8 @@ export function FileViewer({
   const editorRef = useRef<Editor | null>(null);
   const modelRef = useRef<TextModel | null>(null);
   const modRef = useRef<MonacoModule | null>(null);
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
 
   const save = useCallback(async () => {
     const m = modRef.current;
@@ -169,10 +194,13 @@ export function FileViewer({
         onOpen(abs.slice(cwd.length + 1));
         return true;
       });
-      const reveal = m.takePendingReveal(m.absPath(cwd, path));
-      if (reveal) {
-        editor.setPosition(reveal);
-        editor.revealPositionInCenter(reveal);
+      const requested = revealRef.current;
+      const pendingLspReveal = m.takePendingReveal(m.absPath(cwd, path));
+      if (requested?.path === path) {
+        revealTarget(editor, model, requested);
+      } else if (pendingLspReveal) {
+        editor.setPosition(pendingLspReveal);
+        editor.revealPositionInCenter(pendingLspReveal);
       }
       editor.focus();
 
@@ -196,6 +224,13 @@ export function FileViewer({
   useEffect(() => {
     mod?.applyTheme(scheme);
   }, [mod, scheme]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const model = modelRef.current;
+    if (!editor || !model || reveal?.path !== path) return;
+    revealTarget(editor, model, reveal);
+  }, [path, reveal]);
 
   const submitDraft = () => {
     const m = modRef.current;

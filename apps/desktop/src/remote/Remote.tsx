@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   remoteDevices,
   remotePairingLink,
@@ -7,11 +7,31 @@ import {
   startRemote,
   stopRemote,
   type RemoteDevice,
+  type RemoteEndpoint,
   type RemotePairingLink,
   type RemoteStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+function defaultEndpointId(status: RemoteStatus | null): string | null {
+  if (!status) return null;
+  return (
+    status.endpoints.find((endpoint) => endpoint.id === "lan" && endpoint.qr_shareable)?.id ??
+    status.endpoints.find((endpoint) => endpoint.qr_shareable)?.id ??
+    status.endpoints[0]?.id ??
+    null
+  );
+}
+
+function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
+  if (!endpoint) return "No pairing address is currently available.";
+  if (!endpoint.qr_shareable) {
+    return "Works only in another browser on this computer. Other devices cannot reach 127.0.0.1, so no QR code is shown.";
+  }
+  return "Devices on the same network can scan this code or open the link.";
+}
 
 /**
  * Remote control, t3code-style: toggle network access, mint one-time pairing links (URL + QR), and
@@ -22,15 +42,44 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const linkRequest = useRef(0);
+
+  const applyStatus = useCallback((next: RemoteStatus | null) => {
+    setStatus(next);
+    setSelectedEndpointId((current) => {
+      if (current && next?.endpoints.some((endpoint) => endpoint.id === current)) return current;
+      return defaultEndpointId(next);
+    });
+    if (!next) setLink(null);
+  }, []);
 
   const refresh = useCallback(() => {
-    remoteStatus().then(setStatus).catch(() => {});
+    remoteStatus().then(applyStatus).catch(() => {});
     remoteDevices().then(setDevices).catch(() => {});
-  }, []);
+  }, [applyStatus]);
   useEffect(refresh, [refresh]);
+
+  const mintLink = useCallback(async (endpointId: string | null) => {
+    const request = ++linkRequest.current;
+    setLinkBusy(true);
+    setErr(null);
+    try {
+      const next = await remotePairingLink(endpointId ?? undefined);
+      if (request !== linkRequest.current) return;
+      setLink(next);
+      if (next) setSelectedEndpointId(next.endpoint_id);
+      setCopied(false);
+    } catch (e) {
+      if (request === linkRequest.current) setErr(String(e));
+    } finally {
+      if (request === linkRequest.current) setLinkBusy(false);
+    }
+  }, []);
 
   const turnOn = async () => {
     setBusy(true);
@@ -40,8 +89,8 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
       if (!st) {
         setErr("Remote is only available in the desktop app.");
       } else {
-        setStatus(st);
-        setLink(await remotePairingLink());
+        applyStatus(st);
+        await mintLink(defaultEndpointId(st));
       }
     } catch (e) {
       setErr(String(e));
@@ -51,9 +100,11 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
 
   const turnOff = async () => {
     setBusy(true);
+    linkRequest.current += 1;
+    setLinkBusy(false);
     try {
       await stopRemote();
-      setStatus(null);
+      applyStatus(null);
       setLink(null);
     } catch (e) {
       setErr(String(e));
@@ -61,14 +112,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     setBusy(false);
   };
 
-  const newLink = async () => {
-    setErr(null);
-    try {
-      setLink(await remotePairingLink());
-      setCopied(false);
-    } catch (e) {
-      setErr(String(e));
-    }
+  const selectEndpoint = (endpointId: string) => {
+    setSelectedEndpointId(endpointId);
+    void mintLink(endpointId);
   };
 
   const copy = async () => {
@@ -86,6 +132,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     await remoteRevokeDevice(id).catch(() => {});
     remoteDevices().then(setDevices).catch(() => {});
   };
+
+  const selectedEndpoint = status?.endpoints.find((endpoint) => endpoint.id === selectedEndpointId);
+  const linkEndpoint = status?.endpoints.find((endpoint) => endpoint.id === link?.endpoint_id);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -106,20 +155,43 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
 
-            <div className="space-y-1">
-              {status.endpoints.map((e) => (
-                <p key={e.url} className="text-hint text-muted-foreground">
-                  <span className="mr-1.5 inline-block w-16 font-medium text-foreground">{e.label}</span>
-                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono">{e.url}</code>
-                </p>
-              ))}
+            <div className="space-y-1.5">
+              <label id="remote-endpoint-label" className="text-ui font-medium">
+                Pairing target
+              </label>
+              <Select
+                value={selectedEndpointId ?? undefined}
+                disabled={status.endpoints.length === 0}
+                onValueChange={selectEndpoint}
+              >
+                <SelectTrigger
+                  className="w-full"
+                  aria-labelledby="remote-endpoint-label"
+                  aria-describedby="remote-endpoint-help"
+                >
+                  <SelectValue placeholder="Choose an address" />
+                </SelectTrigger>
+                <SelectContent>
+                  {status.endpoints.map((endpoint) => (
+                    <SelectItem key={endpoint.id} value={endpoint.id}>
+                      {endpoint.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p id="remote-endpoint-help" className="text-hint text-muted-foreground">
+                {endpointHelp(selectedEndpoint)}
+              </p>
             </div>
 
             {link ? (
-              <div className="space-y-2 rounded-md border p-3">
+              <div className="space-y-2 rounded-md border p-3" aria-busy={linkBusy}>
                 <p className="text-hint text-muted-foreground">
-                  Scan or open on the other device. The link is <b>one-time</b> and expires in{" "}
-                  {Math.round(link.expires_in / 60)} minutes; the device stays paired after that.
+                  {linkEndpoint?.qr_shareable
+                    ? "Scan or open on the other device. "
+                    : "Copy this link into another browser on this computer. "}
+                  The link is <b>one-time</b> and expires in {Math.round(link.expires_in / 60)} minutes;
+                  the device stays paired after that.
                 </p>
                 {link.qr_svg && (
                   <div className="mx-auto w-fit rounded-md bg-white p-2">
@@ -132,17 +204,29 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 )}
                 <div className="break-all rounded-md bg-primary/10 px-3 py-2 font-mono text-hint">{link.url}</div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => void copy()}>
+                  <Button variant="outline" size="sm" disabled={linkBusy} onClick={() => void copy()}>
                     {copied ? "Copied ✓" : "Copy link"}
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => void newLink()}>
-                    New link
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-disabled={linkBusy}
+                    className="aria-disabled:opacity-50"
+                    onClick={() => !linkBusy && void mintLink(selectedEndpointId)}
+                  >
+                    {linkBusy ? "Creating…" : "New link"}
                   </Button>
                 </div>
               </div>
             ) : (
-              <Button variant="outline" onClick={() => void newLink()}>
-                Create pairing link
+              <Button
+                variant="outline"
+                disabled={status.endpoints.length === 0}
+                aria-disabled={linkBusy}
+                className="aria-disabled:opacity-50"
+                onClick={() => !linkBusy && void mintLink(selectedEndpointId)}
+              >
+                {linkBusy ? "Creating…" : "Create pairing link"}
               </Button>
             )}
           </>

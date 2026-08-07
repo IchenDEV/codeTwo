@@ -3,12 +3,14 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  CircleAlert,
   ChevronDown,
   ChevronRight,
   Folder,
   FolderPlus,
   PanelLeft,
   Pencil,
+  Pin,
   Search,
   Settings,
   SquarePen,
@@ -32,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
+import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
 function shortAge(ts: number): string {
@@ -63,10 +66,11 @@ export function SessionRail({
   archivedSessions,
   previews,
   activeSession,
-  running,
+  runningSessions,
   onSelect,
   onNew,
   onRename,
+  onPin,
   onArchive,
   displayProvider,
   model,
@@ -77,6 +81,7 @@ export function SessionRail({
   onOpenSearch,
   onOpenSettings,
   collapsed,
+  overlay,
   onToggleCollapse,
   width,
   onWidth,
@@ -94,11 +99,13 @@ export function SessionRail({
   /** Newest text per session id — the row's description line. */
   previews: Record<string, string>;
   activeSession: string | null;
-  /** Whether the active session has a turn in flight. */
-  running: boolean;
+  /** Every session with a turn in flight, including background sessions. */
+  runningSessions: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onNew: () => void;
   onRename: (id: string, title: string) => void;
+  /** Keeps an active session above the recency list until explicitly unpinned. */
+  onPin: (id: string, pinned: boolean) => void;
   /** Flips a session's archived state — true to archive, false to restore. */
   onArchive: (id: string, archived: boolean) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
@@ -114,6 +121,8 @@ export function SessionRail({
   onOpenSettings: () => void;
   /** Collapsed: the rail animates to zero width; the main header grows an expand button. */
   collapsed: boolean;
+  /** Narrow layouts take the rail out of the flex row and show it above the session column. */
+  overlay: boolean;
   onToggleCollapse: () => void;
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
@@ -170,11 +179,15 @@ export function SessionRail({
   // "Recent" means what it says: the active project's sessions, newest first — per group.
   const forProject = useCallback(
     (list: SessionInfo[]) =>
-      list.filter((s) => s.cwd === activeProject).sort((a, b) => b.created_at - a.created_at),
+      list
+        .filter((s) => sessionProjectPath(s) === activeProject)
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at - a.created_at),
     [activeProject],
   );
   const recent = useMemo(() => forProject(sessions), [forProject, sessions]);
   const archived = useMemo(() => forProject(archivedSessions), [forProject, archivedSessions]);
+  const pinned = useMemo(() => recent.filter((s) => s.pinned), [recent]);
+  const active = useMemo(() => recent.filter((s) => !s.pinned), [recent]);
 
   // Folded by default: archived threads are reference material, not the working set, so they
   // shouldn't compete with the live rows for attention. The fold survives a restart.
@@ -192,7 +205,11 @@ export function SessionRail({
    * with the live/finished state spelled out rather than implied.
    */
   const sessionRow = (s: SessionInfo, isArchived: boolean) => {
-    const isRunning = s.id === activeSession && running;
+    const activity = sessionActivity(s).state;
+    const isAwaitingInput = activity.kind === "awaiting_input";
+    const isFailed = activity.kind === "failed";
+    const isRunning =
+      runningSessions.has(s.id) || activity.kind === "running" || isAwaitingInput;
     return (
       <div
         key={s.id}
@@ -220,9 +237,28 @@ export function SessionRail({
               }}
             />
           ) : (
-            <span className={cn("min-w-0 flex-1 truncate text-ui", s.id === activeSession && "font-medium")}>
-              {s.title}
-            </span>
+            <>
+              {!isArchived && (
+                <button
+                  title={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                  aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                  aria-pressed={s.pinned}
+                  className={cn(
+                    "shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    s.pinned && "text-primary",
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPin(s.id, !s.pinned);
+                  }}
+                >
+                  <Pin className="size-3" />
+                </button>
+              )}
+              <span className={cn("min-w-0 flex-1 truncate text-ui", s.id === activeSession && "font-medium")}>
+                {s.title}
+              </span>
+            </>
           )}
           <span className="shrink-0 text-fine text-muted-foreground group-hover:hidden">
             {shortAge(s.created_at)}
@@ -261,7 +297,20 @@ export function SessionRail({
           <ProviderIcon provider={providerLabel(s.provider)} className="size-3 shrink-0 opacity-70" />
           <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
           <span className="min-w-0 flex-1" />
-          {isRunning ? (
+          {isAwaitingInput ? (
+            <span className="flex shrink-0 items-center gap-1 text-warning">
+              <span className="size-1.5 rounded-full bg-warning" />
+              {t("session.awaitingInput")}
+            </span>
+          ) : isFailed ? (
+            <span
+              className="flex min-w-0 shrink items-center gap-1 text-destructive"
+              title={activity.message}
+            >
+              <CircleAlert className="size-3 shrink-0" />
+              <span className="truncate">{t("session.failed")}</span>
+            </span>
+          ) : isRunning ? (
             <span className="flex shrink-0 items-center gap-1 text-primary">
               <span className="size-1.5 animate-pulse rounded-full bg-primary" />
               {t("session.running")}
@@ -282,6 +331,7 @@ export function SessionRail({
       aria-hidden={collapsed}
       className={cn(
         "glass-rail relative flex shrink-0 flex-col overflow-hidden",
+        overlay && "fixed inset-y-0 left-0 z-50 shadow-2xl",
         !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         gone && "invisible",
       )}
@@ -427,10 +477,16 @@ export function SessionRail({
             </p>
           ) : (
             <>
-              {recent.length > 0 && (
+              {pinned.length > 0 && (
+                <>
+                  {groupLabel(t("rail.groupPinned"))}
+                  <div className="space-y-px">{pinned.map((s) => sessionRow(s, false))}</div>
+                </>
+              )}
+              {active.length > 0 && (
                 <>
                   {groupLabel(t("rail.groupActive"))}
-                  <div className="space-y-px">{recent.map((s) => sessionRow(s, false))}</div>
+                  <div className="space-y-px">{active.map((s) => sessionRow(s, false))}</div>
                 </>
               )}
               {archived.length > 0 && (

@@ -36,9 +36,19 @@ pub struct McpServer {
 /// `untagged` preserves the legacy saved stdio shape while adding remote HTTP/SSE servers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum McpTransport {
-    Stdio { command: String, args: Vec<String>, env: Vec<(String, String)> },
-    Http { url: String, headers: Vec<(String, String)> },
-    Sse { url: String, headers: Vec<(String, String)> },
+    Stdio {
+        command: String,
+        args: Vec<String>,
+        env: Vec<(String, String)>,
+    },
+    Http {
+        url: String,
+        headers: Vec<(String, String)>,
+    },
+    Sse {
+        url: String,
+        headers: Vec<(String, String)>,
+    },
 }
 
 impl Serialize for McpTransport {
@@ -61,9 +71,21 @@ impl Serialize for McpTransport {
         }
 
         match self {
-            McpTransport::Stdio { command, args, env } => Stdio { command, args, env }.serialize(serializer),
-            McpTransport::Http { url, headers } => Remote { transport: "http", url, headers }.serialize(serializer),
-            McpTransport::Sse { url, headers } => Remote { transport: "sse", url, headers }.serialize(serializer),
+            McpTransport::Stdio { command, args, env } => {
+                Stdio { command, args, env }.serialize(serializer)
+            }
+            McpTransport::Http { url, headers } => Remote {
+                transport: "http",
+                url,
+                headers,
+            }
+            .serialize(serializer),
+            McpTransport::Sse { url, headers } => Remote {
+                transport: "sse",
+                url,
+                headers,
+            }
+            .serialize(serializer),
         }
     }
 }
@@ -94,10 +116,16 @@ impl<'de> Deserialize<'de> for McpTransport {
 
         match Stored::deserialize(deserializer)? {
             Stored::Stdio { command, args, env } => Ok(McpTransport::Stdio { command, args, env }),
-            Stored::Remote { transport, url, headers } => match transport.as_str() {
+            Stored::Remote {
+                transport,
+                url,
+                headers,
+            } => match transport.as_str() {
                 "http" | "streamable-http" => Ok(McpTransport::Http { url, headers }),
                 "sse" => Ok(McpTransport::Sse { url, headers }),
-                other => Err(serde::de::Error::custom(format!("unsupported MCP transport {other}"))),
+                other => Err(serde::de::Error::custom(format!(
+                    "unsupported MCP transport {other}"
+                ))),
             },
         }
     }
@@ -157,11 +185,23 @@ pub struct SubagentDefinition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SkillPayload {
-    Fragment { text: String },
-    AgentSkill { skill_ref: String, inline_text: Option<String> },
-    Subagent { agent: SubagentDefinition },
-    Mcp { server: McpServer },
-    Macro { template: String, slots: Vec<String> },
+    Fragment {
+        text: String,
+    },
+    AgentSkill {
+        skill_ref: String,
+        inline_text: Option<String>,
+    },
+    Subagent {
+        agent: SubagentDefinition,
+    },
+    Mcp {
+        server: McpServer,
+    },
+    Macro {
+        template: String,
+        slots: Vec<String>,
+    },
 }
 
 impl SkillPayload {
@@ -223,7 +263,9 @@ impl SkillLibrary {
     pub fn load_dir(dir: &std::path::Path) -> std::io::Result<SkillLibrary> {
         let entries = match std::fs::read_dir(dir) {
             Ok(e) => e,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(SkillLibrary::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(SkillLibrary::default())
+            }
             Err(e) => return Err(e),
         };
         let mut skills = Vec::new();
@@ -263,19 +305,49 @@ impl SkillLibrary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DocBlock {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     Skill {
         skill_id: String,
         #[serde(default)]
         params: HashMap<String, String>,
     },
     /// An `@`-mentioned workspace file; its contents are inlined as context at compile time.
-    File { path: String },
+    File {
+        path: String,
+    },
     /// An attached image; sent to the agent as an ACP image content block.
-    Image { path: String },
+    Image {
+        path: String,
+    },
     /// An `@`-mentioned past chat; its transcript is inlined as context at compile time, so a
     /// planning conversation can be referenced from the document that implements it.
-    Session { session_id: String },
+    Session {
+        session_id: String,
+    },
+}
+
+/// Plain, user-authored representation of a composed document.
+///
+/// This is the durable/searchable prompt record. It intentionally excludes project rules, skill
+/// expansion, file contents and referenced-chat contents that are added only while compiling for
+/// the agent. Keeping the two forms separate prevents search results and transcript replay from
+/// surfacing hidden context as if the user had typed it.
+pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
+    doc.iter()
+        .map(|block| match block {
+            DocBlock::Text { text } => text.clone(),
+            DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
+            DocBlock::File { path } => format!("[@{path}]"),
+            DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Session { session_id } => {
+                format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
+            }
+        })
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 /// The result of compiling a document: what to send and how to configure the session.
@@ -382,8 +454,13 @@ pub fn compile_with_sessions(
                 };
                 match &skill.payload {
                     SkillPayload::Fragment { text } => parts.push(text.trim().to_string()),
-                    SkillPayload::Macro { template, .. } => parts.push(substitute(template, params).trim().to_string()),
-                    SkillPayload::AgentSkill { skill_ref, inline_text } => {
+                    SkillPayload::Macro { template, .. } => {
+                        parts.push(substitute(template, params).trim().to_string())
+                    }
+                    SkillPayload::AgentSkill {
+                        skill_ref,
+                        inline_text,
+                    } => {
                         out.agent_skills.push(skill_ref.clone());
                         match inline_text {
                             Some(t) => parts.push(t.trim().to_string()),
@@ -398,7 +475,10 @@ pub fn compile_with_sessions(
                             agent.prompt.trim()
                         );
                         if !agent.tools.is_empty() {
-                            contract.push_str(&format!("\n\nAllowed tools: {}", agent.tools.join(", ")));
+                            contract.push_str(&format!(
+                                "\n\nAllowed tools: {}",
+                                agent.tools.join(", ")
+                            ));
                         }
                         if let Some(model) = &agent.model {
                             contract.push_str(&format!("\nPreferred model: {model}"));
@@ -508,7 +588,8 @@ mod tests {
                 icon: None,
                 source: None,
                 payload: SkillPayload::Fragment {
-                    text: "Act as a meticulous code reviewer. Flag bugs and unsafe patterns.".into(),
+                    text: "Act as a meticulous code reviewer. Flag bugs and unsafe patterns."
+                        .into(),
                 },
             },
             Skill {
@@ -531,7 +612,11 @@ mod tests {
                 payload: SkillPayload::Mcp {
                     server: McpServer {
                         name: "filesystem".into(),
-                        transport: McpTransport::Stdio { command: "mcp-fs".into(), args: vec![], env: vec![] },
+                        transport: McpTransport::Stdio {
+                            command: "mcp-fs".into(),
+                            args: vec![],
+                            env: vec![],
+                        },
                     },
                 },
             },
@@ -542,9 +627,16 @@ mod tests {
     fn compiles_text_and_fragment() {
         let lib = sample_library();
         let doc = vec![
-            DocBlock::Text { text: "# Refactor auth".into() },
-            DocBlock::Skill { skill_id: "reviewer".into(), params: HashMap::new() },
-            DocBlock::Text { text: "Focus on the token path.".into() },
+            DocBlock::Text {
+                text: "# Refactor auth".into(),
+            },
+            DocBlock::Skill {
+                skill_id: "reviewer".into(),
+                params: HashMap::new(),
+            },
+            DocBlock::Text {
+                text: "Focus on the token path.".into(),
+            },
         ];
         let compiled = compile(&doc, &lib);
         assert!(compiled.prompt.contains("# Refactor auth"));
@@ -559,15 +651,24 @@ mod tests {
         let mut params = HashMap::new();
         params.insert("scope".into(), "auth module".into());
         params.insert("style".into(), "conventional".into());
-        let doc = vec![DocBlock::Skill { skill_id: "commit".into(), params }];
+        let doc = vec![DocBlock::Skill {
+            skill_id: "commit".into(),
+            params,
+        }];
         let compiled = compile(&doc, &lib);
-        assert_eq!(compiled.prompt, "Write a commit message for auth module in conventional style.");
+        assert_eq!(
+            compiled.prompt,
+            "Write a commit message for auth module in conventional style."
+        );
     }
 
     #[test]
     fn mcp_skill_adds_server_not_prompt_text() {
         let lib = sample_library();
-        let doc = vec![DocBlock::Skill { skill_id: "fs-mcp".into(), params: HashMap::new() }];
+        let doc = vec![DocBlock::Skill {
+            skill_id: "fs-mcp".into(),
+            params: HashMap::new(),
+        }];
         let compiled = compile(&doc, &lib);
         assert_eq!(compiled.mcp_servers.len(), 1);
         assert_eq!(compiled.mcp_servers[0].name, "filesystem");
@@ -592,7 +693,13 @@ mod tests {
                 },
             },
         }]);
-        let compiled = compile(&[DocBlock::Skill { skill_id: "researcher".into(), params: HashMap::new() }], &lib);
+        let compiled = compile(
+            &[DocBlock::Skill {
+                skill_id: "researcher".into(),
+                params: HashMap::new(),
+            }],
+            &lib,
+        );
         assert_eq!(compiled.subagents, vec!["Researcher"]);
         assert!(compiled.prompt.contains("## Subagent: Researcher"));
         assert!(compiled.prompt.contains("Allowed tools: web, files"));
@@ -602,7 +709,10 @@ mod tests {
     #[test]
     fn unknown_skill_is_reported() {
         let lib = sample_library();
-        let doc = vec![DocBlock::Skill { skill_id: "nope".into(), params: HashMap::new() }];
+        let doc = vec![DocBlock::Skill {
+            skill_id: "nope".into(),
+            params: HashMap::new(),
+        }];
         let compiled = compile(&doc, &lib);
         assert_eq!(compiled.unresolved, vec!["nope".to_string()]);
     }
@@ -611,8 +721,12 @@ mod tests {
     fn session_mention_inlines_resolved_transcript() {
         let lib = sample_library();
         let doc = vec![
-            DocBlock::Session { session_id: "abc".into() },
-            DocBlock::Text { text: "Implement what we planned.".into() },
+            DocBlock::Session {
+                session_id: "abc".into(),
+            },
+            DocBlock::Text {
+                text: "Implement what we planned.".into(),
+            },
         ];
         let resolve = |id: &str| -> Option<String> {
             (id == "abc").then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
@@ -627,10 +741,36 @@ mod tests {
     #[test]
     fn session_mention_without_resolver_is_unresolved() {
         let lib = sample_library();
-        let doc = vec![DocBlock::Session { session_id: "ghost".into() }];
+        let doc = vec![DocBlock::Session {
+            session_id: "ghost".into(),
+        }];
         let compiled = compile(&doc, &lib);
         assert!(compiled.sessions.is_empty());
         assert_eq!(compiled.unresolved, vec!["session:ghost".to_string()]);
+    }
+
+    #[test]
+    fn canonical_doc_keeps_user_text_but_not_expanded_context() {
+        let doc = vec![
+            DocBlock::Text {
+                text: "First line\n  indented line".into(),
+            },
+            DocBlock::Skill {
+                skill_id: "review".into(),
+                params: HashMap::from([("private".into(), "not persisted".into())]),
+            },
+            DocBlock::File {
+                path: "src/main.rs".into(),
+            },
+            DocBlock::Session {
+                session_id: "1234567890abcdef".into(),
+            },
+        ];
+
+        assert_eq!(
+            canonical_doc_text(&doc),
+            "First line\n  indented line\n\n[skill:review]\n\n[@src/main.rs]\n\n[chat:12345678]",
+        );
     }
 
     #[test]
@@ -643,9 +783,15 @@ mod tests {
             description: "Plan first".into(),
             icon: None,
             source: None,
-            payload: SkillPayload::Fragment { text: "Make a plan before coding.".into() },
+            payload: SkillPayload::Fragment {
+                text: "Make a plan before coding.".into(),
+            },
         };
-        std::fs::write(dir.join("planner.json"), serde_json::to_string(&skill).unwrap()).unwrap();
+        std::fs::write(
+            dir.join("planner.json"),
+            serde_json::to_string(&skill).unwrap(),
+        )
+        .unwrap();
         std::fs::write(dir.join("notes.txt"), "ignored").unwrap();
 
         let lib = SkillLibrary::load_dir(&dir).unwrap();
@@ -690,11 +836,19 @@ mod tests {
         let lib = sample_library();
 
         let doc = vec![
-            DocBlock::Text { text: "Fix the bug.".into() },
-            DocBlock::File { path: "src/a.rs".into() },
+            DocBlock::Text {
+                text: "Fix the bug.".into(),
+            },
+            DocBlock::File {
+                path: "src/a.rs".into(),
+            },
         ];
         let c = compile_with_context(&doc, &lib, Some(&dir));
-        assert!(c.prompt.contains("## Project rules"), "rules prepended: {}", c.prompt);
+        assert!(
+            c.prompt.contains("## Project rules"),
+            "rules prepended: {}",
+            c.prompt
+        );
         assert!(c.prompt.contains("Use tabs."));
         assert!(c.prompt.contains("**File** `src/a.rs`"));
         assert!(c.prompt.contains("fn a() {}"));
@@ -703,7 +857,13 @@ mod tests {
         assert!(c.unresolved.is_empty());
 
         // A missing file is reported, not silently dropped.
-        let c2 = compile_with_context(&[DocBlock::File { path: "nope.rs".into() }], &lib, Some(&dir));
+        let c2 = compile_with_context(
+            &[DocBlock::File {
+                path: "nope.rs".into(),
+            }],
+            &lib,
+            Some(&dir),
+        );
         assert_eq!(c2.unresolved, vec!["file:nope.rs".to_string()]);
 
         // Without a workspace, no rules and files can't be read.
@@ -745,7 +905,10 @@ mod tests {
 
         let events = McpServer {
             name: "events".into(),
-            transport: McpTransport::Sse { url: "https://mcp.example.test/sse".into(), headers: Vec::new() },
+            transport: McpTransport::Sse {
+                url: "https://mcp.example.test/sse".into(),
+                headers: Vec::new(),
+            },
         };
         let v = events.to_acp_json();
         assert_eq!(v["type"], "sse");
@@ -757,8 +920,10 @@ mod tests {
         assert!(matches!(round_trip.transport, McpTransport::Sse { .. }));
 
         // Records written before remote transports were tagged remain readable as HTTP.
-        let legacy: McpServer =
-            serde_json::from_str(r#"{"name":"legacy","url":"https://mcp.example.test","headers":[]}"#).unwrap();
+        let legacy: McpServer = serde_json::from_str(
+            r#"{"name":"legacy","url":"https://mcp.example.test","headers":[]}"#,
+        )
+        .unwrap();
         assert!(matches!(legacy.transport, McpTransport::Http { .. }));
     }
 }

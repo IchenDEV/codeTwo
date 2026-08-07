@@ -8,6 +8,7 @@ import {
   ListChecks,
   Lock,
   LockOpen,
+  Loader2,
   Maximize2,
   Minimize2,
   Plus,
@@ -68,6 +69,8 @@ interface ComposerProps {
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   running: boolean;
+  /** Session summary is visible while its transcript detail is still loading; sending is gated. */
+  loading: boolean;
   docEmpty: boolean;
   onRun: () => void;
   onStop: () => void;
@@ -127,6 +130,7 @@ function MenuRow({
   detail,
   leading,
   onClick,
+  disabled = false,
 }: {
   selected: boolean;
   isDefault: boolean;
@@ -135,13 +139,16 @@ function MenuRow({
   /** Optional marker before the label — the provider list's availability dot. */
   leading?: ReactNode;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
         selected ? "bg-accent" : "hover:bg-accent/50",
+        disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
       )}
     >
       {leading}
@@ -176,10 +183,20 @@ function ModePicker({ config }: { config: SessionConfig }) {
   const [open, setOpen] = useState(false);
   const active = sessionMode(config.mode, config.sandbox);
 
+  useEffect(() => {
+    if (config.modeChangeDisabled) setOpen(false);
+  }, [config.modeChangeDisabled]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Chip tone={active === "full_access" ? "warning" : undefined} title={t("config.mode")}>
+        <Chip
+          tone={active === "full_access" ? "warning" : undefined}
+          title={t("config.mode")}
+          disabled={config.modeChangeDisabled}
+          aria-busy={config.modeChangeDisabled}
+          className={cn(config.modeChangeDisabled && "cursor-wait opacity-60 hover:bg-transparent")}
+        >
           {active === "full_access" ? (
             <LockOpen className="size-3 shrink-0" />
           ) : (
@@ -199,6 +216,7 @@ function ModePicker({ config }: { config: SessionConfig }) {
             isDefault={false}
             label={t(`mode.${m.id}` as "mode.ask")}
             detail={t(`mode.${m.id}Hint` as "mode.askHint")}
+            disabled={config.modeChangeDisabled}
             onClick={() => {
               config.onSessionMode(m.id);
               setOpen(false);
@@ -254,6 +272,119 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
             }}
           />
         ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const WORKTREE_BASELINES = ["current", "origin_default"] as const;
+
+/** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
+function WorktreePicker({ config }: { config: SessionConfig }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const selectedKind = config.hasSession
+    ? config.activeWorktreeBaseline?.kind ?? null
+    : config.worktreeBase;
+  const selected =
+    selectedKind == null
+      ? null
+      : config.worktreeOptions.find((option) => option.kind === selectedKind);
+  const selectedUnavailable =
+    !config.hasSession &&
+    selectedKind != null &&
+    !config.worktreeOptionsLoading &&
+    selected?.resolved == null;
+  const compactLabel = config.activeWorktreeUnknown
+    ? t("worktree.legacyUnknown")
+    : config.hasSession && config.activeWorktreeBaseline
+      ? config.activeWorktreeBaseline.display
+      : selectedKind == null
+        ? t("worktree.off")
+        : t(`worktree.${selectedKind}` as "worktree.current");
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Chip
+          tone={selectedUnavailable ? "warning" : undefined}
+          title={t("config.worktreeHint")}
+          aria-expanded={open}
+          className={cn(
+            selectedKind != null && !selectedUnavailable && "text-primary hover:text-primary",
+          )}
+        >
+          <GitBranch className="size-3.5 shrink-0" />
+          <span className="hidden max-w-36 truncate @lg/composer:inline">{compactLabel}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>
+      </PopoverTrigger>
+      <PopoverContent align="center" side="top" className="w-80 p-1.5">
+        <MenuSection>{t("config.worktree")}</MenuSection>
+        {config.hasSession ? (
+          <>
+            <MenuRow
+              selected
+              isDefault={false}
+              label={
+                config.activeWorktreeUnknown
+                  ? t("worktree.legacyUnknown")
+                  : selectedKind == null
+                    ? t("worktree.off")
+                    : t(`worktree.${selectedKind}` as "worktree.current")
+              }
+              detail={
+                config.activeWorktreeUnknown
+                  ? t("worktree.legacyUnknownHint")
+                  : config.activeWorktreeBaseline?.display ?? t("worktree.offHint")
+              }
+              disabled
+              onClick={() => {}}
+            />
+            <p className="px-2.5 pb-1 pt-2 text-fine leading-relaxed text-muted-foreground">
+              {t("worktree.fixedForSession")}
+            </p>
+          </>
+        ) : (
+          <>
+            <MenuRow
+              selected={config.worktreeBase == null}
+              isDefault={false}
+              label={t("worktree.off")}
+              detail={t("worktree.offHint")}
+              onClick={() => {
+                config.onWorktreeBase(null);
+                setOpen(false);
+              }}
+            />
+            {WORKTREE_BASELINES.map((kind) => {
+              const option = config.worktreeOptions.find((candidate) => candidate.kind === kind);
+              const unavailable = !config.worktreeOptionsLoading && option?.resolved == null;
+              const detail = config.worktreeOptionsLoading
+                ? t("worktree.resolving")
+                : option?.resolved
+                  ? `${option.resolved.display} · ${t("worktree.localOnly")}`
+                  : option?.unavailable_reason || t("worktree.unavailable");
+              return (
+                <MenuRow
+                  key={kind}
+                  selected={config.worktreeBase === kind}
+                  isDefault={false}
+                  label={t(`worktree.${kind}` as "worktree.current")}
+                  detail={detail}
+                  disabled={unavailable}
+                  onClick={() => {
+                    config.onWorktreeBase(kind);
+                    setOpen(false);
+                  }}
+                />
+              );
+            })}
+          </>
+        )}
+        <p className="px-2.5 pb-1 pt-2 text-fine leading-relaxed text-muted-foreground">
+          {t("worktree.noFetch")}
+        </p>
       </PopoverContent>
     </Popover>
   );
@@ -521,6 +652,7 @@ export function Composer({
   configOptions,
   onConfigOption,
   running,
+  loading,
   docEmpty,
   onRun,
   onStop,
@@ -639,15 +771,7 @@ export function Composer({
         <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
       </Chip>
 
-      <Chip
-        title={t("config.worktreeHint")}
-        aria-pressed={config.useWorktree}
-        className={cn(config.useWorktree && "text-primary hover:text-primary")}
-        onClick={() => config.onWorktree(!config.useWorktree)}
-      >
-        <GitBranch className="size-3.5 shrink-0" />
-        <span className="hidden @lg/composer:inline">{t("composer.worktree")}</span>
-      </Chip>
+      <WorktreePicker config={config} />
 
       <div className="flex-1" />
 
@@ -672,7 +796,7 @@ export function Composer({
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
-      {docEmpty && !running && runHint && (
+      {docEmpty && !running && !loading && runHint && (
         <span className="mx-1 hidden shrink-0 whitespace-nowrap text-fine text-muted-foreground @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
         </span>
@@ -703,14 +827,15 @@ export function Composer({
               variant={docEmpty ? "secondary" : "default"}
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onRun}
-              aria-label={t("composer.run")}
+              disabled={loading}
+              aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
             >
-              <ArrowUp className="size-4" />
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {docEmpty ? t("composer.runEmpty") : t("composer.run")}
-            <span className="ml-1.5 opacity-60">{runHint}</span>
+            {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
+            {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
           </TooltipContent>
         </Tooltip>
       )}

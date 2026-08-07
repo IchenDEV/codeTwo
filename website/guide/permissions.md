@@ -1,7 +1,10 @@
 # Permissions & YOLO
 
-When an agent wants to run a command or edit files, ACP asks the client for permission. Code2
-decides how to respond based on the session's **permission mode** and any rules.
+When an ACP agent sends a permission request for a command or file operation, Code2 decides how to
+respond from the session's **permission mode**, tool scope, and any rules. This is permission
+mediation, not an operating-system sandbox: a provider process that performs work without sending an
+ACP permission request is outside this guard. Use a disposable checkout, container, VM, or provider
+sandbox when the provider itself is not trusted.
 
 ## Modes
 
@@ -11,26 +14,34 @@ Set the mode in the config popover — the provider chip at the bottom of the co
 | Mode | Behavior |
 | --- | --- |
 | **Ask** | Prompt for anything not explicitly allowed. The default. |
-| **Accept edits** | Auto-approve edit-class tools (edit/delete/move) in the working dir; still ask for the rest. |
-| **YOLO** | Bypass everything — auto-approve all requests. |
+| **Accept edits** | Auto-approve provider-classified edit/delete/move requests; still ask for the rest. |
+| **YOLO** | Auto-approve every request that the independent tool scope permits. |
 
-## Sandbox — a second, independent axis
+## Tool scope — a second, independent axis
 
-The permission mode decides *who approves*; the **sandbox** decides *what's possible at all*. Pick it
-in the config popover, next to the approval mode — the composer's left-hand chip shows the current
-one, and turns amber on **Danger full access**:
+The permission mode decides *when Code2 asks*; the **tool scope** is a fail-closed ceiling over the
+ACP tool kinds Code2 is willing to approve. The wire field remains named `sandbox` for compatibility.
+Pick it in the config popover; the composer's chip turns amber on **Danger full access**:
 
-| Sandbox | Effect |
+| Tool scope | Effect on ACP permission requests |
 | --- | --- |
-| **Read-only** | No mutations. Edits, deletes, moves, and commands are denied outright. |
-| **Workspace write** | Edits in the workspace are permitted; commands still follow the approval mode. The default. |
-| **Danger full access** | No sandbox restrictions (approvals still apply unless the mode bypasses them). |
+| **Read-only** | Only standardized read/search/fetch/think kinds may continue; mutations and unknown or missing kinds are rejected. |
+| **Workspace write** | Standardized tool kinds may continue to rules and the approval mode; unknown or missing kinds are rejected. The default. |
+| **Danger full access** | Unknown kinds may also continue to rules and the approval mode. |
 
-The sandbox is checked **first and wins**: a read-only sandbox denies a file edit *even in YOLO mode*.
-That combination — auto-approve everything, but physically can't mutate — is a genuinely useful way to
-let an agent explore a repo fast without any risk.
+The scope is checked **first and wins**: Read-only rejects a reported edit even in YOLO mode, and
+Workspace write never lets an unclassified request become an automatic approval. It does not prove
+that a reported path is inside the workspace, intercept provider syscalls, or contain shell commands.
 
-This mirrors Codex's approval-policy × sandbox split.
+That distinction is why Code2 does not describe this control as physical containment.
+
+Code2 persists the two choices as one execution policy. A new session sends the complete policy with
+its creation request, so the first turn uses that pair. Later changes carry a request id; the core
+publishes an authoritative policy event only after the durable row and live permission handler both
+advance. Persistence failure emits a correlated error and leaves the old pair active. Reopening,
+reviving, switching clients, or receiving a concurrent update therefore converges on the core's pair.
+Older session databases migrate to their existing approval mode plus **Workspace write**, rather than
+inventing full access.
 
 ## The permission prompt
 
@@ -42,13 +53,15 @@ you decide.
 
 The engine resolves each request as `(action ∈ ask | allow | deny) × (tool + input pattern)`:
 
-1. Explicit rules are checked first — a matching **deny** always wins.
-2. Otherwise the mode's default applies (YOLO → allow; Accept-edits → allow for edits; else ask).
+1. The tool scope rejects kinds it does not permit.
+2. Explicit rules are checked — a matching **deny** always wins.
+3. Otherwise the mode's default applies (YOLO → allow; Accept-edits → allow for edits; else ask).
 
 ## YOLO safely
 
 ::: danger
-**YOLO auto-approves everything**, including shell commands. Only use it when the session is
-isolated — for example in a [git worktree](/guide/git#worktree-isolation) or a throwaway checkout —
-so a mistake can't touch anything you care about.
+**YOLO auto-approves every request admitted by the selected tool scope**, including reported shell
+commands. A Git worktree protects branch organization, not the rest of your filesystem. For untrusted
+automation, use a throwaway checkout plus real process/filesystem isolation supplied by the provider,
+container, VM, or operating system.
 :::

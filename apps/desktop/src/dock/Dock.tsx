@@ -12,7 +12,7 @@ import {
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
-import { FileViewer } from "../files/FileViewer";
+import { FileViewer, type FileRevealTarget } from "../files/FileViewer";
 import { dirtyKey, useDirtyPaths } from "../files/dirty";
 import { onPtyTitle, ptyDump, ptyKill, type Annotation, type GitStatus } from "../bridge";
 import type { StringKey } from "../i18n/strings";
@@ -76,6 +76,7 @@ export function Dock({
   onSendText,
   openFiles,
   activeFile,
+  fileReveal,
   onActiveFile,
   onCloseFile,
   width,
@@ -105,6 +106,7 @@ export function Dock({
   /** The viewer's open tabs, in open order, and which one is showing. */
   openFiles: string[];
   activeFile: string | null;
+  fileReveal: FileRevealTarget | null;
   onActiveFile: (path: string) => void;
   onCloseFile: (path: string) => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
@@ -414,6 +416,7 @@ export function Dock({
                 onInsert={onInsertFile}
                 onOpen={onOpenFile}
                 onComment={onSendText}
+                reveal={fileReveal}
               />
             ) : (
               <div className="flex min-h-0 flex-1 items-center justify-center p-6">
