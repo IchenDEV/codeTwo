@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "path": "src/terminal/Terminal.tsx",
+      "rules": ["raw-color"],
+      "reason": "xterm receives its renderer-owned ANSI palette from CSS custom properties."
+    },
+    {
+      "path": "src/files/monaco.ts",
+      "rules": ["raw-color", "hardcoded-type-metric"],
+      "reason": "Monaco and Shiki own syntax colors and editor content typography."
+    },
+    {
+      "path": "src/editor/Editor.tsx",
+      "rules": ["hardcoded-type-metric"],
+      "reason": "BlockNote owns document content typography while Code2 owns its surrounding chrome."
+    }
+  ]
+}

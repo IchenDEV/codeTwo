@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "bun run check:design && tsc --noEmit && vite build",
+    "check:design": "bun scripts/check-design-system.ts",
     "test": "bun test",
     "preview": "vite preview",
     "tauri": "tauri"

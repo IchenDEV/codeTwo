@@ -1,181 +1,255 @@
-# Design standards
+# Code2 desktop design system
 
-The desktop app's visual system. Everything here is enforced by tokens in
-`apps/desktop/src/styles.css` where CSS can enforce it, and by convention where it can't.
-When a new value seems needed, add a token — don't inline an arbitrary one.
+Status: **0.9.0 candidate**. The system is structurally frozen; it becomes 1.0.0 only after the
+preview has been checked on Windows with Segoe UI/Cascadia in light and dark mode.
 
-## Type
+This document applies to `apps/desktop` only. The website has its own system; only brand and logo
+assets may be shared. The machine-readable source is
+`apps/desktop/src/design/tokens.css`. Do not copy token values into TypeScript.
 
-Seven sizes, named for their role. Use the token classes; `text-[Npx]` is a code smell
-(the half-pixel sizes that used to litter the codebase — 11.5, 12.5, 13.5 — were drift,
-not decisions).
+Phase 1 establishes the system, development preview, automated contrast checks, and a no-growth
+baseline for existing visual debt. It intentionally does not partially restyle the production UI.
+Phase 2 migrates every desktop surface in one coordinated change and removes the legacy baseline.
 
-| class          | size | role                                              |
-| -------------- | ---- | ------------------------------------------------- |
-| `text-cap`     | 10px | keycaps, badges, all-caps micro-labels, durations |
-| `text-fine`    | 11px | metadata, preview lines, hints, timestamps        |
-| `text-hint`    | 12px | secondary text, tab labels, descriptions          |
-| `text-ui`      | 13px | **the default** — rows, buttons, menus, body text |
-| `text-title`   | 15px | panel and dialog titles                           |
-| `text-heading` | 17px | page headings, empty-state greetings              |
-| `text-display` | 22px | the single heading of a full-page surface         |
+Open the development-only preview with:
 
-Tailwind's own scale — `text-xs`/`text-sm`/`text-base`/`text-lg` — is **not** part of this
-system and must not appear in the app, including inside `components/ui/`. Those are 12/14/16/18px:
-importing a shadcn component unedited is how 14px body text gets in, and 14px next to 13px doesn't
-read as a decision, it reads as a mistake. Restyle the primitive to these tokens on the way in.
+```text
+bun run dev
+http://localhost:1420/?design-system=1
+```
 
-The editor (BlockNote) and settings page display headings have their own scale in
-`styles.css`; those are content, not chrome.
+The preview is not linked from production navigation and is removed from the production bundle by
+the `import.meta.env.DEV` gate.
 
-Faces: Inter (UI), `--font-mono` (paths, shortcuts, diffs, token counts). No third face.
+## Design direction
 
-## Icons
+Freeze and strengthen the existing Code2 visual language. It is a compact desktop tool, not a
+mobile layout and not a showcase for decorative effects.
 
-Lucide only — one library, `currentColor`, consistent stroke. Provider brand marks are the
-single exception (`providers/ProviderIcon.tsx`), drawn in `currentColor` for the same reason.
+- One compact density. Content may remain comfortable; chrome stays tight.
+- Quiet neutral planes establish hierarchy. Code2 blue identifies the primary action.
+- Persistent panels, cards, inputs, popovers, and dialogs are borderless and separated by solid
+  surface tones plus controlled elevation.
+- Hover changes surface or text tone only. It never lifts, scales, or blooms a shadow.
+- Icons use Lucide and `currentColor`. Provider marks may keep their shape, never their brand color.
+- Official themes are light, dark, and system. There is no user accent, provider theme, or custom
+  palette.
 
-| class      | size | role                                           |
-| ---------- | ---- | ---------------------------------------------- |
-| `size-3`   | 12px | inline glyphs inside text lines                |
-| `size-3.5` | 14px | menu rows, list rows, chips                    |
-| `size-4`   | 16px | control buttons (the `size-8` icon button)     |
-| `size-5`   | 20px | feature tiles (dock surface picker)            |
+## Token architecture
 
-## Spacing
+There are three levels, in this order:
 
-The Tailwind 4px grid; no arbitrary pixel padding. The recurring measures:
+1. `--ds-foundation-*` stores raw numbers and colors. Product code must never consume it.
+2. Semantic roles such as `--ds-color-surface`, `--ds-space-section`, and
+   `--ds-type-body-size` describe intent.
+3. Shared-component aliases such as `--ds-button-height` and `--ds-dialog-radius` belong only to
+   reusable primitives.
 
-- **Module inset**: 8px (`m-2`) between floating modules and the window/each other.
-- **Rail gutter**: `px-3` container + `px-2` rows — icons land on one vertical line.
-- **Page gutter**: `px-6` inside full-page surfaces (settings).
-- **Control rows**: `gap-1.5` between grouped controls, `gap-0.5` between icon buttons.
-- **Text measure**: transcript and doc-mode editor cap at `max-w-[860px]`.
+Business components may override layout—width, flex/grid, alignment, positioning, responsive
+behavior, and semantic spacing. They may not override typography, color, radius, elevation,
+control height, motion, or focus appearance. A missing visual treatment becomes a semantic variant
+in the shared primitive, not a local class string.
 
-## Color
+## Color and surfaces
 
-All color goes through the semantic tokens in `styles.css` (`--background`, `--muted-foreground`,
-`--primary`, `--success`, `--warning`, `--destructive`, …), defined in oklch for both schemes.
-Never hex/rgb in components — the sole exception is the terminal's 16-slot ANSI palette, which
-its renderer parses itself.
+All app chrome consumes semantic OKLCH tokens. The five neutral planes are fixed:
 
-Fills for borderless controls derive from foreground alpha so they work in both schemes. Three
-steps, as named tokens — not hand-written alphas, which is how six values (0.025 … 0.09) ended up
-doing three jobs:
+| role | use |
+| --- | --- |
+| `canvas` | window content background |
+| `sidebar` | application chrome; macOS may use native vibrancy |
+| `surface` | cards, fields, persistent panels |
+| `raised` | menus, popovers, tooltips |
+| `modal` | dialogs and blocking surfaces |
 
-| class            | role                                                       |
-| ---------------- | ---------------------------------------------------------- |
-| `bg-fill-quiet`  | list tiles, read-only chips — present, not clickable-looking |
-| `bg-fill-rest`   | fields and borderless buttons at rest                       |
-| `bg-fill-hover`  | those same surfaces under the pointer                       |
+Components cannot mix transparency to invent a sixth plane. macOS sidebar vibrancy is the only
+native-material exception; Windows uses a solid sidebar. Cards, inputs, popovers, and dialogs are
+always solid. Reduced Transparency forces the macOS sidebar to its solid token.
 
-The terminal is the one surface that stays dark in both schemes, so nothing drawn on it can use
-`--foreground` (in light mode that's black on black). Its chrome reads from `bg-term-bg` /
-`text-term-fg` instead — never `white/…`, which is the same hardcoding one step disguised.
+Code2 blue is fixed for primary actions. Use no more than one primary action per local area.
+Success, warning, destructive, and neutral keyboard focus have dedicated roles. A color change must
+be made centrally, pass the light and dark contrast contracts, and land in an isolated visual-token
+commit with light, dark, and narrow screenshots.
 
-## Radius
+Dark mode separates planes with lightness and tighter dark shadows. Do not add a white hairline,
+inner glow, or translucent glass to recover separation.
 
-`rounded-sm` 6px (inline chips, rows inside a panel) · `rounded-md` 8px (**the default** — buttons,
-fields, menu items) · `rounded-lg` 10px (cards, panels) · `rounded-xl` 14px (feature tiles).
-The 12px on `.surface-module` is the window's own corner and matches `windowEffects.radius` in
-`tauri.conf.json`; it isn't a general-purpose value.
+## Typography
 
-## State
+Use the platform UI stack:
 
-Every interactive element owes the same six answers, and they must be answered the same way
-everywhere — a tree row, a menu item, a table row and a tab are not four different products.
+```css
+-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
+```
 
-| state    | how it's expressed                                                              |
-| -------- | ------------------------------------------------------------------------------- |
-| hover    | `hover:bg-accent/50` on rows, `hover:bg-fill-hover` on fields and bare buttons. Colour only — hover never moves layout or changes size |
-| selected | `bg-accent` (+ `text-accent-foreground` when the row carries its own colour). A second, weaker rank — the cursor sitting on a row you haven't opened — is `bg-accent/70` |
-| focus    | `focus-visible:ring-[3px] focus-visible:ring-ring/50`, never `outline-none` alone. Keyboard reachability is not optional, and Radix gives it for free if you don't fight it |
-| active   | brightness or a ≤1px shift, `--motion-fast`. No bounce |
-| disabled | `disabled:opacity-50 disabled:pointer-events-none`. Never a bespoke grey |
-| loading  | keep the element's size, swap the label for a spinner, and block re-submit. A control that resizes when it starts working makes the page jump under the pointer |
+Monospace uses `ui-monospace`, SF Mono on macOS, and Cascadia/Consolas fallbacks on Windows. Do not
+bundle Inter or force SF on Windows.
 
-Tabs are the deliberate exception: they mark selection with the underline in `tabs.tsx`, not a
-fill, because a tab strip full of filled rectangles competes with the content it labels.
+| role | size / line height | use |
+| --- | --- | --- |
+| Large title | 26 / 32 | rare top-level statement |
+| Page title | 22 / 26 | full-page title |
+| Section | 17 / 22 | section heading |
+| Dialog | 15 / 20 | dialog and panel title |
+| Body / control | 13 / 16 | rows, buttons, menus, single-line body |
+| Callout | 12 / 15 | secondary descriptions and tab labels |
+| Metadata | 11 / 14 | timestamps, paths, hints |
+| Caption / keycap | 10 / 13 | badges and compact keyboard labels |
 
-## Surfaces & borders
+Transcript, Markdown, and document content use 13 / 20 for multi-line body text. Code blocks use
+12 / 18. Content headings may use 15, 17, and 22; compact density applies to surrounding chrome,
+not to reading comfort.
 
-Borderless: layout is defined by shadow and fill, not lines (`surface-module`, ring-hairlines
-`ring-1 ring-foreground/10` on overlays, `divide-*`/`border-*` only inside content like diffs).
-See the module classes in `styles.css`.
+Tailwind's `text-xs`, `text-sm`, `text-base`, and arbitrary `text-[…]` values are not part of the
+system.
+
+## Spacing, geometry, and control height
+
+Spacing is a 4px grid with one controlled 2px optical step:
+
+| value | semantic role |
+| --- | --- |
+| 2 | optical correction |
+| 4 | inline and metadata gap |
+| 6 | icon/text and grouped controls |
+| 8 | row horizontal inset and module gap |
+| 12 | card, popover, and persistent-panel inset |
+| 16 | section and form group |
+| 24 | dialog and page gutter |
+| 32 | large page section |
+
+The radius scale is 4 / 8 / 12 / 16px:
+
+- 4: checkbox, status mark, micro element.
+- 8: button, input, menu item, list row.
+- 12: card, popover, sidebar module.
+- 16: dialog and large panel.
+
+Fully round geometry is reserved for intrinsically circular objects. Icons are exactly 12 / 14 /
+16px for inline, list, and control roles. Standard UI does not use 20px icons.
+
+Control heights are 24px for mini/icon/inline controls, 28px for normal buttons, menus, and
+toolbars, and 32px for inputs, selects, and important controls. A taller element is content input
+such as Composer, not a generic large-button size.
+
+## Elevation and borders
+
+Elevation communicates a real layer and never changes on hover:
+
+| role | use |
+| --- | --- |
+| `elevation-surface` | input, card, persistent panel |
+| `elevation-raised` | menu, popover, tooltip |
+| `elevation-modal` | dialog, blocking overlay |
+
+Static borders and decorative rings are forbidden. The complete whitelist is:
+
+- neutral keyboard focus;
+- error or warning status;
+- table, diff, code, or document content structure;
+- resize divider or drag target;
+- progress track.
+
+## State contracts
+
+Every shared control implements rest, hover, keyboard focus, disabled, and loading. Selected and
+invalid are added where meaningful.
+
+- **Focus:** a 2px neutral, high-contrast indicator, visible for keyboard focus only. No blue
+  focus ring. Inputs may slightly raise their surface, but must not resize.
+- **Invalid:** a persistent 2px destructive indicator plus adjacent error text.
+- **Disabled:** 50% opacity and no pointer events; do not invent a disabled gray.
+- **Read-only:** quiet fill and normal legibility.
+- **Loading:** stable dimensions with a 14px spinner; do not swap to a differently sized control.
+
+Button variants are Primary, Secondary, Ghost, and Destructive. Secondary is a neutral elevated
+surface, Ghost has no shadow, and Destructive is red only for a destructive action. Outline is not
+a variant.
+
+Inputs use a neutral surface plus `elevation-surface`, without a border. Rest, hover, keyboard
+focus, invalid, disabled, read-only, and loading all preserve the 32px field contract.
 
 ## Motion
 
-One curve and four durations, as tokens in `styles.css` — a hand-typed `0.18s` is the same drift
-as a hand-typed hex.
+| role | duration | use |
+| --- | --- | --- |
+| feedback | 120ms | hover, press, color, opacity |
+| layer | 160ms | menu, popover, tooltip |
+| dialog | 220ms | dialog, dock, tree |
+| page | 280ms | full-page transition |
 
-| token             | value | use                                                            |
-| ----------------- | ----- | -------------------------------------------------------------- |
-| `--ease-standard` | `cubic-bezier(0.16, 1, 0.3, 1)` | everything that isn't an exit. Exits use `ease-in` |
-| `--motion-fast`   | 120ms | hover, press, grabbers, opacity. Never moves layout             |
-| `--motion-layer`  | 160ms | anchored surfaces: menus, popovers, tooltips                    |
-| `--motion-normal` | 220ms | dialogs, dock sweep, tree branches — motion you watch travel    |
-| `--motion-slow`   | 280ms | full-page mounts                                                |
+Entrances use `cubic-bezier(0.16, 1, 0.3, 1)` and exits use `ease-in`. Do not add spring, bounce,
+hover scaling, or a one-off duration. Reduced Motion collapses all four semantic durations.
 
-In CSS use the variables; in a component use `duration-[var(--motion-fast)]`. The ready-made
-classes cover most cases: `pop-layer`, `dialog-layer`, `overlay-layer`, `animate-page-in`,
-`animate-rise-in`, `animate-slide-in-right`. Animation is for a change of state, not for proof
-that the UI can move: no bounce, no spring, no scaling a card on hover. All motion collapses
-under `prefers-reduced-motion`.
+## Window behavior
 
-## Transcript
+The desktop minimum remains 800×500. Window classes are compact at 800–999px, standard at
+1000–1399px, and wide at 1400px and above. Local modules use container queries when their own
+available width—not the window—is the cause of a layout change. There is no mobile application
+layout. Dialogs must avoid overflow around 400px for tests and auxiliary windows.
 
-The main conversation and the document-mode side panel share one renderer; their variants may
-change layout, never behavior or content. Live output follows the bottom only while the reader is
-already at the latest content. Pointer or keyboard interaction pauses following, exposes a visible
-“Jump to latest” action, and leaves the reading position untouched as new chunks arrive. Loading an
-earlier page preserves the content under the reader instead of moving the viewport. Never start a
-new smooth-scroll animation for each streamed chunk.
+## Shared components and exceptions
 
-## Feedback & recovery
+The local shadcn/Radix primitives remain the unique foundation. Do not add a second UI library or
+reimplement Button, Input, Select, Checkbox, Tabs, Dialog, Popover, DropdownMenu, ContextMenu,
+Tooltip, Command palette, file Tree, or Toast.
 
-Every action needs a perceptible result, and the result is not always a dialog.
+Terminal, Monaco/Shiki, and BlockNote are controlled content-renderer exceptions:
 
-- **Say something happened.** `useToast()` from `ui/toast.tsx` is the app-wide channel; anything
-  that can silently no-op (a disabled provider, a commit with nothing staged) must say so there.
-- **Prefer undo to confirmation.** For anything recoverable, do it, report it, and pass an
-  `action` to the toast: `toast("Deleted 3 files", "info", { label: "Undo", run: restore })`.
-  A confirm dialog trains the reflex that dismisses it. Toasts carrying an undo stay up 8s.
-- **Keep confirmation for the unrecoverable** — and label the button with the verb ("Delete
-  branch"), never "OK".
-- **Tooltips are for unlabelled icons.** Never put information there that the user must read to
-  proceed; a tooltip is unreachable by touch and invisible to a keyboard until focus lands.
-- **Errors linger** (8s) because they usually carry something worth reading.
+- their surrounding chrome uses Code2 semantic tokens;
+- xterm may use its fixed ANSI palette;
+- Monaco/Shiki may own syntax colors and editor content typography;
+- BlockNote may own document typography inside the document surface.
 
-## Components
+Every exception is file-scoped with a reason in `scripts/design-system-allowlist.json`.
 
-Source order when a control is needed:
+## Accessibility
 
-1. **shadcn/ui primitive** in `components/ui/` (built on the `radix-ui` bundle) — menus are
-   `DropdownMenu` (keyboard nav for free), composite anchored panels are `Popover`, centred
-   surfaces are `Dialog`. Restyle in place to these standards.
-2. A shared app component (`Chip`, `MenuSection`, `IconAction`…) when a primitive doesn't fit.
-3. A new hand-rolled element only when neither exists — and it must consume the tokens above.
+Version 1 includes Reduced Motion, Reduced Transparency, Increased Contrast, and Bold Text. Bold
+Text is represented by `data-ds-bold-text` until Phase 2 wires the native Tauri preference. There
+is no independent UI zoom in v1; the product retains one compact density. Semantic colors are
+checked in both schemes by `bun run check:design`.
 
-Don't hand-roll what Radix already ships: focus management, dismissal, and keyboard behavior
-are the actual product of that dependency.
+## Behavioral laws retained from Code2
 
-There is exactly one implementation of each of Button, Input, Select, Checkbox, Tabs, Dialog,
-Popover, DropdownMenu, ContextMenu, Tooltip, Command palette, the file Tree (`files/FilePanel`)
-and the toast (`ui/toast`). A second one is a bug even when it looks right on its own page.
+- Live transcript follows the bottom only while the reader is already at the latest content.
+  Pointer or keyboard interaction pauses following and exposes “Jump to latest.” Prepending history
+  preserves the content under the reader.
+- Actions provide perceptible feedback. Use the shared toast for outcomes, prefer undo for
+  recoverable actions, and reserve confirmation dialogs for irreversible work.
+- Tooltips explain unlabelled icons; they never contain information required to proceed.
+- Errors remain visible long enough to read and act on.
 
-## Before you commit
+## Enforcement and migration
 
-A change that touches the UI should survive this list. Every item is greppable, so it's also
-what a review looks for first:
+Run from `apps/desktop`:
 
-- [ ] No hex, `rgb()` or `oklch()` in a component — only the terminal's ANSI palette is exempt.
-- [ ] No `text-xs`/`text-sm`/`text-base`/`text-lg`, no `text-[Npx]`.
-- [ ] No hand-written `bg-foreground/[0.0x]` — use `bg-fill-*`; no `white/…` outside the terminal.
-- [ ] No literal transition durations or curves — use the motion tokens.
-- [ ] Padding on the 4px grid; no arbitrary `p-[13px]`.
-- [ ] Hover, focus-visible, disabled and (where it can be busy) loading all exist, and hover
-      doesn't move anything.
-- [ ] Both schemes checked — the dark one is not a filter over the light one.
-- [ ] Nothing re-implements a component from the list above.
-- [ ] Destructive or slow actions report their result, and recoverable ones offer undo instead of
-      a confirmation.
+```bash
+bun run check:design
+bun test
+bun run build
+```
+
+The checker reads CSS tokens directly, verifies declared contrast pairs, and scans TSX/CSS for
+raw color, arbitrary values, off-scale type, spacing, radii, shadow, motion, borders, direct
+foundation use, visual `!important`, and non-contract control heights. Errors include file, line,
+matched value, and the expected replacement.
+
+`scripts/design-system-baseline.json` records only pre-Phase-1 debt by rule, path, and value. CI
+allows the count to decrease but never increase. New system files have zero baseline allowance.
+Phase 2 removes all recorded violations and deletes the baseline in the same migration.
+
+Pixel-diff CI is intentionally deferred because platform system-font rasterization differs. CI
+enforces rules and contrast; the development preview is manually checked in light, dark, narrow,
+Reduced Motion, Increased Contrast, and Bold Text. After the migration, evaluate separate macOS
+and Windows visual baselines.
+
+## Versioning and review
+
+- Patch: documentation or alias correction with no semantic/visual change.
+- Minor: token value change or additive semantic role.
+- Major: token removal, rename, or meaning change.
+
+Foundation changes belong in an isolated commit and require light, dark, and narrow screenshots.
+A feature PR cannot casually change foundation values. Before 1.0.0, validate the Preview on
+Windows in Segoe UI/Cascadia, light and dark; until then the status remains 0.9.x.
