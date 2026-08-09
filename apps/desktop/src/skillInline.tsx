@@ -1,6 +1,7 @@
 import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs } from "@blocknote/core";
 import { createReactBlockSpec, createReactInlineContentSpec } from "@blocknote/react";
 import type { DocBlock, StyleChange } from "./bridge";
+import { workspaceReferenceBlock } from "./editor/workspaceReference";
 
 // A real inline "skill" node: a first-class document element (not styled text), so a composed
 // prompt serializes deterministically into `DocBlock::Skill` with a stable skillId. This is what
@@ -183,7 +184,7 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
         } else if (inline.type === "fileMention") {
           flush();
           const props = inline.props as { path: string };
-          out.push({ type: "file", path: props.path });
+          out.push(workspaceReferenceBlock(props.path));
         } else if (inline.type === "sessionMention") {
           flush();
           const props = inline.props as { sessionId: string };

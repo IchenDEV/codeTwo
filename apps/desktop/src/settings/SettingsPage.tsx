@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, BrainCircuit, Keyboard, Package, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Folder, Keyboard, Package, RotateCcw, SlidersHorizontal } from "lucide-react";
 
-import type { KeymapEntry, ProviderInfo } from "../bridge";
+import type { KeymapEntry, Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
@@ -15,10 +15,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "general" | "memory" | "keybindings" | "providers";
+type SettingsTab = "general" | "project" | "memory" | "keybindings" | "providers";
 
 const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey: StringKey }[] = [
   { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+  { id: "project", icon: Folder, labelKey: "settings.project" },
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
@@ -119,6 +120,8 @@ export function SettingsPage({
   onResetAll,
   providers,
   projectPath,
+  project,
+  onProjectWorktreeMode,
   onClose,
 }: {
   bindings: KeymapEntry[];
@@ -129,6 +132,8 @@ export function SettingsPage({
   onResetAll?: () => void;
   providers: ProviderInfo[];
   projectPath: string;
+  project: Project | null;
+  onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
   onClose: () => void;
 }) {
   const t = useT();
@@ -136,6 +141,19 @@ export function SettingsPage({
   const { preference: language, setPreference: setLanguage } = useLanguage();
   const term = useTerminalSettings();
   const [tab, setTab] = useState<SettingsTab>("general");
+  const [projectModeSaving, setProjectModeSaving] = useState(false);
+
+  const saveProjectWorktreeMode = async (
+    path: string,
+    mode: ProjectWorktreeMode | null,
+  ) => {
+    setProjectModeSaving(true);
+    try {
+      await onProjectWorktreeMode(path, mode);
+    } finally {
+      setProjectModeSaving(false);
+    }
+  };
 
   const byAction = useMemo(() => new Map(bindings.map((b) => [b[0], b])), [bindings]);
 
@@ -228,8 +246,9 @@ export function SettingsPage({
           ))}
         </nav>
         <button
+          disabled={projectModeSaving}
           onClick={onClose}
-          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft className="size-4 shrink-0" />
           {t("settings.back")}
@@ -334,6 +353,49 @@ export function SettingsPage({
                     <div className="space-y-0.5">{g.actions.map(keyRow)}</div>
                   </div>
                 ))}
+              </Page>
+            )}
+
+            {tab === "project" && (
+              <Page title={t("settings.project")} description={t("settings.projectHint")}>
+                {project ? (
+                  <>
+                    <Row
+                      label={t("settings.projectWorkspace")}
+                      hint={t("settings.projectWorkspaceHint")}
+                    >
+                      <Select
+                        disabled={projectModeSaving}
+                        value={project.default_worktree_mode ?? "inherit"}
+                        onValueChange={(value) => {
+                          void saveProjectWorktreeMode(
+                            project.path,
+                            value === "inherit" ? null : (value as ProjectWorktreeMode),
+                          );
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-56 justify-between">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper" align="end">
+                          <SelectItem value="inherit">{t("settings.projectWorkspaceInherit")}</SelectItem>
+                          <SelectItem value="local">{t("settings.projectWorkspaceLocal")}</SelectItem>
+                          <SelectItem value="current">{t("settings.projectWorkspaceCurrent")}</SelectItem>
+                          <SelectItem value="origin_default">
+                            {t("settings.projectWorkspaceOrigin")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Row>
+                    <Row label={t("settings.projectPath")}>
+                      <span className="max-w-72 truncate font-mono text-fine text-muted-foreground" title={project.path}>
+                        {project.path}
+                      </span>
+                    </Row>
+                  </>
+                ) : (
+                  <p className="py-6 text-ui text-muted-foreground">{t("settings.projectNone")}</p>
+                )}
               </Page>
             )}
 

@@ -3,6 +3,11 @@ import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "l
 
 import { DocEditor } from "./editor/Editor";
 import {
+  loadBrowserHistory,
+  removeBrowserProject,
+  saveBrowserHistory,
+} from "./browser/history";
+import {
   answerPermission,
   applyPluginScaffold,
   archiveSession,
@@ -53,6 +58,7 @@ import {
   setConfigOption,
   setKeymap,
   setModel,
+  setProjectWorktreeMode,
   setSessionMemoryPolicy,
   setExecutionPolicy,
   submitPrompt,
@@ -74,6 +80,7 @@ import {
   type PluginInfo,
   type Project,
   type ProjectScript,
+  type ProjectWorktreeMode,
   type ProviderInfo,
   type PermissionMode,
   type Sandbox,
@@ -108,6 +115,10 @@ import {
   type SessionMode,
 } from "./session/mode";
 import { Composer } from "./session/Composer";
+import {
+  nextSessionWorktreeBaseline,
+  projectSwitchWorktreeBaseline,
+} from "./session/projectDefaults";
 import { TranscriptPane } from "./session/TranscriptPane";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import {
@@ -405,6 +416,10 @@ export default function App() {
   // Mirrors `activeProject` so `selectProject` can tell a real switch from a re-click without
   // remaking its callback (and the rail rows' props) on every project change.
   const activeProjectRef = useRef<string | null>(null);
+  // Project list reads can overlap local preference writes. A read that started before or during
+  // a write must never restore the older SQLite snapshot after the write completes.
+  const projectLoadSeqRef = useRef(0);
+  const projectMutationVersionRef = useRef(0);
   const memoryReadRef = useRef<MemoryAccess>("inherit");
   const memoryWriteRef = useRef<MemoryAccess>("inherit");
   const memoryReceiptsRef = useRef<MemoryReceipt[]>([]);
@@ -620,8 +635,41 @@ export default function App() {
   }, [t, toast]);
 
   const refreshProjects = useCallback(() => {
-    listProjects().then(setProjects).catch(() => {});
+    const seq = ++projectLoadSeqRef.current;
+    const mutationVersion = projectMutationVersionRef.current;
+    listProjects()
+      .then((items) => {
+        if (
+          seq === projectLoadSeqRef.current &&
+          mutationVersion === projectMutationVersionRef.current
+        ) {
+          setProjects(items);
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const updateProjectWorktreeMode = useCallback(
+    async (path: string, nextMode: ProjectWorktreeMode | null) => {
+      const patchMode = (mode: ProjectWorktreeMode | null) => (items: Project[]) =>
+        items.map((project) =>
+          project.path === path ? { ...project, default_worktree_mode: mode } : project,
+        );
+
+      projectMutationVersionRef.current += 1;
+      try {
+        await setProjectWorktreeMode(path, nextMode);
+        projectMutationVersionRef.current += 1;
+        // A project default seeds future drafts. It must not overwrite an explicit choice in the
+        // current Composer while Settings is open or while this native write is in flight.
+        setProjects(patchMode(nextMode));
+      } catch (error) {
+        projectMutationVersionRef.current += 1;
+        toast(t("toast.projectDefaultFailed", { error: String(error) }), "error");
+      }
+    },
+    [t, toast],
+  );
 
   /** Switch projects: the working directory, the conversation list and the git section all follow. */
   const selectProject = useCallback(
@@ -631,6 +679,8 @@ export default function App() {
       invalidatePendingCreation();
       setActiveProject(path);
       setCwd(path);
+      const project = projects.find((item) => item.path === path);
+      setWorktreeBase(projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null));
       // Selecting a project always opens a blank source-checkout draft, including a re-click of the
       // current project. Keeping an active worktree session while `cwd` switches to the source would
       // make file/Git/terminal surfaces show one checkout while the agent keeps editing another.
@@ -653,7 +703,7 @@ export default function App() {
       setMemoryWrite("inherit");
       void openProject(path).then(refreshProjects);
     },
-    [invalidatePendingCreation, refreshProjects],
+    [invalidatePendingCreation, projects, refreshProjects],
   );
 
   const addProjectFolder = useCallback(async () => {
@@ -1150,8 +1200,19 @@ export default function App() {
     setMemoryRead("inherit");
     setMemoryWrite("inherit");
     setCwd(source);
-    const baseline = sessionCreationBaseline(currentSession);
-    if (baseline !== undefined) setWorktreeBase(baseline);
+    // Pressing New while already on the unsent blank draft is a focus/reset no-op for workspace
+    // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
+    // and seeds that draft from the project preference or the prior session's baseline kind.
+    if (currentSessionId !== null) {
+      const projectMode = projects.find(
+        (project) => project.path === activeProjectRef.current,
+      )?.default_worktree_mode ?? null;
+      const baseline = nextSessionWorktreeBaseline(
+        projectMode,
+        sessionCreationBaseline(currentSession),
+      );
+      if (baseline !== undefined) setWorktreeBase(baseline);
+    }
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
     // A New action opens a configurable blank draft. The first Run creates the durable session,
@@ -1160,6 +1221,7 @@ export default function App() {
     cwd,
     sessions,
     archivedSessions,
+    projects,
     toast,
     t,
     invalidatePendingCreation,
@@ -1834,6 +1896,7 @@ export default function App() {
           activeProjectRef.current = last.path;
           setActiveProject(last.path);
           setCwd(last.path);
+          setWorktreeBase(projectSwitchWorktreeBaseline(last.default_worktree_mode));
           return;
         }
         const here = await defaultCwd();
@@ -1963,6 +2026,8 @@ export default function App() {
           onResetAll={resetAllBindings}
           providers={providers}
           projectPath={activeProject ?? cwd}
+          project={projects.find((project) => project.path === activeProject) ?? null}
+          onProjectWorktreeMode={updateProjectWorktreeMode}
           onClose={() => {
             setShowSettings(false);
             setCapturing(null);
@@ -1992,6 +2057,12 @@ export default function App() {
           onRenameProject={(p, name) => void renameProject(p, name).then(refreshProjects)}
           onRemoveProject={(p) => {
             void removeProject(p).then(() => {
+              try {
+                const history = loadBrowserHistory(window.localStorage);
+                saveBrowserHistory(window.localStorage, removeBrowserProject(history, p));
+              } catch {
+                // Browser history is a convenience; a blocked local store must not block removal.
+              }
               refreshProjects();
               // Dropping the project you were in leaves nothing selected; fall back to the next one
               // rather than stranding the rail on a project that's no longer listed.
@@ -2269,6 +2340,7 @@ export default function App() {
             onTab={setDockTab}
             onClose={() => setDockTab(null)}
             cwd={cwd || null}
+            projectPath={activeProject ?? cwd ?? null}
             sessionKey={activeSession ?? "main"}
             git={git}
             onRefreshGit={refreshGit}

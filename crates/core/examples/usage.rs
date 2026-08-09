@@ -6,7 +6,7 @@
 //! CODETWO_LIMIT_5H=5000000 cargo run -p codetwo-core --example usage
 //! ```
 
-use codetwo_core::usage::{by_source, scan_all, windows, Limits};
+use codetwo_core::usage::{by_source, scan_all_with_count, windows, Limits};
 
 fn fmt(n: u64) -> String {
     if n >= 1_000_000 {
@@ -43,11 +43,15 @@ fn bar(fraction: Option<f32>, filled_when_unknown: bool) -> String {
 }
 
 fn main() {
-    let records = scan_all();
+    let scan = scan_all_with_count();
+    let records = scan.records;
     let now = codetwo_core::session::now_millis();
     let limits = Limits::from_env();
 
-    println!("\n  Code2 usage — {} transcripts scanned\n", records.len());
+    println!(
+        "\n  Code2 usage — {} transcripts scanned\n",
+        scan.transcripts
+    );
     for w in windows(&records, now, &limits) {
         let pct = match w.fraction {
             Some(f) => format!("{:>4.0}%", f * 100.0),
