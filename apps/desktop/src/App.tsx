@@ -30,6 +30,7 @@ import {
   gitRevert,
   gitStatus,
   githubImportPlugin,
+  installMarketplacePlugin,
   issueContext,
   listArchivedSessions,
   listMemoryReceipts,
@@ -45,6 +46,7 @@ import {
   newSession,
   onEngineEvent,
   openProject,
+  pickPluginMarketplace,
   pinSession,
   pickDirectory,
   providerLabel,
@@ -58,6 +60,8 @@ import {
   setConfigOption,
   setKeymap,
   setModel,
+  setPluginEnabled,
+  setPluginTrusted,
   setProjectWorktreeMode,
   setSessionMemoryPolicy,
   setExecutionPolicy,
@@ -2405,14 +2409,48 @@ export default function App() {
             toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
             return result;
           }}
-          onUninstallPlugin={async (id) => {
+          onOpenMarketplace={pickPluginMarketplace}
+          onInstallMarketplacePlugin={async (marketplacePath, pluginName) => {
             try {
-              await uninstallPlugin(id);
+              const result = await installMarketplacePlugin(marketplacePath, pluginName);
+              setPlugins(await listPlugins());
+              await refreshSkills();
+              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+              return result;
+            } catch (error) {
+              toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onUninstallPlugin={async (id, keepData = false) => {
+            try {
+              await uninstallPlugin(id, keepData);
               setPlugins(await listPlugins());
               await refreshSkills();
               toast(t("pluginHub.pluginUninstalledToast"), "success");
             } catch (error) {
               toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onSetPluginEnabled={async (id, enabled) => {
+            try {
+              await setPluginEnabled(id, enabled);
+              setPlugins(await listPlugins());
+              await refreshSkills();
+              toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
+            } catch (error) {
+              toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
+              throw error;
+            }
+          }}
+          onSetPluginTrusted={async (id, trusted) => {
+            try {
+              await setPluginTrusted(id, trusted);
+              setPlugins(await listPlugins());
+              toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
+            } catch (error) {
+              toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
               throw error;
             }
           }}

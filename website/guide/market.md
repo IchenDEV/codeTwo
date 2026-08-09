@@ -13,16 +13,23 @@ Choose **Install from GitHub**, then enter one of these forms:
 - `https://github.com/owner/repository`
 - `https://github.com/owner/repository/tree/ref/path` to select one plugin in a larger repository
 
-Code2 understands `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json`. A repository with no
+Code2 understands the portable Agent Plugins 1.0.0 root `plugin.json`,
+`.codex-plugin/plugin.json`, and `.claude-plugin/plugin.json`. Coexisting manifests are merged with
+deterministic metadata precedence: Agent Plugins, then Codex, then Claude Code. A repository with no
 manifest is treated as a conventional plugin when it contains one of the supported folders below,
 so existing skill-only repositories remain installable.
 
 ```text
 my-plugin/
+├── plugin.json                  # Agent Plugins 1.0.0, when present
 ├── .codex-plugin/plugin.json
+├── .claude-plugin/plugin.json
 ├── skills/<name>/SKILL.md
 ├── agents/<name>.md
+├── commands/<name>.md
+├── mcp.json                     # Agent Plugins portable MCP
 ├── .mcp.json
+├── .lsp.json
 ├── scaffolds/<name>/
 │   ├── scaffold.json
 │   └── ...project files
@@ -30,14 +37,15 @@ my-plugin/
 └── assets/
 ```
 
-The canonical manifest fields `name`, `version`, `description`, `author`, `skills`, `mcpServers`,
-and `interface.displayName` are read. `skills` and `mcpServers` may point to custom relative paths;
-Subagents and scaffolds use the conventional folders shown above.
+Agent Plugins schema selection is local and versioned: this release accepts 1.0.0 and never fetches
+a schema while installing. Invalid portable Skills and MCP entries are isolated and reported in the
+plugin detail instead of hiding valid siblings. Native `skills`, `commands`, `agents`, `mcpServers`,
+and `lspServers` paths may be declared with `./`-relative paths. Unsupported native components are
+preserved and shown explicitly; detection alone is not reported as runtime support.
 
 ## Components
 
-Installed packages expose three composable component types in the **Components** tab and `/`
-picker:
+Installed packages expose these composable or runtime component types:
 
 - **Skills** — standard `SKILL.md` instructions, with an inline cross-provider fallback.
 - **Subagents** — Markdown specialist definitions from `agents/`, `subagents/`, `.codex/agents/`, or
@@ -47,8 +55,22 @@ picker:
   attaches it during ACP `session/new`; merely installing a plugin does not launch the server.
   Remote transports require the corresponding capability from the selected Agent, and Code2 reports
   an explicit error before the turn if it is absent.
+- **Commands** — native command Markdown is compiled into the same cross-provider inline form as a
+  Skill.
+- **LSP** — valid stdio definitions from `.lsp.json` or inline `lspServers` can replace the stock
+  language server for matching language ids after the plugin is explicitly trusted. Socket LSP is
+  inventoried but not run.
 
 The compiled-prompt preview lists attached Skills, Subagents, and MCP servers before a turn runs.
+
+## Opening a marketplace
+
+Choose **Open marketplace** and select either `.agents/plugins/marketplace.json` or
+`.claude-plugin/marketplace.json`. Code2 lists valid entries even when sibling entries are invalid.
+Relative local sources, public GitHub sources, and GitHub `git-subdir` sources are installable;
+branch, tag, and exact SHA pins are preserved. npm, archive, private/authenticated repositories, and
+non-GitHub Git sources are currently shown with an explicit unsupported diagnostic rather than
+silently falling back to another source.
 
 ## Installing a scaffold
 
@@ -75,9 +97,10 @@ Code2's application-data `plugins/` directory. Updating the same repository and 
 that package; uninstalling removes the package and all of its components.
 
 Installation never executes repository scripts. Plugin files, including scripts and assets, are
-preserved for the package, but code runs only later when you explicitly use an MCP component. Read
-the source and install only repositories you trust: Skills and Subagents become prompt instructions,
-and MCP servers are executable integrations.
+preserved for the package. MCP starts only when composed into a session; plugin LSP starts only when
+the package is enabled, explicitly trusted, and a matching file is opened. Disable a package to
+remove its prompt/runtime components from new sessions, or revoke trust to block executable native
+components. Uninstall can delete the package-owned persistent data or retain it for a later reinstall.
 
 ## Built-in market and local skills
 

@@ -463,11 +463,7 @@ export async function listWorktreeBaselines(cwd: string): Promise<WorktreeBaseli
   return inTauri ? invoke<WorktreeBaselineOption[]>("list_worktree_baselines", { cwd }) : [];
 }
 
-export async function submitPrompt(
-  session: string,
-  doc: DocBlock[],
-  requestId: string,
-): Promise<void> {
+export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {
   if (inTauri) await invoke("submit_prompt", { session, doc, requestId });
 }
 
@@ -1058,6 +1054,28 @@ export interface PluginCounts {
   subagents: number;
   mcp_servers: number;
   scaffolds: number;
+  commands: number;
+  hooks: number;
+  lsp_servers: number;
+  monitors: number;
+  apps: number;
+}
+
+export type PluginStandard = "agent_plugins" | "codex" | "claude_code" | "conventional";
+export type PluginInstallScope = "user" | "project" | "local" | "managed";
+
+export interface PluginDiagnostic {
+  level: "warning" | "error";
+  code: string;
+  message: string;
+  component?: string;
+}
+
+export interface PluginExtensionComponent {
+  kind: string;
+  name: string;
+  path: string;
+  status: "ready" | "requires_trust" | "requires_auth" | "unsupported";
 }
 
 export interface PluginScaffoldInfo {
@@ -1075,13 +1093,119 @@ export interface PluginInfo {
   author: string;
   source: string;
   repository: string;
+  spec_version: string;
+  standard: PluginStandard;
+  standards: PluginStandard[];
+  enabled: boolean;
+  trusted: boolean;
+  scope: PluginInstallScope;
   counts: PluginCounts;
   scaffolds: PluginScaffoldInfo[];
+  extension_components: PluginExtensionComponent[];
+  diagnostics: PluginDiagnostic[];
 }
 
 export interface GitHubImportResult {
   plugin: PluginInfo;
 }
+
+export type MarketplacePluginSource =
+  | { kind: "local"; path: string }
+  | {
+      kind: "github";
+      repository: string;
+      reference: string | null;
+      sha: string | null;
+    }
+  | {
+      kind: "git";
+      url: string;
+      path: string | null;
+      reference: string | null;
+      sha: string | null;
+    }
+  | {
+      kind: "npm";
+      package: string;
+      version: string | null;
+      registry: string | null;
+    }
+  | { kind: "archive"; url: string; sha256: string | null }
+  | { kind: "unsupported"; description: string };
+
+export interface MarketplacePlugin {
+  name: string;
+  display_name: string;
+  description: string;
+  version: string;
+  category: string;
+  installation_policy: string;
+  authentication_policy: string;
+  default_enabled: boolean;
+  source: MarketplacePluginSource;
+  installable: boolean;
+  diagnostic: string | null;
+}
+
+export interface MarketplaceDiagnostic {
+  code: string;
+  message: string;
+  entry: number | null;
+}
+
+export interface PluginMarketplace {
+  name: string;
+  display_name: string;
+  description: string;
+  manifest_path: string;
+  root: string;
+  standard: "codex" | "claude_code";
+  plugins: MarketplacePlugin[];
+  diagnostics: MarketplaceDiagnostic[];
+}
+
+const BROWSER_PLUGIN_MARKETPLACE: PluginMarketplace = {
+  name: "code2-demo-marketplace",
+  display_name: "Code2 compatibility preview",
+  description: "A browser-only preview of marketplace source support and compatibility diagnostics.",
+  manifest_path: "/demo/.claude-plugin/marketplace.json",
+  root: "/demo",
+  standard: "claude_code",
+  plugins: [
+    {
+      name: "local-review-suite",
+      display_name: "Local Review Suite",
+      description: "A local plugin bundle that can be installed by the desktop runtime.",
+      version: "2.1.0",
+      category: "development",
+      installation_policy: "allowed",
+      authentication_policy: "none",
+      default_enabled: true,
+      source: { kind: "local", path: "./plugins/local-review-suite" },
+      installable: true,
+      diagnostic: null,
+    },
+    {
+      name: "npm-observability-demo",
+      display_name: "NPM Observability Demo",
+      description: "Shown for compatibility visibility; the npm source adapter is not implemented yet.",
+      version: "0.8.0",
+      category: "monitoring",
+      installation_policy: "allowed",
+      authentication_policy: "none",
+      default_enabled: false,
+      source: {
+        kind: "npm",
+        package: "@example/observability-plugin",
+        version: "0.8.0",
+        registry: null,
+      },
+      installable: false,
+      diagnostic: "npm marketplace sources are recognized but not installable in this release",
+    },
+  ],
+  diagnostics: [],
+};
 
 export interface ScaffoldInstallResult {
   plugin: string;
@@ -1102,7 +1226,38 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "Code2 Community",
           source: "GitHub · example/developer-toolkit",
           repository: "https://github.com/example/developer-toolkit",
-          counts: { skills: 1, subagents: 1, mcp_servers: 1, scaffolds: 1 },
+          spec_version: "1.0.0",
+          standard: "agent_plugins",
+          standards: ["agent_plugins", "codex", "claude_code"],
+          enabled: true,
+          trusted: false,
+          scope: "user",
+          counts: {
+            skills: 1,
+            subagents: 1,
+            mcp_servers: 1,
+            scaffolds: 1,
+            commands: 1,
+            hooks: 1,
+            lsp_servers: 1,
+            monitors: 0,
+            apps: 0,
+          },
+          extension_components: [
+            {
+              kind: "lsp",
+              name: "rust",
+              path: ".lsp.json",
+              status: "requires_trust",
+            },
+            {
+              kind: "hook",
+              name: "session",
+              path: "hooks/hooks.json",
+              status: "unsupported",
+            },
+          ],
+          diagnostics: [],
           scaffolds: [
             {
               id: "vite-react-demo",
@@ -1121,8 +1276,43 @@ export async function githubImportPlugin(repository: string): Promise<GitHubImpo
   return invoke<GitHubImportResult>("github_import_plugin", { repository });
 }
 
-export async function uninstallPlugin(id: string): Promise<void> {
-  if (inTauri) await invoke("uninstall_plugin", { id });
+export async function pickPluginMarketplace(): Promise<PluginMarketplace | null> {
+  if (!inTauri) return BROWSER_PLUGIN_MARKETPLACE;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: "Plugin marketplace", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return null;
+  return invoke<PluginMarketplace>("read_plugin_marketplace", {
+    path: selected,
+  });
+}
+
+export async function installMarketplacePlugin(
+  marketplacePath: string,
+  pluginName: string,
+): Promise<GitHubImportResult> {
+  if (!inTauri) throw new Error("Marketplace installation requires the Code2 desktop app.");
+  return invoke<GitHubImportResult>("install_marketplace_plugin", {
+    marketplacePath,
+    pluginName,
+  });
+}
+
+export async function uninstallPlugin(id: string, keepData = false): Promise<void> {
+  if (inTauri) await invoke("uninstall_plugin", { id, keepData });
+}
+
+export async function setPluginEnabled(id: string, enabled: boolean): Promise<PluginInfo> {
+  if (!inTauri) throw new Error("Plugin state changes require the Code2 desktop app.");
+  return invoke<PluginInfo>("set_plugin_enabled", { id, enabled });
+}
+
+export async function setPluginTrusted(id: string, trusted: boolean): Promise<PluginInfo> {
+  if (!inTauri) throw new Error("Plugin trust changes require the Code2 desktop app.");
+  return invoke<PluginInfo>("set_plugin_trusted", { id, trusted });
 }
 
 export async function applyPluginScaffold(

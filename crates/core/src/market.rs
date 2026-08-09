@@ -169,6 +169,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "browser".into(),
+                    cwd: None,
                     transport: McpTransport::Stdio {
                         command: "codetwo-browser-mcp".into(),
                         args: vec![],
@@ -187,6 +188,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "web-search".into(),
+                    cwd: None,
                     transport: McpTransport::Stdio {
                         command: "mcp-server-web-search".into(),
                         args: vec![],
@@ -205,6 +207,7 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
             payload: SkillPayload::Mcp {
                 server: McpServer {
                     name: "filesystem".into(),
+                    cwd: None,
                     transport: McpTransport::Stdio {
                         command: "mcp-server-filesystem".into(),
                         args: vec![".".into()],

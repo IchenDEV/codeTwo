@@ -31,6 +31,7 @@ pub mod memory;
 pub mod models;
 pub mod permission;
 pub mod plugin;
+pub mod plugin_marketplace;
 pub mod project;
 pub mod provider;
 pub mod pty;
