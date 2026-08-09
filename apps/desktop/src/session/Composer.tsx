@@ -4,6 +4,7 @@ import {
   BrainCircuit,
   ChevronDown,
   FileText,
+  Gauge,
   GitBranch,
   ListChecks,
   Lock,
@@ -24,6 +25,12 @@ import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./mo
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ConfigOptionInfo, ModelChoice } from "../bridge";
+import {
+  describeContextWindow,
+  formatExactContextTokens,
+  formatContextWindowPercentage,
+  type ContextWindow,
+} from "./contextWindow";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -62,6 +69,8 @@ interface ComposerProps {
   /** What the agent reported it can run. Empty until a session exists, or if it reports none. */
   models: ModelChoice[];
   currentModel: string | null;
+  /** The current session's authoritative provider context usage/capacity, if reported. */
+  contextWindow: ContextWindow | null;
   /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
   defaultModel: string | null;
   onModel: (id: string) => void;
@@ -446,6 +455,46 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
   );
 }
 
+function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
+  const t = useT();
+  const display = describeContextWindow(value);
+  if (!value || !display) return null;
+  const exact = t("composer.contextWindowExact", {
+    used: formatExactContextTokens(value.usedTokens),
+    capacity: formatExactContextTokens(value.contextWindow),
+    percentage: formatContextWindowPercentage(value),
+  });
+  const warning = display.percentage !== null && display.percentage >= 80;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={value.contextWindow}
+          aria-valuenow={Math.min(value.usedTokens, value.contextWindow)}
+          aria-valuetext={exact}
+          aria-label={exact}
+          title={exact}
+          className={cn(
+            "flex shrink-0 items-center gap-1 px-0 py-1 text-hint @lg/composer:px-1.5",
+            warning ? "text-warning" : "text-muted-foreground",
+          )}
+        >
+          <Gauge className="hidden size-3.5 shrink-0 @lg/composer:inline" aria-hidden="true" />
+          <span className="hidden @lg/composer:inline" aria-hidden="true">
+            {display.compact}
+          </span>
+          <span className="@lg/composer:hidden" aria-hidden="true">
+            {display.capacity}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{exact}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
@@ -648,6 +697,7 @@ export function Composer({
   models,
   currentModel,
   defaultModel,
+  contextWindow,
   onModel,
   configOptions,
   onConfigOption,
@@ -755,6 +805,8 @@ export function Composer({
         onConfigOption={onConfigOption}
         hasSession={config.hasSession}
       />
+
+      <ContextWindowStatus value={contextWindow} />
 
       <ModePicker config={config} />
 

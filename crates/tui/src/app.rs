@@ -321,6 +321,9 @@ impl App {
                 }
             }
             Event::Usage { .. } => {}
+            // Context-window data is rendered by the desktop Composer; the TUI keeps the event
+            // exhaustive without conflating it with the legacy rolling usage projection.
+            Event::ContextWindow { .. } => {}
             Event::MemoryContext { receipt, .. } => {
                 self.status = format!("memory: {} recalled", receipt.items.len());
             }

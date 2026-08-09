@@ -90,6 +90,7 @@ Tagged by `event`:
 | `plan` | `session`, `entries`; optional `transcript_seq` |
 | `permission_request` | `session`, `request_id`, `title`, `options` (`[id, label]` pairs) |
 | `usage` | `session`, `input_tokens`, `output_tokens` |
+| `context_window` | `session`, authoritative `used_tokens`, `context_window` capacity |
 | `models` | `session`, `available`, `current` |
 | `config_options` | `session`, `options` |
 | `execution_policy_changed` | `session`, authoritative `policy`; optional `request_id` echoed from `set_execution_policy` |
@@ -121,6 +122,11 @@ handler both hold the same pair. A missing session or persistence failure emits 
 `error` with the policy request's `request_id` and no success event. Every client applies the
 broadcast policy, including uncorrelated events produced by legacy single-axis ops, so session
 switches and concurrent clients converge on the core rather than a local optimistic value.
+
+`context_window` is translated from ACP's `session/update` `usage_update` and carries the provider's
+current context tokens and effective model capacity. It is session-level state, is not persisted as
+transcript content, and may be absent when an adapter cannot report a meaningful window. The legacy
+`usage` event above remains the separate rolling account-usage shape.
 
 `turn_started` is emitted exactly once after the core accepts a prompt for a known session, and
 echoes that prompt's optional `request_id`. With a persistent store, the canonical user-authored

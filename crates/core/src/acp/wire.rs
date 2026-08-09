@@ -297,6 +297,15 @@ pub enum SessionUpdate {
         #[serde(rename = "configOptions", default)]
         config_options: Vec<SessionConfigOption>,
     },
+    /// Authoritative provider context usage/capacity for the active session. `cost` is an
+    /// adapter-specific optional payload; retain it as an opaque value so newer providers remain
+    /// parse-compatible without making cost part of CodeTwo's context-window contract.
+    UsageUpdate {
+        used: u64,
+        size: u64,
+        #[serde(default)]
+        cost: Option<Value>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -427,5 +436,26 @@ mod tests {
         assert!(r.caps().load_session);
         assert!(r.caps().mcp_http);
         assert!(r.caps().mcp_sse);
+    }
+
+    #[test]
+    fn usage_update_parses_authoritative_window_and_unknown_metadata() {
+        let update: SessionUpdate = serde_json::from_value(json!({
+            "sessionUpdate": "usage_update",
+            "used": 53_000,
+            "size": 200_000,
+            "cost": {"input": 0.01},
+            "_meta": {"provider": "codex"}
+        }))
+        .expect("usage_update is a supported ACP session update");
+
+        match update {
+            SessionUpdate::UsageUpdate { used, size, cost } => {
+                assert_eq!(used, 53_000);
+                assert_eq!(size, 200_000);
+                assert_eq!(cost, Some(json!({"input": 0.01})));
+            }
+            other => panic!("unexpected update: {other:?}"),
+        }
     }
 }

@@ -179,6 +179,13 @@ pub enum Event {
         input_tokens: u64,
         output_tokens: u64,
     },
+    /// Authoritative provider-reported context usage/capacity for the active session. This is
+    /// deliberately separate from [`Event::Usage`], which remains the legacy rolling quota shape.
+    ContextWindow {
+        session: SessionId,
+        used_tokens: u64,
+        context_window: u64,
+    },
     /// The models this session can run on: the agent's own list (reported at `session/new` and
     /// echoed after a switch), or [`crate::models::builtin_models`] for its provider — emitted as
     /// soon as the session exists — when the agent doesn't implement the (UNSTABLE) ACP model API.
@@ -284,6 +291,21 @@ mod tests {
         .unwrap();
         assert!(event.get("request_id").is_none());
         assert!(event.get("transcript_seq").is_none());
+    }
+
+    #[test]
+    fn usage_update_event_serializes_context_window_fields() {
+        let value = serde_json::to_value(Event::ContextWindow {
+            session: "session-1".into(),
+            used_tokens: 53_000,
+            context_window: 200_000,
+        })
+        .unwrap();
+
+        assert_eq!(value["event"], "context_window");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["used_tokens"], 53_000);
+        assert_eq!(value["context_window"], 200_000);
     }
 
     #[test]
