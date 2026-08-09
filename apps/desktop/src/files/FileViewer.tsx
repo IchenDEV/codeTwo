@@ -5,7 +5,8 @@ import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
 import { useToast } from "../ui/toast";
-import { ImagePreview, imageTypeOf } from "./ImagePreview";
+import { ImagePreview } from "./ImagePreview";
+import { imageTypeOf } from "./imageTypes";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 

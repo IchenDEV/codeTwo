@@ -45,6 +45,16 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useT } from "../i18n";
 import { useToast } from "../ui/toast";
 import { cn } from "@/lib/utils";
+import {
+  loadBrowserHistory,
+  recentSitesForProject,
+  recordBrowserVisit,
+  removeBrowserVisit,
+  saveBrowserHistory,
+  updateBrowserVisitTitle,
+  type BrowserHistoryState,
+  type StorageLike,
+} from "./history";
 
 const BLANK = "about:blank";
 
@@ -80,6 +90,23 @@ interface Tab {
 }
 
 const labelOf = (id: number) => `browser-${id}`;
+
+function visitAge(at: number, now = Date.now()): string | null {
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+  if (minutes < 1) return null;
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function localHistoryStorage(): StorageLike | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
 
 /** True while a dock or split drag is live (the class the drag handlers put on `<body>`).
  *
@@ -137,11 +164,14 @@ function MenuItem({
  */
 export function BrowserPanel({
   url,
+  projectPath,
   visible,
   onNavigate,
   onAnnotate,
 }: {
   url: string;
+  /** Logical source project. Worktree sessions keep browser history with their source project. */
+  projectPath: string | null;
   /** The dock's open state. It closes by sweeping its width to zero without unmounting, and a
    *  native view has no idea it is inside a collapsed box — it would keep painting over the app. */
   visible: boolean;
@@ -164,6 +194,9 @@ export function BrowserPanel({
   const dragging = useDragging();
   const [annotating, setAnnotating] = useState(false);
   const [pending, setPending] = useState(0);
+  const [historyState, setHistoryState] = useState<BrowserHistoryState>(() =>
+    loadBrowserHistory(typeof window === "undefined" ? null : localHistoryStorage()),
+  );
 
   const active = tabs.find((x) => x.id === activeId) ?? tabs[0];
   const activeLabel = labelOf(active.id);
@@ -171,6 +204,30 @@ export function BrowserPanel({
   // A native view can't be layered under a popover, and can't let a drag pass through it either, so
   // the page steps aside for both.
   const showPage = visible && !blank && !menuOpen && !dragging;
+  const recentSites = recentSitesForProject(historyState, projectPath);
+  const tabsRef = useRef(tabs);
+  tabsRef.current = tabs;
+  const projectPathRef = useRef(projectPath);
+  projectPathRef.current = projectPath;
+  const annotatingRef = useRef(annotating);
+  annotatingRef.current = annotating;
+
+  useEffect(() => {
+    // Another window or a previous mount may have written newer history. Re-read at the project
+    // boundary rather than carrying one project's in-memory list into another.
+    setHistoryState(loadBrowserHistory(localHistoryStorage()));
+  }, [projectPath]);
+
+  const updateHistory = useCallback(
+    (update: (current: BrowserHistoryState) => BrowserHistoryState) => {
+      const storage = localHistoryStorage();
+      const current = loadBrowserHistory(storage);
+      const next = update(current);
+      saveBrowserHistory(storage, next);
+      setHistoryState(next);
+    },
+    [],
+  );
 
   const patch = (id: number, f: (t: Tab) => Tab) =>
     setTabs((prev) => prev.map((x) => (x.id === id ? f(x) : x)));
@@ -224,10 +281,6 @@ export function BrowserPanel({
   useEffect(() => {
     if (blank) return;
     void browserAnnotate(activeLabel, annotating);
-    const un = onBrowserLoad(({ label }) => {
-      if (label === activeLabel && annotating) void browserAnnotate(label, true);
-    });
-    return () => void un.then((f) => f());
   }, [activeLabel, annotating, blank]);
 
   /* The badge. The page can't call out to us, so the count is polled — cheaply, and only while
@@ -289,6 +342,17 @@ export function BrowserPanel({
      form posts. The address bar follows the page rather than the other way round. */
   useEffect(() => {
     const un = [
+      onBrowserLoad(({ label, url: loadedUrl }) => {
+        if (label === labelOf(activeId) && annotatingRef.current) {
+          void browserAnnotate(label, true);
+        }
+        const project = projectPathRef.current;
+        if (!project) return;
+        const title = tabsRef.current.find((tab) => labelOf(tab.id) === label)?.title ?? null;
+        updateHistory((current) =>
+          recordBrowserVisit(current, project, loadedUrl, title, Date.now()),
+        );
+      }),
       onBrowserNav(({ label, url: to }) => {
         setTabs((prev) => prev.map((x) => (labelOf(x.id) === label ? { ...x, url: to } : x)));
         if (label === labelOf(activeId)) {
@@ -296,9 +360,14 @@ export function BrowserPanel({
           onNavigate(to);
         }
       }),
-      onBrowserTitle(({ label, title }) =>
-        setTabs((prev) => prev.map((x) => (labelOf(x.id) === label ? { ...x, title } : x))),
-      ),
+      onBrowserTitle(({ label, title }) => {
+        const tab = tabsRef.current.find((entry) => labelOf(entry.id) === label);
+        setTabs((prev) => prev.map((x) => (labelOf(x.id) === label ? { ...x, title } : x)));
+        const project = projectPathRef.current;
+        if (project && tab) {
+          updateHistory((current) => updateBrowserVisitTitle(current, project, tab.url, title));
+        }
+      }),
       onBrowserPopup(({ url: to }) => openTab(to)),
     ];
     return () => {
@@ -307,7 +376,7 @@ export function BrowserPanel({
     // `openTab` and `onNavigate` are re-made every render; re-subscribing on each one would drop
     // events. The identity that matters here is which tab is in front.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId]);
+  }, [activeId, updateHistory]);
 
   /** Hand the page's markup to the prompt, then clear it — sent notes are done, not pending. */
   const annotate = async () => {
@@ -568,9 +637,61 @@ export function BrowserPanel({
         {blank && (
           // No webview for a blank tab: an empty native page paints a white sheet, which in dark
           // mode reads as a rendering bug rather than an empty tab.
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <Globe className="size-8 text-muted-foreground/40" />
-            <p className="text-hint text-muted-foreground">{t("browser.urlPlaceholder")}</p>
+          <div className="absolute inset-0 flex items-start justify-center overflow-y-auto px-6 pt-[14vh]">
+            {recentSites.length > 0 ? (
+              <div className="w-full max-w-md">
+                <div className="mb-3 flex items-center gap-2">
+                  <Globe className="size-4 text-muted-foreground" />
+                  <h3 className="text-ui font-semibold">{t("browser.recent")}</h3>
+                </div>
+                <div className="space-y-1">
+                  {recentSites.map((site) => (
+                    <div
+                      key={site.url}
+                      className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-accent/50"
+                    >
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        title={site.url}
+                        onClick={() => go(site.url)}
+                      >
+                        <span className="block truncate text-ui font-medium">
+                          {site.title || hostOf(site.url) || site.url}
+                        </span>
+                        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
+                          <span className="truncate font-mono">{site.url}</span>
+                          <span
+                            className="shrink-0"
+                            title={new Date(site.last_visited_at).toLocaleString()}
+                          >
+                            {visitAge(site.last_visited_at) ?? t("browser.justNow")}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                        aria-label={t("browser.removeRecent")}
+                        title={t("browser.removeRecent")}
+                        onClick={() => {
+                          const project = projectPathRef.current;
+                          if (!project) return;
+                          updateHistory((current) => removeBrowserVisit(current, project, site.url));
+                        }}
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 pt-[8vh]">
+                <Globe className="size-8 text-muted-foreground/40" />
+                <p className="text-hint text-muted-foreground">{t("browser.urlPlaceholder")}</p>
+              </div>
+            )}
           </div>
         )}
         {!blank && !isDesktop && (

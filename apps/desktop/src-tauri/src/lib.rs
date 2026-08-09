@@ -22,7 +22,7 @@ use codetwo_core::keymap::{Action as KeyAction, Keymap};
 use codetwo_core::models::builtin_models;
 use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
-use codetwo_core::project::{self, ProjectScript};
+use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::source_control::{self, SourceControlInfo};
@@ -1134,6 +1134,20 @@ fn rename_project(state: State<'_, AppState>, path: String, name: String) -> Res
 }
 
 #[tauri::command]
+fn set_project_worktree_mode(
+    state: State<'_, AppState>,
+    path: String,
+    mode: Option<ProjectWorktreeMode>,
+) -> Result<(), String> {
+    match state.engine.store() {
+        Some(store) => store
+            .set_project_worktree_mode(&path, mode)
+            .map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
+#[tauri::command]
 fn remove_project(state: State<'_, AppState>, path: String) -> Result<(), String> {
     match state.engine.store() {
         Some(store) => store.remove_project(&path).map_err(|e| e.to_string()),
@@ -1297,14 +1311,18 @@ struct UsageReport {
 
 /// Scan local provider transcripts and report rolling usage windows (CodexBar-style).
 #[tauri::command]
-fn usage_report() -> UsageReport {
-    let records = codetwo_core::usage::scan_all();
+async fn usage_report() -> UsageReport {
+    // A cold 30-day transcript walk can take noticeable time. Keep it off Tauri's command/UI
+    // thread; subsequent requests normally hit the core's bounded per-file cache.
+    let scan = tokio::task::spawn_blocking(codetwo_core::usage::scan_all_with_count)
+        .await
+        .unwrap_or_default();
     let now = codetwo_core::session::now_millis();
     let limits = codetwo_core::usage::Limits::from_env();
     UsageReport {
-        windows: codetwo_core::usage::windows(&records, now, &limits),
-        by_source: codetwo_core::usage::by_source(&records),
-        transcripts: records.len(),
+        windows: codetwo_core::usage::windows(&scan.records, now, &limits),
+        by_source: codetwo_core::usage::by_source(&scan.records),
+        transcripts: scan.transcripts,
     }
 }
 
@@ -1710,6 +1728,7 @@ pub fn run() {
             add_project,
             open_project,
             rename_project,
+            set_project_worktree_mode,
             remove_project,
             cancel_turn,
             pty_spawn,

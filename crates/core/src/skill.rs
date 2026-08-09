@@ -415,7 +415,15 @@ pub fn compile_with_sessions(
             DocBlock::Image { path } => {
                 // Validate now so a bad path surfaces in the preview rather than mid-turn.
                 match cwd.map(|c| crate::workspace::read_image_base64(c, path)) {
-                    Some(Ok(_)) => out.images.push(path.clone()),
+                    Some(Ok(_)) => {
+                        out.images.push(path.clone());
+                        // The image block lets the model see the pixels. The path hint lets an
+                        // agent use file tools to copy, edit, or include that same image in work.
+                        // JSON quoting keeps unusual filenames on one unambiguous prompt line.
+                        let quoted = serde_json::to_string(path)
+                            .unwrap_or_else(|_| "\"unavailable\"".to_string());
+                        parts.push(format!("**Attached image workspace path:** {quoted}"));
+                    }
                     _ => out.unresolved.push(format!("image:{path}")),
                 }
             }
@@ -870,6 +878,43 @@ mod tests {
         let c3 = compile(&doc, &lib);
         assert!(!c3.prompt.contains("Project rules"));
         assert_eq!(c3.unresolved, vec!["file:src/a.rs".to_string()]);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn image_context_keeps_pixels_and_an_actionable_workspace_path_together() {
+        let dir =
+            std::env::temp_dir().join(format!("codetwo-image-context-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join("screens")).unwrap();
+        let tiny_png = [
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00,
+            0x00, 0xb5, 0x1c, 0x0c, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x49, 0x44, 0x41, 0x54, 0x78,
+            0xda, 0x63, 0x64, 0xf8, 0x0f, 0x00, 0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xe3, 0x66,
+            0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+        ];
+        std::fs::write(dir.join("screens/result.png"), tiny_png).unwrap();
+        let doc = vec![
+            DocBlock::Text {
+                text: "Include this result in the report.".into(),
+            },
+            DocBlock::Image {
+                path: "screens/result.png".into(),
+            },
+        ];
+
+        let compiled = compile_with_context(&doc, &sample_library(), Some(&dir));
+        assert_eq!(compiled.images, vec!["screens/result.png".to_string()]);
+        assert!(compiled
+            .prompt
+            .contains("**Attached image workspace path:** \"screens/result.png\""));
+        assert!(compiled.unresolved.is_empty());
+        assert_eq!(
+            canonical_doc_text(&doc),
+            "Include this result in the report.\n\n[img:screens/result.png]",
+            "provider-only path context must not replace the user's canonical document"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

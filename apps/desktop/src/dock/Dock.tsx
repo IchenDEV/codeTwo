@@ -64,6 +64,7 @@ export function Dock({
   onTab,
   onClose,
   cwd,
+  projectPath,
   sessionKey,
   git,
   onRefreshGit,
@@ -90,6 +91,8 @@ export function Dock({
   onTab: (t: DockSurface) => void;
   onClose: () => void;
   cwd: string | null;
+  /** Source project identity; distinct from `cwd` for isolated worktree sessions. */
+  projectPath: string | null;
   sessionKey: string;
   git: GitStatus | null;
   onRefreshGit: () => void;
@@ -365,7 +368,13 @@ export function Dock({
         </TabsContent>
 
         <TabsContent value="browser" className="m-0 flex min-h-0 flex-1">
-          <BrowserPanel url={browserUrl} visible={open} onNavigate={onNavigate} onAnnotate={onAnnotate} />
+          <BrowserPanel
+            url={browserUrl}
+            projectPath={projectPath}
+            visible={open}
+            onNavigate={onNavigate}
+            onAnnotate={onAnnotate}
+          />
         </TabsContent>
 
         {/* Files, reference-style: tabs over the viewer, and the tree in its own column on the

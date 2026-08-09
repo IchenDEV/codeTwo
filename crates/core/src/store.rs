@@ -11,6 +11,7 @@ use std::sync::Mutex;
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
+use crate::project::ProjectWorktreeMode;
 use crate::session::{
     MemoryAccess, Part, Role, RunFailureReason, Session, SessionActivity, SessionRunState,
     SessionTitleOrigin, TranscriptCursor, TranscriptEntry, TranscriptPage, MAX_TRANSCRIPT_TURNS,
@@ -75,7 +76,8 @@ CREATE TABLE IF NOT EXISTS projects (
   path           TEXT PRIMARY KEY,
   name           TEXT NOT NULL,
   last_opened_at INTEGER NOT NULL,
-  added_at       INTEGER NOT NULL DEFAULT 0
+  added_at       INTEGER NOT NULL DEFAULT 0,
+  default_worktree_mode TEXT
 );
 ";
 
@@ -86,6 +88,8 @@ pub struct Project {
     pub path: String,
     pub name: String,
     pub last_opened_at: i64,
+    /// `None` follows the current draft/session; `Local` is an explicit no-worktree default.
+    pub default_worktree_mode: Option<ProjectWorktreeMode>,
 }
 
 /// One best conversation-content match per session.
@@ -292,6 +296,12 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "added_at",
         "added_at INTEGER NOT NULL DEFAULT 0",
     )?;
+    ensure_column(
+        &tx,
+        "projects",
+        "default_worktree_mode",
+        "default_worktree_mode TEXT",
+    )?;
     // `0` is the additive-column sentinel; current writes always use their positive timestamp.
     // Re-running this also heals a database interrupted between an old ALTER and UPDATE.
     tx.execute(
@@ -493,13 +503,18 @@ impl Store {
     pub fn list_projects(&self) -> Result<Vec<Project>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT path, name, last_opened_at FROM projects ORDER BY added_at DESC, path ASC",
+            "SELECT path, name, last_opened_at, default_worktree_mode
+             FROM projects ORDER BY added_at DESC, path ASC",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok(Project {
                 path: r.get(0)?,
                 name: r.get(1)?,
                 last_opened_at: r.get(2)?,
+                default_worktree_mode: r
+                    .get::<_, Option<String>>(3)?
+                    .as_deref()
+                    .and_then(ProjectWorktreeMode::from_db),
             })
         })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
@@ -537,6 +552,19 @@ impl Store {
         conn.execute(
             "UPDATE projects SET name=?2 WHERE path=?1",
             rusqlite::params![path, name],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_project_worktree_mode(
+        &self,
+        path: &str,
+        mode: Option<ProjectWorktreeMode>,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE projects SET default_worktree_mode=?2 WHERE path=?1",
+            rusqlite::params![path, mode.map(ProjectWorktreeMode::as_db)],
         )?;
         Ok(())
     }
@@ -1622,6 +1650,43 @@ mod tests {
         assert_eq!(list[0].last_opened_at, 400);
         // Re-adding must not clobber a name the user chose.
         assert_eq!(list[0].name, "Alpha");
+    }
+
+    #[test]
+    fn project_worktree_default_round_trips_survives_reopen_and_clears() {
+        let store = Store::open_in_memory().unwrap();
+        store.add_project("/work/alpha", None, 100).unwrap();
+        assert_eq!(
+            store.list_projects().unwrap()[0].default_worktree_mode,
+            None
+        );
+
+        store
+            .set_project_worktree_mode("/work/alpha", Some(ProjectWorktreeMode::OriginDefault))
+            .unwrap();
+        store.add_project("/work/alpha", None, 200).unwrap();
+        assert_eq!(
+            store.list_projects().unwrap()[0].default_worktree_mode,
+            Some(ProjectWorktreeMode::OriginDefault),
+            "reopening a project must not reset its default"
+        );
+
+        store
+            .set_project_worktree_mode("/work/alpha", Some(ProjectWorktreeMode::Local))
+            .unwrap();
+        assert_eq!(
+            store.list_projects().unwrap()[0].default_worktree_mode,
+            Some(ProjectWorktreeMode::Local),
+            "local is an explicit preference, not the inherit sentinel"
+        );
+
+        store
+            .set_project_worktree_mode("/work/alpha", None)
+            .unwrap();
+        assert_eq!(
+            store.list_projects().unwrap()[0].default_worktree_mode,
+            None
+        );
     }
 
     #[test]

@@ -10,6 +10,39 @@ use tokio::process::Command;
 
 pub const CONFIG_FILES: [&str; 2] = [".codetwo.json", "codetwo.json"];
 
+/// A project's preferred workspace for newly created sessions.
+///
+/// The project row stores `Option<ProjectWorktreeMode>`: `None` follows the current draft/session
+/// context, while these variants are explicit project defaults. `Local` is intentionally a real
+/// value rather than another `None`, so a project can opt out after another project selected a
+/// worktree default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectWorktreeMode {
+    Local,
+    Current,
+    OriginDefault,
+}
+
+impl ProjectWorktreeMode {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Current => "current",
+            Self::OriginDefault => "origin_default",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Option<Self> {
+        match value {
+            "local" => Some(Self::Local),
+            "current" => Some(Self::Current),
+            "origin_default" => Some(Self::OriginDefault),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScript {
     pub id: String,
@@ -44,7 +77,12 @@ pub fn load(cwd: &Path) -> ProjectConfig {
 
 /// Run one script in `cwd`, returning its combined output.
 pub async fn run_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<String> {
-    let out = Command::new("sh").arg("-c").arg(&script.command).current_dir(cwd).output().await?;
+    let out = Command::new("sh")
+        .arg("-c")
+        .arg(&script.command)
+        .current_dir(cwd)
+        .output()
+        .await?;
     let mut text = String::from_utf8_lossy(&out.stdout).to_string();
     let err = String::from_utf8_lossy(&out.stderr);
     if !err.trim().is_empty() {
@@ -73,6 +111,18 @@ mod tests {
 
     fn write_cfg(dir: &Path, json: &str) {
         std::fs::write(dir.join(".codetwo.json"), json).unwrap();
+    }
+
+    #[test]
+    fn project_worktree_modes_have_stable_database_values() {
+        assert_eq!(ProjectWorktreeMode::Local.as_db(), "local");
+        assert_eq!(ProjectWorktreeMode::Current.as_db(), "current");
+        assert_eq!(ProjectWorktreeMode::OriginDefault.as_db(), "origin_default");
+        assert_eq!(
+            ProjectWorktreeMode::from_db("origin_default"),
+            Some(ProjectWorktreeMode::OriginDefault)
+        );
+        assert_eq!(ProjectWorktreeMode::from_db("future"), None);
     }
 
     #[test]

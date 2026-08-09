@@ -3,26 +3,7 @@ import { Loader2 } from "lucide-react";
 
 import { readBinary } from "../bridge";
 import { useT } from "../i18n";
-
-/** Extension → MIME. An image the browser can't decode is better refused than shown as a broken box. */
-const IMAGE_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  avif: "image/avif",
-  bmp: "image/bmp",
-  ico: "image/x-icon",
-  icns: "image/x-icns",
-  svg: "image/svg+xml",
-};
-
-/** The MIME to preview `path` as, or null when it isn't an image and belongs in the editor. */
-export function imageTypeOf(path: string): string | null {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return IMAGE_TYPES[ext] ?? null;
-}
+import { imageTypeOf } from "./imageTypes";
 
 function prettySize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

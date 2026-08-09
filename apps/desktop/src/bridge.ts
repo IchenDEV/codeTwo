@@ -92,6 +92,7 @@ export interface SessionActivity {
 }
 
 export type WorktreeBaselineKind = "current" | "origin_default";
+export type ProjectWorktreeMode = "local" | WorktreeBaselineKind;
 
 export interface ResolvedWorktreeBaseline {
   kind: WorktreeBaselineKind;
@@ -113,6 +114,8 @@ export interface Project {
   path: string;
   name: string;
   last_opened_at: number;
+  /** Null follows the current draft/session; local is an explicit no-worktree default. */
+  default_worktree_mode: ProjectWorktreeMode | null;
 }
 
 export interface MemorySettings {
@@ -760,6 +763,13 @@ export async function openProject(path: string): Promise<void> {
 
 export async function renameProject(path: string, name: string): Promise<void> {
   if (inTauri) await invoke("rename_project", { path, name });
+}
+
+export async function setProjectWorktreeMode(
+  path: string,
+  mode: ProjectWorktreeMode | null,
+): Promise<void> {
+  if (inTauri) await invoke("set_project_worktree_mode", { path, mode });
 }
 
 export async function removeProject(path: string): Promise<void> {

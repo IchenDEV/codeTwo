@@ -1,6 +1,7 @@
 //! Workspace file listing and reading — backs `@`-file mentions in the prompt document.
 
-use std::path::Path;
+use std::io::Read;
+use std::path::{Component, Path};
 
 /// Directories we never descend into when listing files.
 const SKIP_DIRS: [&str; 9] =
@@ -118,8 +119,9 @@ pub fn read_text(cwd: &Path, rel: &str) -> Result<String, std::io::Error> {
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "not valid UTF-8"))
 }
 
-/// Images are the one binary the file pane renders rather than refuses, so they get their own cap:
-/// a screenshot or a design export is routinely bigger than any text file we'd open.
+/// Images are the one binary the file pane and prompt compiler render rather than refuse, so they
+/// get their own cap: a screenshot or design export is routinely bigger than a text file, but it
+/// must still be bounded before either IPC transfer or base64 expansion.
 pub const MAX_IMAGE_BYTES: usize = 16_000_000;
 
 /// Read a file as raw bytes, for the image preview. Same path guard as everything else; no text
@@ -283,18 +285,124 @@ pub fn image_mime(rel: &str) -> Option<&'static str> {
     }
 }
 
-/// Read an image and return `(mime, base64)` for an ACP image content block.
-pub fn read_image_base64(cwd: &Path, rel: &str) -> std::io::Result<(String, String)> {
-    if rel.starts_with('/') || rel.split('/').any(|c| c == "..") {
+fn canonical_workspace_file(cwd: &Path, rel: &str) -> std::io::Result<std::path::PathBuf> {
+    let relative = Path::new(rel);
+    if relative.as_os_str().is_empty()
+        || relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(component, Component::ParentDir | Component::RootDir | Component::Prefix(_))
+        })
+    {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "path escapes the workspace",
         ));
     }
-    let mime = image_mime(rel)
+
+    let workspace = cwd.canonicalize()?;
+    let path = workspace.join(relative).canonicalize()?;
+    if !path.starts_with(&workspace) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "path escapes the workspace",
+        ));
+    }
+    Ok(path)
+}
+
+fn image_too_large(size: u64) -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        format!("image is {} MB — too large to attach", size / 1_000_000),
+    )
+}
+
+fn read_bounded_image(path: &Path) -> std::io::Result<Vec<u8>> {
+    let file = std::fs::File::open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "image path is not a file",
+        ));
+    }
+    if metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return Err(image_too_large(metadata.len()));
+    }
+
+    // The metadata check avoids allocating for an already-large file. `take` also covers a regular
+    // file that grows after that check, without ever reading an unbounded payload into memory.
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.take((MAX_IMAGE_BYTES + 1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(image_too_large(bytes.len() as u64));
+    }
+    Ok(bytes)
+}
+
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return false;
+    };
+    let mut rest = text.strip_prefix('\u{feff}').unwrap_or(text);
+
+    // XML declarations and comments before the document element are common in exported SVGs. Keep
+    // this parser narrow: the first real element still has to be a lowercase `svg` root.
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with("<?") {
+            let Some(end) = rest.find("?>") else { return false };
+            rest = &rest[end + 2..];
+        } else if rest.starts_with("<!--") {
+            let Some(end) = rest.find("-->") else { return false };
+            rest = &rest[end + 3..];
+        } else {
+            break;
+        }
+    }
+
+    let Some(after_name) = rest.strip_prefix("<svg") else { return false };
+    let valid_boundary = after_name.chars().next().is_some_and(|character| {
+        character.is_whitespace() || character == '>' || character == '/'
+    });
+    valid_boundary && after_name.contains('>')
+}
+
+fn detected_image_mime(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(b"\xff\xd8\xff") {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else if looks_like_svg(bytes) {
+        Some("image/svg+xml")
+    } else {
+        None
+    }
+}
+
+/// Read a workspace-contained image and return `(mime, base64)` for an ACP image content block.
+pub fn read_image_base64(cwd: &Path, rel: &str) -> std::io::Result<(String, String)> {
+    let expected_mime = image_mime(rel)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "not an image"))?;
-    let bytes = std::fs::read(cwd.join(rel))?;
-    Ok((mime.to_string(), base64_encode(&bytes)))
+    let path = canonical_workspace_file(cwd, rel)?;
+    let bytes = read_bounded_image(&path)?;
+    let detected_mime = detected_image_mime(&bytes).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file content is not a supported image",
+        )
+    })?;
+    if detected_mime != expected_mime {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("image content is {detected_mime}, not {expected_mime}"),
+        ));
+    }
+    Ok((expected_mime.to_string(), base64_encode(&bytes)))
 }
 
 /// Minimal standard base64 encoder (avoids pulling in a dependency for one call site).
@@ -341,6 +449,14 @@ pub fn lang_for(rel: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TINY_PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00, 0x00, 0xb5,
+        0x1c, 0x0c, 0x02, 0x00, 0x00, 0x00, 0x0b, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0x64,
+        0xf8, 0x0f, 0x00, 0x01, 0x05, 0x01, 0x01, 0x27, 0x18, 0xe3, 0x66, 0x00, 0x00, 0x00, 0x00,
+        0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
 
     fn fixture() -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("codetwo-ws-{}", uuid::Uuid::new_v4()));
@@ -555,19 +671,73 @@ mod tests {
     }
 
     #[test]
-    fn image_mime_and_read() {
+    fn image_mime_and_read_valid_image() {
         assert_eq!(image_mime("a/b.PNG"), Some("image/png"));
         assert_eq!(image_mime("a/b.jpeg"), Some("image/jpeg"));
         assert_eq!(image_mime("a/b.rs"), None);
 
         let dir = std::env::temp_dir().join(format!("codetwo-img-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("x.png"), b"foo").unwrap();
+        std::fs::write(dir.join("x.png"), TINY_PNG).unwrap();
         let (mime, b64) = read_image_base64(&dir, "x.png").unwrap();
         assert_eq!(mime, "image/png");
-        assert_eq!(b64, "Zm9v");
+        assert_eq!(b64, base64_encode(TINY_PNG));
         assert!(read_image_base64(&dir, "x.rs").is_err(), "non-images rejected");
         assert!(read_image_base64(&dir, "../x.png").is_err(), "escapes rejected");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn image_read_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let dir = std::env::temp_dir().join(format!("codetwo-img-root-{}", uuid::Uuid::new_v4()));
+        let outside = std::env::temp_dir().join(format!("codetwo-img-outside-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("secret.png"), TINY_PNG).unwrap();
+        symlink(outside.join("secret.png"), dir.join("escape.png")).unwrap();
+
+        let error = read_image_base64(&dir, "escape.png").unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn image_read_rejects_oversize_file_before_encoding() {
+        let dir = std::env::temp_dir().join(format!("codetwo-img-size-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("huge.png");
+        std::fs::write(&path, TINY_PNG).unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len((MAX_IMAGE_BYTES + 1) as u64)
+            .unwrap();
+
+        let error = read_image_base64(&dir, "huge.png").unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("too large"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn image_read_rejects_extension_content_mismatch_and_arbitrary_bytes() {
+        let dir = std::env::temp_dir().join(format!("codetwo-img-mismatch-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("png-as-jpeg.jpg"), TINY_PNG).unwrap();
+        std::fs::write(dir.join("text.png"), b"not actually an image").unwrap();
+
+        for rel in ["png-as-jpeg.jpg", "text.png"] {
+            let error = read_image_base64(&dir, rel).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidData, "{rel}");
+        }
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 
