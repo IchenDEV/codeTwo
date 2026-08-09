@@ -29,6 +29,8 @@ pub enum SkillKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpServer {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
     #[serde(flatten)]
     pub transport: McpTransport,
 }
@@ -138,7 +140,7 @@ fn default_http_transport() -> String {
 impl McpServer {
     /// Shape this server the way ACP `session/new` expects (`mcpServers[]`).
     pub fn to_acp_json(&self) -> serde_json::Value {
-        match &self.transport {
+        let mut value = match &self.transport {
             McpTransport::Stdio { command, args, env } => serde_json::json!({
                 "name": self.name,
                 "command": command,
@@ -163,7 +165,11 @@ impl McpServer {
                     .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
                     .collect::<Vec<_>>(),
             }),
+        };
+        if let (Some(cwd), Some(object)) = (&self.cwd, value.as_object_mut()) {
+            object.insert("cwd".into(), serde_json::Value::String(cwd.clone()));
         }
+        value
     }
 }
 
@@ -620,6 +626,7 @@ mod tests {
                 payload: SkillPayload::Mcp {
                     server: McpServer {
                         name: "filesystem".into(),
+                        cwd: None,
                         transport: McpTransport::Stdio {
                             command: "mcp-fs".into(),
                             args: vec![],
@@ -923,6 +930,7 @@ mod tests {
     fn mcp_to_acp_json_shape() {
         let server = McpServer {
             name: "fs".into(),
+            cwd: None,
             transport: McpTransport::Stdio {
                 command: "mcp-fs".into(),
                 args: vec!["--root".into(), "/tmp".into()],
@@ -938,6 +946,7 @@ mod tests {
 
         let remote = McpServer {
             name: "remote".into(),
+            cwd: None,
             transport: McpTransport::Http {
                 url: "https://mcp.example.test".into(),
                 headers: vec![("Authorization".into(), "Bearer token".into())],
@@ -950,6 +959,7 @@ mod tests {
 
         let events = McpServer {
             name: "events".into(),
+            cwd: None,
             transport: McpTransport::Sse {
                 url: "https://mcp.example.test/sse".into(),
                 headers: Vec::new(),

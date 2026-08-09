@@ -14,6 +14,8 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::AppState;
+
 pub struct LspState(pub Mutex<HashMap<String, Server>>);
 
 pub struct Server {
@@ -53,43 +55,117 @@ fn candidates(lang: &str) -> &'static [(&'static str, &'static [&'static str])] 
 pub fn lsp_start(
     app: AppHandle,
     state: State<LspState>,
+    app_state: State<AppState>,
     cwd: String,
     lang: String,
 ) -> Result<Option<String>, String> {
-    for (bin, args) in candidates(&lang) {
-        let Some(path) = codetwo_core::provider::which(bin) else {
-            continue;
-        };
-        let key = format!("{bin}:{cwd}");
-        let mut servers = state.0.lock().unwrap();
-        if let Some(server) = servers.get_mut(&key) {
-            // A dead entry (crashed server) must not shadow a fresh spawn.
-            match server.child.try_wait() {
-                Ok(None) => return Ok(Some(key)),
-                _ => {
-                    servers.remove(&key);
+    if let Ok(plugins) = codetwo_core::plugin::load_dir(&app_state.plugins_dir) {
+        for plugin in plugins
+            .into_iter()
+            .filter(|plugin| plugin.enabled && plugin.trusted)
+        {
+            for server in plugin.lsp_servers.into_iter().filter(|server| {
+                server.transport == "stdio"
+                    && server
+                        .extension_to_language
+                        .iter()
+                        .any(|(_, language)| language == &lang)
+            }) {
+                let command = expand_project_dir(&server.command, &cwd);
+                let args = server
+                    .args
+                    .iter()
+                    .map(|arg| expand_project_dir(arg, &cwd))
+                    .collect::<Vec<_>>();
+                let mut env = server
+                    .env
+                    .into_iter()
+                    .filter(|(name, _)| {
+                        !matches!(
+                            name.as_str(),
+                            "CLAUDE_PROJECT_DIR" | "CODEX_PROJECT_DIR" | "PLUGIN_PROJECT_DIR"
+                        )
+                    })
+                    .map(|(name, value)| (name, expand_project_dir(&value, &cwd)))
+                    .collect::<Vec<_>>();
+                env.push(("CLAUDE_PROJECT_DIR".into(), cwd.clone()));
+                env.push(("CODEX_PROJECT_DIR".into(), cwd.clone()));
+                env.push(("PLUGIN_PROJECT_DIR".into(), cwd.clone()));
+                if let Some(key) = start_server(
+                    &app,
+                    &state,
+                    &cwd,
+                    &format!("plugin:{}:{}", plugin.id, server.name),
+                    &command,
+                    &args,
+                    &env,
+                )? {
+                    return Ok(Some(key));
                 }
             }
         }
-        let mut child = Command::new(&path)
-            .args(args.iter())
-            .current_dir(&cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| format!("{bin}: {e}"))?;
-        let stdin = child.stdin.take().expect("piped stdin");
-        let stdout = child.stdout.take().expect("piped stdout");
-        {
-            let app = app.clone();
-            let key = key.clone();
-            std::thread::spawn(move || read_loop(app, key, stdout));
+    }
+    for (bin, args) in candidates(&lang) {
+        let args = args
+            .iter()
+            .map(|arg| (*arg).to_string())
+            .collect::<Vec<_>>();
+        if let Some(key) = start_server(&app, &state, &cwd, bin, bin, &args, &[])? {
+            return Ok(Some(key));
         }
-        servers.insert(key.clone(), Server { child, stdin });
-        return Ok(Some(key));
     }
     Ok(None)
+}
+
+fn start_server(
+    app: &AppHandle,
+    state: &State<LspState>,
+    cwd: &str,
+    key_name: &str,
+    command: &str,
+    args: &[String],
+    env: &[(String, String)],
+) -> Result<Option<String>, String> {
+    let Some(path) = codetwo_core::provider::which(command) else {
+        return Ok(None);
+    };
+    let key = format!("{key_name}:{cwd}");
+    let mut servers = state.0.lock().unwrap();
+    if let Some(server) = servers.get_mut(&key) {
+        match server.child.try_wait() {
+            Ok(None) => return Ok(Some(key)),
+            _ => {
+                servers.remove(&key);
+            }
+        }
+    }
+    let mut child = Command::new(&path)
+        .args(args)
+        .envs(env.iter().cloned())
+        .current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("{command}: {error}"))?;
+    let stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    {
+        let app = app.clone();
+        let key = key.clone();
+        std::thread::spawn(move || read_loop(app, key, stdout));
+    }
+    servers.insert(key.clone(), Server { child, stdin });
+    Ok(Some(key))
+}
+
+fn expand_project_dir(value: &str, cwd: &str) -> String {
+    value
+        .replace("${CLAUDE_PROJECT_DIR}", cwd)
+        .replace("$CLAUDE_PROJECT_DIR", cwd)
+        .replace("${CODEX_PROJECT_DIR}", cwd)
+        .replace("$CODEX_PROJECT_DIR", cwd)
+        .replace("${PLUGIN_PROJECT_DIR}", cwd)
 }
 
 /// Forward one already-serialized JSON-RPC message to the server, framed.
@@ -136,12 +212,34 @@ fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
             return;
         }
         if let Ok(payload) = String::from_utf8(buf) {
-            let _ = app.emit("lsp-message", LspMessage { key: key.clone(), payload });
+            let _ = app.emit(
+                "lsp-message",
+                LspMessage {
+                    key: key.clone(),
+                    payload,
+                },
+            );
         }
     }
 }
 
 impl LspState {
+    pub fn kill_plugin(&self, plugin_id: &str) {
+        let prefix = format!("plugin:{plugin_id}:");
+        let mut servers = self.0.lock().unwrap();
+        let keys = servers
+            .keys()
+            .filter(|key| key.starts_with(&prefix))
+            .cloned()
+            .collect::<Vec<_>>();
+        for key in keys {
+            if let Some(mut server) = servers.remove(&key) {
+                let _ = server.child.kill();
+                let _ = server.child.wait();
+            }
+        }
+    }
+
     /// Kill every child. Called on app exit — an orphaned rust-analyzer indexes forever.
     pub fn kill_all(&self) {
         let mut servers = self.0.lock().unwrap();

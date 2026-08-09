@@ -22,6 +22,7 @@ use codetwo_core::keymap::{Action as KeyAction, Keymap};
 use codetwo_core::models::builtin_models;
 use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
+use codetwo_core::plugin_marketplace::{self, MarketplacePluginSource, PluginMarketplace};
 use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
 use codetwo_core::provider::{default_registry, Provider, ProviderId};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
@@ -98,7 +99,12 @@ fn reload_skills(state: &AppState) {
         v.extend(loaded.all().cloned());
     }
     if let Ok(plugins) = plugin::load_dir(&state.plugins_dir) {
-        v.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
+        v.extend(
+            plugins
+                .into_iter()
+                .filter(|plugin| plugin.enabled)
+                .flat_map(|plugin| plugin.components),
+        );
     }
     let cwd = state.skills_cwd.lock().unwrap().clone();
     v.extend(harness::discover(cwd.as_deref()));
@@ -181,8 +187,16 @@ struct PluginInfo {
     author: String,
     source: String,
     repository: String,
+    spec_version: String,
+    standard: plugin::PluginStandard,
+    standards: Vec<plugin::PluginStandard>,
+    enabled: bool,
+    trusted: bool,
+    scope: plugin::PluginInstallScope,
     counts: PluginCounts,
     scaffolds: Vec<PluginScaffoldInfo>,
+    extension_components: Vec<plugin::PluginExtensionComponent>,
+    diagnostics: Vec<plugin::PluginDiagnostic>,
 }
 
 impl From<PluginScaffold> for PluginScaffoldInfo {
@@ -206,8 +220,16 @@ impl From<InstalledPlugin> for PluginInfo {
             author: plugin.author,
             source: plugin.source,
             repository: plugin.repository,
+            spec_version: plugin.spec_version,
+            standard: plugin.standard,
+            standards: plugin.standards,
+            enabled: plugin.enabled,
+            trusted: plugin.trusted,
+            scope: plugin.scope,
             counts: plugin.counts,
             scaffolds: plugin.scaffolds.into_iter().map(Into::into).collect(),
+            extension_components: plugin.extension_components,
+            diagnostics: plugin.diagnostics,
         }
     }
 }
@@ -648,12 +670,14 @@ fn list_plugins(state: State<'_, AppState>) -> Vec<PluginInfo> {
 #[tauri::command]
 async fn github_import_plugin(
     state: State<'_, AppState>,
+    lsp_state: State<'_, lsp::LspState>,
     repository: String,
 ) -> Result<GitHubImportResult, String> {
     let checkout = github_skills::checkout(&repository)
         .await
         .map_err(|error| error.to_string())?;
     let bundle = plugin::from_github(&checkout).map_err(|error| error.to_string())?;
+    lsp_state.kill_plugin(&bundle.plugin.id);
     let installed =
         plugin::install(&state.plugins_dir, bundle).map_err(|error| error.to_string())?;
     reload_skills(&state);
@@ -663,10 +687,128 @@ async fn github_import_plugin(
 }
 
 #[tauri::command]
-fn uninstall_plugin(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    plugin::uninstall(&state.plugins_dir, &id).map_err(|error| error.to_string())?;
+fn read_plugin_marketplace(path: String) -> Result<PluginMarketplace, String> {
+    plugin_marketplace::load(std::path::Path::new(&path)).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn install_marketplace_plugin(
+    state: State<'_, AppState>,
+    lsp_state: State<'_, lsp::LspState>,
+    marketplace_path: String,
+    plugin_name: String,
+) -> Result<GitHubImportResult, String> {
+    let marketplace = plugin_marketplace::load(std::path::Path::new(&marketplace_path))
+        .map_err(|error| error.to_string())?;
+    let entry = plugin_marketplace::plugin(&marketplace, &plugin_name)
+        .map_err(|error| error.to_string())?;
+    if !entry.installable {
+        return Err(entry
+            .diagnostic
+            .clone()
+            .unwrap_or_else(|| "Marketplace plugin source is not installable".into()));
+    }
+    let source_label = format!("Marketplace · {}", marketplace.display_name);
+    let mut bundle = match &entry.source {
+        MarketplacePluginSource::Local { .. } => {
+            let root = plugin_marketplace::resolve_local_source(&marketplace, &entry.source)
+                .map_err(|error| error.to_string())?;
+            plugin::from_local(
+                &root,
+                &source_label,
+                &format!("{}:{}", marketplace.manifest_path, entry.name),
+            )
+            .map_err(|error| error.to_string())?
+        }
+        MarketplacePluginSource::Github {
+            repository,
+            reference,
+            sha,
+        } => {
+            let mut spec =
+                github_skills::parse_repository(repository).map_err(|error| error.to_string())?;
+            spec.reference = sha.clone().or_else(|| reference.clone());
+            let checkout = github_skills::checkout_spec(spec)
+                .await
+                .map_err(|error| error.to_string())?;
+            plugin::from_github(&checkout).map_err(|error| error.to_string())?
+        }
+        MarketplacePluginSource::Git {
+            url,
+            path,
+            reference,
+            sha,
+        } => {
+            let mut spec =
+                github_skills::parse_repository(url).map_err(|error| error.to_string())?;
+            spec.reference = sha.clone().or_else(|| reference.clone());
+            spec.subpath = path
+                .as_deref()
+                .map(|path| PathBuf::from(path.strip_prefix("./").unwrap_or(path)));
+            let checkout = github_skills::checkout_spec(spec)
+                .await
+                .map_err(|error| error.to_string())?;
+            plugin::from_github(&checkout).map_err(|error| error.to_string())?
+        }
+        _ => return Err("Marketplace plugin source is not installable".into()),
+    };
+    bundle.plugin.source = source_label;
+    bundle.plugin.enabled = entry.default_enabled;
+    if bundle.plugin.version == "0.0.0" && !entry.version.is_empty() {
+        bundle.plugin.version = entry.version.clone();
+    }
+    lsp_state.kill_plugin(&bundle.plugin.id);
+    let installed =
+        plugin::install(&state.plugins_dir, bundle).map_err(|error| error.to_string())?;
+    reload_skills(&state);
+    Ok(GitHubImportResult {
+        plugin: installed.into(),
+    })
+}
+
+#[tauri::command]
+fn uninstall_plugin(
+    state: State<'_, AppState>,
+    lsp_state: State<'_, lsp::LspState>,
+    id: String,
+    keep_data: Option<bool>,
+) -> Result<(), String> {
+    lsp_state.kill_plugin(&id);
+    plugin::uninstall_with_options(&state.plugins_dir, &id, keep_data.unwrap_or(false))
+        .map_err(|error| error.to_string())?;
     reload_skills(&state);
     Ok(())
+}
+
+#[tauri::command]
+fn set_plugin_enabled(
+    state: State<'_, AppState>,
+    lsp_state: State<'_, lsp::LspState>,
+    id: String,
+    enabled: bool,
+) -> Result<PluginInfo, String> {
+    if !enabled {
+        lsp_state.kill_plugin(&id);
+    }
+    let plugin =
+        plugin::set_enabled(&state.plugins_dir, &id, enabled).map_err(|error| error.to_string())?;
+    reload_skills(&state);
+    Ok(plugin.into())
+}
+
+#[tauri::command]
+fn set_plugin_trusted(
+    state: State<'_, AppState>,
+    lsp_state: State<'_, lsp::LspState>,
+    id: String,
+    trusted: bool,
+) -> Result<PluginInfo, String> {
+    if !trusted {
+        lsp_state.kill_plugin(&id);
+    }
+    plugin::set_trusted(&state.plugins_dir, &id, trusted)
+        .map(Into::into)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1580,7 +1722,12 @@ pub fn run() {
                 skill_vec.extend(loaded.all().cloned());
             }
             if let Ok(plugins) = plugin::load_dir(&plugins_dir) {
-                skill_vec.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
+                skill_vec.extend(
+                    plugins
+                        .into_iter()
+                        .filter(|plugin| plugin.enabled)
+                        .flat_map(|plugin| plugin.components),
+                );
             }
             // User-level harness skills only for now; project-level ones join on the first
             // `list_skills` call that carries a workspace.
@@ -1674,7 +1821,11 @@ pub fn run() {
             market_install,
             list_plugins,
             github_import_plugin,
+            read_plugin_marketplace,
+            install_marketplace_plugin,
             uninstall_plugin,
+            set_plugin_enabled,
+            set_plugin_trusted,
             apply_plugin_scaffold,
             start_remote,
             stop_remote,

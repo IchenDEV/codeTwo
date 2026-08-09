@@ -176,9 +176,69 @@ pub async fn fetch(repository: &str) -> Result<GitHubSkillBundle, GitHubSkillErr
 /// Download a public GitHub repository into a bounded, non-interactive temporary checkout.
 pub async fn checkout(repository: &str) -> Result<GitHubCheckout, GitHubSkillError> {
     let spec = parse_repository(repository)?;
+    checkout_spec(spec).await
+}
+
+/// Download a pre-validated GitHub repository selection. Marketplace adapters use this to keep a
+/// branch/tag/SHA selector separate from a plugin subdirectory instead of encoding both in a URL.
+pub async fn checkout_spec(spec: GitHubRepoSpec) -> Result<GitHubCheckout, GitHubSkillError> {
+    if !valid_repo_part(&spec.owner) || !valid_repo_part(&spec.repo) {
+        return Err(invalid("The GitHub owner or repository is invalid"));
+    }
+    if spec
+        .reference
+        .as_deref()
+        .is_some_and(|reference| !valid_reference(reference))
+    {
+        return Err(invalid("The Git reference is not supported"));
+    }
+    if spec.subpath.as_ref().is_some_and(|path| {
+        path.components().any(|component| match component {
+            std::path::Component::Normal(value) => {
+                value.to_str().is_none_or(|value| !valid_path_part(value))
+            }
+            std::path::Component::CurDir => false,
+            _ => true,
+        })
+    }) {
+        return Err(invalid("The repository path is not supported"));
+    }
     let checkout =
         std::env::temp_dir().join(format!("codetwo-github-skills-{}", uuid::Uuid::new_v4()));
     let cleanup = TempCheckout(checkout.clone());
+
+    if spec.reference.as_deref().is_some_and(|reference| {
+        reference.len() == 40 && reference.chars().all(|ch| ch.is_ascii_hexdigit())
+    }) {
+        run_git(Command::new("git").arg("init").arg("--").arg(&checkout)).await?;
+        run_git(
+            Command::new("git")
+                .arg("-C")
+                .arg(&checkout)
+                .args(["remote", "add", "origin"])
+                .arg(spec.clone_url()),
+        )
+        .await?;
+        run_git(
+            Command::new("git")
+                .arg("-C")
+                .arg(&checkout)
+                .args(["fetch", "--depth", "1", "origin"])
+                .arg(spec.reference.as_deref().unwrap()),
+        )
+        .await?;
+        run_git(Command::new("git").arg("-C").arg(&checkout).args([
+            "checkout",
+            "--detach",
+            "FETCH_HEAD",
+        ]))
+        .await?;
+        std::mem::forget(cleanup);
+        return Ok(GitHubCheckout {
+            root: checkout,
+            spec,
+        });
+    }
 
     let mut command = Command::new("git");
     command
@@ -220,6 +280,32 @@ pub async fn checkout(repository: &str) -> Result<GitHubCheckout, GitHubSkillErr
         root: checkout,
         spec,
     })
+}
+
+async fn run_git(command: &mut Command) -> Result<(), GitHubSkillError> {
+    command
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_LFS_SKIP_SMUDGE", "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let output = tokio::time::timeout(CLONE_TIMEOUT, command.output())
+        .await
+        .map_err(|_| GitHubSkillError::Timeout)?
+        .map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                GitHubSkillError::GitUnavailable
+            } else {
+                GitHubSkillError::Io(error)
+            }
+        })?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let detail = stderr.lines().last().unwrap_or("git command failed");
+        Err(GitHubSkillError::Clone(detail.chars().take(500).collect()))
+    }
 }
 
 /// Parse an already available checkout. Public for deterministic tests and future local-repo UI.
@@ -397,7 +483,18 @@ fn valid_repo_part(value: &str) -> bool {
 }
 
 fn valid_reference(value: &str) -> bool {
-    valid_repo_part(value) && !value.starts_with('-') && !value.contains("..")
+    !value.is_empty()
+        && !value.starts_with(['-', '/', '.'])
+        && !value.ends_with(['/', '.'])
+        && !value.ends_with(".lock")
+        && !value.contains("..")
+        && !value.contains("//")
+        && !value.contains("@{")
+        && !value.chars().any(|ch| {
+            ch.is_control()
+                || ch.is_whitespace()
+                || matches!(ch, '~' | '^' | ':' | '?' | '*' | '[' | '\\')
+        })
 }
 
 fn valid_path_part(value: &str) -> bool {
@@ -449,6 +546,25 @@ mod tests {
         assert!(parse_repository("git@github.com:acme/skills.git").is_err());
         assert!(parse_repository("https://github.com/acme/skills/tree/main/../secret").is_err());
         assert!(parse_repository("https://github.com/acme/skills?tab=readme").is_err());
+    }
+
+    #[test]
+    fn accepts_common_git_refs_and_rejects_unsafe_ref_syntax() {
+        assert!(valid_reference("feature/plugin-marketplace"));
+        assert!(valid_reference("release-2026.08"));
+        assert!(valid_reference("0123456789abcdef0123456789abcdef01234567"));
+        for reference in [
+            "../main",
+            "refs//heads/main",
+            "main.lock",
+            "main@{1}",
+            "-branch",
+        ] {
+            assert!(
+                !valid_reference(reference),
+                "accepted unsafe ref {reference}"
+            );
+        }
     }
 
     #[test]

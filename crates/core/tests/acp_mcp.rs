@@ -54,6 +54,7 @@ async fn new_session_forwards_mcp_servers() {
 
     let server = McpServer {
         name: "fs".into(),
+        cwd: None,
         transport: McpTransport::Stdio {
             command: "mcp-fs".into(),
             args: vec![],

@@ -3351,6 +3351,7 @@ mod mcp_tests {
     fn remote_transport_requires_advertised_capability() {
         let server = McpServer {
             name: "remote".into(),
+            cwd: None,
             transport: McpTransport::Http {
                 url: "https://example.test/mcp".into(),
                 headers: Vec::new(),
