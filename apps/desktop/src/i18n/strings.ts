@@ -102,6 +102,7 @@ export const en = {
   "composer.pullIssue": "Pull in an issue",
   "composer.market": "Plugin Hub",
   "composer.newSkill": "New skill",
+  "composer.contextWindowExact": "Context window: {used} of {capacity} tokens ({percentage})",
 
   // plugin hub
   "pluginHub.title": "Plugin Hub",
@@ -591,6 +592,7 @@ export const zhCN: Record<StringKey, string> = {
   "composer.pullIssue": "引入 Issue",
   "composer.market": "Plugin Hub",
   "composer.newSkill": "新建技能",
+  "composer.contextWindowExact": "上下文窗口：已用 {used} / {capacity} 个 token（{percentage}）",
 
   "pluginHub.title": "Plugin Hub",
   "pluginHub.description": "在同一个兼容性中心管理可移植 Agent Plugins，以及 Codex 与 Claude Code 原生扩展。",

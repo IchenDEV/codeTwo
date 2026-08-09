@@ -436,11 +436,75 @@ mod agent_input_projection_tests {
     }
 }
 
+#[cfg(test)]
+mod usage_update_tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::SessionHandler;
+    use crate::acp::wire::{SessionNotification, SessionUpdate};
+    use crate::acp::ClientHandler;
+    use crate::engine::PermissionRouter;
+    use crate::event::Event;
+    use crate::permission::PermissionPolicy;
+    use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn usage_update_propagates_during_replay_without_transcript_persistence() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            "session-1".into(),
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            None,
+        );
+        handler
+            .replay_flag()
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session-1".into(),
+                update: SessionUpdate::UsageUpdate {
+                    used: 53_000,
+                    size: 200_000,
+                    cost: None,
+                },
+            })
+            .await;
+
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ContextWindow {
+                session,
+                used_tokens: 53_000,
+                context_window: 200_000,
+            }) if session == "session-1"
+        ));
+
+        // Replay transcript chunks remain muted and no transcript part is written by the usage
+        // path. The channel therefore has no second event to consume.
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session-1".into(),
+                update: SessionUpdate::AgentMessageChunk {
+                    content: crate::acp::wire::ContentBlock::text("replayed"),
+                },
+            })
+            .await;
+        assert!(received.try_recv().is_err());
+    }
+}
+
 #[async_trait]
 impl ClientHandler for SessionHandler {
     async fn session_update(&self, note: SessionNotification) {
         // History replayed by `session/load` is already persisted and rendered; drop it.
-        if self.replaying.load(Ordering::SeqCst) {
+        // Usage is provider state rather than transcript content, so it must still reach the UI
+        // while the provider replays a loaded session's history.
+        if self.replaying.load(Ordering::SeqCst)
+            && !matches!(&note.update, SessionUpdate::UsageUpdate { .. })
+        {
             return;
         }
         let session = self.session_id.clone();
@@ -534,6 +598,14 @@ impl ClientHandler for SessionHandler {
                 Some(Event::ConfigOptions {
                     session,
                     options: config_option_infos(&config_options),
+                }),
+                None,
+            ),
+            SessionUpdate::UsageUpdate { used, size, .. } => (
+                Some(Event::ContextWindow {
+                    session,
+                    used_tokens: used,
+                    context_window: size,
                 }),
                 None,
             ),
@@ -1538,15 +1610,6 @@ impl Engine {
                         return Ok(());
                     }
                 };
-                // Estimate how much of the context window this prompt uses (the UI meter).
-                let usage =
-                    crate::context::usage(&provider_prompt, crate::context::DEFAULT_CONTEXT_WINDOW);
-                self.emit(Event::Usage {
-                    session: session.clone(),
-                    input_tokens: usage.input_tokens,
-                    output_tokens: 0,
-                });
-
                 // The canonical prompt was already persisted atomically with Running activity.
                 // Attach Memory's receipt to that same sequence instead of writing a duplicate user
                 // part; the transient recalled block remains provider-only context.

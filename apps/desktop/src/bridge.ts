@@ -266,6 +266,7 @@ export type CoreEvent =
     }
   | { event: "permission_request"; session: string; request_id: string; title: string; options: [string, string][] }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
+  | { event: "context_window"; session: string; used_tokens: number; context_window: number }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
   | {

@@ -120,6 +120,12 @@ import {
 } from "./session/mode";
 import { Composer } from "./session/Composer";
 import {
+  activeContextWindow,
+  clearContextWindow,
+  updateContextWindow,
+  type ContextWindowBySession,
+} from "./session/contextWindow";
+import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
@@ -320,6 +326,9 @@ export default function App() {
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
   // Session config options (model + reasoning effort) — the newer ACP surface, same lifecycle.
   const [configOptions, setConfigOptions] = useState<ConfigOptionInfo[]>([]);
+  // Provider-reported context windows are session-level state, not transcript parts. Keeping the
+  // map keyed by id prevents a late/background provider event from repainting the active session.
+  const [contextWindows, setContextWindows] = useState<ContextWindowBySession>({});
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
@@ -410,6 +419,13 @@ export default function App() {
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  const currentModelRef = useRef<string | null>(null);
+  currentModelRef.current = currentModel;
+  // Model changes invalidate the old provider context immediately. Keep the pending id until the
+  // provider echoes its authoritative model, so an echo racing React state cannot restore stale
+  // capacity; session/load responses without a model change leave replayed context intact.
+  const knownModelsRef = useRef<Map<string, string>>(new Map());
+  const pendingModelChangesRef = useRef<Set<string>>(new Set());
   // A correlated creation event is already durable even if the best-effort rail refresh fails.
   // Keep its source/worktree receipt beside the active id so New never treats isolated cwd as a
   // source checkout while React state or the backend list is temporarily unavailable.
@@ -804,6 +820,7 @@ export default function App() {
           sessionLoadSeq.current += 1;
           setSessionLoading(false);
           activeSessionRef.current = ev.session;
+          knownModelsRef.current.delete(ev.session);
           const receipt = sessionCreationReceipt(ev);
           const provenance = receipt
             ? { session: ev.session, shell: receipt }
@@ -920,7 +937,23 @@ export default function App() {
           );
           return;
         }
+        if (ev.event === "context_window") {
+          if (pendingModelChangesRef.current.has(ev.session)) return;
+          // This is deliberately handled before transcript projection: a context update is
+          // session state, never a persisted/rendered transcript part.
+          setContextWindows((previous) => updateContextWindow(previous, ev));
+          return;
+        }
         if (ev.event === "models") {
+          const known = knownModelsRef.current.get(ev.session);
+          const pending = pendingModelChangesRef.current.has(ev.session);
+          if (ev.current && (pending || (known !== undefined && ev.current !== known))) {
+            setContextWindows((previous) => clearContextWindow(previous, ev.session));
+          }
+          if (ev.current) {
+            knownModelsRef.current.set(ev.session, ev.current);
+            pendingModelChangesRef.current.delete(ev.session);
+          }
           if (ev.session !== activeSessionRef.current) return;
           // A switch echoes back the same list; only session/new carries a fresh one.
           if (ev.available.length > 0) setModels(ev.available);
@@ -929,10 +962,19 @@ export default function App() {
           return;
         }
         if (ev.event === "config_options") {
+          const model = ev.options.find((o) => o.category === "model" || o.id === "model");
+          if (model?.current) {
+            const known = knownModelsRef.current.get(ev.session);
+            const pending = pendingModelChangesRef.current.has(ev.session);
+            if (pending || (known !== undefined && model.current !== known)) {
+              setContextWindows((previous) => clearContextWindow(previous, ev.session));
+            }
+            knownModelsRef.current.set(ev.session, model.current);
+            pendingModelChangesRef.current.delete(ev.session);
+          }
           if (ev.session !== activeSessionRef.current) return;
           // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
           setConfigOptions(ev.options);
-          const model = ev.options.find((o) => o.category === "model" || o.id === "model");
           if (model?.current) {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
@@ -1037,6 +1079,34 @@ export default function App() {
     t,
     updateRunningSession,
   ]);
+
+  // Rendered QA has no Tauri event bridge in the Vite shell. This query-controlled fixture is
+  // development-only and is replaced at build time, so production never gets a fake default.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("mockContextWindow") !== "1") return;
+    const usedTokens = Number(query.get("used") ?? "53000");
+    const contextWindow = Number(query.get("size") ?? "200000");
+    if (
+      !Number.isSafeInteger(usedTokens) ||
+      usedTokens < 0 ||
+      !Number.isSafeInteger(contextWindow) ||
+      contextWindow <= 0
+    ) {
+      return;
+    }
+    const session = query.get("session") || "dev-context-window";
+    activeSessionRef.current = session;
+    knownModelsRef.current.set(session, "dev-model");
+    setActiveSession(session);
+    setModels([{ id: "dev-model", name: "Context QA", description: null }]);
+    setCurrentModel("dev-model");
+    setContextWindows((previous) => ({
+      ...previous,
+      [session]: { usedTokens, contextWindow },
+    }));
+  }, []);
 
   const run = useCallback(async () => {
     if (sessionLoading) {
@@ -1354,6 +1424,8 @@ export default function App() {
       setLoadingEarlier(false);
       updateTranscriptCursor(null);
       activeSessionRef.current = id;
+      if (stored?.model) knownModelsRef.current.set(id, stored.model);
+      else knownModelsRef.current.delete(id);
       const provenance = stored ? { session: id, shell: stored } : null;
       activeSessionProvenanceRef.current = provenance;
       setActiveSessionReceipt(provenance);
@@ -2278,26 +2350,51 @@ export default function App() {
                   models={models}
                   currentModel={currentModel}
                   defaultModel={defaultModel}
+                  contextWindow={activeContextWindow(contextWindows, activeSession)}
                   onModel={(id) => {
-                    if (!activeSessionRef.current) return;
+                    const session = activeSessionRef.current;
+                    if (!session) return;
                     // Optimistic: the engine answers with a `models` event, or an `error` if the provider
                     // doesn't implement the switch.
+                    if (id !== currentModelRef.current) {
+                      pendingModelChangesRef.current.add(session);
+                      knownModelsRef.current.set(session, id);
+                      setContextWindows((previous) =>
+                        clearContextWindow(previous, session),
+                      );
+                    }
                     setCurrentModel(id);
-                    void setModel(activeSessionRef.current, id).catch((e) =>
-                      toast(t("toast.modelFailed", { error: String(e) }), "error"),
-                    );
+                    void setModel(session, id).catch((e) => {
+                      pendingModelChangesRef.current.delete(session);
+                      toast(t("toast.modelFailed", { error: String(e) }), "error");
+                    });
                   }}
                   configOptions={configOptions}
                   onConfigOption={(configId, value) => {
-                    if (!activeSessionRef.current) return;
+                    const session = activeSessionRef.current;
+                    if (!session) return;
+                    const option = configOptions.find((item) => item.id === configId);
+                    if (
+                      (option?.category === "model" || configId === "model") &&
+                      value !== currentModelRef.current
+                    ) {
+                      pendingModelChangesRef.current.add(session);
+                      knownModelsRef.current.set(session, value);
+                      setContextWindows((previous) =>
+                        clearContextWindow(previous, session),
+                      );
+                    }
                     // Optimistic: the engine echoes the agent's authoritative `config_options` set, or
                     // an `error` event if the option isn't supported — either replaces this state.
                     setConfigOptions((prev) =>
                       prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
                     );
-                    void setConfigOption(activeSessionRef.current, configId, value).catch((e) =>
-                      toast(t("toast.modelFailed", { error: String(e) }), "error"),
-                    );
+                    void setConfigOption(session, configId, value).catch((e) => {
+                      if (option?.category === "model" || configId === "model") {
+                        pendingModelChangesRef.current.delete(session);
+                      }
+                      toast(t("toast.modelFailed", { error: String(e) }), "error");
+                    });
                   }}
                   running={running}
                   loading={sessionLoading}
