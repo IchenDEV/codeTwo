@@ -1,0 +1,292 @@
+/* @design-system-version 0.9.0
+ *
+ * Code2 desktop design tokens. This is the single source of truth for the new system.
+ * Phase 1 deliberately does not remap the production UI yet; the legacy values in styles.css
+ * remain baseline debt until the one-shot migration. Product components may consume semantic or
+ * shared-component tokens only. Foundation tokens are private inputs for this file.
+ */
+
+:root {
+  /* Foundation: spacing. */
+  --ds-foundation-space-2: 2px;
+  --ds-foundation-space-4: 4px;
+  --ds-foundation-space-6: 6px;
+  --ds-foundation-space-8: 8px;
+  --ds-foundation-space-12: 12px;
+  --ds-foundation-space-16: 16px;
+  --ds-foundation-space-24: 24px;
+  --ds-foundation-space-32: 32px;
+
+  /* Foundation: geometry. */
+  --ds-foundation-radius-4: 4px;
+  --ds-foundation-radius-8: 8px;
+  --ds-foundation-radius-12: 12px;
+  --ds-foundation-radius-16: 16px;
+  --ds-foundation-icon-12: 12px;
+  --ds-foundation-icon-14: 14px;
+  --ds-foundation-icon-16: 16px;
+  --ds-foundation-control-24: 24px;
+  --ds-foundation-control-28: 28px;
+  --ds-foundation-control-32: 32px;
+
+  /* Foundation: platform typography. SF is selected by macOS through -apple-system. */
+  --ds-foundation-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ds-foundation-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Cascadia Code", Consolas,
+    monospace;
+  --ds-foundation-type-10: 10px;
+  --ds-foundation-type-11: 11px;
+  --ds-foundation-type-12: 12px;
+  --ds-foundation-type-13: 13px;
+  --ds-foundation-type-15: 15px;
+  --ds-foundation-type-17: 17px;
+  --ds-foundation-type-22: 22px;
+  --ds-foundation-type-26: 26px;
+  --ds-foundation-leading-13: 13px;
+  --ds-foundation-leading-14: 14px;
+  --ds-foundation-leading-15: 15px;
+  --ds-foundation-leading-16: 16px;
+  --ds-foundation-leading-18: 18px;
+  --ds-foundation-leading-20: 20px;
+  --ds-foundation-leading-22: 22px;
+  --ds-foundation-leading-26: 26px;
+  --ds-foundation-leading-32: 32px;
+
+  /* Foundation: motion. */
+  --ds-foundation-motion-120: 120ms;
+  --ds-foundation-motion-160: 160ms;
+  --ds-foundation-motion-220: 220ms;
+  --ds-foundation-motion-280: 280ms;
+  --ds-foundation-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-foundation-ease-exit: ease-in;
+
+  /* Foundation: light palette. */
+  --ds-foundation-light-canvas: oklch(0.976 0.003 250);
+  --ds-foundation-light-sidebar: oklch(0.956 0.004 250);
+  --ds-foundation-light-surface: oklch(0.992 0.002 250);
+  --ds-foundation-light-raised: oklch(0.998 0.001 250);
+  --ds-foundation-light-modal: oklch(1 0 0);
+  --ds-foundation-light-text: oklch(0.18 0.02 265);
+  --ds-foundation-light-text-muted: oklch(0.5 0.025 260);
+  --ds-foundation-light-fill-quiet: oklch(0.945 0.005 255);
+  --ds-foundation-light-fill-rest: oklch(0.93 0.006 255);
+  --ds-foundation-light-fill-hover: oklch(0.905 0.008 255);
+  --ds-foundation-light-primary: oklch(0.546 0.215 262.881);
+  --ds-foundation-light-primary-hover: oklch(0.51 0.215 262.881);
+  --ds-foundation-light-primary-text: oklch(0.984 0.003 247.858);
+  --ds-foundation-light-success: oklch(0.48 0.15 149);
+  --ds-foundation-light-warning: oklch(0.48 0.13 70);
+  --ds-foundation-light-destructive: oklch(0.56 0.22 27);
+  --ds-foundation-light-destructive-hover: oklch(0.52 0.22 27);
+  --ds-foundation-light-focus: oklch(0.38 0.01 260);
+  --ds-foundation-light-overlay: oklch(0.18 0.01 260 / 42%);
+  --ds-foundation-light-shadow: rgb(16 24 40 / 10%);
+
+  /* Foundation: dark palette. Neutral planes carry hierarchy; no white hairline is added. */
+  --ds-foundation-dark-canvas: oklch(0.165 0.005 265);
+  --ds-foundation-dark-sidebar: oklch(0.14 0.005 265);
+  --ds-foundation-dark-surface: oklch(0.205 0.006 265);
+  --ds-foundation-dark-raised: oklch(0.24 0.007 265);
+  --ds-foundation-dark-modal: oklch(0.27 0.008 265);
+  --ds-foundation-dark-text: oklch(0.955 0.004 250);
+  --ds-foundation-dark-text-muted: oklch(0.74 0.008 260);
+  --ds-foundation-dark-fill-quiet: oklch(0.255 0.007 265);
+  --ds-foundation-dark-fill-rest: oklch(0.285 0.008 265);
+  --ds-foundation-dark-fill-hover: oklch(0.325 0.009 265);
+  --ds-foundation-dark-primary: oklch(0.68 0.15 258);
+  --ds-foundation-dark-primary-hover: oklch(0.72 0.15 258);
+  --ds-foundation-dark-primary-text: oklch(0.16 0.01 265);
+  --ds-foundation-dark-success: oklch(0.75 0.14 152);
+  --ds-foundation-dark-warning: oklch(0.8 0.13 82);
+  --ds-foundation-dark-destructive: oklch(0.72 0.17 22);
+  --ds-foundation-dark-destructive-hover: oklch(0.76 0.17 22);
+  --ds-foundation-dark-focus: oklch(0.78 0.008 260);
+  --ds-foundation-dark-overlay: oklch(0.08 0.004 265 / 72%);
+  --ds-foundation-dark-shadow: rgb(0 0 0 / 34%);
+
+  /* Semantic spacing. */
+  --ds-space-optical: var(--ds-foundation-space-2);
+  --ds-space-inline: var(--ds-foundation-space-4);
+  --ds-space-control-group: var(--ds-foundation-space-6);
+  --ds-space-module-inset: var(--ds-foundation-space-8);
+  --ds-space-surface-inset: var(--ds-foundation-space-12);
+  --ds-space-section: var(--ds-foundation-space-16);
+  --ds-space-page: var(--ds-foundation-space-24);
+  --ds-space-page-section: var(--ds-foundation-space-32);
+
+  /* Semantic type roles. */
+  --ds-font-ui: var(--ds-foundation-font-ui);
+  --ds-font-mono: var(--ds-foundation-font-mono);
+  --ds-type-large-title-size: var(--ds-foundation-type-26);
+  --ds-type-large-title-leading: var(--ds-foundation-leading-32);
+  --ds-type-page-title-size: var(--ds-foundation-type-22);
+  --ds-type-page-title-leading: var(--ds-foundation-leading-26);
+  --ds-type-section-size: var(--ds-foundation-type-17);
+  --ds-type-section-leading: var(--ds-foundation-leading-22);
+  --ds-type-dialog-size: var(--ds-foundation-type-15);
+  --ds-type-dialog-leading: var(--ds-foundation-leading-20);
+  --ds-type-body-size: var(--ds-foundation-type-13);
+  --ds-type-body-leading: var(--ds-foundation-leading-16);
+  --ds-type-content-leading: var(--ds-foundation-leading-20);
+  --ds-type-callout-size: var(--ds-foundation-type-12);
+  --ds-type-callout-leading: var(--ds-foundation-leading-15);
+  --ds-type-metadata-size: var(--ds-foundation-type-11);
+  --ds-type-metadata-leading: var(--ds-foundation-leading-14);
+  --ds-type-caption-size: var(--ds-foundation-type-10);
+  --ds-type-caption-leading: var(--ds-foundation-leading-13);
+  --ds-type-code-size: var(--ds-foundation-type-12);
+  --ds-type-code-leading: var(--ds-foundation-leading-18);
+  --ds-font-weight-regular: 400;
+  --ds-font-weight-medium: 600;
+
+  /* Semantic geometry. */
+  --ds-radius-micro: var(--ds-foundation-radius-4);
+  --ds-radius-control: var(--ds-foundation-radius-8);
+  --ds-radius-module: var(--ds-foundation-radius-12);
+  --ds-radius-modal: var(--ds-foundation-radius-16);
+  --ds-icon-inline: var(--ds-foundation-icon-12);
+  --ds-icon-list: var(--ds-foundation-icon-14);
+  --ds-icon-control: var(--ds-foundation-icon-16);
+  --ds-control-mini: var(--ds-foundation-control-24);
+  --ds-control-normal: var(--ds-foundation-control-28);
+  --ds-control-field: var(--ds-foundation-control-32);
+
+  /* Semantic motion. */
+  --ds-motion-feedback: var(--ds-foundation-motion-120);
+  --ds-motion-layer: var(--ds-foundation-motion-160);
+  --ds-motion-dialog: var(--ds-foundation-motion-220);
+  --ds-motion-page: var(--ds-foundation-motion-280);
+  --ds-ease-enter: var(--ds-foundation-ease-enter);
+  --ds-ease-exit: var(--ds-foundation-ease-exit);
+
+  /* Semantic light scheme. */
+  --ds-color-canvas: var(--ds-foundation-light-canvas);
+  --ds-color-sidebar: var(--ds-foundation-light-sidebar);
+  --ds-color-surface: var(--ds-foundation-light-surface);
+  --ds-color-raised: var(--ds-foundation-light-raised);
+  --ds-color-modal: var(--ds-foundation-light-modal);
+  --ds-color-text: var(--ds-foundation-light-text);
+  --ds-color-text-muted: var(--ds-foundation-light-text-muted);
+  --ds-color-fill-quiet: var(--ds-foundation-light-fill-quiet);
+  --ds-color-fill-rest: var(--ds-foundation-light-fill-rest);
+  --ds-color-fill-hover: var(--ds-foundation-light-fill-hover);
+  --ds-color-primary: var(--ds-foundation-light-primary);
+  --ds-color-primary-hover: var(--ds-foundation-light-primary-hover);
+  --ds-color-primary-text: var(--ds-foundation-light-primary-text);
+  --ds-color-success: var(--ds-foundation-light-success);
+  --ds-color-warning: var(--ds-foundation-light-warning);
+  --ds-color-destructive: var(--ds-foundation-light-destructive);
+  --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
+  --ds-color-focus: var(--ds-foundation-light-focus);
+  --ds-color-overlay: var(--ds-foundation-light-overlay);
+
+  --ds-focus-width: var(--ds-foundation-space-2);
+  --ds-focus-offset: var(--ds-foundation-space-2);
+  --ds-elevation-surface: 0 1px 2px var(--ds-foundation-light-shadow),
+    0 4px 12px rgb(16 24 40 / 5%);
+  --ds-elevation-raised: 0 2px 6px var(--ds-foundation-light-shadow),
+    0 12px 28px rgb(16 24 40 / 10%);
+  --ds-elevation-modal: 0 8px 24px rgb(16 24 40 / 14%),
+    0 28px 72px rgb(16 24 40 / 16%);
+
+  /* Shared primitive contracts. */
+  --ds-button-height: var(--ds-control-normal);
+  --ds-button-radius: var(--ds-radius-control);
+  --ds-input-height: var(--ds-control-field);
+  --ds-input-radius: var(--ds-radius-control);
+  --ds-card-radius: var(--ds-radius-module);
+  --ds-dialog-radius: var(--ds-radius-modal);
+}
+
+/* Explicit preview light mode must override an OS-driven `.dark` class on the document root. */
+[data-ds-theme="light"] {
+  --ds-color-canvas: var(--ds-foundation-light-canvas);
+  --ds-color-sidebar: var(--ds-foundation-light-sidebar);
+  --ds-color-surface: var(--ds-foundation-light-surface);
+  --ds-color-raised: var(--ds-foundation-light-raised);
+  --ds-color-modal: var(--ds-foundation-light-modal);
+  --ds-color-text: var(--ds-foundation-light-text);
+  --ds-color-text-muted: var(--ds-foundation-light-text-muted);
+  --ds-color-fill-quiet: var(--ds-foundation-light-fill-quiet);
+  --ds-color-fill-rest: var(--ds-foundation-light-fill-rest);
+  --ds-color-fill-hover: var(--ds-foundation-light-fill-hover);
+  --ds-color-primary: var(--ds-foundation-light-primary);
+  --ds-color-primary-hover: var(--ds-foundation-light-primary-hover);
+  --ds-color-primary-text: var(--ds-foundation-light-primary-text);
+  --ds-color-success: var(--ds-foundation-light-success);
+  --ds-color-warning: var(--ds-foundation-light-warning);
+  --ds-color-destructive: var(--ds-foundation-light-destructive);
+  --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
+  --ds-color-focus: var(--ds-foundation-light-focus);
+  --ds-color-overlay: var(--ds-foundation-light-overlay);
+  --ds-elevation-surface: 0 1px 2px var(--ds-foundation-light-shadow),
+    0 4px 12px rgb(16 24 40 / 5%);
+  --ds-elevation-raised: 0 2px 6px var(--ds-foundation-light-shadow),
+    0 12px 28px rgb(16 24 40 / 10%);
+  --ds-elevation-modal: 0 8px 24px rgb(16 24 40 / 14%),
+    0 28px 72px rgb(16 24 40 / 16%);
+}
+
+.dark,
+[data-ds-theme="dark"] {
+  --ds-color-canvas: var(--ds-foundation-dark-canvas);
+  --ds-color-sidebar: var(--ds-foundation-dark-sidebar);
+  --ds-color-surface: var(--ds-foundation-dark-surface);
+  --ds-color-raised: var(--ds-foundation-dark-raised);
+  --ds-color-modal: var(--ds-foundation-dark-modal);
+  --ds-color-text: var(--ds-foundation-dark-text);
+  --ds-color-text-muted: var(--ds-foundation-dark-text-muted);
+  --ds-color-fill-quiet: var(--ds-foundation-dark-fill-quiet);
+  --ds-color-fill-rest: var(--ds-foundation-dark-fill-rest);
+  --ds-color-fill-hover: var(--ds-foundation-dark-fill-hover);
+  --ds-color-primary: var(--ds-foundation-dark-primary);
+  --ds-color-primary-hover: var(--ds-foundation-dark-primary-hover);
+  --ds-color-primary-text: var(--ds-foundation-dark-primary-text);
+  --ds-color-success: var(--ds-foundation-dark-success);
+  --ds-color-warning: var(--ds-foundation-dark-warning);
+  --ds-color-destructive: var(--ds-foundation-dark-destructive);
+  --ds-color-destructive-hover: var(--ds-foundation-dark-destructive-hover);
+  --ds-color-focus: var(--ds-foundation-dark-focus);
+  --ds-color-overlay: var(--ds-foundation-dark-overlay);
+  --ds-elevation-surface: 0 1px 2px var(--ds-foundation-dark-shadow),
+    0 6px 16px rgb(0 0 0 / 20%);
+  --ds-elevation-raised: 0 3px 8px var(--ds-foundation-dark-shadow),
+    0 16px 36px rgb(0 0 0 / 32%);
+  --ds-elevation-modal: 0 10px 28px rgb(0 0 0 / 38%),
+    0 32px 80px rgb(0 0 0 / 46%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-motion-feedback: 0ms;
+    --ds-motion-layer: 0ms;
+    --ds-motion-dialog: 0ms;
+    --ds-motion-page: 0ms;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ds-color-text-muted: var(--ds-foundation-light-text);
+    --ds-color-fill-rest: var(--ds-foundation-light-fill-hover);
+  }
+
+  .dark,
+  [data-ds-theme="dark"] {
+    --ds-color-text-muted: var(--ds-foundation-dark-text);
+    --ds-color-fill-rest: var(--ds-foundation-dark-fill-hover);
+  }
+}
+
+/* Tauri maps the OS bold-text setting to this attribute during the Phase 2 migration. */
+[data-ds-bold-text="true"] {
+  --ds-font-weight-regular: 550;
+  --ds-font-weight-medium: 650;
+}
+
+/* Machine-checked WCAG contrast contracts, verified in both light and dark schemes. */
+/* @contrast --ds-color-text --ds-color-canvas 4.5 */
+/* @contrast --ds-color-text --ds-color-surface 4.5 */
+/* @contrast --ds-color-text-muted --ds-color-surface 4.5 */
+/* @contrast --ds-color-primary-text --ds-color-primary 4.5 */
+/* @contrast --ds-color-destructive --ds-color-surface 4.5 */
+/* @contrast --ds-color-focus --ds-color-surface 3 */

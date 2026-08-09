@@ -1,0 +1,37 @@
+name: Desktop design system
+
+on:
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "docs/design.md"
+      - ".github/workflows/desktop-design-system.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "docs/design.md"
+      - ".github/workflows/desktop-design-system.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Check design-system policy
+        run: bun run check:design
+      - name: Run desktop tests
+        run: bun test
+      - name: Build desktop webview
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: bun run build

@@ -8,6 +8,9 @@ import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
 import "./styles.css";
 
+const showDesignSystem =
+  import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");
+
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
 // paste / look up) is genuinely the right one.
@@ -18,18 +21,24 @@ document.addEventListener("contextmenu", (e) => {
 });
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <ThemeProvider>
-      <I18nProvider>
-        <ErrorBoundary>
-          <TooltipProvider delayDuration={300}>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
-          </TooltipProvider>
-        </ErrorBoundary>
-      </I18nProvider>
-    </ThemeProvider>
-  </React.StrictMode>,
-);
+async function render() {
+  const Root = showDesignSystem ? (await import("./design/DesignSystemPreview")).DesignSystemPreview : App;
+
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <ThemeProvider>
+        <I18nProvider>
+          <ErrorBoundary>
+            <TooltipProvider delayDuration={300}>
+              <ToastProvider>
+                <Root />
+              </ToastProvider>
+            </TooltipProvider>
+          </ErrorBoundary>
+        </I18nProvider>
+      </ThemeProvider>
+    </React.StrictMode>,
+  );
+}
+
+void render();
