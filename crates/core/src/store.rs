@@ -8,9 +8,17 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+#[cfg(test)]
+use std::sync::{Arc, Barrier, OnceLock};
+
 use rusqlite::{Connection, OptionalExtension};
 use thiserror::Error;
 
+use crate::canvas::{
+    new_draft, validate_exports, CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasExportBudget,
+    CanvasFeatureGate, CanvasFreezeInput, CanvasPromptPayload, CanvasRevision, CanvasSnapshot,
+    CanvasStaticAsset,
+};
 use crate::project::ProjectWorktreeMode;
 use crate::session::{
     MemoryAccess, Part, Role, RunFailureReason, Session, SessionActivity, SessionRunState,
@@ -106,6 +114,26 @@ pub struct SessionSearchHit {
 
 pub struct Store {
     pub(crate) conn: Mutex<Connection>,
+}
+
+#[cfg(test)]
+fn canvas_freeze_test_barrier() -> &'static Mutex<Option<Arc<Barrier>>> {
+    static BARRIER: OnceLock<Mutex<Option<Arc<Barrier>>>> = OnceLock::new();
+    BARRIER.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(test)]
+fn set_canvas_freeze_test_barrier(barrier: Option<Arc<Barrier>>) {
+    *canvas_freeze_test_barrier().lock().unwrap() = barrier;
+}
+
+#[cfg(test)]
+fn wait_canvas_freeze_test_barrier() {
+    let barrier = canvas_freeze_test_barrier().lock().unwrap().clone();
+    if let Some(barrier) = barrier {
+        barrier.wait();
+        barrier.wait();
+    }
 }
 
 /// Snapshot-only projection mirroring the client tool fold: once a later terminal row exists for
@@ -474,6 +502,7 @@ impl Store {
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
         crate::memory::install(&conn)?;
+        crate::canvas::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
         };
@@ -488,11 +517,739 @@ impl Store {
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
         crate::memory::install(&conn)?;
+        crate::canvas::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
         };
         store.run_memory_maintenance()?;
         Ok(store)
+    }
+
+    // ---- Canvas Input V1 ----------------------------------------------------------------------
+
+    /// Create a mutable, client-owned Canvas draft.  The production entry point is intentionally
+    /// closed until physical QA; tests and a trusted QA harness pass
+    /// [`CanvasFeatureGate::enabled_for_tests`].
+    pub fn create_canvas_draft(
+        &self,
+        owner: &str,
+        title: &str,
+        now: i64,
+    ) -> Result<CanvasDraft, CanvasError> {
+        self.create_canvas_draft_with_gate(CanvasFeatureGate::disabled(), owner, title, now)
+    }
+
+    pub fn create_canvas_draft_with_gate(
+        &self,
+        gate: CanvasFeatureGate,
+        owner: &str,
+        title: &str,
+        now: i64,
+    ) -> Result<CanvasDraft, CanvasError> {
+        gate.require()?;
+        if owner.trim().is_empty() {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let draft = new_draft(owner.to_string(), title.to_string(), now);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO canvas_drafts
+             (id,owner,revision,title,theme,envelope_json,manifest_json,assets_json,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9)",
+            rusqlite::params![
+                draft.id,
+                draft.owner,
+                draft.revision as i64,
+                draft.title,
+                serde_json::to_string(&draft.theme)?,
+                serde_json::to_string(&draft.envelope)?,
+                serde_json::to_string(&draft.manifest)?,
+                serde_json::to_string(&draft.assets)?,
+                now,
+            ],
+        )?;
+        Ok(draft)
+    }
+
+    pub fn get_canvas_draft(
+        &self,
+        id: &str,
+        owner: &str,
+    ) -> Result<Option<CanvasDraft>, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,revision,title,theme,envelope_json,manifest_json,assets_json,created_at,updated_at,tombstoned_at
+                 FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, i64>(7)?,
+                        row.get::<_, i64>(8)?,
+                        row.get::<_, Option<i64>>(9)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((
+            row_owner,
+            revision,
+            title,
+            theme,
+            envelope,
+            manifest,
+            assets,
+            created_at,
+            updated_at,
+            tombstoned_at,
+        )) = row
+        else {
+            return Ok(None);
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let draft = CanvasDraft {
+            id: id.to_string(),
+            owner: row_owner,
+            revision: revision.max(0) as u64,
+            title,
+            theme: serde_json::from_str(&theme)?,
+            envelope: serde_json::from_str(&envelope)?,
+            manifest: serde_json::from_str(&manifest)?,
+            assets: serde_json::from_str(&assets)?,
+            created_at,
+            updated_at,
+            tombstoned_at,
+        };
+        draft.validate()?;
+        Ok(Some(draft))
+    }
+
+    pub fn update_canvas_draft_cas(
+        &self,
+        id: &str,
+        owner: &str,
+        expected_revision: CanvasRevision,
+        update: CanvasDraftUpdate,
+        now: i64,
+    ) -> Result<CanvasDraft, CanvasError> {
+        let next_revision = expected_revision.saturating_add(1);
+        update.validate_for_revision(next_revision)?;
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,revision,created_at,tombstoned_at FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((row_owner, current, created_at, tombstoned_at)) = row else {
+            return Err(CanvasError::NotFound(id.into()));
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        if tombstoned_at.is_some() {
+            return Err(CanvasError::Tombstoned(id.into()));
+        }
+        let actual = current.max(0) as u64;
+        if actual != expected_revision {
+            return Err(CanvasError::StaleRevision {
+                id: id.into(),
+                expected: expected_revision,
+                actual,
+            });
+        }
+        let mut envelope = update.envelope.clone();
+        envelope.revision = next_revision;
+        envelope.theme = update.theme;
+        envelope.assets = update
+            .assets
+            .iter()
+            .map(CanvasStaticAsset::reference)
+            .collect();
+        let manifest = update.manifest.normalized()?;
+        conn.execute(
+            "UPDATE canvas_drafts SET revision=?2,title=?3,theme=?4,envelope_json=?5,manifest_json=?6,assets_json=?7,updated_at=?8
+             WHERE id=?1 AND owner=?9 AND revision=?10 AND tombstoned_at IS NULL",
+            rusqlite::params![
+                id,
+                next_revision as i64,
+                update.title,
+                serde_json::to_string(&update.theme)?,
+                serde_json::to_string(&envelope)?,
+                serde_json::to_string(&manifest)?,
+                serde_json::to_string(&update.assets)?,
+                now,
+                owner,
+                expected_revision as i64,
+            ],
+        )?;
+        if conn.changes() != 1 {
+            return Err(CanvasError::StaleRevision {
+                id: id.into(),
+                expected: expected_revision,
+                actual,
+            });
+        }
+        Ok(CanvasDraft {
+            id: id.into(),
+            owner: owner.into(),
+            revision: next_revision,
+            title: update.title,
+            theme: update.theme,
+            envelope,
+            manifest,
+            assets: update.assets,
+            created_at,
+            updated_at: now,
+            tombstoned_at: None,
+        })
+    }
+
+    pub fn freeze_canvas(
+        &self,
+        id: &str,
+        owner: &str,
+        expected_revision: CanvasRevision,
+        input: CanvasFreezeInput,
+    ) -> Result<CanvasSnapshot, CanvasError> {
+        self.freeze_canvas_with_gate(
+            CanvasFeatureGate::disabled(),
+            id,
+            owner,
+            expected_revision,
+            input,
+        )
+    }
+
+    pub fn freeze_canvas_with_gate(
+        &self,
+        gate: CanvasFeatureGate,
+        id: &str,
+        owner: &str,
+        expected_revision: CanvasRevision,
+        input: CanvasFreezeInput,
+    ) -> Result<CanvasSnapshot, CanvasError> {
+        gate.require()?;
+        let draft = self
+            .get_canvas_draft(id, owner)?
+            .ok_or_else(|| CanvasError::NotFound(id.into()))?;
+        if draft.tombstoned_at.is_some() {
+            return Err(CanvasError::Tombstoned(id.into()));
+        }
+        if draft.revision != expected_revision {
+            return Err(CanvasError::StaleRevision {
+                id: id.into(),
+                expected: expected_revision,
+                actual: draft.revision,
+            });
+        }
+        #[cfg(test)]
+        wait_canvas_freeze_test_barrier();
+        // Normalize the caller's freeze payload exactly as a draft update would.  A frozen
+        // revision is an immutable id@revision address: accepting a different scene, manifest,
+        // title, or asset set here would let two payloads claim the same address.  The mutable
+        // draft head is authoritative; exports are the only freeze-only data.
+        let mut requested_envelope = input.envelope.clone();
+        requested_envelope.revision = expected_revision;
+        requested_envelope.theme = input.theme;
+        requested_envelope.assets = input
+            .assets
+            .iter()
+            .map(CanvasStaticAsset::reference)
+            .collect();
+        requested_envelope.validate()?;
+        let requested_manifest = input.manifest.clone().normalized()?;
+        let asset_ids = input.assets.iter().map(|asset| asset.id.clone()).collect();
+        requested_manifest.validate_with_assets(&asset_ids)?;
+        let derived_manifest = requested_envelope.derive_manifest()?;
+        if requested_manifest != derived_manifest {
+            return Err(CanvasError::InvalidManifest(
+                "manifest does not match the exact scene-derived projection".into(),
+            ));
+        }
+        crate::canvas::validate_static_assets_for_store(&input.assets)?;
+        if input.title != draft.title
+            || input.theme != draft.theme
+            || requested_envelope != draft.envelope
+            || requested_manifest != draft.manifest
+            || input.assets != draft.assets
+        {
+            return Err(CanvasError::InvalidEnvelope(
+                "freeze payload differs from the current mutable draft".into(),
+            ));
+        }
+        validate_exports(&input.exports, CanvasExportBudget::default())?;
+
+        // Re-read the head while holding the same mutex used by CAS updates.  The initial read
+        // above intentionally occurs before validation (which can decode/validate large media),
+        // so this final check closes the stale-freeze race: an update that wins during validation
+        // makes this freeze fail instead of persisting an old revision.
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,revision,title,theme,envelope_json,manifest_json,assets_json,created_at,updated_at,tombstoned_at
+                 FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, i64>(7)?,
+                        row.get::<_, i64>(8)?,
+                        row.get::<_, Option<i64>>(9)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((
+            current_owner,
+            current_revision,
+            title,
+            theme,
+            envelope_json,
+            manifest_json,
+            assets_json,
+            created_at,
+            updated_at,
+            tombstoned_at,
+        )) = row
+        else {
+            return Err(CanvasError::NotFound(id.into()));
+        };
+        if current_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        if tombstoned_at.is_some() {
+            return Err(CanvasError::Tombstoned(id.into()));
+        }
+        let actual = current_revision.max(0) as u64;
+        if actual != expected_revision {
+            return Err(CanvasError::StaleRevision {
+                id: id.into(),
+                expected: expected_revision,
+                actual,
+            });
+        }
+        let current_draft = CanvasDraft {
+            id: id.into(),
+            owner: current_owner,
+            revision: actual,
+            title,
+            theme: serde_json::from_str(&theme)?,
+            envelope: serde_json::from_str(&envelope_json)?,
+            manifest: serde_json::from_str(&manifest_json)?,
+            assets: serde_json::from_str(&assets_json)?,
+            created_at,
+            updated_at,
+            tombstoned_at,
+        };
+        let snapshot = CanvasSnapshot {
+            id: id.into(),
+            revision: expected_revision,
+            title: current_draft.title,
+            theme: current_draft.theme,
+            created_at: current_draft.created_at,
+            frozen_at: input.now,
+            object_count: current_draft.manifest.objects.len(),
+            envelope: current_draft.envelope,
+            assets: current_draft.assets,
+            summary: crate::canvas::deterministic_summary(&current_draft.manifest),
+            manifest: current_draft.manifest,
+            exports: input.exports,
+        };
+        snapshot.validate()?;
+
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT snapshot_json FROM canvas_revisions WHERE canvas_id=?1 AND revision=?2 AND owner=?3",
+                rusqlite::params![id, expected_revision as i64, owner],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            let existing: CanvasSnapshot = serde_json::from_str(&existing)?;
+            existing.validate()?;
+            if existing.exports != snapshot.exports {
+                return Err(CanvasError::Immutable(format!(
+                    "{id}@{expected_revision} already has different exports"
+                )));
+            }
+            return Ok(existing);
+        }
+        conn.execute(
+            "INSERT INTO canvas_revisions(canvas_id,revision,owner,snapshot_json,created_at)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                id,
+                expected_revision as i64,
+                owner,
+                serde_json::to_string(&snapshot)?,
+                input.now,
+            ],
+        )?;
+        Ok(snapshot)
+    }
+
+    pub fn get_canvas_snapshot(
+        &self,
+        id: &str,
+        owner: &str,
+        revision: CanvasRevision,
+    ) -> Result<Option<CanvasSnapshot>, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,snapshot_json FROM canvas_revisions WHERE canvas_id=?1 AND revision=?2",
+                rusqlite::params![id, revision as i64],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        let Some((row_owner, snapshot)) = row else {
+            return Ok(None);
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let snapshot: CanvasSnapshot = serde_json::from_str(&snapshot)?;
+        snapshot.validate()?;
+        Ok(Some(snapshot))
+    }
+
+    /// Read an immutable frozen revision without applying mutable-draft ownership rules.
+    ///
+    /// Frozen history is globally readable only after an authenticated bridge has validated the
+    /// caller.  Keeping this seam separate from [`Self::get_canvas_snapshot`] makes it impossible
+    /// for a remote request to accidentally turn a mutable draft read into a global read.
+    pub fn get_canvas_snapshot_frozen(
+        &self,
+        id: &str,
+        revision: CanvasRevision,
+    ) -> Result<Option<CanvasSnapshot>, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let snapshot: Option<String> = conn
+            .query_row(
+                "SELECT snapshot_json FROM canvas_revisions WHERE canvas_id=?1 AND revision=?2",
+                rusqlite::params![id, revision as i64],
+                |row| row.get(0),
+            )
+            .optional()?;
+        snapshot
+            .map(|json| {
+                let snapshot: CanvasSnapshot = serde_json::from_str(&json)?;
+                snapshot.validate()?;
+                Ok::<CanvasSnapshot, CanvasError>(snapshot)
+            })
+            .transpose()
+    }
+
+    pub fn resolve_canvas_prompt(
+        &self,
+        id: &str,
+        owner: &str,
+        revision: CanvasRevision,
+    ) -> Result<CanvasPromptPayload, CanvasError> {
+        self.get_canvas_snapshot(id, owner, revision)?
+            .map(|snapshot| snapshot.prompt_payload())
+            .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))
+    }
+
+    /// Resolve an immutable frozen revision after an authenticated bridge has already checked
+    /// device/client ownership.  No mutable draft is exposed through this seam, and callers that
+    /// have not performed that bridge check must use [`Self::resolve_canvas_prompt`] instead.
+    pub fn resolve_canvas_prompt_frozen(
+        &self,
+        id: &str,
+        revision: CanvasRevision,
+    ) -> Result<CanvasPromptPayload, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let snapshot: Option<String> = conn
+            .query_row(
+                "SELECT snapshot_json FROM canvas_revisions WHERE canvas_id=?1 AND revision=?2",
+                rusqlite::params![id, revision as i64],
+                |row| row.get(0),
+            )
+            .optional()?;
+        snapshot
+            .map(|json| {
+                let snapshot: CanvasSnapshot = serde_json::from_str(&json)?;
+                snapshot.validate()?;
+                Ok::<CanvasPromptPayload, CanvasError>(snapshot.prompt_payload())
+            })
+            .transpose()?
+            .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))
+    }
+
+    pub fn duplicate_canvas_with_gate(
+        &self,
+        gate: CanvasFeatureGate,
+        id: &str,
+        owner: &str,
+        revision: CanvasRevision,
+        now: i64,
+    ) -> Result<CanvasDraft, CanvasError> {
+        gate.require()?;
+        let snapshot = self
+            .get_canvas_snapshot(id, owner, revision)?
+            .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))?;
+        let mut draft = new_draft(owner.to_string(), snapshot.title, now);
+        draft.theme = snapshot.theme;
+        draft.envelope = snapshot.envelope.clone();
+        draft.envelope.revision = 1;
+        draft.envelope.assets = snapshot
+            .envelope
+            .assets
+            .iter()
+            .map(|asset| asset.clone())
+            .collect();
+        draft.manifest = snapshot.manifest;
+        draft.assets = snapshot.assets;
+        draft.envelope.assets = draft
+            .assets
+            .iter()
+            .map(CanvasStaticAsset::reference)
+            .collect();
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO canvas_drafts
+             (id,owner,revision,title,theme,envelope_json,manifest_json,assets_json,created_at,updated_at)
+             VALUES (?1,?2,1,?3,?4,?5,?6,?7,?8,?8)",
+            rusqlite::params![
+                draft.id,
+                draft.owner,
+                draft.title,
+                serde_json::to_string(&draft.theme)?,
+                serde_json::to_string(&draft.envelope)?,
+                serde_json::to_string(&draft.manifest)?,
+                serde_json::to_string(&draft.assets)?,
+                now,
+            ],
+        )?;
+        Ok(draft)
+    }
+
+    /// Duplicate an immutable frozen revision into a new mutable draft owned by `new_owner`.
+    ///
+    /// The source lookup is deliberately owner-independent: callers must authenticate before
+    /// entering this seam, while the returned draft is always stamped with the server-derived
+    /// requesting owner.  The immutable source row is never updated.
+    pub fn duplicate_canvas_to_owner_with_gate(
+        &self,
+        gate: CanvasFeatureGate,
+        id: &str,
+        revision: CanvasRevision,
+        new_owner: &str,
+        now: i64,
+    ) -> Result<CanvasDraft, CanvasError> {
+        gate.require()?;
+        if new_owner.trim().is_empty() {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let snapshot = self
+            .get_canvas_snapshot_frozen(id, revision)?
+            .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))?;
+        let mut draft = new_draft(new_owner.to_string(), snapshot.title, now);
+        draft.theme = snapshot.theme;
+        draft.envelope = snapshot.envelope.clone();
+        draft.envelope.revision = 1;
+        draft.envelope.assets = snapshot.envelope.assets.iter().cloned().collect();
+        draft.manifest = snapshot.manifest;
+        draft.assets = snapshot.assets;
+        draft.envelope.assets = draft
+            .assets
+            .iter()
+            .map(CanvasStaticAsset::reference)
+            .collect();
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO canvas_drafts
+             (id,owner,revision,title,theme,envelope_json,manifest_json,assets_json,created_at,updated_at)
+             VALUES (?1,?2,1,?3,?4,?5,?6,?7,?8,?8)",
+            rusqlite::params![
+                draft.id,
+                draft.owner,
+                draft.title,
+                serde_json::to_string(&draft.theme)?,
+                serde_json::to_string(&draft.envelope)?,
+                serde_json::to_string(&draft.manifest)?,
+                serde_json::to_string(&draft.assets)?,
+                now,
+            ],
+        )?;
+        Ok(draft)
+    }
+
+    pub fn tombstone_canvas(&self, id: &str, owner: &str, now: i64) -> Result<(), CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,revision,immutable,tombstoned_at,manifest_json FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((row_owner, _revision, immutable, existing, manifest)) = row else {
+            return Err(CanvasError::NotFound(id.into()));
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        if immutable != 0 {
+            return Err(CanvasError::Immutable(id.into()));
+        }
+        if existing.is_some() {
+            return Ok(());
+        }
+        let manifest: crate::canvas::CanvasManifest = serde_json::from_str(&manifest)?;
+        if manifest.objects.is_empty() {
+            return Err(CanvasError::InvalidManifest(
+                "empty drafts do not need tombstones".into(),
+            ));
+        }
+        conn.execute(
+            "UPDATE canvas_drafts SET tombstoned_at=?2,updated_at=?2 WHERE id=?1 AND owner=?3",
+            rusqlite::params![id, now, owner],
+        )?;
+        conn.execute(
+            "INSERT OR REPLACE INTO canvas_tombstones(canvas_id,owner,tombstoned_at) VALUES (?1,?2,?3)",
+            rusqlite::params![id, owner, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn restore_canvas(&self, id: &str, owner: &str, now: i64) -> Result<(), CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,tombstoned_at FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?)),
+            )
+            .optional()?;
+        let Some((row_owner, tombstoned_at)) = row else {
+            return Err(CanvasError::NotFound(id.into()));
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let Some(tombstoned_at) = tombstoned_at else {
+            return Ok(());
+        };
+        if now.saturating_sub(tombstoned_at) > crate::canvas::MAX_CANVAS_TOMBSTONE_AGE_MS {
+            return Err(CanvasError::NotFound(id.into()));
+        }
+        conn.execute(
+            "UPDATE canvas_drafts SET tombstoned_at=NULL,updated_at=?2 WHERE id=?1 AND owner=?3",
+            rusqlite::params![id, now, owner],
+        )?;
+        conn.execute("DELETE FROM canvas_tombstones WHERE canvas_id=?1", [id])?;
+        Ok(())
+    }
+
+    pub fn purge_canvas(&self, id: &str, owner: &str, now: i64) -> Result<bool, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let row = conn
+            .query_row(
+                "SELECT owner,tombstoned_at,manifest_json FROM canvas_drafts WHERE id=?1",
+                [id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((row_owner, tombstoned_at, manifest_json)) = row else {
+            return Ok(false);
+        };
+        if row_owner != owner {
+            return Err(CanvasError::OwnerMismatch);
+        }
+        let references: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM canvas_revisions WHERE canvas_id=?1",
+            [id],
+            |row| row.get(0),
+        )?;
+        let Some(tombstoned_at) = tombstoned_at else {
+            // An empty draft that was never frozen is a disposable editor placeholder.  Purging
+            // it is owner-scoped and cannot remove history; non-empty active drafts still require
+            // an explicit tombstone first.
+            let manifest: crate::canvas::CanvasManifest = serde_json::from_str(&manifest_json)?;
+            if !manifest.objects.is_empty() || references != 0 {
+                return Ok(false);
+            }
+            conn.execute(
+                "DELETE FROM canvas_drafts WHERE id=?1 AND owner=?2",
+                rusqlite::params![id, owner],
+            )?;
+            return Ok(conn.changes() == 1);
+        };
+        let _expired =
+            now.saturating_sub(tombstoned_at) >= crate::canvas::MAX_CANVAS_TOMBSTONE_AGE_MS;
+        // Immutable history is reference-safe: remove only the mutable tombstone row while
+        // retaining every historical snapshot and its normalized assets.
+        if references > 0 {
+            conn.execute("DELETE FROM canvas_tombstones WHERE canvas_id=?1", [id])?;
+            conn.execute("DELETE FROM canvas_drafts WHERE id=?1", [id])?;
+            return Ok(true);
+        }
+        conn.execute("DELETE FROM canvas_tombstones WHERE canvas_id=?1", [id])?;
+        conn.execute("DELETE FROM canvas_drafts WHERE id=?1", [id])?;
+        Ok(true)
+    }
+
+    /// Expire all tombstones older than the bounded recovery window.  Historical revisions remain
+    /// untouched; only mutable draft rows with no history are physically removed.
+    pub fn purge_expired_canvases(&self, now: i64) -> Result<usize, CanvasError> {
+        let conn = self.conn.lock().unwrap();
+        let cutoff = now.saturating_sub(crate::canvas::MAX_CANVAS_TOMBSTONE_AGE_MS);
+        let mut stmt = conn.prepare(
+            "SELECT id FROM canvas_drafts WHERE tombstoned_at IS NOT NULL AND tombstoned_at<=?1",
+        )?;
+        let ids = stmt
+            .query_map([cutoff], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let mut purged = 0;
+        for id in ids {
+            // Frozen history is stored separately and remains resolvable. Expiry removes only
+            // the mutable tombstone/head; referenced snapshot rows and their embedded assets are
+            // never collected here.
+            conn.execute("DELETE FROM canvas_tombstones WHERE canvas_id=?1", [&id])?;
+            conn.execute("DELETE FROM canvas_drafts WHERE id=?1", [&id])?;
+            purged += 1;
+        }
+        Ok(purged)
     }
 
     // ---- projects -----------------------------------------------------------------------------
@@ -1439,10 +2196,16 @@ fn search_hit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSearchHit>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canvas::{
+        CanvasDraftUpdate, CanvasExport, CanvasExportKind, CanvasFeatureGate, CanvasFreezeInput,
+        CanvasManifest, CanvasObject, CanvasObjectKind, CanvasRect, CanvasSceneEnvelope,
+        CanvasTheme,
+    };
     use crate::permission::{PermissionMode, SandboxPolicy};
     use crate::provider::ProviderId;
     use crate::session::{PendingInput, PendingInputKind, DEFAULT_TRANSCRIPT_TURNS};
     use crate::worktree::{DirectoryIdentity, ResolvedWorktreeBaseline, WorktreeBaseline};
+    use std::sync::{Arc, Barrier};
 
     #[test]
     fn migration_adds_pinned_with_an_unpinned_default() {
@@ -2913,5 +3676,106 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn canvas_freeze_rechecks_cas_after_validation_interleaving() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let gate = CanvasFeatureGate::enabled_for_tests();
+        let draft = store
+            .create_canvas_draft_with_gate(gate, "client-a", "Board", 1)
+            .unwrap();
+        let object = CanvasObject::new(
+            "text-1",
+            CanvasObjectKind::Text,
+            CanvasRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            0,
+        );
+        let update = CanvasDraftUpdate {
+            title: "Board".into(),
+            theme: CanvasTheme::Light,
+            envelope: CanvasSceneEnvelope::new(
+                draft.revision,
+                CanvasTheme::Light,
+                serde_json::json!({
+                    "elements": [{"id": "text-1", "type": "text", "x": 0.0, "y": 0.0,
+                        "width": 1.0, "height": 1.0, "text": "", "originalText": ""}],
+                    "appState": {"activeTool": "selection"}
+                }),
+            ),
+            manifest: CanvasManifest::new(vec![object.clone()]),
+            assets: vec![],
+        };
+        let updated = store
+            .update_canvas_draft_cas(&draft.id, "client-a", draft.revision, update, 2)
+            .unwrap();
+        let input = CanvasFreezeInput {
+            title: updated.title.clone(),
+            theme: updated.theme,
+            envelope: updated.envelope.clone(),
+            manifest: updated.manifest.clone(),
+            assets: vec![],
+            exports: vec![CanvasExport {
+                id: "overview".into(),
+                kind: CanvasExportKind::Overview,
+                index: None,
+                mime_type: "image/png".into(),
+                width: 1,
+                height: 1,
+                bytes: vec![
+                    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0,
+                    0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156,
+                    99, 248, 207, 192, 240, 31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73,
+                    69, 78, 68, 174, 66, 96, 130,
+                ],
+            }],
+            now: 3,
+        };
+        let barrier = Arc::new(Barrier::new(2));
+        set_canvas_freeze_test_barrier(Some(barrier.clone()));
+        let worker_store = store.clone();
+        let worker_id = draft.id.clone();
+        let worker_input = input.clone();
+        let worker = std::thread::spawn(move || {
+            worker_store.freeze_canvas_with_gate(gate, &worker_id, "client-a", 2, worker_input)
+        });
+
+        // The worker has completed its first head read and is paused before validation. Advance the
+        // mutable head, then release it to prove the final CAS check rejects the stale freeze.
+        barrier.wait();
+        let second_update = CanvasDraftUpdate {
+            title: "Board v3".into(),
+            theme: CanvasTheme::Light,
+            envelope: CanvasSceneEnvelope::new(
+                updated.revision,
+                CanvasTheme::Light,
+                serde_json::json!({
+                    "elements": [{"id": "text-1", "type": "text", "x": 0.0, "y": 0.0,
+                        "width": 1.0, "height": 1.0, "text": "", "originalText": ""}],
+                    "appState": {"activeTool": "selection"}
+                }),
+            ),
+            manifest: CanvasManifest::new(vec![object]),
+            assets: vec![],
+        };
+        store
+            .update_canvas_draft_cas(&draft.id, "client-a", 2, second_update, 4)
+            .unwrap();
+        barrier.wait();
+        let result = worker.join().unwrap();
+        set_canvas_freeze_test_barrier(None);
+        assert!(
+            matches!(result, Err(CanvasError::StaleRevision { .. })),
+            "freeze result: {result:?}"
+        );
+        assert!(store
+            .get_canvas_snapshot_frozen(&draft.id, 2)
+            .unwrap()
+            .is_none());
     }
 }

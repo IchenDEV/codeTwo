@@ -14,12 +14,18 @@ thiserror.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
 tracing.workspace = true
+blake3 = "1"
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+resvg = { version = "=0.45.1", default-features = false }
 rusqlite = { version = "0.32", features = ["bundled"] }
 portable-pty = "0.8"
 url = "2"
 # Ghostty's VT engine (parsing, scrollback, reflow) behind a C API. NOTE: this builds Ghostty from
 # source with Zig — see the terminal section of docs/architecture.md for the toolchain requirement.
 libghostty-vt = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

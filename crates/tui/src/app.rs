@@ -7,10 +7,13 @@ use std::collections::{HashMap, VecDeque};
 use codetwo_core::event::Event;
 use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::provider::Provider;
-use codetwo_core::session::{PendingInputKind, Session, SessionActivity, SessionRunState};
+use codetwo_core::session::{
+    Part, PendingInputKind, Role, Session, SessionActivity, SessionRunState, TranscriptEntry,
+    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+};
 use codetwo_core::skill::{DocBlock, Skill};
 use codetwo_core::worktree::WorktreeBaseline;
-use codetwo_core::{Engine, Op};
+use codetwo_core::{parse_canvas_history_marker, Engine, Op, StoreError};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
@@ -149,6 +152,54 @@ impl App {
         for (session, activity) in activities {
             self.sync_activity_projection(&session, &activity);
         }
+    }
+
+    /// Hydrate one persisted session into the existing flat TUI transcript projection. The
+    /// caller owns session selection; this method only reads a bounded recent page and replaces
+    /// the current transcript with its read-only projection.
+    pub fn load_session_history(
+        &mut self,
+        engine: &Engine,
+        session_id: &str,
+    ) -> Result<bool, StoreError> {
+        let Some(session) = self
+            .sessions
+            .iter()
+            .find(|session| session.id == session_id)
+        else {
+            return Ok(false);
+        };
+        let page = engine.transcript_page(session_id, None, DEFAULT_TRANSCRIPT_TURNS)?;
+
+        self.active = Some(session.id.clone());
+        self.cwd = session.cwd.clone();
+        self.mode = session.permission_mode;
+        self.sandbox = session.sandbox_policy;
+        self.status = format!("session {}", short(&session.id));
+        self.hydrate_transcript_page(page);
+        Ok(true)
+    }
+
+    /// Select the deterministic first session from the durable list and hydrate its recent
+    /// history. `Engine::list_sessions` orders pinned sessions first, then newest sessions, so
+    /// this is a stable startup choice without introducing a second session navigator in the TUI.
+    pub fn load_recent_session_history(&mut self, engine: &Engine) -> Result<(), StoreError> {
+        let Some(session_id) = self.sessions.first().map(|session| session.id.clone()) else {
+            return Ok(());
+        };
+        let _ = self.load_session_history(engine, &session_id)?;
+        Ok(())
+    }
+
+    /// Replace the current transcript with a bounded, read-only projection of persisted entries.
+    /// Canvas history markers are parsed by core and rendered as text placeholders; scene bytes
+    /// and authoring state never enter the TUI projection.
+    pub fn hydrate_transcript_page(&mut self, page: TranscriptPage) {
+        self.transcript = page
+            .entries
+            .iter()
+            .filter_map(project_transcript_entry)
+            .collect();
     }
 
     fn apply_activity(&mut self, session: String, activity: SessionActivity) {
@@ -1079,6 +1130,107 @@ fn short(id: &str) -> String {
     id.chars().take(8).collect()
 }
 
+const MAX_HISTORY_PROMPT_CHARS: usize = 4_096;
+
+fn bounded_history_text(text: &str) -> String {
+    let mut bounded = text
+        .chars()
+        .take(MAX_HISTORY_PROMPT_CHARS)
+        .collect::<String>();
+    if text.chars().count() > MAX_HISTORY_PROMPT_CHARS {
+        bounded.push('…');
+    }
+    bounded
+}
+
+fn canvas_history_placeholder(marker: &codetwo_core::CanvasHistoryMarker) -> String {
+    let title = marker
+        .title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let title = if title.is_empty() {
+        "untitled"
+    } else {
+        title.as_str()
+    };
+    let text_count = marker.text_originals.len();
+    let label = if text_count == 1 {
+        "text object"
+    } else {
+        "text objects"
+    };
+    format!(
+        "[Canvas history: {title} · {}@{} · {text_count} {label} · read-only]",
+        short(&marker.id),
+        marker.revision
+    )
+}
+
+fn looks_like_canvas_history_marker(line: &str) -> bool {
+    line.trim_start()
+        .starts_with(codetwo_core::canvas::CANVAS_HISTORY_MARKER_PREFIX)
+}
+
+/// Replace exact core JSON marker lines with a bounded human-readable placeholder. A marker-like
+/// line that fails core validation stays visible, so malformed or user-authored text is never
+/// silently discarded.
+fn project_prompt_history(text: &str, display: &str) -> String {
+    let mut found_marker = false;
+    let mut malformed_marker = false;
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        let candidate = line.trim();
+        if let Some(marker) = parse_canvas_history_marker(candidate) {
+            found_marker = true;
+            lines.push(canvas_history_placeholder(&marker));
+        } else {
+            malformed_marker |= looks_like_canvas_history_marker(candidate);
+            lines.push(line.to_string());
+        }
+    }
+
+    if !found_marker && !malformed_marker && !display.is_empty() {
+        return bounded_history_text(display);
+    }
+
+    // `lines` is based on canonical prompt text, which is the only persisted source that can
+    // contain a Canvas marker. Keeping its ordinary lines preserves prompt order and surrounding
+    // text while removing only validated markers.
+    bounded_history_text(&lines.join("\n"))
+}
+
+fn project_transcript_entry(entry: &TranscriptEntry) -> Option<TItem> {
+    let (kind, text) = match (&entry.role, &entry.part) {
+        (Role::User, Part::Prompt { text, display }) => {
+            ("user", project_prompt_history(text, display))
+        }
+        (role, Part::Text { text }) => (role_kind(*role), text.clone()),
+        (_, Part::Reasoning { text }) => ("thought", text.clone()),
+        (
+            _,
+            Part::ToolCall {
+                id, title, status, ..
+            },
+        ) => {
+            let label = if title.is_empty() { id } else { title };
+            ("tool", format!("{label} — {status}"))
+        }
+        (_, Part::Plan { entries }) => ("plan", entries.join("\n")),
+        // Prompt parts are authored by the user; if legacy data labels one as agent, retain the
+        // prompt's read-only text rather than dropping it from history.
+        (_, Part::Prompt { text, display }) => ("user", project_prompt_history(text, display)),
+    };
+    Some(TItem { kind, text })
+}
+
+fn role_kind(role: Role) -> &'static str {
+    match role {
+        Role::User => "user",
+        Role::Agent => "agent",
+    }
+}
+
 fn summarize(doc: &[DocBlock]) -> String {
     doc.iter()
         .map(|b| match b {
@@ -1086,6 +1238,19 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Canvas {
+                id,
+                frozen_revision,
+                pixel_policy,
+            } => format!(
+                "[canvas:{}@{} · {}]",
+                short(id),
+                frozen_revision,
+                match pixel_policy {
+                    codetwo_core::CanvasPixelPolicy::Required => "pixels",
+                    codetwo_core::CanvasPixelPolicy::StructureOnly => "structure",
+                }
+            ),
             DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
         })
         .collect::<Vec<_>>()
@@ -1963,5 +2128,111 @@ mod tests {
         });
         assert_eq!(a.transcript.len(), 1);
         assert_eq!(a.transcript[0].kind, "agent");
+    }
+
+    #[test]
+    fn canvas_summary_is_read_only_and_contains_revision_and_pixel_policy() {
+        let doc = vec![DocBlock::Canvas {
+            id: "canvas-123456".into(),
+            frozen_revision: 7,
+            pixel_policy: codetwo_core::CanvasPixelPolicy::Required,
+        }];
+        assert_eq!(summarize(&doc), "[canvas:canvas-1@7 · pixels]");
+    }
+
+    #[test]
+    fn canvas_history_page_hydration_projects_read_only_markers_and_preserves_prompt_text() {
+        let marker = codetwo_core::encode_canvas_history_marker(
+            "canvas-123456789",
+            7,
+            "Planning board",
+            &["first note".into(), "second note".into()],
+        );
+        let malformed =
+            "[canvas-history-json {\"version\":1,\"id\":\"broken\",\"revision\":\"7\",\"title\":\"Nope\",\"text_originals\":[]}]";
+        let page = TranscriptPage {
+            entries: vec![
+                TranscriptEntry {
+                    seq: 1,
+                    role: Role::User,
+                    part: Part::Prompt {
+                        text: format!("before\n\n{marker}\n\nafter"),
+                        display: "before\n\nafter".into(),
+                    },
+                },
+                TranscriptEntry {
+                    seq: 2,
+                    role: Role::User,
+                    part: Part::Prompt {
+                        text: format!("keep malformed\n{malformed}"),
+                        display: String::new(),
+                    },
+                },
+                TranscriptEntry {
+                    seq: 3,
+                    role: Role::Agent,
+                    part: Part::Text {
+                        text: "ordinary agent reply".into(),
+                    },
+                },
+            ],
+            next_before: None,
+            snapshot_through: None,
+        };
+        let mut a = app();
+        a.hydrate_transcript_page(page);
+
+        assert_eq!(a.transcript.len(), 3);
+        assert!(a.transcript[0].text.contains("before"));
+        assert!(a.transcript[0].text.contains("after"));
+        assert!(a.transcript[0].text.contains("Planning board"));
+        assert!(a.transcript[0].text.contains("canvas-1@7"));
+        assert!(a.transcript[0].text.contains("2 text objects"));
+        assert!(a.transcript[0].text.contains("read-only"));
+        assert!(!a.transcript[0].text.contains(&marker));
+        assert!(a.transcript[1].text.contains("keep malformed"));
+        assert!(a.transcript[1].text.contains(malformed));
+        assert_eq!(a.transcript[2].text, "ordinary agent reply");
+        assert!(a.pending_creation.is_none());
+        assert!(a.pending_prompt.is_none());
+        assert!(a.composed_skills.is_empty());
+    }
+
+    #[test]
+    fn canvas_history_startup_path_hydrates_a_persisted_marker_for_the_recent_session() {
+        use std::sync::Arc;
+
+        let mut a = app();
+        let session = activity_session("persisted-session", SessionActivity::default());
+        let marker = codetwo_core::encode_canvas_history_marker(
+            "canvas-persisted-123",
+            11,
+            "Saved board",
+            &["one".into(), "two".into(), "three".into()],
+        );
+        let prompt = Part::Prompt {
+            text: format!("ordinary persisted prompt\n\n{marker}"),
+            display: "ordinary persisted prompt".into(),
+        };
+        let store = Arc::new(codetwo_core::Store::open_in_memory().unwrap());
+        store.upsert_session(&session).unwrap();
+        store.append_part(&session.id, Role::User, &prompt).unwrap();
+        let (engine, _events) =
+            Engine::with_store(Vec::new(), SkillLibrary::new(Vec::new()), store);
+
+        a.set_sessions(engine.list_sessions().unwrap());
+        a.load_recent_session_history(&engine).unwrap();
+
+        assert_eq!(a.active.as_deref(), Some("persisted-session"));
+        assert_eq!(a.transcript.len(), 1);
+        assert!(a.transcript[0].text.contains("ordinary persisted prompt"));
+        assert!(a.transcript[0].text.contains("Saved board"));
+        assert!(a.transcript[0].text.contains("canvas-p@11"));
+        assert!(a.transcript[0].text.contains("3 text objects"));
+        assert!(a.transcript[0].text.contains("read-only"));
+        assert!(!a.transcript[0].text.contains(&marker));
+        assert!(a.pending_creation.is_none());
+        assert!(a.pending_prompt.is_none());
+        assert!(a.composed_skills.is_empty());
     }
 }

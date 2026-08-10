@@ -16,6 +16,7 @@
 pub mod acp;
 pub mod activity;
 pub mod browser;
+pub mod canvas;
 pub mod context;
 pub mod delegate;
 pub mod engine;
@@ -50,8 +51,18 @@ pub mod worktree;
 
 pub use activity::{ActivityTracker, TurnLease};
 pub use browser::Annotation;
+pub use canvas::{
+    canvas_search_projection, deterministic_summary, encode_canvas_history_marker, normalize_media,
+    parse_canvas_history_marker, resolve_prompt_payload, CanvasAssetRef, CanvasDraft,
+    CanvasDraftUpdate, CanvasError, CanvasExport, CanvasExportBudget, CanvasExportKind,
+    CanvasFeatureGate, CanvasFreezeInput, CanvasHistoryMarker, CanvasId, CanvasManifest,
+    CanvasObject, CanvasObjectKind, CanvasPixelPolicy, CanvasPoint, CanvasPromptPayload,
+    CanvasProviderImageCapability, CanvasRect, CanvasRef, CanvasRevision, CanvasSceneEnvelope,
+    CanvasSnapshot, CanvasStaticAsset, CanvasTheme, CanvasTool, CANVAS_FEATURE_GATE,
+    CANVAS_SCHEMA_VERSION, EXCALIDRAW_ENGINE, EXCALIDRAW_ENGINE_VERSION,
+};
 pub use context::{estimate_tokens, ContextUsage};
-pub use engine::{Engine, PermissionRouter, SessionHandler};
+pub use engine::{lower_canvas_prompt_payload, Engine, PermissionRouter, SessionHandler};
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
@@ -59,8 +70,8 @@ pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;
 pub use memory::{
-    MemoryContext, MemoryReceipt, MemoryReceiptItem, MemoryRecord, MemorySettings, MemorySourceRef,
-    MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
+    MemoryCanvasRef, MemoryContext, MemoryReceipt, MemoryReceiptItem, MemoryRecord, MemorySettings,
+    MemorySourceRef, MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
 };
 pub use models::builtin_models;
 pub use permission::{
@@ -75,8 +86,8 @@ pub use session::{
     TranscriptEntry, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS,
 };
 pub use skill::{
-    canonical_doc_text, compile, CompiledPrompt, DocBlock, McpServer, McpTransport, Skill,
-    SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
+    canonical_doc_text, compile, compile_with_canvas, CompiledCanvas, CompiledPrompt, DocBlock,
+    McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
 pub use store::{SessionSearchHit, Store, StoreError};

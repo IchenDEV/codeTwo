@@ -10,10 +10,17 @@ import {
   ListTodo,
   Wrench,
 } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { deriveAgentRoster } from "./agentActivity";
-import { collapsedPrompt, isLongPrompt } from "./promptPreview";
+import {
+  canvasExportDataUrl,
+  collapsedPrompt,
+  isLongPrompt,
+  parseCanvasHistoryPrompt,
+  type CanvasHistoryMarker,
+} from "./promptPreview";
 import { isRunning, type Turn } from "./turns";
+import { canvasGetSnapshot, type CanvasSnapshot } from "../bridge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useLanguage, useT } from "../i18n";
@@ -38,6 +45,28 @@ function toolStatusDot(status: string): string {
   if (status === "completed") return "bg-success";
   if (status === "failed") return "bg-destructive";
   return "bg-warning";
+}
+
+function canvasKey(canvas: CanvasHistoryMarker): string {
+  return `${canvas.id}:${canvas.revision}`;
+}
+
+function downloadCanvasPng(canvas: CanvasHistoryMarker, snapshot: CanvasSnapshot | undefined): void {
+  const exportItem = snapshot?.exports.find((item) => item.kind === "overview") ?? snapshot?.exports[0];
+  if (!exportItem || typeof document === "undefined") return;
+  const anchor = document.createElement("a");
+  anchor.href = canvasExportDataUrl(exportItem);
+  anchor.download = `${canvas.id}-${canvas.revision}.png`;
+  anchor.click();
+}
+
+function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("codetwo-canvas-duplicate", {
+      detail: { id: canvas.id, revision: canvas.revision },
+    }),
+  );
 }
 
 /** A collapsible group of secondary detail (agents / thinking / tools / plan). */
@@ -74,13 +103,40 @@ function Detail({
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Thinking, tool
  * calls and the plan stay collapsed underneath.
  */
-export const TurnCard = memo(function TurnCard({ turn }: { turn: Turn }) {
+export const TurnCard = memo(function TurnCard({
+  turn,
+  canvasSnapshotLoader = canvasGetSnapshot,
+}: {
+  turn: Turn;
+  canvasSnapshotLoader?: typeof canvasGetSnapshot;
+}) {
   const t = useT();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
   const running = isRunning(turn);
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
+  const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
+  const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
+  useEffect(() => {
+    let cancelled = false;
+    for (const canvas of history.canvases) {
+      void canvasSnapshotLoader(canvas.id, canvas.revision)
+        .then((snapshot) => {
+          if (cancelled || !snapshot) return;
+          historySnapshots.set(canvasKey(canvas), snapshot);
+          setSnapshots((current) => ({ ...current, [canvasKey(canvas)]: snapshot }));
+        })
+        .catch(() => {
+          // Browser/dev fallback has no native bridge; marker metadata remains read-only.
+        });
+    }
+    return () => {
+      cancelled = true;
+      historySnapshots.clear();
+    };
+  }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
   const hasDetail =
     agents.length +
       turn.tools.length +
@@ -88,8 +144,10 @@ export const TurnCard = memo(function TurnCard({ turn }: { turn: Turn }) {
       turn.plan.length +
       (turn.memory?.items.length ?? 0) >
     0;
-  const promptIsLong = isLongPrompt(turn.prompt);
-  const visiblePrompt = promptIsLong && !promptExpanded ? collapsedPrompt(turn.prompt) : turn.prompt;
+  const promptIsLong = isLongPrompt(history.visiblePrompt);
+  const visiblePrompt = promptIsLong && !promptExpanded
+    ? collapsedPrompt(history.visiblePrompt)
+    : history.visiblePrompt;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
@@ -116,6 +174,58 @@ export const TurnCard = memo(function TurnCard({ turn }: { turn: Turn }) {
           )}
         </div>
       </div>
+
+      {history.canvases.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2" aria-label="Canvas history">
+          {history.canvases.map((canvas) => {
+            const snapshot = snapshots[canvasKey(canvas)];
+            const thumbnail = snapshot?.exports.find((item) => item.kind === "overview") ?? snapshot?.exports[0];
+            return (
+              <section key={canvasKey(canvas)} className="canvas-ui-module border bg-fill-quiet p-2.5 text-fine">
+                <div className="flex items-start gap-2">
+                  {thumbnail && (
+                    <img
+                      src={canvasExportDataUrl(thumbnail)}
+                      alt={`${canvas.title} thumbnail`}
+                      className="size-14 shrink-0 rounded border object-cover"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-medium text-foreground">{canvas.title}</h3>
+                    <p className="text-muted-foreground">
+                      rev {canvas.revision}
+                      {snapshot ? ` · ${snapshot.objectCount} objects` : ""}
+                      {snapshot?.frozenAt ? ` · ${new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(snapshot.frozenAt)}` : ""}
+                    </p>
+                    {canvas.textOriginals.length > 0 && (
+                      <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
+                        {canvas.textOriginals.join("\n")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    className="canvas-ui-control border px-2 py-1 text-cap text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!snapshot?.exports.length}
+                    onClick={() => downloadCanvasPng(canvas, snapshot)}
+                  >
+                    Export PNG
+                  </button>
+                  <button
+                    type="button"
+                    className="canvas-ui-control border px-2 py-1 text-cap text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    onClick={() => requestCanvasDuplicate(canvas)}
+                  >
+                    Duplicate into Composer
+                  </button>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
       {/* answer */}
       {turn.text && (

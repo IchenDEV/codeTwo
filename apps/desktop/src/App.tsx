@@ -3,6 +3,11 @@ import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "l
 
 import { DocEditor } from "./editor/Editor";
 import {
+  type CanvasBlockRuntime,
+} from "./skillInline";
+import { deriveCanvasManifest } from "./canvas/manifest";
+import type { CanvasEnvelope as LocalCanvasEnvelope } from "./canvas/types";
+import {
   loadBrowserHistory,
   removeBrowserProject,
   saveBrowserHistory,
@@ -12,6 +17,15 @@ import {
   applyPluginScaffold,
   archiveSession,
   browserContext,
+  canvasCreateDraft,
+  canvasDuplicate,
+  canvasFeatureState,
+  canvasNormalizeMedia,
+  canvasPurge,
+  canvasRestore,
+  canvasFreeze,
+  canvasTombstone,
+  canvasUpdateDraft,
   cancelTurn,
   compileDoc,
   confirmNative,
@@ -68,6 +82,13 @@ import {
   submitPrompt,
   uninstallPlugin,
   type Checkpoint,
+  type CanvasDraft,
+  type CanvasExport,
+  type CanvasFeatureState,
+  type CanvasPixelPolicy,
+  type CanvasSceneEnvelope,
+  type CanvasStaticAsset,
+  type CanvasSnapshot,
   type CompiledPreview,
   type ConfigOptionInfo,
   type CoreEvent,
@@ -133,6 +154,13 @@ import { TranscriptPane } from "./session/TranscriptPane";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import {
   applyEvent,
+  canvasAcceptedRequestKey,
+  canvasIdsToPurgeAfterTurnStart,
+  canvasRetryDocument,
+  canvasRetryTargetSession,
+  canvasUnmountPlan,
+  canvasRetryRefsForTerminal,
+  isCanvasProviderImageError,
   matchesSubmittedEditorRevision,
   mergeLoadedTurns,
   newTurn,
@@ -186,10 +214,18 @@ interface PendingPromptRequest {
   /** Raw editor revision before plan-mode or other synthetic blocks are injected. */
   editorSnapshot: DocBlock[];
   editorRevision: number;
+  /** Exact submitted prompt, retained for an explicit provider retry after Composer clear. */
+  submittedDoc: DocBlock[];
+  /** Canvas heads included in this request; marked for mutable-head purge only after TurnStarted. */
+  canvasIds: string[];
+  /** Frozen immutable revisions retained for an explicit provider-error retry after Composer clear. */
+  canvasRefs: Array<{ id: string; revision: number }>;
 }
 
 interface PendingCreation {
   doc: DocBlock[];
+  /** Frozen Composer document before the internal plan-first block is injected. */
+  canvasRetryDoc: DocBlock[];
   promptRequestId: string;
   editorSnapshot: DocBlock[];
   editorRevision: number;
@@ -198,6 +234,48 @@ interface PendingCreation {
 interface PendingPolicyRequest {
   session: string;
   authoritative: ExecutionPolicy;
+}
+
+function localCanvasManifest(envelope: LocalCanvasEnvelope): import("./bridge").CanvasManifest {
+  const manifest = deriveCanvasManifest(envelope.elements);
+  return {
+    objects: manifest.objects.map((object) => ({
+      id: object.id,
+      kind: object.type === "freedraw" ? "pen" : object.type,
+      originalText: object.originalText ?? undefined,
+      bounds: object.geometry,
+      layer: object.layer,
+      arrowStart: object.arrowStart,
+      arrowEnd: object.arrowEnd,
+      assetId: object.type === "image"
+        ? (() => {
+            const fileId = (envelope.elements.find((element) => element.id === object.id) as { fileId?: string } | undefined)?.fileId;
+            return envelope.assetRefs.find((asset) => asset.fileId === fileId)?.ref ?? fileId ?? null;
+          })()
+        : null,
+    })),
+  };
+}
+
+function localCanvasScene(envelope: LocalCanvasEnvelope, assets: readonly CanvasStaticAsset[]): CanvasSceneEnvelope {
+  return {
+    engine: envelope.engine,
+    engineVersion: envelope.engineVersion,
+    schemaVersion: envelope.schemaVersion,
+    revision: envelope.revision,
+    theme: envelope.theme,
+    assets: assets.map((asset) => ({
+      id: asset.id,
+      mimeType: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+      sourceName: asset.sourceName ?? null,
+    })),
+    scene: {
+      elements: envelope.elements,
+      appState: envelope.appState,
+    },
+  };
 }
 
 interface GitWorkspaceData {
@@ -318,6 +396,38 @@ export default function App() {
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
+  const [canvasFeature, setCanvasFeature] = useState<CanvasFeatureState>({
+    feature: "CODETWO_CANVAS_INPUT_V1",
+    enabled: false,
+    status: "not production-enabled",
+  });
+  const canvasDraftsRef = useRef(new Map<string, CanvasDraft>());
+  const canvasAssetsRef = useRef(new Map<string, Map<string, CanvasStaticAsset>>());
+  const canvasTombstonesRef = useRef(new Set<string>());
+  const canvasPurgeRequestedRef = useRef(new Set<string>());
+  const canvasFrozenRef = useRef(new Set<string>());
+  const insertCanvasRef = useRef<(() => Promise<void>) | null>(null);
+  const insertCanvasDraftRef = useRef<((
+    draft: CanvasDraft,
+    options?: {
+      pixelPolicy?: CanvasPixelPolicy;
+      deliveryError?: string;
+      deliveryErrorKind?: "provider_image" | "other";
+    },
+  ) => void) | null>(null);
+  const restoreCanvasDocumentRef = useRef<((
+    doc: readonly DocBlock[],
+    drafts: ReadonlyMap<string, CanvasDraft>,
+    options?: {
+      pixelPolicy?: CanvasPixelPolicy;
+      deliveryError?: string;
+      deliveryErrorKind?: "provider_image" | "other";
+    },
+  ) => void) | null>(null);
+  const freezeCanvasesRef = useRef<((doc: readonly DocBlock[]) => Promise<DocBlock[]>) | null>(null);
+  const canvasDeliveryErrorRef = useRef<
+    ((doc: readonly DocBlock[], message: string, kind: "provider_image" | "other") => void) | null
+  >(null);
   // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
   const [models, setModels] = useState<ModelChoice[]>([]);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
@@ -454,6 +564,14 @@ export default function App() {
   // Prompt acknowledgements are broadcast to every client. Only the exact request initiated by
   // this window may clear its editor draft.
   const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(new Map());
+  // TurnStarted consumes the pending entry, but a provider may reject images asynchronously after
+  // the Composer has already cleared. Keep immutable refs until the terminal event so retry can
+  // duplicate them without recovering a mutable draft.
+  const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(new Map());
+  // A provider picker selection after an asynchronous Canvas image rejection stages the retry in
+  // a fresh session; an existing ACP session keeps its original provider for its lifetime.
+  const canvasProviderRetrySessionRef = useRef<string | null>(null);
+  const forceNewSessionForCanvasRetryRef = useRef(false);
   // Only session/new calls initiated by this window may take over its active conversation. A
   // remote client can create sessions on the same engine without stealing desktop focus.
   const awaitingSessionRef = useRef<string | null>(null);
@@ -559,6 +677,57 @@ export default function App() {
       return true;
     },
     [updateRunningSession],
+  );
+
+  /** Restore immutable accepted Canvas refs after a terminal provider-image rejection.  The
+   * original Composer heads may already have been cleared/purged, so each retry gets a new draft
+   * id and an explicit error affordance; choosing structure-only remains a user action. */
+  const restoreAcceptedCanvasForProviderError = useCallback(
+    async (session: string, request: PendingPromptRequest, message: string) => {
+      const refs = canvasRetryRefsForTerminal("error", message, request.canvasRefs);
+      if (refs.length === 0) return;
+      if (!restoreCanvasDocumentRef.current) {
+        throw new Error("Composer retry surface is unavailable");
+      }
+      const restored: CanvasDraft[] = [];
+      try {
+        for (const ref of refs) restored.push(await canvasDuplicate(ref.id, ref.revision));
+      } catch (error) {
+        // A failed duplicate must not leave an invisible mutable head behind. Immutable history
+        // remains owned by core; only the newly created retry heads are tombstoned and purged.
+        await Promise.all(
+          restored.map(async (draft) => {
+            try {
+              await canvasTombstone(draft.id);
+              await canvasPurge(draft.id);
+            } catch {
+              /* Best effort cleanup; the primary duplicate failure remains user-visible. */
+            }
+          }),
+        );
+        throw error;
+      }
+      const replacements = new Map(refs.map((ref, index) => [
+        ref.id,
+        { id: restored[index]!.id, revision: restored[index]!.revision },
+      ]));
+      const retryDoc = canvasRetryDocument(request.submittedDoc, replacements);
+      const restoredDrafts = new Map(restored.map((draft) => [draft.id, draft]));
+      for (const draft of restored) {
+        canvasDraftsRef.current.set(draft.id, draft);
+        canvasAssetsRef.current.set(draft.id, new Map(draft.assets.map((asset) => [asset.id, asset])));
+      }
+      restoreCanvasDocumentRef.current(retryDoc, restoredDrafts, {
+        deliveryError: message,
+        deliveryErrorKind: "provider_image",
+      });
+      canvasProviderRetrySessionRef.current = session;
+      toast(
+        "Canvas images are unsupported by this provider. Choose Send structure only in each restored Canvas, or switch provider to stage a new-session retry.",
+        "error",
+      );
+    },
+    [toast],
   );
 
   const invalidatePendingCreation = useCallback(() => {
@@ -847,12 +1016,18 @@ export default function App() {
           if (pendingCreationRef.current) {
             const pending = pendingCreationRef.current;
             pendingCreationRef.current = null;
+            forceNewSessionForCanvasRetryRef.current = false;
             setPendingSessionRunning(false);
             updateRunningSession(ev.session, true);
             pendingPromptRequestsRef.current.set(ev.session, {
               requestId: pending.promptRequestId,
               editorSnapshot: pending.editorSnapshot,
               editorRevision: pending.editorRevision,
+              submittedDoc: pending.canvasRetryDoc,
+              canvasIds: pending.doc.flatMap((block) => block.type === "canvas" ? [block.id] : []),
+              canvasRefs: pending.doc.flatMap((block) => block.type === "canvas"
+                ? [{ id: block.id, revision: block.frozen_revision }]
+                : []),
             });
             void setSessionMemoryPolicy(
               ev.session,
@@ -883,7 +1058,15 @@ export default function App() {
                     }),
                   );
                 }
-                toast(t("toast.turnFailed", { error: message }), "error");
+                if (isCanvasProviderImageError(message)) {
+                  canvasDeliveryErrorRef.current?.(pending.doc, message, "provider_image");
+                  toast(
+                    "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
+                    "error",
+                  );
+                } else {
+                  toast(t("toast.turnFailed", { error: message }), "error");
+                }
               });
           } else {
             void setSessionMemoryPolicy(
@@ -1010,6 +1193,14 @@ export default function App() {
           const pendingRequest = pendingPromptRequestsRef.current.get(ev.session);
           if (pendingRequest && ev.request_id === pendingRequest.requestId) {
             pendingPromptRequestsRef.current.delete(ev.session);
+            if (canvasProviderRetrySessionRef.current === ev.session) {
+              // An explicit structure-only retry was accepted in the original session; do not
+              // force a later unrelated provider selection into a new session.
+              canvasProviderRetrySessionRef.current = null;
+            }
+            if (pendingRequest.canvasRefs.length > 0) {
+              acceptedCanvasRequestsRef.current.set(`${ev.session}:${pendingRequest.requestId}`, pendingRequest);
+            }
             const currentEditor = getBlocksRef.current?.();
             if (
               currentEditor &&
@@ -1020,6 +1211,12 @@ export default function App() {
                 pendingRequest.editorRevision,
               )
             ) {
+              // Core acceptance makes the frozen revision immutable history. Mark the mutable
+              // Composer heads only when the submitted editor is still unchanged and we are
+              // about to clear it; otherwise a later ordinary delete must remain undoable.
+              for (const id of canvasIdsToPurgeAfterTurnStart(true, pendingRequest.canvasIds)) {
+                canvasPurgeRequestedRef.current.add(id);
+              }
               clearEditorRef.current?.();
             }
           }
@@ -1044,7 +1241,25 @@ export default function App() {
         const ended = isTerminalSessionEvent(ev);
         if (ended) {
           if (eventSession) {
-            const terminalRequestId = ev.event === "error" ? ev.request_id : undefined;
+            const terminalRequestId = ev.event === "error"
+              ? (ev.request_id ?? activeTurnRequestId)
+              : activeTurnRequestId;
+            if (terminalRequestId) {
+              const acceptedKey = canvasAcceptedRequestKey(eventSession, terminalRequestId);
+              const acceptedCanvasRequest = acceptedCanvasRequestsRef.current.get(acceptedKey);
+              if (acceptedCanvasRequest) {
+                acceptedCanvasRequestsRef.current.delete(acceptedKey);
+                if (ev.event === "error" && isCanvasProviderImageError(ev.message)) {
+                  void restoreAcceptedCanvasForProviderError(
+                    eventSession,
+                    acceptedCanvasRequest,
+                    ev.message,
+                  ).catch((error) => {
+                    toast(`Canvas retry could not be staged: ${String(error)}`, "error");
+                  });
+                }
+              }
+            }
             if (markSessionStopped(eventSession, terminalRequestId)) {
               setPermissionQueue((previous) =>
                 previous.filter((request) => request.session !== eventSession),
@@ -1074,6 +1289,7 @@ export default function App() {
     markSessionStarted,
     markSessionStopped,
     refreshSessions,
+    restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
     toast,
     t,
@@ -1134,8 +1350,10 @@ export default function App() {
       toast(t("toast.alreadyRunning"));
       return;
     }
-    if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
-    const targetSession = activeSessionRef.current;
+    const targetSession = canvasRetryTargetSession(
+      activeSessionRef.current,
+      forceNewSessionForCanvasRetryRef.current,
+    );
     const worktreeBaseSha = targetSession
       ? null
       : sessionCreationBaselineSha(worktreeBase, worktreeOptions, worktreeOptionsLoading);
@@ -1146,6 +1364,21 @@ export default function App() {
       );
       return;
     }
+    // Freeze every live Canvas before creating the turn or submitting the prompt. The bridge owns
+    // validation/export/CAS; any stale draft, missing pixels, or budget/provider failure aborts the
+    // send with no optimistic turn left behind.
+    try {
+      if (freezeCanvasesRef.current) doc = await freezeCanvasesRef.current(doc);
+    } catch (error) {
+      toast(`Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`, "error");
+      return;
+    }
+    const canvasRetryDoc = doc;
+    const canvasIds = doc.flatMap((block) => block.type === "canvas" ? [block.id] : []);
+    const canvasRefs = doc.flatMap((block) => block.type === "canvas"
+      ? [{ id: block.id, revision: block.frozen_revision }]
+      : []);
+    if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     const promptRequestId = globalThis.crypto.randomUUID();
     const creationRequestId = targetSession ? null : promptRequestId;
     if (targetSession) {
@@ -1153,11 +1386,20 @@ export default function App() {
         requestId: promptRequestId,
         editorSnapshot,
         editorRevision,
+        submittedDoc: canvasRetryDoc,
+        canvasIds,
+        canvasRefs,
       });
       updateRunningSession(targetSession, true);
     } else {
       awaitingSessionRef.current = creationRequestId;
-      pendingCreationRef.current = { doc, promptRequestId, editorSnapshot, editorRevision };
+      pendingCreationRef.current = {
+        doc,
+        canvasRetryDoc,
+        promptRequestId,
+        editorSnapshot,
+        editorRevision,
+      };
       setPendingSessionRunning(true);
     }
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc), promptRequestId)]);
@@ -1212,7 +1454,15 @@ export default function App() {
           }),
         );
       }
-      toast(t("toast.turnFailed", { error: message }), "error");
+      if (isCanvasProviderImageError(message)) {
+        canvasDeliveryErrorRef.current?.(doc, message, "provider_image");
+        toast(
+          "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
+          "error",
+        );
+      } else {
+        toast(t("toast.turnFailed", { error: message }), "error");
+      }
     }
   }, [
     provider,
@@ -1223,6 +1473,7 @@ export default function App() {
     mode,
     sandbox,
     planMode,
+    freezeCanvasesRef,
     running,
     toast,
     activeArchived,
@@ -1714,11 +1965,13 @@ export default function App() {
     const getBlocks = getBlocksRef.current;
     if (!getBlocks) return;
     try {
-      setPreview(await compileDoc(getBlocks(), cwd || "."));
+      const current = getBlocks();
+      const frozen = freezeCanvasesRef.current ? await freezeCanvasesRef.current(current) : current;
+      setPreview(await compileDoc(frozen, cwd || "."));
     } catch (e) {
       toast(`Could not compile the document: ${e}`, "error");
     }
-  }, [cwd, toast]);
+  }, [cwd, freezeCanvasesRef, toast]);
 
   /* One card per annotation. The core renders the markdown the agent will see; the editor shows
      it as a dedicated block — host, element, note, style edits — instead of a wall of text. */
@@ -1745,6 +1998,191 @@ export default function App() {
     setDocMode(v);
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
+
+  const getCanvasAssets = useCallback((id: string): readonly CanvasStaticAsset[] => {
+    const current = canvasAssetsRef.current.get(id);
+    if (current) return Array.from(current.values());
+    const draft = canvasDraftsRef.current.get(id);
+    return draft?.assets ?? [];
+  }, []);
+
+  const rememberCanvasDraft = useCallback((draft: CanvasDraft) => {
+    canvasDraftsRef.current.set(draft.id, draft);
+    const assets = new Map(draft.assets.map((asset) => [asset.id, asset]));
+    canvasAssetsRef.current.set(draft.id, assets);
+  }, []);
+
+  const normalizeCanvasMedia = useCallback(async (canvasId: string, input: import("./canvas/media").CanvasMediaInput) => {
+    const bytes = input.bytes instanceof Uint8Array
+      ? input.bytes
+      : input.bytes instanceof ArrayBuffer
+        ? new Uint8Array(input.bytes)
+        : new Uint8Array(await input.bytes.arrayBuffer());
+    const normalized = await canvasNormalizeMedia(bytes, input.mimeType);
+    const media = {
+      ref: normalized.id,
+      bytes: new Uint8Array(normalized.bytes),
+      mimeType: normalized.mimeType,
+      name: input.name,
+      width: normalized.width,
+      height: normalized.height,
+    } as const;
+    const existing = canvasAssetsRef.current.get(canvasId) ?? new Map<string, CanvasStaticAsset>();
+    existing.set(normalized.id, normalized);
+    canvasAssetsRef.current.set(canvasId, existing);
+    return media;
+  }, []);
+
+  const resolveCanvasAsset = useCallback(async (canvasId: string, asset: { ref: string; fileId: string; mimeType: "image/png" | "image/webp" }) => {
+    const stored = canvasAssetsRef.current.get(canvasId)?.get(asset.ref) ?? canvasAssetsRef.current.get(canvasId)?.get(asset.fileId);
+    if (stored) {
+      return {
+        ref: stored.id,
+        fileId: stored.id,
+        mimeType: stored.mimeType,
+        bytes: new Uint8Array(stored.bytes),
+      };
+    }
+    return null;
+  }, []);
+
+  const saveCanvasDraft = useCallback(async (canvasId: string, envelope: LocalCanvasEnvelope, assets: readonly CanvasStaticAsset[]) => {
+    const current = canvasDraftsRef.current.get(canvasId);
+    const update = {
+      title: current?.title ?? "Canvas",
+      theme: envelope.theme,
+      envelope: localCanvasScene(envelope, assets),
+      manifest: localCanvasManifest(envelope),
+      assets: Array.from(assets),
+    };
+    const saved = await canvasUpdateDraft(canvasId, envelope.revision, update);
+    rememberCanvasDraft(saved);
+    return saved;
+  }, [rememberCanvasDraft]);
+
+  const freezeCanvasDraft = useCallback(async (
+    canvasId: string,
+    envelope: LocalCanvasEnvelope,
+    assets: readonly CanvasStaticAsset[],
+    exports: readonly CanvasExport[],
+    _pixelPolicy: CanvasPixelPolicy,
+  ): Promise<CanvasSnapshot> => {
+    const current = canvasDraftsRef.current.get(canvasId);
+    const frozen = await canvasFreeze(canvasId, envelope.revision, {
+      title: current?.title ?? "Canvas",
+      theme: envelope.theme,
+      envelope: localCanvasScene(envelope, assets),
+      manifest: localCanvasManifest(envelope),
+      assets: Array.from(assets),
+      // Keep validated PNG exports in the immutable revision for history and later provider
+      // retries. The pixel policy is applied by core lowering, not by dropping evidence here.
+      exports: Array.from(exports),
+    });
+    return frozen;
+  }, []);
+
+  const forgetCanvasHead = useCallback((canvasId: string) => {
+    canvasDraftsRef.current.delete(canvasId);
+    canvasAssetsRef.current.delete(canvasId);
+    canvasFrozenRef.current.delete(canvasId);
+  }, []);
+
+  const purgeCanvasHead = useCallback(async (canvasId: string) => {
+    const hasMutableHead = canvasDraftsRef.current.has(canvasId) || canvasAssetsRef.current.has(canvasId);
+    const plan = canvasUnmountPlan(hasMutableHead, canvasTombstonesRef.current.has(canvasId));
+    if (!plan.purge) return;
+    canvasPurgeRequestedRef.current.add(canvasId);
+    if (plan.tombstone) {
+      canvasTombstonesRef.current.add(canvasId);
+      await canvasTombstone(canvasId);
+    }
+    await canvasPurge(canvasId);
+    canvasTombstonesRef.current.delete(canvasId);
+    canvasPurgeRequestedRef.current.delete(canvasId);
+    forgetCanvasHead(canvasId);
+  }, [forgetCanvasHead]);
+
+  const removeCanvasDraft = useCallback((canvasId: string, nonEmpty: boolean) => {
+    canvasTombstonesRef.current.add(canvasId);
+    if (!nonEmpty) {
+      canvasPurgeRequestedRef.current.delete(canvasId);
+      void canvasPurge(canvasId)
+        .then(() => forgetCanvasHead(canvasId))
+        .catch(() => {});
+      return;
+    }
+    void canvasTombstone(canvasId)
+      .then(() => {
+        if (!canvasPurgeRequestedRef.current.has(canvasId)) return;
+        return purgeCanvasHead(canvasId);
+      })
+      .catch((error) => {
+        toast(`Canvas removal could not be recorded: ${String(error)}`, "error");
+      });
+  }, [forgetCanvasHead, purgeCanvasHead, toast]);
+
+  const restoreCanvasDraft = useCallback((canvasId: string) => {
+    if (!canvasTombstonesRef.current.has(canvasId)) return;
+    canvasTombstonesRef.current.delete(canvasId);
+    void canvasRestore(canvasId).catch((error) => {
+      toast(`Canvas restore failed: ${String(error)}`, "error");
+    });
+  }, [toast]);
+
+  const purgeCanvasOnUnmount = useCallback((canvasId: string) => {
+    void purgeCanvasHead(canvasId).catch(() => {});
+  }, [purgeCanvasHead]);
+
+  const canvasRuntime = useMemo<CanvasBlockRuntime | null>(() => ({
+    enabled: canvasFeature.enabled,
+    normalizeMedia: normalizeCanvasMedia,
+    resolveAsset: resolveCanvasAsset,
+    getAssets: getCanvasAssets,
+    onAsset: (canvasId, asset) => {
+      const assets = canvasAssetsRef.current.get(canvasId) ?? new Map<string, CanvasStaticAsset>();
+      assets.set(asset.id, asset);
+      canvasAssetsRef.current.set(canvasId, assets);
+    },
+    onCanvasActivity: () => {},
+    saveDraft: saveCanvasDraft,
+    freezeDraft: freezeCanvasDraft,
+    onCanvasRemoved: removeCanvasDraft,
+    onCanvasRestored: restoreCanvasDraft,
+    onCanvasUnmount: (canvasId) => purgeCanvasOnUnmount(canvasId),
+    onCanvasFrozen: (canvasId) => canvasFrozenRef.current.add(canvasId),
+    onCanvasDeliveryError: (_canvasId, message) => toast(message, "error"),
+    register: () => () => {},
+  }), [canvasFeature.enabled, freezeCanvasDraft, getCanvasAssets, normalizeCanvasMedia, purgeCanvasOnUnmount, removeCanvasDraft, resolveCanvasAsset, restoreCanvasDraft, saveCanvasDraft, toast]);
+
+  const createCanvas = useCallback(async () => {
+    if (!canvasFeature.enabled) {
+      const error = new Error(canvasFeature.status);
+      toast(error.message, "error");
+      throw error;
+    }
+    const draft = await canvasCreateDraft("Canvas");
+    rememberCanvasDraft(draft);
+    return draft;
+  }, [canvasFeature.enabled, canvasFeature.status, rememberCanvasDraft, toast]);
+
+  useEffect(() => {
+    const onDuplicate = (event: Event) => {
+      const detail = (event as CustomEvent<{ id?: string; revision?: number }>).detail;
+      if (!detail?.id || !Number.isFinite(detail.revision)) return;
+      if (!canvasFeature.enabled) {
+        toast(canvasFeature.status, "error");
+        return;
+      }
+      void canvasDuplicate(detail.id, Number(detail.revision))
+        .then((draft) => {
+          rememberCanvasDraft(draft);
+          insertCanvasDraftRef.current?.(draft);
+        })
+        .catch((error) => toast(`Canvas duplicate failed: ${String(error)}`, "error"));
+    };
+    window.addEventListener("codetwo-canvas-duplicate", onDuplicate);
+    return () => window.removeEventListener("codetwo-canvas-duplicate", onDuplicate);
+  }, [canvasFeature.enabled, canvasFeature.status, rememberCanvasDraft, toast]);
 
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
@@ -1959,6 +2397,15 @@ export default function App() {
   ];
 
   useEffect(() => {
+    canvasFeatureState()
+      .then((state) => setCanvasFeature(state))
+      .catch(() => {
+        setCanvasFeature({
+          feature: "CODETWO_CANVAS_INPUT_V1",
+          enabled: false,
+          status: "not production-enabled",
+        });
+      });
     getKeymap().then(setBindings).catch(() => {});
     // Open on the project used last. Failing that, register the directory the app started in, so
     // the picker is never empty and the first session has somewhere real to run.
@@ -2070,6 +2517,20 @@ export default function App() {
     onProvider: (p) => {
       providerPinned.current = true;
       setProvider(p);
+      if (canvasProviderRetrySessionRef.current !== null) {
+        // ACP sessions keep their provider. Switching after an asynchronous Canvas image failure
+        // therefore stages a fresh session instead of silently resubmitting to the failed one.
+        canvasProviderRetrySessionRef.current = null;
+        forceNewSessionForCanvasRetryRef.current = true;
+        activeSessionRef.current = null;
+        activeSessionProvenanceRef.current = null;
+        setActiveSessionReceipt(null);
+        setActiveSession(null);
+        setTurns([]);
+        setModels([]);
+        setCurrentModel(null);
+        setDefaultModel(null);
+      }
     },
     mode,
     sandbox,
@@ -2406,6 +2867,8 @@ export default function App() {
                   onInsertIssue={() => setShowIssues(true)}
                   onOpenMarket={openPluginHub}
                   onNewSkill={() => setSkillDraft({ name: "", text: "" })}
+                  canvasEnabled={canvasFeature.enabled}
+                  onInsertCanvas={() => void insertCanvasRef.current?.()}
                   onVoiceText={(t) => insertTextRef.current?.(t)}
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
@@ -2424,6 +2887,14 @@ export default function App() {
                     clearRef={clearEditorRef}
                     openSkillPickerRef={openSkillPickerRef}
                     insertSkillRef={insertSkillRef}
+                    canvasEnabled={canvasFeature.enabled}
+                    canvasRuntime={canvasRuntime}
+                    createCanvas={createCanvas}
+                    insertCanvasRef={insertCanvasRef}
+                    insertCanvasDraftRef={insertCanvasDraftRef}
+                    restoreCanvasDocumentRef={restoreCanvasDocumentRef}
+                    freezeCanvasesRef={freezeCanvasesRef}
+                    canvasDeliveryErrorRef={canvasDeliveryErrorRef}
                     onEmptyChange={handleEditorEmptyChange}
                   />
                 </Composer>

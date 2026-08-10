@@ -1,0 +1,264 @@
+@import "@excalidraw/excalidraw/index.css";
+
+.canvas-editor {
+  /* Desktop supplies the --ds-* tokens; Remote is a vanilla shell, so every token has a local
+     fallback. Keep these aliases scoped to the island instead of changing the shell globally. */
+  color-scheme: dark;
+  --canvas-fallback-surface: Canvas;
+  --canvas-fallback-raised: ButtonFace;
+  --canvas-fallback-text: CanvasText;
+  --canvas-fallback-muted: GrayText;
+  --canvas-fallback-primary: Highlight;
+  --canvas-fallback-focus: Highlight;
+  --canvas-fallback-fill-rest: ButtonFace;
+  --canvas-fallback-fill-hover: Highlight;
+  --canvas-fallback-primary-text: HighlightText;
+  --canvas-fallback-destructive: Mark;
+  --canvas-ui-bg: var(--ds-color-surface, var(--canvas-fallback-surface));
+  --canvas-ui-raised: var(--ds-color-raised, var(--canvas-fallback-raised));
+  --canvas-ui-text: var(--ds-color-text, var(--canvas-fallback-text));
+  --canvas-ui-muted: var(--ds-color-text-muted, var(--canvas-fallback-muted));
+  --canvas-ui-primary: var(--ds-color-primary, var(--canvas-fallback-primary));
+  --canvas-ui-focus: var(--ds-color-focus, var(--canvas-fallback-focus));
+  --canvas-ui-fill-rest: var(--ds-color-fill-rest, var(--canvas-fallback-fill-rest));
+  --canvas-ui-fill-hover: var(--ds-color-fill-hover, var(--canvas-fallback-fill-hover));
+  --canvas-ui-primary-text: var(--ds-color-primary-text, var(--canvas-fallback-primary-text));
+  --canvas-ui-destructive: var(--ds-color-destructive, var(--canvas-fallback-destructive));
+  --canvas-radius-module: var(--ds-radius-module, 0.5rem);
+  --canvas-radius-control: var(--ds-radius-control, 0.375rem);
+  --canvas-button-radius: var(--ds-button-radius, 0.5rem);
+  --canvas-space-inline: var(--ds-space-inline, 0.375rem);
+  --canvas-space-control-group: var(--ds-space-control-group, 0.5rem);
+  --canvas-space-section: var(--ds-space-section, 0.75rem);
+  --canvas-space-module-inset: var(--ds-space-module-inset, 0.5rem);
+  --canvas-type-dialog-size: var(--ds-type-dialog-size, 1rem);
+  --canvas-type-dialog-leading: var(--ds-type-dialog-leading, 1.4);
+  --canvas-type-callout-size: var(--ds-type-callout-size, 0.875rem);
+  --canvas-type-callout-leading: var(--ds-type-callout-leading, 1.4);
+  --canvas-type-caption-size: var(--ds-type-caption-size, 0.75rem);
+  --canvas-type-body-size: var(--ds-type-body-size, 0.875rem);
+  --canvas-type-body-leading: var(--ds-type-body-leading, 1.4);
+  /* Excalidraw owns the first toolbar row. CodeTwo controls live in this second row so they
+     never cover approved selection/drawing/undo tools, including on narrow Remote viewports. */
+  --canvas-chrome-offset: 4rem;
+  position: relative;
+  min-height: 12rem;
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-bg);
+  border-radius: var(--canvas-radius-module);
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.canvas-editor[data-canvas-theme="light"] {
+  color-scheme: light;
+}
+
+.canvas-editor[data-canvas-mode="readonly"],
+.canvas-editor[data-canvas-mode="historical"] {
+  cursor: default;
+}
+
+.canvas-editor__preview {
+  display: flex;
+  width: 100%;
+  min-height: 12rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--canvas-space-control-group);
+  padding: var(--canvas-space-section);
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-bg);
+  border: 0;
+  border-radius: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-editor__preview:hover {
+  background: var(--canvas-ui-fill-hover);
+}
+
+.canvas-editor__preview:focus-visible,
+.canvas-editor__done:focus-visible,
+.canvas-editor__media-button:focus-visible,
+.canvas-editor__preset:focus-visible {
+  outline: 2px solid var(--canvas-ui-focus);
+  outline-offset: -2px;
+}
+
+.canvas-editor__preview-copy {
+  display: grid;
+  gap: var(--canvas-space-inline);
+  text-align: left;
+}
+
+.canvas-editor__preview-image {
+  display: block;
+  max-width: min(16rem, 36%);
+  max-height: 8rem;
+  object-fit: contain;
+  border-radius: var(--canvas-radius-control);
+}
+
+.canvas-editor__preview-title {
+  font-size: var(--canvas-type-dialog-size);
+  line-height: var(--canvas-type-dialog-leading);
+}
+
+.canvas-editor__preview-hint {
+  color: var(--canvas-ui-muted);
+  font-size: var(--canvas-type-callout-size);
+  line-height: var(--canvas-type-callout-leading);
+}
+
+.canvas-editor__stage {
+  position: relative;
+  min-height: 20rem;
+  height: min(70vh, 42rem);
+}
+
+.canvas-editor__stage .excalidraw {
+  --island-bg-color: var(--canvas-ui-raised);
+  --popup-bg-color: var(--canvas-ui-raised);
+  --text-primary-color: var(--canvas-ui-text);
+  --text-secondary-color: var(--canvas-ui-muted);
+  --color-primary: var(--canvas-ui-primary);
+  --ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-editor__chrome {
+  position: absolute;
+  z-index: 20;
+  inset-block-start: var(--canvas-chrome-offset);
+  inset-inline-start: var(--canvas-space-module-inset);
+  inset-inline-end: var(--canvas-space-module-inset);
+  width: calc(100% - (var(--canvas-space-module-inset) * 2));
+  max-width: calc(100% - (var(--canvas-space-module-inset) * 2));
+  min-width: 0;
+  display: flex;
+  gap: var(--canvas-space-control-group);
+  align-items: center;
+  overflow: hidden;
+}
+
+.canvas-editor__presets {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  max-width: none;
+  width: auto;
+  align-items: center;
+  gap: var(--canvas-space-inline);
+  overflow-x: auto;
+  padding: var(--canvas-space-inline);
+  color: var(--canvas-ui-muted);
+  background: var(--canvas-ui-raised);
+  border-radius: var(--canvas-radius-control);
+  font-size: var(--canvas-type-caption-size);
+}
+
+.canvas-editor__chrome > [data-canvas-owned]:not(.canvas-editor__presets),
+.canvas-editor__done,
+.canvas-editor__media-button {
+  flex: 0 0 auto;
+}
+
+.canvas-editor__preset-label {
+  white-space: nowrap;
+}
+
+.canvas-editor__preset {
+  min-height: 24px;
+  padding: 0 var(--canvas-space-inline);
+  border: 0;
+  border-radius: var(--canvas-radius-control);
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-fill-rest);
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-editor__preset:hover {
+  background: var(--canvas-ui-fill-hover);
+}
+
+.canvas-editor__done,
+.canvas-editor__media-button {
+  min-height: 28px;
+  padding: 0 var(--canvas-space-module-inset);
+  border: 0;
+  border-radius: var(--canvas-button-radius);
+  color: var(--canvas-ui-text);
+  background: var(--canvas-ui-fill-rest);
+  font: inherit;
+  font-size: var(--canvas-type-body-size);
+  line-height: var(--canvas-type-body-leading);
+  cursor: pointer;
+}
+
+.canvas-editor__done:hover,
+.canvas-editor__media-button:hover {
+  background: var(--canvas-ui-fill-hover);
+}
+
+.canvas-editor__done {
+  color: var(--canvas-ui-primary-text);
+  background: var(--canvas-ui-primary);
+}
+
+.canvas-editor__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-editor__error {
+  position: absolute;
+  z-index: 21;
+  inset-block-end: var(--canvas-space-module-inset);
+  inset-inline: var(--canvas-space-module-inset);
+  padding: var(--canvas-space-inline) var(--canvas-space-control-group);
+  color: var(--canvas-ui-destructive);
+  background: var(--canvas-ui-raised);
+  border-radius: var(--canvas-radius-control);
+  font-size: var(--canvas-type-callout-size);
+}
+
+/* Excalidraw moves Hand into a floating control at <=450px. Keep the CodeTwo row below it. */
+@media screen and (max-width: 450px) {
+  .canvas-editor {
+    --canvas-chrome-offset: 8rem;
+  }
+}
+
+/* Excalidraw is a renderer exception; its content styling remains engine-owned. These selectors
+   only remove actions that CodeTwo rejects at the serialization boundary as well. */
+.canvas-editor .ToolIcon[data-canvas-unsupported="true"],
+.canvas-editor [data-canvas-unsupported="true"],
+.canvas-editor .canvas-editor__unsupported,
+.canvas-editor .selected-shape-actions,
+.canvas-editor .main-menu-trigger,
+.canvas-editor .App-toolbar__extra-tools-trigger,
+.canvas-editor .App-toolbar__extra-tools-dropdown,
+.canvas-editor .default-sidebar,
+.canvas-editor .default-sidebar-trigger,
+.canvas-editor .sidebar-trigger,
+.canvas-editor .sidebar-triggers,
+.canvas-editor .collab-button,
+.canvas-editor .ToolIcon__MagicButton,
+.canvas-editor .ToolIcon__LaserPointer,
+.canvas-editor .ttd-dialog-panel {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-editor * {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+  }
+}

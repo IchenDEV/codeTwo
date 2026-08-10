@@ -15,6 +15,11 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
+use crate::canvas::{
+    resolve_prompt_payload, CanvasFeatureGate, CanvasPixelPolicy, CanvasPromptPayload,
+    CanvasProviderImageCapability, CanvasRef,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillKind {
@@ -327,6 +332,14 @@ pub enum DocBlock {
     Image {
         path: String,
     },
+    /// A frozen app-owned Canvas revision.  Only the immutable reference and explicit image
+    /// policy cross the document boundary; scene JSON and pixels remain in the core store.
+    Canvas {
+        id: String,
+        frozen_revision: u64,
+        #[serde(default)]
+        pixel_policy: CanvasPixelPolicy,
+    },
     /// An `@`-mentioned past chat; its transcript is inlined as context at compile time, so a
     /// planning conversation can be referenced from the document that implements it.
     Session {
@@ -347,6 +360,11 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Canvas {
+                id,
+                frozen_revision,
+                ..
+            } => format!("[canvas:{id}@{frozen_revision}]"),
             DocBlock::Session { session_id } => {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
@@ -372,11 +390,21 @@ pub struct CompiledPrompt {
     pub files: Vec<String>,
     /// Attached image paths, sent as ACP image content blocks alongside the prompt.
     pub images: Vec<String>,
+    /// Resolved immutable Canvas payloads.  This is intentionally separate from workspace image
+    /// paths so a provider cannot mistake an app-private asset for a workspace file.
+    #[serde(default)]
+    pub canvases: Vec<CompiledCanvas>,
     /// Past chats inlined via `@`-mentions (session ids).
     #[serde(default)]
     pub sessions: Vec<String>,
     /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CompiledCanvas {
+    pub reference: CanvasRef,
+    pub payload: CanvasPromptPayload,
 }
 
 /// Lower a document into a [`CompiledPrompt`]. Provider-agnostic: `AgentSkill` blocks contribute a
@@ -394,6 +422,50 @@ pub fn compile_with_context(
     cwd: Option<&std::path::Path>,
 ) -> CompiledPrompt {
     compile_with_sessions(doc, library, cwd, None)
+}
+
+/// Compile with an explicit Canvas resolver, feature gate, and provider image capability.  A
+/// A known-unsupported provider fails closed; unknown capability still attempts every ordered
+/// image and surfaces a provider failure. Callers must choose `StructureOnly` when a summary-only
+/// send is intended.
+pub fn compile_with_canvas(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    gate: CanvasFeatureGate,
+    capability: CanvasProviderImageCapability,
+    resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
+) -> Result<CompiledPrompt, crate::canvas::CanvasError> {
+    let mut out = compile_with_sessions(doc, library, cwd, resolve_session);
+    for block in doc {
+        let DocBlock::Canvas {
+            id,
+            frozen_revision,
+            pixel_policy,
+        } = block
+        else {
+            continue;
+        };
+        let reference = CanvasRef {
+            id: id.clone(),
+            frozen_revision: *frozen_revision,
+            pixel_policy: *pixel_policy,
+        };
+        let marker = format!("canvas:{id}@{frozen_revision}");
+        out.unresolved.retain(|item| item != &marker);
+        let payload =
+            resolve_prompt_payload(&reference, gate, capability, |canvas_id, revision| {
+                resolve_canvas(canvas_id, revision)
+            })?;
+        out.prompt.push_str("\n\n");
+        out.prompt.push_str(&format!(
+            "**Canvas {} (revision {}) structural summary:**\n{}",
+            payload.title, payload.revision, payload.summary
+        ));
+        out.canvases.push(CompiledCanvas { reference, payload });
+    }
+    Ok(out)
 }
 
 /// Like [`compile_with_context`], but able to resolve `@`-mentioned past chats: `resolve_session`
@@ -433,6 +505,13 @@ pub fn compile_with_sessions(
                     _ => out.unresolved.push(format!("image:{path}")),
                 }
             }
+            DocBlock::Canvas {
+                id,
+                frozen_revision,
+                ..
+            } => out
+                .unresolved
+                .push(format!("canvas:{id}@{frozen_revision}")),
             DocBlock::File { path } => {
                 out.files.push(path.clone());
                 match cwd.map(|c| crate::workspace::read_file(c, path)) {

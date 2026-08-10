@@ -851,6 +851,14 @@
   overflow: hidden;
 }
 
+/* Canvas cards use the same semantic radius contracts as the surrounding Code2 surfaces. */
+.canvas-ui-module {
+  border-radius: var(--ds-radius-module);
+}
+.canvas-ui-control {
+  border-radius: var(--ds-radius-control);
+}
+
 /* Expanded ("document mode"): the composer is the page, not a panel on it. The editor centres its
    own measure on the app background — no card, no border — with a gutter for the drag/insert
    handles and looser type for long-form writing. The gutter is the minimum the handles need, not

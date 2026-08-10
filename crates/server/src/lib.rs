@@ -26,18 +26,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Query, State};
-use axum::http::{header, HeaderMap, StatusCode};
+use axum::extract::{Path, Query, State};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{any, get, post};
-use axum::{Json, Router};
+use axum::{extract::DefaultBodyLimit, Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
 
 use codetwo_core::{
-    Engine, Event, Op, Session, SessionId, TranscriptCursor, TranscriptEntry,
+    CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput, CanvasRevision,
+    CanvasStaticAsset, DocBlock, Engine, Event, Op, Session,
+    SessionId, Store, TranscriptCursor, TranscriptEntry,
     DEFAULT_TRANSCRIPT_TURNS,
 };
 
@@ -99,10 +101,411 @@ enum Inbound {
     Req(Req),
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasFeatureState {
+    feature: &'static str,
+    enabled: bool,
+    status: &'static str,
+}
+
+#[derive(Debug, Deserialize)]
+struct CanvasCreateBody {
+    #[serde(default)]
+    title: String,
+}
+
+/// JSON requests accept the frontend's camelCase spelling and the core's canonical snake_case
+/// spelling.  Conversion is explicit so scene data stays opaque and no caller can smuggle a live
+/// asset URL into persistence.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasAssetBody {
+    id: String,
+    #[serde(alias = "mime_type")]
+    mime_type: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl From<CanvasAssetBody> for CanvasStaticAsset {
+    fn from(value: CanvasAssetBody) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasAssetRefBody {
+    id: String,
+    #[serde(alias = "mime_type")]
+    mime_type: String,
+    width: u32,
+    height: u32,
+    #[serde(default, alias = "source_name")]
+    source_name: Option<String>,
+}
+
+impl From<CanvasAssetRefBody> for codetwo_core::CanvasAssetRef {
+    fn from(value: CanvasAssetRefBody) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            source_name: value.source_name,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasEnvelopeBody {
+    engine: String,
+    #[serde(alias = "engine_version")]
+    engine_version: String,
+    #[serde(alias = "schema_version")]
+    schema_version: u32,
+    revision: CanvasRevision,
+    theme: codetwo_core::CanvasTheme,
+    #[serde(default)]
+    assets: Vec<CanvasAssetRefBody>,
+    scene: serde_json::Value,
+}
+
+impl From<CanvasEnvelopeBody> for codetwo_core::CanvasSceneEnvelope {
+    fn from(value: CanvasEnvelopeBody) -> Self {
+        Self {
+            engine: value.engine,
+            engine_version: value.engine_version,
+            schema_version: value.schema_version,
+            revision: value.revision,
+            theme: value.theme,
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            scene: value.scene,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasObjectBody {
+    id: String,
+    kind: codetwo_core::CanvasObjectKind,
+    #[serde(default, alias = "original_text")]
+    original_text: String,
+    bounds: codetwo_core::CanvasRect,
+    layer: i64,
+    #[serde(default, alias = "arrow_start")]
+    arrow_start: Option<codetwo_core::CanvasPoint>,
+    #[serde(default, alias = "arrow_end")]
+    arrow_end: Option<codetwo_core::CanvasPoint>,
+    #[serde(default, alias = "asset_id")]
+    asset_id: Option<String>,
+}
+
+impl From<CanvasObjectBody> for codetwo_core::CanvasObject {
+    fn from(value: CanvasObjectBody) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            original_text: value.original_text,
+            bounds: value.bounds,
+            layer: value.layer,
+            arrow_start: value.arrow_start,
+            arrow_end: value.arrow_end,
+            asset_id: value.asset_id,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasManifestBody {
+    objects: Vec<CanvasObjectBody>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasExportBody {
+    id: String,
+    kind: codetwo_core::CanvasExportKind,
+    #[serde(default, alias = "index")]
+    index: Option<u32>,
+    #[serde(alias = "mime_type")]
+    mime_type: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl From<CanvasExportBody> for codetwo_core::CanvasExport {
+    fn from(value: CanvasExportBody) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            index: value.index,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasUpdateBody {
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    envelope: CanvasEnvelopeBody,
+    manifest: CanvasManifestBody,
+    #[serde(default)]
+    assets: Vec<CanvasAssetBody>,
+    #[serde(alias = "expected_revision")]
+    expected_revision: CanvasRevision,
+}
+
+impl CanvasUpdateBody {
+    fn into_core(self) -> CanvasDraftUpdate {
+        CanvasDraftUpdate {
+            title: self.title,
+            theme: self.theme,
+            envelope: self.envelope.into(),
+            manifest: codetwo_core::CanvasManifest::new(
+                self.manifest.objects.into_iter().map(Into::into).collect(),
+            ),
+            assets: self.assets.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasFreezeBody {
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    envelope: CanvasEnvelopeBody,
+    manifest: CanvasManifestBody,
+    #[serde(default)]
+    assets: Vec<CanvasAssetBody>,
+    #[serde(default)]
+    exports: Vec<CanvasExportBody>,
+    #[serde(alias = "expected_revision")]
+    expected_revision: CanvasRevision,
+}
+
+impl CanvasFreezeBody {
+    fn into_core(self, now: i64) -> CanvasFreezeInput {
+        CanvasFreezeInput {
+            title: self.title,
+            theme: self.theme,
+            envelope: self.envelope.into(),
+            manifest: codetwo_core::CanvasManifest::new(
+                self.manifest.objects.into_iter().map(Into::into).collect(),
+            ),
+            assets: self.assets.into_iter().map(Into::into).collect(),
+            exports: self.exports.into_iter().map(Into::into).collect(),
+            now,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasMediaBody {
+    bytes: Vec<u8>,
+    #[serde(default, alias = "declared_mime")]
+    declared_mime: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasBytesReply {
+    id: String,
+    mime_type: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl From<CanvasStaticAsset> for CanvasBytesReply {
+    fn from(value: CanvasStaticAsset) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasDraftResponse {
+    id: String,
+    owner: String,
+    revision: CanvasRevision,
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    envelope: CanvasEnvelopeBody,
+    manifest: CanvasManifestBody,
+    assets: Vec<CanvasAssetBody>,
+    created_at: i64,
+    updated_at: i64,
+    tombstoned_at: Option<i64>,
+}
+
+impl From<CanvasDraft> for CanvasDraftResponse {
+    fn from(value: CanvasDraft) -> Self {
+        Self {
+            id: value.id,
+            owner: value.owner,
+            revision: value.revision,
+            title: value.title,
+            theme: value.theme,
+            envelope: value.envelope.into(),
+            manifest: value.manifest.into(),
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            tombstoned_at: value.tombstoned_at,
+        }
+    }
+}
+
+impl From<codetwo_core::CanvasSceneEnvelope> for CanvasEnvelopeBody {
+    fn from(value: codetwo_core::CanvasSceneEnvelope) -> Self {
+        Self {
+            engine: value.engine,
+            engine_version: value.engine_version,
+            schema_version: value.schema_version,
+            revision: value.revision,
+            theme: value.theme,
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            scene: value.scene,
+        }
+    }
+}
+
+impl From<codetwo_core::CanvasAssetRef> for CanvasAssetRefBody {
+    fn from(value: codetwo_core::CanvasAssetRef) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            source_name: value.source_name,
+        }
+    }
+}
+
+impl From<CanvasStaticAsset> for CanvasAssetBody {
+    fn from(value: CanvasStaticAsset) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+impl From<codetwo_core::CanvasObject> for CanvasObjectBody {
+    fn from(value: codetwo_core::CanvasObject) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            original_text: value.original_text,
+            bounds: value.bounds,
+            layer: value.layer,
+            arrow_start: value.arrow_start,
+            arrow_end: value.arrow_end,
+            asset_id: value.asset_id,
+        }
+    }
+}
+
+impl From<codetwo_core::CanvasManifest> for CanvasManifestBody {
+    fn from(value: codetwo_core::CanvasManifest) -> Self {
+        Self {
+            objects: value.objects.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<codetwo_core::CanvasExport> for CanvasExportBody {
+    fn from(value: codetwo_core::CanvasExport) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            index: value.index,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CanvasSnapshotResponse {
+    id: String,
+    revision: CanvasRevision,
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    created_at: i64,
+    frozen_at: i64,
+    object_count: usize,
+    envelope: CanvasEnvelopeBody,
+    manifest: CanvasManifestBody,
+    assets: Vec<CanvasAssetBody>,
+    summary: String,
+    exports: Vec<CanvasExportBody>,
+}
+
+impl From<codetwo_core::CanvasSnapshot> for CanvasSnapshotResponse {
+    fn from(value: codetwo_core::CanvasSnapshot) -> Self {
+        Self {
+            id: value.id,
+            revision: value.revision,
+            title: value.title,
+            theme: value.theme,
+            created_at: value.created_at,
+            frozen_at: value.frozen_at,
+            object_count: value.object_count,
+            envelope: value.envelope.into(),
+            manifest: value.manifest.into(),
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            summary: value.summary,
+            exports: value.exports.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
 struct ServerState {
     engine: Arc<Engine>,
     events: broadcast::Sender<Event>,
     auth: Arc<AuthState>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -127,17 +530,86 @@ pub async fn bind_and_serve(
     addr: SocketAddr,
     auth: Arc<AuthState>,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    let store = Arc::new(Store::open_in_memory().expect("in-memory canvas store"));
+    bind_and_serve_with_canvas(
+        engine,
+        events,
+        addr,
+        auth,
+        store,
+        CanvasFeatureGate::default(),
+    )
+    .await
+}
+
+/// Bind the server with the same Store and Canvas gate owned by the host runtime.  The gate is
+/// closed for every normal process; only trusted tests may inject `enabled_for_tests()`.
+pub async fn bind_and_serve_with_canvas(
+    engine: Arc<Engine>,
+    events: broadcast::Sender<Event>,
+    addr: SocketAddr,
+    auth: Arc<AuthState>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
+) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let state = Arc::new(ServerState {
         engine,
         events,
         auth,
+        store,
+        canvas_gate,
     });
     let app = Router::new()
         .route("/", get(index))
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/canvas/feature", get(canvas_feature))
+        .route("/api/canvas/media/normalize", post(canvas_normalize_media))
+        .route("/api/canvas/drafts", post(canvas_create_draft))
+        .route(
+            "/api/canvas/drafts/:id",
+            get(canvas_get_draft).put(canvas_update_draft),
+        )
+        .route(
+            "/api/canvas/drafts/:id/normalize",
+            post(canvas_normalize_draft_media),
+        )
+        .route("/api/canvas/drafts/:id/freeze", post(canvas_freeze_draft))
+        .route("/api/canvas/drafts/:id/tombstone", post(canvas_tombstone))
+        .route("/api/canvas/drafts/:id/restore", post(canvas_restore))
+        .route("/api/canvas/drafts/:id/purge", post(canvas_purge))
+        .route(
+            "/api/canvas/:id/revisions/:revision",
+            get(canvas_get_snapshot),
+        )
+        .route(
+            "/api/canvas/:id/revisions/:revision/duplicate",
+            post(canvas_duplicate),
+        )
+        .route(
+            "/api/canvas/:id/revisions/:revision/assets/:asset_id",
+            get(canvas_get_asset),
+        )
+        .route(
+            "/api/canvas/:id/revisions/:revision/exports/:export_id",
+            get(canvas_get_export),
+        )
+        // `/canvas` is the same vanilla Remote shell as `/`; the Canvas island itself is still
+        // fetched lazily from the stable `/canvas/canvas-island.js` route after the feature gate
+        // check and an explicit user invocation.
+        .route("/canvas", get(canvas_page))
+        .route("/canvas/", get(canvas_page))
+        // Stable aliases keep the shell free of Vite's hashed filenames. The generated manifest
+        // remains the source of truth for the actual embedded asset bytes.
+        .route("/canvas/canvas-island.js", get(canvas_entry))
+        .route("/canvas/canvas.css", get(canvas_css))
+        .route("/canvas/styles.css", get(canvas_css))
+        // Axum 0.7/matchit 0.7 uses `/*path` for a safe terminal catch-all.
+        .route("/canvas/*path", get(canvas_asset))
         .route("/ws", any(ws_handler))
+        .layer(DefaultBodyLimit::max(codetwo_core::canvas::MAX_CANVAS_TOTAL_BYTES + 4_000_000))
+        .layer(axum::middleware::map_response(no_store_headers))
         .with_state(state);
 
     let listener = TcpListener::bind(addr).await?;
@@ -146,6 +618,338 @@ pub async fn bind_and_serve(
         let _ = axum::serve(listener, app.into_make_service()).await;
     });
     Ok((local, handle))
+}
+
+async fn no_store_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store, max-age=0"),
+    );
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    response
+}
+
+fn require_device(st: &ServerState, headers: &HeaderMap) -> Result<String, Response> {
+    bearer_from(headers)
+        .and_then(|bearer| st.auth.authorize_bearer(bearer))
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())
+}
+
+fn canvas_error(error: CanvasError) -> Response {
+    let status = match &error {
+        CanvasError::GateDisabled => StatusCode::FORBIDDEN,
+        CanvasError::OwnerMismatch | CanvasError::NotFound(_) => StatusCode::NOT_FOUND,
+        CanvasError::StaleRevision { .. } => StatusCode::CONFLICT,
+        CanvasError::Tombstoned(_) | CanvasError::Immutable(_) => StatusCode::CONFLICT,
+        CanvasError::InvalidEnvelope(_)
+        | CanvasError::InvalidManifest(_)
+        | CanvasError::InvalidAssets(_)
+        | CanvasError::InvalidExports(_)
+        | CanvasError::ExportOverBudget(_)
+        | CanvasError::InvalidGeometry(_)
+        | CanvasError::UnsafeMedia(_)
+        | CanvasError::ProviderImageUnsupported { .. } => StatusCode::BAD_REQUEST,
+        CanvasError::Sqlite(_) | CanvasError::Serde(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    // Mutable owner mismatches deliberately share the same body as an unknown id.  A 404 alone
+    // is not enough if the text says "owner mismatch" and therefore confirms another device's
+    // draft exists.
+    let message = match &error {
+        CanvasError::OwnerMismatch | CanvasError::NotFound(_) => "canvas not found".to_string(),
+        _ => error.to_string(),
+    };
+    (status, message).into_response()
+}
+
+fn parse_revision(value: &str) -> Result<CanvasRevision, Response> {
+    value
+        .parse::<CanvasRevision>()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid canvas revision").into_response())
+}
+
+async fn canvas_feature(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    Json(CanvasFeatureState {
+        feature: codetwo_core::CANVAS_FEATURE_GATE,
+        enabled: st.canvas_gate.is_enabled(),
+        status: "not production-enabled",
+    })
+    .into_response()
+}
+
+async fn canvas_create_draft(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<CanvasCreateBody>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st
+        .store
+        .create_canvas_draft_with_gate(st.canvas_gate, &owner, &body.title, now_millis())
+    {
+        Ok(draft) => Json(CanvasDraftResponse::from(draft)).into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_get_draft(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.get_canvas_draft(&id, &owner) {
+        Ok(Some(draft)) => Json(CanvasDraftResponse::from(draft)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "canvas draft not found").into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_update_draft(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<CanvasUpdateBody>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.update_canvas_draft_cas(
+        &id,
+        &owner,
+        body.expected_revision,
+        body.into_core(),
+        now_millis(),
+    ) {
+        Ok(draft) => Json(CanvasDraftResponse::from(draft)).into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_normalize_media(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<CanvasMediaBody>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    if let Err(error) = st.canvas_gate.require() {
+        return canvas_error(error);
+    }
+    match codetwo_core::normalize_media(&body.bytes, body.declared_mime.as_deref()) {
+        Ok(asset) => Json(CanvasBytesReply::from(asset)).into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_normalize_draft_media(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<CanvasMediaBody>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    if let Err(error) = st.canvas_gate.require() {
+        return canvas_error(error);
+    }
+    match st.store.get_canvas_draft(&id, &owner) {
+        Ok(Some(_)) => match codetwo_core::normalize_media(&body.bytes, body.declared_mime.as_deref())
+        {
+            Ok(asset) => Json(CanvasBytesReply::from(asset)).into_response(),
+            Err(error) => canvas_error(error),
+        },
+        Ok(None) => (StatusCode::NOT_FOUND, "canvas draft not found").into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_freeze_draft(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<CanvasFreezeBody>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.freeze_canvas_with_gate(
+        st.canvas_gate,
+        &id,
+        &owner,
+        body.expected_revision,
+        body.into_core(now_millis()),
+    ) {
+        Ok(snapshot) => Json(CanvasSnapshotResponse::from(snapshot)).into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_get_snapshot(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path((id, revision)): Path<(String, String)>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    let revision = match parse_revision(&revision) {
+        Ok(revision) => revision,
+        Err(response) => return response,
+    };
+    match st.store.get_canvas_snapshot_frozen(&id, revision) {
+        Ok(Some(snapshot)) => Json(CanvasSnapshotResponse::from(snapshot)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "canvas snapshot not found").into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_get_asset(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path((id, revision, asset_id)): Path<(String, String, String)>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    let revision = match parse_revision(&revision) {
+        Ok(revision) => revision,
+        Err(response) => return response,
+    };
+    match st.store.get_canvas_snapshot_frozen(&id, revision) {
+        Ok(Some(snapshot)) => match snapshot.assets.into_iter().find(|asset| asset.id == asset_id) {
+            Some(asset) => {
+                let mime = HeaderValue::from_str(&asset.mime_type)
+                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
+                let mut response = asset.bytes.into_response();
+                response.headers_mut().insert(header::CONTENT_TYPE, mime);
+                response
+            }
+            None => (StatusCode::NOT_FOUND, "canvas asset not found").into_response(),
+        },
+        Ok(None) => (StatusCode::NOT_FOUND, "canvas snapshot not found").into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_get_export(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path((id, revision, export_id)): Path<(String, String, String)>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    let revision = match parse_revision(&revision) {
+        Ok(revision) => revision,
+        Err(response) => return response,
+    };
+    match st.store.get_canvas_snapshot_frozen(&id, revision) {
+        Ok(Some(snapshot)) => match snapshot.exports.into_iter().find(|export| export.id == export_id) {
+            Some(export) => {
+                let mut response = export.bytes.into_response();
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("image/png"),
+                );
+                response
+            }
+            None => (StatusCode::NOT_FOUND, "canvas export not found").into_response(),
+        },
+        Ok(None) => (StatusCode::NOT_FOUND, "canvas snapshot not found").into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_duplicate(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path((id, revision)): Path<(String, String)>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    let revision = match parse_revision(&revision) {
+        Ok(revision) => revision,
+        Err(response) => return response,
+    };
+    match st.store.duplicate_canvas_to_owner_with_gate(
+        st.canvas_gate,
+        &id,
+        revision,
+        &owner,
+        now_millis(),
+    ) {
+        Ok(draft) => Json(CanvasDraftResponse::from(draft)).into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_tombstone(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.tombstone_canvas(&id, &owner, now_millis()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_restore(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.restore_canvas(&id, &owner, now_millis()) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(error) => canvas_error(error),
+    }
+}
+
+async fn canvas_purge(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let owner = match require_device(&st, &headers) {
+        Ok(owner) => owner,
+        Err(response) => return response,
+    };
+    match st.store.purge_canvas(&id, &owner, now_millis()) {
+        Ok(purged) => Json(serde_json::json!({ "purged": purged })).into_response(),
+        Err(error) => canvas_error(error),
+    }
 }
 
 #[derive(Deserialize)]
@@ -197,16 +1001,43 @@ async fn ws_handler(
     Query(q): Query<HashMap<String, String>>,
     State(st): State<Arc<ServerState>>,
 ) -> Response {
-    let ok = q
+    let Some(device_id) = q
         .get("ticket")
-        .is_some_and(|t| st.auth.take_ws_ticket(t).is_some());
-    if !ok {
+        .and_then(|ticket| st.auth.take_ws_ticket(ticket))
+    else {
         return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response();
-    }
-    ws.on_upgrade(move |socket| handle_socket(socket, st))
+    };
+    ws.on_upgrade(move |socket| handle_socket(socket, st, device_id))
 }
 
-async fn handle_socket(socket: WebSocket, st: Arc<ServerState>) {
+fn validate_canvas_op(st: &ServerState, _device_id: &str, op: &Op) -> Result<(), CanvasError> {
+    let Op::Prompt { doc, .. } = op else {
+        return Ok(());
+    };
+    let has_canvas = doc.iter().any(|block| matches!(block, DocBlock::Canvas { .. }));
+    if !has_canvas {
+        return Ok(());
+    }
+    st.canvas_gate.require()?;
+    for block in doc {
+        let DocBlock::Canvas {
+            id,
+            frozen_revision,
+            ..
+        } = block
+        else {
+            continue;
+        };
+        // WS prompts carry only immutable references.  The lookup is global after ticket auth;
+        // mutable draft ownership is enforced by the REST update/freeze routes before a ref can
+        // exist, and arbitrary ids never reach Engine.
+        st.store
+            .resolve_canvas_prompt_frozen(id, *frozen_revision)?;
+    }
+    Ok(())
+}
+
+async fn handle_socket(socket: WebSocket, st: Arc<ServerState>, device_id: String) {
     let (mut sender, mut receiver) = socket.split();
 
     // One outbound lane per client: engine events and request replies both go through it, so the
@@ -273,6 +1104,19 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>) {
                         } => (Some(session.clone()), request_id.clone()),
                         _ => (None, None),
                     };
+                    if let Err(error) = validate_canvas_op(&st, &device_id, &op) {
+                        let _ = work_out
+                            .send(Outbound::Event {
+                                event: Event::Error {
+                                    session,
+                                    message: error.to_string(),
+                                    terminal: true,
+                                    request_id,
+                                },
+                            })
+                            .await;
+                        continue;
+                    }
                     // A submit error (for example a missing provider binary) does not necessarily
                     // reach the engine event stream. Give the initiating remote client the same
                     // command-result feedback as Desktop while it remains connected.
@@ -358,6 +1202,71 @@ async fn handle_socket(socket: WebSocket, st: Arc<ServerState>) {
 
 async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
+}
+
+include!(concat!(env!("OUT_DIR"), "/canvas_assets.rs"));
+
+/// Compile-time embedded Canvas island paths, exposed only for integration probes and packaged
+/// host diagnostics.  The returned names are generated from `assets/canvas`, so callers never
+/// need to hard-code Vite's content hashes.
+#[doc(hidden)]
+pub fn embedded_canvas_asset_paths() -> impl Iterator<Item = &'static str> {
+    CANVAS_ASSETS.iter().map(|(path, _)| *path)
+}
+
+fn canvas_asset_mime(path: &str) -> &'static str {
+    if path.ends_with(".js") {
+        "text/javascript; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else if path.ends_with(".woff2") {
+        "font/woff2"
+    } else {
+        "application/octet-stream"
+    }
+}
+
+async fn canvas_page() -> Html<&'static str> {
+    Html(INDEX_HTML)
+}
+
+async fn canvas_entry() -> Response {
+    canvas_asset_response("canvas-island.js")
+}
+
+async fn canvas_css() -> Response {
+    let path = CANVAS_ASSETS
+        .iter()
+        .map(|(path, _)| *path)
+        .find(|path| path.ends_with(".css"));
+    match path {
+        Some(path) => canvas_asset_response(path),
+        None => (StatusCode::NOT_FOUND, "canvas stylesheet not found").into_response(),
+    }
+}
+
+async fn canvas_asset(Path(path): Path<String>) -> Response {
+    // Reject traversal before lookup; only compile-time embedded paths are eligible.
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.split('/').any(|part| part == ".." || part.is_empty())
+        || path.contains('\\')
+    {
+        return (StatusCode::NOT_FOUND, "canvas asset not found").into_response();
+    }
+    canvas_asset_response(&path)
+}
+
+fn canvas_asset_response(path: &str) -> Response {
+    let Some((_, bytes)) = CANVAS_ASSETS.iter().find(|(name, _)| *name == path) else {
+        return (StatusCode::NOT_FOUND, "canvas asset not found").into_response();
+    };
+    let mut response = (*bytes).to_vec().into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(canvas_asset_mime(path)),
+    );
+    response
 }
 
 /// Best-effort LAN IP (via the classic "connect a UDP socket" trick — no packets are sent).
@@ -564,5 +1473,25 @@ mod tests {
         assert_eq!(value["entries"][0]["part"]["kind"], "prompt");
         assert_eq!(value["entries"][0]["part"]["text"], "full\n  prompt");
         assert_eq!(value["next_before"], 7);
+    }
+
+    #[test]
+    fn embedded_canvas_manifest_is_generated_and_wire_fields_are_camel_case() {
+        assert!(super::CANVAS_ASSETS
+            .iter()
+            .any(|(path, _)| *path == "canvas-island.js"));
+        assert!(super::CANVAS_ASSETS
+            .iter()
+            .any(|(path, _)| path.ends_with(".woff2")));
+        let asset = super::CanvasAssetBody {
+            id: "a".into(),
+            mime_type: "image/png".into(),
+            width: 1,
+            height: 1,
+            bytes: vec![1, 2],
+        };
+        let value = serde_json::to_value(asset).unwrap();
+        assert_eq!(value["mimeType"], "image/png");
+        assert!(value.get("mime_type").is_none());
     }
 }

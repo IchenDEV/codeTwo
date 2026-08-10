@@ -35,8 +35,11 @@ use codetwo_core::workspace_search::{
 };
 use codetwo_core::worktree::{ResolvedWorktreeBaseline, WorktreeBaseline};
 use codetwo_core::{
-    Engine, Event, MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op,
-    Session, SessionSearchHit, Store, TranscriptCursor, TranscriptPage,
+    CanvasAssetRef, CanvasDraft, CanvasDraftUpdate, CanvasExport, CanvasFeatureGate,
+    CanvasFreezeInput, CanvasManifest, CanvasObject, CanvasSceneEnvelope, CanvasSnapshot,
+    CanvasStaticAsset, Engine, Event,
+    MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op, Session,
+    SessionSearchHit, Store, TranscriptCursor, TranscriptPage,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -74,6 +77,9 @@ struct RemoteHandle {
 
 struct AppState {
     engine: Arc<Engine>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
+    canvas_owner: String,
     events: broadcast::Sender<Event>,
     skills_dir: PathBuf,
     plugins_dir: PathBuf,
@@ -867,11 +873,13 @@ async fn start_remote(
     let auth = Arc::new(codetwo_server::AuthState::load(Some(
         state.remote_auth_path.clone(),
     )));
-    let (local, task) = codetwo_server::bind_and_serve(
+    let (local, task) = codetwo_server::bind_and_serve_with_canvas(
         state.engine.clone(),
         state.events.clone(),
         addr,
         auth.clone(),
+        state.store.clone(),
+        state.canvas_gate,
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -971,6 +979,438 @@ fn issue_context(issue: Issue) -> String {
     issue.to_context()
 }
 
+// ---- Canvas Input V1 -------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasAssetRefDto {
+    id: String,
+    mime_type: String,
+    width: u32,
+    height: u32,
+    source_name: Option<String>,
+}
+
+impl From<CanvasAssetRef> for CanvasAssetRefDto {
+    fn from(value: CanvasAssetRef) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            source_name: value.source_name,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasAssetDto {
+    id: String,
+    mime_type: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl From<CanvasStaticAsset> for CanvasAssetDto {
+    fn from(value: CanvasStaticAsset) -> Self {
+        Self {
+            id: value.id,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasEnvelopeDto {
+    engine: String,
+    engine_version: String,
+    schema_version: u32,
+    revision: u64,
+    theme: codetwo_core::CanvasTheme,
+    assets: Vec<CanvasAssetRefDto>,
+    scene: serde_json::Value,
+}
+
+impl From<CanvasSceneEnvelope> for CanvasEnvelopeDto {
+    fn from(value: CanvasSceneEnvelope) -> Self {
+        Self {
+            engine: value.engine,
+            engine_version: value.engine_version,
+            schema_version: value.schema_version,
+            revision: value.revision,
+            theme: value.theme,
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            scene: value.scene,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasObjectDto {
+    id: String,
+    kind: codetwo_core::CanvasObjectKind,
+    original_text: String,
+    bounds: codetwo_core::CanvasRect,
+    layer: i64,
+    arrow_start: Option<codetwo_core::CanvasPoint>,
+    arrow_end: Option<codetwo_core::CanvasPoint>,
+    asset_id: Option<String>,
+}
+
+impl From<CanvasObject> for CanvasObjectDto {
+    fn from(value: CanvasObject) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            original_text: value.original_text,
+            bounds: value.bounds,
+            layer: value.layer,
+            arrow_start: value.arrow_start,
+            arrow_end: value.arrow_end,
+            asset_id: value.asset_id,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+struct CanvasManifestDto {
+    objects: Vec<CanvasObjectDto>,
+}
+
+impl From<CanvasManifest> for CanvasManifestDto {
+    fn from(value: CanvasManifest) -> Self {
+        Self {
+            objects: value.objects.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasExportDto {
+    id: String,
+    kind: codetwo_core::CanvasExportKind,
+    index: Option<u32>,
+    mime_type: String,
+    width: u32,
+    height: u32,
+    bytes: Vec<u8>,
+}
+
+impl From<CanvasExport> for CanvasExportDto {
+    fn from(value: CanvasExport) -> Self {
+        Self {
+            id: value.id,
+            kind: value.kind,
+            index: value.index,
+            mime_type: value.mime_type,
+            width: value.width,
+            height: value.height,
+            bytes: value.bytes,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasDraftDto {
+    id: String,
+    owner: String,
+    revision: u64,
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    envelope: CanvasEnvelopeDto,
+    manifest: CanvasManifestDto,
+    assets: Vec<CanvasAssetDto>,
+    created_at: i64,
+    updated_at: i64,
+    tombstoned_at: Option<i64>,
+}
+
+impl From<CanvasDraft> for CanvasDraftDto {
+    fn from(value: CanvasDraft) -> Self {
+        Self {
+            id: value.id,
+            owner: value.owner,
+            revision: value.revision,
+            title: value.title,
+            theme: value.theme,
+            envelope: value.envelope.into(),
+            manifest: value.manifest.into(),
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+            tombstoned_at: value.tombstoned_at,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasSnapshotDto {
+    id: String,
+    revision: u64,
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    created_at: i64,
+    frozen_at: i64,
+    object_count: usize,
+    envelope: CanvasEnvelopeDto,
+    manifest: CanvasManifestDto,
+    assets: Vec<CanvasAssetDto>,
+    summary: String,
+    exports: Vec<CanvasExportDto>,
+}
+
+impl From<CanvasSnapshot> for CanvasSnapshotDto {
+    fn from(value: CanvasSnapshot) -> Self {
+        Self {
+            id: value.id,
+            revision: value.revision,
+            title: value.title,
+            theme: value.theme,
+            created_at: value.created_at,
+            frozen_at: value.frozen_at,
+            object_count: value.object_count,
+            envelope: value.envelope.into(),
+            manifest: value.manifest.into(),
+            assets: value.assets.into_iter().map(Into::into).collect(),
+            summary: value.summary,
+            exports: value.exports.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct CanvasFreezeCommandInput {
+    title: String,
+    theme: codetwo_core::CanvasTheme,
+    envelope: CanvasSceneEnvelope,
+    manifest: CanvasManifest,
+    #[serde(default)]
+    assets: Vec<CanvasStaticAsset>,
+    #[serde(default)]
+    exports: Vec<CanvasExport>,
+}
+
+impl CanvasFreezeCommandInput {
+    fn into_core(self, now: i64) -> CanvasFreezeInput {
+        CanvasFreezeInput {
+            title: self.title,
+            theme: self.theme,
+            envelope: self.envelope,
+            manifest: self.manifest,
+            assets: self.assets,
+            exports: self.exports,
+            now,
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CanvasFeatureStateDto {
+    feature: &'static str,
+    enabled: bool,
+    status: &'static str,
+}
+
+#[tauri::command]
+fn canvas_feature_state(state: State<'_, AppState>) -> CanvasFeatureStateDto {
+    CanvasFeatureStateDto {
+        feature: codetwo_core::CANVAS_FEATURE_GATE,
+        enabled: state.canvas_gate.is_enabled(),
+        status: "not production-enabled",
+    }
+}
+
+fn require_canvas(state: &AppState) -> Result<(), String> {
+    state.canvas_gate.require().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_create_draft(
+    state: State<'_, AppState>,
+    title: String,
+) -> Result<CanvasDraftDto, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .create_canvas_draft_with_gate(state.canvas_gate, &state.canvas_owner, &title, now_millis())
+        .map(CanvasDraftDto::from)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_get_draft(state: State<'_, AppState>, id: String) -> Result<Option<CanvasDraftDto>, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .get_canvas_draft(&id, &state.canvas_owner)
+        .map(|draft| draft.map(CanvasDraftDto::from))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_update_draft(
+    state: State<'_, AppState>,
+    id: String,
+    expected_revision: u64,
+    update: CanvasDraftUpdate,
+) -> Result<CanvasDraftDto, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .update_canvas_draft_cas(
+            &id,
+            &state.canvas_owner,
+            expected_revision,
+            update,
+            now_millis(),
+        )
+        .map(CanvasDraftDto::from)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_normalize_media(
+    state: State<'_, AppState>,
+    bytes: Vec<u8>,
+    declared_mime: Option<String>,
+) -> Result<CanvasAssetDto, String> {
+    require_canvas(&state)?;
+    codetwo_core::normalize_media(&bytes, declared_mime.as_deref())
+        .map(CanvasAssetDto::from)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_freeze(
+    state: State<'_, AppState>,
+    id: String,
+    expected_revision: u64,
+    input: CanvasFreezeCommandInput,
+) -> Result<CanvasSnapshotDto, String> {
+    require_canvas(&state)?;
+    let input = input.into_core(now_millis());
+    state
+        .store
+        .freeze_canvas_with_gate(
+            state.canvas_gate,
+            &id,
+            &state.canvas_owner,
+            expected_revision,
+            input,
+        )
+        .map(CanvasSnapshotDto::from)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_get_snapshot(
+    state: State<'_, AppState>,
+    id: String,
+    revision: u64,
+) -> Result<Option<CanvasSnapshotDto>, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .get_canvas_snapshot_frozen(&id, revision)
+        .map(|snapshot| snapshot.map(CanvasSnapshotDto::from))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_get_asset(
+    state: State<'_, AppState>,
+    id: String,
+    revision: u64,
+    asset_id: String,
+) -> Result<Option<CanvasAssetDto>, String> {
+    require_canvas(&state)?;
+    let snapshot = state
+        .store
+        .get_canvas_snapshot_frozen(&id, revision)
+        .map_err(|error| error.to_string())?;
+    Ok(snapshot.and_then(|snapshot| {
+        snapshot.assets.into_iter().find(|asset| asset.id == asset_id)
+    }).map(CanvasAssetDto::from))
+}
+
+#[tauri::command]
+fn canvas_get_export(
+    state: State<'_, AppState>,
+    id: String,
+    revision: u64,
+    export_id: String,
+) -> Result<Option<CanvasExportDto>, String> {
+    require_canvas(&state)?;
+    let snapshot = state
+        .store
+        .get_canvas_snapshot_frozen(&id, revision)
+        .map_err(|error| error.to_string())?;
+    Ok(snapshot.and_then(|snapshot| {
+        snapshot
+            .exports
+            .into_iter()
+            .find(|export| export.id == export_id)
+    }).map(CanvasExportDto::from))
+}
+
+#[tauri::command]
+fn canvas_duplicate(
+    state: State<'_, AppState>,
+    id: String,
+    revision: u64,
+) -> Result<CanvasDraftDto, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .duplicate_canvas_to_owner_with_gate(
+            state.canvas_gate,
+            &id,
+            revision,
+            &state.canvas_owner,
+            now_millis(),
+        )
+        .map(CanvasDraftDto::from)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_tombstone(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .tombstone_canvas(&id, &state.canvas_owner, now_millis())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_restore(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .restore_canvas(&id, &state.canvas_owner, now_millis())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn canvas_purge(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    require_canvas(&state)?;
+    state
+        .store
+        .purge_canvas(&id, &state.canvas_owner, now_millis())
+        .map_err(|error| error.to_string())
+}
+
 // ---- compiled-prompt preview (F13) -----------------------------------------------------------
 
 #[derive(Serialize)]
@@ -982,6 +1422,18 @@ struct CompiledPromptDto {
     files: Vec<String>,
     sessions: Vec<String>,
     unresolved: Vec<String>,
+    #[serde(default)]
+    canvases: Vec<CompiledCanvasDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompiledCanvasDto {
+    id: String,
+    frozen_revision: u64,
+    title: String,
+    summary: String,
+    exports: Vec<CanvasExportDto>,
 }
 
 /// Compile the current document into the prompt that would actually be sent — skills expanded,
@@ -991,15 +1443,28 @@ fn compile_doc(
     state: State<'_, AppState>,
     doc: Vec<DocBlock>,
     cwd: Option<String>,
-) -> CompiledPromptDto {
+) -> Result<CompiledPromptDto, String> {
     let lib = state.engine.skills();
     let lib = lib.lock().unwrap();
     let path = cwd.as_deref().map(std::path::Path::new);
     // The preview resolves `@`-mentioned chats exactly like the real send in the engine does.
     let resolve =
         |id: &str| -> Option<String> { state.engine.referenced_session_context(id).ok().flatten() };
-    let c = codetwo_core::skill::compile_with_sessions(&doc, &lib, path, Some(&resolve));
-    CompiledPromptDto {
+    let c = codetwo_core::skill::compile_with_canvas(
+        &doc,
+        &lib,
+        path,
+        Some(&resolve),
+        state.canvas_gate,
+        codetwo_core::CanvasProviderImageCapability::Unknown,
+        &|id, revision| {
+            state
+                .store
+                .resolve_canvas_prompt_frozen(id, revision)
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(CompiledPromptDto {
         prompt: c.prompt,
         mcp_servers: c.mcp_servers.into_iter().map(|s| s.name).collect(),
         agent_skills: c.agent_skills,
@@ -1007,7 +1472,23 @@ fn compile_doc(
         files: c.files,
         sessions: c.sessions,
         unresolved: c.unresolved,
-    }
+        canvases: c
+            .canvases
+            .into_iter()
+            .map(|canvas| CompiledCanvasDto {
+                id: canvas.payload.id,
+                frozen_revision: canvas.payload.revision,
+                title: canvas.payload.title,
+                summary: canvas.payload.summary,
+                exports: canvas
+                    .payload
+                    .exports
+                    .into_iter()
+                    .map(CanvasExportDto::from)
+                    .collect(),
+            })
+            .collect(),
+    })
 }
 
 /// Workspace file search for `@`-mentions.
@@ -1714,6 +2195,9 @@ pub fn run() {
 
             let db_path = data_dir.join("codetwo.db");
             let store = Arc::new(Store::open(db_path.to_string_lossy().as_ref())?);
+            if let Err(error) = store.purge_expired_canvases(now_millis()) {
+                eprintln!("canvas tombstone cleanup failed: {error}");
+            }
 
             let skills_dir = data_dir.join("skills");
             let plugins_dir = data_dir.join("plugins");
@@ -1734,7 +2218,14 @@ pub fn run() {
             skill_vec.extend(harness::discover(None));
             let skills = SkillLibrary::new(skill_vec);
 
-            let (engine, mut rx) = Engine::with_store(default_registry(), skills, store);
+            let canvas_gate = CanvasFeatureGate::disabled();
+            let canvas_owner = format!("desktop:{}", data_dir.to_string_lossy());
+            let (engine, mut rx) = Engine::with_store_and_canvas_gate(
+                default_registry(),
+                skills,
+                store.clone(),
+                canvas_gate,
+            );
             let engine = Arc::new(engine);
 
             // Fan the engine's events into a broadcast so both the frontend and the remote server
@@ -1770,6 +2261,9 @@ pub fn run() {
 
             app.manage(AppState {
                 engine,
+                store,
+                canvas_gate,
+                canvas_owner,
                 events,
                 skills_dir,
                 plugins_dir,
@@ -1833,6 +2327,19 @@ pub fn run() {
             remote_pairing_link,
             remote_devices,
             remote_revoke_device,
+            canvas_feature_state,
+            canvas_create_draft,
+            canvas_get_draft,
+            canvas_update_draft,
+            canvas_normalize_media,
+            canvas_freeze,
+            canvas_get_snapshot,
+            canvas_get_asset,
+            canvas_get_export,
+            canvas_duplicate,
+            canvas_tombstone,
+            canvas_restore,
+            canvas_purge,
             tmux_available,
             gh_available,
             list_github_issues,
@@ -1919,7 +2426,11 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_sandbox, resolve_known_workspace_root};
+    use super::{
+        parse_sandbox, resolve_known_workspace_root, CanvasAssetDto, CanvasDraftDto,
+        CanvasEnvelopeDto, CanvasExportDto, CanvasSnapshotDto, CompiledCanvasDto,
+    };
+    use codetwo_core::{CanvasExport, CanvasExportKind, CanvasManifest, CanvasSceneEnvelope, CanvasSnapshot, CanvasStaticAsset};
     use codetwo_core::permission::{ExecutionPolicy, SandboxPolicy};
 
     #[test]
@@ -2026,5 +2537,94 @@ mod tests {
             "sandbox": "future_policy"
         });
         assert!(serde_json::from_value::<ExecutionPolicy>(initial_policy).is_err());
+    }
+
+    #[test]
+    fn canvas_wire_dtos_preserve_opaque_scene_and_use_camel_case() {
+        let scene = serde_json::json!({
+            "elements": [],
+            "appState": { "activeTool": "selection" },
+            "customOpaque": { "assetRef": "opaque-value" }
+        });
+        let envelope = CanvasSceneEnvelope::new(2, codetwo_core::CanvasTheme::Dark, scene.clone());
+        let dto = CanvasEnvelopeDto::from(envelope);
+        let value = serde_json::to_value(dto).unwrap();
+        assert_eq!(value["engineVersion"], codetwo_core::EXCALIDRAW_ENGINE_VERSION);
+        assert!(value.get("engine_version").is_none());
+        assert_eq!(value["scene"], scene);
+
+        let asset = CanvasStaticAsset {
+            id: "asset-opaque".into(),
+            mime_type: "image/png".into(),
+            width: 1,
+            height: 1,
+            bytes: vec![1, 2, 3],
+        };
+        let asset_value = serde_json::to_value(CanvasAssetDto::from(asset)).unwrap();
+        assert_eq!(asset_value["mimeType"], "image/png");
+        assert!(asset_value.get("mime_type").is_none());
+        assert_eq!(asset_value["bytes"], serde_json::json!([1, 2, 3]));
+
+        let export = CanvasExport {
+            id: "overview".into(),
+            kind: CanvasExportKind::Overview,
+            index: None,
+            mime_type: "image/png".into(),
+            width: 1,
+            height: 1,
+            bytes: vec![4, 5, 6],
+        };
+        let export_value = serde_json::to_value(CanvasExportDto::from(export.clone())).unwrap();
+        assert_eq!(export_value["mimeType"], "image/png");
+        assert!(export_value.get("mime_type").is_none());
+
+        let manifest = CanvasManifest::new(Vec::new());
+        let draft = codetwo_core::CanvasDraft {
+            id: "canvas-1".into(),
+            owner: "desktop:test".into(),
+            revision: 2,
+            title: "Board".into(),
+            theme: codetwo_core::CanvasTheme::Dark,
+            envelope: CanvasSceneEnvelope::new(2, codetwo_core::CanvasTheme::Dark, scene.clone()),
+            manifest: manifest.clone(),
+            assets: Vec::new(),
+            created_at: 10,
+            updated_at: 20,
+            tombstoned_at: None,
+        };
+        let draft_value = serde_json::to_value(CanvasDraftDto::from(draft)).unwrap();
+        assert_eq!(draft_value["createdAt"], 10);
+        assert_eq!(draft_value["updatedAt"], 20);
+        assert!(draft_value.get("created_at").is_none());
+
+        let snapshot = CanvasSnapshot {
+            id: "canvas-1".into(),
+            revision: 2,
+            title: "Board".into(),
+            theme: codetwo_core::CanvasTheme::Dark,
+            created_at: 10,
+            frozen_at: 30,
+            object_count: 0,
+            envelope: CanvasSceneEnvelope::new(2, codetwo_core::CanvasTheme::Dark, scene),
+            manifest,
+            assets: Vec::new(),
+            summary: String::new(),
+            exports: vec![export.clone()],
+        };
+        let snapshot_value = serde_json::to_value(CanvasSnapshotDto::from(snapshot)).unwrap();
+        assert_eq!(snapshot_value["frozenAt"], 30);
+        assert_eq!(snapshot_value["exports"][0]["mimeType"], "image/png");
+        assert!(snapshot_value.get("frozen_at").is_none());
+
+        let compiled_value = serde_json::to_value(CompiledCanvasDto {
+            id: "canvas-1".into(),
+            frozen_revision: 2,
+            title: "Board".into(),
+            summary: "object_count=0".into(),
+            exports: vec![CanvasExportDto::from(export)],
+        })
+        .unwrap();
+        assert_eq!(compiled_value["frozenRevision"], 2);
+        assert_eq!(compiled_value["exports"][0]["mimeType"], "image/png");
     }
 }

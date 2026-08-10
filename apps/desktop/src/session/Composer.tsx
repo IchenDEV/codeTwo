@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
@@ -13,6 +13,7 @@ import {
   Maximize2,
   Minimize2,
   Plus,
+  PenLine,
   Sparkles,
   Square,
   Store,
@@ -88,6 +89,8 @@ interface ComposerProps {
   onInsertIssue: () => void;
   onOpenMarket: () => void;
   onNewSkill: () => void;
+  canvasEnabled: boolean;
+  onInsertCanvas: () => void;
   onVoiceText: (text: string) => void;
   runHint: string;
   skillHint: string;
@@ -402,7 +405,17 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
 function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const active = config.providers.find((p) => p.id === config.provider);
+
+  useEffect(() => {
+    const openProviderPicker = () => {
+      setOpen(true);
+      window.setTimeout(() => triggerRef.current?.focus(), 0);
+    };
+    window.addEventListener("codetwo-open-provider-picker", openProviderPicker);
+    return () => window.removeEventListener("codetwo-open-provider-picker", openProviderPicker);
+  }, []);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -411,7 +424,7 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
             shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
             already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
             send" hint (worth more to a first run than a name the sidebar already shows). */}
-        <Chip title={t("config.provider")} className="hidden @3xl/composer:flex">
+        <Chip ref={triggerRef} title={t("config.provider")} className="hidden @3xl/composer:flex">
           {active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}
@@ -711,6 +724,8 @@ export function Composer({
   onInsertIssue,
   onOpenMarket,
   onNewSkill,
+  canvasEnabled,
+  onInsertCanvas,
   onVoiceText,
   runHint,
   skillHint,
@@ -772,6 +787,12 @@ export function Composer({
             {t("composer.insertSkill")}
             {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
           </DropdownMenuItem>
+          {canvasEnabled && (
+            <DropdownMenuItem onSelect={onInsertCanvas}>
+              <PenLine />
+              {t("composer.insertCanvas")}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={onInsertIssue}>
             <Ticket />
             {t("composer.pullIssue")}
