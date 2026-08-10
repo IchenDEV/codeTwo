@@ -42,6 +42,16 @@ pub enum StoreError {
         expected: u64,
         actual: u64,
     },
+    #[error("work store: {0}")]
+    Domain(String),
+    #[error(
+        "work revision conflict for {entity_kind}:{entity_id} (current revision {current_revision:?})"
+    )]
+    WorkConflict {
+        entity_kind: String,
+        entity_id: String,
+        current_revision: Option<u64>,
+    },
 }
 
 const SCHEMA: &str = "
