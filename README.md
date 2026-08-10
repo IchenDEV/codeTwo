@@ -65,4 +65,5 @@ From the desktop you can also start it in-process (Command palette → "Remote c
 network access) sharing the *live* engine, so remote and local drive the same running sessions.
 
 To actually drive an agent, one provider must be on PATH: `grok` (native ACP), or Node for
-`npx @agentclientprotocol/claude-agent-acp` (Claude Code) / `npx @zed-industries/codex-acp` (Codex).
+`npx @agentclientprotocol/claude-agent-acp` (Claude Code) /
+`npx @agentclientprotocol/codex-acp` (Codex).

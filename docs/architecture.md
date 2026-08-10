@@ -122,7 +122,7 @@ left unregistered rather than replying twice.
 | Provider | Launch | Notes |
 |---|---|---|
 | Claude Code | `npx -y @agentclientprotocol/claude-agent-acp` | needs Node; richest ACP surface |
-| Codex | `npx -y @zed-industries/codex-acp` | needs Node; official Rust adapter |
+| Codex | `npx -y @agentclientprotocol/codex-acp` | needs Node; Codex App Server adapter |
 | Grok | `grok agent stdio` | native ACP, no adapter |
 
 `Provider::is_available()` does a PATH check to drive a startup health panel (missing CLI → clear

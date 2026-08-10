@@ -82,7 +82,7 @@ impl Provider {
 /// The three providers from the plan, wired from the start (see plan decision "all three").
 ///
 /// - Claude Code: official ACP adapter via npx (richest ACP surface).
-/// - Codex: official Rust ACP adapter via npx (npm wrapper fetches the platform binary).
+/// - Codex: maintained ACP adapter via npx, backed by the Codex App Server.
 /// - Grok Build: speaks ACP natively (`grok agent stdio`) — no adapter needed.
 /// - Kimi Code: speaks ACP natively too (`kimi acp`).
 /// - Pi: community ACP adapter via npx (pi itself has no ACP mode yet).
@@ -98,7 +98,7 @@ pub fn default_registry() -> Vec<Provider> {
         Provider {
             id: ProviderId::Codex,
             display_name: "OpenAI Codex".into(),
-            launch: LaunchSpec::new("npx", ["-y", "@zed-industries/codex-acp"]),
+            launch: LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp"]),
             needs_node: true,
         },
         Provider {
@@ -236,6 +236,13 @@ mod tests {
         let grok = reg.iter().find(|p| p.id == ProviderId::Grok).unwrap();
         assert_eq!(grok.launch.command, "grok");
         assert_eq!(grok.launch.args, vec!["agent", "stdio"]);
+    }
+
+    #[test]
+    fn codex_launch_uses_the_maintained_app_server_adapter() {
+        let reg = default_registry();
+        let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
+        assert_eq!(codex.launch.args, vec!["-y", "@agentclientprotocol/codex-acp"]);
     }
 
     #[test]

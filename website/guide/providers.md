@@ -21,7 +21,7 @@ Because everything is ACP, adding a provider is just a launch command.
 | Provider | Launch | Needs Node |
 | --- | --- | --- |
 | **Claude Code** | `npx -y @agentclientprotocol/claude-agent-acp` | yes |
-| **Codex** | `npx -y @zed-industries/codex-acp` | yes |
+| **Codex** | `npx -y @agentclientprotocol/codex-acp` | yes |
 | **Grok** | `grok agent stdio` | no (native ACP) |
 | **Cursor** | `cursor-agent --acp` | no |
 | **OpenCode** | `opencode acp` | no |

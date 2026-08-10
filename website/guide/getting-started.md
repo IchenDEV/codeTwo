@@ -21,7 +21,7 @@ To run a real turn you need one agent CLI on your `PATH`:
 
 - **Grok** — `grok` (speaks ACP natively; simplest, no Node needed).
 - **Claude Code** — Node/npx (Code2 launches `npx @agentclientprotocol/claude-agent-acp`).
-- **Codex** — Node/npx (`npx @zed-industries/codex-acp`).
+- **Codex** — Node/npx (`npx @agentclientprotocol/codex-acp`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode** — `opencode`.
 - **Pi** — Node/npx (`npx -y pi-acp`, with `pi` on your `PATH` for its own config).

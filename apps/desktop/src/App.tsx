@@ -2648,13 +2648,14 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* A 40px bar with content centred on the 20px line the traffic lights sit on — the same
-              line as the rail's wordmark and the dock's tabs. With the rail collapsed, the inset
-              clears the lights and the expand button takes the wordmark's place. */}
+          {/* The native traffic lights sit about 6px below a plain 40px row's midpoint. Match the
+              rail's optical centre so the breadcrumb and controls share one title-bar baseline.
+              With the rail collapsed, the inset clears the lights and the expand button takes the
+              wordmark's place. */}
           <header
             data-tauri-drag-region
             className={cn(
-              "flex items-center gap-1.5 border-b pb-1.5 pr-3 pt-1.5",
+              "flex items-center gap-1.5 border-b pr-3 pt-3",
               displayedRailCollapsed ? "pl-[78px]" : "pl-3",
             )}
           >
