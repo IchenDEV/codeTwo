@@ -1,0 +1,2 @@
+# Generated, deterministic Excalidraw bundle. Preserve upstream bytes verbatim.
+crates/server/assets/canvas/** -whitespace

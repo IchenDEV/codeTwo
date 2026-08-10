@@ -67,6 +67,8 @@ async fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
     let mut app = App::new(default_registry(), skill_vec);
     app.set_sessions(engine.list_sessions().map_err(std::io::Error::other)?);
+    app.load_recent_session_history(&engine)
+        .map_err(std::io::Error::other)?;
     let result = run(&mut terminal, &mut app, &engine, &mut in_rx, &mut engine_rx).await;
     ratatui::restore();
     result

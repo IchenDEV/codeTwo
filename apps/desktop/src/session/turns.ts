@@ -1,6 +1,80 @@
 import type { CoreEvent, DocBlock, MemoryReceipt, Part, TranscriptEntry } from "../bridge";
 import { isAgentActivityTitle } from "./agentActivity";
 
+/** Only an accepted TurnStarted may dispose mutable Composer Canvas heads. */
+export function canvasIdsToPurgeAfterTurnStart(
+  accepted: boolean,
+  canvasIds: readonly string[],
+  editorUnchanged = true,
+): string[] {
+  return accepted && editorUnchanged
+    ? Array.from(new Set(canvasIds.filter((id) => id.length > 0)))
+    : [];
+}
+
+/**
+ * Unmounting is the last safe lifecycle boundary for a mutable Composer head.  A live head must
+ * be tombstoned before purge; a head already tombstoned by document removal can go straight to
+ * purge.  Frozen revisions remain immutable in core and are not represented by this plan.
+ */
+export function canvasUnmountPlan(
+  hasMutableHead: boolean,
+  alreadyTombstoned: boolean,
+): { tombstone: boolean; purge: boolean } {
+  const mutable = hasMutableHead || alreadyTombstoned;
+  return {
+    tombstone: hasMutableHead && !alreadyTombstoned,
+    purge: mutable,
+  };
+}
+
+export interface CanvasFrozenRef {
+  id: string;
+  revision: number;
+}
+
+/** Provider-image failures are the only terminal errors that may offer a structure-only retry. */
+export function isCanvasProviderImageError(message: string): boolean {
+  return /provider.*image|image.*unsupported|ProviderImageUnsupported/i.test(message);
+}
+
+/** Correlate the immutable accepted request with its explicit provider retry affordance. */
+export function canvasRetryRefsForTerminal(
+  kind: "error" | "success",
+  message: string | undefined,
+  refs: readonly CanvasFrozenRef[],
+): CanvasFrozenRef[] {
+  if (kind !== "error" || !message || !isCanvasProviderImageError(message)) return [];
+  return refs.map((ref) => ({ id: ref.id, revision: ref.revision }));
+}
+
+export function canvasAcceptedRequestKey(session: string, requestId: string): string {
+  return `${session}:${requestId}`;
+}
+
+/** A provider change after an accepted Canvas failure must stage a fresh session. */
+export function canvasRetryTargetSession(
+  activeSession: string | null,
+  forceNewSession: boolean,
+): string | null {
+  return forceNewSession ? null : activeSession;
+}
+
+/** Replace only Canvas references in a retry document; every non-Canvas block stays ordered and
+ * byte-for-byte equivalent so an async provider failure never drops the user's instruction. */
+export function canvasRetryDocument(
+  doc: readonly DocBlock[],
+  replacements: ReadonlyMap<string, CanvasFrozenRef>,
+): DocBlock[] {
+  return doc.map((block) => {
+    if (block.type !== "canvas") return block;
+    const replacement = replacements.get(block.id);
+    return replacement
+      ? { ...block, id: replacement.id, frozen_revision: replacement.revision }
+      : block;
+  });
+}
+
 export interface ToolEntry {
   id: string;
   title: string;
@@ -112,6 +186,13 @@ export function sameDocBlocks(a: readonly DocBlock[], b: readonly DocBlock[]): b
         return right.type === left.type && left.path === right.path;
       case "session":
         return right.type === "session" && left.session_id === right.session_id;
+      case "canvas":
+        return (
+          right.type === "canvas" &&
+          left.id === right.id &&
+          left.frozen_revision === right.frozen_revision &&
+          left.pixel_policy === right.pixel_policy
+        );
       case "skill": {
         if (right.type !== "skill" || left.skill_id !== right.skill_id) return false;
         const leftKeys = Object.keys(left.params).sort();

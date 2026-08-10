@@ -100,6 +100,14 @@ async fn pairing_ticket_and_op_event_roundtrip() {
     .await
     .unwrap();
 
+    // Axum 0.7's embedded catch-all serves the generated island from a compile-time manifest;
+    // traversal and missing files never touch the runtime filesystem.
+    let (status, island) = http(addr, "GET", "/canvas/canvas-island.js", None, "").await;
+    assert_eq!(status, 200);
+    assert!(!island.is_empty());
+    let (status, _) = http(addr, "GET", "/canvas/%2e%2e/client.html", None, "").await;
+    assert_eq!(status, 404);
+
     // Bad pairing token → 401.
     let (status, _) = http(
         addr,

@@ -197,6 +197,7 @@ export type DocBlock =
   | { type: "skill"; skill_id: string; params: Record<string, string> }
   | { type: "file"; path: string }
   | { type: "image"; path: string }
+  | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
   | { type: "session"; session_id: string };
 
 /// One-line description of a doc block, used for summaries and browser-mode previews.
@@ -210,6 +211,8 @@ export function describeBlock(b: DocBlock): string {
       return `[@${b.path}]`;
     case "image":
       return `[img:${b.path}]`;
+    case "canvas":
+      return `[canvas:${b.id}@${b.frozen_revision}]`;
     case "session":
       return `[chat:${b.session_id.slice(0, 8)}]`;
   }
@@ -1417,6 +1420,286 @@ export async function issueContext(issue: Issue): Promise<string> {
 
 // ---- compiled-prompt preview (F13) -----------------------------------------------------------
 
+export type CanvasPixelPolicy = "required" | "structure_only";
+export type CanvasTheme = "light" | "dark";
+export type CanvasObjectKind =
+  | "pen"
+  | "text"
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "arrow"
+  | "image";
+
+export interface CanvasFeatureState {
+  feature: string;
+  enabled: boolean;
+  status: "not production-enabled";
+}
+
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+export interface CanvasRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface CanvasObject {
+  id: string;
+  kind: CanvasObjectKind;
+  originalText?: string;
+  bounds: CanvasRect;
+  layer: number;
+  arrowStart?: CanvasPoint | null;
+  arrowEnd?: CanvasPoint | null;
+  assetId?: string | null;
+}
+
+export interface CanvasAssetRef {
+  id: string;
+  mimeType: "image/png" | "image/webp";
+  width: number;
+  height: number;
+  sourceName?: string | null;
+}
+
+export interface CanvasStaticAsset extends CanvasAssetRef {
+  bytes: number[];
+}
+
+export interface CanvasSceneEnvelope {
+  engine: string;
+  engineVersion: string;
+  schemaVersion: number;
+  revision: number;
+  theme: CanvasTheme;
+  assets: CanvasAssetRef[];
+  /** Exact opaque Excalidraw scene retained by the core; no active refs are accepted on write. */
+  scene: Record<string, unknown>;
+}
+
+export interface CanvasManifest {
+  objects: CanvasObject[];
+}
+
+export type CanvasExportKind = "overview" | "detail";
+export interface CanvasExport {
+  id: string;
+  kind: CanvasExportKind;
+  index?: number | null;
+  mimeType: "image/png";
+  width: number;
+  height: number;
+  bytes: number[];
+}
+
+export interface CanvasDraftUpdate {
+  title: string;
+  theme: CanvasTheme;
+  envelope: CanvasSceneEnvelope;
+  manifest: CanvasManifest;
+  assets?: CanvasStaticAsset[];
+}
+
+export interface CanvasFreezeInput extends CanvasDraftUpdate {
+  exports?: CanvasExport[];
+}
+
+export interface CanvasDraft {
+  id: string;
+  owner: string;
+  revision: number;
+  title: string;
+  theme: CanvasTheme;
+  envelope: CanvasSceneEnvelope;
+  manifest: CanvasManifest;
+  assets: CanvasStaticAsset[];
+  createdAt: number;
+  updatedAt: number;
+  tombstonedAt?: number | null;
+}
+
+/** Immutable history wire shape. Mutable owner/head timestamps are intentionally absent. */
+export interface CanvasSnapshot {
+  id: string;
+  revision: number;
+  title: string;
+  theme: CanvasTheme;
+  envelope: CanvasSceneEnvelope;
+  manifest: CanvasManifest;
+  assets: CanvasStaticAsset[];
+  createdAt: number;
+  frozenAt: number;
+  objectCount: number;
+  summary: string;
+  exports: CanvasExport[];
+}
+
+export function canvasFeatureState(): Promise<CanvasFeatureState> {
+  return inTauri
+    ? invoke<CanvasFeatureState>("canvas_feature_state")
+    : Promise.resolve({
+        feature: "CODETWO_CANVAS_INPUT_V1",
+        enabled: false,
+        status: "not production-enabled",
+      });
+}
+
+function canvasAssetToCore(asset: CanvasStaticAsset): Record<string, unknown> {
+  return {
+    id: asset.id,
+    mime_type: asset.mimeType,
+    width: asset.width,
+    height: asset.height,
+    bytes: asset.bytes,
+  };
+}
+
+function canvasEnvelopeToCore(envelope: CanvasSceneEnvelope): Record<string, unknown> {
+  return {
+    engine: envelope.engine,
+    engine_version: envelope.engineVersion,
+    schema_version: envelope.schemaVersion,
+    revision: envelope.revision,
+    theme: envelope.theme,
+    assets: envelope.assets.map((asset) => ({
+      id: asset.id,
+      mime_type: asset.mimeType,
+      width: asset.width,
+      height: asset.height,
+      source_name: asset.sourceName ?? null,
+    })),
+    scene: envelope.scene,
+  };
+}
+
+function canvasManifestToCore(manifest: CanvasManifest): Record<string, unknown> {
+  return {
+    objects: manifest.objects.map((object) => ({
+      id: object.id,
+      kind: object.kind,
+      original_text: object.originalText ?? "",
+      bounds: object.bounds,
+      layer: object.layer,
+      arrow_start: object.arrowStart ?? null,
+      arrow_end: object.arrowEnd ?? null,
+      asset_id: object.assetId ?? null,
+    })),
+  };
+}
+
+function canvasExportToCore(exportItem: CanvasExport): Record<string, unknown> {
+  return {
+    id: exportItem.id,
+    kind: exportItem.kind,
+    index: exportItem.index ?? null,
+    mime_type: exportItem.mimeType,
+    width: exportItem.width,
+    height: exportItem.height,
+    bytes: exportItem.bytes,
+  };
+}
+
+function canvasUpdateToCore(update: CanvasDraftUpdate): Record<string, unknown> {
+  return {
+    title: update.title,
+    theme: update.theme,
+    envelope: canvasEnvelopeToCore(update.envelope),
+    manifest: canvasManifestToCore(update.manifest),
+    assets: (update.assets ?? []).map(canvasAssetToCore),
+  };
+}
+
+function canvasFreezeToCore(input: CanvasFreezeInput): Record<string, unknown> {
+  return {
+    ...canvasUpdateToCore(input),
+    exports: (input.exports ?? []).map(canvasExportToCore),
+  };
+}
+
+export async function canvasCreateDraft(title: string): Promise<CanvasDraft> {
+  return invoke<CanvasDraft>("canvas_create_draft", { title });
+}
+
+export async function canvasGetDraft(id: string): Promise<CanvasDraft | null> {
+  return invoke<CanvasDraft | null>("canvas_get_draft", { id });
+}
+
+export async function canvasUpdateDraft(
+  id: string,
+  expectedRevision: number,
+  update: CanvasDraftUpdate,
+): Promise<CanvasDraft> {
+  return invoke<CanvasDraft>("canvas_update_draft", {
+    id,
+    expectedRevision,
+    update: canvasUpdateToCore(update),
+  });
+}
+
+export async function canvasNormalizeMedia(
+  bytes: Uint8Array | number[],
+  declaredMime?: string | null,
+): Promise<CanvasStaticAsset> {
+  return invoke<CanvasStaticAsset>("canvas_normalize_media", {
+    bytes: Array.from(bytes),
+    declaredMime: declaredMime ?? null,
+  });
+}
+
+export async function canvasFreeze(
+  id: string,
+  expectedRevision: number,
+  input: CanvasFreezeInput,
+): Promise<CanvasSnapshot> {
+  return invoke<CanvasSnapshot>("canvas_freeze", {
+    id,
+    expectedRevision,
+    input: canvasFreezeToCore(input),
+  });
+}
+
+export async function canvasGetSnapshot(id: string, revision: number): Promise<CanvasSnapshot | null> {
+  return invoke<CanvasSnapshot | null>("canvas_get_snapshot", { id, revision });
+}
+
+export async function canvasGetAsset(
+  id: string,
+  revision: number,
+  assetId: string,
+): Promise<CanvasStaticAsset | null> {
+  return invoke<CanvasStaticAsset | null>("canvas_get_asset", { id, revision, assetId });
+}
+
+export async function canvasGetExport(
+  id: string,
+  revision: number,
+  exportId: string,
+): Promise<CanvasExport | null> {
+  return invoke<CanvasExport | null>("canvas_get_export", { id, revision, exportId });
+}
+
+export async function canvasDuplicate(id: string, revision: number): Promise<CanvasDraft> {
+  return invoke<CanvasDraft>("canvas_duplicate", { id, revision });
+}
+
+export async function canvasTombstone(id: string): Promise<void> {
+  return invoke("canvas_tombstone", { id });
+}
+
+export async function canvasRestore(id: string): Promise<void> {
+  return invoke("canvas_restore", { id });
+}
+
+export async function canvasPurge(id: string): Promise<boolean> {
+  return invoke<boolean>("canvas_purge", { id });
+}
+
 export interface CompiledPreview {
   prompt: string;
   mcp_servers: string[];
@@ -1426,6 +1709,16 @@ export interface CompiledPreview {
   images: string[];
   sessions: string[];
   unresolved: string[];
+  canvases: CompiledCanvasPreview[];
+}
+
+export interface CompiledCanvasPreview {
+  id: string;
+  frozenRevision: number;
+  title: string;
+  summary: string;
+  /** Ordered overview first, then detail tiles as returned by core validation. */
+  exports: CanvasExport[];
 }
 
 export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<CompiledPreview> {
@@ -1439,6 +1732,7 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
     images: doc.flatMap((b) => (b.type === "image" ? [b.path] : [])),
     sessions: doc.flatMap((b) => (b.type === "session" ? [b.session_id] : [])),
     unresolved: [],
+    canvases: [],
   };
 }
 

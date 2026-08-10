@@ -130,6 +130,12 @@ impl Default for MemorySettings {
 /// Per-turn provenance used by the contamination gate and retained for audit. `used_tools` is
 /// completed from persisted provider updates after the turn; the remaining flags come from the
 /// compiled user document.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryCanvasRef {
+    pub id: String,
+    pub revision: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryTurnProvenance {
     pub used_mcp: bool,
@@ -139,6 +145,10 @@ pub struct MemoryTurnProvenance {
     pub used_web: bool,
     pub used_tools: bool,
     pub used_recalled_memory: bool,
+    /// Frozen canvas provenance only. Scene JSON, summaries, and image bytes are intentionally not
+    /// represented here.
+    #[serde(default)]
+    pub canvas_refs: Vec<MemoryCanvasRef>,
 }
 
 impl MemoryTurnProvenance {
@@ -150,6 +160,7 @@ impl MemoryTurnProvenance {
             || self.used_web
             || self.used_tools
             || self.used_recalled_memory
+            || !self.canvas_refs.is_empty()
     }
 }
 
@@ -815,6 +826,11 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
             }
             DocBlock::File { path } => lines.push(format!("Referenced file: {path}")),
             DocBlock::Image { path } => lines.push(format!("Attached image: {path}")),
+            DocBlock::Canvas {
+                id,
+                frozen_revision,
+                ..
+            } => lines.push(format!("Referenced canvas: {id}@{frozen_revision}")),
             DocBlock::Session { session_id } => {
                 lines.push(format!("Referenced session: {session_id}"))
             }

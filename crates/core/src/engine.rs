@@ -22,9 +22,15 @@ use crate::acp::wire::{
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::activity::{ActivityTracker, TurnLease};
+use crate::canvas::{
+    encode_canvas_history_marker, CanvasError, CanvasFeatureGate, CanvasPixelPolicy,
+    CanvasPromptPayload, CanvasProviderImageCapability,
+};
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
-use crate::memory::{prompt_source, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS};
+use crate::memory::{
+    prompt_source, MemoryCanvasRef, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS,
+};
 use crate::models::builtin_models;
 use crate::permission::{Action, ExecutionPolicy, PermissionMode, PermissionPolicy, SandboxPolicy};
 use crate::provider::Provider;
@@ -33,7 +39,8 @@ use crate::session::{
     SessionId, SessionTitleOrigin, TranscriptCursor, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
-    canonical_doc_text, compile_with_sessions, DocBlock, McpServer, McpTransport, SkillLibrary,
+    canonical_doc_text, compile_with_canvas, compile_with_sessions, CompiledPrompt, DocBlock,
+    McpServer, McpTransport, SkillLibrary,
 };
 use crate::store::{SessionSearchHit, Store, StoreError};
 use crate::worktree::WorktreeBaseline;
@@ -190,6 +197,55 @@ fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
         return None;
     }
     Some(model.current.clone())
+}
+
+/// Lower one resolved immutable Canvas payload to ACP blocks.  The summary is always textual;
+/// ordered overview/detail PNG exports are attached only when the explicit policy permits them.
+/// A known-unsupported provider fails before any summary-only degradation can occur.
+pub fn lower_canvas_prompt_payload(
+    payload: &CanvasPromptPayload,
+    policy: CanvasPixelPolicy,
+    capability: CanvasProviderImageCapability,
+) -> Result<Vec<ContentBlock>, CanvasError> {
+    if policy == CanvasPixelPolicy::Required
+        && matches!(capability, CanvasProviderImageCapability::Unsupported)
+    {
+        return Err(CanvasError::ProviderImageUnsupported { capability });
+    }
+    let mut blocks = vec![ContentBlock::text(format!(
+        "**Canvas {} (revision {}) structural summary:**\n{}",
+        payload.title, payload.revision, payload.summary
+    ))];
+    if policy == CanvasPixelPolicy::StructureOnly {
+        return Ok(blocks);
+    }
+    for export in &payload.exports {
+        blocks.push(ContentBlock::Image {
+            data: crate::workspace::base64_encode(&export.bytes),
+            mime_type: export.mime_type.clone(),
+        });
+    }
+    Ok(blocks)
+}
+
+fn canvas_history_projection(canonical: String, compiled: Option<&CompiledPrompt>) -> String {
+    let Some(compiled) = compiled else {
+        return canonical;
+    };
+    if compiled.canvases.is_empty() {
+        return canonical;
+    }
+    let mut out = canonical;
+    for canvas in &compiled.canvases {
+        out.push_str("\n\n");
+        out.push_str(&encode_canvas_history_marker(
+            &canvas.payload.id,
+            canvas.payload.revision,
+            &canvas.payload.title,
+            &canvas.payload.text_originals,
+        ));
+    }
+    out
 }
 
 fn encode_mcp_servers(
@@ -727,6 +783,7 @@ struct EngineState {
     activity: ActivityTracker,
     router: PermissionRouter,
     store: Option<Arc<Store>>,
+    canvas_gate: CanvasFeatureGate,
 }
 
 /// Owns the sessions and drives providers. Construct with [`Engine::new`], which also hands back the
@@ -740,7 +797,7 @@ impl Engine {
         providers: Vec<Provider>,
         skills: SkillLibrary,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, None)
+        Self::build(providers, skills, None, CanvasFeatureGate::default())
     }
 
     /// Like [`Engine::new`] but persists sessions and transcripts to `store`.
@@ -749,13 +806,26 @@ impl Engine {
         skills: SkillLibrary,
         store: Arc<Store>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store))
+        Self::build(providers, skills, Some(store), CanvasFeatureGate::default())
+    }
+
+    /// Like [`Engine::with_store`] with an explicitly injected Canvas gate for trusted physical
+    /// QA. The default constructors remain disabled and never read an environment toggle.
+    #[doc(hidden)]
+    pub fn with_store_and_canvas_gate(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        canvas_gate: CanvasFeatureGate,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(providers, skills, Some(store), canvas_gate)
     }
 
     fn build(
         providers: Vec<Provider>,
         skills: SkillLibrary,
         store: Option<Arc<Store>>,
+        canvas_gate: CanvasFeatureGate,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         let (events, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
@@ -773,6 +843,7 @@ impl Engine {
             activity,
             router,
             store,
+            canvas_gate,
         });
         (Engine { state }, rx)
     }
@@ -846,6 +917,39 @@ impl Engine {
     fn try_start_turn(&self, session: &str, request_id: Option<String>) -> Option<TurnLease> {
         let initial = self.session_activity(session)?;
         self.state.activity.claim(session, request_id, initial)
+    }
+
+    fn preflight_canvas_document(
+        &self,
+        doc: &[DocBlock],
+        cwd: &str,
+    ) -> Result<Option<CompiledPrompt>, CanvasError> {
+        if !doc
+            .iter()
+            .any(|block| matches!(block, DocBlock::Canvas { .. }))
+        {
+            return Ok(None);
+        }
+        let library = self.state.skills.lock().unwrap();
+        let resolve_session =
+            |id: &str| -> Option<String> { self.referenced_session_context(id).ok().flatten() };
+        let store = self.state.store.clone();
+        let resolve_canvas = move |id: &str, revision: u64| {
+            store
+                .as_ref()
+                .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))?
+                .resolve_canvas_prompt_frozen(id, revision)
+        };
+        compile_with_canvas(
+            doc,
+            &library,
+            Some(std::path::Path::new(cwd)),
+            Some(&resolve_session),
+            self.state.canvas_gate,
+            CanvasProviderImageCapability::Unknown,
+            &resolve_canvas,
+        )
+        .map(Some)
     }
 
     /// A session's persisted transcript (empty if not using a store).
@@ -1409,6 +1513,21 @@ impl Engine {
                     });
                     return Ok(());
                 }
+                // Canvas references are resolved and validated before the turn claim and before
+                // any canonical prompt/activity row is persisted. A gate/provider/budget error
+                // therefore cannot become accepted history.
+                let canvas_preflight = match self.preflight_canvas_document(&doc, &checkout.cwd) {
+                    Ok(compiled) => compiled,
+                    Err(error) => {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: error.to_string(),
+                            terminal: true,
+                            request_id,
+                        });
+                        return Ok(());
+                    }
+                };
                 let turn_lease = match self.try_start_turn(&session, request_id.clone()) {
                     Some(lease) => lease,
                     None => {
@@ -1427,9 +1546,13 @@ impl Engine {
                 // Preserve exactly what the user authored before compiling rules, skills, files
                 // and referenced chats into the provider prompt. Search, replay and title
                 // generation must never mistake that hidden context for user prose.
-                let canonical_prompt = canonical_doc_text(&doc);
-                let mut prompt_display: String = canonical_prompt.chars().take(400).collect();
-                if canonical_prompt.chars().count() > 400 {
+                let canonical_user_prompt = canonical_doc_text(&doc);
+                let canonical_prompt = canvas_history_projection(
+                    canonical_user_prompt.clone(),
+                    canvas_preflight.as_ref(),
+                );
+                let mut prompt_display: String = canonical_user_prompt.chars().take(400).collect();
+                if canonical_user_prompt.chars().count() > 400 {
                     prompt_display.push('…');
                 }
                 let title = doc
@@ -1438,7 +1561,7 @@ impl Engine {
                         DocBlock::Text { text } => initial_session_title(text),
                         _ => None,
                     })
-                    .or_else(|| initial_session_title(&canonical_prompt));
+                    .or_else(|| initial_session_title(&canonical_user_prompt));
                 let prompt_part = Part::Prompt {
                     text: canonical_prompt,
                     display: prompt_display,
@@ -1518,19 +1641,22 @@ impl Engine {
                 // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
                 let cwd_for_images = cwd.clone();
 
-                let compiled = {
-                    let lib = self.state.skills.lock().unwrap();
-                    // `@`-mentioned past chats resolve against the store; without one (tests,
-                    // in-memory runs) they surface as unresolved rather than silently vanishing.
-                    let resolve = |id: &str| -> Option<String> {
-                        self.referenced_session_context(id).ok().flatten()
-                    };
-                    compile_with_sessions(
-                        &doc,
-                        &lib,
-                        Some(std::path::Path::new(&cwd)),
-                        Some(&resolve),
-                    )
+                let compiled = match canvas_preflight {
+                    Some(compiled) => compiled,
+                    None => {
+                        let lib = self.state.skills.lock().unwrap();
+                        // `@`-mentioned past chats resolve against the store; without one (tests,
+                        // in-memory runs) they surface as unresolved rather than silently vanishing.
+                        let resolve = |id: &str| -> Option<String> {
+                            self.referenced_session_context(id).ok().flatten()
+                        };
+                        compile_with_sessions(
+                            &doc,
+                            &lib,
+                            Some(std::path::Path::new(&cwd)),
+                            Some(&resolve),
+                        )
+                    }
                 };
                 for id in &compiled.unresolved {
                     self.emit(Event::Error {
@@ -1570,6 +1696,14 @@ impl Engine {
                     }),
                     used_tools: false,
                     used_recalled_memory: !memory_context.items.is_empty(),
+                    canvas_refs: compiled
+                        .canvases
+                        .iter()
+                        .map(|canvas| MemoryCanvasRef {
+                            id: canvas.payload.id.clone(),
+                            revision: canvas.payload.revision,
+                        })
+                        .collect(),
                 };
                 let (caps, attached_mcp) = {
                     let map = self.state.sessions.lock().unwrap();
@@ -1876,6 +2010,27 @@ impl Engine {
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
                 let memory_project = images_cwd.clone();
+                let mut canvas_image_blocks = Vec::new();
+                for canvas in &compiled.canvases {
+                    match lower_canvas_prompt_payload(
+                        &canvas.payload,
+                        canvas.reference.pixel_policy,
+                        CanvasProviderImageCapability::Unknown,
+                    ) {
+                        Ok(lowered) => canvas_image_blocks.extend(lowered.into_iter().skip(1)),
+                        Err(error) => {
+                            let message = error.to_string();
+                            turn_lease.fail_provider(message.clone());
+                            self.emit(Event::Error {
+                                session: Some(session),
+                                message,
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                    }
+                }
                 tokio::spawn(async move {
                     let mut blocks = vec![ContentBlock::text(provider_prompt)];
                     // Attached images ride along as ACP image content blocks.
@@ -1887,6 +2042,10 @@ impl Engine {
                             blocks.push(ContentBlock::Image { data, mime_type });
                         }
                     }
+                    // Canvas exports are already normalized and ordered. Unknown provider
+                    // capability intentionally attempted every image above; any provider failure
+                    // remains visible through the ACP error path.
+                    blocks.extend(canvas_image_blocks);
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
                             // A cancelled turn is intentionally incomplete; do not memorialize its

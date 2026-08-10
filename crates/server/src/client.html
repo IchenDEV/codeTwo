@@ -23,6 +23,23 @@
       .msg.err { color: #f87171; }
       .msg.sys { color: #6b7280; font-size: 12px; }
       .bar { display: flex; gap: 6px; padding: 8px; background: #171a21; flex-wrap: wrap; align-items: center; }
+      #canvas-status { color: #9ca3af; font-size: 12px; min-height: 1em; }
+      #canvas-status.err { color: #f87171; }
+      #canvas-add { border-color: #475569; }
+      #canvas-add.ready { border-color: #2563eb; color: #bfdbfe; }
+      #canvas-menu { position: relative; }
+      #canvas-menu-panel { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; min-width: 9rem; padding: 4px; border: 1px solid #2b2f38; border-radius: 8px; background: #171a21; box-shadow: 0 8px 22px #0006; }
+      #canvas-menu-panel button { display: block; width: 100%; text-align: left; border: 0; }
+      #canvas-blocks { display: flex; flex: 1 1 100%; flex-direction: column; gap: 6px; }
+      .canvas-prompt-block { display: flex; flex: 1 1 100%; gap: 6px; align-items: flex-start; }
+      .canvas-prompt-block textarea { flex: 1 1 auto; min-height: 42px; }
+      .canvas-prompt-card { display: flex; flex: 1 1 auto; flex-direction: column; gap: 5px; padding: 8px; border: 1px solid #334155; border-radius: 8px; background: #12151b; }
+      .canvas-prompt-card header { padding: 0; background: transparent; font-size: 12px; }
+      .canvas-prompt-card .canvas-mount { min-height: 7rem; }
+      .canvas-prompt-card .canvas-remove { align-self: flex-start; padding: 4px 8px; font-size: 12px; }
+      .canvas-history-card { display: grid; gap: 4px; margin: 6px 0; padding: 8px; border: 1px solid #334155; border-radius: 8px; background: #12151b; }
+      .canvas-history-card img { max-width: 14rem; max-height: 8rem; object-fit: contain; border-radius: 5px; }
+      .canvas-history-actions { display: flex; gap: 5px; flex-wrap: wrap; }
       select, input, textarea, button { font: inherit; border-radius: 8px; border: 1px solid #2b2f38; background: #0f1115; color: #e8e8ea; padding: 8px 10px; }
       textarea { flex: 1 1 100%; min-height: 54px; resize: vertical; }
       button.run { background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 700; }
@@ -61,6 +78,14 @@
         </select>
         <input id="cwd" value="." size="8" title="working dir" />
         <button id="new">New</button>
+        <div id="canvas-menu">
+          <button id="canvas-add" type="button" aria-label="+ Canvas" aria-expanded="false" hidden disabled>+</button>
+          <div id="canvas-menu-panel" hidden>
+            <button id="canvas-menu-canvas" type="button" aria-label="Canvas">Canvas</button>
+          </div>
+        </div>
+        <span id="canvas-status" role="status" aria-live="polite"></span>
+        <div id="canvas-blocks"></div>
         <textarea id="prompt" placeholder="Type a prompt and press Run…"></textarea>
         <button class="run" id="run">Run ▸</button>
       </div>
@@ -84,8 +109,16 @@
       const permEl = document.getElementById("perm");
       const pairingEl = document.getElementById("pairing");
       const runButton = document.getElementById("run");
+      const canvasAddButton = document.getElementById("canvas-add");
+      const canvasMenuPanel = document.getElementById("canvas-menu-panel");
+      const canvasMenuCanvas = document.getElementById("canvas-menu-canvas");
+      const canvasStatusEl = document.getElementById("canvas-status");
+      const canvasBlocksEl = document.getElementById("canvas-blocks");
+      const promptEl = document.getElementById("prompt");
       let active = null;
       let pending = null;
+      let pendingSourceBlocks = null;
+      let pendingRecovery = null;
       let pendingRequestId = null;
       let permissionQueue = [];
       const runningSessions = new Set();
@@ -99,12 +132,118 @@
       const renderedTranscriptSeqs = new Set();
       let ws;
       let retryTimer = null;
+      let canvasFeature = { enabled: false, status: "not production-enabled" };
+      let canvasModulePromise = null;
+      let canvasIsland = null;
+      let promptBlocks = [{ type: "text", text: "" }];
+      let focusedPromptTextIndex = 0;
+      const remoteCanvases = new Map();
+      let canvasReconnectPending = false;
+      let pendingProviderRecovery = null;
+      const providerRecoveryByRequest = new Map();
 
       function messageNode(text, cls) {
         const d = document.createElement("div");
         d.className = "msg " + (cls || "");
         d.textContent = text;
         return d;
+      }
+
+      const CANVAS_HISTORY_MARKER_PREFIX = "[canvas-history-json ";
+      function parseCanvasHistoryMarker(value) {
+        if (typeof value !== "string" || value.includes("\n") || value.includes("\r") || !value.startsWith(CANVAS_HISTORY_MARKER_PREFIX) || !value.endsWith("]")) return null;
+        try {
+          const marker = JSON.parse(value.slice(CANVAS_HISTORY_MARKER_PREFIX.length, -1));
+          if (!marker || marker.version !== 1 || typeof marker.id !== "string" || !marker.id.trim() || !Number.isInteger(marker.revision) || marker.revision <= 0 || typeof marker.title !== "string" || Array.from(marker.title).length > 200 || !Array.isArray(marker.text_originals) || marker.text_originals.length > 64 || marker.text_originals.some((text) => typeof text !== "string" || Array.from(text).length > 2000)) return null;
+          return marker;
+        } catch {
+          return null;
+        }
+      }
+
+      async function duplicateCanvasHistory(marker) {
+        const response = await canvasRequest("/api/canvas/" + encodeURIComponent(marker.id) + "/revisions/" + marker.revision + "/duplicate", { method: "POST" });
+        if (!response.ok) throw new Error("Canvas history duplicate failed: " + (await response.text()));
+        const draft = await response.json();
+        const state = {
+          id: draft.id,
+          revision: Number(draft.revision || 1),
+          title: draft.title || marker.title || "Canvas",
+          envelope: uiEnvelopeFromDraft(draft),
+          assets: new Map(),
+          saveQueue: Promise.resolve(),
+          pendingEnvelope: null,
+          saveTimer: null,
+          removed: false,
+          stale: false,
+          error: null,
+          root: null,
+          island: null,
+          needsReconnect: false,
+        };
+        for (const asset of draft.assets || []) state.assets.set(asset.id, { ...asset, bytes: new Uint8Array(asset.bytes || []), ref: asset.id, fileId: asset.id });
+        remoteCanvases.set(state.id, state);
+        promptBlocks.push({ type: "canvas", id: state.id, pixel_policy: "required" }, { type: "text", text: "" });
+        renderPromptBlocks();
+      }
+
+      function renderCanvasHistoryCard(marker, target) {
+        const card = document.createElement("div");
+        card.className = "canvas-history-card";
+        const title = document.createElement("b");
+        title.textContent = marker.title || "Canvas history";
+        card.appendChild(title);
+        const details = document.createElement("span");
+        details.textContent = "Frozen revision " + marker.revision + " · loading object count…";
+        card.appendChild(details);
+        const image = document.createElement("img");
+        image.alt = "Canvas history thumbnail";
+        image.hidden = true;
+        card.appendChild(image);
+        const actions = document.createElement("div");
+        actions.className = "canvas-history-actions";
+        const download = document.createElement("a");
+        download.textContent = "Download PNG";
+        download.hidden = true;
+        download.setAttribute("download", marker.id + "-r" + marker.revision + ".png");
+        actions.appendChild(download);
+        const duplicate = document.createElement("button");
+        duplicate.type = "button";
+        duplicate.textContent = "Duplicate into prompt";
+        duplicate.onclick = () => void duplicateCanvasHistory(marker).catch((error) => setCanvasStatus(error.message, true));
+        actions.appendChild(duplicate);
+        card.appendChild(actions);
+        target.appendChild(card);
+        void canvasRequest("/api/canvas/" + encodeURIComponent(marker.id) + "/revisions/" + marker.revision, { method: "GET" }).then(async (response) => {
+          if (!response.ok) throw new Error("history unavailable");
+          const snapshot = await response.json();
+          details.textContent = "Frozen " + new Date(snapshot.frozenAt || snapshot.createdAt || Date.now()).toLocaleString() + " · revision " + marker.revision + " · " + (snapshot.objectCount ?? snapshot.manifest?.objects?.length ?? 0) + " objects";
+          const exportBytes = snapshot.exports?.[0]?.bytes;
+          if (Array.isArray(exportBytes) && exportBytes.length > 0) {
+            let binary = "";
+            for (const byte of exportBytes) binary += String.fromCharCode(byte);
+            const source = "data:image/png;base64," + btoa(binary);
+            image.src = source;
+            image.hidden = false;
+            download.href = source;
+            download.hidden = false;
+          }
+        }).catch(() => { details.textContent = "Canvas history unavailable"; });
+      }
+
+      function renderPromptWithHistory(prompt, role, target) {
+        const pieces = String(prompt || "").split(/(\n{2,})/);
+        let found = false;
+        for (const piece of pieces) {
+          const marker = parseCanvasHistoryMarker(piece);
+          if (marker) {
+            renderCanvasHistoryCard(marker, target);
+            found = true;
+          } else if (piece) {
+            target.appendChild(messageNode(piece, role === "user" ? "user" : "agent"));
+          }
+        }
+        return found;
       }
       function add(text, cls) {
         messagesEl.appendChild(messageNode(text, cls));
@@ -175,7 +314,11 @@
         let node = null;
         switch (part.kind) {
           case "text": node = messageNode(part.text, role === "user" ? "user" : "agent"); break;
-          case "prompt": node = messageNode(part.text || part.display, "user"); break;
+          case "prompt": {
+            const prompt = part.text || part.display || "";
+            renderPromptWithHistory(prompt, "user", target);
+            return;
+          }
           case "reasoning": node = messageNode(part.text, "thought"); break;
           case "tool_call": node = messageNode(`⚙ ${part.title || part.id} — ${part.status}`, "tool"); break;
           case "plan": node = messageNode("☰ " + (part.entries || []).join("\n"), "tool"); break;
@@ -269,23 +412,624 @@
         }
       }
 
+      function canvasHeaders(extra = {}) {
+        const bearer = localStorage.getItem(BEARER_KEY);
+        return { ...extra, ...(bearer ? { Authorization: "Bearer " + bearer } : {}) };
+      }
+
+      async function canvasRequest(path, options = {}) {
+        const headers = canvasHeaders(options.headers || {});
+        return fetch(path, { ...options, headers });
+      }
+
+      function setCanvasStatus(message, error = false) {
+        canvasStatusEl.textContent = message || "";
+        canvasStatusEl.classList.toggle("err", Boolean(error));
+      }
+
+      async function refreshCanvasFeature() {
+        const bearer = localStorage.getItem(BEARER_KEY);
+        if (!bearer) return false;
+        try {
+          const response = await canvasRequest("/api/canvas/feature", { method: "GET" });
+          if (response.status === 401) {
+            canvasFeature = { enabled: false, status: "not production-enabled" };
+            canvasAddButton.hidden = false;
+            canvasAddButton.disabled = true;
+            canvasMenuCanvas.disabled = true;
+            setCanvasStatus("Canvas: not production-enabled");
+            return false;
+          }
+          if (!response.ok) throw new Error("Canvas feature request failed: " + response.status);
+          const state = await response.json();
+          canvasFeature = {
+            enabled: state.enabled === true,
+            status: state.status === "not production-enabled" ? state.status : "not production-enabled",
+          };
+          canvasAddButton.hidden = false;
+          canvasAddButton.disabled = !canvasFeature.enabled;
+          canvasMenuCanvas.disabled = !canvasFeature.enabled;
+          canvasAddButton.classList.toggle("ready", canvasFeature.enabled);
+          setCanvasStatus(canvasFeature.enabled ? "Canvas ready" : "Canvas: not production-enabled");
+          // Navigating to /canvas is an explicit user invocation. The bundle still remains lazy
+          // on every other route until + Canvas is clicked.
+          if (canvasFeature.enabled && location.pathname === "/canvas" && !promptBlocks.some((block) => block.type === "canvas")) {
+            await addCanvasBlock();
+          }
+          return canvasFeature.enabled;
+        } catch (error) {
+          canvasAddButton.hidden = false;
+          canvasAddButton.disabled = true;
+          setCanvasStatus("Canvas: feature status unavailable", true);
+          return false;
+        }
+      }
+
+      function uiEnvelopeFromDraft(draft) {
+        const serverEnvelope = draft?.envelope || {};
+        const scene = serverEnvelope.scene && typeof serverEnvelope.scene === "object"
+          ? serverEnvelope.scene
+          : {};
+        const refs = (serverEnvelope.assets || []).map((asset) => ({
+          ref: asset.id,
+          fileId: asset.id,
+          mimeType: asset.mimeType,
+          byteLength: 0,
+          width: asset.width,
+          height: asset.height,
+        }));
+        return {
+          engine: serverEnvelope.engine || "@excalidraw/excalidraw",
+          engineVersion: serverEnvelope.engineVersion || "0.18.1",
+          schemaVersion: serverEnvelope.schemaVersion || 1,
+          revision: Number(draft?.revision || serverEnvelope.revision || 1),
+          theme: draft?.theme || serverEnvelope.theme || "light",
+          elements: Array.isArray(scene.elements) ? scene.elements : [],
+          appState: scene.appState || {
+            viewBackgroundColor: "white",
+            scrollX: 0,
+            scrollY: 0,
+            zoom: 1,
+            gridSize: 20,
+            gridStep: 5,
+            viewModeEnabled: false,
+          },
+          assetRefs: refs,
+        };
+      }
+
+      function currentCanvasTheme() {
+        const declared = [
+          document.documentElement.dataset.canvasTheme,
+          document.documentElement.dataset.theme,
+          document.body?.dataset.canvasTheme,
+          document.body?.dataset.theme,
+        ].find((value) => value === "light" || value === "dark");
+        return declared || "dark";
+      }
+
+      function sceneForServer(envelope) {
+        return {
+          elements: envelope.elements || [],
+          appState: envelope.appState || {},
+        };
+      }
+
+      function serverManifest(manifest) {
+        const kind = (type) => type === "freedraw" ? "pen" : type;
+        return {
+          objects: (manifest?.objects || []).map((object) => ({
+            id: object.id,
+            kind: kind(object.type),
+            originalText: object.originalText || "",
+            bounds: object.geometry || object.bounds || { x: 0, y: 0, width: 0, height: 0 },
+            layer: Number.isFinite(object.layer) ? object.layer : 0,
+            arrowStart: object.arrowStart || null,
+            arrowEnd: object.arrowEnd || null,
+            assetId: object.assetId || null,
+          })),
+        };
+      }
+
+      function staticAssetBodies(state, envelope) {
+        return (envelope.assetRefs || []).map((ref) => {
+          const asset = state.assets.get(ref.ref || ref.fileId);
+          return asset ? {
+            id: asset.id,
+            mimeType: asset.mimeType,
+            width: asset.width || ref.width || 1,
+            height: asset.height || ref.height || 1,
+            bytes: Array.from(asset.bytes || []),
+          } : null;
+        }).filter(Boolean);
+      }
+
+      function updateBodyForState(state, prepared, expectedRevision) {
+        const envelope = prepared.envelope;
+        return {
+          title: state.title || "Canvas",
+          theme: prepared.theme,
+          envelope: {
+            engine: envelope.engine,
+            engineVersion: envelope.engineVersion,
+            schemaVersion: envelope.schemaVersion,
+            revision: expectedRevision,
+            theme: prepared.theme,
+            assets: (envelope.assetRefs || []).map((ref) => ({
+              id: ref.ref || ref.fileId,
+              mimeType: ref.mimeType,
+              width: ref.width || 1,
+              height: ref.height || 1,
+            })),
+            scene: sceneForServer(envelope),
+          },
+          manifest: serverManifest(prepared.manifest),
+          assets: staticAssetBodies(state, envelope),
+          expectedRevision,
+        };
+      }
+
+      function draftAssets(state, envelope) {
+        return (envelope?.assetRefs || []).map((ref) => state.assets.get(ref.ref || ref.fileId)).filter(Boolean);
+      }
+
+      async function loadCanvasIsland() {
+        if (!canvasFeature.enabled) throw new Error("Canvas: not production-enabled");
+        if (!canvasModulePromise) {
+          const css = document.querySelector('link[data-codetwo-canvas="true"]');
+          if (!css) {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = "/canvas/canvas.css";
+            link.dataset.codetwoCanvas = "true";
+            document.head.appendChild(link);
+          }
+          // This is the only Remote bundle load. It is deliberately after the authenticated gate
+          // response and a + Canvas or /canvas invocation.
+          canvasModulePromise = window.__CODETWO_REMOTE_TEST__ && window.CodeTwoCanvasIsland
+            ? Promise.resolve(window.CodeTwoCanvasIsland)
+            : import("/canvas/canvas-island.js").then((module) => module.default || window.CodeTwoCanvasIsland);
+        }
+        canvasIsland = await canvasModulePromise;
+        if (!canvasIsland) throw new Error("Canvas island failed to load");
+        return canvasIsland;
+      }
+
+      function canvasStateForBlock(block) {
+        return block.type === "canvas" ? remoteCanvases.get(block.id) : null;
+      }
+
+      async function normalizeCanvasMedia(state, input) {
+        const bytes = input.bytes instanceof Uint8Array
+          ? input.bytes
+          : new Uint8Array(await input.bytes.arrayBuffer());
+        const response = await canvasRequest("/api/canvas/media/normalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bytes: Array.from(bytes), declaredMime: input.mimeType }),
+        });
+        if (!response.ok) throw new Error("Canvas media normalization failed: " + (await response.text()));
+        const normalized = await response.json();
+        const asset = {
+          id: normalized.id,
+          ref: normalized.id,
+          fileId: normalized.id,
+          mimeType: normalized.mimeType,
+          width: normalized.width,
+          height: normalized.height,
+          bytes: new Uint8Array(normalized.bytes || []),
+        };
+        state.assets.set(asset.id, asset);
+        return {
+          ref: asset.id,
+          bytes: asset.bytes,
+          mimeType: asset.mimeType,
+          name: input.name,
+          width: asset.width,
+          height: asset.height,
+        };
+      }
+
+      async function resolveCanvasAsset(state, ref) {
+        const asset = state.assets.get(ref.ref || ref.fileId);
+        if (!asset) return null;
+        return {
+          ref: asset.id,
+          fileId: asset.id,
+          mimeType: asset.mimeType,
+          bytes: asset.bytes,
+          width: asset.width,
+          height: asset.height,
+        };
+      }
+
+      function preparedForState(state) {
+        if (!state.root || !state.island?.prepareDraft) throw new Error("Canvas island is not ready");
+        return state.island.prepareDraft(state.root);
+      }
+
+      function queueCanvasAutosave(state, envelope) {
+        state.pendingEnvelope = envelope;
+        if (state.saveTimer) clearTimeout(state.saveTimer);
+        state.saveTimer = setTimeout(() => {
+          state.saveTimer = null;
+          state.saveQueue = state.saveQueue.then(() => saveCanvasDraft(state)).catch((error) => {
+            state.error = error instanceof Error ? error.message : String(error);
+            setCanvasStatus("Canvas autosave failed: " + state.error, true);
+          });
+        }, 220);
+      }
+
+      async function saveCanvasDraft(state, preparedOverride = null) {
+        if (state.removed) return;
+        const prepared = preparedOverride || preparedForState(state);
+        state.envelope = prepared.envelope;
+        const expectedRevision = state.revision;
+        const response = await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updateBodyForState(state, prepared, expectedRevision)),
+        });
+        if (response.status === 409) {
+          state.stale = true;
+          throw new Error("Canvas autosave is stale; keep editing or reopen the latest draft");
+        }
+        if (!response.ok) throw new Error("Canvas autosave failed: " + (await response.text()));
+        const draft = await response.json();
+        state.revision = Number(draft.revision || expectedRevision + 1);
+        state.envelope = { ...state.envelope, revision: state.revision };
+        state.stale = false;
+        state.error = null;
+        setCanvasStatus("Canvas saved · revision " + state.revision);
+      }
+
+      async function createCanvasState() {
+        const response = await canvasRequest("/api/canvas/drafts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "Canvas" }),
+        });
+        if (!response.ok) throw new Error("Canvas draft creation failed: " + (await response.text()));
+        const draft = await response.json();
+        const state = {
+          id: draft.id,
+          revision: Number(draft.revision || 1),
+          title: draft.title || "Canvas",
+          envelope: uiEnvelopeFromDraft(draft),
+          assets: new Map(),
+          saveQueue: Promise.resolve(),
+          pendingEnvelope: null,
+          saveTimer: null,
+          removed: false,
+          stale: false,
+          error: null,
+          root: null,
+          island: null,
+          needsReconnect: false,
+        };
+        for (const asset of draft.assets || []) {
+          state.assets.set(asset.id, {
+            ...asset,
+            bytes: new Uint8Array(asset.bytes || []),
+            ref: asset.id,
+            fileId: asset.id,
+          });
+        }
+        remoteCanvases.set(state.id, state);
+        return state;
+      }
+
+      async function mountCanvasState(state, mountRoot) {
+        const island = await loadCanvasIsland();
+        state.root = mountRoot;
+        state.island = island;
+        island.mount(mountRoot, {
+          value: state.envelope,
+          // Draft creation defaults to light on the server, but authoring follows the shell's
+          // current theme. CanvasEditor uses this explicit prop for the live scene and envelope.
+          theme: currentCanvasTheme(),
+          name: state.title,
+          initiallyExpanded: false,
+          freezePolicy: "required",
+          mediaNormalizer: (input) => normalizeCanvasMedia(state, input),
+          assetResolver: (ref) => resolveCanvasAsset(state, ref),
+          onChange: (envelope) => {
+            state.envelope = envelope;
+            queueCanvasAutosave(state, envelope);
+          },
+          onMediaError: (error) => {
+            state.error = error.message;
+            setCanvasStatus("Canvas media error: " + error.message, true);
+          },
+        });
+      }
+
+      function syncPromptText(block) {
+        if (!block || block.type !== "text") return;
+        const textarea = document.querySelector('textarea[data-canvas-text-index="' + block.index + '"]');
+        if (textarea) block.text = textarea.value;
+      }
+
+      function syncPromptBlocksFromInputs() {
+        document.querySelectorAll("textarea[data-canvas-text-index]").forEach((textarea) => {
+          const index = Number(textarea.dataset.canvasTextIndex);
+          if (promptBlocks[index]?.type === "text") promptBlocks[index].text = textarea.value;
+        });
+        if (promptBlocks.length === 1 && promptBlocks[0].type === "text" && !promptEl.hidden) {
+          promptBlocks[0].text = promptEl.value;
+        }
+      }
+
+      function promptDocument() {
+        syncPromptBlocksFromInputs();
+        return promptBlocks
+          .filter((block) => block.type === "canvas" || (block.text || "").length > 0)
+          .map((block) => block.type === "canvas"
+            ? { type: "canvas", id: block.id, frozen_revision: block.frozen_revision || 0, pixel_policy: block.pixel_policy || "required" }
+            : { type: "text", text: block.text || "" });
+      }
+
+      function renderPromptBlocks() {
+        syncPromptBlocksFromInputs();
+        const hasCanvas = promptBlocks.some((block) => block.type === "canvas");
+        promptEl.hidden = hasCanvas;
+        canvasBlocksEl.replaceChildren();
+        if (!hasCanvas) return;
+        promptBlocks.forEach((block, index) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "canvas-prompt-block";
+          if (block.type === "text") {
+            const textarea = document.createElement("textarea");
+            textarea.value = block.text || "";
+            textarea.placeholder = "Continue the prompt…";
+            textarea.dataset.canvasTextIndex = String(index);
+            textarea.onfocus = () => { focusedPromptTextIndex = index; };
+            textarea.oninput = () => { block.text = textarea.value; };
+            wrapper.appendChild(textarea);
+          } else {
+            const card = document.createElement("div");
+            card.className = "canvas-prompt-card";
+            const heading = document.createElement("header");
+            heading.textContent = "Canvas";
+            card.appendChild(heading);
+            const warning = document.createElement("div");
+            warning.className = "msg sys";
+            warning.textContent = "Sensitive visual upload: images are sent to the paired CodeTwo server.";
+            card.appendChild(warning);
+            const mount = document.createElement("div");
+            mount.className = "canvas-mount";
+            card.appendChild(mount);
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "canvas-remove";
+            remove.textContent = "Remove Canvas";
+            remove.onclick = () => removeCanvasBlock(index);
+            card.appendChild(remove);
+            wrapper.appendChild(card);
+            const state = canvasStateForBlock(block);
+            if (state && !state.root) {
+              void mountCanvasState(state, mount).catch((error) => {
+                setCanvasStatus("Canvas failed to load: " + error.message, true);
+              });
+            } else if (state?.root && state.root !== mount) {
+              state.island?.unmount(state.root);
+              state.root = null;
+              void mountCanvasState(state, mount);
+            }
+          }
+          canvasBlocksEl.appendChild(wrapper);
+        });
+      }
+
+      async function addCanvasBlock() {
+        if (!canvasFeature.enabled) {
+          setCanvasStatus("Canvas: not production-enabled");
+          return false;
+        }
+        syncPromptBlocksFromInputs();
+        const activeIndex = promptBlocks[focusedPromptTextIndex]?.type === "text"
+          ? focusedPromptTextIndex
+          : promptBlocks.findIndex((block) => block.type === "text");
+        const textBlock = activeIndex >= 0 ? promptBlocks[activeIndex] : { type: "text", text: "" };
+        const activeTextarea = document.querySelector('textarea[data-canvas-text-index="' + activeIndex + '"]') || (!promptEl.hidden ? promptEl : null);
+        const caret = activeTextarea && typeof activeTextarea.selectionStart === "number" ? activeTextarea.selectionStart : (textBlock.text || "").length;
+        const before = (textBlock.text || "").slice(0, caret);
+        const after = (textBlock.text || "").slice(caret);
+        const state = await createCanvasState();
+        if (activeIndex < 0) promptBlocks = [{ type: "text", text: before }];
+        else promptBlocks[activeIndex] = { type: "text", text: before };
+        const insertAt = activeIndex < 0 ? 1 : activeIndex + 1;
+        promptBlocks.splice(insertAt, 0, { type: "canvas", id: state.id, pixel_policy: "required" }, { type: "text", text: after });
+        focusedPromptTextIndex = insertAt + 1;
+        renderPromptBlocks();
+        setCanvasStatus("Canvas draft " + state.id.slice(0, 8) + " ready");
+        return true;
+      }
+
+      let lastRemovedCanvas = null;
+      async function removeCanvasBlock(index) {
+        const block = promptBlocks[index];
+        if (!block || block.type !== "canvas") return;
+        const state = canvasStateForBlock(block);
+        if (!state) return;
+        syncPromptBlocksFromInputs();
+        let prepared = null;
+        try { prepared = preparedForState(state); } catch {}
+        const nonEmpty = Boolean(prepared?.manifest?.objects?.length);
+        if (state.root) state.island?.unmount(state.root);
+        state.root = null;
+        state.removed = true;
+        void canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/tombstone", { method: "POST", keepalive: true }).then(() => {
+          if (!nonEmpty) return canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/purge", { method: "POST", keepalive: true });
+          return null;
+        }).catch(() => undefined);
+        promptBlocks.splice(index, 1);
+        if (!promptBlocks.some((item) => item.type === "text")) promptBlocks.push({ type: "text", text: "" });
+        lastRemovedCanvas = nonEmpty ? { index, block, state } : null;
+        renderPromptBlocks();
+      }
+
+      async function undoCanvasRemoval() {
+        if (!lastRemovedCanvas) return false;
+        const { index, block, state } = lastRemovedCanvas;
+        lastRemovedCanvas = null;
+        state.removed = false;
+        await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/restore", { method: "POST" }).catch(() => undefined);
+        remoteCanvases.set(state.id, state);
+        promptBlocks.splice(Math.min(index, promptBlocks.length), 0, block);
+        renderPromptBlocks();
+        return true;
+      }
+
+      async function purgeAcceptedMutableHeads(sourceBlocks) {
+        for (const block of sourceBlocks || []) {
+          if (block.type !== "canvas") continue;
+          const state = remoteCanvases.get(block.id);
+          if (!state) continue;
+          state.removed = true;
+          state.island?.unmount(state.root);
+          state.root = null;
+          await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/tombstone", { method: "POST" }).catch(() => undefined);
+          await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/purge", { method: "POST" }).catch(() => undefined);
+          remoteCanvases.delete(state.id);
+        }
+      }
+
+      function showCanvasProviderChoices(accepted) {
+        if (!accepted?.doc?.some((block) => block.type === "canvas")) return;
+        canvasStatusEl.replaceChildren();
+        const text = document.createElement("span");
+        text.textContent = "Provider rejected Canvas pixels. Choose an explicit retry policy:";
+        canvasStatusEl.appendChild(text);
+        const structure = document.createElement("button");
+        structure.type = "button";
+        structure.textContent = "Resend structure only";
+        structure.onclick = () => {
+          const doc = accepted.doc.map((block) => block.type === "canvas" ? { ...block, pixel_policy: "structure_only" } : block);
+          if (submitPrompt(accepted.session, doc, false, null, accepted)) setCanvasStatus("Resent with structure-only policy");
+        };
+        const switchProvider = document.createElement("button");
+        switchProvider.type = "button";
+        switchProvider.textContent = "Switch provider / new session";
+        switchProvider.onclick = () => {
+          pendingProviderRecovery = accepted;
+          document.getElementById("provider").focus();
+          setCanvasStatus("Choose another provider, then press New; the frozen Canvas prompt will be submitted there.");
+        };
+        canvasStatusEl.appendChild(structure);
+        canvasStatusEl.appendChild(switchProvider);
+      }
+
+      function readPngDimension(bytes, offset) {
+        return bytes.length >= offset + 4
+          ? ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0
+          : 1;
+      }
+
+      async function canvasExportBody(item, detailIndex) {
+        const bytes = new Uint8Array(await item.blob.arrayBuffer());
+        // PNG IHDR is deterministic and avoids a second renderer/readback dependency in the
+        // Remote shell. The server decodes the bytes again before accepting an immutable ref.
+        const width = readPngDimension(bytes, 16);
+        const height = readPngDimension(bytes, 20);
+        return {
+          id: item.kind === "overview" ? "overview" : "detail-" + detailIndex,
+          kind: item.kind,
+          index: item.kind === "detail" ? detailIndex : null,
+          mimeType: "image/png",
+          width,
+          height,
+          bytes: Array.from(bytes),
+        };
+      }
+
+      async function freezeCanvasBlocks(doc) {
+        const result = [];
+        for (const block of doc) {
+          if (block.type !== "canvas") {
+            result.push(block);
+            continue;
+          }
+          const state = remoteCanvases.get(block.id);
+          if (!state || state.removed) throw new Error("Canvas draft is no longer available");
+          if (state.saveTimer) {
+            clearTimeout(state.saveTimer);
+            state.saveTimer = null;
+          }
+          state.saveQueue = state.saveQueue.then(() => saveCanvasDraft(state));
+          await state.saveQueue;
+          const prepared = await state.island.prepareFreeze(state.root, {
+            assets: draftAssets(state, state.envelope),
+            policy: block.pixel_policy || "required",
+          });
+          const expectedRevision = state.revision;
+          let detailIndex = 0;
+          const exports = [];
+          for (const item of prepared.exports) {
+            exports.push(await canvasExportBody(item, item.kind === "detail" ? detailIndex++ : 0));
+          }
+          const response = await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/freeze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: state.title,
+              theme: prepared.theme,
+              envelope: {
+                engine: prepared.envelope.engine,
+                engineVersion: prepared.envelope.engineVersion,
+                schemaVersion: prepared.envelope.schemaVersion,
+                revision: expectedRevision,
+                theme: prepared.theme,
+                assets: (prepared.envelope.assetRefs || []).map((ref) => ({ id: ref.ref || ref.fileId, mimeType: ref.mimeType, width: ref.width || 1, height: ref.height || 1 })),
+                scene: sceneForServer(prepared.envelope),
+              },
+              manifest: serverManifest(prepared.manifest),
+              assets: staticAssetBodies(state, prepared.envelope),
+              exports,
+              expectedRevision,
+            }),
+          });
+          if (!response.ok) throw new Error("Canvas freeze failed: " + (await response.text()));
+          const snapshot = await response.json();
+          result.push({ type: "canvas", id: state.id, frozen_revision: Number(snapshot.revision), pixel_policy: block.pixel_policy || "required" });
+        }
+        return result;
+      }
+
       function ownsCreationResult(ev) {
         return pendingRequestId !== null && ev.request_id === pendingRequestId;
       }
 
       function promptText(doc) {
         return (doc || [])
-          .filter((block) => block.type === "text")
-          .map((block) => block.text)
+          .map((block) => block.type === "text" ? block.text : "[Canvas]")
           .join("\n\n");
       }
 
       function restorePromptDocs(docs) {
         const restored = docs.map(promptText).filter(Boolean);
         if (restored.length === 0) return;
-        const prompt = document.getElementById("prompt");
-        if (prompt.value) restored.push(prompt.value);
-        prompt.value = restored.join("\n\n");
+        if (promptBlocks.some((block) => block.type === "canvas")) {
+          promptBlocks = [...promptBlocks, { type: "text", text: restored.join("\n\n") }];
+          renderPromptBlocks();
+          return;
+        }
+        if (promptEl.value) restored.push(promptEl.value);
+        promptEl.value = restored.join("\n\n");
+        promptBlocks = [{ type: "text", text: promptEl.value }];
+      }
+
+      function restorePromptSource(sourceBlocks) {
+        if (!Array.isArray(sourceBlocks) || sourceBlocks.length === 0) return false;
+        syncPromptBlocksFromInputs();
+        const current = promptBlocks.filter((block) => block.type === "canvas" || (block.text || "").length > 0);
+        const next = sourceBlocks.map((block) => ({ ...block }));
+        // Never overwrite text entered while the request was in flight. Keep the user's current
+        // blocks first, then append the rejected source as an explicit recovery item.
+        promptBlocks = current.length > 0 ? [...current, { type: "text", text: "" }, ...next] : next;
+        promptEl.value = promptBlocks.filter((block) => block.type === "text").map((block) => block.text || "").join("\n\n");
+        renderPromptBlocks();
+        return true;
       }
 
       function isSessionBusy(session) {
@@ -294,20 +1038,27 @@
       }
 
       function clearAcceptedPromptsForSession(session) {
-        for (const [requestId, acceptedSession] of acceptedPromptRequests) {
-          if (acceptedSession === session) acceptedPromptRequests.delete(requestId);
+        for (const [requestId, accepted] of acceptedPromptRequests) {
+          if (accepted.session === session) acceptedPromptRequests.delete(requestId);
         }
       }
 
-      function submitPrompt(session, doc, restoreOnFailure) {
+      function submitPrompt(session, doc, restoreOnFailure, sourceBlocks = null, recovery = null) {
         const requestId = crypto.randomUUID();
-        pendingPrompts.set(requestId, { session, doc });
+        pendingPrompts.set(requestId, { session, doc, sourceBlocks });
+        if (recovery) providerRecoveryByRequest.set(requestId, recovery);
         // The request is visibly in flight before the socket send. A synchronous send failure rolls
         // this optimistic state back below; TurnStarted is the authority that promotes it to live.
         renderSessions();
         if (send({ op: "prompt", session, doc, request_id: requestId })) return true;
         const wasPending = pendingPrompts.delete(requestId);
-        if (restoreOnFailure && wasPending) restorePromptDocs([doc]);
+        const recoveryForFailure = providerRecoveryByRequest.get(requestId);
+        providerRecoveryByRequest.delete(requestId);
+        if (recoveryForFailure) {
+          pendingProviderRecovery = recoveryForFailure;
+          showCanvasProviderChoices(recoveryForFailure);
+        }
+        if (restoreOnFailure && wasPending && !recoveryForFailure) restorePromptSource(sourceBlocks) || restorePromptDocs([doc]);
         renderSessions();
         return false;
       }
@@ -484,12 +1235,16 @@
             if (!ownsCreationResult(ev)) { renderSessions(); break; }
             {
               const pendingDoc = pending;
+              const pendingSource = pendingSourceBlocks;
+              const recovery = pendingRecovery;
               pending = null;
+              pendingSourceBlocks = null;
+              pendingRecovery = null;
               pendingRequestId = null;
               active = ev.session;
               // Registering the prompt before render/send makes the newly created session visibly
               // busy without pretending the core has accepted it yet.
-              if (pendingDoc) submitPrompt(ev.session, pendingDoc, true);
+              if (pendingDoc) submitPrompt(ev.session, pendingDoc, true, pendingSource, recovery);
               else renderSessions();
             }
             break;
@@ -520,7 +1275,10 @@
               const prompt = pendingPrompts.get(ev.request_id);
               if (prompt?.session === ev.session) {
                 pendingPrompts.delete(ev.request_id);
-                acceptedPromptRequests.set(ev.request_id, ev.session);
+                const recovery = providerRecoveryByRequest.get(ev.request_id);
+                providerRecoveryByRequest.delete(ev.request_id);
+                acceptedPromptRequests.set(ev.request_id, recovery ? { ...prompt, sourceBlocks: recovery.sourceBlocks } : prompt);
+                void purgeAcceptedMutableHeads(prompt.sourceBlocks);
                 ownedPrompt = true;
               }
             }
@@ -551,8 +1309,13 @@
             const acceptedSession = ev.request_id == null
               ? null
               : acceptedPromptRequests.get(ev.request_id);
+            const pendingRecoveryForError = ev.request_id == null
+              ? null
+              : providerRecoveryByRequest.get(ev.request_id);
+            if (pendingRecoveryForError) providerRecoveryByRequest.delete(ev.request_id);
             const ownsAcceptedPrompt = acceptedSession != null
-              && (ev.session == null || acceptedSession === ev.session);
+              && (ev.session == null || acceptedSession.session === ev.session);
+            const providerPixelFailure = (ownsAcceptedPrompt || pendingRecoveryForError) && /image|pixel|vision|multimodal/i.test(ev.message || "");
             const ownsCreation = ownsCreationResult(ev);
             const requestScoped = ev.request_id != null;
             const foreignRequestError = requestScoped
@@ -576,26 +1339,91 @@
             // exact user text and roll back only this client's optimistic request state.
             if (ownsPendingPrompt) {
               pendingPrompts.delete(ev.request_id);
-              restorePromptDocs([pendingPrompt.doc]);
+              if (!pendingRecoveryForError) {
+                restorePromptSource(pendingPrompt.sourceBlocks) || restorePromptDocs([pendingPrompt.doc]);
+              }
               renderSessions();
             }
             const terminalSession = ev.session
               || (ownsPendingPrompt ? pendingPrompt.session : null)
-              || (ownsAcceptedPrompt ? acceptedSession : null);
+              || (ownsAcceptedPrompt ? acceptedSession.session : null)
+              || (pendingRecoveryForError ? pendingRecoveryForError.session : null);
             if (ev.terminal && terminalSession) {
               runningSessions.delete(terminalSession);
-              clearAcceptedPromptsForSession(terminalSession);
+              if (!providerPixelFailure) clearAcceptedPromptsForSession(terminalSession);
               clearPermissionsForSession(terminalSession);
               renderSessions();
             }
             if (ev.terminal && ownsCreation) {
-              restorePromptDocs([pending]);
-              pending = null; pendingRequestId = null;
+              restorePromptSource(pendingSourceBlocks) || restorePromptDocs([pending]);
+              pending = null; pendingSourceBlocks = null; pendingRequestId = null;
               renderRunState();
+            }
+            if (providerPixelFailure) {
+              showCanvasProviderChoices(acceptedSession || pendingRecoveryForError);
             }
             break;
           }
         }
+      }
+
+      async function reconnectCanvasDrafts() {
+        if (!canvasReconnectPending || remoteCanvases.size === 0 || !canvasFeature.enabled) return;
+        canvasReconnectPending = false;
+        for (const state of Array.from(remoteCanvases.values())) {
+          if (!state.needsReconnect || state.removed) continue;
+          const oldId = state.id;
+          let prepared;
+          try {
+            prepared = preparedForState(state);
+          } catch (error) {
+            state.error = error instanceof Error ? error.message : String(error);
+            canvasReconnectPending = true;
+            continue;
+          }
+          let draft;
+          try {
+            const response = await canvasRequest("/api/canvas/drafts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: state.title || "Canvas" }),
+            });
+            if (!response.ok) throw new Error("Canvas reconnect draft creation failed: " + (await response.text()));
+            draft = await response.json();
+            if (!draft || typeof draft.id !== "string" || !draft.id.trim()) throw new Error("Canvas reconnect draft creation returned no id");
+          } catch (error) {
+            state.error = error instanceof Error ? error.message : String(error);
+            canvasReconnectPending = true;
+            continue;
+          }
+
+          // Rekey the in-memory state before touching the old mutable head. There is no await in
+          // this block, so a successful replacement cannot expose a half-rekeyed state to the
+          // rest of the shell. The retained scene/assets remain page-memory-only.
+          state.id = draft.id;
+          state.revision = Number(draft.revision || 1);
+          state.envelope = { ...prepared.envelope, revision: state.revision };
+          state.needsReconnect = false;
+          remoteCanvases.delete(oldId);
+          remoteCanvases.set(state.id, state);
+          promptBlocks.forEach((block) => {
+            if (block.type === "canvas" && block.id === oldId) block.id = state.id;
+          });
+          try {
+            state.island?.reset?.(state.root, state.envelope);
+          } catch (error) {
+            state.error = error instanceof Error ? error.message : String(error);
+          }
+
+          // These are deliberately best-effort. Cleanup failure must not roll the state back to
+          // the old id or erase the retained scene from page memory.
+          await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(oldId) + "/tombstone", { method: "POST" }).catch(() => undefined);
+          await canvasRequest("/api/canvas/drafts/" + encodeURIComponent(oldId) + "/purge", { method: "POST" }).catch(() => undefined);
+          state.saveQueue = state.saveQueue.then(() => saveCanvasDraft(state, prepared)).catch((error) => {
+            state.error = error instanceof Error ? error.message : String(error);
+          });
+        }
+        renderPromptBlocks();
       }
 
       function handleSocketClose() {
@@ -603,12 +1431,21 @@
         add("disconnected — retrying…", "sys");
         const drafts = [];
         if (pending) drafts.push(pending);
-        for (const prompt of pendingPrompts.values()) drafts.push(prompt.doc);
-        restorePromptDocs(drafts);
+        const sourceDrafts = [];
+        if (pendingSourceBlocks) sourceDrafts.push(pendingSourceBlocks);
+        for (const prompt of pendingPrompts.values()) {
+          drafts.push(prompt.doc);
+          if (prompt.sourceBlocks) sourceDrafts.push(prompt.sourceBlocks);
+        }
+        if (sourceDrafts.length > 0) restorePromptSource(sourceDrafts[0]);
+        else restorePromptDocs(drafts);
         pending = null;
+        pendingSourceBlocks = null;
+        pendingRecovery = null;
         pendingRequestId = null;
         pendingPrompts.clear();
         acceptedPromptRequests.clear();
+        providerRecoveryByRequest.clear();
         runningSessions.clear();
         permissionQueue = [];
         renderPermission();
@@ -617,6 +1454,11 @@
         transcriptNextBefore = null;
         renderOlderState();
         ws = null;
+        if (remoteCanvases.size > 0) {
+          canvasReconnectPending = true;
+          remoteCanvases.forEach((state) => { state.needsReconnect = true; });
+          setCanvasStatus("Canvas retained in page memory; reconnecting with a new draft…");
+        }
         renderSessions();
         scheduleRetry();
       }
@@ -644,40 +1486,143 @@
         }
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
         ws = new WebSocket(`${proto}//${location.host}/ws?ticket=${encodeURIComponent(ticket)}`);
-        ws.onopen = () => { pairingEl.classList.remove("show"); statusDot.classList.add("on"); add("connected", "sys"); };
+        ws.onopen = () => {
+          pairingEl.classList.remove("show");
+          statusDot.classList.add("on");
+          add("connected", "sys");
+          void refreshCanvasFeature().then(() => reconnectCanvasDrafts());
+        };
         ws.onclose = handleSocketClose;
         ws.onmessage = (message) => handleMessage(JSON.parse(message.data));
       }
       function scheduleRetry() {
         if (!retryTimer) retryTimer = setTimeout(connect, 1500);
       }
-      function run() {
+      async function run() {
         if (pendingRequestId !== null || (active && isSessionBusy(active))) return;
-        const prompt = document.getElementById("prompt");
-        const text = prompt.value.trim();
-        if (!text) return;
-        const doc = [{ type: "text", text }];
+        syncPromptBlocksFromInputs();
+        const sourceBlocks = promptBlocks.map((block) => ({ ...block }));
+        const draftDoc = promptDocument();
+        if (draftDoc.length === 0) return;
+        if (draftDoc.length === 1 && draftDoc[0].type === "text" && draftDoc[0].text.trim() === "/canvas") {
+          promptBlocks = [{ type: "text", text: "" }];
+          promptEl.value = "";
+          renderPromptBlocks();
+          await addCanvasBlock();
+          return;
+        }
+        let doc;
+        try {
+          doc = await freezeCanvasBlocks(draftDoc);
+        } catch (error) {
+          setCanvasStatus("Canvas send blocked: " + (error instanceof Error ? error.message : String(error)) + " Reduce or split the canvas, then retry.", true);
+          return;
+        }
         if (active) {
-          if (!submitPrompt(active, doc, false)) return;
-        } else if (!newSession(doc)) return;
-        add(text, "user");
-        prompt.value = "";
+          if (!submitPrompt(active, doc, false, sourceBlocks)) return;
+        } else if (!newSession(doc, sourceBlocks)) return;
+        add(promptText(doc), "user");
+        promptBlocks = [{ type: "text", text: "" }];
+        promptEl.value = "";
+        renderPromptBlocks();
       }
-      function newSession(doc) {
+      function newSession(doc, sourceBlocks = null, recovery = null) {
         if (pendingRequestId !== null) return false;
         const requestId = crypto.randomUUID();
         if (!send({ op: "new_session", provider: document.getElementById("provider").value, cwd: document.getElementById("cwd").value || ".", use_worktree: false, request_id: requestId })) return false;
         pending = doc || null;
+        pendingSourceBlocks = sourceBlocks;
+        pendingRecovery = recovery;
         pendingRequestId = requestId;
         renderRunState();
         return true;
       }
       document.getElementById("run").onclick = run;
-      document.getElementById("new").onclick = () => newSession(null);
+      canvasAddButton.onclick = () => {
+        const open = canvasMenuPanel.hidden;
+        canvasMenuPanel.hidden = !open;
+        canvasAddButton.setAttribute("aria-expanded", String(open));
+      };
+      canvasMenuCanvas.onclick = () => {
+        canvasMenuPanel.hidden = true;
+        canvasAddButton.setAttribute("aria-expanded", "false");
+        void addCanvasBlock().catch((error) => setCanvasStatus("Canvas failed: " + error.message, true));
+      };
+      document.getElementById("new").onclick = () => {
+        if (pendingProviderRecovery) {
+          const recovery = pendingProviderRecovery;
+          if (newSession(recovery.doc, null, recovery)) pendingProviderRecovery = null;
+        } else {
+          newSession(null);
+        }
+      };
       olderButton.onclick = () => {
         if (transcriptNextBefore != null) requestTranscript(transcriptNextBefore);
       };
-      document.getElementById("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run(); });
+      document.getElementById("prompt").addEventListener("focus", () => { focusedPromptTextIndex = 0; });
+      document.getElementById("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void run(); });
+      canvasBlocksEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          void run();
+        }
+      });
+      window.addEventListener("keydown", (event) => {
+        if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
+        if (event.target?.closest?.(".canvas-editor")) return;
+        if (lastRemovedCanvas) {
+          event.preventDefault();
+          void undoCanvasRemoval();
+        }
+      });
+      window.addEventListener("pagehide", () => {
+        // Refresh/close has no recovery path. Keep scene bytes out of storage and only issue a
+        // best-effort authenticated tombstone for known mutable heads.
+        for (const state of remoteCanvases.values()) {
+          void canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/tombstone", {
+            method: "POST",
+            keepalive: true,
+          }).then(() => canvasRequest("/api/canvas/drafts/" + encodeURIComponent(state.id) + "/purge", {
+            method: "POST",
+            keepalive: true,
+          })).catch(() => undefined);
+        }
+      });
+
+      // The shell stays vanilla in production. A test-only handle lets the jsdom contract suite
+      // exercise these exact closures without duplicating the Remote composer implementation.
+      if (window.__CODETWO_REMOTE_TEST__) {
+        window.__CodeTwoRemoteCanvasTest = {
+          parseCanvasHistoryMarker,
+          renderPromptWithHistory,
+          restorePromptSource,
+          promptDocument,
+          run,
+          submitPrompt,
+          handleMessage,
+          getPromptBlocks: () => promptBlocks,
+          setPromptBlocks: (blocks) => {
+            promptBlocks = blocks.map((block) => ({ ...block }));
+            if (!promptBlocks.some((block) => block.type === "canvas")) {
+              promptEl.value = promptBlocks.map((block) => block.type === "text" ? block.text || "" : "").join("\n\n");
+            }
+            renderPromptBlocks();
+          },
+          setCanvasFeature: (enabled) => { canvasFeature.enabled = enabled; canvasAddButton.hidden = false; canvasAddButton.disabled = !enabled; canvasMenuCanvas.disabled = !enabled; },
+          menuButton: canvasAddButton,
+          menuCanvasButton: canvasMenuCanvas,
+          status: canvasStatusEl,
+          pendingRecovery: () => pendingProviderRecovery,
+          providerRecoverySize: () => providerRecoveryByRequest.size,
+          canvasState: (id) => remoteCanvases.get(id) || null,
+          canvasStateIds: () => Array.from(remoteCanvases.keys()),
+          reconnectCanvasDrafts,
+          cancelRetry: () => {
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = null;
+          },
+        };
+      }
 
       maybePair().then(() => connect());
     </script>
