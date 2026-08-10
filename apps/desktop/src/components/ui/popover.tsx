@@ -19,16 +19,23 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  variant = "default",
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  variant?: "default" | "borderless"
+}) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         data-slot="popover-content"
+        data-variant={variant}
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "glass-raised pop-layer z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md p-4 text-popover-foreground shadow-raised ring-1 ring-foreground/10 outline-hidden",
+          "pop-layer z-50 w-72 origin-(--radix-popover-content-transform-origin) rounded-md p-4 text-popover-foreground shadow-raised outline-hidden",
+          variant === "borderless"
+            ? "bg-popover"
+            : "glass-raised ring-1 ring-foreground/10",
           className
         )}
         {...props}
