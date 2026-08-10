@@ -6,12 +6,13 @@
 //! engine only touches the store at turn boundaries and per streamed part.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex;
 
 #[cfg(test)]
 use std::sync::{Arc, Barrier, OnceLock};
 
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 use thiserror::Error;
 
 use crate::canvas::{
@@ -124,6 +125,7 @@ pub struct SessionSearchHit {
 
 pub struct Store {
     pub(crate) conn: Mutex<Connection>,
+    pub(crate) pre_work_store_v1_backup: Option<std::path::PathBuf>,
 }
 
 #[cfg(test)]
@@ -508,13 +510,22 @@ pub fn default_project_name(path: &str) -> String {
 
 impl Store {
     pub fn open(path: &str) -> Result<Self, StoreError> {
+        let preexisting = Path::new(path)
+            .metadata()
+            .map(|metadata| metadata.is_file() && metadata.len() > 0)
+            .unwrap_or(false);
         let conn = Connection::open(path)?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+        let backup = crate::work::store::prepare_backup(path, &conn, preexisting)?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
+        let mut conn = conn;
+        crate::work::store::install(&mut conn)?;
         let store = Self {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: backup,
         };
         // A delayed candidate may have become eligible while Code2 was closed.
         store.run_memory_maintenance()?;
@@ -524,12 +535,16 @@ impl Store {
     /// In-memory store, used by tests.
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory()?;
+        conn.execute_batch("PRAGMA foreign_keys=ON;")?;
         conn.execute_batch(SCHEMA)?;
         migrate(&conn)?;
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
+        let mut conn = conn;
+        crate::work::store::install(&mut conn)?;
         let store = Self {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
         store.run_memory_maintenance()?;
         Ok(store)
@@ -1450,8 +1465,9 @@ impl Store {
     }
 
     pub fn upsert_session(&self, s: &Session) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        tx.execute(
             "INSERT INTO sessions
                (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)
@@ -1495,6 +1511,8 @@ impl Store {
                 s.memory_write.as_db(),
             ],
         )?;
+        crate::work::store::ensure_session_binding_tx(&tx, &s.id)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -2218,6 +2236,30 @@ mod tests {
     use std::sync::{Arc, Barrier};
 
     #[test]
+    fn work_store_reopen_keeps_foreign_keys_enabled() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("foreign-keys.db");
+        let store = Store::open(path.to_str().unwrap()).unwrap();
+        let enabled: i64 = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(enabled, 1);
+        drop(store);
+
+        let reopened = Store::open(path.to_str().unwrap()).unwrap();
+        let enabled: i64 = reopened
+            .conn
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(enabled, 1);
+    }
+
+    #[test]
     fn migration_adds_pinned_with_an_unpinned_default() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute_batch(
@@ -2240,6 +2282,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
         let restored = store.get_session("legacy").unwrap().unwrap();
         assert!(!restored.pinned);
@@ -2356,6 +2399,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
         let restored = store.get_session("legacy-worktree").unwrap().unwrap();
         assert!(restored.project_path.is_none());
@@ -2485,6 +2529,7 @@ mod tests {
         conn.execute_batch(SCHEMA).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
         let mut a = Session::new(ProviderId::Grok, "/work/alpha");
         a.created_at = 100;
@@ -2520,6 +2565,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
 
         let paths: Vec<String> = store
@@ -3674,6 +3720,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            pre_work_store_v1_backup: None,
         };
         assert!(store
             .search_sessions("private_file_rule_marker", 10)

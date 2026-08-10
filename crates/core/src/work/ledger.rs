@@ -262,9 +262,59 @@ fn work_conflict(
 pub fn install_schema(conn: &mut Connection) -> Result<(), StoreError> {
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    schema::install(&tx)?;
+    install_schema_tx(&tx)?;
     tx.commit()?;
     Ok(())
+}
+
+pub(super) fn install_schema_tx(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    schema::install(tx)
+}
+
+/// Append one deterministic revision-1 migration head when a legacy projection has no ledger
+/// head yet. Existing heads are left untouched so rerunning Store installation cannot advance
+/// revisions or the global high-water mark.
+pub(super) fn ensure_backfill_head(
+    tx: &Transaction<'_>,
+    entity_kind: WorkEntityKind,
+    entity_id: &str,
+    created_at: i64,
+) -> Result<bool, StoreError> {
+    validate_text("entity id", entity_id, 256)?;
+    if entity_kind == WorkEntityKind::System {
+        return Err(StoreError::Domain(
+            "system is reserved for high-water metadata".to_owned(),
+        ));
+    }
+    let exists: Option<i64> = tx
+        .query_row(
+            "SELECT revision FROM work_entity_heads WHERE entity_kind=?1 AND entity_id=?2",
+            params![entity_kind.as_str(), entity_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if exists.is_some() {
+        return Ok(false);
+    }
+    let input = WorkMutationInput {
+        entity_kind,
+        entity_id: entity_id.to_owned(),
+        expected_revision: None,
+        deleted: false,
+        operation: "backfill".to_owned(),
+        audit: WorkAuditContext::new(
+            "migration",
+            "work_store_v1",
+            format!(
+                "work_store_v1:backfill:{}:{}",
+                entity_kind.as_str(),
+                blake3::hash(entity_id.as_bytes()).to_hex()
+            ),
+        ),
+    };
+    input.validate()?;
+    append_with_revision_tx(tx, &input, 1, created_at.max(0))?;
+    Ok(true)
 }
 
 pub fn with_transaction<T, F>(conn: &mut Connection, f: F) -> Result<T, StoreError>
@@ -534,21 +584,30 @@ impl WorkTransaction<'_> {
         input: &WorkMutationInput,
         revision: u64,
     ) -> Result<WorkMutation, StoreError> {
-        let revision_i64 = sqlite_revision(revision)?;
-        let now = now_millis();
-        self.transaction.execute(
-            "UPDATE work_revision_clock SET high_water=high_water+1 WHERE singleton=1",
-            [],
-        )?;
-        let mutation_id: i64 = self.transaction.query_row(
-            "SELECT high_water FROM work_revision_clock WHERE singleton=1",
-            [],
-            |row| row.get(0),
-        )?;
-        if mutation_id < 1 {
-            return Err(StoreError::Domain("invalid Work mutation id".to_owned()));
-        }
-        self.transaction.execute(
+        append_with_revision_tx(&self.transaction, input, revision, now_millis())
+    }
+}
+
+fn append_with_revision_tx(
+    tx: &Transaction<'_>,
+    input: &WorkMutationInput,
+    revision: u64,
+    now: i64,
+) -> Result<WorkMutation, StoreError> {
+    let revision_i64 = sqlite_revision(revision)?;
+    tx.execute(
+        "UPDATE work_revision_clock SET high_water=high_water+1 WHERE singleton=1",
+        [],
+    )?;
+    let mutation_id: i64 = tx.query_row(
+        "SELECT high_water FROM work_revision_clock WHERE singleton=1",
+        [],
+        |row| row.get(0),
+    )?;
+    if mutation_id < 1 {
+        return Err(StoreError::Domain("invalid Work mutation id".to_owned()));
+    }
+    tx.execute(
             "INSERT INTO work_entity_heads(entity_kind,entity_id,revision,deleted,mutation_id,updated_at)
              VALUES(?1,?2,?3,?4,?5,?6)
              ON CONFLICT(entity_kind,entity_id) DO UPDATE SET revision=excluded.revision,
@@ -562,7 +621,7 @@ impl WorkTransaction<'_> {
                 now,
             ],
         )?;
-        self.transaction.execute(
+    tx.execute(
             "INSERT INTO work_mutations
              (mutation_id,entity_kind,entity_id,revision,deleted,operation,actor,auth_subject,request_id,created_at)
              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
@@ -579,20 +638,19 @@ impl WorkTransaction<'_> {
                 now,
             ],
         )?;
-        Ok(WorkMutation {
-            mutation_id: u64::try_from(mutation_id)
-                .map_err(|_| StoreError::Domain("invalid Work mutation id".to_owned()))?,
-            entity_kind: input.entity_kind,
-            entity_id: input.entity_id.clone(),
-            revision,
-            deleted: input.deleted,
-            operation: input.operation.clone(),
-            actor: input.audit.actor.clone(),
-            auth_subject: input.audit.auth_subject.clone(),
-            request_id: input.audit.request_id.clone(),
-            created_at: now,
-        })
-    }
+    Ok(WorkMutation {
+        mutation_id: u64::try_from(mutation_id)
+            .map_err(|_| StoreError::Domain("invalid Work mutation id".to_owned()))?,
+        entity_kind: input.entity_kind,
+        entity_id: input.entity_id.clone(),
+        revision,
+        deleted: input.deleted,
+        operation: input.operation.clone(),
+        actor: input.audit.actor.clone(),
+        auth_subject: input.audit.auth_subject.clone(),
+        request_id: input.audit.request_id.clone(),
+        created_at: now,
+    })
 }
 
 pub fn high_water(conn: &Connection) -> Result<u64, StoreError> {
