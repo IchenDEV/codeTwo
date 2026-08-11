@@ -13,10 +13,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, BriefRevision, BriefSaveResult, Deliverable, EventEnvelope, Op, Request,
-    RequestEnvelope, ResetReason, Response, ResponseEnvelope, Run, RunStartReceipt, ServerFrame,
-    StreamCursor, StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage,
-    WorkRequest, WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
+    read_json, write_json, BriefRevision, BriefSaveResult, ChangeSummary, Deliverable,
+    EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response, ResponseEnvelope,
+    RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, StreamCursor, StreamEpoch,
+    SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse,
+    WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedReadHalf, UnixStream};
@@ -450,6 +451,58 @@ impl Client {
         }
     }
 
+    pub async fn inspect_run_changes(&self, run_id: String) -> Result<ChangeSummary, ClientError> {
+        match self.work(WorkRequest::InspectRunChanges { run_id }).await? {
+            WorkResponse::ChangeSummary { summary } => Ok(summary),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "change_summary",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn list_changes(
+        &self,
+        snapshot_id: String,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<RunChange>, ClientError> {
+        match self
+            .work(WorkRequest::ListChanges {
+                snapshot_id,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::Changes { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "changes",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn rollback_run(
+        &self,
+        run_id: String,
+        snapshot_id: String,
+    ) -> Result<RollbackReceipt, ClientError> {
+        match self
+            .work(WorkRequest::RollbackRun {
+                run_id,
+                snapshot_id,
+            })
+            .await?
+        {
+            WorkResponse::RollbackCompleted { receipt } => Ok(receipt),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "rollback_completed",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn register_deliverable(
         &self,
         task_id: String,
@@ -812,6 +865,9 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::BriefSaved { .. } => "brief_saved",
         WorkResponse::Runs { .. } => "runs",
         WorkResponse::RunStarted { .. } => "run_started",
+        WorkResponse::ChangeSummary { .. } => "change_summary",
+        WorkResponse::Changes { .. } => "changes",
+        WorkResponse::RollbackCompleted { .. } => "rollback_completed",
         WorkResponse::DeliverableRegistered { .. } => "deliverable_registered",
         WorkResponse::Deliverables { .. } => "deliverables",
         WorkResponse::Error { .. } => "error",

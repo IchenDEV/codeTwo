@@ -8,15 +8,16 @@ use std::sync::{Arc, Mutex as StdMutex};
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
-    Engine, Event, Op, Provider, RunSnapshot, SnapshotConfig, SnapshotPreparation,
-    SnapshotPreparationOptions, Store, StoreError, WorkArtifactError, WorkArtifactService,
-    WorkMutationGuard, WorkspaceSnapshot, WorkspaceSnapshotService,
+    Engine, Event, Op, Provider, RunSnapshot, SnapshotChangeKind, SnapshotComparison,
+    SnapshotConfig, SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError,
+    WorkArtifactError, WorkArtifactService, WorkMutationGuard, WorkspaceSnapshot,
+    WorkspaceSnapshotService,
 };
 use codetwo_protocol::{
-    read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
-    RequestEnvelope, ResetReason, Response, ResponseEnvelope, RunStartReceipt, ServerFrame,
-    StreamCursor, StreamEpoch, SubscribeResult, TransportEvent, WorkErrorKind, WorkRequest,
-    WorkResponse, MAX_REPLAY_EVENTS,
+    read_json, write_json, ChangeSummary, EnvelopeError, ErrorKind, EventEnvelope, OwnerState,
+    Request, RequestEnvelope, ResetReason, Response, ResponseEnvelope, RollbackReceipt,
+    RunStartReceipt, ServerFrame, StreamCursor, StreamEpoch, SubscribeResult, TransportEvent,
+    WorkErrorKind, WorkRequest, WorkResponse, MAX_REPLAY_EVENTS,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedWriteHalf, UnixListener, UnixStream};
@@ -717,6 +718,125 @@ async fn dispatch_work(
                 Vec::new(),
             )
         }
+        WorkRequest::InspectRunChanges { run_id } => {
+            let record = match state.store.work_snapshot_for_run(&run_id) {
+                Ok(Some(record)) => record,
+                Ok(None) => return (invalid_work_response(), Vec::new()),
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            let workspace_root = match state.store.work_workspace_root_for_task(&record.task_id) {
+                Ok(root) => root,
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            let workspace_root = fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
+            let mut snapshot = match WorkspaceSnapshot::load(&record.storage_path, &workspace_root)
+            {
+                Ok(snapshot) if snapshot.manifest == record.manifest => snapshot,
+                _ => return (invalid_work_response(), Vec::new()),
+            };
+            snapshot.not_covered = record.not_covered.clone();
+            let service = WorkspaceSnapshotService::new(
+                SnapshotConfig::new(&workspace_root, &record.storage_path)
+                    .provider_cwd(&workspace_root),
+            );
+            let comparison = match service.compare(&snapshot) {
+                Ok(comparison) => comparison,
+                Err(_) => return (invalid_work_response(), Vec::new()),
+            };
+            let guard = local_guard(request_id, None);
+            let saved =
+                match state
+                    .store
+                    .work_save_run_changes(&record.id, comparison.changes, &guard)
+                {
+                    Ok(saved) => saved,
+                    Err(error) => return (work_error(error), Vec::new()),
+                };
+            let saved_changes = saved
+                .iter()
+                .map(|item| item.entity.change.clone())
+                .collect::<Vec<_>>();
+            let summary = change_summary(record.id, &saved_changes, comparison.not_covered.len());
+            (
+                WorkResponse::ChangeSummary {
+                    summary: summary.clone(),
+                },
+                vec![TransportEvent::ChangeSetPrepared { summary }],
+            )
+        }
+        WorkRequest::ListChanges {
+            snapshot_id,
+            cursor,
+            limit,
+        } => match state
+            .store
+            .work_list_changes(&snapshot_id, cursor.as_deref(), limit)
+        {
+            Ok(page) => (WorkResponse::Changes { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
+        WorkRequest::RollbackRun {
+            run_id,
+            snapshot_id,
+        } => {
+            let record = match state.store.work_snapshot_for_run(&run_id) {
+                Ok(Some(record)) if record.id == snapshot_id => record,
+                Ok(_) => return (invalid_work_response(), Vec::new()),
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            let workspace_root = match state.store.work_workspace_root_for_task(&record.task_id) {
+                Ok(root) => root,
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            let workspace_root = fs::canonicalize(&workspace_root).unwrap_or(workspace_root);
+            let mut snapshot = match WorkspaceSnapshot::load(&record.storage_path, &workspace_root)
+            {
+                Ok(snapshot) if snapshot.manifest == record.manifest => snapshot,
+                _ => return (invalid_work_response(), Vec::new()),
+            };
+            snapshot.not_covered = record.not_covered;
+            let service = WorkspaceSnapshotService::new(
+                SnapshotConfig::new(&workspace_root, &record.storage_path)
+                    .provider_cwd(&workspace_root),
+            );
+            let mut changes = Vec::new();
+            let mut cursor = None;
+            loop {
+                let page = match state
+                    .store
+                    .work_list_changes(&record.id, cursor.as_deref(), 100)
+                {
+                    Ok(page) => page,
+                    Err(error) => return (work_error(error), Vec::new()),
+                };
+                changes.extend(page.items.into_iter().map(|item| item.entity.change));
+                cursor = page.next_cursor;
+                if cursor.is_none() {
+                    break;
+                }
+            }
+            let comparison = SnapshotComparison {
+                changes,
+                not_covered: snapshot.not_covered.clone(),
+            };
+            let report = match service.rollback(&snapshot, &comparison) {
+                Ok(report) => report,
+                Err(_) => return (invalid_work_response(), Vec::new()),
+            };
+            let receipt = RollbackReceipt {
+                snapshot_id,
+                restored: u64::try_from(report.restored.len()).unwrap_or(u64::MAX),
+                removed: u64::try_from(report.removed.len()).unwrap_or(u64::MAX),
+                not_covered: u64::try_from(report.not_covered.len()).unwrap_or(u64::MAX),
+                conflicts: u64::try_from(report.conflicts.len()).unwrap_or(u64::MAX),
+            };
+            (
+                WorkResponse::RollbackCompleted {
+                    receipt: receipt.clone(),
+                },
+                vec![TransportEvent::RollbackCompleted { receipt }],
+            )
+        }
         WorkRequest::RegisterDeliverable {
             task_id,
             run_id,
@@ -775,6 +895,28 @@ fn invalid_work_response() -> WorkResponse {
         message: "invalid Work request".to_owned(),
         current_revision: None,
     }
+}
+
+fn change_summary(
+    snapshot_id: String,
+    changes: &[codetwo_core::SnapshotChange],
+    not_covered: usize,
+) -> ChangeSummary {
+    let mut summary = ChangeSummary {
+        snapshot_id,
+        added: 0,
+        modified: 0,
+        deleted: 0,
+        not_covered: u64::try_from(not_covered).unwrap_or(u64::MAX),
+    };
+    for change in changes {
+        match change.kind {
+            SnapshotChangeKind::Added => summary.added += 1,
+            SnapshotChangeKind::Modified => summary.modified += 1,
+            SnapshotChangeKind::Deleted => summary.deleted += 1,
+        }
+    }
+    summary
 }
 
 fn work_error(error: StoreError) -> WorkResponse {

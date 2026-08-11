@@ -7,8 +7,8 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, Task, WorkPage,
-    WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, RunChange, Task,
+    WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -189,6 +189,12 @@ pub enum TransportEvent {
         not_covered: u64,
         revision: u64,
     },
+    ChangeSetPrepared {
+        summary: ChangeSummary,
+    },
+    RollbackCompleted {
+        receipt: RollbackReceipt,
+    },
     DeliverableChanged {
         deliverable: Deliverable,
         revision: u64,
@@ -274,6 +280,8 @@ impl EventEnvelope {
                     return Err(EnvelopeError::InvalidField("snapshot revision".to_owned()));
                 }
             }
+            TransportEvent::ChangeSetPrepared { summary } => summary.validate()?,
+            TransportEvent::RollbackCompleted { receipt } => receipt.validate()?,
             TransportEvent::DeliverableChanged {
                 deliverable,
                 revision,
@@ -333,6 +341,19 @@ pub enum WorkRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
         limit: usize,
+    },
+    InspectRunChanges {
+        run_id: String,
+    },
+    ListChanges {
+        snapshot_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
+    RollbackRun {
+        run_id: String,
+        snapshot_id: String,
     },
     StartRun {
         task_id: String,
@@ -434,6 +455,29 @@ impl WorkRequest {
             } => {
                 validate_bounded_text(task_id, 256, "task id")?;
                 validate_bounded_text(provider.as_str(), 256, "provider id")?;
+            }
+            Self::InspectRunChanges { run_id } => {
+                validate_bounded_text(run_id, 256, "run id")?;
+            }
+            Self::ListChanges {
+                snapshot_id,
+                cursor,
+                limit,
+            } => {
+                validate_bounded_text(snapshot_id, 256, "snapshot id")?;
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 8192, "Change page cursor")?;
+                }
+            }
+            Self::RollbackRun {
+                run_id,
+                snapshot_id,
+            } => {
+                validate_bounded_text(run_id, 256, "run id")?;
+                validate_bounded_text(snapshot_id, 256, "snapshot id")?;
             }
             Self::RegisterDeliverable {
                 task_id,
@@ -605,6 +649,36 @@ pub struct RunStartReceipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangeSummary {
+    pub snapshot_id: String,
+    pub added: u64,
+    pub modified: u64,
+    pub deleted: u64,
+    pub not_covered: u64,
+}
+
+impl ChangeSummary {
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        validate_bounded_text(&self.snapshot_id, 256, "snapshot id")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackReceipt {
+    pub snapshot_id: String,
+    pub restored: u64,
+    pub removed: u64,
+    pub not_covered: u64,
+    pub conflicts: u64,
+}
+
+impl RollbackReceipt {
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        validate_bounded_text(&self.snapshot_id, 256, "snapshot id")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum WorkResponse {
     Workspaces {
@@ -630,6 +704,15 @@ pub enum WorkResponse {
     },
     RunStarted {
         receipt: RunStartReceipt,
+    },
+    ChangeSummary {
+        summary: ChangeSummary,
+    },
+    Changes {
+        page: WorkPage<RunChange>,
+    },
+    RollbackCompleted {
+        receipt: RollbackReceipt,
     },
     DeliverableRegistered {
         item: WorkVersioned<Deliverable>,
@@ -751,6 +834,24 @@ impl WorkResponse {
                     ));
                 }
             }
+            Self::ChangeSummary { summary } => summary.validate()?,
+            Self::Changes { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 8192, "Change page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField("change revision".to_owned()));
+                    }
+                }
+            }
+            Self::RollbackCompleted { receipt } => receipt.validate()?,
             Self::DeliverableRegistered { item } => {
                 item.entity
                     .validate()

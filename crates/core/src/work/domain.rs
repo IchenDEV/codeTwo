@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::skill::DocBlock;
-use crate::work_snapshot::{NotCoveredPath, SnapshotManifest};
+use crate::work_snapshot::{NotCoveredPath, SnapshotChange, SnapshotManifest};
 use crate::{ProviderId, SessionActivity};
 
 pub const MAX_WORK_PAGE_SIZE: usize = 100;
@@ -266,6 +266,37 @@ pub struct RunSnapshot {
     pub manifest: SnapshotManifest,
     pub not_covered: Vec<NotCoveredPath>,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunChange {
+    pub id: String,
+    pub snapshot_id: String,
+    pub change: SnapshotChange,
+    pub created_at: i64,
+}
+
+impl RunChange {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_text("change id", &self.id, 256)?;
+        validate_text("change snapshot id", &self.snapshot_id, 256)?;
+        validate_text("change path", &self.change.path, 4096)?;
+        if self.created_at < 0
+            || self
+                .change
+                .before
+                .as_ref()
+                .is_some_and(|file| file.path != self.change.path)
+            || self
+                .change
+                .after
+                .as_ref()
+                .is_some_and(|file| file.path != self.change.path)
+        {
+            return Err("invalid Work change".to_owned());
+        }
+        Ok(())
+    }
 }
 
 impl RunSnapshot {

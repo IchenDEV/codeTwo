@@ -6,15 +6,16 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 
 use super::domain::{
-    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, RunSnapshot, Task,
-    TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
-    MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, RunChange,
+    RunSnapshot, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace,
+    WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
     ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
     WorkEntityKind, WorkMutationGuard,
 };
 use crate::store::{Store, StoreError};
+use crate::work_snapshot::SnapshotChange;
 
 pub(crate) const WORK_STORE_MARKER: &str = "work_store_v1";
 const BACKUP_SUFFIX: &str = ".pre-work-store-v1.bak";
@@ -1089,6 +1090,87 @@ impl Store {
         .map_err(StoreError::from)
     }
 
+    pub fn work_save_run_changes(
+        &self,
+        snapshot_id: &str,
+        changes: Vec<SnapshotChange>,
+        guard: &WorkMutationGuard,
+    ) -> Result<Vec<WorkVersioned<RunChange>>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.save_run_changes(snapshot_id, changes, guard)
+        })
+    }
+
+    pub fn work_list_changes(
+        &self,
+        snapshot_id: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<RunChange>, StoreError> {
+        if limit == 0 || limit > MAX_WORK_PAGE_SIZE {
+            return Err(StoreError::Domain(format!(
+                "Work page limit must be between 1 and {MAX_WORK_PAGE_SIZE}"
+            )));
+        }
+        let after = cursor
+            .map(|cursor| {
+                if cursor.len() > 8192 || cursor.chars().any(char::is_control) {
+                    return Err(StoreError::Domain("invalid Change page cursor".to_owned()));
+                }
+                serde_json::from_str::<ChangeCursor>(cursor)
+                    .map_err(|_| StoreError::Domain("invalid Change page cursor".to_owned()))
+            })
+            .transpose()?;
+        let conn = self.conn.lock().unwrap();
+        let active: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM run_snapshots s JOIN work_entity_heads h
+               ON h.entity_kind='snapshot' AND h.entity_id=s.id AND h.deleted=0 WHERE s.id=?1)",
+            [snapshot_id],
+            |row| row.get(0),
+        )?;
+        if !active {
+            return Err(StoreError::Domain("snapshot unavailable".to_owned()));
+        }
+        let mut statement = conn.prepare(
+            "SELECT c.id,c.snapshot_id,c.change_json,c.created_at,h.revision
+             FROM run_changes c JOIN work_entity_heads h
+               ON h.entity_kind='change' AND h.entity_id=c.id AND h.deleted=0
+             WHERE c.snapshot_id=?1
+               AND (?2 IS NULL OR c.path>?2 OR (c.path=?2 AND c.id>?3))
+             ORDER BY c.path,c.id LIMIT ?4",
+        )?;
+        let rows = statement.query_map(
+            params![
+                snapshot_id,
+                after.as_ref().map(|cursor| cursor.path.as_str()),
+                after.as_ref().map(|cursor| cursor.id.as_str()),
+                (limit + 1) as i64,
+            ],
+            run_change_from_row,
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = if items.len() > limit {
+            items.truncate(limit);
+            items
+                .last()
+                .map(|item| {
+                    serde_json::to_string(&ChangeCursor {
+                        path: item.entity.change.path.clone(),
+                        id: item.entity.id.clone(),
+                    })
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {
         let conn = self.conn.lock().unwrap();
         if !work_store_marker_applied(&conn)? {
@@ -1242,6 +1324,29 @@ fn run_snapshot_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunSnapsho
         manifest,
         not_covered,
         created_at: row.get(6)?,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ChangeCursor {
+    path: String,
+    id: String,
+}
+
+fn run_change_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<RunChange>> {
+    let change_json: String = row.get(2)?;
+    let change = serde_json::from_str(&change_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    Ok(WorkVersioned {
+        entity: RunChange {
+            id: row.get(0)?,
+            snapshot_id: row.get(1)?,
+            change,
+            created_at: row.get(3)?,
+        },
+        revision: u64::try_from(row.get::<_, i64>(4)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
     })
 }
 

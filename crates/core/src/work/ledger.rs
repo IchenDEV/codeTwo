@@ -2,10 +2,12 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::domain::{
-    BriefRevision, Deliverable, DeliverableSaveResult, RunSnapshot, Task, WorkVersioned, Workspace,
+    BriefRevision, Deliverable, DeliverableSaveResult, RunChange, RunSnapshot, Task, WorkVersioned,
+    Workspace,
 };
 use super::schema;
 use crate::store::StoreError;
+use crate::work_snapshot::SnapshotChange;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
@@ -689,6 +691,79 @@ impl WorkTransaction<'_> {
         })
     }
 
+    pub fn save_run_changes(
+        &mut self,
+        snapshot_id: &str,
+        mut changes: Vec<SnapshotChange>,
+        guard: &WorkMutationGuard,
+    ) -> Result<Vec<WorkVersioned<RunChange>>, StoreError> {
+        if guard.expected_revision.is_some() {
+            return Err(StoreError::Domain(
+                "new Changes do not accept an expected revision".to_owned(),
+            ));
+        }
+        let active: bool = self.transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM run_snapshots s JOIN work_entity_heads h
+               ON h.entity_kind='snapshot' AND h.entity_id=s.id AND h.deleted=0 WHERE s.id=?1)",
+            [snapshot_id],
+            |row| row.get(0),
+        )?;
+        if !active {
+            return Err(StoreError::Domain(
+                "snapshot unavailable for change review".to_owned(),
+            ));
+        }
+        let existing_count: i64 = self.transaction.query_row(
+            "SELECT COUNT(*) FROM run_changes WHERE snapshot_id=?1",
+            [snapshot_id],
+            |row| row.get(0),
+        )?;
+        if existing_count > 0 {
+            let mut statement = self.transaction.prepare(
+                "SELECT c.id,c.snapshot_id,c.change_json,c.created_at,h.revision
+                 FROM run_changes c JOIN work_entity_heads h
+                   ON h.entity_kind='change' AND h.entity_id=c.id AND h.deleted=0
+                 WHERE c.snapshot_id=?1 ORDER BY c.path,c.id",
+            )?;
+            let rows = statement.query_map([snapshot_id], run_change_versioned_row)?;
+            return Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?);
+        }
+
+        changes.sort_by(|left, right| left.path.cmp(&right.path));
+        if changes.windows(2).any(|pair| pair[0].path == pair[1].path) {
+            return Err(StoreError::Domain(
+                "duplicate paths in Work change set".to_owned(),
+            ));
+        }
+        let now = now_millis();
+        let mut saved = Vec::with_capacity(changes.len());
+        for change in changes {
+            let entity = RunChange {
+                id: uuid::Uuid::new_v4().to_string(),
+                snapshot_id: snapshot_id.to_owned(),
+                change,
+                created_at: now,
+            };
+            entity.validate().map_err(StoreError::Domain)?;
+            let input = guard.input(WorkEntityKind::Change, entity.id.clone(), false, "create");
+            let revision = self.next_revision(&input)?;
+            self.transaction.execute(
+                "INSERT INTO run_changes(id,snapshot_id,path,change_json,created_at)
+                 VALUES(?1,?2,?3,?4,?5)",
+                params![
+                    entity.id,
+                    entity.snapshot_id,
+                    entity.change.path,
+                    serde_json::to_string(&entity.change)?,
+                    entity.created_at,
+                ],
+            )?;
+            self.append_with_revision(&input, revision)?;
+            saved.push(WorkVersioned { entity, revision });
+        }
+        Ok(saved)
+    }
+
     pub fn high_water(&self) -> Result<u64, StoreError> {
         high_water(&self.transaction)
     }
@@ -796,6 +871,23 @@ fn deliverable_versioned_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Deliv
         },
         u64::try_from(row.get::<_, i64>(11)?).map_err(|_| rusqlite::Error::InvalidQuery)?,
     ))
+}
+
+fn run_change_versioned_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<RunChange>> {
+    let change_json: String = row.get(2)?;
+    let change = serde_json::from_str(&change_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    Ok(WorkVersioned {
+        entity: RunChange {
+            id: row.get(0)?,
+            snapshot_id: row.get(1)?,
+            change,
+            created_at: row.get(3)?,
+        },
+        revision: u64::try_from(row.get::<_, i64>(4)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
+    })
 }
 
 fn append_with_revision_tx(

@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS run_snapshots (
 CREATE INDEX IF NOT EXISTS run_snapshots_task_created
   ON run_snapshots(task_id, created_at, id);
 
+CREATE TABLE IF NOT EXISTS run_changes (
+  id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 256),
+  snapshot_id TEXT NOT NULL REFERENCES run_snapshots(id),
+  path TEXT NOT NULL CHECK(length(path) BETWEEN 1 AND 4096),
+  change_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL CHECK(created_at >= 0),
+  UNIQUE(snapshot_id, path)
+);
+CREATE INDEX IF NOT EXISTS run_changes_snapshot_path
+  ON run_changes(snapshot_id, path, id);
+
 CREATE TABLE IF NOT EXISTS work_revision_clock (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   high_water INTEGER NOT NULL CHECK(high_water >= 0)

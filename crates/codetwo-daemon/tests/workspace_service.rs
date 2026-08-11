@@ -560,6 +560,54 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
             }
         }
         assert!(workspace_root.join("provider-started.txt").is_file());
+        if expected_count == 0 {
+            let summary = client
+                .inspect_run_changes(saved_snapshot.run_id.clone())
+                .await
+                .unwrap();
+            assert_eq!(summary.snapshot_id, saved_snapshot.id);
+            assert_eq!(
+                (summary.added, summary.modified, summary.deleted),
+                (1, 0, 0)
+            );
+            let changes = client
+                .list_changes(summary.snapshot_id.clone(), None, 50)
+                .await
+                .unwrap();
+            assert_eq!(changes.items.len(), 1);
+            assert_eq!(changes.items[0].entity.change.path, "provider-started.txt");
+            std::fs::write(&provider_marker, b"later user edit\n").unwrap();
+            let stale = client
+                .rollback_run(saved_snapshot.run_id.clone(), saved_snapshot.id.clone())
+                .await
+                .unwrap();
+            assert_eq!((stale.restored, stale.removed, stale.conflicts), (0, 0, 1));
+            assert_eq!(
+                std::fs::read(&provider_marker).unwrap(),
+                b"later user edit\n"
+            );
+        } else {
+            let summary = client
+                .inspect_run_changes(saved_snapshot.run_id.clone())
+                .await
+                .unwrap();
+            assert_eq!(
+                (summary.added, summary.modified, summary.deleted),
+                (0, 1, 0)
+            );
+            let rollback = client
+                .rollback_run(saved_snapshot.run_id.clone(), saved_snapshot.id.clone())
+                .await
+                .unwrap();
+            assert_eq!(
+                (rollback.restored, rollback.removed, rollback.conflicts),
+                (1, 0, 0)
+            );
+            assert_eq!(
+                std::fs::read(&provider_marker).unwrap(),
+                b"later user edit\n"
+            );
+        }
     }
 
     let page = client
