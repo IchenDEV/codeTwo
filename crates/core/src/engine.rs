@@ -200,6 +200,81 @@ fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
     Some(model.current.clone())
 }
 
+struct ReconciledModelSelection {
+    current: String,
+    options: Vec<ConfigOptionInfo>,
+    warning: Option<String>,
+    switch_error: Option<String>,
+}
+
+/// Reconcile the model configured by an adapter with a selection made before the ACP session
+/// existed. Config-option adapters need a different RPC from older flat-model adapters. A stale
+/// persisted choice is discarded when the adapter's authoritative menu no longer contains it.
+async fn reconcile_model_selection(
+    client: &AcpClient,
+    acp_session_id: &str,
+    mut current: String,
+    mut options: Vec<ConfigOptionInfo>,
+    pending: Option<String>,
+) -> ReconciledModelSelection {
+    if let Some(model) = current_model_from_options(&options) {
+        current = model;
+    }
+    let model_option = options
+        .iter()
+        .find(|option| option.category.as_deref() == Some("model") || option.id == "model");
+    let pending_is_available = pending.as_ref().is_some_and(|want| {
+        model_option.is_none_or(|option| option.choices.iter().any(|choice| &choice.id == want))
+    });
+    let model_config_id = model_option.map(|option| option.id.clone());
+    let mut switch_error = None;
+
+    if let Some(want) = pending
+        .clone()
+        .filter(|_| pending_is_available)
+        .filter(|want| want != &current)
+    {
+        if let Some(config_id) = model_config_id.as_deref() {
+            match client
+                .set_config_option(acp_session_id, config_id, &want)
+                .await
+            {
+                Ok(reported_options) => {
+                    let replacement = config_option_infos(&reported_options);
+                    if !replacement.is_empty() {
+                        options = replacement;
+                    } else if let Some(model) = options.iter_mut().find(|option| {
+                        option.category.as_deref() == Some("model") || option.id == "model"
+                    }) {
+                        model.current = want.clone();
+                    }
+                    current = current_model_from_options(&options).unwrap_or_else(|| want.clone());
+                }
+                Err(error) => switch_error = Some(format!("{want} wasn't accepted: {error}")),
+            }
+        } else {
+            match client.set_model(acp_session_id, &want).await {
+                Ok(()) => {
+                    current = want;
+                }
+                Err(error) => switch_error = Some(format!("{want} wasn't accepted: {error}")),
+            }
+        }
+    }
+
+    let warning = pending
+        .as_ref()
+        .filter(|_| !pending_is_available && !current.is_empty())
+        .map(|stale| format!("{stale} is no longer available; using {current}"));
+
+    ReconciledModelSelection {
+        current,
+        options,
+        warning,
+        switch_error,
+    }
+}
+
 /// Lower one resolved immutable Canvas payload to ACP blocks.  The summary is always textual;
 /// ordered overview/detail PNG exports are attached only when the explicit policy permits them.
 /// A known-unsupported provider fails before any summary-only degradation can occur.
@@ -1421,6 +1496,7 @@ impl Engine {
                 worktree_base_sha,
                 request_id,
                 initial_policy,
+                initial_model,
                 task_id,
             } => {
                 let Some(prov) = self
@@ -1454,6 +1530,7 @@ impl Engine {
                     }
                 };
                 let mut sess = Session::new(provider, cwd.clone());
+                sess.model = initial_model.filter(|model| !model.trim().is_empty());
                 let initial_policy = initial_policy.unwrap_or_default();
                 sess.permission_mode = initial_policy.mode;
                 sess.sandbox_policy = initial_policy.sandbox;
@@ -1537,6 +1614,7 @@ impl Engine {
                 let project_path = sess.project_path.clone();
                 let worktree_path = sess.worktree_path.clone();
                 let worktree_baseline = sess.worktree_baseline.clone();
+                let draft_model = sess.model.clone().unwrap_or_default();
                 self.state
                     .activity
                     .register(&session_id, sess.activity.clone());
@@ -1577,12 +1655,12 @@ impl Engine {
                     });
                 }
                 if !models.is_empty() {
-                    // No `current`: nothing has been chosen yet, and claiming a default the CLI
-                    // never told us about would be a guess at its config.
+                    // Empty means the provider will choose. A non-empty draft choice is explicit
+                    // user input and will be reconciled with the adapter before the first prompt.
                     self.emit(Event::Models {
                         session: session_id,
                         available: models,
-                        current: String::new(),
+                        current: draft_model,
                     });
                 }
             }
@@ -1965,11 +2043,13 @@ impl Engine {
                         replaying.store(false, Ordering::SeqCst);
                         match loaded {
                             Ok(resp) => {
-                                let (models, current, options) = {
+                                let (models, current, options, pending) = {
                                     let mut map = self.state.sessions.lock().unwrap();
                                     let mut models = Vec::new();
                                     let mut current = String::new();
+                                    let mut pending = None;
                                     if let Some(r) = map.get_mut(&session) {
+                                        pending = r.session.model.clone();
                                         r.acp_session_id = Some(resume_id.clone());
                                         r.session.acp_session_id = Some(resume_id.clone());
                                         r.resume_acp_session_id = None;
@@ -1994,8 +2074,40 @@ impl Engine {
                                         .as_deref()
                                         .map(config_option_infos)
                                         .unwrap_or_default();
-                                    (models, current, options)
+                                    (models, current, options, pending)
                                 };
+                                let reconciled = reconcile_model_selection(
+                                    &client, &resume_id, current, options, pending,
+                                )
+                                .await;
+                                if let Some(message) = reconciled.switch_error {
+                                    self.emit(Event::Error {
+                                        session: Some(session.clone()),
+                                        message,
+                                        terminal: false,
+                                        request_id: request_id.clone(),
+                                    });
+                                }
+                                if let Some(message) = reconciled.warning {
+                                    self.emit(Event::Error {
+                                        session: Some(session.clone()),
+                                        message,
+                                        terminal: false,
+                                        request_id: request_id.clone(),
+                                    });
+                                }
+                                let current = reconciled.current;
+                                let options = reconciled.options;
+                                {
+                                    let mut map = self.state.sessions.lock().unwrap();
+                                    if let Some(r) = map.get_mut(&session) {
+                                        r.session.model =
+                                            (!current.is_empty()).then(|| current.clone());
+                                        if let Some(store) = &self.state.store {
+                                            let _ = store.upsert_session(&r.session);
+                                        }
+                                    }
+                                }
                                 if !models.is_empty() {
                                     self.emit(Event::Models {
                                         session: session.clone(),
@@ -2058,26 +2170,27 @@ impl Engine {
                                         .collect()
                                 })
                                 .unwrap_or_default();
-                            let mut current = resp
+                            let current = resp
                                 .models
                                 .as_ref()
                                 .map(|m| m.current_model_id.clone())
                                 .unwrap_or_default();
 
                             // The newer config-options surface: model selector + thought level.
+                            let pending = {
+                                let map = self.state.sessions.lock().unwrap();
+                                map.get(&session)
+                                    .and_then(|runtime| runtime.session.model.clone())
+                            };
                             let options = resp
                                 .config_options
                                 .as_deref()
                                 .map(config_option_infos)
                                 .unwrap_or_default();
-                            let option_model = current_model_from_options(&options);
 
-                            // A model chosen before this point had no ACP session to be sent to,
-                            // so the choice is still only ours. Apply it below.
-                            let (models, pending) = {
+                            // Record the ACP session before applying a pending selection.
+                            let models = {
                                 let mut map = self.state.sessions.lock().unwrap();
-                                let pending =
-                                    map.get(&session).and_then(|r| r.session.model.clone());
                                 let models = if let Some(r) = map.get_mut(&session) {
                                     r.acp_session_id = Some(id.clone());
                                     r.session.acp_session_id = Some(id.clone());
@@ -2086,52 +2199,46 @@ impl Engine {
                                         r.models = reported;
                                         r.models_reported = true;
                                     }
-                                    if let Some(m) = &option_model {
-                                        r.session.model = Some(m.clone());
-                                    }
                                     r.models.clone()
                                 } else {
                                     Vec::new()
                                 };
-                                if let Some(store) = &self.state.store {
-                                    if let Some(r) = map.get(&session) {
-                                        let _ = store.upsert_session(&r.session);
-                                    }
-                                }
-                                (models, pending)
+                                models
                             };
 
-                            // Unless the agent reported a model selector of its own, in which case
-                            // what it says is live wins and the pre-session pick was only ever a
-                            // guess at a list we didn't have.
-                            let pending = pending.filter(|_| option_model.is_none());
-                            if let Some(want) = pending.filter(|m| *m != current) {
-                                match client.set_model(&id, &want).await {
-                                    Ok(()) => {
-                                        current = want.clone();
-                                        let mut map = self.state.sessions.lock().unwrap();
-                                        if let Some(r) = map.get_mut(&session) {
-                                            r.session.model = Some(want);
-                                            if let Some(store) = &self.state.store {
-                                                let _ = store.upsert_session(&r.session);
-                                            }
-                                        }
-                                    }
-                                    // Not fatal — the turn runs on whatever the CLI is configured
-                                    // for. Say so rather than leave the chip claiming otherwise.
-                                    Err(e) => {
-                                        let mut map = self.state.sessions.lock().unwrap();
-                                        if let Some(r) = map.get_mut(&session) {
-                                            r.session.model =
-                                                (!current.is_empty()).then(|| current.clone());
-                                        }
-                                        drop(map);
-                                        self.emit(Event::Error {
-                                            session: Some(session.clone()),
-                                            message: format!("{want} wasn't accepted: {e}"),
-                                            terminal: false,
-                                            request_id: request_id.clone(),
-                                        });
+                            // A pre-prompt choice must be sent after `session/new`. Adapters with a
+                            // model config option require `session/set_config_option`; dropping the
+                            // choice here used to make the chip and the actual first-turn model
+                            // disagree. A stale saved choice yields to the adapter's live default.
+                            let reconciled =
+                                reconcile_model_selection(&client, &id, current, options, pending)
+                                    .await;
+                            if let Some(message) = reconciled.switch_error {
+                                self.emit(Event::Error {
+                                    session: Some(session.clone()),
+                                    message,
+                                    terminal: false,
+                                    request_id: request_id.clone(),
+                                });
+                            }
+                            if let Some(message) = reconciled.warning {
+                                self.emit(Event::Error {
+                                    session: Some(session.clone()),
+                                    message,
+                                    terminal: false,
+                                    request_id: request_id.clone(),
+                                });
+                            }
+                            let current = reconciled.current;
+                            let options = reconciled.options;
+
+                            {
+                                let mut map = self.state.sessions.lock().unwrap();
+                                if let Some(r) = map.get_mut(&session) {
+                                    r.session.model =
+                                        (!current.is_empty()).then(|| current.clone());
+                                    if let Some(store) = &self.state.store {
+                                        let _ = store.upsert_session(&r.session);
                                     }
                                 }
                             }
@@ -3487,6 +3594,7 @@ for line in sys.stdin:
                 worktree_base_sha: None,
                 request_id: Some("create-with-identity".into()),
                 initial_policy: None,
+                initial_model: None,
                 task_id: None,
             })
             .await

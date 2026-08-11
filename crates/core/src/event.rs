@@ -39,6 +39,10 @@ pub enum Op {
         /// first prompt.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         initial_policy: Option<ExecutionPolicy>,
+        /// Model chosen in the draft before the durable session exists. The first ACP session/new
+        /// reconciles this against the adapter's authoritative choices before sending the prompt.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        initial_model: Option<String>,
         /// Bind this new provider session as the next immutable Run of an existing Work Task.
         /// Omitted by Code clients, which retain one Task per legacy Session.
         #[serde(default, skip_serializing_if = "Option::is_none")]

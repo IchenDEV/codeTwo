@@ -116,6 +116,7 @@ async fn create_session(
             worktree_base_sha: None,
             request_id: Some("create-activity-test".into()),
             initial_policy: None,
+            initial_model: None,
             task_id: None,
         })
         .await
@@ -446,6 +447,7 @@ async fn initial_execution_policy_governs_the_first_turn_and_is_persisted() {
                 mode: PermissionMode::Ask,
                 sandbox: SandboxPolicy::ReadOnly,
             }),
+            initial_model: None,
             task_id: None,
         })
         .await

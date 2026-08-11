@@ -95,6 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             worktree_base_sha: None,
             request_id: None,
             initial_policy: None,
+            initial_model: None,
             task_id: None,
         })
         .await?;

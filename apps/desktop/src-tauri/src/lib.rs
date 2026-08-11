@@ -29,6 +29,10 @@ use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibra
 use codetwo_core::source_control::{self, SourceControlInfo};
 use codetwo_core::store::Project;
 use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+use codetwo_core::work::{
+    BriefRevision, BriefSaveResult, Deliverable, Run, RunChange, Task, TaskExperience,
+    WorkMutationGuard, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
+};
 use codetwo_core::workspace::DirEntry;
 use codetwo_core::workspace_search::{
     self, WorkspaceSearchCancellation, WorkspaceSearchOptions, WorkspaceSearchResult,
@@ -303,6 +307,188 @@ fn list_sessions(state: State<'_, AppState>) -> Result<Vec<Session>, String> {
     state
         .engine
         .list_sessions()
+        .map_err(|error| error.to_string())
+}
+
+fn desktop_work_guard(expected_revision: Option<u64>, request_id: String) -> WorkMutationGuard {
+    WorkMutationGuard::new(expected_revision, "desktop", "local_user", request_id)
+}
+
+#[tauri::command]
+fn work_list_workspaces(state: State<'_, AppState>) -> Result<WorkPage<Workspace>, String> {
+    state
+        .store
+        .work_list_workspaces(None, 100)
+        .map_err(|error| error.to_string())
+}
+
+/// Ensure a project opened after the Work schema migration also has a first-class Workspace.
+#[tauri::command]
+fn work_ensure_workspace(
+    state: State<'_, AppState>,
+    path: String,
+    name: String,
+    request_id: String,
+) -> Result<WorkVersioned<Workspace>, String> {
+    let root = std::path::Path::new(&path)
+        .canonicalize()
+        .map_err(|error| format!("can't open Work workspace “{path}”: {error}"))?;
+    if !root.is_dir() {
+        return Err(format!("“{}” is not a directory", root.display()));
+    }
+    let root = root.to_string_lossy().into_owned();
+    if let Some(existing) = state
+        .store
+        .work_list_workspaces(None, 100)
+        .map_err(|error| error.to_string())?
+        .items
+        .into_iter()
+        .find(|workspace| workspace.entity.root_path.as_deref() == Some(root.as_str()))
+    {
+        return Ok(existing);
+    }
+
+    let fallback_name = std::path::Path::new(&root)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Workspace");
+    let name = if name.trim().is_empty() {
+        fallback_name.to_owned()
+    } else {
+        name.trim().to_owned()
+    };
+    let workspace = Workspace::new(name, Some(root), WorkspaceKind::External);
+    state
+        .store
+        .work_save_workspace(&workspace, &desktop_work_guard(None, request_id))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_list_tasks(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<WorkPage<Task>, String> {
+    state
+        .store
+        .work_list_tasks(Some(&workspace_id), false, None, 100)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_create_task(
+    state: State<'_, AppState>,
+    workspace_id: String,
+    title: String,
+    request_id: String,
+) -> Result<WorkVersioned<Task>, String> {
+    let task = Task::named(workspace_id, title.trim(), TaskExperience::Work);
+    state
+        .store
+        .work_save_task(&task, &desktop_work_guard(None, request_id))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_rename_task(
+    state: State<'_, AppState>,
+    task_id: String,
+    title: String,
+    expected_revision: u64,
+    request_id: String,
+) -> Result<WorkVersioned<Task>, String> {
+    let mut task = state
+        .store
+        .work_get_task(&task_id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("unknown Work Task {task_id}"))?
+        .entity;
+    task.title = title.trim().to_owned();
+    task.updated_at = now_millis();
+    state
+        .store
+        .work_save_task(
+            &task,
+            &desktop_work_guard(Some(expected_revision), request_id),
+        )
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_get_brief(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<Option<WorkVersioned<BriefRevision>>, String> {
+    state
+        .store
+        .work_current_brief(&task_id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_save_brief(
+    state: State<'_, AppState>,
+    task_id: String,
+    text: String,
+    expected_revision: Option<u64>,
+    request_id: String,
+) -> Result<BriefSaveResult, String> {
+    let brief = BriefRevision::new(task_id, 1, vec![DocBlock::Text { text }], "desktop");
+    state
+        .store
+        .work_save_brief(brief, &desktop_work_guard(expected_revision, request_id))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_list_runs(state: State<'_, AppState>, task_id: String) -> Result<WorkPage<Run>, String> {
+    state
+        .store
+        .work_list_runs(&task_id, None, 100)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_list_deliverables(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<WorkPage<Deliverable>, String> {
+    state
+        .store
+        .work_list_deliverables(&task_id, None, 100)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn work_list_changes(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<WorkPage<RunChange>, String> {
+    let runs = state
+        .store
+        .work_list_runs(&task_id, None, 100)
+        .map_err(|error| error.to_string())?;
+    let Some(run) = runs.items.last() else {
+        return Ok(WorkPage {
+            items: Vec::new(),
+            next_cursor: None,
+            high_water: runs.high_water,
+        });
+    };
+    let Some(snapshot) = state
+        .store
+        .work_snapshot_for_run(&run.entity.id)
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(WorkPage {
+            items: Vec::new(),
+            next_cursor: None,
+            high_water: runs.high_water,
+        });
+    };
+    state
+        .store
+        .work_list_changes(&snapshot.id, None, 100)
         .map_err(|error| error.to_string())
 }
 
@@ -1993,6 +2179,8 @@ async fn new_session(
     worktree_base_sha: Option<String>,
     request_id: Option<String>,
     initial_policy: Option<ExecutionPolicy>,
+    initial_model: Option<String>,
+    task_id: Option<String>,
 ) -> Result<(), String> {
     state
         .engine
@@ -2004,7 +2192,8 @@ async fn new_session(
             worktree_base_sha,
             request_id,
             initial_policy,
-            task_id: None,
+            initial_model,
+            task_id,
         })
         .await
         .map_err(|e| e.to_string())
@@ -2282,6 +2471,16 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_providers,
             list_sessions,
+            work_list_workspaces,
+            work_ensure_workspace,
+            work_list_tasks,
+            work_create_task,
+            work_rename_task,
+            work_get_brief,
+            work_save_brief,
+            work_list_runs,
+            work_list_deliverables,
+            work_list_changes,
             list_worktree_baselines,
             list_skills,
             save_skill,

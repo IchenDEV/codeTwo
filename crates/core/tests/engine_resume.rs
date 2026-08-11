@@ -88,6 +88,40 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","id":mid,"result":{"stopReason":"end_turn"}})
 "#;
 
+/// A resumed Codex session whose live adapter catalog no longer contains the stored GPT-5.1
+/// selection. CodeTwo must keep the adapter's current model instead of sending the stale value.
+const CODEX_MODEL_AGENT: &str = r#"
+import json, sys
+current_model = "gpt-5.6-sol"
+def send(m): print(json.dumps(m), flush=True)
+def options(): return [{
+    "id":"model","name":"Model","type":"select","category":"model",
+    "currentValue":current_model,
+    "options":[
+        {"value":"gpt-5.6-sol","name":"GPT-5.6 Sol"},
+        {"value":"gpt-5.5","name":"GPT-5.5"},
+        {"value":"gpt-5.4","name":"gpt-5.4"}
+    ]
+}]
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    msg = json.loads(line)
+    method, mid = msg.get("method"), msg.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":True}}})
+    elif method == "session/load":
+        send({"jsonrpc":"2.0","id":mid,"result":{"configOptions":options()}})
+    elif method == "session/set_config_option":
+        current_model = msg["params"]["value"]
+        send({"jsonrpc":"2.0","id":mid,"result":{"configOptions":options()}})
+    elif method == "session/prompt":
+        if current_model == "gpt-5.6-sol":
+            send({"jsonrpc":"2.0","id":mid,"result":{"stopReason":"end_turn"}})
+        else:
+            send({"jsonrpc":"2.0","id":mid,"error":{"code":-32000,"message":"unsupported "+current_model}})
+"#;
+
 /// Build an engine over `script`, with a stored session that carries `sess-old` as its resume
 /// cursor — i.e. exactly what a restart leaves behind.
 fn engine_with_stored_session(
@@ -218,5 +252,54 @@ async fn an_agent_without_load_session_goes_straight_to_session_new() {
     assert!(
         !events.iter().any(|e| matches!(e, Event::Error { .. })),
         "no errors expected: {events:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_revived_codex_session_discards_a_stale_saved_model() {
+    let provider = Provider {
+        id: ProviderId::Codex,
+        display_name: "Mock Codex".into(),
+        launch: LaunchSpec::new("python3", ["-c", CODEX_MODEL_AGENT]),
+        needs_node: false,
+    };
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let mut session = Session::new(
+        ProviderId::Codex,
+        std::env::temp_dir().to_string_lossy().to_string(),
+    );
+    session.acp_session_id = Some("sess-old".into());
+    session.model = Some("gpt-5.1-codex medium".into());
+    let id = session.id.clone();
+    store.upsert_session(&session).unwrap();
+    let (engine, mut rx) =
+        Engine::with_store(vec![provider], SkillLibrary::new(vec![]), store.clone());
+
+    let events = run_turn(&engine, &mut rx, &id).await;
+    let model_option = events.iter().find_map(|event| match event {
+        Event::ConfigOptions { options, .. } => options
+            .iter()
+            .find(|option| option.category.as_deref() == Some("model")),
+        _ => None,
+    });
+    let model_option = model_option.expect("a filtered model config option");
+    assert_eq!(model_option.current, "gpt-5.6-sol");
+    assert_eq!(
+        model_option
+            .choices
+            .iter()
+            .map(|choice| choice.id.as_str())
+            .collect::<Vec<_>>(),
+        ["gpt-5.6-sol", "gpt-5.5", "gpt-5.4"]
+    );
+    assert_eq!(
+        store.get_session(&id).unwrap().unwrap().model.as_deref(),
+        Some("gpt-5.6-sol")
+    );
+    assert!(
+        events.iter().any(
+            |event| matches!(event, Event::Error { message, terminal: false, .. } if message.contains("no longer available"))
+        ),
+        "the stale saved selection should be explained: {events:?}"
     );
 }

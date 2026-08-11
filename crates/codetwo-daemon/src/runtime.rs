@@ -1459,6 +1459,7 @@ async fn dispatch_work(
                     worktree_base_sha: None,
                     request_id: Some(request_id.clone()),
                     initial_policy: None,
+                    initial_model: None,
                     task_id: Some(task_id),
                 })
                 .await;

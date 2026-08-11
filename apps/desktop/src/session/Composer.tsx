@@ -61,6 +61,8 @@ interface ComposerProps {
   hero?: boolean;
   /** Full-page authoring: the document takes the whole column and the transcript steps aside. */
   docMode: boolean;
+  /** Work keeps the same editor and controls, but presents them as the reference chat composer. */
+  workMode?: boolean;
   onDocMode: (v: boolean) => void;
   /** Height of the document area in compact mode, in px — dragged by the grip, persisted. */
   height: number;
@@ -526,8 +528,8 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
  * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
  * built-in one for that provider rather than the agent's own — same shape either way. Only a
  * provider we have no list for (a custom one) falls through to the note explaining that its CLI
- * config decides. Everything is hidden until a session exists, because before that there's nothing
- * to ask.
+ * config decides. Provider metadata keeps the picker available on a blank draft; after the session
+ * starts, adapter-reported options replace that pre-session fallback.
  */
 function ModelPicker({
   models,
@@ -552,7 +554,10 @@ function ModelPicker({
   const [modelOpen, setModelOpen] = useState(false);
   const [effortOpen, setEffortOpen] = useState(false);
   const families = useMemo(() => groupModels(models), [models]);
-  if (!hasSession) return null;
+  // Provider metadata supplies an honest pre-session list. A selected draft model is stored on
+  // NewSession and reconciled against the adapter immediately after ACP session/new, so the first
+  // Work Run is configurable instead of forcing an invisible provider default.
+  if (!modelPickerAvailable(hasSession, models)) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
@@ -688,6 +693,10 @@ function ModelPicker({
   );
 }
 
+export function modelPickerAvailable(hasSession: boolean, models: readonly ModelChoice[]): boolean {
+  return hasSession || models.length > 0;
+}
+
 /**
  * The prompt composer.
  *
@@ -703,6 +712,7 @@ export function Composer({
   checkout,
   hero,
   docMode,
+  workMode = false,
   onDocMode,
   height,
   onHeight,
@@ -768,8 +778,7 @@ export function Composer({
     [applied, onHeight, boundsRef],
   );
 
-  const controls = (
-    <>
+  const addControl = (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
@@ -810,6 +819,56 @@ export function Composer({
           </p>
         </DropdownMenuContent>
       </DropdownMenu>
+  );
+
+  const runControl = running ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="destructive"
+          size={workMode ? "sm" : "icon"}
+          className={cn(
+            "shrink-0 transition-transform active:scale-95",
+            workMode ? "h-(--ds-control-field) rounded-(--ds-radius-control) px-3" : "size-8 rounded-full",
+          )}
+          onClick={onStop}
+          aria-label={t("composer.stop")}
+        >
+          {workMode ? <><span>Stop</span><Square className="size-3 fill-current" /></> : <Square className="size-3.5 fill-current" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{t("composer.stop")}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+            focuses the document and says what's missing. */}
+        <Button
+          size={workMode ? "sm" : "icon"}
+          variant={docEmpty ? "secondary" : "default"}
+          className={cn(
+            "shrink-0 transition-transform active:scale-95",
+            workMode ? "h-(--ds-control-field) gap-2 rounded-(--ds-radius-control) px-3" : "size-8 rounded-full",
+          )}
+          onClick={onRun}
+          disabled={loading}
+          aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
+        >
+          {workMode && <span>{loading ? "Loading" : "Send"}</span>}
+          {loading && !workMode ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
+        {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
+      </TooltipContent>
+    </Tooltip>
+  );
+
+  const controls = (
+    <>
+      {!workMode && addControl}
 
       {/* Provider, model, effort, then access — cause before effect: the provider decides which
           models exist, the model decides which efforts exist, and access frames the run. Each
@@ -850,20 +909,22 @@ export function Composer({
 
       {/* Document mode is the app's own feature — it deserves a control you can see, not just a
           chord and a grip gesture. */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0 text-muted-foreground"
-            aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
-            onClick={() => onDocMode(!docMode)}
-          >
-            {docMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
-      </Tooltip>
+      {!workMode && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
+              onClick={() => onDocMode(!docMode)}
+            >
+              {docMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
+        </Tooltip>
+      )}
 
       <VoiceButton onText={onVoiceText} />
 
@@ -875,43 +936,7 @@ export function Composer({
         </span>
       )}
 
-      {running ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="destructive"
-              size="icon"
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-              onClick={onStop}
-              aria-label={t("composer.stop")}
-            >
-              <Square className="size-3.5 fill-current" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{t("composer.stop")}</TooltipContent>
-        </Tooltip>
-      ) : (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-                focuses the document and says what's missing. */}
-            <Button
-              size="icon"
-              variant={docEmpty ? "secondary" : "default"}
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-              onClick={onRun}
-              disabled={loading}
-              aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
-            >
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
-            {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
-          </TooltipContent>
-        </Tooltip>
-      )}
+      {!workMode && runControl}
     </>
   );
 
@@ -927,7 +952,7 @@ export function Composer({
         "flex flex-col",
         // min-w-0: in document mode the composer sits in a row beside the transcript panel and
         // must be able to shrink, or the panel gets pushed off the module's edge.
-        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-4 pb-3.5 pt-1",
+        docMode ? "min-h-0 min-w-0 flex-1" : cn("shrink-0 px-4", workMode ? "pb-5 pt-2" : "pb-3.5 pt-1"),
       )}
     >
       <div
@@ -938,7 +963,7 @@ export function Composer({
           "@container/composer flex flex-col",
           docMode
             ? "min-h-0 flex-1"
-            : cn("mx-auto w-full", hero ? "max-w-[680px]" : "max-w-[860px]"),
+            : cn("mx-auto w-full", workMode ? "work-measure" : hero ? "max-w-[680px]" : "max-w-[860px]"),
         )}
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
@@ -946,13 +971,16 @@ export function Composer({
         <div
           className={cn(
             "composer-card flex flex-col",
+            workMode && "work-chat-composer",
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "relative min-h-0 flex-1"
-              : // A plain white card on a plain page, T3-style: border + a soft shadow, and the
-                // ring only wakes up when the caret is inside.
-                "rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] transition-[box-shadow,border-color] duration-200 focus-within:border-ring/40 focus-within:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_28px_rgb(0_0_0/0.07)]",
+              : workMode
+                ? "border bg-card"
+                : // A plain white card on a plain page, T3-style: border + a soft shadow, and the
+                  // ring only wakes up when the caret is inside.
+                  "rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] transition-[box-shadow,border-color] duration-200 focus-within:border-ring/40 focus-within:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_28px_rgb(0_0_0/0.07)]",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -964,12 +992,29 @@ export function Composer({
             title={t("composer.grip")}
           />
 
+          {workMode && (
+            <div className="work-composer-context flex h-(--ds-control-field) items-center gap-2 px-3.5 text-hint text-muted-foreground">
+              {addControl}
+              <span>Add context</span>
+            </div>
+          )}
+
           <div
-            className={cn("min-h-0 overflow-y-auto", docMode ? "bn-doc-mode flex-1" : "py-1")}
+            className={cn(
+              "min-h-0 overflow-y-auto",
+              docMode ? "bn-doc-mode flex-1" : workMode ? "work-composer-editor py-0" : "py-1",
+            )}
             style={docMode ? undefined : { maxHeight: applied }}
           >
             {children}
           </div>
+
+          {workMode && (
+            <div className="work-composer-primary flex items-center justify-end gap-2 px-3.5 pb-2">
+              {runHint && <kbd className="rounded border bg-muted/30 px-1.5 py-0.5 text-cap text-muted-foreground">{runHint}</kbd>}
+              {runControl}
+            </div>
+          )}
 
           {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside
@@ -990,7 +1035,7 @@ export function Composer({
                     // control — worst case the card floats a little over whatever sits beside it,
                     // which its own z-plane makes safe.
                     "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-raised"
-                  : "px-2 pb-1.5 pt-1",
+                  : cn("px-2 pb-1.5 pt-1", workMode && "work-composer-controls work-divider-top mx-3 px-0 pb-1.5 pt-1.5"),
               )}
             >
               {controls}

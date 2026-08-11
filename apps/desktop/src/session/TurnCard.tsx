@@ -5,9 +5,13 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Check,
   CircleAlert,
+  Copy,
   Loader2,
   ListTodo,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -105,14 +109,19 @@ function Detail({
  */
 export const TurnCard = memo(function TurnCard({
   turn,
+  presentation = "code",
+  showActions = true,
   canvasSnapshotLoader = canvasGetSnapshot,
 }: {
   turn: Turn;
+  presentation?: "code" | "work";
+  showActions?: boolean;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
 }) {
   const t = useT();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const running = isRunning(turn);
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
@@ -148,6 +157,110 @@ export const TurnCard = memo(function TurnCard({
   const visiblePrompt = promptIsLong && !promptExpanded
     ? collapsedPrompt(history.visiblePrompt)
     : history.visiblePrompt;
+
+  if (presentation === "work") {
+    const time = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+    const completedItems = [
+      ...turn.plan,
+      ...turn.tools.map((tool) => tool.title),
+    ].filter((item, index, items) => items.indexOf(item) === index);
+    return (
+      <article aria-busy={running} className="work-turn py-4">
+        <div className="work-message-grid">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-ui font-semibold">You</span>
+              <time className="text-fine text-muted-foreground">{time.format(turn.startedAt)}</time>
+            </div>
+            <p className="mt-1 whitespace-pre-wrap break-words text-ui leading-[1.55] text-foreground/90">
+              {visiblePrompt}
+            </p>
+            {promptIsLong && (
+              <button
+                type="button"
+                aria-expanded={promptExpanded}
+                onClick={() => setPromptExpanded((value) => !value)}
+                className="mt-1 text-fine font-medium text-muted-foreground hover:text-foreground"
+              >
+                {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="work-message-grid mt-8">
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="text-ui font-semibold">CodeTwo</span>
+              <time className="text-fine text-muted-foreground">
+                {time.format(turn.endedAt ?? turn.startedAt)}
+              </time>
+            </div>
+            {turn.text && (
+              <p className="mt-1 whitespace-pre-wrap break-words text-ui leading-[1.6] text-foreground/90">
+                {turn.text}
+              </p>
+            )}
+            {running && !turn.text && (
+              <p className="mt-1 flex items-center gap-2 text-ui text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-primary" />
+                {t("turn.working")}
+              </p>
+            )}
+            {turn.error && (
+              <p className="mt-2 flex items-start gap-1.5 rounded-(--ds-radius-control) bg-destructive/10 px-3 py-2 text-ui text-destructive">
+                <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+                {turn.error}
+              </p>
+            )}
+            {completedItems.length > 0 && (
+              <ul className="mt-3 space-y-1.5">
+                {completedItems.map((item) => (
+                  <li key={item} className="flex items-start gap-2 text-hint text-foreground/85">
+                    <span className="work-check-icon mt-px" aria-hidden>
+                      <Check className="size-2.5" strokeWidth={3} />
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {!running && turn.text && showActions && (
+              <div className="mt-3 flex items-center gap-1 text-muted-foreground">
+                <button
+                  type="button"
+                  aria-label="Helpful"
+                  aria-pressed={feedback === "up"}
+                  onClick={() => setFeedback((value) => value === "up" ? null : "up")}
+                  className={cn("work-message-action", feedback === "up" && "text-primary")}
+                >
+                  <ThumbsUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Not helpful"
+                  aria-pressed={feedback === "down"}
+                  onClick={() => setFeedback((value) => value === "down" ? null : "down")}
+                  className={cn("work-message-action", feedback === "down" && "text-primary")}
+                >
+                  <ThumbsDown className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Copy response"
+                  onClick={() => void navigator.clipboard?.writeText(turn.text)}
+                  className="work-message-action"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+                {dur && <span className="ml-1 font-mono text-cap">{dur}</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the

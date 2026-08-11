@@ -814,6 +814,7 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
             worktree_base_sha: None,
             request_id: Some("unsafe-work-bypass".to_owned()),
             initial_policy: None,
+            initial_model: None,
             task_id: Some(task.entity.id.clone()),
         })
         .await

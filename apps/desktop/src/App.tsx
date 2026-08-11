@@ -153,6 +153,12 @@ import {
 import { TranscriptPane } from "./session/TranscriptPane";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import {
+  WorkInspector,
+  WorkTaskRail,
+  useWorkExperience,
+} from "./work/WorkExperience";
+import type { AppExperience } from "./work/ExperienceSwitcher";
+import {
   applyEvent,
   canvasAcceptedRequestKey,
   canvasIdsToPurgeAfterTurnStart,
@@ -331,6 +337,16 @@ function IconAction({
 }
 
 export default function App() {
+  const [experience, setExperience] = useState<AppExperience>(() => {
+    if (typeof window === "undefined") return "code";
+    try {
+      const requested = new URLSearchParams(window.location.search).get("experience");
+      if (requested === "work") return "work";
+      return window.localStorage.getItem("codetwo.experience") === "work" ? "work" : "code";
+    } catch {
+      return "code";
+    }
+  });
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
@@ -395,6 +411,7 @@ export default function App() {
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
+  const [workInspectorOpen, setWorkInspectorOpen] = useState(() => window.innerWidth > 1120);
   const [docEmpty, setDocEmpty] = useState(true);
   const [canvasFeature, setCanvasFeature] = useState<CanvasFeatureState>({
     feature: "CODETWO_CANVAS_INPUT_V1",
@@ -513,6 +530,11 @@ export default function App() {
   // and the choice persists.
   const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
   const docMode = docModeRaw !== 0;
+  // Work always keeps the conversation in the centre column. It shares the exact same editor
+  // instance with Code, but does not inherit Code's full-page document presentation: letting a
+  // persisted Code preference leak across the experience switch was the source of the large
+  // layout jump and the empty document-looking Work screen.
+  const effectiveDocMode = experience === "code" && docMode;
   const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
   const mainRef = useRef<HTMLElement | null>(null);
   const toast = useToast();
@@ -529,6 +551,9 @@ export default function App() {
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  const previousExperienceRef = useRef<AppExperience>(experience);
+  const lastCodeSessionRef = useRef<string | null>(null);
+  const workSelectionRef = useRef<string | null>(null);
   const currentModelRef = useRef<string | null>(null);
   currentModelRef.current = currentModel;
   // Model changes invalidate the old provider context immediately. Keep the pending id until the
@@ -881,7 +906,7 @@ export default function App() {
       setActiveSessionReceipt(null);
       setActiveSession(null);
       setTurns([]);
-      setModels([]);
+      setModels(providers.find((item) => item.id === provider)?.models ?? []);
       setCurrentModel(null);
       setDefaultModel(null);
       setConfigOptions([]);
@@ -892,7 +917,7 @@ export default function App() {
       setMemoryWrite("inherit");
       void openProject(path).then(refreshProjects);
     },
-    [invalidatePendingCreation, projects, refreshProjects],
+    [invalidatePendingCreation, projects, provider, providers, refreshProjects],
   );
 
   const addProjectFolder = useCallback(async () => {
@@ -906,6 +931,15 @@ export default function App() {
       toast(t("toast.projectFailed", { error: String(e) }), "error");
     }
   }, [refreshProjects, selectProject, toast]);
+
+  // Work contributes durable Task/Brief/Run context around the same session core used by Code.
+  // Keeping this state beside the shared Composer is the architectural boundary: switching modes
+  // changes the navigation and inspector, never the transcript/editor implementation.
+  const work = useWorkExperience({
+    projects,
+    activeProject,
+    onSelectProject: selectProject,
+  });
 
   const activeTitle = useMemo(
     () =>
@@ -970,9 +1004,18 @@ export default function App() {
         // meant a machine without it failed on the first session with a raw spawn error.
         if (!providerPinned.current) {
           const cur = list.find((p) => p.id === provider);
-          if (!cur?.available) {
-            const firstAvailable = list.find((p) => p.available);
-            if (firstAvailable) setProvider(firstAvailable.id);
+          const selected = cur?.available ? cur : list.find((p) => p.available) ?? cur;
+          if (selected) {
+            setProvider(selected.id);
+            // A draft is model-configurable before its first Run. Built-in provider metadata is
+            // the honest pre-session menu; the agent replaces it with authoritative ACP options
+            // after session/new.
+            if (!activeSessionRef.current) {
+              setModels(selected.models);
+              setCurrentModel((current) =>
+                selected.models.some((model) => model.id === current) ? current : null,
+              );
+            }
           }
         }
       })
@@ -997,6 +1040,7 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          if (experience === "work") void work.refreshActiveTask();
           memoryReceiptsRef.current = [];
           // The creation event carries the cwd that was persisted before publication. File, Git,
           // terminal and hook surfaces switch with the active id even if a best-effort list/preview
@@ -1273,6 +1317,7 @@ export default function App() {
             invalidatePendingCreation();
           }
           refreshSessions();
+          if (experience === "work") void work.refreshActiveTask();
         }
         if (!shouldRenderSessionEvent(ev, activeSessionRef.current, awaitingCreationRequest)) return;
         setTurns((prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined));
@@ -1291,9 +1336,11 @@ export default function App() {
     refreshSessions,
     restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
+    experience,
     toast,
     t,
     updateRunningSession,
+    work.refreshActiveTask,
   ]);
 
   // Rendered QA has no Tauri event bridge in the Vite shell. This query-controlled fixture is
@@ -1328,6 +1375,16 @@ export default function App() {
     if (sessionLoading) {
       toast(t("toast.sessionLoading"));
       return;
+    }
+    if (experience === "work") {
+      if (!work.activeTaskId) {
+        toast("Create a Work task before starting a run.", "error");
+        work.setNewTaskOpen(true);
+        return;
+      }
+      // The saved Brief is injected into every Work prompt by core. Save the visible revision
+      // before sending so the inspector and the provider always describe the same contract.
+      if (work.dirty && !await work.saveTask()) return;
     }
     // The banner is the primary gate; this backstop catches the keyboard path (⌘⏎ and friends).
     if (activeArchived) {
@@ -1420,6 +1477,8 @@ export default function App() {
           creationRequestId!,
           worktreeBaseSha,
           { mode, sandbox },
+          currentModel,
+          experience === "work" ? work.activeTaskId : null,
         );
       }
     } catch (e) {
@@ -1483,6 +1542,12 @@ export default function App() {
     invalidatePendingCreation,
     markSessionStopped,
     updateRunningSession,
+    currentModel,
+    experience,
+    work.activeTaskId,
+    work.dirty,
+    work.saveTask,
+    work.setNewTaskOpen,
   ]);
 
   const createSession = useCallback(() => {
@@ -1515,7 +1580,7 @@ export default function App() {
     setActiveSessionReceipt(null);
     setActiveSession(null);
     setTurns([]);
-    setModels([]);
+    setModels(providers.find((item) => item.id === provider)?.models ?? []);
     setCurrentModel(null);
     setDefaultModel(null);
     setConfigOptions([]);
@@ -1547,6 +1612,8 @@ export default function App() {
     sessions,
     archivedSessions,
     projects,
+    provider,
+    providers,
     toast,
     t,
     invalidatePendingCreation,
@@ -1650,6 +1717,7 @@ export default function App() {
         sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
       if (stored) {
         setCwd(stored.cwd);
+        setProvider(providerLabel(stored.provider));
         const policy = sessionExecutionPolicy(stored);
         if (policy) {
           setMode(policy.mode);
@@ -1675,7 +1743,11 @@ export default function App() {
       setLoadingEarlier(false);
       updateTranscriptCursor(null);
       activeSessionRef.current = id;
-      if (stored?.model) knownModelsRef.current.set(id, stored.model);
+      // A provider-confirmed (or optimistic in-flight) selection is newer than the session-list
+      // shell. The list can lag behind set_model, especially while switching Code/Work quickly;
+      // overwriting this map with its stale value made the picker visibly jump back to default.
+      const restoredModel = knownModelsRef.current.get(id) ?? stored?.model ?? null;
+      if (restoredModel) knownModelsRef.current.set(id, restoredModel);
       else knownModelsRef.current.delete(id);
       const provenance = stored ? { session: id, shell: stored } : null;
       activeSessionProvenanceRef.current = provenance;
@@ -1690,7 +1762,7 @@ export default function App() {
       const forProvider = providers.find((p) => p.id === providerLabel(stored?.provider ?? ""));
       setModels(forProvider?.models ?? []);
       setConfigOptions([]);
-      setCurrentModel(stored?.model ?? null);
+      setCurrentModel(restoredModel);
       setDefaultModel(null);
       const nextRead = stored?.memory_read ?? "inherit";
       const nextWrite = stored?.memory_write ?? "inherit";
@@ -1761,6 +1833,53 @@ export default function App() {
       updateTranscriptCursor,
     ],
   );
+
+  // Each experience remembers its own navigation target while the actual transcript/Composer
+  // stays mounted once. Changing the mode therefore swaps context, not an entire application tree.
+  useEffect(() => {
+    const previous = previousExperienceRef.current;
+    if (previous === experience) return;
+    previousExperienceRef.current = experience;
+
+    if (previous === "code") lastCodeSessionRef.current = activeSessionRef.current;
+    if (experience === "work") {
+      workSelectionRef.current = null;
+      return;
+    }
+
+    const codeSession = lastCodeSessionRef.current;
+    if (codeSession && codeSession !== activeSessionRef.current) {
+      void selectSession(codeSession);
+    } else if (!codeSession && activeSessionRef.current) {
+      createSession();
+    }
+  }, [createSession, experience, selectSession]);
+
+  // A Work Task opens its latest Run (a real Session). A task without Runs opens the same blank
+  // draft used by Code; its first send creates a task-bound Session through NewSession.task_id.
+  useEffect(() => {
+    if (
+      experience !== "work" ||
+      !work.activeTaskId ||
+      work.detailTaskId !== work.activeTaskId
+    ) return;
+    const latestRun = work.runs[work.runs.length - 1]?.entity ?? null;
+    const selection = `${work.activeTaskId}:${latestRun?.id ?? "draft"}`;
+    if (workSelectionRef.current === selection) return;
+    workSelectionRef.current = selection;
+    if (latestRun) {
+      if (latestRun.id !== activeSessionRef.current) void selectSession(latestRun.id);
+    } else {
+      createSession();
+    }
+  }, [
+    createSession,
+    experience,
+    selectSession,
+    work.activeTaskId,
+    work.detailTaskId,
+    work.runs,
+  ]);
 
   const loadEarlierTranscript = useCallback(async () => {
     const session = activeSessionRef.current;
@@ -2517,6 +2636,12 @@ export default function App() {
     onProvider: (p) => {
       providerPinned.current = true;
       setProvider(p);
+      if (!activeSessionRef.current) {
+        setModels(providers.find((item) => item.id === p)?.models ?? []);
+        setCurrentModel(null);
+        setDefaultModel(null);
+        setConfigOptions([]);
+      }
       if (canvasProviderRetrySessionRef.current !== null) {
         // ACP sessions keep their provider. Switching after an asynchronous Canvas image failure
         // therefore stages a fresh session instead of silently resubmitting to the failed one.
@@ -2550,8 +2675,16 @@ export default function App() {
     hasSession: activeSession !== null,
   };
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("codetwo.experience", experience);
+    } catch {
+      // Experience persistence is a convenience; storage can be blocked in hardened webviews.
+    }
+  }, [experience]);
+
   return (
-    <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
+    <div className={cn("app-shell relative flex h-screen flex-col overflow-hidden text-foreground", experience === "work" && "work-experience")}>
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
@@ -2571,10 +2704,9 @@ export default function App() {
           }}
         />
       ) : (
-      // page-in makes the return from settings (which remounts this whole subtree) a transition
-      // rather than a cut, and doubles as the app's own opening animation.
-      <div className="animate-page-in flex min-h-0 flex-1">
-        {/* ---------------- sessions rail ---------------- */}
+        <div className="flex min-h-0 flex-1">
+        {/* Work and Code replace only their side context. The main transcript/Composer below is a
+            single mounted tree, so switching never plays a page entrance or reconstructs a draft. */}
         {narrowLayout && narrowRailOpen && (
           <button
             type="button"
@@ -2583,7 +2715,7 @@ export default function App() {
             onClick={() => setNarrowRailOpen(false)}
           />
         )}
-        <SessionRail
+        {experience === "code" ? <SessionRail
           projects={projects}
           activeProject={activeProject}
           onSelectProject={(path) => {
@@ -2642,7 +2774,20 @@ export default function App() {
           collapsed={displayedRailCollapsed}
           overlay={narrowLayout}
           onToggleCollapse={toggleDisplayedRail}
-        />
+          experience={experience}
+          onExperience={setExperience}
+        /> : <WorkTaskRail
+          work={work}
+          collapsed={displayedRailCollapsed}
+          overlay={narrowLayout}
+          onToggleCollapse={toggleDisplayedRail}
+          onExperience={setExperience}
+          onAddProject={() => void addProjectFolder()}
+          provider={provider}
+          providerLabel={providers.find((item) => item.id === provider)?.display_name ?? provider}
+          onOpenMarket={openPluginHub}
+          onOpenSettings={() => setShowSettings(true)}
+        />}
 
         {/* ---------------- the session column ---------------- */}
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
@@ -2654,32 +2799,37 @@ export default function App() {
           <header
             data-tauri-drag-region
             className={cn(
-              "flex items-center gap-1.5 border-b pb-1.5 pr-3 pt-1.5",
+              "window-titlebar flex items-center gap-1.5 border-b pr-3",
               displayedRailCollapsed ? "pl-[78px]" : "pl-3",
             )}
           >
             {displayedRailCollapsed && (
               <IconAction icon={PanelLeft} label={t("rail.expand")} onClick={toggleDisplayedRail} />
             )}
-            {/* Breadcrumb, reference-style: project / thread. */}
+            {/* Work already exposes task/workspace context in its rail and transcript, so the
+                accepted header stays session-level. Code keeps the full project breadcrumb. */}
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            {activeProjectName && (
+            {experience === "work" ? (
+              <span data-tauri-drag-region className="max-w-96 truncate text-ui font-medium">New session</span>
+            ) : (
               <>
-                <span data-tauri-drag-region className="max-w-40 truncate text-ui text-muted-foreground">
-                  {activeProjectName}
-                </span>
-                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                {activeProjectName && (
+                  <>
+                    <span data-tauri-drag-region className="max-w-40 truncate text-ui text-muted-foreground">
+                      {activeProjectName}
+                    </span>
+                    <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                  </>
+                )}
+                <span data-tauri-drag-region className="max-w-96 truncate text-ui font-medium">{activeTitle}</span>
               </>
             )}
-            <span data-tauri-drag-region className="max-w-96 truncate text-ui font-medium">
-              {activeTitle}
-            </span>
 
             <div data-tauri-drag-region className="flex-1" />
 
             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                 is in flight — and the way back to the answer without leaving the mode for good. */}
-            {docMode && (running || turns.length > 0 || sessionLoading) && (
+            {effectiveDocMode && (running || turns.length > 0 || sessionLoading) && (
               <button
                 onClick={() => toggleDocMode(false)}
                 className="mr-1 flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
@@ -2698,43 +2848,62 @@ export default function App() {
               </button>
             )}
 
-            <EnvironmentPopover
-              project={activeProjectName}
-              projectPath={activeProjectName ? activeProject : null}
-              projects={projects}
-              git={git}
-              diffStat={diffStat}
-              onRefresh={refreshGit}
-              onSelectProject={selectProject}
-              onAddProject={() => void addProjectFolder()}
-              onCheckpoint={() => void doCheckpoint()}
-              onOpenSourceControl={openSourceControl}
-              onOpenIssues={() => setShowIssues(true)}
-              onOpenUsage={() => setShowUsage(true)}
-              onOpenMarket={openPluginHub}
-              onOpenSettings={() => setShowSettings(true)}
-            />
+            <div className={cn("flex items-center gap-1", experience === "work" && "work-window-actions")}>
+              <EnvironmentPopover
+                active={experience === "code"}
+                project={activeProjectName}
+                projectPath={activeProjectName ? activeProject : null}
+                projects={projects}
+                git={git}
+                diffStat={diffStat}
+                onRefresh={refreshGit}
+                onSelectProject={selectProject}
+                onAddProject={() => void addProjectFolder()}
+                onCheckpoint={() => void doCheckpoint()}
+                onOpenSourceControl={openSourceControl}
+                onOpenIssues={() => setShowIssues(true)}
+                onOpenUsage={() => setShowUsage(true)}
+                onOpenMarket={openPluginHub}
+                onOpenSettings={() => setShowSettings(true)}
+              />
 
-            {/* One control, not a toolbar: the panel toggle. Opening lands on the surface picker;
-                the dock's own tabs and the keyboard shortcuts pick specific surfaces. */}
-            <IconAction
-              icon={PanelRight}
-              label={t("header.panel")}
-              active={dockTab !== null}
-              onClick={() => {
-                setDockTab(dockTab ? null : "home");
-                setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-              }}
-            />
+              {/* One control, not a toolbar: the panel toggle. Opening lands on the surface picker;
+                  the dock's own tabs and the keyboard shortcuts pick specific surfaces. */}
+              <IconAction
+                icon={PanelRight}
+                label={experience === "work" ? "Work details" : t("header.panel")}
+                active={experience === "work" ? false : dockTab !== null}
+                onClick={() => {
+                  if (experience === "work") setWorkInspectorOpen((open) => !open);
+                  else setDockTab(dockTab ? null : "home");
+                  setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+                }}
+              />
+            </div>
           </header>
 
           {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
-          <div className={cn("flex min-h-0 flex-1", docMode ? "flex-row" : "flex-col")}>
+          <div className={cn("flex min-h-0 flex-1", effectiveDocMode ? "flex-row" : "flex-col")}>
             {(turns.length > 0 || running || sessionLoading) && (
               <TranscriptPane
-                variant={docMode ? "side" : "main"}
+                variant={effectiveDocMode ? "side" : "main"}
+                presentation={experience === "work" ? "work" : "code"}
+                workContext={experience === "work" && work.activeTask && work.activeWorkspace ? {
+                  task: work.activeTask.entity.title,
+                  workspace: work.activeWorkspace.entity.name,
+                  deliverables: work.deliverables.map((item) => ({
+                    path: item.entity.path,
+                    version: item.entity.version,
+                    updatedAt: item.entity.updated_at,
+                  })),
+                  onOpenFile: (path) => {
+                    setExperience("code");
+                    openFileTab(path);
+                  },
+                  onRefresh: () => void work.refreshActiveTask(),
+                } : null}
                 turns={turns}
                 loading={sessionLoading}
                 hasEarlier={transcriptNextBefore !== null}
@@ -2752,7 +2921,7 @@ export default function App() {
             <div
               className={cn(
                 "flex",
-                docMode
+                effectiveDocMode
                   ? "order-1 min-h-0 min-w-0 flex-1"
                   : turns.length === 0 && !sessionLoading
                     ? "order-2 min-h-0 flex-1 flex-col justify-center pb-20"
@@ -2760,13 +2929,15 @@ export default function App() {
               )}
             >
               {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
-              {!docMode && turns.length === 0 && !sessionLoading && (
-                <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
-                  {t("transcript.greetingIn")}{" "}
+              {!effectiveDocMode && turns.length === 0 && !sessionLoading && (
+                <h1 className="mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
+                  {experience === "work" ? "What should we deliver for" : t("transcript.greetingIn")}{" "}
                   <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
-                    {activeProjectName ?? t("rail.noProject")}
+                    {experience === "work"
+                      ? work.activeTask?.entity.title ?? "this Work task"
+                      : activeProjectName ?? t("rail.noProject")}
                   </span>
-                  {t("transcript.greetingEnd")}
+                  {experience === "work" ? "?" : t("transcript.greetingEnd")}
                 </h1>
               )}
               {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
@@ -2797,13 +2968,14 @@ export default function App() {
                 <Composer
                   config={sessionConfig}
                   hero={turns.length === 0 && !sessionLoading}
-                  checkout={{
+                  checkout={experience === "work" ? null : {
                     project: activeProjectName ?? cwd,
                     branch: git?.is_repo ? git.branch : null,
                     dirty: git?.files.length ?? 0,
                     onOpen: openSourceControl,
                   }}
-                  docMode={docMode}
+                  workMode={experience === "work"}
+                  docMode={effectiveDocMode}
                   onDocMode={toggleDocMode}
                   height={composerH}
                   onHeight={setComposerH}
@@ -2814,7 +2986,13 @@ export default function App() {
                   contextWindow={activeContextWindow(contextWindows, activeSession)}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
-                    if (!session) return;
+                    if (!session) {
+                      // Draft selection is persisted atomically on NewSession, before the first
+                      // prompt creates the ACP session. This is what makes Work Run #1 genuinely
+                      // model-selectable instead of showing a decorative disabled chip.
+                      setCurrentModel(id);
+                      return;
+                    }
                     // Optimistic: the engine answers with a `models` event, or an `error` if the provider
                     // doesn't implement the switch.
                     if (id !== currentModelRef.current) {
@@ -2907,7 +3085,7 @@ export default function App() {
         {/* Always mounted: closing animates the width to zero instead of unmounting, which both
             plays the full collapse and keeps shells alive across close/open. */}
         <Dock
-            open={dockTab !== null}
+            open={experience === "code" && dockTab !== null}
             tab={dockTab}
             onTab={setDockTab}
             onClose={() => setDockTab(null)}
@@ -2934,7 +3112,18 @@ export default function App() {
             width={dockWidth}
             onWidth={setDockWidth}
           />
-      </div>
+        <WorkInspector
+          work={work}
+          open={experience === "work" && workInspectorOpen}
+          width={dockWidth}
+          onClose={() => setWorkInspectorOpen(false)}
+          onSelectRun={(id) => void selectSession(id)}
+          onOpenFile={(path) => {
+            setExperience("code");
+            openFileTab(path);
+          }}
+        />
+        </div>
       )}
 
       {/* ---------------- dialogs ---------------- */}

@@ -837,6 +837,7 @@ impl App {
                             mode: self.mode,
                             sandbox: self.sandbox,
                         }),
+                        initial_model: None,
                         task_id: None,
                     })
                     .await
@@ -891,6 +892,7 @@ impl App {
                     mode: self.mode,
                     sandbox: self.sandbox,
                 }),
+                initial_model: None,
                 task_id: None,
             })
             .await

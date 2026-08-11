@@ -260,6 +260,7 @@ async fn new_session_persistence_failure_emits_no_phantom_and_retains_manual_cle
             worktree_base_sha: None,
             request_id: Some("locked-create".into()),
             initial_policy: None,
+            initial_model: None,
             task_id: None,
         })
         .await
@@ -325,6 +326,7 @@ async fn provider_prompt_failure_keeps_the_prompt_correlation() {
             worktree_base_sha: None,
             request_id: Some("create-failure-test".into()),
             initial_policy: None,
+            initial_model: None,
             task_id: None,
         })
         .await
@@ -403,6 +405,7 @@ async fn a_parked_turn_rejects_concurrent_prompts_and_releases_after_completion(
             worktree_base_sha: None,
             request_id: Some("create-turn-test".into()),
             initial_policy: None,
+            initial_model: None,
             task_id: None,
         })
         .await

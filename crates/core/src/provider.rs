@@ -98,7 +98,7 @@ pub fn default_registry() -> Vec<Provider> {
         Provider {
             id: ProviderId::Codex,
             display_name: "OpenAI Codex".into(),
-            launch: LaunchSpec::new("npx", ["-y", "@zed-industries/codex-acp"]),
+            launch: LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp@1.1.14"]),
             needs_node: true,
         },
         Provider {
@@ -151,8 +151,13 @@ pub fn default_registry() -> Vec<Provider> {
 /// Directories a login shell puts on `PATH` but a GUI-launched app doesn't. macOS hands a bundle
 /// started from Finder or Spotlight the bare `/usr/bin:/bin:/usr/sbin:/sbin`, so Homebrew, cargo,
 /// and friends are invisible — every CLI we shell out to looks "not installed".
-const GUI_PATH_FALLBACKS: [&str; 5] =
-    ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "~/.local/bin", "~/.cargo/bin"];
+const GUI_PATH_FALLBACKS: [&str; 5] = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "~/.local/bin",
+    "~/.cargo/bin",
+];
 
 /// Append the directories above to this process's `PATH`, once, if they exist and aren't already
 /// there. Child processes inherit it, so this fixes both [`which`] and anything we spawn.
@@ -221,13 +226,21 @@ mod tests {
     fn registry_has_all_providers() {
         let reg = default_registry();
         assert_eq!(reg.len(), 8);
-        assert!(reg.iter().any(|p| p.id == ProviderId::Grok && !p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Grok && !p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
         assert!(reg.iter().any(|p| p.id == ProviderId::Cursor));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode));
         assert!(reg.iter().any(|p| p.id == ProviderId::Pi && p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::Kimi && !p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::ZCode && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Kimi && !p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::ZCode && p.needs_node));
     }
 
     #[test]
@@ -236,6 +249,17 @@ mod tests {
         let grok = reg.iter().find(|p| p.id == ProviderId::Grok).unwrap();
         assert_eq!(grok.launch.command, "grok");
         assert_eq!(grok.launch.args, vec!["agent", "stdio"]);
+    }
+
+    #[test]
+    fn codex_launch_uses_the_current_acp_package() {
+        let reg = default_registry();
+        let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
+        assert_eq!(codex.launch.command, "npx");
+        assert_eq!(
+            codex.launch.args,
+            vec!["-y", "@agentclientprotocol/codex-acp@1.1.14"]
+        );
     }
 
     #[test]

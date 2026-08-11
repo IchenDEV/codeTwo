@@ -200,6 +200,96 @@ export type DocBlock =
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
   | { type: "session"; session_id: string };
 
+export interface WorkVersioned<T> {
+  entity: T;
+  revision: number;
+}
+
+export interface WorkPage<T> {
+  items: WorkVersioned<T>[];
+  next_cursor: string | null;
+  high_water: number;
+}
+
+export interface WorkWorkspace {
+  id: string;
+  name: string;
+  root_path: string | null;
+  kind: "external" | "managed";
+  created_at: number;
+  updated_at: number;
+}
+
+export type WorkTaskStatus =
+  | "draft"
+  | "active"
+  | "waiting"
+  | "review"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface WorkTask {
+  id: string;
+  workspace_id: string;
+  title: string;
+  experience: "code" | "work";
+  status: WorkTaskStatus;
+  current_brief_revision: number | null;
+  created_at: number;
+  updated_at: number;
+  archived: boolean;
+}
+
+export interface WorkBriefRevision {
+  id: string;
+  task_id: string;
+  revision: number;
+  blocks: DocBlock[];
+  source: string;
+  created_at: number;
+}
+
+export interface WorkBriefSaveResult {
+  brief: WorkVersioned<WorkBriefRevision>;
+  task: WorkVersioned<WorkTask>;
+}
+
+export interface WorkRun {
+  id: string;
+  task_id: string;
+  index: number;
+  provider: SessionInfo["provider"];
+  model: string | null;
+  activity: SessionActivity;
+  cwd: string;
+  created_at: number;
+}
+
+export interface WorkDeliverable {
+  id: string;
+  task_id: string;
+  run_id: string;
+  path: string;
+  mime: string | null;
+  hash: string;
+  version: number;
+  current: boolean;
+  missing: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface WorkRunChange {
+  id: string;
+  snapshot_id: string;
+  change: {
+    path: string;
+    kind: "added" | "modified" | "deleted";
+  };
+  created_at: number;
+}
+
 /// One-line description of a doc block, used for summaries and browser-mode previews.
 export function describeBlock(b: DocBlock): string {
   switch (b.type) {
@@ -350,12 +440,150 @@ export interface Skill {
 // True only inside the Tauri webview; lets `vite build`/`preview` run in a plain browser.
 const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== "undefined";
 
+// Vite's browser build doubles as a deterministic rendered-UI harness. Native builds never read
+// these fixtures; every Work call below crosses the Tauri bridge when `inTauri` is true.
+const BROWSER_WORK_NOW = Date.now();
+const BROWSER_WORKSPACE: WorkVersioned<WorkWorkspace> = {
+  entity: {
+    id: "browser-workspace",
+    name: "mini-game",
+    root_path: "/preview/mini-game",
+    kind: "external",
+    created_at: BROWSER_WORK_NOW - 86_400_000,
+    updated_at: BROWSER_WORK_NOW,
+  },
+  revision: 1,
+};
+let browserWorkTasks: WorkVersioned<WorkTask>[] = [
+  {
+    entity: {
+      id: "browser-work-task",
+      workspace_id: BROWSER_WORKSPACE.entity.id,
+      title: "Launch landing page",
+      experience: "work",
+      status: "active",
+      current_brief_revision: 1,
+      created_at: BROWSER_WORK_NOW - 3_600_000,
+      updated_at: BROWSER_WORK_NOW - 600_000,
+      archived: false,
+    },
+    revision: 2,
+  },
+  {
+    entity: {
+      id: "browser-work-controls",
+      workspace_id: BROWSER_WORKSPACE.entity.id,
+      title: "Add keyboard controls",
+      experience: "work",
+      status: "active",
+      current_brief_revision: null,
+      created_at: BROWSER_WORK_NOW - 7_200_000,
+      updated_at: BROWSER_WORK_NOW - 1_800_000,
+      archived: false,
+    },
+    revision: 1,
+  },
+  {
+    entity: {
+      id: "browser-work-score",
+      workspace_id: BROWSER_WORKSPACE.entity.id,
+      title: "Save high score",
+      experience: "work",
+      status: "active",
+      current_brief_revision: null,
+      created_at: BROWSER_WORK_NOW - 10_800_000,
+      updated_at: BROWSER_WORK_NOW - 3_600_000,
+      archived: false,
+    },
+    revision: 1,
+  },
+  {
+    entity: {
+      id: "browser-work-init",
+      workspace_id: BROWSER_WORKSPACE.entity.id,
+      title: "Initialize project",
+      experience: "work",
+      status: "completed",
+      current_brief_revision: null,
+      created_at: BROWSER_WORK_NOW - 86_400_000,
+      updated_at: BROWSER_WORK_NOW - 14_400_000,
+      archived: false,
+    },
+    revision: 1,
+  },
+  {
+    entity: {
+      id: "browser-work-setup",
+      workspace_id: BROWSER_WORKSPACE.entity.id,
+      title: "Project setup",
+      experience: "work",
+      status: "completed",
+      current_brief_revision: null,
+      created_at: BROWSER_WORK_NOW - 172_800_000,
+      updated_at: BROWSER_WORK_NOW - 28_800_000,
+      archived: false,
+    },
+    revision: 1,
+  },
+];
+let browserWorkBrief: WorkVersioned<WorkBriefRevision> | null = {
+  entity: {
+    id: "browser-work-brief",
+    task_id: "browser-work-task",
+    revision: 1,
+    blocks: [
+      {
+        type: "text",
+        text: "Create a minimal landing page for the mini-game using existing design tokens. Make it responsive and include a primary CTA to start the game.",
+      },
+    ],
+    source: "browser_preview",
+    created_at: BROWSER_WORK_NOW - 600_000,
+  },
+  revision: 1,
+};
+
+const BROWSER_CODEX_MODELS: ModelChoice[] = [
+  { id: "gpt-5.6-sol", name: "GPT-5.6 Sol", description: "Latest frontier agentic coding model." },
+  { id: "gpt-5.6-terra", name: "GPT-5.6 Terra", description: "Balanced agentic coding model for everyday work." },
+  { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", description: "Fast and affordable agentic coding model." },
+  { id: "gpt-5.5", name: "GPT-5.5", description: "Frontier model for complex coding and research." },
+  { id: "gpt-5.4", name: "GPT-5.4", description: "Strong model for everyday coding." },
+  { id: "gpt-5.4-mini", name: "GPT-5.4 Mini", description: "Fast model for simpler coding tasks." },
+  { id: "gpt-5.3-codex-spark", name: "GPT-5.3 Codex Spark", description: "Ultra-fast coding model." },
+];
+
+const BROWSER_WORK_SESSION: SessionInfo = {
+  id: "browser-work-run",
+  title: "Launch landing page",
+  title_origin: "manual",
+  pinned: false,
+  provider: "codex",
+  model: "gpt-5.6-sol",
+  cwd: "/preview/mini-game",
+  worktree_path: null,
+  project_path: "/preview/mini-game",
+  worktree_baseline: null,
+  worktree_identity: null,
+  permission_mode: "ask",
+  sandbox_policy: "workspace_write",
+  acp_session_id: "browser-acp-session",
+  memory_read: "inherit",
+  memory_write: "inherit",
+  created_at: BROWSER_WORK_NOW - 1_200_000,
+  activity: { revision: 1, state: { kind: "idle" } },
+};
+
+function workRequestId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `desktop-work-${Date.now()}-${Math.random()}`;
+}
+
 /** False when the UI runs in a plain browser (`bun run dev`), where no native commands exist. */
 export const isDesktop = inTauri;
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [] },
-  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [] },
+  { id: "codex", display_name: "OpenAI Codex", available: true, needs_node: true, models: BROWSER_CODEX_MODELS },
   { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [] },
   { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [] },
   { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [] },
@@ -385,7 +613,7 @@ export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
-  return inTauri ? invoke<SessionInfo[]>("list_sessions") : [];
+  return inTauri ? invoke<SessionInfo[]>("list_sessions") : [BROWSER_WORK_SESSION];
 }
 
 export async function getMemorySettings(): Promise<MemorySettings> {
@@ -448,6 +676,8 @@ export async function newSession(
   requestId: string,
   worktreeBaseSha?: string | null,
   initialPolicy?: ExecutionPolicy | null,
+  initialModel?: string | null,
+  taskId?: string | null,
 ): Promise<void> {
   if (inTauri) {
     await invoke("new_session", {
@@ -458,6 +688,8 @@ export async function newSession(
       worktreeBaseSha: worktreeBaseSha ?? null,
       requestId,
       initialPolicy: initialPolicy ?? null,
+      initialModel: initialModel || null,
+      taskId: taskId ?? null,
     });
   }
 }
@@ -715,7 +947,7 @@ export async function onLspExit(cb: (key: string) => void): Promise<() => void> 
 
 /** Newest text per session id, for the rail's preview line. */
 export async function sessionPreviews(): Promise<Record<string, string>> {
-  if (!inTauri) return {};
+  if (!inTauri) return { [BROWSER_WORK_SESSION.id]: "Added the responsive launch page and verified keyboard navigation." };
   const rows = await invoke<[string, string][]>("session_previews");
   return Object.fromEntries(rows);
 }
@@ -739,6 +971,189 @@ export async function searchSessions(query: string, limit = 12): Promise<Session
 
 export async function listProjects(): Promise<Project[]> {
   return inTauri ? invoke<Project[]>("list_projects") : [];
+}
+
+// ---- Work mode -------------------------------------------------------------------------------
+
+export async function listWorkWorkspaces(): Promise<WorkPage<WorkWorkspace>> {
+  if (inTauri) return invoke<WorkPage<WorkWorkspace>>("work_list_workspaces");
+  return { items: [BROWSER_WORKSPACE], next_cursor: null, high_water: 1 };
+}
+
+export async function ensureWorkWorkspace(path: string, name: string): Promise<WorkVersioned<WorkWorkspace>> {
+  if (inTauri) {
+    return invoke<WorkVersioned<WorkWorkspace>>("work_ensure_workspace", {
+      path,
+      name,
+      requestId: workRequestId(),
+    });
+  }
+  return BROWSER_WORKSPACE;
+}
+
+export async function listWorkTasks(workspaceId: string): Promise<WorkPage<WorkTask>> {
+  if (inTauri) return invoke<WorkPage<WorkTask>>("work_list_tasks", { workspaceId });
+  return {
+    items: browserWorkTasks.filter((task) => task.entity.workspace_id === workspaceId),
+    next_cursor: null,
+    high_water: 2,
+  };
+}
+
+export async function createWorkTask(
+  workspaceId: string,
+  title: string,
+): Promise<WorkVersioned<WorkTask>> {
+  if (inTauri) {
+    return invoke<WorkVersioned<WorkTask>>("work_create_task", {
+      workspaceId,
+      title,
+      requestId: workRequestId(),
+    });
+  }
+  const now = Date.now();
+  const task: WorkVersioned<WorkTask> = {
+    entity: {
+      id: workRequestId(),
+      workspace_id: workspaceId,
+      title: title.trim() || "Untitled task",
+      experience: "work",
+      status: "draft",
+      current_brief_revision: null,
+      created_at: now,
+      updated_at: now,
+      archived: false,
+    },
+    revision: 1,
+  };
+  browserWorkTasks = [...browserWorkTasks, task];
+  return task;
+}
+
+export async function renameWorkTask(
+  taskId: string,
+  title: string,
+  expectedRevision: number,
+): Promise<WorkVersioned<WorkTask>> {
+  if (inTauri) {
+    return invoke<WorkVersioned<WorkTask>>("work_rename_task", {
+      taskId,
+      title,
+      expectedRevision,
+      requestId: workRequestId(),
+    });
+  }
+  const index = browserWorkTasks.findIndex((task) => task.entity.id === taskId);
+  if (index < 0) throw new Error(`unknown Work Task ${taskId}`);
+  if (browserWorkTasks[index].revision !== expectedRevision) throw new Error("Work Task changed in another client");
+  const updated = {
+    entity: { ...browserWorkTasks[index].entity, title: title.trim(), updated_at: Date.now() },
+    revision: expectedRevision + 1,
+  };
+  browserWorkTasks = browserWorkTasks.map((task, taskIndex) => taskIndex === index ? updated : task);
+  return updated;
+}
+
+export async function getWorkBrief(taskId: string): Promise<WorkVersioned<WorkBriefRevision> | null> {
+  if (inTauri) return invoke<WorkVersioned<WorkBriefRevision> | null>("work_get_brief", { taskId });
+  return browserWorkBrief?.entity.task_id === taskId ? browserWorkBrief : null;
+}
+
+export async function saveWorkBrief(
+  taskId: string,
+  text: string,
+  expectedRevision: number | null,
+): Promise<WorkBriefSaveResult> {
+  if (inTauri) {
+    return invoke<WorkBriefSaveResult>("work_save_brief", {
+      taskId,
+      text,
+      expectedRevision,
+      requestId: workRequestId(),
+    });
+  }
+  if ((browserWorkBrief?.revision ?? null) !== expectedRevision) throw new Error("Work Brief changed in another client");
+  const taskIndex = browserWorkTasks.findIndex((task) => task.entity.id === taskId);
+  if (taskIndex < 0) throw new Error(`unknown Work Task ${taskId}`);
+  const revision = (browserWorkBrief?.revision ?? 0) + 1;
+  const now = Date.now();
+  browserWorkBrief = {
+    entity: {
+      id: workRequestId(),
+      task_id: taskId,
+      revision,
+      blocks: [{ type: "text", text }],
+      source: "browser_preview",
+      created_at: now,
+    },
+    revision,
+  };
+  const task = {
+    entity: {
+      ...browserWorkTasks[taskIndex].entity,
+      current_brief_revision: revision,
+      updated_at: now,
+    },
+    revision: browserWorkTasks[taskIndex].revision + 1,
+  };
+  browserWorkTasks = browserWorkTasks.map((item, index) => index === taskIndex ? task : item);
+  return { brief: browserWorkBrief, task };
+}
+
+export async function listWorkRuns(taskId: string): Promise<WorkPage<WorkRun>> {
+  if (inTauri) return invoke<WorkPage<WorkRun>>("work_list_runs", { taskId });
+  const items: WorkVersioned<WorkRun>[] = taskId === "browser-work-task" ? [{
+    entity: {
+      id: "browser-work-run",
+      task_id: taskId,
+      index: 1,
+      provider: "codex",
+      model: "gpt-5.6-sol",
+      activity: {
+        revision: 1,
+        state: { kind: "running" as const, turn_id: "browser-work-turn" },
+      },
+      cwd: "/preview/mini-game",
+      created_at: BROWSER_WORK_NOW - 1_200_000,
+    },
+    revision: 1,
+  }] : [];
+  return { items, next_cursor: null, high_water: 1 };
+}
+
+export async function listWorkDeliverables(taskId: string): Promise<WorkPage<WorkDeliverable>> {
+  if (inTauri) return invoke<WorkPage<WorkDeliverable>>("work_list_deliverables", { taskId });
+  const items = taskId === "browser-work-task" ? [{
+    entity: {
+      id: "browser-work-deliverable",
+      task_id: taskId,
+      run_id: "browser-work-run",
+      path: "dist/index.html",
+      mime: "text/html",
+      hash: "0".repeat(64),
+      version: 1,
+      current: true,
+      missing: false,
+      created_at: BROWSER_WORK_NOW - 1_100_000,
+      updated_at: BROWSER_WORK_NOW - 1_100_000,
+    },
+    revision: 1,
+  }] : [];
+  return { items, next_cursor: null, high_water: 1 };
+}
+
+export async function listWorkChanges(taskId: string): Promise<WorkPage<WorkRunChange>> {
+  if (inTauri) return invoke<WorkPage<WorkRunChange>>("work_list_changes", { taskId });
+  const items = taskId === "browser-work-task" ? [{
+    entity: {
+      id: "browser-work-change",
+      snapshot_id: "browser-work-snapshot",
+      change: { path: "src/App.tsx", kind: "modified" as const },
+      created_at: BROWSER_WORK_NOW - 900_000,
+    },
+    revision: 1,
+  }] : [];
+  return { items, next_cursor: null, high_water: 1 };
 }
 
 /**
@@ -846,7 +1261,21 @@ export async function getTranscriptPage(
 ): Promise<TranscriptPage> {
   return inTauri
     ? invoke<TranscriptPage>("get_transcript_page", { session, before, limit })
-    : { entries: [], next_before: null, snapshot_through: null };
+    : session === BROWSER_WORK_SESSION.id
+      ? {
+          entries: [
+            { seq: 1, role: "user", part: { kind: "prompt", text: "Create a minimal landing page for the mini-game.\nUse the existing design tokens and keep it responsive.", display: "Create a minimal landing page for the mini-game.\nUse the existing design tokens and keep it responsive." } },
+            { seq: 2, role: "agent", part: { kind: "text", text: "I'll create a minimal, responsive landing page using the project's design tokens. I'll add a hero section, game title, tagline, and a primary CTA to start." } },
+            { seq: 3, role: "agent", part: { kind: "plan", entries: ["Scanned project for design tokens and layout patterns", "Created dist/index.html", "Added responsive styles and basic interactions"] } },
+            { seq: 5, role: "user", part: { kind: "prompt", text: "Make the CTA start the game and persist the last selected mode.", display: "Make the CTA start the game and persist the last selected mode." } },
+            { seq: 6, role: "agent", part: { kind: "text", text: "I'll wire up the CTA to start the game and persist the selected mode using localStorage." } },
+            { seq: 7, role: "agent", part: { kind: "plan", entries: ["Updated click handler to start game", "Persist selected mode to localStorage"] } },
+            { seq: 8, role: "agent", part: { kind: "tool_call", id: "preview-build", title: "Verified desktop and mobile breakpoints", status: "completed" } },
+          ],
+          next_before: null,
+          snapshot_through: 8,
+        }
+      : { entries: [], next_before: null, snapshot_through: null };
 }
 
 // ---- git (F1) --------------------------------------------------------------------------------

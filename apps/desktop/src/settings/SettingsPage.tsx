@@ -258,7 +258,7 @@ export function SettingsPage({
       {/* ---- the page ---- */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
         {/* The same 40px bar as the main shell's header, border and all. */}
-        <header data-tauri-drag-region className="flex items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5">
+        <header data-tauri-drag-region className="window-titlebar flex items-center gap-1.5 border-b pl-6 pr-3">
           <span data-tauri-drag-region className="text-ui font-medium text-muted-foreground">
             {t("settings.title")}
           </span>

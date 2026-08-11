@@ -233,7 +233,7 @@ export function Dock({
         <>
           {/* Same 40px bar as the surface header below; the explicit height keeps the border on
               the same line even though this row only holds 24px buttons. */}
-          <div data-tauri-drag-region className="flex h-10 items-center gap-1 border-b px-3">
+          <div data-tauri-drag-region className="window-titlebar flex items-center gap-1 border-b px-3">
             <div data-tauri-drag-region className="flex-1" />
             <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
               <X className="size-3.5" />
@@ -267,12 +267,12 @@ export function Dock({
         </>
       ) : (
       <Tabs value={shown} onValueChange={(v) => onTab(v as DockSurface)} className="flex min-h-0 flex-1 flex-col gap-0">
-        {/* pt/pb mirror the main header exactly, so this tab row and the breadcrumb sit on the
-            same 20px line and share one continuous bottom border. It drags the window for the
+        {/* The fixed height and top inset mirror the main header exactly, so this tab row and the
+            breadcrumb sit on the native titlebar line and share one continuous bottom border. It drags the window for the
             same reason: the overlay title bar leaves nothing else to grab. */}
         {/* Frameless tab pills rather than the boxed segmented control — the dock's chrome should
             weigh less than what's inside it. */}
-        <div data-tauri-drag-region className="flex items-center gap-1 border-b px-3 pb-1.5 pt-1.5">
+        <div data-tauri-drag-region className="window-titlebar flex items-center gap-1 border-b px-3">
           {/* h-7! — the primitive pins horizontal lists to h-9 via a group variant that outranks a
               plain h-7, and the extra 8px is exactly what pushed this row off the 28px title line. */}
           <TabsList className="h-7! gap-0.5 bg-transparent p-0">

@@ -32,18 +32,53 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
             choice("sonnet", "Claude Sonnet", Some("Balanced")),
             choice("haiku", "Claude Haiku", Some("Fastest")),
         ],
-        // Codex encodes reasoning effort in the model id; the picker splits those suffixes back out
-        // into a second chip (see the desktop `models.ts`), so name them the way it parses.
+        // Keep the pre-prompt fallback aligned with the pinned codex-acp release. Once
+        // `session/new` completes, the adapter replaces it with its live model + effort catalog.
         ProviderId::Codex => vec![
-            choice("gpt-5.1-codex low", "GPT-5.1 Codex (Low)", None),
-            choice("gpt-5.1-codex medium", "GPT-5.1 Codex (Medium)", None),
-            choice("gpt-5.1-codex high", "GPT-5.1 Codex (High)", None),
-            choice("gpt-5.1-codex-max", "GPT-5.1 Codex Max", None),
+            choice(
+                "gpt-5.6-sol",
+                "GPT-5.6 Sol",
+                Some("Latest frontier agentic coding model."),
+            ),
+            choice(
+                "gpt-5.6-terra",
+                "GPT-5.6 Terra",
+                Some("Balanced agentic coding model for everyday work."),
+            ),
+            choice(
+                "gpt-5.6-luna",
+                "GPT-5.6 Luna",
+                Some("Fast and affordable agentic coding model."),
+            ),
+            choice(
+                "gpt-5.5",
+                "GPT-5.5",
+                Some("Frontier model for complex coding, research, and real-world work."),
+            ),
+            choice(
+                "gpt-5.4",
+                "GPT-5.4",
+                Some("Strong model for everyday coding."),
+            ),
+            choice(
+                "gpt-5.4-mini",
+                "GPT-5.4 Mini",
+                Some("Small, fast, and cost-efficient model for simpler coding tasks."),
+            ),
+            choice(
+                "gpt-5.3-codex-spark",
+                "GPT-5.3 Codex Spark",
+                Some("Ultra-fast coding model."),
+            ),
         ],
         ProviderId::Grok => vec![
             choice("grok-4-fast", "Grok 4 Fast", None),
             choice("grok-4", "Grok 4", None),
-            choice("grok-code-fast-1", "Grok Code Fast", Some("Tuned for coding")),
+            choice(
+                "grok-code-fast-1",
+                "Grok Code Fast",
+                Some("Tuned for coding"),
+            ),
         ],
         ProviderId::Cursor => vec![
             choice("composer-1", "Composer 1", Some("Cursor's own")),
@@ -70,7 +105,11 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
             choice("k3", "Kimi K3", Some("Flagship, 1M context")),
             choice("k3-256k", "Kimi K3 (256K)", Some("Cheaper context window")),
             choice("kimi-for-coding", "Kimi for Coding", None),
-            choice("kimi-for-coding-highspeed", "Kimi for Coding Highspeed", Some("Same ability, faster")),
+            choice(
+                "kimi-for-coding-highspeed",
+                "Kimi for Coding Highspeed",
+                Some("Same ability, faster"),
+            ),
         ],
         // The GLM ACP agent switches models mid-session, and these are the ids it accepts.
         ProviderId::ZCode => vec![
@@ -91,7 +130,11 @@ mod tests {
     #[test]
     fn every_registered_provider_has_a_list() {
         for p in crate::provider::default_registry() {
-            assert!(!builtin_models(&p.id).is_empty(), "{} has no built-in models", p.display_name);
+            assert!(
+                !builtin_models(&p.id).is_empty(),
+                "{} has no built-in models",
+                p.display_name
+            );
         }
     }
 
@@ -101,10 +144,35 @@ mod tests {
     }
 
     #[test]
-    fn codex_names_split_into_effort_variants() {
-        // The desktop picker groups by trailing effort token; ids and names must stay in step.
+    fn codex_model_ids_are_real_slugs() {
         let codex = builtin_models(&ProviderId::Codex);
-        assert!(codex.iter().any(|m| m.name.ends_with("(High)")));
-        assert!(codex.iter().all(|m| !m.id.is_empty()));
+        assert!(codex
+            .iter()
+            .all(|m| !m.id.is_empty() && !m.id.contains(' ')));
+    }
+
+    #[test]
+    fn codex_list_matches_the_pinned_adapter() {
+        let ids: Vec<_> = builtin_models(&ProviderId::Codex)
+            .into_iter()
+            .map(|model| model.id)
+            .collect();
+
+        assert_eq!(
+            ids,
+            [
+                "gpt-5.6-sol",
+                "gpt-5.6-terra",
+                "gpt-5.6-luna",
+                "gpt-5.5",
+                "gpt-5.4",
+                "gpt-5.4-mini",
+                "gpt-5.3-codex-spark",
+            ]
+        );
+        assert!(
+            ids.iter().all(|id| !id.starts_with("gpt-5.1-codex")),
+            "stale GPT-5.1 Codex entries are still exposed: {ids:?}"
+        );
     }
 }

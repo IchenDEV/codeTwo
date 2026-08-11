@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   BarChart3,
   Check,
@@ -87,6 +87,7 @@ function EnvironmentRow({
  * header-anchored popover. The neighboring panel control owns the dock independently.
  */
 export function EnvironmentPopover({
+  active = true,
   project,
   projectPath,
   projects,
@@ -102,6 +103,7 @@ export function EnvironmentPopover({
   onOpenMarket,
   onOpenSettings,
 }: {
+  active?: boolean;
   project: string | null;
   projectPath: string | null;
   projects: Project[];
@@ -122,6 +124,13 @@ export function EnvironmentPopover({
   const [open, setOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const isRepo = git?.is_repo === true;
+
+  // Popover content is portalled to document.body, so hiding the Code surface alone cannot hide
+  // it. Close it when Code becomes inactive and skip the portal immediately during that render;
+  // otherwise it floats over Work and replays its entrance motion on the next switch.
+  useEffect(() => {
+    if (!active) setOpen(false);
+  }, [active]);
 
   const changeDetail = git === null ? (
     "…"
@@ -184,16 +193,16 @@ export function EnvironmentPopover({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent
-        align="end"
-        alignOffset={-36}
-        sideOffset={16}
-        collisionPadding={12}
-        variant="borderless"
-        className="w-72 rounded-lg p-2"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
-      >
+      {active && (
+        <PopoverContent
+          align="end"
+          alignOffset={-36}
+          sideOffset={16}
+          collisionPadding={12}
+          variant="borderless"
+          className="w-72 rounded-lg p-2"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
         <div className="mb-1 flex h-8 items-center gap-2 px-2">
           <h2 className="min-w-0 flex-1 truncate text-title font-medium text-muted-foreground">
             {t("environment.title")}
@@ -309,7 +318,8 @@ export function EnvironmentPopover({
             onClick={() => openTool(onOpenSettings)}
           />
         </div>
-      </PopoverContent>
+        </PopoverContent>
+      )}
     </Popover>
   );
 }

@@ -35,6 +35,7 @@ import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
+import { ExperienceSwitcher, type AppExperience } from "../work/ExperienceSwitcher";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
 function shortAge(ts: number): string {
@@ -85,6 +86,8 @@ export function SessionRail({
   onToggleCollapse,
   width,
   onWidth,
+  experience,
+  onExperience,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -127,6 +130,8 @@ export function SessionRail({
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
+  experience: AppExperience;
+  onExperience: (experience: AppExperience) => void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
@@ -344,7 +349,7 @@ export function SessionRail({
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
       {/* The configured traffic lights sit about 6px below the 40px web title row's midpoint.
           Top padding moves the title and sidebar control onto that native optical center. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2 pt-3">
+      <div data-tauri-drag-region className="window-titlebar flex shrink-0 items-center gap-1 pl-[78px] pr-2">
         <span data-tauri-drag-region className="min-w-0 truncate text-ui font-semibold">
           {t("app.name")}
         </span>
@@ -363,6 +368,9 @@ export function SessionRail({
           </TooltipTrigger>
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
+      </div>
+      <div className="px-3 pb-1 pt-2">
+        <ExperienceSwitcher value={experience} onChange={onExperience} />
       </div>
       <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
         <button

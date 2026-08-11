@@ -1,3 +1,4 @@
+@import "./design/tokens.css";
 @import "tailwindcss";
 
 /* shadcn/ui — dark variant driven by a `.dark` class on <html> (set from the OS appearance). */
@@ -286,6 +287,180 @@
   .glass-rail {
     background: var(--sidebar);
     border-right: 1px solid var(--sidebar-border);
+  }
+  .glass-rail[aria-hidden="true"] {
+    border-right: 0;
+  }
+  /* Overlay windows keep the native traffic lights but replace the rest of the titlebar. Every
+     top-level pane uses this row so its border and optical center remain continuous. */
+  .window-titlebar {
+    height: 3.125rem;
+    padding-top: 0.625rem;
+  }
+  /* Native traffic lights own the leading titlebar space in overlay windows. */
+  .work-rail-title {
+    padding-left: 4.875rem;
+  }
+  .work-control {
+    height: var(--ds-control-field);
+    border-radius: var(--ds-radius-control);
+    box-shadow: var(--ds-elevation-surface);
+  }
+  .work-row {
+    border-radius: var(--ds-radius-control);
+  }
+  .work-divider-top {
+    box-shadow: inset 0 1px 0 var(--sidebar-border);
+  }
+  .work-divider-bottom {
+    box-shadow: inset 0 -1px 0 var(--border);
+  }
+  .work-context-panel {
+    box-shadow: inset 1px 0 0 var(--border);
+  }
+  .experience-switcher {
+    min-height: 40px;
+    border-radius: var(--ds-radius-module);
+  }
+  .experience-tab {
+    height: 32px;
+    border-radius: var(--ds-radius-control);
+    font-size: var(--text-ui);
+    font-weight: 500;
+  }
+
+  /* ---- Work experience ---------------------------------------------------------------------
+     Work reuses Code's editor/runtime, but its visual hierarchy follows the accepted three-column
+     chat reference: quiet rail, readable conversation, compact inspector, and a two-level composer. */
+  .work-experience {
+    --text-cap: 11px;
+    --text-fine: 12px;
+    --text-hint: 13px;
+    --text-ui: 14px;
+  }
+  .work-experience .glass-rail {
+    background: color-mix(in oklch, var(--sidebar) 94%, var(--background));
+  }
+  .work-experience .work-rail-title {
+    padding-left: calc(var(--ds-space-page) * 5);
+  }
+  .work-experience .work-context-panel {
+    background: var(--background);
+  }
+  .work-window-actions {
+    position: fixed;
+    z-index: 60;
+    top: 11px;
+    right: var(--ds-space-surface-inset);
+  }
+  .work-experience .work-control,
+  .work-experience .work-workspace-row {
+    height: 36px;
+    border-radius: var(--radius);
+  }
+  .work-workspace-row {
+    box-shadow: var(--ds-elevation-surface);
+  }
+  .work-task-row {
+    min-height: 60px;
+  }
+  .work-inspector-section {
+    padding-block: calc(var(--ds-space-section) + var(--ds-space-inline));
+    box-shadow: inset 0 -1px 0 var(--border);
+  }
+  .work-inspector-section[aria-labelledby="work-brief-heading"],
+  .work-inspector-section[aria-labelledby="work-deliverables-heading"] {
+    padding-bottom: calc(var(--ds-space-page) + var(--ds-space-inline));
+  }
+  .work-inspector-section[aria-labelledby="work-activity-heading"] {
+    padding-bottom: calc(var(--ds-space-page) + var(--ds-space-section));
+  }
+  .work-inspector-drag-region {
+    height: 50px;
+  }
+  .work-inspector-header {
+    height: 61px;
+  }
+  .work-inspector-section:last-child {
+    box-shadow: none;
+  }
+  .work-detail-row {
+    min-height: 43px;
+  }
+  .work-transcript {
+    background: var(--background);
+  }
+  .work-context-line,
+  .work-turn {
+    padding-inline-start: calc(var(--ds-space-control-group) + var(--ds-space-inline));
+  }
+  .work-turn + .work-turn {
+    box-shadow: inset 0 1px 0 color-mix(in oklch, var(--border) 65%, transparent);
+  }
+  .work-message-grid {
+    min-width: 0;
+  }
+  .work-check-icon {
+    display: inline-flex;
+    width: 14px;
+    height: 14px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--primary-foreground);
+    background: var(--success);
+  }
+  .work-message-action {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--ds-radius-control);
+    transition: color var(--motion-fast), background var(--motion-fast);
+  }
+  .work-message-action:hover {
+    color: var(--foreground);
+    background: var(--accent);
+  }
+  .work-delivery-card {
+    min-height: 48px;
+    max-width: 375px;
+    border-radius: var(--ds-radius-control);
+  }
+  .work-result {
+    margin-top: var(--ds-space-page);
+  }
+  .work-chat-composer {
+    position: relative;
+    min-height: 154px;
+    overflow: visible;
+    border-radius: var(--ds-radius-modal);
+    box-shadow: var(--ds-elevation-surface);
+  }
+  .work-chat-composer .composer-grip {
+    display: none;
+  }
+  .work-composer-context > button {
+    margin-left: calc(-1 * var(--ds-space-control-group));
+  }
+  .work-composer-context {
+    margin-top: var(--ds-space-module-inset);
+  }
+  .work-composer-primary {
+    position: absolute;
+    right: 0;
+    top: 46px;
+    z-index: 2;
+  }
+  .work-chat-composer .work-composer-controls {
+    min-height: 54px;
+    padding-block: calc(var(--ds-space-control-group) + var(--ds-space-inline));
+    overflow: hidden;
+  }
+  .work-measure {
+    max-width: 828px;
   }
   /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
      page content, so the blur does what it looks like it does. */
@@ -784,6 +959,17 @@
   }
 }
 
+@media (max-width: 70rem) {
+  .work-context-panel {
+    position: fixed;
+    inset-block: 0;
+    right: 0;
+    z-index: 60;
+    max-width: calc(100vw - 3rem);
+    box-shadow: var(--ds-elevation-modal), inset 1px 0 0 var(--border);
+  }
+}
+
 /* Motion is decoration here — every animation above is an entrance or a hover, so honouring the
    system preference costs nothing and skipping it would be the kind of thing that makes an app
    feel careless rather than native. */
@@ -810,6 +996,23 @@
 .bn-editor {
   padding-inline: 12px;
   font-size: 14px;
+}
+/* BlockNote ships unlayered editor rules after the app component layer. Keep the Work-only
+   integration here so its prompt row cannot collapse under the floating Send control. Work also
+   has an explicit Add context action, so the document-style block menu must not escape the card. */
+.work-chat-composer .work-composer-editor {
+  min-height: 58px;
+}
+.work-composer-editor .bn-editor {
+  padding-inline: var(--ds-space-section)
+    calc(
+      var(--ds-space-page) + var(--ds-space-page) + var(--ds-space-page) + var(--ds-space-page) +
+        var(--ds-space-section)
+    );
+  font-size: var(--ds-type-body-size);
+}
+.work-composer-editor .bn-side-menu {
+  display: none;
 }
 .bn-block-content[data-content-type="heading"][data-level="1"] .bn-inline-content {
   font-size: 21px;
