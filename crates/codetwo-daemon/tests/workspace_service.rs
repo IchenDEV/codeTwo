@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
-    BriefRevision, DocBlock, Event, LaunchSpec, Op, Part, PermissionMode, Provider, ProviderId,
-    Role, Session, SkillLibrary, Store, Task, TaskExperience, TaskStatus, WorkMutationGuard,
-    Workspace, WorkspaceKind, WorkspaceSnapshot,
+    AutomationSpec, AutomationTrigger, BriefRevision, DocBlock, Event, LaunchSpec, Op, Part,
+    PermissionMode, Provider, ProviderId, Role, ScheduleTrigger, Session, SkillLibrary, Store,
+    Task, TaskExperience, TaskStatus, WorkMutationGuard, Workspace, WorkspaceKind,
+    WorkspaceSnapshot,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -135,6 +136,70 @@ async fn managed_workspace_gets_a_stable_private_files_directory() {
         .find(|item| item.entity.id == saved.entity.id)
         .unwrap();
     assert_eq!(persisted.entity.root_path, saved.entity.root_path);
+}
+
+#[tokio::test]
+async fn automation_definitions_are_shared_revisioned_daemon_state() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let store = Arc::new(Store::open(root.path().join("codetwo.db").to_str().unwrap()).unwrap());
+    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let writer = Client::connect(&socket).await.unwrap();
+    let observer = Client::connect(&socket).await.unwrap();
+    let mut events = observer
+        .subscribe(Some(observer.hello().cursor.clone()))
+        .await
+        .unwrap();
+
+    let workspace = writer
+        .save_workspace(
+            Workspace::new("Automation", None, WorkspaceKind::Managed),
+            None,
+        )
+        .await
+        .unwrap();
+    let _ = events.recv().await.unwrap();
+    let task = writer
+        .save_task(
+            Task::named(workspace.entity.id, "Daily report", TaskExperience::Work),
+            None,
+        )
+        .await
+        .unwrap();
+    let _ = events.recv().await.unwrap();
+    let automation = AutomationSpec::new(
+        "daily-report",
+        task.entity.id.clone(),
+        ProviderId::Codex,
+        AutomationTrigger::Schedule(ScheduleTrigger { at_ms: 10_000 }),
+        vec![DocBlock::Text {
+            text: "write the daily report".into(),
+        }],
+    );
+    let saved = writer.save_automation(automation, None).await.unwrap();
+    assert_eq!(saved.revision, 1);
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::AutomationChanged { revision: 1, .. })
+    ));
+    assert_eq!(
+        observer
+            .list_automations(Some(task.entity.id), None, 10)
+            .await
+            .unwrap()
+            .items,
+        vec![saved]
+    );
+
+    writer.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
 }
 
 #[tokio::test]

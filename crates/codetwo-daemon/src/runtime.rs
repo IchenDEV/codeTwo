@@ -994,6 +994,33 @@ async fn dispatch_work(
             Ok(page) => (WorkResponse::Deliverables { page }, Vec::new()),
             Err(error) => (work_error(error), Vec::new()),
         },
+        WorkRequest::ListAutomations {
+            task_id,
+            cursor,
+            limit,
+        } => match state
+            .store
+            .work_list_automations(task_id.as_deref(), cursor.as_deref(), limit)
+        {
+            Ok(page) => (WorkResponse::Automations { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
+        WorkRequest::SaveAutomation {
+            automation,
+            expected_revision,
+        } => {
+            let guard = local_guard(request_id, expected_revision);
+            match state.store.work_save_automation(automation, &guard) {
+                Ok(item) => {
+                    let event = TransportEvent::AutomationChanged {
+                        automation: item.entity.clone(),
+                        revision: item.revision,
+                    };
+                    (WorkResponse::AutomationSaved { item }, vec![event])
+                }
+                Err(error) => (work_error(error), Vec::new()),
+            }
+        }
     }
 }
 

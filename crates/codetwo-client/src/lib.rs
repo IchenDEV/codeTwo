@@ -13,11 +13,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, BriefRevision, BriefSaveResult, ChangeSummary, Deliverable,
-    EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response, ResponseEnvelope,
-    RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, Session, Skill, StreamCursor,
-    StreamEpoch, SubscribeResult, Task, TranscriptCursor, TranscriptPage, TransportEvent,
-    WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
+    read_json, write_json, AutomationSpec, BriefRevision, BriefSaveResult, ChangeSummary,
+    Deliverable, EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response,
+    ResponseEnvelope, RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, Session,
+    Skill, StreamCursor, StreamEpoch, SubscribeResult, Task, TranscriptCursor, TranscriptPage,
+    TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
     MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
@@ -674,6 +674,48 @@ impl Client {
         }
     }
 
+    pub async fn list_automations(
+        &self,
+        task_id: Option<String>,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<AutomationSpec>, ClientError> {
+        match self
+            .work(WorkRequest::ListAutomations {
+                task_id,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::Automations { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "automations",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn save_automation(
+        &self,
+        automation: AutomationSpec,
+        expected_revision: Option<u64>,
+    ) -> Result<WorkVersioned<AutomationSpec>, ClientError> {
+        match self
+            .work(WorkRequest::SaveAutomation {
+                automation,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::AutomationSaved { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "automation_saved",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), ClientError> {
         match self
             .request(Request::Shutdown, ExpectedResponse::Shutdown)
@@ -1007,6 +1049,8 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::RollbackCompleted { .. } => "rollback_completed",
         WorkResponse::DeliverableRegistered { .. } => "deliverable_registered",
         WorkResponse::Deliverables { .. } => "deliverables",
+        WorkResponse::Automations { .. } => "automations",
+        WorkResponse::AutomationSaved { .. } => "automation_saved",
         WorkResponse::Error { .. } => "error",
     }
 }

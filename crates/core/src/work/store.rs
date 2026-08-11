@@ -12,7 +12,11 @@ use super::domain::{
 };
 use super::ledger::{
     ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
-    WorkEntityKind, WorkMutationGuard,
+    WorkAuditContext, WorkEntityKind, WorkMutationGuard,
+};
+use crate::automation::{
+    AutomationFailure, AutomationRun, AutomationRunStatus, AutomationSpec, AutomationValidation,
+    AutomationWait,
 };
 use crate::store::{Store, StoreError};
 use crate::work_snapshot::SnapshotChange;
@@ -816,6 +820,90 @@ impl Store {
         })
     }
 
+    pub fn work_save_automation(
+        &self,
+        automation: AutomationSpec,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<AutomationSpec>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.save_automation(automation, guard)
+        })
+    }
+
+    pub fn work_get_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<Option<WorkVersioned<AutomationSpec>>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT a.id,a.task_id,a.provider_json,a.model,a.prompt_json,a.trigger_json,a.enabled,
+                    a.last_evaluated_at,a.next_due_at,a.cursor_ms,a.created_at,a.updated_at,h.revision
+             FROM automations a JOIN work_entity_heads h
+               ON h.entity_kind='automation' AND h.entity_id=a.id AND h.deleted=0
+             WHERE a.id=?1",
+            [automation_id],
+            automation_from_row,
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
+    pub fn work_list_automations(
+        &self,
+        task_id: Option<&str>,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<AutomationSpec>, StoreError> {
+        validate_page(cursor, limit)?;
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT a.id,a.task_id,a.provider_json,a.model,a.prompt_json,a.trigger_json,a.enabled,
+                    a.last_evaluated_at,a.next_due_at,a.cursor_ms,a.created_at,a.updated_at,h.revision
+             FROM automations a JOIN work_entity_heads h
+               ON h.entity_kind='automation' AND h.entity_id=a.id AND h.deleted=0
+             WHERE (?1 IS NULL OR a.task_id=?1) AND (?2 IS NULL OR a.id>?2)
+             ORDER BY a.id LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![task_id, cursor, (limit + 1) as i64],
+            automation_from_row,
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = page_cursor(&mut items, limit, |item| item.entity.id.clone());
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
+    pub fn work_claim_due_automations(
+        &self,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<Vec<WorkVersioned<AutomationRun>>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.claim_due_automations(now, audit)
+        })
+    }
+
+    pub fn work_transition_automation_run(
+        &self,
+        run_id: &str,
+        target: AutomationRunStatus,
+        wait: Option<AutomationWait>,
+        failure: Option<AutomationFailure>,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.transition_automation_run(run_id, target, wait, failure, now, audit)
+        })
+    }
+
     pub fn work_save_brief(
         &self,
         brief: BriefRevision,
@@ -1370,6 +1458,45 @@ fn run_change_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersione
         },
         revision: u64::try_from(row.get::<_, i64>(4)?)
             .map_err(|_| rusqlite::Error::InvalidQuery)?,
+    })
+}
+
+fn automation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<AutomationSpec>> {
+    fn json<T: serde::de::DeserializeOwned>(
+        row: &rusqlite::Row<'_>,
+        index: usize,
+    ) -> rusqlite::Result<T> {
+        let value: String = row.get(index)?;
+        serde_json::from_str(&value).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                index,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })
+    }
+
+    let revision =
+        u64::try_from(row.get::<_, i64>(12)?).map_err(|_| rusqlite::Error::InvalidQuery)?;
+    Ok(WorkVersioned {
+        entity: AutomationSpec {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            provider: Some(json(row, 2)?),
+            model: row.get(3)?,
+            prompt: json(row, 4)?,
+            trigger: json(row, 5)?,
+            enabled: row.get::<_, i64>(6)? != 0,
+            revision: i64::try_from(revision).map_err(|_| rusqlite::Error::InvalidQuery)?,
+            last_evaluated_at: row.get(7)?,
+            next_due_at: row.get(8)?,
+            cursor_ms: row.get(9)?,
+            validation: AutomationValidation::Valid,
+            created_at: Some(row.get(10)?),
+            updated_at: Some(row.get(11)?),
+            tombstoned: false,
+        },
+        revision,
     })
 }
 

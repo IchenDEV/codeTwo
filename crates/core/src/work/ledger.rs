@@ -6,6 +6,10 @@ use super::domain::{
     WorkVersioned, Workspace,
 };
 use super::schema;
+use crate::automation::{
+    AutomationFailure, AutomationRun, AutomationRunStatus, AutomationSpec, AutomationValidation,
+    AutomationWait, MAX_DUE_WINDOW_MS,
+};
 use crate::store::StoreError;
 use crate::work_snapshot::SnapshotChange;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
@@ -251,6 +255,98 @@ fn sqlite_revision(value: u64) -> Result<i64, StoreError> {
     i64::try_from(value).map_err(|_| StoreError::Domain("Work revision is out of range".to_owned()))
 }
 
+fn json_column<T: serde::de::DeserializeOwned>(
+    row: &rusqlite::Row<'_>,
+    index: usize,
+) -> rusqlite::Result<T> {
+    let value: String = row.get(index)?;
+    serde_json::from_str(&value).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            index,
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })
+}
+
+fn automation_spec_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<WorkVersioned<AutomationSpec>> {
+    let revision =
+        u64::try_from(row.get::<_, i64>(12)?).map_err(|_| rusqlite::Error::InvalidQuery)?;
+    Ok(WorkVersioned {
+        entity: AutomationSpec {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            provider: Some(json_column(row, 2)?),
+            model: row.get(3)?,
+            prompt: json_column(row, 4)?,
+            trigger: json_column(row, 5)?,
+            enabled: row.get::<_, i64>(6)? != 0,
+            revision: i64::try_from(revision).map_err(|_| rusqlite::Error::InvalidQuery)?,
+            last_evaluated_at: row.get(7)?,
+            next_due_at: row.get(8)?,
+            cursor_ms: row.get(9)?,
+            validation: AutomationValidation::Valid,
+            created_at: Some(row.get(10)?),
+            updated_at: Some(row.get(11)?),
+            tombstoned: false,
+        },
+        revision,
+    })
+}
+
+fn automation_run_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<WorkVersioned<AutomationRun>> {
+    let status: String = row.get(3)?;
+    Ok(WorkVersioned {
+        entity: AutomationRun {
+            id: row.get(0)?,
+            automation_id: row.get(1)?,
+            occurrence_key: row.get(2)?,
+            status: AutomationRunStatus::parse(&status).ok_or(rusqlite::Error::InvalidQuery)?,
+            scheduled_at: row.get(4)?,
+            provider: json_column(row, 5)?,
+            model: row.get(6)?,
+            prompt: json_column(row, 7)?,
+            work_run_id: row.get(8)?,
+            started_at: row.get(9)?,
+            finished_at: row.get(10)?,
+            wait: row
+                .get::<_, Option<String>>(11)?
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        11,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?,
+            failure: row
+                .get::<_, Option<String>>(12)?
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        12,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?,
+            coalesced_missed: u64::try_from(row.get::<_, i64>(13)?)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
+            missed_start: row.get(14)?,
+            missed_end: row.get(15)?,
+            created_at: row.get(16)?,
+            updated_at: row.get(17)?,
+        },
+        revision: u64::try_from(row.get::<_, i64>(18)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
+    })
+}
+
 fn work_conflict(
     entity_kind: WorkEntityKind,
     entity_id: &str,
@@ -457,6 +553,368 @@ impl WorkTransaction<'_> {
             )?;
         }
         self.append_with_revision(&input, revision)
+    }
+
+    pub fn save_automation(
+        &mut self,
+        mut automation: AutomationSpec,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<AutomationSpec>, StoreError> {
+        automation
+            .validate()
+            .map_err(|error| StoreError::Domain(error.to_string()))?;
+        if automation.tombstoned {
+            return Err(StoreError::Domain(
+                "tombstoned Automation cannot be saved".to_owned(),
+            ));
+        }
+        let existing: Option<(String, i64, Option<i64>, Option<i64>, Option<i64>)> = self
+            .transaction
+            .query_row(
+                "SELECT task_id,created_at,last_evaluated_at,next_due_at,cursor_ms
+                 FROM automations WHERE id=?1",
+                [&automation.id],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        if let Some((task_id, ..)) = &existing {
+            if task_id != &automation.task_id {
+                return Err(StoreError::Domain(
+                    "Automation task binding is immutable".to_owned(),
+                ));
+            }
+        } else {
+            let active_task: bool = self.transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM tasks t JOIN work_entity_heads h
+                   ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0
+                   WHERE t.id=?1 AND t.experience='work')",
+                [&automation.task_id],
+                |row| row.get(0),
+            )?;
+            if !active_task {
+                return Err(StoreError::Domain(
+                    "Automation requires an active Work Task".to_owned(),
+                ));
+            }
+        }
+
+        let input = guard.input(
+            WorkEntityKind::Automation,
+            automation.id.clone(),
+            false,
+            "save",
+        );
+        let revision = self.next_revision(&input)?;
+        let now = now_millis();
+        let (created_at, last_evaluated_at, next_due_at, cursor_ms) = existing
+            .map(|(_, created_at, last, next, cursor)| (created_at, last, next, cursor))
+            .unwrap_or((now, None, None, None));
+        automation.revision = sqlite_revision(revision)?;
+        automation.created_at = Some(created_at);
+        automation.updated_at = Some(now);
+        automation.last_evaluated_at = last_evaluated_at;
+        automation.next_due_at = next_due_at;
+        automation.cursor_ms = cursor_ms;
+        let provider =
+            serde_json::to_string(automation.provider.as_ref().ok_or_else(|| {
+                StoreError::Domain("Automation provider is required".to_owned())
+            })?)?;
+        let prompt = serde_json::to_string(&automation.prompt)?;
+        let trigger = serde_json::to_string(&automation.trigger)?;
+        self.transaction.execute(
+            "INSERT INTO automations
+             (id,task_id,provider_json,model,prompt_json,trigger_json,enabled,last_evaluated_at,
+              next_due_at,cursor_ms,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
+             ON CONFLICT(id) DO UPDATE SET provider_json=excluded.provider_json,
+               model=excluded.model,prompt_json=excluded.prompt_json,
+               trigger_json=excluded.trigger_json,enabled=excluded.enabled,
+               updated_at=excluded.updated_at",
+            params![
+                automation.id,
+                automation.task_id,
+                provider,
+                automation.model,
+                prompt,
+                trigger,
+                automation.enabled as i64,
+                automation.last_evaluated_at,
+                automation.next_due_at,
+                automation.cursor_ms,
+                created_at,
+                now,
+            ],
+        )?;
+        self.append_with_revision(&input, revision)?;
+        Ok(WorkVersioned {
+            entity: automation,
+            revision,
+        })
+    }
+
+    pub fn claim_due_automations(
+        &mut self,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<Vec<WorkVersioned<AutomationRun>>, StoreError> {
+        if now < 0 {
+            return Err(StoreError::Domain(
+                "Automation evaluation time is invalid".to_owned(),
+            ));
+        }
+        let mut statement = self.transaction.prepare(
+            "SELECT a.id,a.task_id,a.provider_json,a.model,a.prompt_json,a.trigger_json,a.enabled,
+                    a.last_evaluated_at,a.next_due_at,a.cursor_ms,a.created_at,a.updated_at,h.revision
+             FROM automations a JOIN work_entity_heads h
+               ON h.entity_kind='automation' AND h.entity_id=a.id AND h.deleted=0
+             WHERE a.enabled=1 ORDER BY a.id",
+        )?;
+        let rows = statement.query_map([], automation_spec_from_row)?;
+        let automations = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(statement);
+
+        let mut claimed = Vec::new();
+        for current in automations {
+            let mut automation = current.entity;
+            let from = automation
+                .cursor_ms
+                .unwrap_or_else(|| automation.created_at.unwrap_or(now).saturating_sub(1))
+                .max(now.saturating_sub(MAX_DUE_WINDOW_MS));
+            let Some(due) = automation
+                .due_summary(from, now)
+                .map_err(|error| StoreError::Domain(error.to_string()))?
+            else {
+                continue;
+            };
+            let active: Option<WorkVersioned<AutomationRun>> = self
+                .transaction
+                .query_row(
+                    "SELECT r.id,r.automation_id,r.occurrence_key,r.status,r.scheduled_at,
+                            r.provider_json,r.model,r.prompt_json,r.work_run_id,r.started_at,
+                            r.finished_at,r.wait_json,r.failure_json,r.coalesced_missed,
+                            r.missed_start,r.missed_end,r.created_at,r.updated_at,h.revision
+                     FROM automation_runs r JOIN work_entity_heads h
+                       ON h.entity_kind='automation_run' AND h.entity_id=r.id AND h.deleted=0
+                     WHERE r.automation_id=?1 AND r.status IN ('queued','running','waiting')",
+                    [&automation.id],
+                    automation_run_from_row,
+                )
+                .optional()?;
+
+            let run = if let Some(mut active) = active {
+                active.entity.coalesced_missed =
+                    active.entity.coalesced_missed.saturating_add(due.count);
+                active.entity.missed_start = Some(
+                    active
+                        .entity
+                        .missed_start
+                        .map_or(due.first_ms, |value| value.min(due.first_ms)),
+                );
+                active.entity.missed_end = Some(
+                    active
+                        .entity
+                        .missed_end
+                        .map_or(due.last_ms, |value| value.max(due.last_ms)),
+                );
+                active.entity.updated_at = now;
+                let run_guard = WorkMutationGuard::from_audit(Some(active.revision), audit);
+                let mutation = self.append_guarded(
+                    WorkEntityKind::AutomationRun,
+                    active.entity.id.clone(),
+                    false,
+                    "coalesce",
+                    &run_guard,
+                )?;
+                self.transaction.execute(
+                    "UPDATE automation_runs SET coalesced_missed=?2,missed_start=?3,
+                       missed_end=?4,updated_at=?5 WHERE id=?1",
+                    params![
+                        active.entity.id,
+                        i64::try_from(active.entity.coalesced_missed).unwrap_or(i64::MAX),
+                        active.entity.missed_start,
+                        active.entity.missed_end,
+                        now,
+                    ],
+                )?;
+                active.revision = mutation.revision;
+                active
+            } else {
+                let provider = automation.provider.clone().ok_or_else(|| {
+                    StoreError::Domain("Automation provider is required".to_owned())
+                })?;
+                let run = AutomationRun {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    automation_id: automation.id.clone(),
+                    occurrence_key: due.last_ms.to_string(),
+                    status: AutomationRunStatus::Queued,
+                    scheduled_at: due.last_ms,
+                    provider,
+                    model: automation.model.clone(),
+                    prompt: automation.prompt.clone(),
+                    work_run_id: None,
+                    started_at: None,
+                    finished_at: None,
+                    wait: None,
+                    failure: None,
+                    coalesced_missed: due.count.saturating_sub(1),
+                    missed_start: (due.count > 1).then_some(due.first_ms),
+                    missed_end: (due.count > 1).then_some(due.last_ms),
+                    created_at: now,
+                    updated_at: now,
+                };
+                run.validate()
+                    .map_err(|error| StoreError::Domain(error.to_string()))?;
+                let run_guard = WorkMutationGuard::from_audit(None, audit);
+                let mutation = self.append_guarded(
+                    WorkEntityKind::AutomationRun,
+                    run.id.clone(),
+                    false,
+                    "claim",
+                    &run_guard,
+                )?;
+                self.transaction.execute(
+                    "INSERT INTO automation_runs
+                     (id,automation_id,occurrence_key,status,scheduled_at,provider_json,model,
+                      prompt_json,work_run_id,started_at,finished_at,wait_json,failure_json,
+                      coalesced_missed,missed_start,missed_end,created_at,updated_at)
+                     VALUES(?1,?2,?3,'queued',?4,?5,?6,?7,NULL,NULL,NULL,NULL,NULL,?8,?9,?10,?11,?11)",
+                    params![
+                        run.id,
+                        run.automation_id,
+                        run.occurrence_key,
+                        run.scheduled_at,
+                        serde_json::to_string(&run.provider)?,
+                        run.model,
+                        serde_json::to_string(&run.prompt)?,
+                        i64::try_from(run.coalesced_missed).unwrap_or(i64::MAX),
+                        run.missed_start,
+                        run.missed_end,
+                        now,
+                    ],
+                )?;
+                WorkVersioned {
+                    entity: run,
+                    revision: mutation.revision,
+                }
+            };
+
+            automation.cursor_ms = Some(now);
+            automation.last_evaluated_at = Some(now);
+            automation.next_due_at = automation
+                .due_summary(now, now.saturating_add(MAX_DUE_WINDOW_MS))
+                .map_err(|error| StoreError::Domain(error.to_string()))?
+                .map(|summary| summary.first_ms);
+            let automation_guard = WorkMutationGuard::from_audit(Some(current.revision), audit);
+            let mutation = self.append_guarded(
+                WorkEntityKind::Automation,
+                automation.id.clone(),
+                false,
+                "evaluate",
+                &automation_guard,
+            )?;
+            self.transaction.execute(
+                "UPDATE automations SET last_evaluated_at=?2,next_due_at=?3,cursor_ms=?4,
+                   updated_at=?5 WHERE id=?1",
+                params![
+                    automation.id,
+                    automation.last_evaluated_at,
+                    automation.next_due_at,
+                    automation.cursor_ms,
+                    now,
+                ],
+            )?;
+            debug_assert_eq!(mutation.revision, current.revision + 1);
+            claimed.push(run);
+        }
+        Ok(claimed)
+    }
+
+    pub fn transition_automation_run(
+        &mut self,
+        run_id: &str,
+        target: AutomationRunStatus,
+        wait: Option<AutomationWait>,
+        failure: Option<AutomationFailure>,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        let mut current = self
+            .transaction
+            .query_row(
+                "SELECT r.id,r.automation_id,r.occurrence_key,r.status,r.scheduled_at,
+                        r.provider_json,r.model,r.prompt_json,r.work_run_id,r.started_at,
+                        r.finished_at,r.wait_json,r.failure_json,r.coalesced_missed,
+                        r.missed_start,r.missed_end,r.created_at,r.updated_at,h.revision
+                 FROM automation_runs r JOIN work_entity_heads h
+                   ON h.entity_kind='automation_run' AND h.entity_id=r.id AND h.deleted=0
+                 WHERE r.id=?1",
+                [run_id],
+                automation_run_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::Domain("unknown Automation run".to_owned()))?;
+        if !current.entity.status.can_transition_to(target) {
+            return Err(StoreError::Domain(format!(
+                "invalid Automation run transition: {} -> {}",
+                current.entity.status.as_str(),
+                target.as_str()
+            )));
+        }
+        current.entity.status = target;
+        current.entity.wait = wait;
+        current.entity.failure = failure;
+        current.entity.updated_at = now;
+        if target == AutomationRunStatus::Running && current.entity.started_at.is_none() {
+            current.entity.started_at = Some(now);
+        }
+        if !target.is_active() {
+            current.entity.finished_at = Some(now);
+        }
+        current
+            .entity
+            .validate()
+            .map_err(|error| StoreError::Domain(error.to_string()))?;
+        let guard = WorkMutationGuard::from_audit(Some(current.revision), audit);
+        let mutation = self.append_guarded(
+            WorkEntityKind::AutomationRun,
+            current.entity.id.clone(),
+            false,
+            format!("status_{}", target.as_str()),
+            &guard,
+        )?;
+        self.transaction.execute(
+            "UPDATE automation_runs SET status=?2,started_at=?3,finished_at=?4,wait_json=?5,
+               failure_json=?6,updated_at=?7 WHERE id=?1",
+            params![
+                current.entity.id,
+                target.as_str(),
+                current.entity.started_at,
+                current.entity.finished_at,
+                current
+                    .entity
+                    .wait
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                current
+                    .entity
+                    .failure
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                now,
+            ],
+        )?;
+        current.revision = mutation.revision;
+        Ok(current)
     }
 
     pub fn transition_task_status(

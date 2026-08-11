@@ -15,6 +15,7 @@
 
 pub mod acp;
 pub mod activity;
+pub mod automation;
 pub mod browser;
 pub mod canvas;
 pub mod context;
@@ -53,6 +54,13 @@ pub mod workspace_search;
 pub mod worktree;
 
 pub use activity::{ActivityTracker, TurnLease};
+pub use automation::{
+    AutomationError, AutomationFailure, AutomationFailureCode, AutomationNotification,
+    AutomationNotificationKind, AutomationPage, AutomationPathPolicy, AutomationRun,
+    AutomationRunStatus, AutomationSpec, AutomationTrigger, AutomationTriggerConfig,
+    AutomationValidation, AutomationWait, AutomationWaitCode, CronTrigger, DueOccurrence,
+    DueSummary, FilesystemTrigger, OneShotTrigger, RecurringTrigger, ScheduleTrigger,
+};
 pub use browser::Annotation;
 pub use canvas::{
     canvas_search_projection, deterministic_summary, encode_canvas_history_marker, normalize_media,

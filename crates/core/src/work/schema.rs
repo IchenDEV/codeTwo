@@ -85,6 +85,50 @@ CREATE TABLE IF NOT EXISTS run_changes (
 CREATE INDEX IF NOT EXISTS run_changes_snapshot_path
   ON run_changes(snapshot_id, path, id);
 
+CREATE TABLE IF NOT EXISTS automations (
+  id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 256),
+  task_id TEXT NOT NULL REFERENCES tasks(id),
+  provider_json TEXT NOT NULL,
+  model TEXT,
+  prompt_json TEXT NOT NULL,
+  trigger_json TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+  last_evaluated_at INTEGER,
+  next_due_at INTEGER,
+  cursor_ms INTEGER,
+  created_at INTEGER NOT NULL CHECK(created_at >= 0),
+  updated_at INTEGER NOT NULL CHECK(updated_at >= created_at)
+);
+CREATE INDEX IF NOT EXISTS automations_task_enabled
+  ON automations(task_id, enabled, id);
+
+CREATE TABLE IF NOT EXISTS automation_runs (
+  id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 256),
+  automation_id TEXT NOT NULL REFERENCES automations(id),
+  occurrence_key TEXT NOT NULL CHECK(length(occurrence_key) BETWEEN 1 AND 256),
+  status TEXT NOT NULL CHECK(status IN ('queued','running','waiting','completed','failed','skipped')),
+  scheduled_at INTEGER NOT NULL CHECK(scheduled_at >= 0),
+  provider_json TEXT NOT NULL,
+  model TEXT,
+  prompt_json TEXT NOT NULL,
+  work_run_id TEXT REFERENCES sessions(id),
+  started_at INTEGER,
+  finished_at INTEGER,
+  wait_json TEXT,
+  failure_json TEXT,
+  coalesced_missed INTEGER NOT NULL DEFAULT 0 CHECK(coalesced_missed >= 0),
+  missed_start INTEGER,
+  missed_end INTEGER,
+  created_at INTEGER NOT NULL CHECK(created_at >= 0),
+  updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+  UNIQUE(automation_id, occurrence_key)
+);
+CREATE INDEX IF NOT EXISTS automation_runs_order
+  ON automation_runs(automation_id, scheduled_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS automation_runs_one_active
+  ON automation_runs(automation_id)
+  WHERE status IN ('queued','running','waiting');
+
 CREATE TABLE IF NOT EXISTS work_revision_clock (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   high_water INTEGER NOT NULL CHECK(high_water >= 0)

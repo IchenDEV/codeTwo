@@ -8,9 +8,9 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, RunChange, Session,
-    Skill, Task, TranscriptCursor, TranscriptPage, WorkPage, WorkVersioned, Workspace,
-    WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    AutomationSpec, BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run,
+    RunChange, Session, Skill, Task, TranscriptCursor, TranscriptPage, WorkPage, WorkVersioned,
+    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -201,6 +201,10 @@ pub enum TransportEvent {
         deliverable: Deliverable,
         revision: u64,
     },
+    AutomationChanged {
+        automation: AutomationSpec,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -297,6 +301,19 @@ impl EventEnvelope {
                     ));
                 }
             }
+            TransportEvent::AutomationChanged {
+                automation,
+                revision,
+            } => {
+                automation
+                    .validate()
+                    .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                if *revision == 0 || u64::try_from(automation.revision) != Ok(*revision) {
+                    return Err(EnvelopeError::InvalidField(
+                        "automation revision".to_owned(),
+                    ));
+                }
+            }
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -383,6 +400,18 @@ pub enum WorkRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
         limit: usize,
+    },
+    ListAutomations {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
+    SaveAutomation {
+        automation: AutomationSpec,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_revision: Option<u64>,
     },
 }
 
@@ -539,6 +568,34 @@ impl WorkRequest {
                 }
                 if let Some(cursor) = cursor {
                     validate_bounded_text(cursor, 8192, "Deliverable page cursor")?;
+                }
+            }
+            Self::ListAutomations {
+                task_id,
+                cursor,
+                limit,
+            } => {
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(task_id) = task_id {
+                    validate_bounded_text(task_id, 256, "task id")?;
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 256, "Automation page cursor")?;
+                }
+            }
+            Self::SaveAutomation {
+                automation,
+                expected_revision,
+            } => {
+                automation
+                    .validate()
+                    .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                if *expected_revision == Some(0) {
+                    return Err(EnvelopeError::InvalidField(
+                        "automation expected revision".to_owned(),
+                    ));
                 }
             }
         }
@@ -799,6 +856,12 @@ pub enum WorkResponse {
     Deliverables {
         page: WorkPage<Deliverable>,
     },
+    Automations {
+        page: WorkPage<AutomationSpec>,
+    },
+    AutomationSaved {
+        item: WorkVersioned<AutomationSpec>,
+    },
     Error {
         error: WorkErrorKind,
         message: String,
@@ -957,6 +1020,36 @@ impl WorkResponse {
                             "deliverable revision".to_owned(),
                         ));
                     }
+                }
+            }
+            Self::Automations { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 256, "Automation page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                    if item.revision == 0
+                        || u64::try_from(item.entity.revision) != Ok(item.revision)
+                    {
+                        return Err(EnvelopeError::InvalidField(
+                            "automation revision".to_owned(),
+                        ));
+                    }
+                }
+            }
+            Self::AutomationSaved { item } => {
+                item.entity
+                    .validate()
+                    .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                if item.revision == 0 || u64::try_from(item.entity.revision) != Ok(item.revision) {
+                    return Err(EnvelopeError::InvalidField(
+                        "automation revision".to_owned(),
+                    ));
                 }
             }
             Self::Error { message, .. } => {
