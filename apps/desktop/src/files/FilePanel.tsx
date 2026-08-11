@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuGroup,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
@@ -240,72 +241,82 @@ export function FilePanel({
     <ContextMenuContent>
       {!entry.is_dir && (
         <>
-          <ContextMenuItem onSelect={() => onOpen(entry.path)}>
-            <File className="size-3.5" /> {t("files.open")}
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => onInsert(entry.path)}>
-            <AtSign className="size-3.5" /> {t("files.insert")}
-          </ContextMenuItem>
+          <ContextMenuGroup>
+            <ContextMenuItem onClick={() => onOpen(entry.path)}>
+              <File className="size-3.5" /> {t("files.open")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onInsert(entry.path)}>
+              <AtSign className="size-3.5" /> {t("files.insert")}
+            </ContextMenuItem>
+          </ContextMenuGroup>
           <ContextMenuSeparator />
         </>
       )}
 
-      <ContextMenuItem
-        onSelect={() => {
-          const parent = entry.is_dir ? entry.path : parentOf(entry.path);
-          reveal(parent);
-          setDraft({ kind: "new-file", parent, value: "" });
-        }}
-      >
-        <FilePlus className="size-3.5" /> {t("files.newFile")}
-      </ContextMenuItem>
-      <ContextMenuItem
-        onSelect={() => {
-          const parent = entry.is_dir ? entry.path : parentOf(entry.path);
-          reveal(parent);
-          setDraft({ kind: "new-folder", parent, value: "" });
-        }}
-      >
-        <FolderPlus className="size-3.5" /> {t("files.newFolder")}
-      </ContextMenuItem>
-      <ContextMenuSeparator />
-
-      <ContextMenuItem onSelect={() => setDraft({ kind: "rename", path: entry.path, value: entry.name })}>
-        <Pencil className="size-3.5" /> {t("files.rename")}
-      </ContextMenuItem>
-      <ContextMenuItem
-        onSelect={() => setDraft({ kind: "rename", path: entry.path, value: entry.path })}
-      >
-        <CornerUpRight className="size-3.5" /> {t("files.move")}
-      </ContextMenuItem>
-      {!entry.is_dir && (
+      <ContextMenuGroup>
         <ContextMenuItem
-          onSelect={() => {
-            if (cwd) void run(copyPath(cwd, entry.path, copyName(entry.path)), t("files.duplicated"));
+          onClick={() => {
+            const parent = entry.is_dir ? entry.path : parentOf(entry.path);
+            reveal(parent);
+            setDraft({ kind: "new-file", parent, value: "" });
           }}
         >
-          <Copy className="size-3.5" /> {t("files.duplicate")}
+          <FilePlus className="size-3.5" /> {t("files.newFile")}
         </ContextMenuItem>
-      )}
-      <ContextMenuItem onSelect={() => void navigator.clipboard?.writeText(entry.path)}>
-        <Copy className="size-3.5" /> {t("files.copyPath")}
-      </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            const parent = entry.is_dir ? entry.path : parentOf(entry.path);
+            reveal(parent);
+            setDraft({ kind: "new-folder", parent, value: "" });
+          }}
+        >
+          <FolderPlus className="size-3.5" /> {t("files.newFolder")}
+        </ContextMenuItem>
+      </ContextMenuGroup>
       <ContextMenuSeparator />
 
-      <ContextMenuItem
-        variant="destructive"
-        onSelect={async () => {
-          // Deleting a folder takes everything in it, so the confirmation says which and how much.
-          // Native dialog, not window.confirm — wry's stub would silently answer "yes".
-          const message = entry.is_dir
-            ? t("files.confirmDeleteFolder", { name: entry.name })
-            : t("files.confirmDelete", { name: entry.name });
-          if (!(await confirmNative(message))) return;
-          if (cwd) void run(deletePath(cwd, entry.path), t("files.deleted", { name: entry.name }));
-        }}
-      >
-        <Trash2 className="size-3.5" /> {t("files.delete")}
-      </ContextMenuItem>
+      <ContextMenuGroup>
+        <ContextMenuItem
+          onClick={() => setDraft({ kind: "rename", path: entry.path, value: entry.name })}
+        >
+          <Pencil className="size-3.5" /> {t("files.rename")}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => setDraft({ kind: "rename", path: entry.path, value: entry.path })}
+        >
+          <CornerUpRight className="size-3.5" /> {t("files.move")}
+        </ContextMenuItem>
+        {!entry.is_dir && (
+          <ContextMenuItem
+            onClick={() => {
+              if (cwd) void run(copyPath(cwd, entry.path, copyName(entry.path)), t("files.duplicated"));
+            }}
+          >
+            <Copy className="size-3.5" /> {t("files.duplicate")}
+          </ContextMenuItem>
+        )}
+        <ContextMenuItem onClick={() => void navigator.clipboard?.writeText(entry.path)}>
+          <Copy className="size-3.5" /> {t("files.copyPath")}
+        </ContextMenuItem>
+      </ContextMenuGroup>
+      <ContextMenuSeparator />
+
+      <ContextMenuGroup>
+        <ContextMenuItem
+          variant="destructive"
+          onClick={async () => {
+            // Deleting a folder takes everything in it, so the confirmation says which and how much.
+            // Native dialog, not window.confirm — wry's stub would silently answer "yes".
+            const message = entry.is_dir
+              ? t("files.confirmDeleteFolder", { name: entry.name })
+              : t("files.confirmDelete", { name: entry.name });
+            if (!(await confirmNative(message))) return;
+            if (cwd) void run(deletePath(cwd, entry.path), t("files.deleted", { name: entry.name }));
+          }}
+        >
+          <Trash2 className="size-3.5" /> {t("files.delete")}
+        </ContextMenuItem>
+      </ContextMenuGroup>
     </ContextMenuContent>
   );
 
@@ -328,8 +339,8 @@ export function FilePanel({
             draftRow(depth)
           ) : (
             <ContextMenu>
-              <ContextMenuTrigger asChild>
-                <div
+              <ContextMenuTrigger
+                render={<div
                   onClick={() => {
                     setSelected(entry.path);
                     // A plain click opens a directory or *views* a file. It never edits —
@@ -370,8 +381,8 @@ export function FilePanel({
                       <AtSign className="size-3" />
                     </button>
                   )}
-                </div>
-              </ContextMenuTrigger>
+                </div>}
+              />
               {menuFor(entry)}
             </ContextMenu>
           )}
@@ -418,8 +429,8 @@ export function FilePanel({
           onChange={(e) => setFilter(e.target.value)}
         />
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-7 shrink-0"
@@ -427,13 +438,13 @@ export function FilePanel({
               onClick={() => setDraft({ kind: "new-file", parent: "", value: "" })}
             >
               <FilePlus className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("files.newFile")}</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-7 shrink-0"
@@ -441,16 +452,16 @@ export function FilePanel({
               onClick={() => setDraft({ kind: "new-folder", parent: "", value: "" })}
             >
               <FolderPlus className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("files.newFolder")}</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={() => void reload()}>
+          <TooltipTrigger
+            render={<Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={() => void reload()}>
               <RefreshCw className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("files.refresh")}</TooltipContent>
         </Tooltip>
       </div>

@@ -313,8 +313,8 @@ function IconAction({
 }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
+      <TooltipTrigger
+        render={<Button
           variant={active ? "secondary" : "ghost"}
           size="icon"
           aria-label={label}
@@ -322,8 +322,8 @@ function IconAction({
           onClick={onClick}
         >
           <Icon className="size-4" />
-        </Button>
-      </TooltipTrigger>
+        </Button>}
+      />
       <TooltipContent>
         {label}
         {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
