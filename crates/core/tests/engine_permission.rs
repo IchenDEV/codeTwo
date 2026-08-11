@@ -4,10 +4,15 @@
 
 use std::sync::{Arc, Mutex};
 
-use codetwo_core::acp::wire::PermissionOutcome;
-use codetwo_core::acp::{AcpClient, Connection, ContentBlock, StopReason};
+use codetwo_core::acp::wire::{
+    PermissionOption, PermissionOutcome, RequestPermissionRequest, SessionNotification,
+    SessionUpdate, ToolCall,
+};
+use codetwo_core::acp::{AcpClient, ClientHandler, Connection, ContentBlock, StopReason};
 use codetwo_core::event::Event;
-use codetwo_core::permission::PermissionPolicy;
+use codetwo_core::permission::{
+    PermissionContextKind, PermissionMode, PermissionPolicy, SandboxPolicy,
+};
 use codetwo_core::{PermissionRouter, SessionHandler};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
@@ -157,4 +162,171 @@ async fn permission_is_parked_then_answered() {
     ));
     let stop = turn.await.unwrap().unwrap();
     assert_eq!(stop, StopReason::EndTurn);
+}
+
+#[tokio::test]
+async fn mcp_elicitation_still_parks_in_full_access() {
+    let (events_tx, mut events_rx) = mpsc::unbounded_channel::<Event>();
+    let router = PermissionRouter::default();
+    let policy = Arc::new(Mutex::new(PermissionPolicy {
+        mode: PermissionMode::Yolo,
+        sandbox: SandboxPolicy::DangerFullAccess,
+        rules: Vec::new(),
+    }));
+    let handler = Arc::new(SessionHandler::new(
+        "s1".into(),
+        events_tx,
+        policy,
+        router.clone(),
+        None,
+    ));
+    let request = RequestPermissionRequest {
+        session_id: "provider-session".into(),
+        tool_call: json!({
+            "toolCallId": "browser-approval",
+            "title": "Website access",
+            "kind": "other"
+        }),
+        options: vec![
+            PermissionOption {
+                option_id: "allow".into(),
+                name: "Allow once".into(),
+                kind: "allow_once".into(),
+            },
+            PermissionOption {
+                option_id: "reject".into(),
+                name: "Reject".into(),
+                kind: "reject_once".into(),
+            },
+        ],
+        meta: Some(json!({"is_mcp_tool_approval": true})),
+    };
+
+    let pending = tokio::spawn({
+        let handler = handler.clone();
+        async move { handler.request_permission(request).await }
+    });
+    let event = events_rx.recv().await.expect("permission event");
+    let request_id = match event {
+        Event::PermissionRequest {
+            request_id,
+            context,
+            ..
+        } => {
+            assert_eq!(context.kind, PermissionContextKind::WebsiteAccess);
+            request_id
+        }
+        other => panic!("unexpected event: {other:?}"),
+    };
+    assert!(
+        !pending.is_finished(),
+        "Full Access must not auto-answer elicitation"
+    );
+    assert!(router.answer(
+        &request_id,
+        PermissionOutcome::Selected {
+            option_id: "reject".into()
+        }
+    ));
+    let response = pending.await.unwrap();
+    assert!(matches!(
+        response.outcome,
+        PermissionOutcome::Selected { option_id } if option_id == "reject"
+    ));
+}
+
+#[tokio::test]
+async fn sites_production_action_still_parks_in_full_access() {
+    let (events_tx, mut events_rx) = mpsc::unbounded_channel::<Event>();
+    let router = PermissionRouter::default();
+    let policy = Arc::new(Mutex::new(PermissionPolicy {
+        mode: PermissionMode::Yolo,
+        sandbox: SandboxPolicy::DangerFullAccess,
+        rules: Vec::new(),
+    }));
+    let handler = Arc::new(SessionHandler::new(
+        "s1".into(),
+        events_tx,
+        policy,
+        router.clone(),
+        None,
+    ));
+    handler
+        .session_update(SessionNotification {
+            session_id: "provider-session".into(),
+            update: SessionUpdate::ToolCall(ToolCall {
+                tool_call_id: "sites-deploy".into(),
+                title: Some("Deploy site".into()),
+                kind: Some("other".into()),
+                status: Some("pending".into()),
+                content: None,
+                raw_input: Some(json!({
+                    "server": "codex_apps",
+                    "tool": "sites_deploy_site_version"
+                })),
+                raw_output: None,
+                meta: None,
+            }),
+        })
+        .await;
+    assert!(matches!(
+        events_rx.recv().await,
+        Some(Event::ToolCall { kind: Some(kind), .. }) if kind == "sites"
+    ));
+
+    let pending = tokio::spawn({
+        let handler = handler.clone();
+        async move {
+            handler
+                .request_permission(RequestPermissionRequest {
+                    session_id: "provider-session".into(),
+                    tool_call: json!({
+                        "toolCallId": "sites-deploy",
+                        "title": "Deploy site",
+                        "kind": "other"
+                    }),
+                    options: vec![
+                        PermissionOption {
+                            option_id: "allow".into(),
+                            name: "Allow once".into(),
+                            kind: "allow_once".into(),
+                        },
+                        PermissionOption {
+                            option_id: "reject".into(),
+                            name: "Reject".into(),
+                            kind: "reject_once".into(),
+                        },
+                    ],
+                    meta: None,
+                })
+                .await
+        }
+    });
+    let request_id = match events_rx.recv().await.expect("permission event") {
+        Event::PermissionRequest {
+            request_id,
+            context,
+            ..
+        } => {
+            assert_eq!(context.kind, PermissionContextKind::SitesProduction);
+            assert!(context
+                .risk
+                .as_deref()
+                .is_some_and(|risk| risk.contains("Production")));
+            request_id
+        }
+        other => panic!("unexpected event: {other:?}"),
+    };
+    assert!(!pending.is_finished(), "Full Access must not deploy Sites");
+    assert!(router.answer(
+        &request_id,
+        PermissionOutcome::Selected {
+            option_id: "reject".into()
+        }
+    ));
+    let response = pending.await.unwrap();
+    assert!(matches!(
+        response.outcome,
+        PermissionOutcome::Selected { option_id } if option_id == "reject"
+    ));
 }

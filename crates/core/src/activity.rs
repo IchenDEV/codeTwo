@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::acp::wire::PermissionOutcome;
 use crate::event::Event;
+use crate::permission::PermissionContext;
 use crate::session::{
     PendingInput, PendingInputKind, RunFailureReason, SessionActivity, SessionRunState,
 };
@@ -151,6 +152,7 @@ impl ActivityTracker {
         session: &str,
         title: String,
         options: Vec<(String, String)>,
+        context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
         let _transition = self.inner.transitions.lock().unwrap();
         let input_id = uuid::Uuid::new_v4().to_string();
@@ -170,6 +172,7 @@ impl ActivityTracker {
                 title,
                 options,
                 sequence,
+                context,
             };
             turn.pending
                 .insert(sequence, PendingRoute { input, sender });
@@ -524,6 +527,7 @@ mod tests {
                 "session",
                 "First".into(),
                 vec![("allow-1".into(), "Allow".into())],
+                PermissionContext::default(),
             )
             .unwrap();
         let (second, second_rx) = tracker
@@ -531,6 +535,7 @@ mod tests {
                 "session",
                 "Second".into(),
                 vec![("allow-2".into(), "Allow".into())],
+                PermissionContext::default(),
             )
             .unwrap();
         let awaiting = tracker.activity("session").unwrap();
@@ -582,10 +587,20 @@ mod tests {
     fn cancel_drains_all_pending_but_keeps_the_turn_running() {
         let (tracker, lease, _events) = running_tracker();
         let (_, first) = tracker
-            .park_permission("session", "One".into(), vec![])
+            .park_permission(
+                "session",
+                "One".into(),
+                vec![],
+                PermissionContext::default(),
+            )
             .unwrap();
         let (_, second) = tracker
-            .park_permission("session", "Two".into(), vec![])
+            .park_permission(
+                "session",
+                "Two".into(),
+                vec![],
+                PermissionContext::default(),
+            )
             .unwrap();
         assert!(tracker.cancel_pending("session"));
         assert!(matches!(

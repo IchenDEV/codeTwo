@@ -170,6 +170,7 @@ async fn main() -> std::process::ExitCode {
                     request_id,
                     title,
                     options,
+                    ..
                 } => {
                     // Headless: approve when --yolo, otherwise decline and keep going.
                     let option_id = if args.yolo {

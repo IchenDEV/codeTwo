@@ -22,6 +22,7 @@ use crate::acp::wire::{
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::activity::{ActivityTracker, TurnLease};
+use crate::artifact::{ArtifactStore, ToolOutputNormalizer, ToolSource};
 use crate::canvas::{
     encode_canvas_history_marker, CanvasError, CanvasFeatureGate, CanvasPixelPolicy,
     CanvasPromptPayload, CanvasProviderImageCapability,
@@ -32,8 +33,11 @@ use crate::memory::{
     prompt_source, MemoryCanvasRef, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS,
 };
 use crate::models::builtin_models;
-use crate::permission::{Action, ExecutionPolicy, PermissionMode, PermissionPolicy, SandboxPolicy};
-use crate::provider::Provider;
+use crate::permission::{
+    Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
+    PermissionPolicy, SandboxPolicy,
+};
+use crate::provider::{Provider, ProviderId};
 use crate::session::{
     initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
     SessionId, SessionTitleOrigin, TranscriptCursor, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
@@ -73,9 +77,10 @@ impl PermissionRouter {
         session: &str,
         title: String,
         options: Vec<(String, String)>,
+        context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
         match &self.tracker {
-            Some(tracker) => tracker.park_permission(session, title, options),
+            Some(tracker) => tracker.park_permission(session, title, options, context),
             None => {
                 let request_id = uuid::Uuid::new_v4().to_string();
                 let receiver = self.park(request_id.clone());
@@ -119,6 +124,8 @@ pub struct SessionHandler {
     policy: Arc<Mutex<PermissionPolicy>>,
     router: PermissionRouter,
     store: Option<Arc<Store>>,
+    normalizer: ToolOutputNormalizer,
+    tool_contexts: Mutex<HashMap<String, ToolContext>>,
     /// True while a `session/load` replay is in flight. The replayed history already lives in the
     /// store and the UI, so updates arriving under this flag are dropped — neither re-persisted
     /// nor re-emitted. Set/cleared by the engine around the `session/load` call.
@@ -138,7 +145,11 @@ impl SessionHandler {
             events,
             policy,
             router,
+            normalizer: ToolOutputNormalizer::new(
+                store.clone().and_then(ArtifactStore::from_store),
+            ),
             store,
+            tool_contexts: Mutex::new(HashMap::new()),
             replaying: Arc::default(),
         }
     }
@@ -160,6 +171,203 @@ impl SessionHandler {
             }
         }
         None
+    }
+
+    fn remember_tool(&self, id: &str, context: ToolContext) {
+        let mut contexts = self.tool_contexts.lock().unwrap();
+        if contexts.len() >= 256 && !contexts.contains_key(id) {
+            if let Some(oldest) = contexts.keys().next().cloned() {
+                contexts.remove(&oldest);
+            }
+        }
+        contexts.insert(id.to_string(), context);
+    }
+
+    fn tool_context(&self, id: &str) -> ToolContext {
+        self.tool_contexts
+            .lock()
+            .unwrap()
+            .get(id)
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ToolContext {
+    title: String,
+    kind: Option<String>,
+    source: ToolSource,
+}
+
+fn bounded_string(value: Option<&Value>, key: &str) -> Option<String> {
+    value
+        .and_then(|value| value.get(key))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.chars().take(128).collect())
+}
+
+fn tool_source(title: &str, raw_input: Option<&Value>) -> ToolSource {
+    ToolSource {
+        image_generation: title.eq_ignore_ascii_case("image generation"),
+        server: bounded_string(raw_input, "server"),
+        tool: bounded_string(raw_input, "tool"),
+    }
+}
+
+fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Option<String> {
+    let server = source
+        .server
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool = source
+        .tool
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let title = title.to_ascii_lowercase();
+    if source.image_generation {
+        Some("image_generation".into())
+    } else if server == "codetwo_browser" {
+        Some("codetwo_browser".into())
+    } else if server.contains("sites") || tool.starts_with("sites_") || tool.contains("__sites_") {
+        Some("sites".into())
+    } else if server.contains("chrome") || tool.contains("chrome") || title.contains("chrome") {
+        Some("chrome_browser".into())
+    } else if tool.contains("computer") || tool.contains("cua") || title.contains("computer use") {
+        Some("computer_use".into())
+    } else {
+        kind
+    }
+}
+
+fn is_mcp_elicitation(req: &RequestPermissionRequest) -> bool {
+    req.meta
+        .as_ref()
+        .and_then(|meta| meta.get("is_mcp_tool_approval"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn elicitation_message(tool_call: &Value) -> Option<String> {
+    tool_call
+        .get("content")
+        .and_then(Value::as_array)
+        .and_then(|content| {
+            content.iter().find_map(|item| {
+                item.pointer("/content/text")
+                    .or_else(|| item.get("text"))
+                    .and_then(Value::as_str)
+            })
+        })
+        .filter(|message| !message.trim().is_empty())
+        .map(|message| message.chars().take(256).collect())
+}
+
+fn permission_context(
+    req: &RequestPermissionRequest,
+    tool: &ToolContext,
+    title: &str,
+) -> PermissionContext {
+    let explicit_elicitation = is_mcp_elicitation(req);
+    let lower = title.to_ascii_lowercase();
+    let sites_context = sites_permission_kind(&tool.source);
+    let kind =
+        if let Some((kind, _)) = sites_context {
+            kind
+        } else if lower.contains("website access") || lower.contains("site access") {
+            PermissionContextKind::WebsiteAccess
+        } else if lower.contains("sensitive web action") || lower.contains("confirm browser action")
+        {
+            PermissionContextKind::SensitiveWebAction
+        } else if tool.source.server.as_deref().is_some_and(|server| {
+            server.contains("computer-use") || server.contains("computer_use")
+        }) || lower.contains("computer use")
+        {
+            PermissionContextKind::ComputerUseApplication
+        } else if explicit_elicitation {
+            PermissionContextKind::McpElicitation
+        } else {
+            PermissionContextKind::Acp
+        };
+    PermissionContext {
+        kind,
+        server: tool.source.server.clone(),
+        tool: tool.source.tool.clone(),
+        origin: req
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get("origin"))
+            .and_then(Value::as_str)
+            .map(|value| value.chars().take(2_048).collect()),
+        risk: req
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get("risk"))
+            .and_then(Value::as_str)
+            .map(|value| value.chars().take(128).collect())
+            .or_else(|| sites_context.map(|(_, risk)| risk.to_string())),
+        application: req
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get("application"))
+            .and_then(Value::as_str)
+            .map(|value| value.chars().take(256).collect()),
+    }
+}
+
+fn sites_permission_kind(source: &ToolSource) -> Option<(PermissionContextKind, &'static str)> {
+    let server = source
+        .server
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool = source
+        .tool
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let is_sites =
+        server.contains("sites") || tool.starts_with("sites_") || tool.contains("__sites_");
+    if !is_sites {
+        return None;
+    }
+
+    let production_or_sensitive = [
+        "deploy_",
+        "delete_site",
+        "update_site_access",
+        "update_environment",
+        "add_custom_domain",
+        "remove_custom_domain",
+        "generate_siwc_bypass_token",
+    ]
+    .iter()
+    .any(|needle| tool.contains(needle));
+    if production_or_sensitive {
+        return Some((
+            PermissionContextKind::SitesProduction,
+            "Production deployment, access, secret, domain, token, or destructive Sites change",
+        ));
+    }
+
+    let read_only = [
+        "sites_get_",
+        "sites_list_",
+        "sites_inspect_",
+        "sites_download_",
+    ]
+    .iter()
+    .any(|prefix| tool.starts_with(prefix));
+    if read_only {
+        None
+    } else {
+        Some((
+            PermissionContextKind::SitesMutation,
+            "Creates or changes hosted Sites state",
+        ))
     }
 }
 
@@ -275,6 +483,25 @@ fn encode_mcp_servers(
             }
         })
         .collect()
+}
+
+const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[CodeTwo desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
+const CODEX_SITES_INSTRUCTIONS: &str = "[CodeTwo Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
+
+fn with_codetwo_browser_routing(prompt: String, enabled: bool) -> String {
+    if enabled {
+        format!("{CODETWO_BROWSER_ROUTING_INSTRUCTIONS}\n\n{prompt}")
+    } else {
+        prompt
+    }
+}
+
+fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
+    if enabled {
+        format!("{CODEX_SITES_INSTRUCTIONS}\n\n{prompt}")
+    } else {
+        prompt
+    }
 }
 
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
@@ -565,7 +792,8 @@ impl ClientHandler for SessionHandler {
         }
         let session = self.session_id.clone();
         // Build the UI event and the persisted transcript part together, then emit + persist.
-        let (event, part): (Option<Event>, Option<Part>) = match note.update {
+        let (event, part, warnings): (Option<Event>, Option<Part>, Vec<String>) = match note.update
+        {
             SessionUpdate::AgentMessageChunk {
                 content: ContentBlock::Text { text },
             } => (
@@ -576,6 +804,7 @@ impl ClientHandler for SessionHandler {
                     transcript_seq: None,
                 }),
                 Some(Part::Text { text }),
+                Vec::new(),
             ),
             SessionUpdate::AgentThoughtChunk {
                 content: ContentBlock::Text { text },
@@ -586,16 +815,32 @@ impl ClientHandler for SessionHandler {
                     transcript_seq: None,
                 }),
                 Some(Part::Reasoning { text }),
+                Vec::new(),
             ),
             SessionUpdate::ToolCall(tc) => {
-                let tool_kind = tc.kind;
+                let provider_kind = tc.kind;
                 let agent_input = agent_input_projection(
-                    tool_kind.as_deref(),
+                    provider_kind.as_deref(),
                     tc.title.as_deref(),
                     tc.raw_input.as_ref(),
                 );
                 let title = tc.title.unwrap_or_default();
                 let status = tc.status.unwrap_or_else(|| "pending".into());
+                let source = tool_source(&title, tc.raw_input.as_ref());
+                let tool_kind = rich_tool_kind(provider_kind, &source, &title);
+                let context = ToolContext {
+                    title: title.clone(),
+                    kind: tool_kind.clone(),
+                    source,
+                };
+                self.remember_tool(&tc.tool_call_id, context.clone());
+                let normalized = self.normalizer.normalize(
+                    tc.content.as_ref(),
+                    tc.raw_output.as_ref(),
+                    &context.source,
+                    &self.session_id,
+                    &tc.tool_call_id,
+                );
                 (
                     Some(Event::ToolCall {
                         session,
@@ -604,6 +849,7 @@ impl ClientHandler for SessionHandler {
                         status: status.clone(),
                         kind: tool_kind.clone(),
                         agent_input: agent_input.clone(),
+                        outputs: normalized.outputs.clone(),
                         transcript_seq: None,
                     }),
                     Some(Part::ToolCall {
@@ -612,29 +858,60 @@ impl ClientHandler for SessionHandler {
                         status,
                         tool_kind,
                         agent_input,
+                        outputs: normalized.outputs,
                     }),
+                    normalized.warnings,
                 )
             }
             SessionUpdate::ToolCallUpdate(u) => {
-                let title = u.title.unwrap_or_default();
+                let previous = self.tool_context(&u.tool_call_id);
+                let title = u
+                    .title
+                    .filter(|title| !title.trim().is_empty())
+                    .unwrap_or_else(|| previous.title.clone());
                 let status = u.status.unwrap_or_else(|| "in_progress".into());
+                let source = if u.raw_input.is_some() {
+                    tool_source(&title, u.raw_input.as_ref())
+                } else {
+                    previous.source
+                };
+                let kind =
+                    rich_tool_kind(u.kind.or_else(|| previous.kind.clone()), &source, &title);
+                self.remember_tool(
+                    &u.tool_call_id,
+                    ToolContext {
+                        title: title.clone(),
+                        kind: kind.clone(),
+                        source: source.clone(),
+                    },
+                );
+                let normalized = self.normalizer.normalize(
+                    u.content.as_ref(),
+                    u.raw_output.as_ref(),
+                    &source,
+                    &self.session_id,
+                    &u.tool_call_id,
+                );
                 (
                     Some(Event::ToolCall {
                         session,
                         id: u.tool_call_id.clone(),
                         title: title.clone(),
                         status: status.clone(),
-                        kind: None,
+                        kind: kind.clone(),
                         agent_input: None,
+                        outputs: normalized.outputs.clone(),
                         transcript_seq: None,
                     }),
                     Some(Part::ToolCall {
                         id: u.tool_call_id,
                         title,
                         status,
-                        tool_kind: None,
+                        tool_kind: kind,
                         agent_input: None,
+                        outputs: normalized.outputs,
                     }),
+                    normalized.warnings,
                 )
             }
             SessionUpdate::Plan { entries } => {
@@ -646,6 +923,7 @@ impl ClientHandler for SessionHandler {
                         transcript_seq: None,
                     }),
                     Some(Part::Plan { entries: items }),
+                    Vec::new(),
                 )
             }
             // Agent-side config change (e.g. it switched model itself): forward the new set to the
@@ -656,6 +934,7 @@ impl ClientHandler for SessionHandler {
                     options: config_option_infos(&config_options),
                 }),
                 None,
+                Vec::new(),
             ),
             SessionUpdate::UsageUpdate { used, size, .. } => (
                 Some(Event::ContextWindow {
@@ -664,9 +943,10 @@ impl ClientHandler for SessionHandler {
                     context_window: size,
                 }),
                 None,
+                Vec::new(),
             ),
             // Our own echoed input and any image/resource chunks aren't rendered/persisted here.
-            _ => (None, None),
+            _ => (None, None, Vec::new()),
         };
         // Persistence precedes publication, so a sequence-bearing live event can be merged with a
         // snapshot without races. A failed/disabled store still produces the live event with no
@@ -696,6 +976,14 @@ impl ClientHandler for SessionHandler {
             }
             self.emit(event);
         }
+        for warning in warnings {
+            self.emit(Event::Error {
+                session: Some(self.session_id.clone()),
+                message: format!("tool output warning: {warning}"),
+                terminal: false,
+                request_id: None,
+            });
+        }
     }
 
     async fn request_permission(&self, req: RequestPermissionRequest) -> RequestPermissionResponse {
@@ -704,14 +992,37 @@ impl ClientHandler for SessionHandler {
             .get("kind")
             .and_then(|v| v.as_str())
             .unwrap_or("other");
+        let tool_call_id = req
+            .tool_call
+            .get("toolCallId")
+            .or_else(|| req.tool_call.get("tool_call_id"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let tool = self.tool_context(tool_call_id);
+        let explicit_elicitation = is_mcp_elicitation(&req);
         let title = req
             .tool_call
             .get("title")
             .and_then(|v| v.as_str())
-            .unwrap_or("Tool call")
-            .to_string();
+            .filter(|title| !title.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                explicit_elicitation
+                    .then(|| elicitation_message(&req.tool_call))
+                    .flatten()
+            })
+            .or_else(|| (!tool.title.trim().is_empty()).then(|| tool.title.clone()))
+            .unwrap_or_else(|| "Tool call".to_string());
 
-        let action = self.policy.lock().unwrap().decide(kind, &title);
+        let context = permission_context(&req, &tool, &title);
+
+        let action = if context.kind == PermissionContextKind::Acp {
+            self.policy.lock().unwrap().decide(kind, &title)
+        } else {
+            // MCP elicitation, site access, sensitive browser actions, and Computer Use app
+            // approvals are user-presence boundaries. Full Access never bypasses them.
+            Action::Ask
+        };
         let outcome = match action {
             Action::Allow => select_kind(&req.options, "allow"),
             Action::Deny => select_kind(&req.options, "reject"),
@@ -722,10 +1033,12 @@ impl ClientHandler for SessionHandler {
                     .iter()
                     .map(|o| (o.option_id.clone(), o.name.clone()))
                     .collect::<Vec<_>>();
-                let Some((request_id, rx)) =
-                    self.router
-                        .park_permission(&self.session_id, title.clone(), options.clone())
-                else {
+                let Some((request_id, rx)) = self.router.park_permission(
+                    &self.session_id,
+                    title.clone(),
+                    options.clone(),
+                    context.clone(),
+                ) else {
                     return RequestPermissionResponse {
                         outcome: PermissionOutcome::Cancelled,
                     };
@@ -735,6 +1048,7 @@ impl ClientHandler for SessionHandler {
                     request_id,
                     title,
                     options,
+                    context,
                 });
                 rx.await.unwrap_or(PermissionOutcome::Cancelled)
             }
@@ -784,6 +1098,39 @@ struct EngineState {
     router: PermissionRouter,
     store: Option<Arc<Store>>,
     canvas_gate: CanvasFeatureGate,
+    desktop_mcp: Option<DesktopMcpConfig>,
+}
+
+/// Desktop-only bootstrap material for CodeTwo's authenticated browser MCP sidecar. The master
+/// key never leaves the process: each session receives a distinct derived key in its child
+/// environment, and the broker validates it before dispatching a request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesktopMcpConfig {
+    pub command: String,
+    pub socket_path: String,
+    pub master_key: String,
+}
+
+impl DesktopMcpConfig {
+    fn server_for_session(&self, session: &str) -> McpServer {
+        let session_key =
+            blake3::hash(format!("codetwo-browser\0{}\0{session}", self.master_key).as_bytes())
+                .to_hex()
+                .to_string();
+        McpServer {
+            name: "codetwo_browser".into(),
+            cwd: None,
+            transport: McpTransport::Stdio {
+                command: self.command.clone(),
+                args: vec!["--codetwo-browser-mcp".into()],
+                env: vec![
+                    ("CODETWO_BROWSER_SOCKET".into(), self.socket_path.clone()),
+                    ("CODETWO_BROWSER_SESSION".into(), session.to_string()),
+                    ("CODETWO_BROWSER_SESSION_KEY".into(), session_key),
+                ],
+            },
+        }
+    }
 }
 
 /// Owns the sessions and drives providers. Construct with [`Engine::new`], which also hands back the
@@ -797,7 +1144,7 @@ impl Engine {
         providers: Vec<Provider>,
         skills: SkillLibrary,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, None, CanvasFeatureGate::default())
+        Self::build(providers, skills, None, CanvasFeatureGate::default(), None)
     }
 
     /// Like [`Engine::new`] but persists sessions and transcripts to `store`.
@@ -806,7 +1153,13 @@ impl Engine {
         skills: SkillLibrary,
         store: Arc<Store>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store), CanvasFeatureGate::default())
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            CanvasFeatureGate::default(),
+            None,
+        )
     }
 
     /// Like [`Engine::with_store`] with an explicitly injected Canvas gate for trusted physical
@@ -818,7 +1171,26 @@ impl Engine {
         store: Arc<Store>,
         canvas_gate: CanvasFeatureGate,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store), canvas_gate)
+        Self::build(providers, skills, Some(store), canvas_gate, None)
+    }
+
+    /// Desktop construction path that attaches CodeTwo's internal browser MCP to every Codex
+    /// session. Other providers and non-desktop frontends remain unchanged.
+    #[doc(hidden)]
+    pub fn with_store_canvas_and_desktop_mcp(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        canvas_gate: CanvasFeatureGate,
+        desktop_mcp: DesktopMcpConfig,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            canvas_gate,
+            Some(desktop_mcp),
+        )
     }
 
     fn build(
@@ -826,6 +1198,7 @@ impl Engine {
         skills: SkillLibrary,
         store: Option<Arc<Store>>,
         canvas_gate: CanvasFeatureGate,
+        desktop_mcp: Option<DesktopMcpConfig>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         let (events, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
@@ -844,6 +1217,7 @@ impl Engine {
             router,
             store,
             canvas_gate,
+            desktop_mcp,
         });
         (Engine { state }, rx)
     }
@@ -1641,7 +2015,7 @@ impl Engine {
                 // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
                 let cwd_for_images = cwd.clone();
 
-                let compiled = match canvas_preflight {
+                let mut compiled = match canvas_preflight {
                     Some(compiled) => compiled,
                     None => {
                         let lib = self.state.skills.lock().unwrap();
@@ -1658,6 +2032,25 @@ impl Engine {
                         )
                     }
                 };
+                let is_codex = {
+                    let sessions = self.state.sessions.lock().unwrap();
+                    sessions
+                        .get(&session)
+                        .map(|runtime| runtime.session.provider == ProviderId::Codex)
+                        .unwrap_or(false)
+                };
+                if is_codex {
+                    if let Some(config) = &self.state.desktop_mcp {
+                        let server = config.server_for_session(&session);
+                        if !compiled
+                            .mcp_servers
+                            .iter()
+                            .any(|candidate| candidate.name == server.name)
+                        {
+                            compiled.mcp_servers.push(server);
+                        }
+                    }
+                }
                 for id in &compiled.unresolved {
                     self.emit(Event::Error {
                         session: Some(session.clone()),
@@ -1685,6 +2078,11 @@ impl Engine {
                 } else {
                     format!("{}\n\n{}", memory_context.block, compiled.prompt)
                 };
+                let provider_prompt = with_codetwo_browser_routing(
+                    provider_prompt,
+                    is_codex && self.state.desktop_mcp.is_some(),
+                );
+                let provider_prompt = with_codex_sites_routing(provider_prompt, is_codex);
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
@@ -3565,8 +3963,13 @@ mod session_management_tests {
 
 #[cfg(test)]
 mod mcp_tests {
-    use super::encode_mcp_servers;
+    use super::{
+        elicitation_message, encode_mcp_servers, rich_tool_kind, sites_permission_kind,
+        with_codetwo_browser_routing, with_codex_sites_routing, DesktopMcpConfig,
+    };
     use crate::acp::wire::AgentCaps;
+    use crate::artifact::ToolSource;
+    use crate::permission::PermissionContextKind;
     use crate::skill::{McpServer, McpTransport};
 
     #[test]
@@ -3589,5 +3992,108 @@ mod mcp_tests {
         )
         .unwrap();
         assert_eq!(encoded[0]["type"], "http");
+    }
+
+    #[test]
+    fn desktop_browser_mcp_uses_a_distinct_session_key() {
+        let config = DesktopMcpConfig {
+            command: "/Applications/CodeTwo.app/Contents/MacOS/CodeTwo".into(),
+            socket_path: "/tmp/codetwo-browser.sock".into(),
+            master_key: "launch-secret".into(),
+        };
+        let first = config.server_for_session("session-a");
+        let second = config.server_for_session("session-b");
+        assert_eq!(first.name, "codetwo_browser");
+        let env = |server: &McpServer| match &server.transport {
+            McpTransport::Stdio { args, env, .. } => {
+                assert_eq!(args, &["--codetwo-browser-mcp"]);
+                env.iter()
+                    .find(|(name, _)| name == "CODETWO_BROWSER_SESSION_KEY")
+                    .unwrap()
+                    .1
+                    .clone()
+            }
+            _ => panic!("desktop browser must use stdio"),
+        };
+        assert_ne!(env(&first), env(&second));
+        assert!(!env(&first).contains("launch-secret"));
+    }
+
+    #[test]
+    fn desktop_browser_routing_overrides_host_browser_skills() {
+        let prompt = with_codetwo_browser_routing("open example.test".into(), true);
+        assert!(prompt.contains("use the codetwo_browser MCP tools by default"));
+        assert!(prompt.contains("Do not use node_repl"));
+        assert!(prompt.ends_with("open example.test"));
+
+        assert_eq!(
+            with_codetwo_browser_routing("open example.test".into(), false),
+            "open example.test"
+        );
+    }
+
+    #[test]
+    fn codex_sites_routing_preserves_the_production_boundary() {
+        let prompt = with_codex_sites_routing("publish the landing page".into(), true);
+        assert!(prompt.contains("use the official OpenAI Sites plugin"));
+        assert!(prompt.contains("every Sites deployment URL is production"));
+        assert!(prompt.contains("require an explicit ACP or MCP approval even in Full Access"));
+        assert!(prompt.ends_with("publish the landing page"));
+
+        assert_eq!(
+            with_codex_sites_routing("local work only".into(), false),
+            "local work only"
+        );
+    }
+
+    #[test]
+    fn sites_tools_have_a_distinct_kind_and_permission_risk() {
+        let source = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_deploy_site_version".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &source, "Deploy site"),
+            Some("sites".into())
+        );
+        assert_eq!(
+            sites_permission_kind(&source).map(|value| value.0),
+            Some(PermissionContextKind::SitesProduction)
+        );
+
+        let read_only = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_get_site".into()),
+            ..Default::default()
+        };
+        assert_eq!(sites_permission_kind(&read_only), None);
+
+        let mutation = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_save_site_version".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            sites_permission_kind(&mutation).map(|value| value.0),
+            Some(PermissionContextKind::SitesMutation)
+        );
+    }
+
+    #[test]
+    fn mcp_elicitation_uses_the_safe_visible_message_as_its_title() {
+        let tool_call = serde_json::json!({
+            "content": [{
+                "type": "content",
+                "content": {
+                    "type": "text",
+                    "text": "Website access: Allow navigation to the requested origin"
+                }
+            }]
+        });
+        assert_eq!(
+            elicitation_message(&tool_call).as_deref(),
+            Some("Website access: Allow navigation to the requested origin")
+        );
     }
 }

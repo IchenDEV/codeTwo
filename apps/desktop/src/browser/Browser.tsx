@@ -30,12 +30,16 @@ import {
   browserNavigate,
   browserOpen,
   browserReload,
+  browserRegistryCreate,
+  browserRegistrySnapshot,
+  browserTakeControl,
   browserVisible,
   browserZoom,
   isDesktop,
   onBrowserLoad,
   onBrowserNav,
   onBrowserPopup,
+  onBrowserRegistry,
   onBrowserTitle,
   openExternal,
   type Annotation,
@@ -87,6 +91,8 @@ interface Tab {
   id: number;
   url: string;
   title: string;
+  agentActive?: boolean;
+  leaseSession?: string | null;
 }
 
 const labelOf = (id: number) => `browser-${id}`;
@@ -189,7 +195,6 @@ export function BrowserPanel({
   const [device, setDevice] = useState<number | null>(null);
   const [deviceBar, setDeviceBar] = useState(false);
   const addrRef = useRef<HTMLInputElement | null>(null);
-  const nextId = useRef(1);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const dragging = useDragging();
   const [annotating, setAnnotating] = useState(false);
@@ -211,6 +216,31 @@ export function BrowserPanel({
   projectPathRef.current = projectPath;
   const annotatingRef = useRef(annotating);
   annotatingRef.current = annotating;
+
+  const applyRegistry = useCallback((registry: import("../bridge").BrowserTab[]) => {
+    const restored = registry
+      .map((tab) => ({
+        id: Number(tab.id.replace(/^browser-/, "")),
+        url: tab.url,
+        title: tab.title,
+        agentActive: tab.agent_active,
+        leaseSession: tab.lease_session,
+      }))
+      .filter((tab) => Number.isSafeInteger(tab.id) && tab.id > 0);
+    if (restored.length === 0) return;
+    const selected = registry.find((tab) => tab.active);
+    const selectedId = selected ? Number(selected.id.replace(/^browser-/, "")) : restored[0].id;
+    const selectedTab = restored.find((tab) => tab.id === selectedId) ?? restored[0];
+    setTabs(restored);
+    setActiveId(selectedTab.id);
+    setAddr(selectedTab.url === BLANK ? "" : selectedTab.url);
+  }, []);
+
+  useEffect(() => {
+    void browserRegistrySnapshot().then(applyRegistry);
+    const registration = onBrowserRegistry(applyRegistry);
+    return () => void registration.then((unlisten) => unlisten());
+  }, [applyRegistry]);
 
   useEffect(() => {
     // Another window or a previous mount may have written newer history. Re-read at the project
@@ -317,18 +347,25 @@ export function BrowserPanel({
   };
 
   const selectTab = (tab: Tab) => {
+    void browserTakeControl(labelOf(tab.id));
     setActiveId(tab.id);
     setAddr(tab.url === BLANK ? "" : tab.url);
   };
 
   const openTab = (to: string) => {
-    // A ref, not state: popups arrive through an event subscription that deliberately doesn't
-    // re-run every render, and a captured `nextId` would hand two tabs the same webview label.
-    const tab: Tab = { id: ++nextId.current, url: to, title: "" };
-    setTabs((prev) => [...prev, tab]);
-    setActiveId(tab.id);
-    setAddr(to === BLANK ? "" : to);
-    if (to === BLANK) setTimeout(() => addrRef.current?.focus(), 0);
+    void browserRegistryCreate(to).then((created) => {
+      const tab: Tab = {
+        id: Number(created.id.replace(/^browser-/, "")),
+        url: created.url,
+        title: created.title,
+        agentActive: created.agent_active,
+        leaseSession: created.lease_session,
+      };
+      setTabs((prev) => [...prev.filter((entry) => entry.id !== tab.id), tab]);
+      setActiveId(tab.id);
+      setAddr(to === BLANK ? "" : to);
+      if (to === BLANK) setTimeout(() => addrRef.current?.focus(), 0);
+    });
   };
 
   const closeTab = (id: number) => {
@@ -502,6 +539,19 @@ export function BrowserPanel({
           placeholder={t("browser.urlPlaceholder")}
           spellCheck={false}
         />
+
+        {active.agentActive && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-(--ds-control-normal) gap-1.5 px-2 text-fine"
+            title="Stop the agent lease and take control of this tab"
+            onClick={() => void browserTakeControl(activeLabel)}
+          >
+            <SquareDashedMousePointer className="size-3.5" />
+            Take Control
+          </Button>
+        )}
 
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger asChild>

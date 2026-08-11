@@ -6,6 +6,35 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionContextKind {
+    #[default]
+    Acp,
+    McpElicitation,
+    WebsiteAccess,
+    SensitiveWebAction,
+    ComputerUseApplication,
+    SitesMutation,
+    SitesProduction,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermissionContext {
+    #[serde(default)]
+    pub kind: PermissionContextKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application: Option<String>,
+}
+
 /// Per-session permission posture. Mirrors codex (`--full-auto`/bypass), opencode (ask/allow/deny),
 /// and Claude Code (permission modes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -69,4 +69,41 @@ describe("TurnCard rendered activity", () => {
     ).toBe("Solving…");
     rendered.unmount();
   });
+
+  test("renders safe Sites links without exposing non-web resource URIs", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      tools: [
+        {
+          id: "sites-1",
+          title: "Deploy site",
+          status: "completed",
+          kind: "sites",
+          outputs: [
+            {
+              type: "resource_link",
+              name: "Sites production deployment",
+              uri: "https://example.sites.openai.com/release",
+              mime_type: "text/html",
+            },
+            {
+              type: "resource_link",
+              name: "Unsafe",
+              uri: "javascript:alert(1)",
+            },
+          ],
+        },
+      ],
+    };
+    const rendered = mount(<TurnCard turn={turn} />);
+    const links = rendered.container.querySelector('[aria-label="Tool links"]');
+
+    expect(links?.textContent).toContain("Sites production deployment");
+    expect(links?.textContent).toContain("example.sites.openai.com");
+    expect(links?.textContent).not.toContain("Unsafe");
+    expect(rendered.container.textContent).toContain("sites");
+    rendered.unmount();
+  });
 });

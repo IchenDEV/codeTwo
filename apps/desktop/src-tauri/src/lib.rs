@@ -6,6 +6,7 @@
 //! `pty-output`.
 
 mod browser;
+mod browser_mcp;
 mod lsp;
 
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use codetwo_core::browser::Annotation;
+use codetwo_core::codex_runtime::CodexRuntimeDiscovery;
 use codetwo_core::event::ModelChoice;
 use codetwo_core::git::{self, Checkpoint, DiffResult, DiffScope, DiffStat, GitStatus};
 use codetwo_core::github_skills;
@@ -24,7 +26,9 @@ use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
 use codetwo_core::plugin_marketplace::{self, MarketplacePluginSource, PluginMarketplace};
 use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
-use codetwo_core::provider::{default_registry, Provider, ProviderId};
+use codetwo_core::provider::{
+    registry_with_codex_runtime, Provider, ProviderCapability, ProviderId,
+};
 use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
 use codetwo_core::source_control::{self, SourceControlInfo};
 use codetwo_core::store::Project;
@@ -35,11 +39,11 @@ use codetwo_core::workspace_search::{
 };
 use codetwo_core::worktree::{ResolvedWorktreeBaseline, WorktreeBaseline};
 use codetwo_core::{
-    CanvasAssetRef, CanvasDraft, CanvasDraftUpdate, CanvasExport, CanvasFeatureGate,
+    ArtifactStore, CanvasAssetRef, CanvasDraft, CanvasDraftUpdate, CanvasExport, CanvasFeatureGate,
     CanvasFreezeInput, CanvasManifest, CanvasObject, CanvasSceneEnvelope, CanvasSnapshot,
-    CanvasStaticAsset, Engine, Event,
-    MemoryAccess, MemoryReceipt, MemoryRecord, MemorySettings, MemoryStats, Op, Session,
-    SessionSearchHit, Store, TranscriptCursor, TranscriptPage,
+    CanvasStaticAsset, DesktopMcpConfig, Engine, Event, MemoryAccess, MemoryReceipt, MemoryRecord,
+    MemorySettings, MemoryStats, Op, Session, SessionSearchHit, Store, TranscriptCursor,
+    TranscriptPage,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -78,6 +82,7 @@ struct RemoteHandle {
 struct AppState {
     engine: Arc<Engine>,
     store: Arc<Store>,
+    providers: Vec<ProviderInfo>,
     canvas_gate: CanvasFeatureGate,
     canvas_owner: String,
     events: broadcast::Sender<Event>,
@@ -95,6 +100,7 @@ struct AppState {
     remote: Mutex<Option<RemoteHandle>>,
     /// Where paired remote devices persist (survives app restarts and server stop/start).
     remote_auth_path: PathBuf,
+    browser_socket_path: PathBuf,
 }
 
 /// Rebuild the live skill library: built-ins + `<data>/skills/*.json` + skills auto-discovered
@@ -117,7 +123,7 @@ fn reload_skills(state: &AppState) {
     state.engine.set_skills(SkillLibrary::new(v));
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct ProviderInfo {
     id: String,
     display_name: String,
@@ -126,6 +132,8 @@ struct ProviderInfo {
     /// The models we offer for this provider when it reports none of its own over ACP. Empty only
     /// for providers we ship no list for.
     models: Vec<ModelChoice>,
+    #[serde(default)]
+    capabilities: Vec<ProviderCapability>,
 }
 
 #[derive(Serialize)]
@@ -285,17 +293,8 @@ fn kind_str(k: SkillKind) -> String {
 // ---- commands --------------------------------------------------------------------------------
 
 #[tauri::command]
-fn list_providers() -> Vec<ProviderInfo> {
-    default_registry()
-        .into_iter()
-        .map(|p: Provider| ProviderInfo {
-            id: p.id.as_str().to_string(),
-            display_name: p.display_name.clone(),
-            available: p.is_available(),
-            needs_node: p.needs_node,
-            models: builtin_models(&p.id),
-        })
-        .collect()
+fn list_providers(state: State<'_, AppState>) -> Vec<ProviderInfo> {
+    state.providers.clone()
 }
 
 #[tauri::command]
@@ -1232,7 +1231,10 @@ fn canvas_feature_state(state: State<'_, AppState>) -> CanvasFeatureStateDto {
 }
 
 fn require_canvas(state: &AppState) -> Result<(), String> {
-    state.canvas_gate.require().map_err(|error| error.to_string())
+    state
+        .canvas_gate
+        .require()
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -1249,7 +1251,10 @@ fn canvas_create_draft(
 }
 
 #[tauri::command]
-fn canvas_get_draft(state: State<'_, AppState>, id: String) -> Result<Option<CanvasDraftDto>, String> {
+fn canvas_get_draft(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<Option<CanvasDraftDto>, String> {
     require_canvas(&state)?;
     state
         .store
@@ -1339,9 +1344,14 @@ fn canvas_get_asset(
         .store
         .get_canvas_snapshot_frozen(&id, revision)
         .map_err(|error| error.to_string())?;
-    Ok(snapshot.and_then(|snapshot| {
-        snapshot.assets.into_iter().find(|asset| asset.id == asset_id)
-    }).map(CanvasAssetDto::from))
+    Ok(snapshot
+        .and_then(|snapshot| {
+            snapshot
+                .assets
+                .into_iter()
+                .find(|asset| asset.id == asset_id)
+        })
+        .map(CanvasAssetDto::from))
 }
 
 #[tauri::command]
@@ -1356,12 +1366,14 @@ fn canvas_get_export(
         .store
         .get_canvas_snapshot_frozen(&id, revision)
         .map_err(|error| error.to_string())?;
-    Ok(snapshot.and_then(|snapshot| {
-        snapshot
-            .exports
-            .into_iter()
-            .find(|export| export.id == export_id)
-    }).map(CanvasExportDto::from))
+    Ok(snapshot
+        .and_then(|snapshot| {
+            snapshot
+                .exports
+                .into_iter()
+                .find(|export| export.id == export_id)
+        })
+        .map(CanvasExportDto::from))
 }
 
 #[tauri::command]
@@ -1457,11 +1469,7 @@ fn compile_doc(
         Some(&resolve),
         state.canvas_gate,
         codetwo_core::CanvasProviderImageCapability::Unknown,
-        &|id, revision| {
-            state
-                .store
-                .resolve_canvas_prompt_frozen(id, revision)
-        },
+        &|id, revision| state.store.resolve_canvas_prompt_frozen(id, revision),
     )
     .map_err(|error| error.to_string())?;
     Ok(CompiledPromptDto {
@@ -1639,6 +1647,50 @@ fn read_binary(cwd: String, path: String) -> Result<tauri::ipc::Response, String
     codetwo_core::workspace::read_binary(std::path::Path::new(&cwd), &path)
         .map(tauri::ipc::Response::new)
         .map_err(|e| e.to_string())
+}
+
+/// Read a durable tool artifact by opaque id. The storage path never crosses IPC.
+#[tauri::command]
+fn get_artifact(state: State<'_, AppState>, id: String) -> Result<tauri::ipc::Response, String> {
+    ArtifactStore::from_store(state.store.clone())
+        .ok_or_else(|| "artifact storage is unavailable".to_string())?
+        .get(&id)
+        .map(tauri::ipc::Response::new)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_artifact_as(
+    state: State<'_, AppState>,
+    id: String,
+    destination: String,
+) -> Result<(), String> {
+    ArtifactStore::from_store(state.store.clone())
+        .ok_or_else(|| "artifact storage is unavailable".to_string())?
+        .save_as(&id, std::path::Path::new(&destination))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reveal_artifact(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let path = ArtifactStore::from_store(state.store.clone())
+        .ok_or_else(|| "artifact storage is unavailable".to_string())?
+        .path_for_reveal(&id)
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("/usr/bin/open")
+        .arg("-R")
+        .arg(path)
+        .status();
+    #[cfg(not(target_os = "macos"))]
+    let status = std::process::Command::new("xdg-open")
+        .arg(path.parent().unwrap_or(std::path::Path::new(".")))
+        .status();
+    status
+        .map_err(|error| error.to_string())?
+        .success()
+        .then_some(())
+        .ok_or_else(|| "could not reveal artifact".to_string())
 }
 
 #[tauri::command]
@@ -2193,6 +2245,41 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir).ok();
 
+            let browser_socket_path = data_dir.join("codetwo-browser.sock");
+            let browser_master_key = uuid::Uuid::new_v4().to_string();
+            app.manage(browser::BrowserState::load(&data_dir));
+            let browser_handle = app.handle().clone();
+            let broker_socket_path = browser_socket_path.clone();
+            let broker_master_key = browser_master_key.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) =
+                    browser::start_broker(browser_handle, broker_socket_path, broker_master_key)
+                        .await
+                {
+                    eprintln!("CodeTwo Browser broker stopped: {error}");
+                }
+            });
+
+            // One immutable startup snapshot. Updating ChatGPT/plugins/config requires a restart;
+            // CodeTwo never mutates or continuously scans the external host.
+            let codex_runtime = CodexRuntimeDiscovery::detect();
+            let registry = registry_with_codex_runtime(&codex_runtime);
+            let providers = registry
+                .iter()
+                .map(|provider: &Provider| ProviderInfo {
+                    id: provider.id.as_str().to_string(),
+                    display_name: provider.display_name.clone(),
+                    available: provider.is_available(),
+                    needs_node: provider.needs_node,
+                    models: builtin_models(&provider.id),
+                    capabilities: if provider.id == ProviderId::Codex {
+                        codex_runtime.capability_projection(true)
+                    } else {
+                        Vec::new()
+                    },
+                })
+                .collect::<Vec<_>>();
+
             let db_path = data_dir.join("codetwo.db");
             let store = Arc::new(Store::open(db_path.to_string_lossy().as_ref())?);
             if let Err(error) = store.purge_expired_canvases(now_millis()) {
@@ -2220,11 +2307,17 @@ pub fn run() {
 
             let canvas_gate = CanvasFeatureGate::disabled();
             let canvas_owner = format!("desktop:{}", data_dir.to_string_lossy());
-            let (engine, mut rx) = Engine::with_store_and_canvas_gate(
-                default_registry(),
+            let desktop_mcp = DesktopMcpConfig {
+                command: std::env::current_exe()?.to_string_lossy().into_owned(),
+                socket_path: browser_socket_path.to_string_lossy().into_owned(),
+                master_key: browser_master_key,
+            };
+            let (engine, mut rx) = Engine::with_store_canvas_and_desktop_mcp(
+                registry,
                 skills,
                 store.clone(),
                 canvas_gate,
+                desktop_mcp,
             );
             let engine = Arc::new(engine);
 
@@ -2262,6 +2355,7 @@ pub fn run() {
             app.manage(AppState {
                 engine,
                 store,
+                providers,
                 canvas_gate,
                 canvas_owner,
                 events,
@@ -2274,6 +2368,7 @@ pub fn run() {
                 workspace_searches: Mutex::new(HashMap::new()),
                 remote: Mutex::new(None),
                 remote_auth_path: data_dir.join("remote-devices.json"),
+                browser_socket_path,
             });
             app.manage(lsp::LspState(Mutex::new(HashMap::new())));
             Ok(())
@@ -2354,6 +2449,9 @@ pub fn run() {
             create_dir,
             read_text,
             read_binary,
+            get_artifact,
+            save_artifact_as,
+            reveal_artifact,
             write_text,
             rename_path,
             copy_path,
@@ -2408,6 +2506,11 @@ pub fn run() {
             browser::browser_annotations_clear,
             browser::browser_close,
             browser::browser_close_all,
+            browser::browser_registry_snapshot,
+            browser::browser_registry_create,
+            browser::browser_take_control,
+            browser::browser_permissions,
+            browser::browser_revoke_permission,
             lsp::lsp_start,
             lsp::lsp_send
         ])
@@ -2420,8 +2523,17 @@ pub fn run() {
                 if let Some(state) = app.try_state::<lsp::LspState>() {
                     state.kill_all();
                 }
+                if let Some(state) = app.try_state::<AppState>() {
+                    let _ = std::fs::remove_file(&state.browser_socket_path);
+                }
             }
         });
+}
+
+/// Entrypoint used by the exact internal MCP launch flag. This path does not initialize Tauri or
+/// any user-facing window.
+pub fn run_browser_mcp() -> Result<(), String> {
+    browser_mcp::run()
 }
 
 #[cfg(test)]
@@ -2430,8 +2542,11 @@ mod tests {
         parse_sandbox, resolve_known_workspace_root, CanvasAssetDto, CanvasDraftDto,
         CanvasEnvelopeDto, CanvasExportDto, CanvasSnapshotDto, CompiledCanvasDto,
     };
-    use codetwo_core::{CanvasExport, CanvasExportKind, CanvasManifest, CanvasSceneEnvelope, CanvasSnapshot, CanvasStaticAsset};
     use codetwo_core::permission::{ExecutionPolicy, SandboxPolicy};
+    use codetwo_core::{
+        CanvasExport, CanvasExportKind, CanvasManifest, CanvasSceneEnvelope, CanvasSnapshot,
+        CanvasStaticAsset,
+    };
 
     #[test]
     fn workspace_search_accepts_only_an_exact_known_canonical_root() {
@@ -2549,7 +2664,10 @@ mod tests {
         let envelope = CanvasSceneEnvelope::new(2, codetwo_core::CanvasTheme::Dark, scene.clone());
         let dto = CanvasEnvelopeDto::from(envelope);
         let value = serde_json::to_value(dto).unwrap();
-        assert_eq!(value["engineVersion"], codetwo_core::EXCALIDRAW_ENGINE_VERSION);
+        assert_eq!(
+            value["engineVersion"],
+            codetwo_core::EXCALIDRAW_ENGINE_VERSION
+        );
         assert!(value.get("engine_version").is_none());
         assert_eq!(value["scene"], scene);
 

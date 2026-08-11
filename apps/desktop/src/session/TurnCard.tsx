@@ -6,6 +6,9 @@ import {
   ChevronRight,
   ChevronUp,
   CircleAlert,
+  Download,
+  ExternalLink,
+  FolderOpen,
   Loader2,
   ListTodo,
   Wrench,
@@ -21,7 +24,15 @@ import {
   type CanvasHistoryMarker,
 } from "./promptPreview";
 import { isRunning, type Turn } from "./turns";
-import { canvasGetSnapshot, type CanvasSnapshot } from "../bridge";
+import {
+  canvasGetSnapshot,
+  getArtifact,
+  openExternal,
+  revealArtifact,
+  saveArtifactAs,
+  type ArtifactRef,
+  type CanvasSnapshot,
+} from "../bridge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useLanguage, useT } from "../i18n";
@@ -46,6 +57,100 @@ function toolStatusDot(status: string): string {
   if (status === "completed") return "bg-success";
   if (status === "failed") return "bg-destructive";
   return "bg-warning";
+}
+
+function prettySize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function safeResourceLink(uri: string): { uri: string; host: string } | null {
+  try {
+    const parsed = new URL(uri);
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username.length > 0 ||
+      parsed.password.length > 0
+    ) {
+      return null;
+    }
+    return { uri: parsed.toString(), host: parsed.host };
+  } catch {
+    return null;
+  }
+}
+
+function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let objectUrl: string | null = null;
+    void getArtifact(artifact.id)
+      .then((bytes) => {
+        if (!alive) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([bytes.slice().buffer as ArrayBuffer], { type: artifact.mime_type }),
+        );
+        setUrl(objectUrl);
+      })
+      .catch(() => alive && setError(true));
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [artifact.id, artifact.mime_type]);
+
+  return (
+    <figure className="min-w-0 overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
+      <div className="image-checker flex min-h-32 items-center justify-center">
+        {url ? (
+          <img
+            src={url}
+            alt={artifact.display_name}
+            className="max-h-96 w-full object-contain"
+            onError={() => setError(true)}
+          />
+        ) : (
+          <span className={cn("px-4 py-10 text-fine text-muted-foreground", error && "text-destructive")}>
+            {error ? "Image unavailable" : "Loading image…"}
+          </span>
+        )}
+      </div>
+      <figcaption className="flex flex-wrap items-center gap-2 bg-background/60 px-2.5 py-2 text-fine text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate text-foreground">{artifact.display_name}</span>
+        <span>{artifact.width} × {artifact.height}</span>
+        <span>{prettySize(artifact.bytes)}</span>
+        <button
+          type="button"
+          className="rounded p-1 hover:bg-accent hover:text-foreground"
+          title="Save As"
+          onClick={() => {
+            setActionError(null);
+            void saveArtifactAs(artifact.id, artifact.display_name).catch(() =>
+              setActionError("Could not save image"),
+            );
+          }}
+        >
+          <Download className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          className="rounded p-1 hover:bg-accent hover:text-foreground"
+          title="Reveal in Finder"
+          onClick={() => {
+            setActionError(null);
+            void revealArtifact(artifact.id).catch(() => setActionError("Could not reveal image"));
+          }}
+        >
+          <FolderOpen className="size-3.5" />
+        </button>
+        {actionError && <span className="basis-full text-destructive">{actionError}</span>}
+      </figcaption>
+    </figure>
+  );
 }
 
 function canvasKey(canvas: CanvasHistoryMarker): string {
@@ -117,6 +222,27 @@ export const TurnCard = memo(function TurnCard({
   const running = isRunning(turn);
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const artifacts = useMemo(
+    () =>
+      turn.tools.flatMap((tool) =>
+        (tool.outputs ?? []).flatMap((output) =>
+          output.type === "image" ? [output.artifact] : [],
+        ),
+      ),
+    [turn.tools],
+  );
+  const resourceLinks = useMemo(() => {
+    const seen = new Set<string>();
+    return turn.tools.flatMap((tool) =>
+      (tool.outputs ?? []).flatMap((output) => {
+        if (output.type !== "resource_link") return [];
+        const safe = safeResourceLink(output.uri);
+        if (!safe || seen.has(safe.uri)) return [];
+        seen.add(safe.uri);
+        return [{ ...output, ...safe }];
+      }),
+    );
+  }, [turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
@@ -235,6 +361,34 @@ export const TurnCard = memo(function TurnCard({
         </p>
       )}
 
+      {artifacts.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Generated images">
+          {artifacts.map((artifact) => (
+            <ArtifactImage key={artifact.id} artifact={artifact} />
+          ))}
+        </div>
+      )}
+
+      {resourceLinks.length > 0 && (
+        <div className="mt-3 flex flex-col gap-1.5" aria-label="Tool links">
+          {resourceLinks.map((link) => (
+            <button
+              key={link.uri}
+              type="button"
+              className="flex min-w-0 items-center gap-2 rounded-(--ds-radius-control) border bg-fill-quiet px-3 py-2 text-left text-fine transition-colors hover:bg-accent/50"
+              title={link.uri}
+              onClick={() => void openExternal(link.uri)}
+            >
+              <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
+              <span className="max-w-52 truncate font-mono text-cap text-muted-foreground">
+                {link.host}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {running && !turn.text && (
         <p
           role="status"
@@ -251,7 +405,7 @@ export const TurnCard = memo(function TurnCard({
       )}
 
       {turn.error && (
-        <p className="mt-3.5 flex items-start gap-1.5 rounded-lg bg-destructive/10 px-3 py-2 text-ui text-destructive">
+        <p className="mt-3.5 flex items-start gap-1.5 rounded-(--ds-radius-control) bg-destructive/10 px-3 py-2 text-ui text-destructive">
           <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
           {turn.error}
         </p>
@@ -286,6 +440,11 @@ export const TurnCard = memo(function TurnCard({
                 <div key={tool.id} className="flex items-center gap-2 text-fine">
                   <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(tool.status))} />
                   <span className="truncate font-mono">{tool.title}</span>
+                  {tool.kind && (
+                    <span className="shrink-0 rounded bg-fill-quiet px-1.5 py-0.5 text-cap text-muted-foreground">
+                      {tool.kind}
+                    </span>
+                  )}
                   <span className="ms-auto shrink-0 text-muted-foreground">{tool.status}</span>
                 </div>
               ))}

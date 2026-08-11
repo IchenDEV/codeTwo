@@ -26,6 +26,15 @@ uuid.workspace = true
 codetwo-core.workspace = true
 codetwo-server = { path = "../../../crates/server" }
 tauri-plugin-dialog = "2"
+async-trait.workspace = true
+base64 = "0.22"
+blake3 = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSBitmapImageRep", "NSImage"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSDictionary", "NSError", "NSObject"] }
+objc2-web-kit = { version = "0.3", features = ["WKSnapshotConfiguration", "WKWebView", "block2"] }
 
 [lib]
 name = "codetwo_desktop_lib"

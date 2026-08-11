@@ -6,6 +6,7 @@
 //! engine only touches the store at turn boundaries and per streamed part.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[cfg(test)]
@@ -77,6 +78,25 @@ CREATE TABLE IF NOT EXISTS parts (
 );
 CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
 CREATE INDEX IF NOT EXISTS parts_session_role_seq ON parts(session_id, role, seq);
+CREATE TABLE IF NOT EXISTS artifacts (
+  id           TEXT PRIMARY KEY,
+  digest       TEXT NOT NULL UNIQUE,
+  mime_type    TEXT NOT NULL,
+  byte_count   INTEGER NOT NULL,
+  width        INTEGER NOT NULL,
+  height       INTEGER NOT NULL,
+  display_name TEXT NOT NULL,
+  storage_name TEXT NOT NULL UNIQUE,
+  created_at   INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS artifact_refs (
+  session_id   TEXT NOT NULL,
+  tool_call_id TEXT NOT NULL,
+  artifact_id  TEXT NOT NULL,
+  PRIMARY KEY (session_id, tool_call_id, artifact_id),
+  FOREIGN KEY (artifact_id) REFERENCES artifacts(id)
+);
+CREATE INDEX IF NOT EXISTS artifact_refs_session ON artifact_refs(session_id, tool_call_id);
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id TEXT PRIMARY KEY
 );
@@ -114,6 +134,7 @@ pub struct SessionSearchHit {
 
 pub struct Store {
     pub(crate) conn: Mutex<Connection>,
+    artifact_root: Option<PathBuf>,
 }
 
 #[cfg(test)]
@@ -161,6 +182,7 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
             status,
             tool_kind,
             agent_input,
+            outputs,
         } = &entries[index].part
         else {
             continue;
@@ -176,10 +198,12 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
         let prior_title = title.clone();
         let prior_kind = tool_kind.clone();
         let prior_input = agent_input.clone();
+        let prior_outputs = outputs.clone();
         if let Part::ToolCall {
             title,
             tool_kind,
             agent_input,
+            outputs,
             ..
         } = &mut entries[terminal_index].part
         {
@@ -191,6 +215,9 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
             }
             if agent_input.is_none() {
                 *agent_input = prior_input;
+            }
+            if outputs.is_empty() {
+                *outputs = prior_outputs;
             }
         }
         keep[index] = false;
@@ -505,6 +532,9 @@ impl Store {
         crate::canvas::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
+            artifact_root: Path::new(path)
+                .parent()
+                .map(|parent| parent.join("artifacts")),
         };
         // A delayed candidate may have become eligible while Code2 was closed.
         store.run_memory_maintenance()?;
@@ -520,9 +550,15 @@ impl Store {
         crate::canvas::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
         store.run_memory_maintenance()?;
         Ok(store)
+    }
+
+    /// App-private root for opaque tool artifacts. In-memory stores deliberately have none.
+    pub fn artifact_root(&self) -> Option<&Path> {
+        self.artifact_root.as_deref()
     }
 
     // ---- Canvas Input V1 ----------------------------------------------------------------------
@@ -2230,6 +2266,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
         let restored = store.get_session("legacy").unwrap().unwrap();
         assert!(!restored.pinned);
@@ -2346,6 +2383,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
         let restored = store.get_session("legacy-worktree").unwrap().unwrap();
         assert!(restored.project_path.is_none());
@@ -2475,6 +2513,7 @@ mod tests {
         conn.execute_batch(SCHEMA).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
         let mut a = Session::new(ProviderId::Grok, "/work/alpha");
         a.created_at = 100;
@@ -2510,6 +2549,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
 
         let paths: Vec<String> = store
@@ -2568,6 +2608,7 @@ mod tests {
                     status: "completed".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             )
             .unwrap();
@@ -2668,6 +2709,7 @@ mod tests {
                     title: "Run tests".into(),
                     options: vec![("allow".into(), "Allow".into())],
                     sequence: 1,
+                    context: Default::default(),
                 }],
             },
         };
@@ -2762,6 +2804,7 @@ mod tests {
                     title: "Approve".into(),
                     options: vec![],
                     sequence: 9,
+                    context: Default::default(),
                 }],
             },
         };
@@ -3032,6 +3075,7 @@ mod tests {
                     status: "completed".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             )
             .unwrap();
@@ -3377,6 +3421,7 @@ mod tests {
                     status: "completed".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             )
             .unwrap();
@@ -3513,9 +3558,10 @@ mod tests {
                 status: status.into(),
                 tool_kind: metadata.then(|| "agent".into()),
                 agent_input: metadata.then(|| serde_json::json!({ "role": "researcher" })),
+                outputs: Vec::new(),
             },
         };
-        let entries = vec![
+        let mut entries = vec![
             TranscriptEntry {
                 seq: 0,
                 role: Role::User,
@@ -3534,6 +3580,19 @@ mod tests {
             // A later turn cannot supersede the prior turn's row.
             tool(6, "failed", "Other turn", false),
         ];
+        let artifact = crate::artifact::ArtifactRef {
+            id: "opaque-image-id".into(),
+            mime_type: "image/png".into(),
+            bytes: 128,
+            width: 8,
+            height: 8,
+            display_name: "generated.png".into(),
+        };
+        if let Part::ToolCall { outputs, .. } = &mut entries[1].part {
+            outputs.push(crate::artifact::ToolOutput::Image {
+                artifact: artifact.clone(),
+            });
+        }
 
         let projected = drop_superseded_tool_updates(entries);
         assert_eq!(
@@ -3545,6 +3604,7 @@ mod tests {
             status,
             tool_kind,
             agent_input,
+            outputs,
             ..
         } = &projected[1].part
         else {
@@ -3556,6 +3616,10 @@ mod tests {
         assert_eq!(
             agent_input,
             &Some(serde_json::json!({ "role": "researcher" }))
+        );
+        assert_eq!(
+            outputs,
+            &vec![crate::artifact::ToolOutput::Image { artifact }]
         );
     }
 
@@ -3576,6 +3640,7 @@ mod tests {
                     status: "pending".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             },
             TranscriptEntry {
@@ -3587,6 +3652,7 @@ mod tests {
                     status: "in_progress".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             },
         ];
@@ -3664,6 +3730,7 @@ mod tests {
         migrate(&conn).unwrap();
         let store = Store {
             conn: Mutex::new(conn),
+            artifact_root: None,
         };
         assert!(store
             .search_sessions("private_file_rule_marker", 10)

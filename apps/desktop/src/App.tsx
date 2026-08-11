@@ -58,6 +58,8 @@ import {
   marketCatalog,
   marketInstall,
   newSession,
+  onBrowserAgentActivity,
+  onBrowserDownloadBlocked,
   onEngineEvent,
   openProject,
   pickPluginMarketplace,
@@ -963,6 +965,20 @@ export default function App() {
   const providerPinned = useRef(false);
 
   useEffect(() => {
+    const activity = onBrowserAgentActivity(() => {
+      setDockTab("browser");
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    });
+    const downloads = onBrowserDownloadBlocked(() => {
+      toast("Download blocked. Approve it from the agent request or take control of the tab.", "error");
+    });
+    return () => {
+      void activity.then((unlisten) => unlisten());
+      void downloads.then((unlisten) => unlisten());
+    };
+  }, [toast]);
+
+  useEffect(() => {
     listProviders()
       .then((list) => {
         setProviders(list);
@@ -1184,6 +1200,7 @@ export default function App() {
             requestId: ev.request_id,
             title: ev.title,
             options: ev.options,
+            context: ev.context,
           };
           setPermissionQueue((previous) => enqueuePermission(previous, request));
           return;
@@ -3146,6 +3163,19 @@ export default function App() {
               </DialogTitle>
             </DialogHeader>
             <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">{permission.title}</p>
+            {permission.context && permission.context.kind !== "acp" && (
+              <div className="space-y-1 text-hint text-muted-foreground">
+                <p className="font-medium capitalize text-foreground">
+                  {permission.context.kind.replaceAll("_", " ")}
+                </p>
+                {permission.context.server && <p>Server: {permission.context.server}</p>}
+                {permission.context.tool && <p>Tool: {permission.context.tool}</p>}
+                {permission.context.origin && <p>Site: {permission.context.origin}</p>}
+                {permission.context.application && <p>Application: {permission.context.application}</p>}
+                {permission.context.risk && <p>Risk: {permission.context.risk}</p>}
+                <p>This approval is required even in Full Access.</p>
+              </div>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => void answer(null)}>
                 Cancel

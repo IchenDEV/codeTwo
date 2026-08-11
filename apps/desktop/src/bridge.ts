@@ -11,6 +11,32 @@ export interface ProviderInfo {
   /// The core's built-in models for this provider — what the picker offers when the provider
   /// reports none of its own over ACP. Empty only for providers we ship no list for.
   models: ModelChoice[];
+  capabilities: ProviderCapability[];
+}
+
+export type ProviderCapabilityId =
+  | "image_generation"
+  | "computer_use"
+  | "chrome_browser"
+  | "codetwo_browser"
+  | "sites";
+export type CapabilityState = "ready" | "unverified" | "unavailable";
+
+export interface ProviderCapability {
+  id: ProviderCapabilityId;
+  state: CapabilityState;
+  version?: string | null;
+  experimental: boolean;
+  reason?: string | null;
+  fix?: string | null;
+}
+
+type ProviderInfoWire = Omit<ProviderInfo, "capabilities"> & {
+  capabilities?: ProviderCapability[] | null;
+};
+
+export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo {
+  return { ...provider, capabilities: provider.capabilities ?? [] };
 }
 
 export interface SkillInfo {
@@ -60,12 +86,31 @@ export interface SessionInfo {
 
 export type PendingInputKind = "permission";
 
+export type PermissionContextKind =
+  | "acp"
+  | "mcp_elicitation"
+  | "website_access"
+  | "sensitive_web_action"
+  | "computer_use_application"
+  | "sites_mutation"
+  | "sites_production";
+
+export interface PermissionContext {
+  kind: PermissionContextKind;
+  server?: string | null;
+  tool?: string | null;
+  origin?: string | null;
+  risk?: string | null;
+  application?: string | null;
+}
+
 export interface PendingInput {
   input_id: string;
   kind: PendingInputKind;
   title: string;
   options: [string, string][];
   sequence: number;
+  context?: PermissionContext;
 }
 
 export type RunFailureReason = "provider_error" | "interrupted";
@@ -259,6 +304,7 @@ export type CoreEvent =
       status: string;
       kind?: string | null;
       agent_input?: unknown;
+      outputs?: ToolOutput[];
       transcript_seq?: number | null;
     }
   | {
@@ -267,7 +313,14 @@ export type CoreEvent =
       entries: string[];
       transcript_seq?: number | null;
     }
-  | { event: "permission_request"; session: string; request_id: string; title: string; options: [string, string][] }
+  | {
+      event: "permission_request";
+      session: string;
+      request_id: string;
+      title: string;
+      options: [string, string][];
+      context?: PermissionContext;
+    }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
   | { event: "context_window"; session: string; used_tokens: number; context_window: number }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
@@ -317,8 +370,23 @@ export type Part =
       status: string;
       tool_kind?: string | null;
       agent_input?: unknown;
+      outputs?: ToolOutput[];
     }
   | { kind: "plan"; entries: string[] };
+
+export interface ArtifactRef {
+  id: string;
+  mime_type: string;
+  bytes: number;
+  width: number;
+  height: number;
+  display_name: string;
+}
+
+export type ToolOutput =
+  | { type: "text"; text: string }
+  | { type: "image"; artifact: ArtifactRef }
+  | { type: "resource_link"; name: string; uri: string; mime_type?: string | null };
 
 /** One durable transcript row. `seq` is stable within a session and orders snapshot/live merge. */
 export interface TranscriptEntry {
@@ -354,14 +422,14 @@ const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI
 export const isDesktop = inTauri;
 
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
-  { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [] },
-  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [] },
-  { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [] },
-  { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [] },
-  { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [] },
-  { id: "pi", display_name: "Pi", available: false, needs_node: true, models: [] },
-  { id: "kimi", display_name: "Kimi", available: false, needs_node: false, models: [] },
-  { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [] },
+  { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [], capabilities: [] },
+  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [], capabilities: [] },
+  { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [], capabilities: [] },
+  { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [], capabilities: [] },
+  { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [], capabilities: [] },
+  { id: "pi", display_name: "Pi", available: false, needs_node: true, models: [], capabilities: [] },
+  { id: "kimi", display_name: "Kimi", available: false, needs_node: false, models: [], capabilities: [] },
+  { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [], capabilities: [] },
 ];
 
 const FALLBACK_SKILLS: SkillInfo[] = [
@@ -375,7 +443,10 @@ const FALLBACK_SKILLS: SkillInfo[] = [
 ];
 
 export async function listProviders(): Promise<ProviderInfo[]> {
-  return inTauri ? invoke<ProviderInfo[]>("list_providers") : FALLBACK_PROVIDERS;
+  const providers = inTauri
+    ? await invoke<ProviderInfoWire[]>("list_providers")
+    : FALLBACK_PROVIDERS;
+  return providers.map(normalizeProviderInfo);
 }
 
 /// Passing a cwd makes the core rescan that workspace's harness skill directories
@@ -524,6 +595,25 @@ export async function readBinary(cwd: string, path: string): Promise<Uint8Array>
   return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
 }
 
+export async function getArtifact(id: string): Promise<Uint8Array> {
+  if (!inTauri) return new Uint8Array();
+  const res = await invoke<ArrayBuffer | number[]>("get_artifact", { id });
+  return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
+}
+
+export async function saveArtifactAs(id: string, displayName: string): Promise<boolean> {
+  if (!inTauri) return false;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const destination = await save({ defaultPath: displayName });
+  if (!destination) return false;
+  await invoke("save_artifact_as", { id, destination });
+  return true;
+}
+
+export async function revealArtifact(id: string): Promise<void> {
+  if (inTauri) await invoke("reveal_artifact", { id });
+}
+
 export async function writeText(cwd: string, path: string, content: string): Promise<void> {
   if (inTauri) await invoke("write_text", { cwd, path, content });
 }
@@ -653,6 +743,58 @@ export async function browserCloseAll(): Promise<void> {
 export interface BrowserNav {
   label: string;
   url: string;
+}
+
+export interface BrowserTab {
+  id: string;
+  url: string;
+  title: string;
+  active: boolean;
+  lease_session?: string | null;
+  agent_active: boolean;
+}
+
+export async function browserRegistrySnapshot(): Promise<BrowserTab[]> {
+  return inTauri
+    ? invoke<BrowserTab[]>("browser_registry_snapshot")
+    : [{ id: "browser-1", url: "about:blank", title: "", active: true, agent_active: false }];
+}
+
+export async function browserRegistryCreate(url: string): Promise<BrowserTab> {
+  return inTauri
+    ? invoke<BrowserTab>("browser_registry_create", { url })
+    : { id: `browser-${Date.now()}`, url, title: "", active: true, agent_active: false };
+}
+
+export async function browserTakeControl(label: string): Promise<void> {
+  if (inTauri) await invoke("browser_take_control", { label });
+}
+
+export async function browserPermissions(): Promise<string[]> {
+  return inTauri ? invoke<string[]>("browser_permissions") : [];
+}
+
+export async function browserRevokePermission(origin: string): Promise<void> {
+  if (inTauri) await invoke("browser_revoke_permission", { origin });
+}
+
+export async function onBrowserRegistry(cb: (tabs: BrowserTab[]) => void): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<BrowserTab[]>("browser-registry", (event) => cb(event.payload));
+}
+
+export async function onBrowserAgentActivity(
+  cb: (payload: { tabId: string }) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<{ tabId: string }>("browser-agent-activity", (event) => cb(event.payload));
+}
+
+export async function onBrowserDownloadBlocked(
+  cb: (payload: { label: string }) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<{ label: string }>("browser-download-blocked", (event) => cb(event.payload));
 }
 
 // ---- in-page annotator -------------------------------------------------------------------------
