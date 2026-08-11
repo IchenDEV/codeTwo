@@ -5,17 +5,17 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
-    AutomationFailure, AutomationFailureCode, AutomationRunStatus, AutomationWait,
-    AutomationWaitCode, DocBlock, Engine, Event, Op, Provider, RunSnapshot, SessionRunState,
-    SnapshotChangeKind, SnapshotComparison, SnapshotConfig, SnapshotPreparation,
-    SnapshotPreparationOptions, Store, StoreError, TaskStatus, WorkArtifactError,
-    WorkArtifactService, WorkAuditContext, WorkMutationGuard, WorkspaceKind, WorkspaceSnapshot,
-    WorkspaceSnapshotService,
+    AutomationFailure, AutomationFailureCode, AutomationPathPolicy, AutomationRunStatus,
+    AutomationTrigger, AutomationWait, AutomationWaitCode, DocBlock, Engine, Event, Op, Provider,
+    RunSnapshot, SessionRunState, SnapshotChangeKind, SnapshotComparison, SnapshotConfig,
+    SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError, TaskStatus,
+    WorkArtifactError, WorkArtifactService, WorkAuditContext, WorkMutationGuard, WorkspaceKind,
+    WorkspaceSnapshot, WorkspaceSnapshotService,
 };
 use codetwo_protocol::{
     read_json, write_json, ChangeSummary, EnvelopeError, ErrorKind, EventEnvelope, OwnerState,
@@ -23,6 +23,7 @@ use codetwo_protocol::{
     RunStartReceipt, ServerFrame, StreamCursor, StreamEpoch, SubscribeResult, TransportEvent,
     WorkErrorKind, WorkRequest, WorkResponse, MAX_REPLAY_EVENTS,
 };
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use thiserror::Error;
 use tokio::net::{unix::OwnedWriteHalf, UnixListener, UnixStream};
 use tokio::sync::{broadcast, watch, Mutex};
@@ -209,6 +210,7 @@ impl Daemon {
             .ok_or_else(|| io::Error::other("daemon engine events already consumed"))?;
         connections.spawn(engine_event_loop(engine_events, Arc::clone(&self.state)));
         connections.spawn(automation_scheduler_loop(Arc::clone(&self.state)));
+        connections.spawn(filesystem_automation_loop(Arc::clone(&self.state)));
         let gateway = Arc::clone(&self.state.gateway);
         let gateway_shutdown = self.state.shutdown.subscribe();
         connections.spawn(async move {
@@ -241,6 +243,222 @@ fn unix_time_millis() -> i64 {
         .unwrap_or(0)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WatchedFile {
+    len: u64,
+    modified_nanos: u128,
+}
+
+struct FileAutomationState {
+    revision: u64,
+    workspace_root: PathBuf,
+    snapshot: HashMap<String, WatchedFile>,
+    pending_since: Option<Instant>,
+    quiet_for: Duration,
+}
+
+async fn filesystem_automation_loop(state: Arc<State>) {
+    let mut shutdown = state.shutdown.subscribe();
+    let mut interval = tokio::time::interval(Duration::from_millis(100));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut watchers: HashMap<String, FileAutomationState> = HashMap::new();
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                evaluate_filesystem_automations(&state, &mut watchers).await;
+            }
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn evaluate_filesystem_automations(
+    state: &Arc<State>,
+    watchers: &mut HashMap<String, FileAutomationState>,
+) {
+    let mut cursor = None;
+    let mut active = std::collections::HashSet::new();
+    loop {
+        let Ok(page) = state.store.work_list_automations(
+            None,
+            cursor.as_deref(),
+            codetwo_core::MAX_WORK_PAGE_SIZE,
+        ) else {
+            return;
+        };
+        for automation in page.items {
+            let AutomationTrigger::Filesystem(config) = &automation.entity.trigger else {
+                continue;
+            };
+            if !automation.entity.enabled {
+                continue;
+            }
+            let Some(task) = state
+                .store
+                .work_get_task(&automation.entity.task_id)
+                .ok()
+                .flatten()
+            else {
+                continue;
+            };
+            let Some(workspace) = state
+                .store
+                .work_get_workspace(&task.entity.workspace_id)
+                .ok()
+                .flatten()
+            else {
+                continue;
+            };
+            let Some(root) = workspace.entity.root_path.map(PathBuf::from) else {
+                continue;
+            };
+            let Ok(root) = root.canonicalize() else {
+                continue;
+            };
+            let Ok(matcher) = build_file_matcher(&config.patterns) else {
+                continue;
+            };
+            let Ok(snapshot) = scan_watched_files(&root, &matcher) else {
+                continue;
+            };
+            active.insert(automation.entity.id.clone());
+            let quiet_for = Duration::from_millis(
+                u64::try_from(config.debounce_ms.max(config.settle_ms)).unwrap_or(u64::MAX),
+            );
+            let entry = watchers
+                .entry(automation.entity.id.clone())
+                .or_insert_with(|| FileAutomationState {
+                    revision: automation.revision,
+                    workspace_root: root.clone(),
+                    snapshot: snapshot.clone(),
+                    pending_since: None,
+                    quiet_for,
+                });
+            if entry.revision != automation.revision || entry.workspace_root != root {
+                *entry = FileAutomationState {
+                    revision: automation.revision,
+                    workspace_root: root,
+                    snapshot,
+                    pending_since: None,
+                    quiet_for,
+                };
+                continue;
+            }
+            entry.quiet_for = quiet_for;
+            if entry.snapshot != snapshot {
+                entry.snapshot = snapshot;
+                entry.pending_since = Some(Instant::now());
+                continue;
+            }
+            if !entry
+                .pending_since
+                .is_some_and(|started| started.elapsed() >= entry.quiet_for)
+            {
+                continue;
+            }
+            entry.pending_since = None;
+            let audit = WorkAuditContext::new(
+                "filesystem_watcher",
+                "local_daemon",
+                format!("filesystem:{}", Uuid::new_v4().simple()),
+            );
+            if let Ok(run) = state.store.work_claim_filesystem_automation(
+                &automation.entity.id,
+                unix_time_millis(),
+                &audit,
+            ) {
+                let launch = run.clone();
+                append(
+                    state,
+                    TransportEvent::AutomationRunChanged {
+                        run: run.entity,
+                        revision: run.revision,
+                    },
+                )
+                .await;
+                publish_automation_head(state, &launch.entity.automation_id).await;
+                launch_automation_occurrence(state, launch).await;
+            }
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    watchers.retain(|id, _| active.contains(id));
+}
+
+fn build_file_matcher(patterns: &[String]) -> Result<GlobSet, globset::Error> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(Glob::new(pattern)?);
+    }
+    builder.build()
+}
+
+fn scan_watched_files(
+    workspace_root: &Path,
+    matcher: &GlobSet,
+) -> io::Result<HashMap<String, WatchedFile>> {
+    const MAX_WATCHED_FILES: usize = 20_000;
+    let policy = AutomationPathPolicy::new(workspace_root);
+    let mut output = HashMap::new();
+    let mut stack = vec![workspace_root.to_owned()];
+    while let Some(directory) = stack.pop() {
+        for entry in fs::read_dir(&directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path)?;
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(workspace_root) else {
+                continue;
+            };
+            let relative = relative
+                .components()
+                .filter_map(|component| match component {
+                    std::path::Component::Normal(value) => Some(value.to_string_lossy()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            if !policy.is_eligible(&relative) {
+                continue;
+            }
+            if metadata.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if !metadata.is_file() || !matcher.is_match(&relative) {
+                continue;
+            }
+            let modified_nanos = metadata
+                .modified()
+                .ok()
+                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                .map_or(0, |duration| duration.as_nanos());
+            output.insert(
+                relative,
+                WatchedFile {
+                    len: metadata.len(),
+                    modified_nanos,
+                },
+            );
+            if output.len() > MAX_WATCHED_FILES {
+                return Err(io::Error::other(
+                    "filesystem Automation file limit exceeded",
+                ));
+            }
+        }
+    }
+    Ok(output)
+}
+
 async fn automation_scheduler_loop(state: Arc<State>) {
     let mut shutdown = state.shutdown.subscribe();
     let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -265,6 +483,7 @@ async fn automation_scheduler_loop(state: Arc<State>) {
                                 },
                             )
                             .await;
+                            publish_automation_head(&state, &launch.entity.automation_id).await;
                             launch_automation_occurrence(&state, launch).await;
                         }
                     }
@@ -290,6 +509,19 @@ async fn automation_scheduler_loop(state: Arc<State>) {
                 }
             }
         }
+    }
+}
+
+async fn publish_automation_head(state: &Arc<State>, automation_id: &str) {
+    if let Ok(Some(automation)) = state.store.work_get_automation(automation_id) {
+        append(
+            state,
+            TransportEvent::AutomationChanged {
+                automation: automation.entity,
+                revision: automation.revision,
+            },
+        )
+        .await;
     }
 }
 

@@ -528,6 +528,7 @@ dependencies = [
  "codetwo-client",
  "codetwo-core",
  "codetwo-protocol",
+ "globset",
  "libc",
  "serde",
  "tempfile",

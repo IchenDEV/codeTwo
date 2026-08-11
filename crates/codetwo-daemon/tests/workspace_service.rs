@@ -5,10 +5,10 @@ use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
-    AutomationSpec, AutomationTrigger, BriefRevision, DocBlock, Event, LaunchSpec, Op, Part,
-    PermissionMode, Provider, ProviderId, Role, ScheduleTrigger, Session, SkillLibrary, Store,
-    Task, TaskExperience, TaskStatus, WorkMutationGuard, Workspace, WorkspaceKind,
-    WorkspaceSnapshot,
+    AutomationSpec, AutomationTrigger, BriefRevision, DocBlock, Event, FilesystemTrigger,
+    LaunchSpec, Op, Part, PermissionMode, Provider, ProviderId, Role, ScheduleTrigger, Session,
+    SkillLibrary, Store, Task, TaskExperience, TaskStatus, WorkMutationGuard, Workspace,
+    WorkspaceKind, WorkspaceSnapshot,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -265,6 +265,110 @@ async fn automation_definitions_are_shared_revisioned_daemon_state() {
     assert!(completed.items[0].entity.work_run_id.is_some());
 
     writer.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn filesystem_automation_ignores_outputs_and_waits_for_stable_input() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let workspace_root = root.path().join("watched-workspace");
+    std::fs::create_dir_all(workspace_root.join("reports")).unwrap();
+    std::fs::create_dir_all(workspace_root.join("Deliverables")).unwrap();
+    let store = Arc::new(Store::open(root.path().join("codetwo.db").to_str().unwrap()).unwrap());
+    let provider_id = "filesystem-provider";
+    let marker = root.path().join("filesystem-provider-started.txt");
+    let daemon = Daemon::bind_with_components(
+        &runtime,
+        store,
+        vec![mock_provider(provider_id, &marker)],
+        SkillLibrary::new(Vec::new()),
+    )
+    .unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let client = Client::connect(&socket).await.unwrap();
+
+    let workspace = client
+        .save_workspace(
+            Workspace::new(
+                "Watched",
+                Some(workspace_root.to_string_lossy().into_owned()),
+                WorkspaceKind::External,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    let task = client
+        .save_task(
+            Task::named(workspace.entity.id, "Watch reports", TaskExperience::Work),
+            None,
+        )
+        .await
+        .unwrap();
+    client
+        .save_automation(
+            AutomationSpec::new(
+                "watch-reports",
+                task.entity.id,
+                ProviderId::Custom(provider_id.into()),
+                AutomationTrigger::Filesystem(FilesystemTrigger {
+                    patterns: vec!["reports/*.md".into()],
+                    debounce_ms: 100,
+                    settle_ms: 100,
+                }),
+                vec![DocBlock::Text {
+                    text: "refresh report index".into(),
+                }],
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    assert!(client
+        .list_automation_runs("watch-reports".into(), None, 10)
+        .await
+        .unwrap()
+        .items
+        .is_empty());
+    std::fs::write(workspace_root.join("Deliverables/ignored.md"), "ignore").unwrap();
+    tokio::time::sleep(Duration::from_millis(350)).await;
+    assert!(client
+        .list_automation_runs("watch-reports".into(), None, 10)
+        .await
+        .unwrap()
+        .items
+        .is_empty());
+
+    let input = workspace_root.join("reports/input.md");
+    std::fs::write(&input, "draft").unwrap();
+    tokio::time::sleep(Duration::from_millis(40)).await;
+    std::fs::write(&input, "stable").unwrap();
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let runs = client
+                .list_automation_runs("watch-reports".into(), None, 10)
+                .await
+                .unwrap();
+            if !runs.items.is_empty() && marker.is_file() {
+                assert_eq!(runs.items.len(), 1);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(marker.is_file());
+
+    client.shutdown().await.unwrap();
     timeout(Duration::from_secs(2), server)
         .await
         .unwrap()

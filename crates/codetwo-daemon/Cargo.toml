@@ -18,6 +18,7 @@ path = "src/main.rs"
 async-trait.workspace = true
 codetwo-core.workspace = true
 codetwo-protocol.workspace = true
+globset = "0.4"
 libc.workspace = true
 serde.workspace = true
 thiserror.workspace = true

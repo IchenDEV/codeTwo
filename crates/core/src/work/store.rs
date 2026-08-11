@@ -719,6 +719,29 @@ impl Store {
         })
     }
 
+    pub fn work_get_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<WorkVersioned<Workspace>>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT w.id,w.name,w.root_path,w.kind,w.created_at,w.updated_at,h.revision
+             FROM workspaces w JOIN work_entity_heads h
+               ON h.entity_kind='workspace' AND h.entity_id=w.id AND h.deleted=0
+             WHERE w.id=?1",
+            [workspace_id],
+            |row| {
+                Ok(WorkVersioned {
+                    entity: workspace_from_row(row)?,
+                    revision: u64::try_from(row.get::<_, i64>(6)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
     pub fn work_save_task(
         &self,
         task: &Task,
@@ -886,6 +909,18 @@ impl Store {
         let mut conn = self.conn.lock().unwrap();
         with_transaction(&mut conn, |transaction| {
             transaction.claim_due_automations(now, audit)
+        })
+    }
+
+    pub fn work_claim_filesystem_automation(
+        &self,
+        automation_id: &str,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.claim_filesystem_automation(automation_id, now, audit)
         })
     }
 

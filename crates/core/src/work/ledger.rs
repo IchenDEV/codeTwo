@@ -7,8 +7,8 @@ use super::domain::{
 };
 use super::schema;
 use crate::automation::{
-    AutomationFailure, AutomationRun, AutomationRunStatus, AutomationSpec, AutomationValidation,
-    AutomationWait, MAX_DUE_WINDOW_MS,
+    AutomationFailure, AutomationRun, AutomationRunStatus, AutomationSpec, AutomationTrigger,
+    AutomationValidation, AutomationWait, MAX_DUE_WINDOW_MS,
 };
 use crate::store::StoreError;
 use crate::work_snapshot::SnapshotChange;
@@ -835,6 +835,158 @@ impl WorkTransaction<'_> {
             claimed.push(run);
         }
         Ok(claimed)
+    }
+
+    pub fn claim_filesystem_automation(
+        &mut self,
+        automation_id: &str,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        if now < 0 {
+            return Err(StoreError::Domain(
+                "Automation evaluation time is invalid".to_owned(),
+            ));
+        }
+        let current = self
+            .transaction
+            .query_row(
+                "SELECT a.id,a.task_id,a.provider_json,a.model,a.prompt_json,a.trigger_json,a.enabled,
+                        a.last_evaluated_at,a.next_due_at,a.cursor_ms,a.created_at,a.updated_at,h.revision
+                 FROM automations a JOIN work_entity_heads h
+                   ON h.entity_kind='automation' AND h.entity_id=a.id AND h.deleted=0
+                 WHERE a.id=?1",
+                [automation_id],
+                automation_spec_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::Domain("unknown Automation".to_owned()))?;
+        if !current.entity.enabled
+            || !matches!(current.entity.trigger, AutomationTrigger::Filesystem(_))
+        {
+            return Err(StoreError::Domain(
+                "Automation is not an enabled filesystem trigger".to_owned(),
+            ));
+        }
+        let provider = current
+            .entity
+            .provider
+            .clone()
+            .ok_or_else(|| StoreError::Domain("Automation provider is required".to_owned()))?;
+        let active = self
+            .transaction
+            .query_row(
+                "SELECT r.id,r.automation_id,r.occurrence_key,r.status,r.scheduled_at,
+                        r.provider_json,r.model,r.prompt_json,r.work_run_id,r.started_at,
+                        r.finished_at,r.wait_json,r.failure_json,r.coalesced_missed,
+                        r.missed_start,r.missed_end,r.created_at,r.updated_at,h.revision
+                 FROM automation_runs r JOIN work_entity_heads h
+                   ON h.entity_kind='automation_run' AND h.entity_id=r.id AND h.deleted=0
+                 WHERE r.automation_id=?1 AND r.status IN ('queued','running','waiting')",
+                [automation_id],
+                automation_run_from_row,
+            )
+            .optional()?;
+        let run = if let Some(mut active) = active {
+            active.entity.coalesced_missed = active.entity.coalesced_missed.saturating_add(1);
+            active.entity.missed_start = Some(
+                active
+                    .entity
+                    .missed_start
+                    .map_or(now, |value| value.min(now)),
+            );
+            active.entity.missed_end =
+                Some(active.entity.missed_end.map_or(now, |value| value.max(now)));
+            active.entity.updated_at = now;
+            let guard = WorkMutationGuard::from_audit(Some(active.revision), audit);
+            let mutation = self.append_guarded(
+                WorkEntityKind::AutomationRun,
+                active.entity.id.clone(),
+                false,
+                "filesystem_coalesce",
+                &guard,
+            )?;
+            self.transaction.execute(
+                "UPDATE automation_runs SET coalesced_missed=?2,missed_start=?3,
+                   missed_end=?4,updated_at=?5 WHERE id=?1",
+                params![
+                    active.entity.id,
+                    i64::try_from(active.entity.coalesced_missed).unwrap_or(i64::MAX),
+                    active.entity.missed_start,
+                    active.entity.missed_end,
+                    now,
+                ],
+            )?;
+            active.revision = mutation.revision;
+            active
+        } else {
+            let run = AutomationRun {
+                id: uuid::Uuid::new_v4().to_string(),
+                automation_id: automation_id.to_owned(),
+                occurrence_key: format!("fs:{now}:{}", uuid::Uuid::new_v4().simple()),
+                status: AutomationRunStatus::Queued,
+                scheduled_at: now,
+                provider,
+                model: current.entity.model.clone(),
+                prompt: current.entity.prompt.clone(),
+                work_run_id: None,
+                started_at: None,
+                finished_at: None,
+                wait: None,
+                failure: None,
+                coalesced_missed: 0,
+                missed_start: None,
+                missed_end: None,
+                created_at: now,
+                updated_at: now,
+            };
+            run.validate()
+                .map_err(|error| StoreError::Domain(error.to_string()))?;
+            let guard = WorkMutationGuard::from_audit(None, audit);
+            let mutation = self.append_guarded(
+                WorkEntityKind::AutomationRun,
+                run.id.clone(),
+                false,
+                "filesystem_claim",
+                &guard,
+            )?;
+            self.transaction.execute(
+                "INSERT INTO automation_runs
+                 (id,automation_id,occurrence_key,status,scheduled_at,provider_json,model,
+                  prompt_json,work_run_id,started_at,finished_at,wait_json,failure_json,
+                  coalesced_missed,missed_start,missed_end,created_at,updated_at)
+                 VALUES(?1,?2,?3,'queued',?4,?5,?6,?7,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,?8,?8)",
+                params![
+                    run.id,
+                    run.automation_id,
+                    run.occurrence_key,
+                    run.scheduled_at,
+                    serde_json::to_string(&run.provider)?,
+                    run.model,
+                    serde_json::to_string(&run.prompt)?,
+                    now,
+                ],
+            )?;
+            WorkVersioned {
+                entity: run,
+                revision: mutation.revision,
+            }
+        };
+
+        let guard = WorkMutationGuard::from_audit(Some(current.revision), audit);
+        let mutation = self.append_guarded(
+            WorkEntityKind::Automation,
+            automation_id.to_owned(),
+            false,
+            "filesystem_evaluate",
+            &guard,
+        )?;
+        self.transaction.execute(
+            "UPDATE automations SET last_evaluated_at=?2,cursor_ms=?2,updated_at=?2 WHERE id=?1",
+            params![automation_id, now],
+        )?;
+        debug_assert_eq!(mutation.revision, current.revision + 1);
+        Ok(run)
     }
 
     pub fn transition_automation_run(

@@ -258,3 +258,89 @@ fn scheduler_coalesces_sleep_and_prevents_same_automation_reentry() {
     assert_ne!(next[0].entity.id, run_id);
     assert_eq!(next[0].entity.coalesced_missed, 0);
 }
+
+#[test]
+fn filesystem_occurrences_are_guarded_and_never_reenter() {
+    let store = Store::open_in_memory().unwrap();
+    let workspace = store
+        .work_save_workspace(
+            &Workspace::new("Files", None, WorkspaceKind::Managed),
+            &guard(None, "files-workspace"),
+        )
+        .unwrap();
+    let task = store
+        .work_save_task(
+            &Task::named(workspace.entity.id, "Watch", TaskExperience::Work),
+            &guard(None, "files-task"),
+        )
+        .unwrap();
+    let task_id = task.entity.id.clone();
+    let automation = AutomationSpec::new(
+        "files-trigger",
+        task_id.clone(),
+        ProviderId::Codex,
+        AutomationTrigger::Filesystem(FilesystemTrigger {
+            patterns: vec!["reports/**/*.md".into()],
+            debounce_ms: 100,
+            settle_ms: 100,
+        }),
+        vec![DocBlock::Text {
+            text: "refresh index".into(),
+        }],
+    );
+    let saved = store
+        .work_save_automation(automation, &guard(None, "files-definition"))
+        .unwrap();
+    let base = saved.entity.created_at.unwrap() + 1_000;
+    let audit = WorkAuditContext::new("watcher", "local-daemon", "files-1");
+
+    let first = store
+        .work_claim_filesystem_automation("files-trigger", base, &audit)
+        .unwrap();
+    assert_eq!(first.entity.status, AutomationRunStatus::Queued);
+    assert!(first.entity.occurrence_key.starts_with("fs:"));
+    let coalesced = store
+        .work_claim_filesystem_automation("files-trigger", base + 100, &audit)
+        .unwrap();
+    assert_eq!(coalesced.entity.id, first.entity.id);
+    assert_eq!(coalesced.entity.coalesced_missed, 1);
+
+    store
+        .work_transition_automation_run(
+            &first.entity.id,
+            AutomationRunStatus::Running,
+            None,
+            None,
+            base + 200,
+            &audit,
+        )
+        .unwrap();
+    store
+        .work_transition_automation_run(
+            &first.entity.id,
+            AutomationRunStatus::Completed,
+            None,
+            None,
+            base + 300,
+            &audit,
+        )
+        .unwrap();
+    let next = store
+        .work_claim_filesystem_automation("files-trigger", base + 400, &audit)
+        .unwrap();
+    assert_ne!(next.entity.id, first.entity.id);
+
+    let scheduled = AutomationSpec::new(
+        "not-files",
+        task_id,
+        ProviderId::Codex,
+        AutomationTrigger::Schedule(ScheduleTrigger { at_ms: 20_000 }),
+        vec![],
+    );
+    store
+        .work_save_automation(scheduled, &guard(None, "not-files-definition"))
+        .unwrap();
+    assert!(store
+        .work_claim_filesystem_automation("not-files", base + 500, &audit)
+        .is_err());
+}
