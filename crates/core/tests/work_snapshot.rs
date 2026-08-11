@@ -494,6 +494,66 @@ fn rollback_restores_modified_deleted_and_removes_only_added() {
     fs::remove_dir_all(snapshot_root).unwrap();
 }
 
+#[test]
+fn rollback_paths_restores_only_reviewed_selection() {
+    let workspace = tempdir().unwrap();
+    let snapshot_root = workspace
+        .path()
+        .parent()
+        .unwrap()
+        .join(format!("codetwo-snapshot-test-{}", uuid::Uuid::new_v4()));
+    let selected = workspace.path().join("selected.txt");
+    let untouched = workspace.path().join("untouched.txt");
+    let added = workspace.path().join("added.txt");
+    fs::write(&selected, b"selected before").unwrap();
+    fs::write(&untouched, b"untouched before").unwrap();
+    let snapshot = snapshot_from(service(workspace.path(), &snapshot_root).create().unwrap());
+
+    fs::write(&selected, b"selected after").unwrap();
+    fs::write(&untouched, b"untouched after").unwrap();
+    fs::write(&added, b"added after").unwrap();
+    let comparison = service(workspace.path(), &snapshot_root)
+        .compare(&snapshot)
+        .unwrap();
+
+    let report = service(workspace.path(), &snapshot_root)
+        .rollback_paths(&snapshot, &comparison, &["selected.txt".to_owned()])
+        .unwrap();
+
+    assert_eq!(report.restored, vec!["selected.txt"]);
+    assert!(report.removed.is_empty());
+    assert!(report.conflicts.is_empty());
+    assert_eq!(fs::read(&selected).unwrap(), b"selected before");
+    assert_eq!(fs::read(&untouched).unwrap(), b"untouched after");
+    assert_eq!(fs::read(&added).unwrap(), b"added after");
+    fs::remove_dir_all(snapshot_root).unwrap();
+}
+
+#[test]
+fn rollback_paths_rejects_path_missing_from_reviewed_comparison() {
+    let workspace = tempdir().unwrap();
+    let snapshot_root = workspace
+        .path()
+        .parent()
+        .unwrap()
+        .join(format!("codetwo-snapshot-test-{}", uuid::Uuid::new_v4()));
+    let changed = workspace.path().join("changed.txt");
+    fs::write(&changed, b"before").unwrap();
+    let snapshot = snapshot_from(service(workspace.path(), &snapshot_root).create().unwrap());
+    fs::write(&changed, b"after").unwrap();
+    let comparison = service(workspace.path(), &snapshot_root)
+        .compare(&snapshot)
+        .unwrap();
+
+    let error = service(workspace.path(), &snapshot_root)
+        .rollback_paths(&snapshot, &comparison, &["not-reviewed.txt".to_owned()])
+        .unwrap_err();
+
+    assert!(matches!(error, SnapshotError::RollbackRejected(_)));
+    assert_eq!(fs::read(&changed).unwrap(), b"after");
+    fs::remove_dir_all(snapshot_root).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn rollback_ignored_symlink_and_outside_paths_are_untouched() {

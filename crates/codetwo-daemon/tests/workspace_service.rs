@@ -409,6 +409,8 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
     let workspace_root = root.path().join("workspace");
     std::fs::create_dir_all(&workspace_root).unwrap();
     let provider_marker = workspace_root.join("provider-started.txt");
+    let selectively_preserved = workspace_root.join("selectively-preserved.txt");
+    std::fs::write(&selectively_preserved, b"before partial rollback\n").unwrap();
     let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
     let daemon = Daemon::bind_with_components(
         &runtime,
@@ -587,16 +589,21 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
                 b"later user edit\n"
             );
         } else {
+            std::fs::write(&selectively_preserved, b"keep this reviewed change\n").unwrap();
             let summary = client
                 .inspect_run_changes(saved_snapshot.run_id.clone())
                 .await
                 .unwrap();
             assert_eq!(
                 (summary.added, summary.modified, summary.deleted),
-                (0, 1, 0)
+                (0, 2, 0)
             );
             let rollback = client
-                .rollback_run(saved_snapshot.run_id.clone(), saved_snapshot.id.clone())
+                .rollback_paths(
+                    saved_snapshot.run_id.clone(),
+                    saved_snapshot.id.clone(),
+                    vec!["provider-started.txt".to_owned()],
+                )
                 .await
                 .unwrap();
             assert_eq!(
@@ -606,6 +613,10 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
             assert_eq!(
                 std::fs::read(&provider_marker).unwrap(),
                 b"later user edit\n"
+            );
+            assert_eq!(
+                std::fs::read(&selectively_preserved).unwrap(),
+                b"keep this reviewed change\n"
             );
         }
     }

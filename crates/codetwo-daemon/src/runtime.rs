@@ -778,6 +778,7 @@ async fn dispatch_work(
         WorkRequest::RollbackRun {
             run_id,
             snapshot_id,
+            paths,
         } => {
             let record = match state.store.work_snapshot_for_run(&run_id) {
                 Ok(Some(record)) if record.id == snapshot_id => record,
@@ -819,7 +820,11 @@ async fn dispatch_work(
                 changes,
                 not_covered: snapshot.not_covered.clone(),
             };
-            let report = match service.rollback(&snapshot, &comparison) {
+            let report = match paths {
+                Some(paths) => service.rollback_paths(&snapshot, &comparison, &paths),
+                None => service.rollback(&snapshot, &comparison),
+            };
+            let report = match report {
                 Ok(report) => report,
                 Err(_) => return (invalid_work_response(), Vec::new()),
             };

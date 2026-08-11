@@ -4,7 +4,7 @@
 //! launch a provider, or decide whether a failed snapshot is safe to continue; callers must make
 //! that decision explicitly through [`SnapshotPreparationOptions`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::fmt;
 use std::fs::{self, File, Metadata, OpenOptions};
@@ -715,6 +715,51 @@ impl WorkspaceSnapshotService {
         snapshot: &WorkspaceSnapshot,
         comparison: &SnapshotComparison,
     ) -> Result<RollbackReport, SnapshotError> {
+        self.rollback_selected(snapshot, comparison, None)
+    }
+
+    /// Restore only selected paths from a freshly verified, complete comparison. Paths must be
+    /// present in that reviewed comparison. The complete comparison is still checked for
+    /// staleness before any selected path is changed.
+    pub fn rollback_paths(
+        &self,
+        snapshot: &WorkspaceSnapshot,
+        comparison: &SnapshotComparison,
+        paths: &[String],
+    ) -> Result<RollbackReport, SnapshotError> {
+        if paths.is_empty() {
+            return Err(SnapshotError::RollbackRejected(
+                "rollback path selection must not be empty".to_owned(),
+            ));
+        }
+        let mut selected = BTreeSet::new();
+        for path in paths {
+            let normalized = validate_relative_path(path)?;
+            if normalized != *path {
+                return Err(SnapshotError::RollbackRejected(format!(
+                    "rollback path is not normalized: {path}"
+                )));
+            }
+            if !selected.insert(path.as_str()) {
+                return Err(SnapshotError::RollbackRejected(format!(
+                    "rollback path is duplicated: {path}"
+                )));
+            }
+            if !comparison.changes.iter().any(|change| change.path == *path) {
+                return Err(SnapshotError::RollbackRejected(format!(
+                    "rollback path is not present in the reviewed comparison: {path}"
+                )));
+            }
+        }
+        self.rollback_selected(snapshot, comparison, Some(&selected))
+    }
+
+    fn rollback_selected(
+        &self,
+        snapshot: &WorkspaceSnapshot,
+        comparison: &SnapshotComparison,
+        selected: Option<&BTreeSet<&str>>,
+    ) -> Result<RollbackReport, SnapshotError> {
         let roots = ValidatedRoots::new(&self.config)?;
         if roots.workspace_root != snapshot.workspace_root {
             return Err(SnapshotError::RollbackRejected(
@@ -764,7 +809,8 @@ impl WorkspaceSnapshotService {
             });
         }
 
-        let mut plans = Vec::with_capacity(comparison.changes.len());
+        let mut plans =
+            Vec::with_capacity(selected.map_or(comparison.changes.len(), BTreeSet::len));
         let mut conflicts = Vec::new();
         for change in &comparison.changes {
             let normalized = validate_relative_path(&change.path)?;
@@ -773,6 +819,9 @@ impl WorkspaceSnapshotService {
                     "comparison path is not normalized: {}",
                     change.path
                 )));
+            }
+            if selected.is_some_and(|paths| !paths.contains(change.path.as_str())) {
+                continue;
             }
             let target = safe_workspace_path(&roots.workspace_root, &normalized, true)?;
             match change.kind {

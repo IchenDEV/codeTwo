@@ -492,6 +492,29 @@ impl Client {
             .work(WorkRequest::RollbackRun {
                 run_id,
                 snapshot_id,
+                paths: None,
+            })
+            .await?
+        {
+            WorkResponse::RollbackCompleted { receipt } => Ok(receipt),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "rollback_completed",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn rollback_paths(
+        &self,
+        run_id: String,
+        snapshot_id: String,
+        paths: Vec<String>,
+    ) -> Result<RollbackReceipt, ClientError> {
+        match self
+            .work(WorkRequest::RollbackRun {
+                run_id,
+                snapshot_id,
+                paths: Some(paths),
             })
             .await?
         {

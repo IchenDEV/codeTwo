@@ -1,5 +1,6 @@
 //! Versioned, domain-free framing and envelopes for the local Code2 transport.
 
+use std::collections::BTreeSet;
 use std::io;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -354,6 +355,8 @@ pub enum WorkRequest {
     RollbackRun {
         run_id: String,
         snapshot_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        paths: Option<Vec<String>>,
     },
     StartRun {
         task_id: String,
@@ -475,9 +478,22 @@ impl WorkRequest {
             Self::RollbackRun {
                 run_id,
                 snapshot_id,
+                paths,
             } => {
                 validate_bounded_text(run_id, 256, "run id")?;
                 validate_bounded_text(snapshot_id, 256, "snapshot id")?;
+                if let Some(paths) = paths {
+                    if paths.is_empty() || paths.len() > MAX_WORK_PAGE_SIZE {
+                        return Err(EnvelopeError::InvalidField("rollback paths".to_owned()));
+                    }
+                    let mut unique = BTreeSet::new();
+                    for path in paths {
+                        validate_bounded_text(path, 4096, "rollback path")?;
+                        if !unique.insert(path) {
+                            return Err(EnvelopeError::InvalidField("rollback paths".to_owned()));
+                        }
+                    }
+                }
             }
             Self::RegisterDeliverable {
                 task_id,
@@ -1243,6 +1259,32 @@ mod tests {
         let json = serde_json::to_string(&request).unwrap();
         assert!(!json.contains("Value"));
         assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn partial_rollback_requires_a_unique_nonempty_path_selection() {
+        let request = |paths| {
+            RequestEnvelope::new(
+                1,
+                Request::Work {
+                    request: WorkRequest::RollbackRun {
+                        run_id: "run".to_owned(),
+                        snapshot_id: "snapshot".to_owned(),
+                        paths,
+                    },
+                },
+            )
+        };
+        assert!(request(None).validate().is_ok());
+        assert!(request(Some(vec!["one.txt".to_owned()])).validate().is_ok());
+        assert!(matches!(
+            request(Some(Vec::new())).validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "rollback paths"
+        ));
+        assert!(matches!(
+            request(Some(vec!["one.txt".to_owned(), "one.txt".to_owned()])).validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "rollback paths"
+        ));
     }
 
     #[test]
