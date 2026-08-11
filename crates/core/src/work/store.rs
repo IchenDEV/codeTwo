@@ -11,8 +11,8 @@ use super::domain::{
     WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
-    ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
-    WorkAuditContext, WorkEntityKind, WorkMutationGuard,
+    automation_run_from_row, ensure_backfill_head, entity_head, high_water, install_schema_tx,
+    with_transaction, WorkAuditContext, WorkEntityKind, WorkMutationGuard,
 };
 use crate::automation::{
     AutomationFailure, AutomationRun, AutomationRunStatus, AutomationSpec, AutomationValidation,
@@ -904,6 +904,76 @@ impl Store {
         })
     }
 
+    pub fn work_start_automation_run(
+        &self,
+        run_id: &str,
+        work_run_id: &str,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.start_automation_run(run_id, work_run_id, now, audit)
+        })
+    }
+
+    pub fn work_list_automation_runs(
+        &self,
+        automation_id: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<AutomationRun>, StoreError> {
+        validate_page(cursor, limit)?;
+        let after = cursor
+            .map(|value| {
+                serde_json::from_str::<AutomationRunCursor>(value).map_err(|_| {
+                    StoreError::Domain("invalid Automation run page cursor".to_owned())
+                })
+            })
+            .transpose()?;
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT r.id,r.automation_id,r.occurrence_key,r.status,r.scheduled_at,
+                    r.provider_json,r.model,r.prompt_json,r.work_run_id,r.started_at,
+                    r.finished_at,r.wait_json,r.failure_json,r.coalesced_missed,
+                    r.missed_start,r.missed_end,r.created_at,r.updated_at,h.revision
+             FROM automation_runs r JOIN work_entity_heads h
+               ON h.entity_kind='automation_run' AND h.entity_id=r.id AND h.deleted=0
+             WHERE r.automation_id=?1
+               AND (?2 IS NULL OR r.scheduled_at>?2 OR (r.scheduled_at=?2 AND r.id>?3))
+             ORDER BY r.scheduled_at,r.id LIMIT ?4",
+        )?;
+        let rows = statement.query_map(
+            params![
+                automation_id,
+                after.as_ref().map(|value| value.scheduled_at),
+                after.as_ref().map(|value| value.id.as_str()),
+                (limit + 1) as i64,
+            ],
+            automation_run_from_row,
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = if items.len() > limit {
+            items.truncate(limit);
+            items
+                .last()
+                .map(|item| {
+                    serde_json::to_string(&AutomationRunCursor {
+                        scheduled_at: item.entity.scheduled_at,
+                        id: item.entity.id.clone(),
+                    })
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
     pub fn work_save_brief(
         &self,
         brief: BriefRevision,
@@ -1498,6 +1568,12 @@ fn automation_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersione
         },
         revision,
     })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AutomationRunCursor {
+    scheduled_at: i64,
+    id: String,
 }
 
 fn validate_page(cursor: Option<&str>, limit: usize) -> Result<(), StoreError> {

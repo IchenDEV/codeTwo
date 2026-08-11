@@ -296,7 +296,7 @@ fn automation_spec_from_row(
     })
 }
 
-fn automation_run_from_row(
+pub(super) fn automation_run_from_row(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<WorkVersioned<AutomationRun>> {
     let status: String = row.get(3)?;
@@ -912,6 +912,77 @@ impl WorkTransaction<'_> {
                     .transpose()?,
                 now,
             ],
+        )?;
+        current.revision = mutation.revision;
+        Ok(current)
+    }
+
+    pub fn start_automation_run(
+        &mut self,
+        run_id: &str,
+        work_run_id: &str,
+        now: i64,
+        audit: &WorkAuditContext,
+    ) -> Result<WorkVersioned<AutomationRun>, StoreError> {
+        let mut current = self
+            .transaction
+            .query_row(
+                "SELECT r.id,r.automation_id,r.occurrence_key,r.status,r.scheduled_at,
+                        r.provider_json,r.model,r.prompt_json,r.work_run_id,r.started_at,
+                        r.finished_at,r.wait_json,r.failure_json,r.coalesced_missed,
+                        r.missed_start,r.missed_end,r.created_at,r.updated_at,h.revision
+                 FROM automation_runs r JOIN work_entity_heads h
+                   ON h.entity_kind='automation_run' AND h.entity_id=r.id AND h.deleted=0
+                 WHERE r.id=?1",
+                [run_id],
+                automation_run_from_row,
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::Domain("unknown Automation run".to_owned()))?;
+        if current.entity.status != AutomationRunStatus::Queued
+            || current.entity.work_run_id.is_some()
+        {
+            return Err(StoreError::Domain(
+                "Automation run is not ready to start".to_owned(),
+            ));
+        }
+        let owned: bool = self.transaction.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM automation_runs ar
+               JOIN automations a ON a.id=ar.automation_id
+               JOIN sessions s ON s.id=?2 AND s.task_id=a.task_id
+               JOIN work_entity_heads h
+                 ON h.entity_kind='run' AND h.entity_id=s.id AND h.deleted=0
+               WHERE ar.id=?1
+             )",
+            params![run_id, work_run_id],
+            |row| row.get(0),
+        )?;
+        if !owned {
+            return Err(StoreError::Domain(
+                "Automation occurrence and Work Run do not share a Task".to_owned(),
+            ));
+        }
+        current.entity.status = AutomationRunStatus::Running;
+        current.entity.work_run_id = Some(work_run_id.to_owned());
+        current.entity.started_at = Some(now);
+        current.entity.updated_at = now;
+        current
+            .entity
+            .validate()
+            .map_err(|error| StoreError::Domain(error.to_string()))?;
+        let guard = WorkMutationGuard::from_audit(Some(current.revision), audit);
+        let mutation = self.append_guarded(
+            WorkEntityKind::AutomationRun,
+            current.entity.id.clone(),
+            false,
+            "start",
+            &guard,
+        )?;
+        self.transaction.execute(
+            "UPDATE automation_runs SET status='running',work_run_id=?2,started_at=?3,
+               wait_json=NULL,failure_json=NULL,updated_at=?3 WHERE id=?1",
+            params![current.entity.id, work_run_id, now],
         )?;
         current.revision = mutation.revision;
         Ok(current)

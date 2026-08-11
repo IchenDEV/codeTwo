@@ -143,7 +143,15 @@ async fn automation_definitions_are_shared_revisioned_daemon_state() {
     let root = TempDir::new().unwrap();
     let runtime = root.path().join("runtime");
     let store = Arc::new(Store::open(root.path().join("codetwo.db").to_str().unwrap()).unwrap());
-    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let provider_id = "automation-provider";
+    let marker = root.path().join("automation-provider-started.txt");
+    let daemon = Daemon::bind_with_components(
+        &runtime,
+        store,
+        vec![mock_provider(provider_id, &marker)],
+        SkillLibrary::new(Vec::new()),
+    )
+    .unwrap();
     let socket = daemon.socket_path().to_owned();
     let server = tokio::spawn(daemon.run());
     let writer = Client::connect(&socket).await.unwrap();
@@ -169,11 +177,18 @@ async fn automation_definitions_are_shared_revisioned_daemon_state() {
         .await
         .unwrap();
     let _ = events.recv().await.unwrap();
+    let scheduled_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64
+        + 100;
     let automation = AutomationSpec::new(
         "daily-report",
         task.entity.id.clone(),
-        ProviderId::Codex,
-        AutomationTrigger::Schedule(ScheduleTrigger { at_ms: 10_000 }),
+        ProviderId::Custom(provider_id.into()),
+        AutomationTrigger::Schedule(ScheduleTrigger {
+            at_ms: scheduled_at,
+        }),
         vec![DocBlock::Text {
             text: "write the daily report".into(),
         }],
@@ -187,12 +202,67 @@ async fn automation_definitions_are_shared_revisioned_daemon_state() {
     ));
     assert_eq!(
         observer
-            .list_automations(Some(task.entity.id), None, 10)
+            .list_automations(Some(task.entity.id.clone()), None, 10)
             .await
             .unwrap()
             .items,
         vec![saved]
     );
+    let occurrence = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let run_id = match occurrence {
+        SubscriptionMessage::Event(envelope) => match envelope.event {
+            TransportEvent::AutomationRunChanged { run, revision: 1 } => {
+                assert_eq!(run.scheduled_at, scheduled_at);
+                run.id
+            }
+            event => panic!("unexpected event: {event:?}"),
+        },
+        message => panic!("unexpected subscription message: {message:?}"),
+    };
+    let runs = observer
+        .list_automation_runs("daily-report".into(), None, 10)
+        .await
+        .unwrap();
+    assert_eq!(runs.items.len(), 1);
+    assert_eq!(runs.items[0].entity.id, run_id);
+    timeout(Duration::from_secs(5), async {
+        let mut completed = false;
+        let mut review = false;
+        while !completed || !review {
+            let SubscriptionMessage::Event(envelope) = events.recv().await.unwrap() else {
+                continue;
+            };
+            match envelope.event {
+                TransportEvent::AutomationRunChanged { run, .. }
+                    if run.id == run_id
+                        && run.status == codetwo_core::AutomationRunStatus::Completed =>
+                {
+                    completed = true;
+                }
+                TransportEvent::TaskChanged { task: changed, .. }
+                    if changed.id == task.entity.id && changed.status == TaskStatus::Review =>
+                {
+                    review = true;
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(marker.is_file());
+    let completed = observer
+        .list_automation_runs("daily-report".into(), None, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        completed.items[0].entity.status,
+        codetwo_core::AutomationRunStatus::Completed
+    );
+    assert!(completed.items[0].entity.work_run_id.is_some());
 
     writer.shutdown().await.unwrap();
     timeout(Duration::from_secs(2), server)
@@ -552,10 +622,16 @@ const MOCK_AGENT: &str = r#"
 import json, os, sys
 for line in sys.stdin:
     message = json.loads(line)
-    if message.get("method") == "initialize":
+    method = message.get("method")
+    if method == "initialize":
         with open(os.environ["CODETWO_TEST_PROVIDER_MARKER"], "w") as marker:
             marker.write("provider started\n")
         print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":{"protocolVersion":1}}), flush=True)
+    elif method == "session/new":
+        print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":{"sessionId":"mock-session"}}), flush=True)
+    elif method == "session/prompt":
+        print(json.dumps({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"mock-session","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"automation done"}}}}), flush=True)
+        print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":{"stopReason":"end_turn"}}), flush=True)
 "#;
 
 fn mock_provider(id: &str, marker: &std::path::Path) -> Provider {

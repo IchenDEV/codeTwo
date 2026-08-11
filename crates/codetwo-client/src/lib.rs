@@ -13,8 +13,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, AutomationSpec, BriefRevision, BriefSaveResult, ChangeSummary,
-    Deliverable, EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response,
+    read_json, write_json, AutomationRun, AutomationSpec, BriefRevision, BriefSaveResult,
+    ChangeSummary, Deliverable, EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response,
     ResponseEnvelope, RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, Session,
     Skill, StreamCursor, StreamEpoch, SubscribeResult, Task, TranscriptCursor, TranscriptPage,
     TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
@@ -716,6 +716,28 @@ impl Client {
         }
     }
 
+    pub async fn list_automation_runs(
+        &self,
+        automation_id: String,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<AutomationRun>, ClientError> {
+        match self
+            .work(WorkRequest::ListAutomationRuns {
+                automation_id,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::AutomationRuns { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "automation_runs",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), ClientError> {
         match self
             .request(Request::Shutdown, ExpectedResponse::Shutdown)
@@ -1051,6 +1073,7 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::Deliverables { .. } => "deliverables",
         WorkResponse::Automations { .. } => "automations",
         WorkResponse::AutomationSaved { .. } => "automation_saved",
+        WorkResponse::AutomationRuns { .. } => "automation_runs",
         WorkResponse::Error { .. } => "error",
     }
 }

@@ -8,9 +8,9 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    AutomationSpec, BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run,
-    RunChange, Session, Skill, Task, TranscriptCursor, TranscriptPage, WorkPage, WorkVersioned,
-    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    AutomationRun, AutomationSpec, BriefRevision, BriefSaveResult, Deliverable, Event, Op,
+    ProviderId, Run, RunChange, Session, Skill, Task, TranscriptCursor, TranscriptPage, WorkPage,
+    WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -205,6 +205,10 @@ pub enum TransportEvent {
         automation: AutomationSpec,
         revision: u64,
     },
+    AutomationRunChanged {
+        run: AutomationRun,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -314,6 +318,15 @@ impl EventEnvelope {
                     ));
                 }
             }
+            TransportEvent::AutomationRunChanged { run, revision } => {
+                run.validate()
+                    .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField(
+                        "automation run revision".to_owned(),
+                    ));
+                }
+            }
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -412,6 +425,12 @@ pub enum WorkRequest {
         automation: AutomationSpec,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_revision: Option<u64>,
+    },
+    ListAutomationRuns {
+        automation_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
     },
 }
 
@@ -596,6 +615,19 @@ impl WorkRequest {
                     return Err(EnvelopeError::InvalidField(
                         "automation expected revision".to_owned(),
                     ));
+                }
+            }
+            Self::ListAutomationRuns {
+                automation_id,
+                cursor,
+                limit,
+            } => {
+                validate_bounded_text(automation_id, 256, "automation id")?;
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 256, "Automation run page cursor")?;
                 }
             }
         }
@@ -862,6 +894,9 @@ pub enum WorkResponse {
     AutomationSaved {
         item: WorkVersioned<AutomationSpec>,
     },
+    AutomationRuns {
+        page: WorkPage<AutomationRun>,
+    },
     Error {
         error: WorkErrorKind,
         message: String,
@@ -1050,6 +1085,24 @@ impl WorkResponse {
                     return Err(EnvelopeError::InvalidField(
                         "automation revision".to_owned(),
                     ));
+                }
+            }
+            Self::AutomationRuns { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 256, "Automation run page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(|error| EnvelopeError::InvalidField(error.to_string()))?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField(
+                            "automation run revision".to_owned(),
+                        ));
+                    }
                 }
             }
             Self::Error { message, .. } => {

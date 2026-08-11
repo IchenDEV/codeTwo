@@ -3,14 +3,18 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
-    Engine, Event, Op, Provider, RunSnapshot, SnapshotChangeKind, SnapshotComparison,
-    SnapshotConfig, SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError, TaskStatus,
-    WorkArtifactError, WorkArtifactService, WorkMutationGuard, WorkspaceKind, WorkspaceSnapshot,
+    AutomationFailure, AutomationFailureCode, AutomationRunStatus, AutomationWait,
+    AutomationWaitCode, DocBlock, Engine, Event, Op, Provider, RunSnapshot, SessionRunState,
+    SnapshotChangeKind, SnapshotComparison, SnapshotConfig, SnapshotPreparation,
+    SnapshotPreparationOptions, Store, StoreError, TaskStatus, WorkArtifactError,
+    WorkArtifactService, WorkAuditContext, WorkMutationGuard, WorkspaceKind, WorkspaceSnapshot,
     WorkspaceSnapshotService,
 };
 use codetwo_protocol::{
@@ -51,6 +55,9 @@ struct State {
     pending_snapshots: StdMutex<HashMap<String, PendingSnapshot>>,
     engine: Engine,
     engine_events: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<Event>>>,
+    pending_automation_runs: StdMutex<HashMap<String, PendingAutomationRun>>,
+    early_automation_sessions: StdMutex<HashMap<String, String>>,
+    automation_sessions: StdMutex<HashMap<String, String>>,
 }
 
 struct PendingSnapshot {
@@ -58,6 +65,14 @@ struct PendingSnapshot {
     task_id: String,
     snapshot: WorkspaceSnapshot,
 }
+
+struct PendingAutomationRun {
+    id: String,
+    prompt: Vec<DocBlock>,
+}
+
+const AUTOMATION_REQUEST_BIT: u64 = 1 << 63;
+static NEXT_AUTOMATION_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
 pub struct Daemon {
     _ownership: RuntimeOwnership,
@@ -156,6 +171,9 @@ impl Daemon {
                 pending_snapshots: StdMutex::new(HashMap::new()),
                 engine,
                 engine_events: StdMutex::new(Some(engine_events)),
+                pending_automation_runs: StdMutex::new(HashMap::new()),
+                early_automation_sessions: StdMutex::new(HashMap::new()),
+                automation_sessions: StdMutex::new(HashMap::new()),
             }),
         })
     }
@@ -180,6 +198,7 @@ impl Daemon {
             .take()
             .ok_or_else(|| io::Error::other("daemon engine events already consumed"))?;
         connections.spawn(engine_event_loop(engine_events, Arc::clone(&self.state)));
+        connections.spawn(automation_scheduler_loop(Arc::clone(&self.state)));
         while !*shutdown.borrow() {
             tokio::select! {
                 result = self.listener.accept() => { let (stream, _) = result?; connections.spawn(connection(stream, Arc::clone(&self.state))); }
@@ -191,6 +210,233 @@ impl Daemon {
         while connections.join_next().await.is_some() {}
         self.socket_identity.remove_if_matches(&self.socket_path)?;
         Ok(())
+    }
+}
+
+fn unix_time_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+        .unwrap_or(0)
+}
+
+async fn automation_scheduler_loop(state: Arc<State>) {
+    let mut shutdown = state.shutdown.subscribe();
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        tokio::select! {
+            _ = interval.tick() => {
+                let audit = WorkAuditContext::new(
+                    "scheduler",
+                    "local_daemon",
+                    format!("scheduler:{}", Uuid::new_v4().simple()),
+                );
+                match state.store.work_claim_due_automations(unix_time_millis(), &audit) {
+                    Ok(runs) => {
+                        for run in runs {
+                            let launch = run.clone();
+                            append(
+                                &state,
+                                TransportEvent::AutomationRunChanged {
+                                    run: run.entity,
+                                    revision: run.revision,
+                                },
+                            )
+                            .await;
+                            launch_automation_occurrence(&state, launch).await;
+                        }
+                    }
+                    Err(_) => {
+                        append(
+                            &state,
+                            TransportEvent::Core {
+                                event: Event::Error {
+                                    session: None,
+                                    message: "Automation scheduler evaluation failed".to_owned(),
+                                    terminal: false,
+                                    request_id: None,
+                                },
+                            },
+                        )
+                        .await;
+                    }
+                }
+            }
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+async fn launch_automation_occurrence(
+    state: &Arc<State>,
+    occurrence: codetwo_core::WorkVersioned<codetwo_core::AutomationRun>,
+) {
+    if occurrence.revision != 1 || occurrence.entity.status != AutomationRunStatus::Queued {
+        return;
+    }
+    let Some(automation) = state
+        .store
+        .work_get_automation(&occurrence.entity.automation_id)
+        .ok()
+        .flatten()
+    else {
+        fail_automation_occurrence(
+            state,
+            &occurrence.entity.id,
+            AutomationFailureCode::InvalidDefinition,
+        )
+        .await;
+        return;
+    };
+    let request_id = AUTOMATION_REQUEST_BIT
+        | NEXT_AUTOMATION_REQUEST_ID
+            .fetch_add(1, Ordering::Relaxed)
+            .max(1);
+    let (response, events) = dispatch_work(
+        state,
+        request_id,
+        WorkRequest::StartRun {
+            task_id: automation.entity.task_id,
+            provider: occurrence.entity.provider.clone(),
+            allow_without_rollback: false,
+        },
+    )
+    .await;
+    for event in events {
+        append(state, event).await;
+    }
+    let WorkResponse::RunStarted { receipt } = response else {
+        wait_automation_occurrence(
+            state,
+            &occurrence.entity.id,
+            AutomationWaitCode::RollbackDecision,
+        )
+        .await;
+        return;
+    };
+    let pending = PendingAutomationRun {
+        id: occurrence.entity.id,
+        prompt: occurrence.entity.prompt,
+    };
+    state
+        .pending_automation_runs
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(receipt.request_id.clone(), pending);
+    let early = state
+        .early_automation_sessions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&receipt.request_id);
+    if let Some(session) = early {
+        let pending = state
+            .pending_automation_runs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&receipt.request_id);
+        if let Some(pending) = pending {
+            begin_automation_session(state, session, pending).await;
+        }
+    }
+}
+
+async fn begin_automation_session(
+    state: &Arc<State>,
+    session: String,
+    pending: PendingAutomationRun,
+) {
+    state
+        .automation_sessions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(session.clone(), pending.id.clone());
+    let audit = scheduler_audit("start");
+    match state
+        .store
+        .work_start_automation_run(&pending.id, &session, unix_time_millis(), &audit)
+    {
+        Ok(run) => {
+            append(
+                state,
+                TransportEvent::AutomationRunChanged {
+                    run: run.entity,
+                    revision: run.revision,
+                },
+            )
+            .await;
+        }
+        Err(_) => return,
+    }
+    if state
+        .engine
+        .submit(Op::Prompt {
+            session: session.clone(),
+            doc: pending.prompt,
+            request_id: Some(format!("automation-prompt:{}", pending.id)),
+        })
+        .await
+        .is_err()
+    {
+        state
+            .automation_sessions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&session);
+        fail_automation_occurrence(state, &pending.id, AutomationFailureCode::ProviderFailed).await;
+    }
+}
+
+fn scheduler_audit(operation: &str) -> WorkAuditContext {
+    WorkAuditContext::new(
+        "scheduler",
+        "local_daemon",
+        format!("scheduler-{operation}:{}", Uuid::new_v4().simple()),
+    )
+}
+
+async fn wait_automation_occurrence(state: &Arc<State>, run_id: &str, code: AutomationWaitCode) {
+    if let Ok(run) = state.store.work_transition_automation_run(
+        run_id,
+        AutomationRunStatus::Waiting,
+        Some(AutomationWait { code, detail: None }),
+        None,
+        unix_time_millis(),
+        &scheduler_audit("wait"),
+    ) {
+        append(
+            state,
+            TransportEvent::AutomationRunChanged {
+                run: run.entity,
+                revision: run.revision,
+            },
+        )
+        .await;
+    }
+}
+
+async fn fail_automation_occurrence(state: &Arc<State>, run_id: &str, code: AutomationFailureCode) {
+    if let Ok(run) = state.store.work_transition_automation_run(
+        run_id,
+        AutomationRunStatus::Failed,
+        None,
+        Some(AutomationFailure { code, detail: None }),
+        unix_time_millis(),
+        &scheduler_audit("fail"),
+    ) {
+        append(
+            state,
+            TransportEvent::AutomationRunChanged {
+                run: run.entity,
+                revision: run.revision,
+            },
+        )
+        .await;
     }
 }
 async fn append(state: &State, event: TransportEvent) -> EventEnvelope {
@@ -509,6 +755,19 @@ async fn engine_event_loop(
             } => Some((session.clone(), request_id.clone())),
             _ => None,
         };
+        let activity_update = match &event {
+            Event::SessionActivityChanged { session, activity } => {
+                Some((session.clone(), activity.state.clone()))
+            }
+            _ => None,
+        };
+        let automation_start_error = match &event {
+            Event::Error {
+                request_id: Some(request_id),
+                ..
+            } if request_id.starts_with("automation-run:") => Some(request_id.clone()),
+            _ => None,
+        };
         let snapshot_result = created_run.as_ref().and_then(|(run_id, request_id)| {
             let request_id = request_id.as_ref()?;
             let pending = state
@@ -542,8 +801,8 @@ async fn engine_event_loop(
             ))
         });
         append(&state, TransportEvent::Core { event }).await;
-        if let Some((run_id, _)) = created_run {
-            if let Ok(Some(run)) = state.store.work_get_run(&run_id) {
+        if let Some((run_id, _)) = created_run.as_ref() {
+            if let Ok(Some(run)) = state.store.work_get_run(run_id) {
                 append(
                     &state,
                     TransportEvent::RunChanged {
@@ -586,6 +845,145 @@ async fn engine_event_loop(
                 .await;
             }
             None => {}
+        }
+        if let Some((session, Some(request_id))) = created_run {
+            if request_id.starts_with("automation-run:") {
+                let pending = state
+                    .pending_automation_runs
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&request_id);
+                if let Some(pending) = pending {
+                    begin_automation_session(&state, session, pending).await;
+                } else {
+                    state
+                        .early_automation_sessions
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .insert(request_id, session);
+                }
+            }
+        }
+        if let Some(request_id) = automation_start_error {
+            let pending = state
+                .pending_automation_runs
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(&request_id);
+            state
+                .early_automation_sessions
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(&request_id);
+            if let Some(pending) = pending {
+                fail_automation_occurrence(
+                    &state,
+                    &pending.id,
+                    AutomationFailureCode::ProviderSpawn,
+                )
+                .await;
+            }
+        }
+        if let Some((session, activity)) = activity_update {
+            update_automation_session_activity(&state, &session, activity).await;
+        }
+    }
+}
+
+async fn update_automation_session_activity(
+    state: &Arc<State>,
+    session: &str,
+    activity: SessionRunState,
+) {
+    let run_id = state
+        .automation_sessions
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .get(session)
+        .cloned();
+    let Some(run_id) = run_id else {
+        return;
+    };
+    match activity {
+        SessionRunState::Running { .. } => {
+            if let Ok(run) = state.store.work_transition_automation_run(
+                &run_id,
+                AutomationRunStatus::Running,
+                None,
+                None,
+                unix_time_millis(),
+                &scheduler_audit("resume"),
+            ) {
+                append(
+                    state,
+                    TransportEvent::AutomationRunChanged {
+                        run: run.entity,
+                        revision: run.revision,
+                    },
+                )
+                .await;
+            }
+        }
+        SessionRunState::AwaitingInput { .. } => {
+            wait_automation_occurrence(state, &run_id, AutomationWaitCode::Permission).await;
+        }
+        SessionRunState::Idle => {
+            state
+                .automation_sessions
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(session);
+            if let Ok(run) = state.store.work_transition_automation_run(
+                &run_id,
+                AutomationRunStatus::Completed,
+                None,
+                None,
+                unix_time_millis(),
+                &scheduler_audit("complete"),
+            ) {
+                append(
+                    state,
+                    TransportEvent::AutomationRunChanged {
+                        run: run.entity,
+                        revision: run.revision,
+                    },
+                )
+                .await;
+            }
+            if let Ok(Some(run)) = state.store.work_get_run(session) {
+                if let Ok(Some(task)) = state.store.work_get_task(&run.entity.task_id) {
+                    if task.entity.status == TaskStatus::Active {
+                        let guard = WorkMutationGuard::new(
+                            Some(task.revision),
+                            "scheduler",
+                            "local_daemon",
+                            format!("automation-review:{}", Uuid::new_v4().simple()),
+                        );
+                        if let Ok(task) = state.store.work_transition_task_status(
+                            &task.entity.id,
+                            TaskStatus::Review,
+                            &guard,
+                        ) {
+                            append(
+                                state,
+                                TransportEvent::TaskChanged {
+                                    task: task.entity,
+                                    revision: task.revision,
+                                },
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
+        }
+        SessionRunState::Failed { .. } => {
+            state
+                .automation_sessions
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(session);
+            fail_automation_occurrence(state, &run_id, AutomationFailureCode::ProviderFailed).await;
         }
     }
 }
@@ -737,7 +1135,12 @@ async fn dispatch_work(
                 Ok(root) => root,
                 Err(error) => return (work_error(error), Vec::new()),
             };
-            let request_id = format!("work-run:{}", Uuid::new_v4().simple());
+            let request_kind = if client_request_id & AUTOMATION_REQUEST_BIT != 0 {
+                "automation-run"
+            } else {
+                "work-run"
+            };
+            let request_id = format!("{request_kind}:{}", Uuid::new_v4().simple());
             let snapshot_id = Uuid::new_v4().to_string();
             let snapshot_path = state.snapshot_root.join(&snapshot_id);
             let service = WorkspaceSnapshotService::new(
@@ -1021,6 +1424,17 @@ async fn dispatch_work(
                 Err(error) => (work_error(error), Vec::new()),
             }
         }
+        WorkRequest::ListAutomationRuns {
+            automation_id,
+            cursor,
+            limit,
+        } => match state
+            .store
+            .work_list_automation_runs(&automation_id, cursor.as_deref(), limit)
+        {
+            Ok(page) => (WorkResponse::AutomationRuns { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
     }
 }
 
