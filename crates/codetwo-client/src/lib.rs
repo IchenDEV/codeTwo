@@ -13,10 +13,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, BriefRevision, BriefSaveResult, EventEnvelope, Request, RequestEnvelope,
-    ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor, StreamEpoch,
-    SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse,
-    WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
+    read_json, write_json, BriefRevision, BriefSaveResult, EventEnvelope, Op, Request,
+    RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
+    StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest,
+    WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedReadHalf, UnixStream};
@@ -59,7 +59,7 @@ pub enum ClientError {
 }
 
 /// Items delivered directly by a successful subscription receiver.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SubscriptionMessage {
     Event(EventEnvelope),
     Reset {
@@ -81,6 +81,7 @@ enum ExpectedResponse {
         sender: mpsc::Sender<SubscriptionMessage>,
     },
     Work,
+    Core,
     Shutdown,
 }
 
@@ -91,6 +92,7 @@ impl ExpectedResponse {
             Self::Ping { .. } => "pong",
             Self::Subscribe { .. } => "subscribe",
             Self::Work => "work",
+            Self::Core => "core_accepted",
             Self::Shutdown => "shutdown",
         }
     }
@@ -102,6 +104,7 @@ fn response_name(response: &Response) -> &'static str {
         Response::Subscribe(_) => "subscribe",
         Response::Pong { .. } => "pong",
         Response::Work { .. } => "work",
+        Response::CoreAccepted => "core_accepted",
         Response::Shutdown => "shutdown",
         Response::Error { .. } => "error",
     }
@@ -416,6 +419,19 @@ impl Client {
         }
     }
 
+    pub async fn submit(&self, op: Op) -> Result<(), ClientError> {
+        match self
+            .request(Request::Core { op }, ExpectedResponse::Core)
+            .await?
+        {
+            Response::CoreAccepted => Ok(()),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "core_accepted",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
     async fn work(&self, request: WorkRequest) -> Result<WorkResponse, ClientError> {
         match self
             .request(Request::Work { request }, ExpectedResponse::Work)
@@ -663,6 +679,7 @@ async fn reader_loop(mut reader: OwnedReadHalf, inner: Arc<Inner>) {
                     expected => match (&expected, &response.response) {
                         (ExpectedResponse::Hello, Response::Hello { .. }) => Ok(response.response),
                         (ExpectedResponse::Work, Response::Work { .. }) => Ok(response.response),
+                        (ExpectedResponse::Core, Response::CoreAccepted) => Ok(response.response),
                         (ExpectedResponse::Shutdown, Response::Shutdown) => Ok(response.response),
                         (
                             ExpectedResponse::Ping { nonce: expected },

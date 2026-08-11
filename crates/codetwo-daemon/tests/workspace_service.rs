@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
-    BriefRevision, DocBlock, Store, Task, TaskExperience, Workspace, WorkspaceKind,
+    BriefRevision, DocBlock, Event, Op, PermissionMode, ProviderId, Session, Store, Task,
+    TaskExperience, Workspace, WorkspaceKind,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -189,4 +190,61 @@ async fn task_and_brief_share_guarded_daemon_state_and_ordered_events() {
         .unwrap()
         .unwrap()
         .unwrap();
+}
+
+#[tokio::test]
+async fn core_ops_execute_once_inside_daemon_and_share_the_ordered_stream() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let database = root.path().join("codetwo.db");
+    let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
+    let session = Session::new(ProviderId::Grok, root.path().to_string_lossy().into_owned());
+    store.upsert_session(&session).unwrap();
+    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+
+    let writer = Client::connect(&socket).await.unwrap();
+    let observer = Client::connect(&socket).await.unwrap();
+    let mut events = observer
+        .subscribe(Some(observer.hello().cursor.clone()))
+        .await
+        .unwrap();
+    writer
+        .submit(Op::SetPermissionMode {
+            session: session.id.clone(),
+            mode: PermissionMode::Yolo,
+        })
+        .await
+        .unwrap();
+
+    let event = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        event,
+        SubscriptionMessage::Event(envelope)
+            if matches!(
+                envelope.event,
+                TransportEvent::Core { event: Event::ExecutionPolicyChanged { session: ref event_session, policy, .. } }
+                    if event_session == &session.id && policy.mode == PermissionMode::Yolo
+            )
+    ));
+
+    writer.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let reopened = Store::open(database.to_str().unwrap()).unwrap();
+    assert_eq!(
+        reopened
+            .get_session(&session.id)
+            .unwrap()
+            .unwrap()
+            .permission_mode,
+        PermissionMode::Yolo
+    );
 }

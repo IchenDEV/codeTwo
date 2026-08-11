@@ -3,9 +3,11 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
-use codetwo_core::{Store, StoreError, WorkMutationGuard};
+use codetwo_core::provider::default_registry;
+use codetwo_core::skill::{builtin_skills, SkillLibrary};
+use codetwo_core::{Engine, Event, Store, StoreError, WorkMutationGuard};
 use codetwo_protocol::{
     read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
     RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
@@ -38,6 +40,8 @@ struct State {
     events: broadcast::Sender<EventEnvelope>,
     shutdown: watch::Sender<bool>,
     store: Arc<Store>,
+    engine: Engine,
+    engine_events: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<Event>>>,
 }
 
 pub struct Daemon {
@@ -87,6 +91,8 @@ impl Daemon {
         );
         let (events, _) = broadcast::channel(MAX_REPLAY_EVENTS);
         let (shutdown, _) = watch::channel(false);
+        let skills = SkillLibrary::new(builtin_skills());
+        let (engine, engine_events) = Engine::with_store(default_registry(), skills, store.clone());
         Ok(Self {
             _ownership: ownership,
             listener,
@@ -98,6 +104,8 @@ impl Daemon {
                 events,
                 shutdown,
                 store,
+                engine,
+                engine_events: StdMutex::new(Some(engine_events)),
             }),
         })
     }
@@ -114,6 +122,14 @@ impl Daemon {
     pub async fn run(self) -> Result<(), DaemonError> {
         let mut shutdown = self.state.shutdown.subscribe();
         let mut connections = JoinSet::new();
+        let engine_events = self
+            .state
+            .engine_events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+            .ok_or_else(|| io::Error::other("daemon engine events already consumed"))?;
+        connections.spawn(engine_event_loop(engine_events, Arc::clone(&self.state)));
         while !*shutdown.borrow() {
             tokio::select! {
                 result = self.listener.accept() => { let (stream, _) = result?; connections.spawn(connection(stream, Arc::clone(&self.state))); }
@@ -291,6 +307,18 @@ async fn handle(
             }
             send(writer, request.request_id, Response::Work { response }).await
         }
+        Request::Core { op } => match state.engine.submit(op).await {
+            Ok(()) => send(writer, request.request_id, Response::CoreAccepted).await,
+            Err(_) => {
+                send_error(
+                    writer,
+                    request.request_id,
+                    ErrorKind::Internal,
+                    "core submission failed",
+                )
+                .await
+            }
+        },
         Request::Subscribe { cursor } => {
             let receiver = state.events.subscribe();
             let (head, events) = snapshot(state).await;
@@ -350,6 +378,15 @@ async fn handle(
             state.shutdown.send_replace(true);
             false
         }
+    }
+}
+
+async fn engine_event_loop(
+    mut receiver: tokio::sync::mpsc::UnboundedReceiver<Event>,
+    state: Arc<State>,
+) {
+    while let Some(event) = receiver.recv().await {
+        append(&state, TransportEvent::Core { event }).await;
     }
 }
 

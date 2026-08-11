@@ -7,8 +7,8 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Task, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
-    MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Event, Op, Task, WorkPage, WorkVersioned, Workspace,
+    WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -152,7 +152,7 @@ pub enum OwnerState {
     Stopping,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum TransportEvent {
     OwnerLifecycle {
@@ -174,9 +174,12 @@ pub enum TransportEvent {
         brief: BriefRevision,
         revision: u64,
     },
+    Core {
+        event: Event,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventEnvelope {
     pub protocol: u16,
     pub epoch: StreamEpoch,
@@ -234,6 +237,7 @@ impl EventEnvelope {
                     return Err(EnvelopeError::InvalidField("brief revision".to_owned()));
                 }
             }
+            TransportEvent::Core { .. } => {}
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -345,17 +349,18 @@ impl WorkRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Request {
     Hello { client_version: u16 },
     Subscribe { cursor: Option<StreamCursor> },
     Ping { nonce: u64 },
     Work { request: WorkRequest },
+    Core { op: Op },
     Shutdown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequestEnvelope {
     pub protocol: u16,
     pub request_id: u64,
@@ -396,7 +401,7 @@ impl RequestEnvelope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 // Keep the nested discriminator distinct from `Response`'s `kind` field;
 // Response::Subscribe is represented in the same JSON object.
 #[serde(rename_all = "snake_case", tag = "result_kind")]
@@ -593,7 +598,7 @@ impl WorkResponse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Response {
     Hello {
@@ -607,6 +612,7 @@ pub enum Response {
     Work {
         response: WorkResponse,
     },
+    CoreAccepted,
     Shutdown,
     Error {
         error: ErrorKind,
@@ -614,7 +620,7 @@ pub enum Response {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResponseEnvelope {
     pub protocol: u16,
     pub request_id: u64,
@@ -652,7 +658,7 @@ impl ResponseEnvelope {
                 validate_bounded_text(message, 256, "error message")?;
             }
             Response::Work { response } => response.validate()?,
-            Response::Pong { .. } | Response::Shutdown => {}
+            Response::Pong { .. } | Response::CoreAccepted | Response::Shutdown => {}
         }
         Ok(())
     }
@@ -660,7 +666,7 @@ impl ResponseEnvelope {
 
 /// Typed server-to-client frames.  The explicit outer tag keeps response and
 /// event directions unambiguous without falling back to untyped JSON values.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "frame", content = "payload", rename_all = "snake_case")]
 pub enum ServerFrame {
     Response(ResponseEnvelope),

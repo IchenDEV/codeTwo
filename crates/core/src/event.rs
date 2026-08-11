@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Submissions: what a frontend asks the core to do.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Op {
     NewSession {
@@ -90,7 +90,7 @@ pub enum Op {
 }
 
 /// Events: what the core streams back for the UI to render.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
     SessionCreated {
@@ -227,7 +227,7 @@ pub enum Event {
 }
 
 /// One selectable model, flattened from ACP's `ModelInfo` for the frontends.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModelChoice {
     pub id: String,
     pub name: String,
@@ -237,7 +237,7 @@ pub struct ModelChoice {
 /// One session config selector, flattened from ACP's `SessionConfigOption` for the frontends.
 /// `category` is the spec's semantic hint ("model", "mode", "thought_level", …); `choices` reuses
 /// [`ModelChoice`] since the shape (id, name, description) is identical.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfigOptionInfo {
     pub id: String,
     pub name: String,
