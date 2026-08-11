@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
+import { ThinkingOrb } from "thinking-orbs";
 import { deriveAgentRoster } from "./agentActivity";
 import {
   canvasExportDataUrl,
@@ -235,8 +236,16 @@ export const TurnCard = memo(function TurnCard({
       )}
 
       {running && !turn.text && (
-        <p className="mt-3.5 flex items-center gap-2 text-ui text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" />
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-3.5 flex items-center gap-2 text-ui text-muted-foreground"
+        >
+          <ThinkingOrb
+            state={turn.thoughts.length > 0 ? "solving" : "working"}
+            size={20}
+            aria-hidden="true"
+          />
           {t("turn.working")}
         </p>
       )}
