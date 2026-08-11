@@ -528,6 +528,54 @@ export async function writeText(cwd: string, path: string, content: string): Pro
   if (inTauri) await invoke("write_text", { cwd, path, content });
 }
 
+function splitNativePath(path: string): { cwd: string; name: string } {
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (separator < 0) return { cwd: ".", name: path };
+  const windowsRoot = separator === 2 && path[1] === ":";
+  const cwd = windowsRoot ? path.slice(0, separator + 1) : path.slice(0, separator) || path.slice(0, 1);
+  return { cwd, name: path.slice(separator + 1) };
+}
+
+/** Native theme picker. `undefined` means the web build should use its hidden file input. */
+export async function pickAppearanceThemeDocument(): Promise<string | null | undefined> {
+  if (!inTauri) return undefined;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const selected = await open({
+    multiple: false,
+    directory: false,
+    title: "Import Code2 theme",
+    filters: [{ name: "Code2 theme", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return null;
+  const { cwd, name } = splitNativePath(selected);
+  return invoke<string>("read_text", { cwd, path: name });
+}
+
+export type AppearanceThemeSaveResult = "saved" | "cancelled" | "unsupported";
+
+/** Saves through the OS dialog in Tauri; the web build falls back to a normal JSON download. */
+export async function saveAppearanceThemeDocument(
+  suggestedName: string,
+  content: string,
+): Promise<AppearanceThemeSaveResult> {
+  if (!inTauri) return "unsupported";
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const selected = await save({
+    title: "Export Code2 theme",
+    defaultPath: suggestedName,
+    filters: [{ name: "Code2 theme", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return "cancelled";
+  const { cwd, name } = splitNativePath(selected);
+  try {
+    await invoke("create_file", { cwd, path: name });
+  } catch {
+    // The save panel explicitly confirms replacement. An existing file is therefore expected.
+  }
+  await invoke("write_text", { cwd, path: name, content });
+  return "saved";
+}
+
 /** Rename *and* move — a `to` with a different parent moves it. */
 export async function renamePath(cwd: string, from: string, to: string): Promise<void> {
   if (inTauri) await invoke("rename_path", { cwd, from, to });

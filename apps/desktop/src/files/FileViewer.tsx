@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Save } from "lucide-react";
 
+import { CODE_FONTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
@@ -74,6 +75,8 @@ export function FileViewer({
   const t = useT();
   const toast = useToast();
   const scheme = useColorScheme();
+  const appearance = useAppearanceSettings();
+  const codeFont = CODE_FONTS.find((font) => font.id === appearance.codeFont)?.stack ?? CODE_FONTS[0].stack;
   // Pictures take the preview path instead of the editor — there's no text to put in a buffer.
   const isImage = imageTypeOf(path) !== null;
   const container = useRef<HTMLDivElement | null>(null);
@@ -151,11 +154,9 @@ export function FileViewer({
       editor = m.monaco.editor.create(container.current, {
         model,
         automaticLayout: true,
-        fontFamily:
-          getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() ||
-          "ui-monospace, monospace",
-        fontSize: 12,
-        lineHeight: 20,
+        fontFamily: codeFont,
+        fontSize: appearance.codeFontSize,
+        lineHeight: Math.round(appearance.codeFontSize * 1.6),
         minimap: { enabled: false },
         wordWrap: "on",
         scrollBeyondLastLine: false,
@@ -225,6 +226,14 @@ export function FileViewer({
   useEffect(() => {
     mod?.applyTheme(scheme);
   }, [mod, scheme]);
+
+  useEffect(() => {
+    editorRef.current?.updateOptions({
+      fontFamily: codeFont,
+      fontSize: appearance.codeFontSize,
+      lineHeight: Math.round(appearance.codeFontSize * 1.6),
+    });
+  }, [appearance.codeFontSize, codeFont]);
 
   useEffect(() => {
     const editor = editorRef.current;
