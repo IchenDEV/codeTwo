@@ -117,6 +117,12 @@ import {
   type WorktreeBaselineKind,
   type WorktreeBaselineOption,
   type WorkspaceContentMatch,
+  applySceneToSession,
+  getSessionScene,
+  listScenes,
+  sceneSessionPlan,
+  setModel as setSessionModel,
+  setSessionScene,
 } from "./bridge";
 import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
@@ -141,6 +147,15 @@ import {
   withSessionExecutionPolicy,
   type SessionMode,
 } from "./session/mode";
+import {
+  escalationNeeded,
+  nextSceneInRing,
+  sceneCustomized,
+  softApplyPending,
+  MEMORY_PRESET_POLICY,
+  type SceneInfo,
+} from "./session/scene";
+import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
 import { Composer } from "./session/Composer";
 import {
   activeContextWindow,
@@ -398,6 +413,27 @@ export default function App() {
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
+  // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
+  const [scenes, setScenes] = useState<SceneInfo[]>([]);
+  /** The active scene's canonical reference for the focused session (or the draft). */
+  const [activeSceneName, setActiveSceneName] = useState<string | null>(null);
+  const [scenePendingFields, setScenePendingFields] = useState<string[]>([]);
+  const [showScenePicker, setShowScenePicker] = useState(false);
+  const [sceneEscalation, setSceneEscalation] = useState<{
+    reference: string;
+    kind: "soft" | "restart";
+    from: SessionMode;
+    to: SessionMode;
+  } | null>(null);
+  /** Scene to bind to the next created session (full-apply handshake). */
+  const pendingSceneRef = useRef<string | null>(null);
+  /** Per-session scene memory so switching sessions restores each one's scene. */
+  const sceneBySessionRef = useRef(new Map<string, string>());
+  const scenesRef = useRef<SceneInfo[]>([]);
+  const activeSceneNameRef = useRef<string | null>(null);
+  useEffect(() => {
+    activeSceneNameRef.current = activeSceneName;
+  }, [activeSceneName]);
   const [canvasFeature, setCanvasFeature] = useState<CanvasFeatureState>({
     feature: "CODETWO_CANVAS_INPUT_V1",
     enabled: false,
@@ -1013,6 +1049,28 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          {
+            // Full-apply handshake: bind the staged scene to the session the moment it exists.
+            const pendingScene = pendingSceneRef.current;
+            if (pendingScene) {
+              pendingSceneRef.current = null;
+              sceneBySessionRef.current.set(ev.session, pendingScene);
+              void setSessionScene(ev.session, pendingScene, false);
+              const scene = scenesRef.current.find((s) => s.reference === pendingScene);
+              if (scene?.execution?.model) {
+                void setSessionModel(ev.session, scene.execution.model);
+              }
+              setActiveSceneName(pendingScene);
+              // Reasoning effort has no provider-stable config id before the session reports
+              // its options, so it stays pending even after a full apply.
+              setScenePendingFields(
+                scene?.execution?.reasoning_effort ? ["reasoning_effort"] : [],
+              );
+            } else {
+              setActiveSceneName(sceneBySessionRef.current.get(ev.session) ?? null);
+              setScenePendingFields([]);
+            }
+          }
           memoryReceiptsRef.current = [];
           // The creation event carries the cwd that was persisted before publication. File, Git,
           // terminal and hook surfaces switch with the active id even if a best-effort list/preview
@@ -1541,6 +1599,12 @@ export default function App() {
     memoryReceiptsRef.current = [];
     setMemoryRead("inherit");
     setMemoryWrite("inherit");
+    // A plain new session starts sceneless; the restart-in-scene flow stages its scene first
+    // and keeps it through this reset.
+    if (pendingSceneRef.current === null) {
+      setActiveSceneName(null);
+      setScenePendingFields([]);
+    }
     setCwd(source);
     // Pressing New while already on the unsent blank draft is a focus/reset no-op for workspace
     // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
@@ -1698,6 +1762,20 @@ export default function App() {
       activeSessionProvenanceRef.current = provenance;
       setActiveSessionReceipt(provenance);
       setActiveSession(id);
+      {
+        // Restore this session's scene; fall back to the persisted reference on first visit.
+        const remembered = sceneBySessionRef.current.get(id) ?? null;
+        setActiveSceneName(remembered);
+        setScenePendingFields([]);
+        if (remembered === null) {
+          void getSessionScene(id).then((state) => {
+            if (!state || activeSessionRef.current !== id) return;
+            sceneBySessionRef.current.set(id, state.reference);
+            setActiveSceneName(state.reference);
+            if (!state.resolved) toast(t("scene.unresolved"), "error");
+          });
+        }
+      }
       setSessionLoading(true);
       setTurns([]);
       // Models belong to a session. The agent only reports its own menu at session/new — which for
@@ -1863,6 +1941,14 @@ export default function App() {
   useEffect(() => {
     refreshSkills();
   }, [refreshSkills]);
+
+  // Scenes rescan with the workspace, same contract as skills. Degrades to [] on an older core.
+  useEffect(() => {
+    void listScenes(cwd || ".").then((next) => {
+      scenesRef.current = next;
+      setScenes(next);
+    });
+  }, [cwd]);
 
   const saveDraft = useCallback(async () => {
     if (!skillDraft || skillDraft.name.trim().length === 0) return;
@@ -2258,6 +2344,111 @@ export default function App() {
    * Every action in the keymap must land here. An action with no arm is a key that silently does
    * nothing — `open_skill_picker` and `focus_editor` were exactly that.
    */
+  /**
+   * Soft-apply a scene (or clear with null). Tightening applies silently; loosening stops here
+   * and raises the escalation dialog — the rule is absolute, so this is the only UI path in.
+   */
+  const applySceneChoice = useCallback(
+    (reference: string | null, opts?: { confirmed?: boolean }) => {
+      const session = activeSessionRef.current;
+      if (reference === null) {
+        setActiveSceneName(null);
+        setScenePendingFields([]);
+        pendingSceneRef.current = null;
+        if (session) {
+          sceneBySessionRef.current.delete(session);
+          void setSessionScene(session, null, false);
+        }
+        return;
+      }
+      const scene = scenesRef.current.find((s) => s.reference === reference);
+      if (!scene) return;
+      const confirmed = opts?.confirmed ?? false;
+      const escalation = escalationNeeded(scene, sessionMode(mode, sandbox));
+      if (escalation && !confirmed) {
+        setSceneEscalation({ reference, kind: "soft", ...escalation });
+        return;
+      }
+      const live = {
+        mode: sessionMode(mode, sandbox),
+        memoryRead,
+        memoryWrite,
+        planFirst: planMode,
+        provider,
+        model: currentModel,
+      };
+      const execution = scene.execution;
+      if (execution?.session_mode) onSessionModeChange(execution.session_mode);
+      if (execution?.memory_preset) {
+        const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
+        onMemoryPolicyChange(preset.read, preset.write);
+      }
+      if (execution?.plan_first !== undefined) setPlanMode(execution.plan_first);
+      setActiveSceneName(reference);
+      setScenePendingFields(softApplyPending(scene, live));
+      if (session) {
+        sceneBySessionRef.current.set(session, reference);
+        void applySceneToSession(session, reference, confirmed).then((outcome) => {
+          // The core re-checks against the persisted policy; if it disagrees, nothing was
+          // applied there — surface the same dialog instead of drifting.
+          if (outcome?.escalation) {
+            setSceneEscalation({
+              reference,
+              kind: "soft",
+              from: outcome.escalation.from as SessionMode,
+              to: outcome.escalation.to as SessionMode,
+            });
+          }
+        });
+      } else {
+        pendingSceneRef.current = reference;
+      }
+      toast(t("scene.switched", { scene: scene.title }));
+    },
+    [
+      mode,
+      sandbox,
+      memoryRead,
+      memoryWrite,
+      planMode,
+      provider,
+      currentModel,
+      onSessionModeChange,
+      onMemoryPolicyChange,
+      toast,
+      t,
+    ],
+  );
+
+  /** Full-apply: a fresh session in the active scene, closing the soft-apply gap. */
+  const restartInScene = useCallback(
+    async (confirmed = false) => {
+      const reference = activeSceneNameRef.current;
+      if (!reference) return;
+      const plan = await sceneSessionPlan(reference, confirmed);
+      if (!plan) return;
+      if (plan.escalation) {
+        setSceneEscalation({
+          reference,
+          kind: "restart",
+          from: plan.escalation.from as SessionMode,
+          to: plan.escalation.to as SessionMode,
+        });
+        return;
+      }
+      pendingSceneRef.current = reference;
+      createSession();
+      const params = plan.params;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      // The draft reset cleared the posture; re-apply the scene's fields to the new draft.
+      applySceneChoice(reference, { confirmed: true });
+      pendingSceneRef.current = reference;
+    },
+    [applySceneChoice, createSession],
+  );
+
   const dispatchAction = useCallback(
     (action: string) => {
       switch (action) {
@@ -2333,6 +2524,14 @@ export default function App() {
         case "refresh_git":
           refreshGit();
           break;
+        case "cycle_scene": {
+          const next = nextSceneInRing([], scenesRef.current, activeSceneNameRef.current);
+          if (next) applySceneChoice(next);
+          break;
+        }
+        case "open_scene_picker":
+          setShowScenePicker(true);
+          break;
         default:
           // A binding pointing at an action this frontend doesn't implement.
           toast(`No handler for "${action}".`, "error");
@@ -2356,6 +2555,7 @@ export default function App() {
       docMode,
       stepSession,
       toast,
+      applySceneChoice,
     ],
   );
 
@@ -2393,6 +2593,12 @@ export default function App() {
     { id: "gitpanel", label: "Toggle git panel", hint: hint("toggle_git"), run: () => toggleDock("git") },
     { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
     { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
+    { id: "scene", label: t("scene.pickerTitle"), hint: hint("cycle_scene"), run: () => setShowScenePicker(true) },
+    ...scenes.map((s) => ({
+      id: `scene-${s.reference}`,
+      label: `${t("scene.chip")}: ${s.title}`,
+      run: () => applySceneChoice(s.reference),
+    })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
       label: `Run script: ${s.name || s.id}`,
@@ -2565,6 +2771,32 @@ export default function App() {
     memoryWrite,
     onMemoryPolicy: onMemoryPolicyChange,
     hasSession: activeSession !== null,
+    scenes,
+    activeScene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+    onScene: (reference, strength) => {
+      if (strength === "full") {
+        if (reference !== null) {
+          setActiveSceneName(reference);
+          void restartInScene();
+        }
+      } else {
+        applySceneChoice(reference);
+      }
+    },
+    sceneCustomized: (() => {
+      const scene = scenes.find((s) => s.reference === activeSceneName);
+      if (!scene) return false;
+      return sceneCustomized(scene, {
+        mode: sessionMode(mode, sandbox),
+        memoryRead,
+        memoryWrite,
+        planFirst: planMode,
+        provider,
+        model: currentModel,
+      });
+    })(),
+    scenePendingFields,
+    onRestartInScene: () => void restartInScene(),
   };
 
   return (
@@ -3109,6 +3341,31 @@ export default function App() {
       )}
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
       {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
+      {showScenePicker && (
+        <ScenePicker
+          scenes={scenes}
+          active={scenes.find((s) => s.reference === activeSceneName) ?? null}
+          onScene={(reference) => applySceneChoice(reference)}
+          onClose={() => setShowScenePicker(false)}
+        />
+      )}
+      {sceneEscalation && (
+        <SceneEscalationDialog
+          sceneLabel={
+            scenes.find((s) => s.reference === sceneEscalation.reference)?.title ??
+            sceneEscalation.reference
+          }
+          from={sceneEscalation.from}
+          to={sceneEscalation.to}
+          onConfirm={() => {
+            const pending = sceneEscalation;
+            setSceneEscalation(null);
+            if (pending.kind === "soft") applySceneChoice(pending.reference, { confirmed: true });
+            else void restartInScene(true);
+          }}
+          onCancel={() => setSceneEscalation(null)}
+        />
+      )}
       {showFiles && (
         <FileBrowserModal
           cwd={cwd || "."}

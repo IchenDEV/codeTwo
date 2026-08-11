@@ -6,7 +6,6 @@ import {
   FileText,
   Gauge,
   GitBranch,
-  ListChecks,
   Lock,
   LockOpen,
   Loader2,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
+import { SceneChip } from "./SceneChip";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
@@ -101,7 +101,7 @@ interface ComposerProps {
  * A status chip in the control row — reads as text, behaves as a button. Forwards its ref so it can
  * be a Radix popover trigger.
  */
-const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
+export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
   ({ children, tone, className, ...props }, ref) => (
     <button
       ref={ref}
@@ -135,7 +135,7 @@ function DefaultBadge() {
 }
 
 /** One selectable row of a picker menu: the current choice sits on a filled background. */
-function MenuRow({
+export function MenuRow({
   selected,
   isDefault,
   label,
@@ -190,7 +190,7 @@ interface PickerRow {
  * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
  * asked you about four other things first. Each control row chip now opens only its own list.
  */
-function ModePicker({ config }: { config: SessionConfig }) {
+export function ModePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active = sessionMode(config.mode, config.sandbox);
@@ -247,7 +247,7 @@ const MEMORY_PRESETS = [
   { id: "learn_only", read: "deny", write: "allow" },
 ] as const;
 
-function MemoryPicker({ config }: { config: SessionConfig }) {
+export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active =
@@ -292,7 +292,7 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
 const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
 /** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
-function WorktreePicker({ config }: { config: SessionConfig }) {
+export function WorktreePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const selectedKind = config.hasSession
@@ -402,7 +402,7 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-function ProviderPicker({ config }: { config: SessionConfig }) {
+export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -529,7 +529,7 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
  * config decides. Everything is hidden until a session exists, because before that there's nothing
  * to ask.
  */
-function ModelPicker({
+export function ModelPicker({
   models,
   current,
   defaultModel,
@@ -811,40 +811,20 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Provider, model, effort, then access — cause before effect: the provider decides which
-          models exist, the model decides which efforts exist, and access frames the run. Each
-          chip opens only itself. */}
-      <ProviderPicker config={config} />
-
-      <ModelPicker
+      {/* One scene chip replaces the posture row (docs/scenes.md §UI contract): the scene sets
+          provider/model/permissions/memory/plan-first/worktree, and opening the chip still
+          exposes each picker unchanged for manual overrides. */}
+      <SceneChip
+        config={config}
         models={models}
-        current={currentModel}
+        currentModel={currentModel}
         defaultModel={defaultModel}
-        provider={config.provider}
         onModel={onModel}
         configOptions={configOptions}
         onConfigOption={onConfigOption}
-        hasSession={config.hasSession}
       />
 
       <ContextWindowStatus value={contextWindow} />
-
-      <ModePicker config={config} />
-
-      <MemoryPicker config={config} />
-
-      {/* A boolean needs no view to choose from: the chip *is* the control. */}
-      <Chip
-        title={t("config.planFirstHint")}
-        aria-pressed={config.planMode}
-        className={cn(config.planMode && "text-primary hover:text-primary")}
-        onClick={() => config.onPlan(!config.planMode)}
-      >
-        <ListChecks className="size-3.5 shrink-0" />
-        <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
-      </Chip>
-
-      <WorktreePicker config={config} />
 
       <div className="flex-1" />
 

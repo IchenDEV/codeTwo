@@ -178,6 +178,35 @@ impl McpServer {
     }
 }
 
+/// One typed fill-in slot — the shared vocabulary between Macro skills and scene `brief.slots`
+/// (Agent Scenes 1.0.0 slot object; see `crates/core/schemas/agent-scenes/1.0.0/scene.schema.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotDef {
+    pub id: String,
+    /// Empty → UI falls back to the id (legacy macros); scene validation requires non-empty.
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub kind: SlotKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SlotKind {
+    #[default]
+    Text,
+    Multiline,
+    Select,
+    File,
+    Artifact,
+}
+
 /// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
 /// registration, so Code2 also keeps a deterministic inline delegation fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

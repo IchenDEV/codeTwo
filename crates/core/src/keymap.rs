@@ -34,10 +34,11 @@ pub enum Action {
     ClosePanel,
     PrevSession,
     NextSession,
+    CycleScene,
 }
 
 impl Action {
-    pub const ALL: [Action; 22] = [
+    pub const ALL: [Action; 23] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
@@ -60,6 +61,7 @@ impl Action {
         Action::RefreshGit,
         Action::PrevSession,
         Action::NextSession,
+        Action::CycleScene,
     ];
 
     pub fn as_str(&self) -> &'static str {
@@ -86,6 +88,7 @@ impl Action {
             Action::ClosePanel => "close_panel",
             Action::PrevSession => "prev_session",
             Action::NextSession => "next_session",
+            Action::CycleScene => "cycle_scene",
         }
     }
 
@@ -113,6 +116,7 @@ impl Action {
             Action::ClosePanel => "Close side panel",
             Action::PrevSession => "Previous session",
             Action::NextSession => "Next session",
+            Action::CycleScene => "Cycle scene",
         }
     }
 
@@ -140,6 +144,7 @@ impl Action {
             Action::ClosePanel => "Escape",
             Action::PrevSession => "Mod+Alt+ArrowUp",
             Action::NextSession => "Mod+Alt+ArrowDown",
+            Action::CycleScene => "Shift+Tab",
         }
     }
 }

@@ -2115,3 +2115,95 @@ export async function onPtyExit(cb: (id: string) => void): Promise<() => void> {
 export function providerLabel(p: string | { custom: string }): string {
   return typeof p === "string" ? p : p.custom;
 }
+
+// ---- scenes (Agent Scenes 1.0.0; see docs/scenes.md) ---------------------------------------
+
+import type { SceneInfo } from "./session/scene";
+
+export interface SceneEscalation {
+  from: string;
+  to: string;
+}
+
+export interface SceneApplyOutcome {
+  applied: string[];
+  pending: string[];
+  escalation: SceneEscalation | null;
+  plan_first: boolean | null;
+  suppress_unpinned: boolean;
+  pinned_skills: string[];
+}
+
+export interface SceneSessionParams {
+  provider: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
+  use_worktree: boolean | null;
+  worktree_base: WorktreeBaselineKind | null;
+  initial_policy: { mode: PermissionMode; sandbox: Sandbox } | null;
+}
+
+export interface SceneSessionPlanOutcome {
+  params: SceneSessionParams | null;
+  escalation: SceneEscalation | null;
+}
+
+export interface SessionSceneState {
+  reference: string;
+  customized: boolean;
+  resolved: boolean;
+}
+
+/// Every scene call degrades on a missing backend command (feature-detect: catch → fallback),
+/// so a frontend running against an older core hides the affordance instead of breaking.
+export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
+  if (!inTauri) return [];
+  return invoke<SceneInfo[]>("list_scenes", { cwd: cwd ?? null }).catch(() => []);
+}
+
+export async function getScene(
+  reference: string,
+): Promise<{ reference: string; source: string; scene: unknown } | null> {
+  if (!inTauri) return null;
+  return invoke<{ reference: string; source: string; scene: unknown }>("get_scene", {
+    reference,
+  }).catch(() => null);
+}
+
+export async function applySceneToSession(
+  session: string,
+  reference: string,
+  confirmEscalation: boolean,
+): Promise<SceneApplyOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<SceneApplyOutcome>("apply_scene", {
+    session,
+    reference,
+    confirmEscalation,
+  }).catch(() => null);
+}
+
+export async function sceneSessionPlan(
+  reference: string,
+  confirmEscalation: boolean,
+): Promise<SceneSessionPlanOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<SceneSessionPlanOutcome>("scene_session_plan", {
+    reference,
+    confirmEscalation,
+  }).catch(() => null);
+}
+
+export async function setSessionScene(
+  session: string,
+  reference: string | null,
+  customized: boolean,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_session_scene", { session, reference, customized }).catch(() => {});
+}
+
+export async function getSessionScene(session: string): Promise<SessionSceneState | null> {
+  if (!inTauri) return null;
+  return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
+}

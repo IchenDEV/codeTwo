@@ -332,6 +332,13 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "memory_write",
         "memory_write TEXT NOT NULL DEFAULT 'inherit'",
     )?;
+    ensure_column(&tx, "sessions", "active_scene", "active_scene TEXT")?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "scene_customized",
+        "scene_customized INTEGER NOT NULL DEFAULT 0",
+    )?;
     // A legacy local session's cwd is its source project. A legacy worktree row no longer contains
     // enough information to recover the source safely, so leave it unknown instead of
     // misidentifying the isolated checkout as a project. Keep this idempotent in case a previous
@@ -1797,6 +1804,31 @@ impl Store {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         Ok((MemoryAccess::from_db(&read), MemoryAccess::from_db(&write)))
+    }
+
+    /// Persist (or clear, with `None`) the session's active scene reference.
+    pub fn set_session_scene(
+        &self,
+        session_id: &str,
+        scene_ref: Option<&str>,
+        customized: bool,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET active_scene=?2,scene_customized=?3 WHERE id=?1",
+            rusqlite::params![session_id, scene_ref, customized as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn session_scene(&self, session_id: &str) -> Result<Option<(String, bool)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let (scene_ref, customized): (Option<String>, i64) = conn.query_row(
+            "SELECT active_scene,scene_customized FROM sessions WHERE id=?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(scene_ref.map(|r| (r, customized != 0)))
     }
 
     /// Publish the completed assistant answer into FTS exactly once. Stored chunks remain the

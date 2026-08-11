@@ -39,6 +39,7 @@ pub mod project;
 pub mod provider;
 pub mod pty;
 pub mod rules;
+pub mod scene;
 pub mod session;
 pub mod skill;
 pub mod source_control;
@@ -89,6 +90,17 @@ pub use provider::{
     ProviderCapability, ProviderCapabilityId, ProviderId,
 };
 pub use pty::PtySession;
+pub use scene::{
+    apply_execution, is_artifact_id, is_slug, memory_preset_policy, plan_apply,
+    policy_session_mode, prompt_preamble, session_mode_policy, validate_pipeline, validate_scene,
+    ApplyStrength, BriefClarify, CarriedArtifact, CarrySpec, EscalationRequired, ExitCriterion,
+    ExitCriterionKind, Gate, HookAction, HookActionKind, HookEvent, NextSuggestion, PendingField,
+    Pipeline, PipelineStage, PipelineTransition, ResolvedPipeline, ResolvedScene, Scene,
+    SceneApplyPlan, SceneArtifactKind, SceneArtifactSpec, SceneBrief, SceneConstraints,
+    SceneExecution, SceneExit, SceneHook, SceneInlineFragment, SceneLibrary, SceneLocalization,
+    SceneMemoryPreset, SceneSessionMode, SceneSessionParams, SceneSkills, SceneSource,
+    SceneWorktree, ToolHints, TransitionTrigger, PIPELINE_SCHEMA_ID, SCENE_SCHEMA_ID,
+};
 pub use session::{
     MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,
     SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
@@ -96,7 +108,8 @@ pub use session::{
 };
 pub use skill::{
     canonical_doc_text, compile, compile_with_canvas, CompiledCanvas, CompiledPrompt, DocBlock,
-    McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
+    McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef, SlotKind,
+    SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
 pub use store::{SessionSearchHit, Store, StoreError};
