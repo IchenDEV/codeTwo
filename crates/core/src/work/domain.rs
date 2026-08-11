@@ -163,7 +163,7 @@ impl TaskStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub workspace_id: String,
@@ -225,7 +225,7 @@ impl Task {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BriefRevision {
     pub id: String,
     pub task_id: String,
@@ -233,6 +233,12 @@ pub struct BriefRevision {
     pub blocks: Vec<DocBlock>,
     pub source: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BriefSaveResult {
+    pub brief: WorkVersioned<BriefRevision>,
+    pub task: WorkVersioned<Task>,
 }
 
 impl BriefRevision {

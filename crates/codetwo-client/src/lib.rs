@@ -13,10 +13,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, EventEnvelope, Request, RequestEnvelope, ResetReason, Response,
-    ResponseEnvelope, ServerFrame, StreamCursor, StreamEpoch, SubscribeResult, TransportEvent,
-    WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
-    MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
+    read_json, write_json, BriefRevision, BriefSaveResult, EventEnvelope, Request, RequestEnvelope,
+    ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor, StreamEpoch,
+    SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse,
+    WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedReadHalf, UnixStream};
@@ -326,6 +326,83 @@ impl Client {
         }
     }
 
+    pub async fn list_tasks(
+        &self,
+        workspace_id: Option<String>,
+        include_archived: bool,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<Task>, ClientError> {
+        match self
+            .work(WorkRequest::ListTasks {
+                workspace_id,
+                include_archived,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::Tasks { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "tasks",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn save_task(
+        &self,
+        task: Task,
+        expected_revision: Option<u64>,
+    ) -> Result<WorkVersioned<Task>, ClientError> {
+        match self
+            .work(WorkRequest::SaveTask {
+                task,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::TaskSaved { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "task_saved",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn get_brief(
+        &self,
+        task_id: String,
+    ) -> Result<Option<WorkVersioned<BriefRevision>>, ClientError> {
+        match self.work(WorkRequest::GetBrief { task_id }).await? {
+            WorkResponse::Brief { brief } => Ok(brief),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "brief",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn save_brief(
+        &self,
+        brief: BriefRevision,
+        expected_revision: Option<u64>,
+    ) -> Result<BriefSaveResult, ClientError> {
+        match self
+            .work(WorkRequest::SaveBrief {
+                brief,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::BriefSaved { result } => Ok(result),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "brief_saved",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), ClientError> {
         match self
             .request(Request::Shutdown, ExpectedResponse::Shutdown)
@@ -624,6 +701,10 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
     match response {
         WorkResponse::Workspaces { .. } => "workspaces",
         WorkResponse::WorkspaceSaved { .. } => "workspace_saved",
+        WorkResponse::Tasks { .. } => "tasks",
+        WorkResponse::TaskSaved { .. } => "task_saved",
+        WorkResponse::Brief { .. } => "brief",
+        WorkResponse::BriefSaved { .. } => "brief_saved",
         WorkResponse::Error { .. } => "error",
     }
 }

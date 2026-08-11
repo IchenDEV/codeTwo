@@ -6,12 +6,12 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 
 use super::domain::{
-    Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
-    MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
+    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
-    ensure_backfill_head, high_water, install_schema_tx, with_transaction, WorkEntityKind,
-    WorkMutationGuard,
+    ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
+    WorkEntityKind, WorkMutationGuard,
 };
 use crate::store::{Store, StoreError};
 
@@ -655,6 +655,161 @@ impl Store {
         })
     }
 
+    pub fn work_save_task(
+        &self,
+        task: &Task,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<Task>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let mutation =
+            with_transaction(&mut conn, |transaction| transaction.save_task(task, guard))?;
+        Ok(WorkVersioned {
+            entity: task.clone(),
+            revision: mutation.revision,
+        })
+    }
+
+    pub fn work_get_task(&self, task_id: &str) -> Result<Option<WorkVersioned<Task>>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT t.id,t.workspace_id,t.title,t.experience,t.status,t.current_brief_revision,
+                    t.created_at,t.updated_at,t.archived,h.revision
+             FROM tasks t JOIN work_entity_heads h
+               ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0
+             WHERE t.id=?1",
+            [task_id],
+            |row| {
+                Ok(WorkVersioned {
+                    entity: task_from_row(row)?,
+                    revision: u64::try_from(row.get::<_, i64>(9)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
+    pub fn work_list_tasks(
+        &self,
+        workspace_id: Option<&str>,
+        include_archived: bool,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<Task>, StoreError> {
+        validate_page(cursor, limit)?;
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT t.id,t.workspace_id,t.title,t.experience,t.status,t.current_brief_revision,
+                    t.created_at,t.updated_at,t.archived,h.revision
+             FROM tasks t JOIN work_entity_heads h
+               ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0
+             WHERE (?1 IS NULL OR t.workspace_id=?1)
+               AND (?2=1 OR t.archived=0)
+               AND (?3 IS NULL OR t.id > ?3)
+             ORDER BY t.id LIMIT ?4",
+        )?;
+        let rows = statement.query_map(
+            params![
+                workspace_id,
+                include_archived as i64,
+                cursor,
+                (limit + 1) as i64
+            ],
+            |row| {
+                Ok(WorkVersioned {
+                    entity: task_from_row(row)?,
+                    revision: u64::try_from(row.get::<_, i64>(9)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                })
+            },
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = page_cursor(&mut items, limit, |item| item.entity.id.clone());
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
+    pub fn work_save_brief(
+        &self,
+        brief: BriefRevision,
+        guard: &WorkMutationGuard,
+    ) -> Result<BriefSaveResult, StoreError> {
+        let task_id = brief.task_id.clone();
+        let mut conn = self.conn.lock().unwrap();
+        let brief = with_transaction(&mut conn, |transaction| {
+            transaction.save_brief(brief, guard)
+        })?;
+        let brief_revision = entity_head(&conn, WorkEntityKind::Brief, &task_id)?
+            .ok_or_else(|| StoreError::Domain("saved Brief head is missing".to_owned()))?
+            .revision;
+        let task = conn.query_row(
+            "SELECT t.id,t.workspace_id,t.title,t.experience,t.status,t.current_brief_revision,
+                    t.created_at,t.updated_at,t.archived,h.revision
+             FROM tasks t JOIN work_entity_heads h
+               ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0
+             WHERE t.id=?1",
+            [&task_id],
+            |row| {
+                Ok(WorkVersioned {
+                    entity: task_from_row(row)?,
+                    revision: u64::try_from(row.get::<_, i64>(9)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                })
+            },
+        )?;
+        Ok(BriefSaveResult {
+            brief: WorkVersioned {
+                entity: brief,
+                revision: brief_revision,
+            },
+            task,
+        })
+    }
+
+    pub fn work_current_brief(
+        &self,
+        task_id: &str,
+    ) -> Result<Option<WorkVersioned<BriefRevision>>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT b.id,b.task_id,b.revision,b.blocks_json,b.source,b.created_at,h.revision
+             FROM tasks t JOIN brief_revisions b
+               ON b.task_id=t.id AND b.revision=t.current_brief_revision
+             JOIN work_entity_heads h
+               ON h.entity_kind='brief' AND h.entity_id=t.id AND h.deleted=0
+             WHERE t.id=?1",
+            [task_id],
+            |row| {
+                let blocks_json: String = row.get(3)?;
+                let blocks = serde_json::from_str(&blocks_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
+                Ok(WorkVersioned {
+                    entity: BriefRevision {
+                        id: row.get(0)?,
+                        task_id: row.get(1)?,
+                        revision: row.get(2)?,
+                        blocks,
+                        source: row.get(4)?,
+                        created_at: row.get(5)?,
+                    },
+                    revision: u64::try_from(row.get::<_, i64>(6)?)
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {
         let conn = self.conn.lock().unwrap();
         if !work_store_marker_applied(&conn)? {
@@ -737,6 +892,35 @@ fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         updated_at: row.get(7)?,
         archived: row.get::<_, i64>(8)? != 0,
     })
+}
+
+fn validate_page(cursor: Option<&str>, limit: usize) -> Result<(), StoreError> {
+    if limit == 0 || limit > MAX_WORK_PAGE_SIZE {
+        return Err(StoreError::Domain(format!(
+            "Work page limit must be between 1 and {MAX_WORK_PAGE_SIZE}"
+        )));
+    }
+    if cursor.is_some_and(|value| {
+        value.is_empty()
+            || value.len() > 256
+            || value.trim() != value
+            || value.chars().any(char::is_control)
+    }) {
+        return Err(StoreError::Domain("invalid Work page cursor".to_owned()));
+    }
+    Ok(())
+}
+
+fn page_cursor<T>(
+    items: &mut Vec<T>,
+    limit: usize,
+    key: impl FnOnce(&T) -> String,
+) -> Option<String> {
+    if items.len() <= limit {
+        return None;
+    }
+    items.truncate(limit);
+    items.last().map(key)
 }
 
 #[cfg(test)]

@@ -285,8 +285,8 @@ async fn handle(
         Request::Work {
             request: work_request,
         } => {
-            let (response, event) = dispatch_work(state, request.request_id, work_request);
-            if let Some(event) = event {
+            let (response, events) = dispatch_work(state, request.request_id, work_request);
+            for event in events {
                 append(state, event).await;
             }
             send(writer, request.request_id, Response::Work { response }).await
@@ -357,12 +357,12 @@ fn dispatch_work(
     state: &State,
     request_id: u64,
     request: WorkRequest,
-) -> (WorkResponse, Option<TransportEvent>) {
+) -> (WorkResponse, Vec<TransportEvent>) {
     match request {
         WorkRequest::ListWorkspaces { cursor, limit } => {
             match state.store.work_list_workspaces(cursor.as_deref(), limit) {
-                Ok(page) => (WorkResponse::Workspaces { page }, None),
-                Err(error) => (work_error(error), None),
+                Ok(page) => (WorkResponse::Workspaces { page }, Vec::new()),
+                Err(error) => (work_error(error), Vec::new()),
             }
         }
         WorkRequest::SaveWorkspace {
@@ -381,12 +381,77 @@ fn dispatch_work(
                         workspace: item.entity.clone(),
                         revision: item.revision,
                     };
-                    (WorkResponse::WorkspaceSaved { item }, Some(event))
+                    (WorkResponse::WorkspaceSaved { item }, vec![event])
                 }
-                Err(error) => (work_error(error), None),
+                Err(error) => (work_error(error), Vec::new()),
+            }
+        }
+        WorkRequest::ListTasks {
+            workspace_id,
+            include_archived,
+            cursor,
+            limit,
+        } => match state.store.work_list_tasks(
+            workspace_id.as_deref(),
+            include_archived,
+            cursor.as_deref(),
+            limit,
+        ) {
+            Ok(page) => (WorkResponse::Tasks { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
+        WorkRequest::SaveTask {
+            task,
+            expected_revision,
+        } => {
+            let guard = local_guard(request_id, expected_revision);
+            match state.store.work_save_task(&task, &guard) {
+                Ok(item) => {
+                    let event = TransportEvent::TaskChanged {
+                        task: item.entity.clone(),
+                        revision: item.revision,
+                    };
+                    (WorkResponse::TaskSaved { item }, vec![event])
+                }
+                Err(error) => (work_error(error), Vec::new()),
+            }
+        }
+        WorkRequest::GetBrief { task_id } => match state.store.work_current_brief(&task_id) {
+            Ok(brief) => (WorkResponse::Brief { brief }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
+        WorkRequest::SaveBrief {
+            brief,
+            expected_revision,
+        } => {
+            let guard = local_guard(request_id, expected_revision);
+            match state.store.work_save_brief(brief, &guard) {
+                Ok(result) => {
+                    let events = vec![
+                        TransportEvent::BriefChanged {
+                            brief: result.brief.entity.clone(),
+                            revision: result.brief.revision,
+                        },
+                        TransportEvent::TaskChanged {
+                            task: result.task.entity.clone(),
+                            revision: result.task.revision,
+                        },
+                    ];
+                    (WorkResponse::BriefSaved { result }, events)
+                }
+                Err(error) => (work_error(error), Vec::new()),
             }
         }
     }
+}
+
+fn local_guard(request_id: u64, expected_revision: Option<u64>) -> WorkMutationGuard {
+    WorkMutationGuard::new(
+        expected_revision,
+        "local_client",
+        format!("local_uid:{}", unsafe { libc::geteuid() }),
+        format!("local:{request_id}"),
+    )
 }
 
 fn work_error(error: StoreError) -> WorkResponse {
@@ -395,7 +460,7 @@ fn work_error(error: StoreError) -> WorkResponse {
             current_revision, ..
         } => WorkResponse::Error {
             error: WorkErrorKind::RevisionConflict,
-            message: "workspace revision conflict".to_owned(),
+            message: "Work revision conflict".to_owned(),
             current_revision,
         },
         StoreError::Domain(_) => WorkResponse::Error {

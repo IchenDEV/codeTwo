@@ -96,8 +96,8 @@ pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use work::{
     entity_head as work_entity_head, high_water as work_high_water,
     install_schema as install_work_schema, mutation_history as work_mutation_history,
-    BriefRevision, Task, TaskExperience, TaskStatus, WorkAuditContext, WorkEntityHead,
-    WorkEntityKind, WorkMutation, WorkMutationGuard, WorkPage, WorkRunBinding, WorkVersioned,
-    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Task, TaskExperience, TaskStatus, WorkAuditContext,
+    WorkEntityHead, WorkEntityKind, WorkMutation, WorkMutationGuard, WorkPage, WorkRunBinding,
+    WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};

@@ -4,7 +4,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
-use codetwo_core::{Store, Workspace, WorkspaceKind};
+use codetwo_core::{
+    BriefRevision, DocBlock, Store, Task, TaskExperience, Workspace, WorkspaceKind,
+};
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
 use tempfile::TempDir;
@@ -85,4 +87,106 @@ async fn workspace_writes_are_daemon_owned_revisioned_and_durable() {
     let reopened = Store::open(database.to_str().unwrap()).unwrap();
     let page = reopened.work_list_workspaces(None, 50).unwrap();
     assert_eq!(page.items, vec![saved]);
+}
+
+#[tokio::test]
+async fn task_and_brief_share_guarded_daemon_state_and_ordered_events() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let database = root.path().join("codetwo.db");
+    let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
+    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let client = Client::connect(&socket).await.unwrap();
+    let observer = Client::connect(&socket).await.unwrap();
+    let mut events = observer
+        .subscribe(Some(observer.hello().cursor.clone()))
+        .await
+        .unwrap();
+
+    let workspace = client
+        .save_workspace(Workspace::new("Work", None, WorkspaceKind::Managed), None)
+        .await
+        .unwrap();
+    let _workspace_event = events.recv().await.unwrap();
+
+    let task = Task::named(
+        &workspace.entity.id,
+        "Prepare launch brief",
+        TaskExperience::Work,
+    );
+    let saved_task = client.save_task(task, None).await.unwrap();
+    assert_eq!(saved_task.revision, 1);
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(
+                envelope.event,
+                TransportEvent::TaskChanged { ref task, revision: 1 }
+                    if task.id == saved_task.entity.id
+            )
+    ));
+
+    let draft = BriefRevision::new(
+        &saved_task.entity.id,
+        999,
+        vec![DocBlock::Text {
+            text: "Goal: produce a reviewed launch memo. Acceptance: PDF exists.".to_owned(),
+        }],
+        "desktop",
+    );
+    let saved_brief = client.save_brief(draft, None).await.unwrap();
+    assert_eq!(saved_brief.brief.entity.revision, 1);
+    assert_eq!(saved_brief.brief.revision, 1);
+    assert_eq!(saved_brief.task.entity.current_brief_revision, Some(1));
+    assert_eq!(saved_brief.task.revision, 2);
+
+    let brief_event = events.recv().await.unwrap();
+    assert!(matches!(
+        brief_event,
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::BriefChanged { revision: 1, .. })
+    ));
+    let task_event = events.recv().await.unwrap();
+    assert!(matches!(
+        task_event,
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::TaskChanged { revision: 2, .. })
+    ));
+
+    let page = observer
+        .list_tasks(Some(workspace.entity.id.clone()), false, None, 50)
+        .await
+        .unwrap();
+    assert_eq!(page.items, vec![saved_brief.task.clone()]);
+    let current = observer
+        .get_brief(saved_task.entity.id.clone())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(current, saved_brief.brief);
+
+    let stale = client
+        .save_brief(
+            BriefRevision::new(
+                &saved_task.entity.id,
+                1,
+                vec![DocBlock::Text {
+                    text: "Replacement".to_owned(),
+                }],
+                "desktop",
+            ),
+            None,
+        )
+        .await
+        .unwrap_err();
+    assert!(stale.to_string().contains("revision conflict"));
+
+    client.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
 }

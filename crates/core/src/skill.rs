@@ -313,7 +313,7 @@ impl SkillLibrary {
 
 /// One block of the document the user composed. This is the neutral shape the BlockNote editor
 /// serializes into (text blocks + skill blocks) and the shape the TUI composer produces too.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DocBlock {
     Text {

@@ -6,7 +6,10 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub use codetwo_core::{WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE};
+pub use codetwo_core::{
+    BriefRevision, BriefSaveResult, Task, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
+    MAX_WORK_PAGE_SIZE,
+};
 
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_SIZE: usize = 64 * 1024;
@@ -163,6 +166,14 @@ pub enum TransportEvent {
         workspace: Workspace,
         revision: u64,
     },
+    TaskChanged {
+        task: Task,
+        revision: u64,
+    },
+    BriefChanged {
+        brief: BriefRevision,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +222,18 @@ impl EventEnvelope {
                     return Err(EnvelopeError::InvalidField("workspace revision".to_owned()));
                 }
             }
+            TransportEvent::TaskChanged { task, revision } => {
+                task.validate().map_err(EnvelopeError::InvalidField)?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField("task revision".to_owned()));
+                }
+            }
+            TransportEvent::BriefChanged { brief, revision } => {
+                brief.validate().map_err(EnvelopeError::InvalidField)?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField("brief revision".to_owned()));
+                }
+            }
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -227,6 +250,28 @@ pub enum WorkRequest {
     },
     SaveWorkspace {
         workspace: Workspace,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_revision: Option<u64>,
+    },
+    ListTasks {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace_id: Option<String>,
+        #[serde(default)]
+        include_archived: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
+    SaveTask {
+        task: Task,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_revision: Option<u64>,
+    },
+    GetBrief {
+        task_id: String,
+    },
+    SaveBrief {
+        brief: BriefRevision,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_revision: Option<u64>,
     },
@@ -251,6 +296,47 @@ impl WorkRequest {
                 if *expected_revision == Some(0) {
                     return Err(EnvelopeError::InvalidField(
                         "workspace expected revision".to_owned(),
+                    ));
+                }
+            }
+            Self::ListTasks {
+                workspace_id,
+                cursor,
+                limit,
+                ..
+            } => {
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(workspace_id) = workspace_id {
+                    validate_bounded_text(workspace_id, 256, "workspace id")?;
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 256, "Work page cursor")?;
+                }
+            }
+            Self::SaveTask {
+                task,
+                expected_revision,
+            } => {
+                task.validate().map_err(EnvelopeError::InvalidField)?;
+                if *expected_revision == Some(0) {
+                    return Err(EnvelopeError::InvalidField(
+                        "task expected revision".to_owned(),
+                    ));
+                }
+            }
+            Self::GetBrief { task_id } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+            }
+            Self::SaveBrief {
+                brief,
+                expected_revision,
+            } => {
+                brief.validate().map_err(EnvelopeError::InvalidField)?;
+                if *expected_revision == Some(0) {
+                    return Err(EnvelopeError::InvalidField(
+                        "brief expected revision".to_owned(),
                     ));
                 }
             }
@@ -400,6 +486,18 @@ pub enum WorkResponse {
     WorkspaceSaved {
         item: WorkVersioned<Workspace>,
     },
+    Tasks {
+        page: WorkPage<Task>,
+    },
+    TaskSaved {
+        item: WorkVersioned<Task>,
+    },
+    Brief {
+        brief: Option<WorkVersioned<BriefRevision>>,
+    },
+    BriefSaved {
+        result: BriefSaveResult,
+    },
     Error {
         error: WorkErrorKind,
         message: String,
@@ -433,6 +531,58 @@ impl WorkResponse {
                     .map_err(EnvelopeError::InvalidField)?;
                 if item.revision == 0 {
                     return Err(EnvelopeError::InvalidField("workspace revision".to_owned()));
+                }
+            }
+            Self::Tasks { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 256, "Work page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField("task revision".to_owned()));
+                    }
+                }
+            }
+            Self::TaskSaved { item } => {
+                item.entity
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                if item.revision == 0 {
+                    return Err(EnvelopeError::InvalidField("task revision".to_owned()));
+                }
+            }
+            Self::Brief { brief } => {
+                if let Some(brief) = brief {
+                    brief
+                        .entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if brief.revision == 0 {
+                        return Err(EnvelopeError::InvalidField("brief revision".to_owned()));
+                    }
+                }
+            }
+            Self::BriefSaved { result } => {
+                result
+                    .brief
+                    .entity
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                result
+                    .task
+                    .entity
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                if result.brief.revision == 0 || result.task.revision == 0 {
+                    return Err(EnvelopeError::InvalidField(
+                        "brief save revision".to_owned(),
+                    ));
                 }
             }
             Self::Error { message, .. } => {
