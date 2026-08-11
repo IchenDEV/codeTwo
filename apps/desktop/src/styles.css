@@ -345,10 +345,10 @@
   /* ---- floating layers ---------------------------------------------------------------------
      The shadcn components ship `animate-in`/`fade-in-0`-style utilities from a Tailwind plugin
      this project doesn't carry, so every overlay used to pop into place fully formed. These are
-     the first-party replacement. Radix stamps `data-state` and delays unmount while a close
-     animation runs, so exits play too. Anchored layers grow from their trigger (Radix supplies
-     the transform-origin; the components keep their origin-(--radix-*) classes). */
-  /* Scale only — no translate. Radix puts the transform-origin on whichever corner faces the
+     the first-party replacement. Base UI stamps `data-open` / `data-closed` and delays unmount
+     while a close animation runs, so exits play too. Anchored layers grow from the transform
+     origin supplied by Base UI's Positioner. */
+  /* Scale only — no translate. Base UI puts the transform-origin on whichever corner faces the
      trigger, so scaling about it already reads as "growing out of the trigger", and it reads that
      way on every side. A hardcoded `translateY` cannot: on a side="top" layer the origin pins the
      bottom edge at its resting place, so an extra 3px down pushed that edge *over* the trigger and
@@ -377,16 +377,20 @@
     }
   }
   .pop-layer[data-state="open"],
-  .pop-layer[data-state="delayed-open"] {
+  .pop-layer[data-state="delayed-open"],
+  .pop-layer[data-open] {
     animation: layer-in var(--motion-layer) var(--ease-standard);
   }
-  .pop-layer[data-state="closed"] {
+  .pop-layer[data-state="closed"],
+  .pop-layer[data-closed] {
     animation: layer-out var(--motion-fast) ease-in forwards;
   }
   /* These layers are glass, and re-sampling a 28px backdrop blur under a changing transform every
      frame is the expensive half of the jank. Promoting them gets the blur rasterised into its own
      layer once, so the animation is a composite rather than a re-blur. */
-  .pop-layer[data-state] {
+  .pop-layer[data-state],
+  .pop-layer[data-open],
+  .pop-layer[data-closed] {
     will-change: transform, opacity;
   }
 
@@ -424,10 +428,12 @@
       transform: scale(0.98);
     }
   }
-  .dialog-layer[data-state="open"] {
+  .dialog-layer[data-state="open"],
+  .dialog-layer[data-open] {
     animation: dialog-in var(--motion-normal) var(--ease-standard);
   }
-  .dialog-layer[data-state="closed"] {
+  .dialog-layer[data-state="closed"],
+  .dialog-layer[data-closed] {
     animation: dialog-out var(--motion-fast) ease-in forwards;
   }
 
@@ -447,10 +453,12 @@
       opacity: 0;
     }
   }
-  .overlay-layer[data-state="open"] {
+  .overlay-layer[data-state="open"],
+  .overlay-layer[data-open] {
     animation: veil-in var(--motion-normal) ease-out;
   }
-  .overlay-layer[data-state="closed"] {
+  .overlay-layer[data-state="closed"],
+  .overlay-layer[data-closed] {
     animation: veil-out var(--motion-fast) ease-in forwards;
   }
 

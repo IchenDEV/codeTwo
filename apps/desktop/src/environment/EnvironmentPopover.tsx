@@ -167,13 +167,17 @@ export function EnvironmentPopover({
   return (
     <Popover
       open={open}
-      onOpenChange={(next) => {
+      onOpenChange={(next, eventDetails) => {
+        if (!next && eventDetails.reason === "outside-press") {
+          eventDetails.cancel();
+          return;
+        }
         setOpen(next);
         if (next) onRefresh();
       }}
     >
-      <PopoverTrigger asChild>
-        <Button
+      <PopoverTrigger
+        render={<Button
           variant={open ? "secondary" : "ghost"}
           size="icon"
           className={cn("size-7 shrink-0", open && "text-primary")}
@@ -181,18 +185,15 @@ export function EnvironmentPopover({
           title={t("header.environment")}
         >
           <SlidersHorizontal className="size-4" />
-        </Button>
-      </PopoverTrigger>
+        </Button>}
+      />
 
       <PopoverContent
         align="end"
         alignOffset={-36}
         sideOffset={16}
-        collisionPadding={12}
-        variant="borderless"
         className="w-72 rounded-lg p-2"
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
+        initialFocus={false}
       >
         <div className="mb-1 flex h-8 items-center gap-2 px-2">
           <h2 className="min-w-0 flex-1 truncate text-title font-medium text-muted-foreground">
@@ -217,8 +218,8 @@ export function EnvironmentPopover({
         />
 
         <Collapsible open={projectsOpen} onOpenChange={setProjectsOpen}>
-          <CollapsibleTrigger asChild>
-            <button
+          <CollapsibleTrigger
+            render={<button
               type="button"
               className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
               title={projectPath ?? undefined}
@@ -235,8 +236,8 @@ export function EnvironmentPopover({
               ) : (
                 <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
               )}
-            </button>
-          </CollapsibleTrigger>
+            </button>}
+          />
           <CollapsibleContent className="max-h-48 overflow-y-auto pl-3">
             {projects.map((item) => (
               <EnvironmentRow

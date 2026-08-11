@@ -162,7 +162,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               <Select
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
-                onValueChange={selectEndpoint}
+                onValueChange={(endpointId) => endpointId && selectEndpoint(endpointId)}
               >
                 <SelectTrigger
                   className="w-full"

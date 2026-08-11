@@ -13,6 +13,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@base-ui/react": "^1.7.0",
     "@blocknote/core": "^0.25.0",
     "@blocknote/mantine": "^0.25.0",
     "@blocknote/react": "^0.25.0",
@@ -29,7 +30,6 @@
     "cmdk": "^1.1.1",
     "lucide-react": "^1.26.0",
     "monaco-editor": "^0.56.0",
-    "radix-ui": "^1.6.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "shiki": "^4",

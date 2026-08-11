@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
@@ -201,8 +202,8 @@ function ModePicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           tone={active === "full_access" ? "warning" : undefined}
           title={t("config.mode")}
           disabled={config.modeChangeDisabled}
@@ -217,8 +218,8 @@ function ModePicker({ config }: { config: SessionConfig }) {
           {/* Narrow, the lock alone carries the meaning — the label is spelt out in the menu. */}
           <span className="hidden @lg/composer:inline">{t(`mode.${active}` as "mode.ask")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.mode")}</MenuSection>
         {SESSION_MODES.map((m) => (
@@ -257,8 +258,8 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           title={t("config.memory")}
           aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}` as "memory.preset.standard")}`}
         >
@@ -267,8 +268,8 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
             {t(`memory.preset.${active.id}` as "memory.preset.standard")}
           </span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
         {MEMORY_PRESETS.map((preset) => (
@@ -317,8 +318,8 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           tone={selectedUnavailable ? "warning" : undefined}
           title={t("config.worktreeHint")}
           aria-expanded={open}
@@ -329,8 +330,8 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
           <GitBranch className="size-3.5 shrink-0" />
           <span className="hidden max-w-36 truncate @lg/composer:inline">{compactLabel}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="center" side="top" className="w-80 p-1.5">
         <MenuSection>{t("config.worktree")}</MenuSection>
         {config.hasSession ? (
@@ -419,12 +420,12 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        {/* The provider also reads in the sidebar footer; squeezed, this chip is the detail to
-            shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
-            already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
-            send" hint (worth more to a first run than a name the sidebar already shows). */}
-        <Chip ref={triggerRef} title={t("config.provider")} className="hidden @3xl/composer:flex">
+      {/* The provider also reads in the sidebar footer; squeezed, this chip is the detail to
+          shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
+          already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
+          send" hint (worth more to a first run than a name the sidebar already shows). */}
+      <PopoverTrigger
+        render={<Chip ref={triggerRef} title={t("config.provider")} className="hidden @3xl/composer:flex">
           {active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}
@@ -432,8 +433,8 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
             {active?.display_name ?? config.provider}
           </span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.provider")}</MenuSection>
         {config.providers.map((p) => (
@@ -480,8 +481,8 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
   const warning = display.percentage !== null && display.percentage >= 80;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
+      <TooltipTrigger
+        render={<span
           role="meter"
           aria-valuemin={0}
           aria-valuemax={value.contextWindow}
@@ -501,8 +502,8 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
           <span className="@lg/composer:hidden" aria-hidden="true">
             {display.capacity}
           </span>
-        </span>
-      </TooltipTrigger>
+        </span>}
+      />
       <TooltipContent>{exact}</TooltipContent>
     </Tooltip>
   );
@@ -620,15 +621,15 @@ function ModelPicker({
   return (
     <>
       <Popover open={modelOpen} onOpenChange={setModelOpen}>
-        <PopoverTrigger asChild>
-          <Chip title={t("composer.model")}>
+        <PopoverTrigger
+          render={<Chip title={t("composer.model")}>
             <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
             <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
               {modelLabel}
             </span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>
-        </PopoverTrigger>
+          </Chip>}
+        />
         <PopoverContent align="start" side="top" className="w-64 p-1.5">
           {modelRows.length === 0 ? (
             <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
@@ -660,12 +661,12 @@ function ModelPicker({
       {/* Only worth a chip when there's an actual choice to make. */}
       {effortRows.length > 1 && (
         <Popover open={effortOpen} onOpenChange={setEffortOpen}>
-          <PopoverTrigger asChild>
-            <Chip title={t("composer.reasoning")}>
+          <PopoverTrigger
+            render={<Chip title={t("composer.reasoning")}>
               <span>{effortLabel}</span>
               <ChevronDown className="size-3 shrink-0 opacity-50" />
-            </Chip>
-          </PopoverTrigger>
+            </Chip>}
+          />
           <PopoverContent align="start" side="top" className="w-44 p-1.5">
             <MenuSection>{t("composer.reasoning")}</MenuSection>
             {effortRows.map((r) => (
@@ -771,40 +772,42 @@ export function Composer({
   const controls = (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
             <Plus className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
+          </Button>}
+        />
         <DropdownMenuContent align="start" side="top" className="w-60">
-          <DropdownMenuItem onSelect={onAttachFile}>
-            <FileText />
-            {t("composer.mentionFile")}
-            {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onInsertSkill}>
-            <Sparkles />
-            {t("composer.insertSkill")}
-            {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
-          </DropdownMenuItem>
-          {canvasEnabled && (
-            <DropdownMenuItem onSelect={onInsertCanvas}>
-              <PenLine />
-              {t("composer.insertCanvas")}
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={onAttachFile}>
+              <FileText />
+              {t("composer.mentionFile")}
+              {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={onInsertIssue}>
-            <Ticket />
-            {t("composer.pullIssue")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenMarket}>
-            <Store />
-            {t("composer.market")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onNewSkill}>
-            <Sparkles />
-            {t("composer.newSkill")}
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={onInsertSkill}>
+              <Sparkles />
+              {t("composer.insertSkill")}
+              {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            {canvasEnabled && (
+              <DropdownMenuItem onClick={onInsertCanvas}>
+                <PenLine />
+                {t("composer.insertCanvas")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onInsertIssue}>
+              <Ticket />
+              {t("composer.pullIssue")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenMarket}>
+              <Store />
+              {t("composer.market")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onNewSkill}>
+              <Sparkles />
+              {t("composer.newSkill")}
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
           <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
           </p>
@@ -851,8 +854,8 @@ export function Composer({
       {/* Document mode is the app's own feature — it deserves a control you can see, not just a
           chord and a grip gesture. */}
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
+        <TooltipTrigger
+          render={<Button
             variant="ghost"
             size="icon"
             className="size-7 shrink-0 text-muted-foreground"
@@ -860,8 +863,8 @@ export function Composer({
             onClick={() => onDocMode(!docMode)}
           >
             {docMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-          </Button>
-        </TooltipTrigger>
+          </Button>}
+        />
         <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
       </Tooltip>
 
@@ -877,8 +880,8 @@ export function Composer({
 
       {running ? (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="destructive"
               size="icon"
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
@@ -886,15 +889,16 @@ export function Composer({
               aria-label={t("composer.stop")}
             >
               <Square className="size-3.5 fill-current" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("composer.stop")}</TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-                focuses the document and says what's missing. */}
+          {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+              focuses the document and says what's missing. */}
+          <TooltipTrigger
+            render={
             <Button
               size="icon"
               variant={docEmpty ? "secondary" : "default"}
@@ -905,7 +909,8 @@ export function Composer({
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
             </Button>
-          </TooltipTrigger>
+            }
+          />
           <TooltipContent>
             {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}

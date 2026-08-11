@@ -190,9 +190,15 @@ layout. Dialogs must avoid overflow around 400px for tests and auxiliary windows
 
 ## Shared components and exceptions
 
-The local shadcn/Radix primitives remain the unique foundation. Do not add a second UI library or
-reimplement Button, Input, Select, Checkbox, Tabs, Dialog, Popover, DropdownMenu, ContextMenu,
-Tooltip, Command palette, file Tree, or Toast.
+Local shadcn/ui components remain the unique styled foundation. Interaction primitives use Base
+UI behind `components/ui`; product surfaces use the Base `render` composition API and must not
+import primitive libraries directly. Radix-backed wrappers and the direct `radix-ui` dependency
+are not part of the desktop UI contract.
+
+AI-native presentation patterns may use selected AI Elements source components under
+`components/ai-elements`. Adapt them to Code2 tokens and ACP data rather than adding Next.js or
+AI SDK transport assumptions. Do not reimplement conversations, messages, reasoning, tools,
+plans, or task progress inside product surfaces when an AI Element fits the behavior.
 
 Terminal, Monaco/Shiki, and BlockNote are controlled content-renderer exceptions:
 

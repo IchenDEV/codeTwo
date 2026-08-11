@@ -148,8 +148,8 @@ export function VoiceButton({ onText, hint }: { onText: (text: string) => void; 
   const label = mode === "listening" ? "Stop listening" : "Voice input — dictate into the prompt";
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
+      <TooltipTrigger
+        render={<Button
           variant={mode === "listening" ? "destructive" : "ghost"}
           size="icon"
           aria-label={label}
@@ -158,8 +158,8 @@ export function VoiceButton({ onText, hint }: { onText: (text: string) => void; 
           disabled={mode === "transcribing"}
         >
           <Icon className={cn("size-4", mode === "transcribing" && "animate-spin")} />
-        </Button>
-      </TooltipTrigger>
+        </Button>}
+      />
       <TooltipContent>
         {label}
         {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
