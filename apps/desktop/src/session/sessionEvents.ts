@@ -1,5 +1,6 @@
 import type {
   CoreEvent,
+  PermissionContext,
   ResolvedWorktreeBaseline,
   SessionActivity,
   SessionInfo,
@@ -13,6 +14,7 @@ export interface PermissionQueueItem {
   title: string;
   options: [string, string][];
   sequence?: number;
+  context?: PermissionContext;
 }
 
 export const IDLE_SESSION_ACTIVITY: SessionActivity = {
@@ -53,6 +55,7 @@ export function permissionsFromSessions(
         title: pending.title,
         options: pending.options,
         sequence: pending.sequence,
+        context: pending.context,
       }));
     })
     .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));

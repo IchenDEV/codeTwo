@@ -1950,6 +1950,7 @@ mod tests {
                     status: "completed".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             )
             .unwrap();

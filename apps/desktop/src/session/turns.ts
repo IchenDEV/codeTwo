@@ -1,4 +1,4 @@
-import type { CoreEvent, DocBlock, MemoryReceipt, Part, TranscriptEntry } from "../bridge";
+import type { CoreEvent, DocBlock, MemoryReceipt, Part, ToolOutput, TranscriptEntry } from "../bridge";
 import { isAgentActivityTitle } from "./agentActivity";
 
 /** Only an accepted TurnStarted may dispose mutable Composer Canvas heads. */
@@ -83,6 +83,7 @@ export interface ToolEntry {
   status: string;
   kind?: string | null;
   agentInput?: unknown;
+  outputs?: ToolOutput[];
   /** Last durable row folded into this call; older snapshot/live updates cannot regress it. */
   lastTranscriptSeq?: number;
 }
@@ -229,6 +230,7 @@ type ToolUpdate = {
   status: string;
   kind?: string | null;
   agentInput?: unknown;
+  outputs?: ToolOutput[];
   transcriptSeq?: number | null;
 };
 
@@ -249,11 +251,30 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
     activityTitle:
       existing?.activityTitle || (isAgentActivityTitle(update.title) ? update.title : undefined),
     status: update.status || existing?.status || "pending",
+    outputs: mergeToolOutputs(existing?.outputs ?? [], update.outputs ?? []),
   };
   if (update.kind != null) entry.kind = update.kind;
   if (update.agentInput != null) entry.agentInput = update.agentInput;
   if (update.transcriptSeq != null) entry.lastTranscriptSeq = update.transcriptSeq;
   return existing ? tools.map((tool) => (tool.id === update.id ? entry : tool)) : [...tools, entry];
+}
+
+function mergeToolOutputs(current: ToolOutput[], incoming: ToolOutput[]): ToolOutput[] {
+  const output = [...current];
+  for (const item of incoming) {
+    const duplicate = output.some((existing) => {
+      if (existing.type !== item.type) return false;
+      if (item.type === "image" && existing.type === "image") {
+        return existing.artifact.id === item.artifact.id;
+      }
+      if (item.type === "resource_link" && existing.type === "resource_link") {
+        return existing.uri === item.uri;
+      }
+      return item.type === "text" && existing.type === "text" && existing.text === item.text;
+    });
+    if (!duplicate) output.push(item);
+  }
+  return output;
 }
 
 /**
@@ -415,6 +436,7 @@ export function applyEvent(
         status: ev.status,
         kind: ev.kind,
         agentInput: ev.agent_input,
+        outputs: ev.outputs,
         transcriptSeq: ev.transcript_seq,
       });
       break;
@@ -553,6 +575,7 @@ export function turnsFromTranscript(
           status: part.status,
           kind: part.tool_kind,
           agentInput: part.agent_input,
+          outputs: part.outputs,
           transcriptSeq: seq,
         });
         break;

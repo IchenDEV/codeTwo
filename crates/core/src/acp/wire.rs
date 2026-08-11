@@ -60,7 +60,11 @@ impl InitializeResponse {
                 .pointer("/mcpCapabilities/http")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
-            mcp_sse: self.agent_capabilities.pointer("/mcpCapabilities/sse").and_then(Value::as_bool).unwrap_or(false),
+            mcp_sse: self
+                .agent_capabilities
+                .pointer("/mcpCapabilities/sse")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }
     }
 }
@@ -179,13 +183,18 @@ pub struct SessionConfigOption {
 impl SessionConfigOption {
     /// The currently selected value id, when this is a select option.
     pub fn current(&self) -> Option<String> {
-        self.current_value.as_ref().and_then(|v| v.as_str()).map(str::to_string)
+        self.current_value
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
     }
 
     /// Flatten the select choices, accepting both wire shapes: a flat option list and a list of
     /// `{group, name, options: […]}` groups.
     pub fn choices(&self) -> Vec<ConfigSelectChoice> {
-        let Some(Value::Array(items)) = &self.options else { return Vec::new() };
+        let Some(Value::Array(items)) = &self.options else {
+            return Vec::new();
+        };
         let mut out = Vec::new();
         for item in items {
             if let Some(Value::Array(grouped)) = item.get("options") {
@@ -223,13 +232,17 @@ pub struct SetConfigOptionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     Image {
         data: String,
         #[serde(rename = "mimeType")]
         mime_type: String,
     },
-    Resource { resource: Value },
+    Resource {
+        resource: Value,
+    },
 }
 
 impl ContentBlock {
@@ -285,12 +298,20 @@ pub struct SessionNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "sessionUpdate", rename_all = "snake_case")]
 pub enum SessionUpdate {
-    UserMessageChunk { content: ContentBlock },
-    AgentMessageChunk { content: ContentBlock },
-    AgentThoughtChunk { content: ContentBlock },
+    UserMessageChunk {
+        content: ContentBlock,
+    },
+    AgentMessageChunk {
+        content: ContentBlock,
+    },
+    AgentThoughtChunk {
+        content: ContentBlock,
+    },
     ToolCall(ToolCall),
     ToolCallUpdate(ToolCallUpdate),
-    Plan { entries: Vec<PlanEntry> },
+    Plan {
+        entries: Vec<PlanEntry>,
+    },
     /// The agent's config options changed (model switched, effort adjusted, …). Carries the full
     /// replacement set, same as `session/new` and `session/set_config_option` responses.
     ConfigOptionUpdate {
@@ -322,6 +343,10 @@ pub struct ToolCall {
     pub content: Option<Value>,
     #[serde(default, rename = "rawInput")]
     pub raw_input: Option<Value>,
+    #[serde(default, rename = "rawOutput")]
+    pub raw_output: Option<Value>,
+    #[serde(default, rename = "_meta")]
+    pub meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,6 +359,14 @@ pub struct ToolCallUpdate {
     pub status: Option<String>,
     #[serde(default)]
     pub content: Option<Value>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default, rename = "rawInput")]
+    pub raw_input: Option<Value>,
+    #[serde(default, rename = "rawOutput")]
+    pub raw_output: Option<Value>,
+    #[serde(default, rename = "_meta")]
+    pub meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -354,6 +387,8 @@ pub struct RequestPermissionRequest {
     #[serde(rename = "toolCall", default)]
     pub tool_call: Value,
     pub options: Vec<PermissionOption>,
+    #[serde(default, rename = "_meta")]
+    pub meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -428,11 +463,12 @@ mod tests {
 
     #[test]
     fn caps_read_load_session() {
-        let r: InitializeResponse = serde_json::from_value(json!({"protocolVersion": 1, "agentCapabilities": {
-            "loadSession": true,
-            "mcpCapabilities": {"http": true, "sse": true}
-        }}))
-        .unwrap();
+        let r: InitializeResponse =
+            serde_json::from_value(json!({"protocolVersion": 1, "agentCapabilities": {
+                "loadSession": true,
+                "mcpCapabilities": {"http": true, "sse": true}
+            }}))
+            .unwrap();
         assert!(r.caps().load_session);
         assert!(r.caps().mcp_http);
         assert!(r.caps().mcp_sse);

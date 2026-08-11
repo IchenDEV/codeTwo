@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodeTwo Browser Physical Acceptance</title>
+    <style>
+      body { font: 16px system-ui; max-width: 36rem; margin: 4rem auto; padding: 0 1rem; }
+      label, input, button { display: block; margin-top: 1rem; }
+      input { width: 100%; padding: .7rem; }
+      button { padding: .7rem 1rem; }
+      output { display: block; margin-top: 2rem; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>CodeTwo Browser Physical Acceptance</h1>
+    <form id="acceptance-form">
+      <label for="message">Non-sensitive test value</label>
+      <input id="message" name="message" autocomplete="off" />
+      <button type="submit">Submit test form</button>
+    </form>
+    <output id="result">Not submitted</output>
+    <script>
+      document.querySelector("form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        document.querySelector("output").textContent =
+          `Submitted: ${new FormData(event.currentTarget).get("message")}`;
+      });
+    </script>
+  </body>
+</html>

@@ -15,8 +15,10 @@
 
 pub mod acp;
 pub mod activity;
+pub mod artifact;
 pub mod browser;
 pub mod canvas;
+pub mod codex_runtime;
 pub mod context;
 pub mod delegate;
 pub mod engine;
@@ -50,6 +52,7 @@ pub mod workspace_search;
 pub mod worktree;
 
 pub use activity::{ActivityTracker, TurnLease};
+pub use artifact::{ArtifactRef, ArtifactStore, ToolOutput, ToolOutputNormalizer};
 pub use browser::Annotation;
 pub use canvas::{
     canvas_search_projection, deterministic_summary, encode_canvas_history_marker, normalize_media,
@@ -62,7 +65,9 @@ pub use canvas::{
     CANVAS_SCHEMA_VERSION, EXCALIDRAW_ENGINE, EXCALIDRAW_ENGINE_VERSION,
 };
 pub use context::{estimate_tokens, ContextUsage};
-pub use engine::{lower_canvas_prompt_payload, Engine, PermissionRouter, SessionHandler};
+pub use engine::{
+    lower_canvas_prompt_payload, DesktopMcpConfig, Engine, PermissionRouter, SessionHandler,
+};
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
@@ -75,10 +80,14 @@ pub use memory::{
 };
 pub use models::builtin_models;
 pub use permission::{
-    Action, ExecutionPolicy, PermissionMode, PermissionPolicy, Rule, SandboxPolicy,
+    Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
+    PermissionPolicy, Rule, SandboxPolicy,
 };
 pub use project::{ProjectConfig, ProjectScript};
-pub use provider::{default_registry, LaunchSpec, Provider, ProviderId};
+pub use provider::{
+    default_registry, registry_with_codex_runtime, CapabilityState, LaunchSpec, Provider,
+    ProviderCapability, ProviderCapabilityId, ProviderId,
+};
 pub use pty::PtySession;
 pub use session::{
     MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,

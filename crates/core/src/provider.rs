@@ -7,6 +7,39 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::codex_runtime::CodexRuntimeDiscovery;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderCapabilityId {
+    ImageGeneration,
+    ComputerUse,
+    ChromeBrowser,
+    CodetwoBrowser,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityState {
+    Ready,
+    Unverified,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderCapability {
+    pub id: ProviderCapabilityId,
+    pub state: CapabilityState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub experimental: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<String>,
+}
+
 /// Identifies a provider. `Custom` lets users register their own ACP-speaking command.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -88,6 +121,17 @@ impl Provider {
 /// - Pi: community ACP adapter via npx (pi itself has no ACP mode yet).
 /// - ZCode: the GLM ACP agent via npx (ZCode ships only a desktop app).
 pub fn default_registry() -> Vec<Provider> {
+    registry_with_codex_runtime(&CodexRuntimeDiscovery::detect())
+}
+
+/// Build the registry from one startup-time discovery snapshot.
+pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provider> {
+    let mut codex_launch = LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp@1.1.14"]);
+    if let Some(path) = runtime.codex_path.as_deref() {
+        codex_launch
+            .env
+            .push(("CODEX_PATH".into(), path.to_string_lossy().into_owned()));
+    }
     vec![
         Provider {
             id: ProviderId::ClaudeCode,
@@ -98,7 +142,7 @@ pub fn default_registry() -> Vec<Provider> {
         Provider {
             id: ProviderId::Codex,
             display_name: "OpenAI Codex".into(),
-            launch: LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp"]),
+            launch: codex_launch,
             needs_node: true,
         },
         Provider {
@@ -151,8 +195,13 @@ pub fn default_registry() -> Vec<Provider> {
 /// Directories a login shell puts on `PATH` but a GUI-launched app doesn't. macOS hands a bundle
 /// started from Finder or Spotlight the bare `/usr/bin:/bin:/usr/sbin:/sbin`, so Homebrew, cargo,
 /// and friends are invisible — every CLI we shell out to looks "not installed".
-const GUI_PATH_FALLBACKS: [&str; 5] =
-    ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin", "~/.local/bin", "~/.cargo/bin"];
+const GUI_PATH_FALLBACKS: [&str; 5] = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "~/.local/bin",
+    "~/.cargo/bin",
+];
 
 /// Append the directories above to this process's `PATH`, once, if they exist and aren't already
 /// there. Child processes inherit it, so this fixes both [`which`] and anything we spawn.
@@ -221,13 +270,21 @@ mod tests {
     fn registry_has_all_providers() {
         let reg = default_registry();
         assert_eq!(reg.len(), 8);
-        assert!(reg.iter().any(|p| p.id == ProviderId::Grok && !p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Grok && !p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
         assert!(reg.iter().any(|p| p.id == ProviderId::Cursor));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode));
         assert!(reg.iter().any(|p| p.id == ProviderId::Pi && p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::Kimi && !p.needs_node));
-        assert!(reg.iter().any(|p| p.id == ProviderId::ZCode && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Kimi && !p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::ZCode && p.needs_node));
     }
 
     #[test]
@@ -242,7 +299,10 @@ mod tests {
     fn codex_launch_uses_the_maintained_app_server_adapter() {
         let reg = default_registry();
         let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
-        assert_eq!(codex.launch.args, vec!["-y", "@agentclientprotocol/codex-acp"]);
+        assert_eq!(
+            codex.launch.args,
+            vec!["-y", "@agentclientprotocol/codex-acp@1.1.14"]
+        );
     }
 
     #[test]

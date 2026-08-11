@@ -337,11 +337,24 @@ impl App {
                 id,
                 title,
                 status,
+                outputs,
                 ..
             } => {
                 if self.active.as_deref() == Some(session.as_str()) {
                     let label = if title.is_empty() { id } else { title };
                     self.push("tool", format!("{label} — {status}"));
+                    for output in outputs {
+                        if let codetwo_core::ToolOutput::Image { artifact } = output {
+                            let dimensions = format!(" {}×{}", artifact.width, artifact.height);
+                            self.push(
+                                "artifact",
+                                format!(
+                                    "[artifact {}{} · {} bytes · {}]",
+                                    artifact.mime_type, dimensions, artifact.bytes, artifact.id
+                                ),
+                            );
+                        }
+                    }
                 }
             }
             Event::Plan {
@@ -356,6 +369,7 @@ impl App {
                 request_id,
                 title,
                 options,
+                ..
             } => {
                 let duplicate = self
                     .permissions
@@ -1801,6 +1815,7 @@ mod tests {
             request_id: request_id.into(),
             title: format!("permission {request_id}"),
             options: vec![("allow".into(), "Allow".into())],
+            context: Default::default(),
         }
     }
 
@@ -1876,6 +1891,7 @@ mod tests {
             kind: PendingInputKind::Permission,
             title: format!("permission {id}"),
             options: vec![("allow".into(), "Allow".into())],
+            context: Default::default(),
             sequence,
         }
     }

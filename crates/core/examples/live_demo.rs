@@ -140,6 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     request_id,
                     title,
                     options,
+                    ..
                 } => {
                     println!(
                         "  🔐 permission: {title}  options={:?}",
@@ -169,6 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
                 Event::Usage { .. } => {}
+                Event::ContextWindow { .. } => {}
                 Event::MemoryContext { receipt, .. } => {
                     println!("memory: {} recalled items", receipt.items.len());
                 }

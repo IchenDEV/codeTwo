@@ -158,6 +158,8 @@ pub enum Event {
         /// Bounded launch metadata powers capability-detected subagent observability.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent_input: Option<Value>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        outputs: Vec<crate::artifact::ToolOutput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transcript_seq: Option<i64>,
     },
@@ -173,6 +175,8 @@ pub enum Event {
         request_id: String,
         title: String,
         options: Vec<(String, String)>,
+        #[serde(default)]
+        context: crate::permission::PermissionContext,
     },
     Usage {
         session: SessionId,
@@ -394,6 +398,7 @@ mod tests {
                         title: "Run command".into(),
                         options: vec![("allow".into(), "Allow".into())],
                         sequence: 1,
+                        context: Default::default(),
                     }],
                 },
             },

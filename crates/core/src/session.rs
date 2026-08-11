@@ -127,6 +127,8 @@ pub struct PendingInput {
     pub title: String,
     pub options: Vec<(String, String)>,
     pub sequence: u64,
+    #[serde(default)]
+    pub context: crate::permission::PermissionContext,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +163,8 @@ pub enum Part {
         /// Whitelisted agent/workflow launch fields; never the arbitrary raw tool payload.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent_input: Option<Value>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        outputs: Vec<crate::artifact::ToolOutput>,
     },
     Plan {
         entries: Vec<String>,
@@ -392,6 +396,7 @@ mod tests {
                     title: "Run tests".into(),
                     options: vec![("allow".into(), "Allow".into())],
                     sequence: 7,
+                    context: Default::default(),
                 }],
             },
         };
@@ -584,6 +589,7 @@ mod transcript_context_tests {
                     status: "completed".into(),
                     tool_kind: None,
                     agent_input: None,
+                    outputs: Vec::new(),
                 },
             ),
             (

@@ -9,6 +9,140 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Stable opaque tab identifier shared by the human browser panel and the agent controller.
+pub type TabId = String;
+
+/// The browser state visible across the controller boundary. A tab never exposes a native
+/// WKWebView pointer or any browser-process credential.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserTab {
+    pub id: TabId,
+    pub url: String,
+    #[serde(default)]
+    pub title: String,
+    pub active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease_session: Option<String>,
+    #[serde(default)]
+    pub agent_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "command", rename_all = "snake_case")]
+pub enum TabCommand {
+    List,
+    Create {
+        url: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+    },
+    Select {
+        tab_id: TabId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session_id: Option<String>,
+    },
+    Close {
+        tab_id: TabId,
+    },
+    TakeControl {
+        tab_id: TabId,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum InspectRequest {
+    DomSnapshot,
+    Screenshot,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BrowserAction {
+    Navigate {
+        url: String,
+    },
+    ClickNode {
+        node_id: String,
+    },
+    ClickPoint {
+        x: f64,
+        y: f64,
+    },
+    Input {
+        node_id: String,
+        text: String,
+    },
+    Key {
+        key: String,
+    },
+    Scroll {
+        delta_x: f64,
+        delta_y: f64,
+    },
+    Drag {
+        from_x: f64,
+        from_y: f64,
+        to_x: f64,
+        to_y: f64,
+    },
+    History {
+        delta: i32,
+    },
+    Reload,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserRisk {
+    None,
+    NewOrigin,
+    SensitiveAction,
+    Download,
+    FileUpload,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserActionResult {
+    pub message: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserSnapshot {
+    pub url: String,
+    pub title: String,
+    pub content: String,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserScreenshot {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BrowserInspection {
+    Snapshot(BrowserSnapshot),
+    Screenshot(BrowserScreenshot),
+}
+
+/// The native browser is intentionally a deep module: callers can manage tabs, inspect a bounded
+/// projection, or execute a fixed action. There is no arbitrary script execution surface.
+#[async_trait::async_trait]
+pub trait BrowserController: Send + Sync {
+    async fn tabs(&self, command: TabCommand) -> Result<Vec<BrowserTab>, String>;
+    async fn inspect(
+        &self,
+        tab_id: &str,
+        request: InspectRequest,
+    ) -> Result<BrowserInspection, String>;
+    async fn act(&self, tab_id: &str, action: BrowserAction)
+        -> Result<BrowserActionResult, String>;
+}
+
 /// One property the user adjusted on the page, and what they adjusted it from and to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StyleChange {
@@ -53,7 +187,10 @@ impl Annotation {
         if !self.styles.is_empty() {
             s.push_str("\n- requested styles:");
             for c in &self.styles {
-                s.push_str(&format!("\n  - `{}`: `{}` → `{}`", c.property, c.from, c.to));
+                s.push_str(&format!(
+                    "\n  - `{}`: `{}` → `{}`",
+                    c.property, c.from, c.to
+                ));
             }
         }
         s

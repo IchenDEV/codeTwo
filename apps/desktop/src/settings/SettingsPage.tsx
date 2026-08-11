@@ -1,7 +1,25 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, BrainCircuit, Folder, Keyboard, Package, Palette, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  ArrowLeft,
+  BrainCircuit,
+  Folder,
+  Globe,
+  Keyboard,
+  Package,
+  Palette,
+  RotateCcw,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 
-import type { KeymapEntry, Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
+import {
+  browserPermissions,
+  browserRevokePermission,
+  type KeymapEntry,
+  type Project,
+  type ProjectWorktreeMode,
+  type ProviderInfo,
+} from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
@@ -12,21 +30,37 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "general" | "appearance" | "project" | "memory" | "keybindings" | "providers";
+type SettingsTab =
+  | "general"
+  | "appearance"
+  | "project"
+  | "memory"
+  | "keybindings"
+  | "providers"
+  | "browser";
 
-const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey: StringKey }[] = [
+const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label?: string }[] = [
   { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
   { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
   { id: "project", icon: Folder, labelKey: "settings.project" },
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
+  { id: "browser", icon: Globe, label: "Browser" },
 ];
+
+const CAPABILITY_LABELS = {
+  image_generation: "Image generation",
+  computer_use: "Computer Use",
+  chrome_browser: "Chrome Browser",
+  codetwo_browser: "CodeTwo Browser",
+} as const;
 
 // Actions grouped by what they touch — a flat list of twenty-two is hard to scan. Anything not
 // listed still shows under "Other", so a new binding is never hidden.
@@ -145,6 +179,11 @@ export function SettingsPage({
   const term = useTerminalSettings();
   const [tab, setTab] = useState<SettingsTab>("general");
   const [projectModeSaving, setProjectModeSaving] = useState(false);
+  const [browserOrigins, setBrowserOrigins] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (tab === "browser") void browserPermissions().then(setBrowserOrigins);
+  }, [tab]);
 
   const saveProjectWorktreeMode = async (
     path: string,
@@ -233,7 +272,7 @@ export function SettingsPage({
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div data-tauri-drag-region className="h-10 shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
-          {NAV.map(({ id, icon: Icon, labelKey }) => (
+          {NAV.map(({ id, icon: Icon, labelKey, label }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
@@ -245,7 +284,7 @@ export function SettingsPage({
               )}
             >
               <Icon className="size-4 shrink-0" />
-              {t(labelKey)}
+              {labelKey ? t(labelKey) : label}
             </button>
           ))}
         </nav>
@@ -401,25 +440,102 @@ export function SettingsPage({
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>
                 {providers.map((p) => (
-                  <Row
-                    key={p.id}
-                    icon={<ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />}
-                    label={p.display_name}
-                    hint={
-                      <span className="font-mono">
-                        {p.id}
-                        {p.needs_node && ` · ${t("settings.needsNode")}`}
+                  <div key={p.id} className="mb-2 rounded-(--ds-radius-module) bg-fill-quiet/40 px-3 last:mb-0">
+                    <Row
+                      icon={<ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />}
+                      label={p.display_name}
+                      hint={
+                        <span className="font-mono">
+                          {p.id}
+                          {p.needs_node && ` · ${t("settings.needsNode")}`}
+                        </span>
+                      }
+                    >
+                      <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+                        <span
+                          className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
+                        />
+                        {p.available ? t("settings.installed") : t("settings.notInstalled")}
                       </span>
-                    }
-                  >
-                    <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
-                      <span
-                        className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
-                      />
-                      {p.available ? t("settings.installed") : t("settings.notInstalled")}
-                    </span>
-                  </Row>
+                    </Row>
+                    {p.capabilities.map((capability) => (
+                      <div
+                        key={capability.id}
+                        className="ml-8 flex items-start justify-between gap-6 py-2.5"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
+                            {CAPABILITY_LABELS[capability.id]}
+                            {capability.experimental && <Badge variant="outline">Experimental</Badge>}
+                            {capability.version && (
+                              <span className="font-mono text-cap text-muted-foreground">
+                                {capability.version}
+                              </span>
+                            )}
+                          </div>
+                          {capability.reason && (
+                            <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">
+                              {capability.reason}
+                            </p>
+                          )}
+                          {capability.fix && (
+                            <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">
+                              {capability.fix}
+                            </p>
+                          )}
+                        </div>
+                        <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              capability.state === "ready" && "bg-success",
+                              capability.state === "unverified" && "bg-warning",
+                              capability.state === "unavailable" && "bg-border",
+                            )}
+                          />
+                          {capability.state}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 ))}
+              </Page>
+            )}
+
+            {tab === "browser" && (
+              <Page
+                title="Browser"
+                description="Experimental website permissions granted permanently to CodeTwo Browser. Sensitive actions and downloads always require one-time approval."
+              >
+                <Row
+                  icon={<Globe className="size-5 text-muted-foreground" />}
+                  label="Default browser adapter"
+                  hint="Ordinary requests use CodeTwo Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome."
+                >
+                  <Badge variant="outline">Experimental</Badge>
+                </Row>
+                <GroupHeading>Permanent website access</GroupHeading>
+                {browserOrigins.length === 0 ? (
+                  <p className="py-5 text-ui text-muted-foreground">No origins have permanent access.</p>
+                ) : (
+                  browserOrigins.map((origin) => (
+                    <Row key={origin} compact label={origin} hint="Website content remains untrusted.">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground hover:text-destructive"
+                        title="Revoke"
+                        onClick={() => {
+                          void browserRevokePermission(origin).then(() =>
+                            setBrowserOrigins((current) => current.filter((item) => item !== origin)),
+                          );
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </Row>
+                  ))
+                )}
               </Page>
             )}
           </div>
