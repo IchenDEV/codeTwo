@@ -374,6 +374,46 @@ impl Client {
         }
     }
 
+    pub async fn submit_for_review(
+        &self,
+        task_id: String,
+        expected_revision: u64,
+    ) -> Result<WorkVersioned<Task>, ClientError> {
+        match self
+            .work(WorkRequest::SubmitForReview {
+                task_id,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::TaskTransitioned { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "task_transitioned",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn accept_task(
+        &self,
+        task_id: String,
+        expected_revision: u64,
+    ) -> Result<WorkVersioned<Task>, ClientError> {
+        match self
+            .work(WorkRequest::AcceptTask {
+                task_id,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::TaskTransitioned { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "task_transitioned",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn get_brief(
         &self,
         task_id: String,
@@ -884,6 +924,7 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::WorkspaceSaved { .. } => "workspace_saved",
         WorkResponse::Tasks { .. } => "tasks",
         WorkResponse::TaskSaved { .. } => "task_saved",
+        WorkResponse::TaskTransitioned { .. } => "task_transitioned",
         WorkResponse::Brief { .. } => "brief",
         WorkResponse::BriefSaved { .. } => "brief_saved",
         WorkResponse::Runs { .. } => "runs",

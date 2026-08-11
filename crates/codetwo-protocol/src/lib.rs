@@ -329,6 +329,14 @@ pub enum WorkRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_revision: Option<u64>,
     },
+    SubmitForReview {
+        task_id: String,
+        expected_revision: u64,
+    },
+    AcceptTask {
+        task_id: String,
+        expected_revision: u64,
+    },
     GetBrief {
         task_id: String,
     },
@@ -421,6 +429,21 @@ impl WorkRequest {
             } => {
                 task.validate().map_err(EnvelopeError::InvalidField)?;
                 if *expected_revision == Some(0) {
+                    return Err(EnvelopeError::InvalidField(
+                        "task expected revision".to_owned(),
+                    ));
+                }
+            }
+            Self::SubmitForReview {
+                task_id,
+                expected_revision,
+            }
+            | Self::AcceptTask {
+                task_id,
+                expected_revision,
+            } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+                if *expected_revision == 0 {
                     return Err(EnvelopeError::InvalidField(
                         "task expected revision".to_owned(),
                     ));
@@ -709,6 +732,9 @@ pub enum WorkResponse {
     TaskSaved {
         item: WorkVersioned<Task>,
     },
+    TaskTransitioned {
+        item: WorkVersioned<Task>,
+    },
     Brief {
         brief: Option<WorkVersioned<BriefRevision>>,
     },
@@ -787,7 +813,7 @@ impl WorkResponse {
                     }
                 }
             }
-            Self::TaskSaved { item } => {
+            Self::TaskSaved { item } | Self::TaskTransitioned { item } => {
                 item.entity
                     .validate()
                     .map_err(EnvelopeError::InvalidField)?;
@@ -1284,6 +1310,23 @@ mod tests {
         assert!(matches!(
             request(Some(vec!["one.txt".to_owned(), "one.txt".to_owned()])).validate(),
             Err(EnvelopeError::InvalidField(field)) if field == "rollback paths"
+        ));
+    }
+
+    #[test]
+    fn task_lifecycle_requests_require_cas_revision() {
+        let request = RequestEnvelope::new(
+            1,
+            Request::Work {
+                request: WorkRequest::SubmitForReview {
+                    task_id: "task".to_owned(),
+                    expected_revision: 0,
+                },
+            },
+        );
+        assert!(matches!(
+            request.validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "task expected revision"
         ));
     }
 

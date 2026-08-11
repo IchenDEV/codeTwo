@@ -164,6 +164,26 @@ impl TaskStatus {
             _ => None,
         }
     }
+
+    pub const fn can_transition_to(self, target: Self) -> bool {
+        matches!(
+            (self, target),
+            (Self::Draft, Self::Active | Self::Cancelled)
+                | (
+                    Self::Active,
+                    Self::Waiting | Self::Review | Self::Failed | Self::Cancelled
+                )
+                | (
+                    Self::Waiting,
+                    Self::Active | Self::Review | Self::Failed | Self::Cancelled
+                )
+                | (
+                    Self::Review,
+                    Self::Active | Self::Completed | Self::Cancelled
+                )
+                | (Self::Failed, Self::Active | Self::Cancelled)
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,7 +9,7 @@ use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
     Engine, Event, Op, Provider, RunSnapshot, SnapshotChangeKind, SnapshotComparison,
-    SnapshotConfig, SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError,
+    SnapshotConfig, SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError, TaskStatus,
     WorkArtifactError, WorkArtifactService, WorkMutationGuard, WorkspaceSnapshot,
     WorkspaceSnapshotService,
 };
@@ -600,6 +600,26 @@ async fn dispatch_work(
                 Err(error) => (work_error(error), Vec::new()),
             }
         }
+        WorkRequest::SubmitForReview {
+            task_id,
+            expected_revision,
+        } => transition_task(
+            state,
+            request_id,
+            &task_id,
+            expected_revision,
+            TaskStatus::Review,
+        ),
+        WorkRequest::AcceptTask {
+            task_id,
+            expected_revision,
+        } => transition_task(
+            state,
+            request_id,
+            &task_id,
+            expected_revision,
+            TaskStatus::Completed,
+        ),
         WorkRequest::GetBrief { task_id } => match state.store.work_current_brief(&task_id) {
             Ok(brief) => (WorkResponse::Brief { brief }, Vec::new()),
             Err(error) => (work_error(error), Vec::new()),
@@ -642,6 +662,18 @@ async fn dispatch_work(
             provider,
             allow_without_rollback,
         } => {
+            let client_request_id = request_id;
+            let task = match state.store.work_get_task(&task_id) {
+                Ok(Some(task)) => task,
+                Ok(None) => return (invalid_work_response(), Vec::new()),
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            if matches!(
+                task.entity.status,
+                TaskStatus::Completed | TaskStatus::Cancelled
+            ) {
+                return (invalid_work_response(), Vec::new());
+            }
             let workspace_root = match state.store.work_workspace_root_for_task(&task_id) {
                 Ok(root) => root,
                 Err(error) => return (work_error(error), Vec::new()),
@@ -668,6 +700,27 @@ async fn dispatch_work(
                 ),
                 Err(_) => return (invalid_work_response(), Vec::new()),
             };
+            let mut lifecycle_events = Vec::new();
+            if task.entity.status != TaskStatus::Active {
+                let guard = local_guard(client_request_id, Some(task.revision));
+                let active = match state.store.work_transition_task_status(
+                    &task_id,
+                    TaskStatus::Active,
+                    &guard,
+                ) {
+                    Ok(active) => active,
+                    Err(error) => {
+                        if rollback_available {
+                            let _ = fs::remove_dir_all(&snapshot_path);
+                        }
+                        return (work_error(error), Vec::new());
+                    }
+                };
+                lifecycle_events.push(TransportEvent::TaskChanged {
+                    task: active.entity,
+                    revision: active.revision,
+                });
+            }
             if let Some(snapshot) = prepared_snapshot {
                 state
                     .pending_snapshots
@@ -704,7 +757,7 @@ async fn dispatch_work(
                 if rollback_available {
                     let _ = fs::remove_dir_all(&snapshot_path);
                 }
-                return (invalid_work_response(), Vec::new());
+                return (invalid_work_response(), lifecycle_events);
             }
             (
                 WorkResponse::RunStarted {
@@ -715,7 +768,7 @@ async fn dispatch_work(
                         not_covered,
                     },
                 },
-                Vec::new(),
+                lifecycle_events,
             )
         }
         WorkRequest::InspectRunChanges { run_id } => {
@@ -882,6 +935,29 @@ async fn dispatch_work(
             Ok(page) => (WorkResponse::Deliverables { page }, Vec::new()),
             Err(error) => (work_error(error), Vec::new()),
         },
+    }
+}
+
+fn transition_task(
+    state: &State,
+    request_id: u64,
+    task_id: &str,
+    expected_revision: u64,
+    target: TaskStatus,
+) -> (WorkResponse, Vec<TransportEvent>) {
+    let guard = local_guard(request_id, Some(expected_revision));
+    match state
+        .store
+        .work_transition_task_status(task_id, target, &guard)
+    {
+        Ok(item) => {
+            let event = TransportEvent::TaskChanged {
+                task: item.entity.clone(),
+                revision: item.revision,
+            };
+            (WorkResponse::TaskTransitioned { item }, vec![event])
+        }
+        Err(error) => (work_error(error), Vec::new()),
     }
 }
 

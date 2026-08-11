@@ -2,8 +2,8 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::domain::{
-    BriefRevision, Deliverable, DeliverableSaveResult, RunChange, RunSnapshot, Task, WorkVersioned,
-    Workspace,
+    BriefRevision, Deliverable, DeliverableSaveResult, RunChange, RunSnapshot, Task, TaskStatus,
+    WorkVersioned, Workspace,
 };
 use super::schema;
 use crate::store::StoreError;
@@ -394,30 +394,39 @@ impl WorkTransaction<'_> {
         guard: &WorkMutationGuard,
     ) -> Result<WorkMutation, StoreError> {
         task.validate().map_err(StoreError::Domain)?;
-        let existing_pointer: Option<Option<i64>> = self
+        let existing: Option<(Option<i64>, String)> = self
             .transaction
             .query_row(
-                "SELECT current_brief_revision FROM tasks WHERE id=?1",
+                "SELECT current_brief_revision,status FROM tasks WHERE id=?1",
                 params![task.id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        match existing_pointer {
+        match &existing {
             None if task.current_brief_revision.is_some() => {
                 return Err(StoreError::Domain(
                     "a task brief pointer can only be set by save_brief".to_owned(),
                 ));
             }
-            Some(pointer) if task.current_brief_revision != pointer => {
+            Some((pointer, _)) if task.current_brief_revision != *pointer => {
                 return Err(StoreError::Domain(
                     "a task brief pointer can only be changed by save_brief".to_owned(),
                 ));
             }
             _ => {}
         }
+        if let Some((_, status)) = &existing {
+            let status = TaskStatus::parse(status)
+                .ok_or_else(|| StoreError::Domain("invalid stored Task status".to_owned()))?;
+            if task.status != status {
+                return Err(StoreError::Domain(
+                    "Task status can only change through a lifecycle transition".to_owned(),
+                ));
+            }
+        }
         let input = guard.input(WorkEntityKind::Task, task.id.clone(), false, "save");
         let revision = self.next_revision(&input)?;
-        if existing_pointer.is_none() {
+        if existing.is_none() {
             self.transaction.execute(
                 "INSERT INTO tasks(id,workspace_id,title,experience,status,created_at,updated_at,archived)
                  VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",
@@ -446,6 +455,46 @@ impl WorkTransaction<'_> {
                     task.archived as i64,
                 ],
             )?;
+        }
+        self.append_with_revision(&input, revision)
+    }
+
+    pub fn transition_task_status(
+        &mut self,
+        task_id: &str,
+        target: TaskStatus,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkMutation, StoreError> {
+        let current: Option<String> = self
+            .transaction
+            .query_row("SELECT status FROM tasks WHERE id=?1", [task_id], |row| {
+                row.get(0)
+            })
+            .optional()?;
+        let current = current
+            .as_deref()
+            .and_then(TaskStatus::parse)
+            .ok_or_else(|| StoreError::Domain(format!("unknown Work Task {task_id}")))?;
+        if !current.can_transition_to(target) {
+            return Err(StoreError::Domain(format!(
+                "invalid Task lifecycle transition: {} -> {}",
+                current.as_str(),
+                target.as_str()
+            )));
+        }
+        let input = guard.input(
+            WorkEntityKind::Task,
+            task_id.to_owned(),
+            false,
+            format!("status_{}", target.as_str()),
+        );
+        let revision = self.next_revision(&input)?;
+        let changed = self.transaction.execute(
+            "UPDATE tasks SET status=?2,updated_at=?3 WHERE id=?1",
+            params![task_id, target.as_str(), now_millis()],
+        )?;
+        if changed != 1 {
+            return Err(StoreError::Domain(format!("unknown Work Task {task_id}")));
         }
         self.append_with_revision(&input, revision)
     }

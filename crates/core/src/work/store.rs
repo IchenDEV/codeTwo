@@ -750,6 +750,29 @@ impl Store {
         .map_err(StoreError::from)
     }
 
+    pub fn work_transition_task_status(
+        &self,
+        task_id: &str,
+        target: TaskStatus,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<Task>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let mutation = with_transaction(&mut conn, |transaction| {
+            transaction.transition_task_status(task_id, target, guard)
+        })?;
+        let task = conn.query_row(
+            "SELECT t.id,t.workspace_id,t.title,t.experience,t.status,t.current_brief_revision,
+                    t.created_at,t.updated_at,t.archived
+             FROM tasks t WHERE t.id=?1",
+            [task_id],
+            task_from_row,
+        )?;
+        Ok(WorkVersioned {
+            entity: task,
+            revision: mutation.revision,
+        })
+    }
+
     pub fn work_list_tasks(
         &self,
         workspace_id: Option<&str>,

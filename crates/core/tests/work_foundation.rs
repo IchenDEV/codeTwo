@@ -167,6 +167,86 @@ fn first_and_next_cas_mutations_allocate_clock_heads_and_redacted_audit() {
 }
 
 #[test]
+fn task_status_changes_use_guarded_lifecycle_transitions() {
+    let mut connection = installed_connection();
+    let workspace = workspace();
+    with_transaction(&mut connection, |tx| {
+        tx.save_workspace(
+            &workspace,
+            &WorkMutationGuard::from_audit(None, &audit("workspace")),
+        )?;
+        tx.save_task(
+            &task(&workspace),
+            &WorkMutationGuard::from_audit(None, &audit("task")),
+        )?;
+        Ok(())
+    })
+    .unwrap();
+
+    let mut bypass = task(&workspace);
+    bypass.status = TaskStatus::Active;
+    bypass.id = connection
+        .query_row("SELECT id FROM tasks", [], |row| row.get(0))
+        .unwrap();
+    let bypass_error = with_transaction(&mut connection, |tx| {
+        tx.save_task(
+            &bypass,
+            &WorkMutationGuard::from_audit(Some(1), &audit("bypass")),
+        )
+    })
+    .unwrap_err();
+    assert!(matches!(bypass_error, StoreError::Domain(message) if message.contains("lifecycle")));
+
+    let task_id = bypass.id;
+    let active = with_transaction(&mut connection, |tx| {
+        tx.transition_task_status(
+            &task_id,
+            TaskStatus::Active,
+            &WorkMutationGuard::from_audit(Some(1), &audit("active")),
+        )
+    })
+    .unwrap();
+    assert_eq!(active.revision, 2);
+    let invalid = with_transaction(&mut connection, |tx| {
+        tx.transition_task_status(
+            &task_id,
+            TaskStatus::Completed,
+            &WorkMutationGuard::from_audit(Some(2), &audit("skip-review")),
+        )
+    })
+    .unwrap_err();
+    assert!(
+        matches!(invalid, StoreError::Domain(message) if message.contains("active -> completed"))
+    );
+
+    let review = with_transaction(&mut connection, |tx| {
+        tx.transition_task_status(
+            &task_id,
+            TaskStatus::Review,
+            &WorkMutationGuard::from_audit(Some(2), &audit("review")),
+        )
+    })
+    .unwrap();
+    assert_eq!(review.revision, 3);
+    let completed = with_transaction(&mut connection, |tx| {
+        tx.transition_task_status(
+            &task_id,
+            TaskStatus::Completed,
+            &WorkMutationGuard::from_audit(Some(3), &audit("accept")),
+        )
+    })
+    .unwrap();
+    assert_eq!(completed.revision, 4);
+    let status: String = connection
+        .query_row("SELECT status FROM tasks WHERE id=?1", [&task_id], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(status, "completed");
+    assert_eq!(high_water(&connection).unwrap(), 5);
+}
+
+#[test]
 fn brief_saves_are_authoritative_atomic_and_pointer_guarded() {
     let mut connection = installed_connection();
     let workspace = workspace();

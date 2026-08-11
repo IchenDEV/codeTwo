@@ -6,8 +6,8 @@ use std::time::Duration;
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
     BriefRevision, DocBlock, Event, LaunchSpec, Op, PermissionMode, Provider, ProviderId, Session,
-    SkillLibrary, Store, Task, TaskExperience, WorkMutationGuard, Workspace, WorkspaceKind,
-    WorkspaceSnapshot,
+    SkillLibrary, Store, Task, TaskExperience, TaskStatus, WorkMutationGuard, Workspace,
+    WorkspaceKind, WorkspaceSnapshot,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -113,11 +113,12 @@ async fn task_and_brief_share_guarded_daemon_state_and_ordered_events() {
         .unwrap();
     let _workspace_event = events.recv().await.unwrap();
 
-    let task = Task::named(
+    let mut task = Task::named(
         &workspace.entity.id,
         "Prepare launch brief",
         TaskExperience::Work,
     );
+    task.status = TaskStatus::Active;
     let saved_task = client.save_task(task, None).await.unwrap();
     assert_eq!(saved_task.revision, 1);
     assert!(matches!(
@@ -184,6 +185,38 @@ async fn task_and_brief_share_guarded_daemon_state_and_ordered_events() {
         .await
         .unwrap_err();
     assert!(stale.to_string().contains("revision conflict"));
+
+    let review = client
+        .submit_for_review(saved_task.entity.id.clone(), 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        (review.entity.status, review.revision),
+        (TaskStatus::Review, 3)
+    );
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::TaskChanged { ref task, revision: 3 } if task.status == TaskStatus::Review)
+    ));
+    let stale_accept = client
+        .accept_task(saved_task.entity.id.clone(), 2)
+        .await
+        .unwrap_err();
+    assert!(stale_accept.to_string().contains("revision conflict"));
+    let completed = client
+        .accept_task(saved_task.entity.id.clone(), 3)
+        .await
+        .unwrap();
+    assert_eq!(
+        (completed.entity.status, completed.revision),
+        (TaskStatus::Completed, 4)
+    );
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::TaskChanged { ref task, revision: 4 } if task.status == TaskStatus::Completed)
+    ));
 
     client.shutdown().await.unwrap();
     timeout(Duration::from_secs(2), server)
@@ -636,6 +669,15 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
         ProviderId::Custom("beta".into())
     );
     assert_ne!(page.items[0].entity.id, page.items[1].entity.id);
+    let tasks = client
+        .list_tasks(Some(workspace.entity.id), false, None, 50)
+        .await
+        .unwrap();
+    assert_eq!(tasks.items.len(), 1);
+    assert_eq!(
+        (tasks.items[0].entity.status, tasks.items[0].revision),
+        (TaskStatus::Active, 2)
+    );
 
     client.shutdown().await.unwrap();
     timeout(Duration::from_secs(2), server)
