@@ -46,6 +46,7 @@ pub mod tmux;
 pub mod usage;
 pub mod voice;
 pub mod work;
+pub mod work_snapshot;
 pub mod workspace;
 pub mod workspace_search;
 pub mod worktree;
@@ -99,5 +100,12 @@ pub use work::{
     BriefRevision, BriefSaveResult, Run, Task, TaskExperience, TaskStatus, WorkAuditContext,
     WorkEntityHead, WorkEntityKind, WorkMutation, WorkMutationGuard, WorkPage, WorkRunBinding,
     WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+};
+pub use work_snapshot::{
+    NoRollbackPreparation, NotCoveredPath, NotCoveredReason, PlatformSnapshotCopier,
+    RequiresRollbackDecision, RollbackConflict, RollbackHook, RollbackReport, SnapshotChange,
+    SnapshotChangeKind, SnapshotComparison, SnapshotConfig, SnapshotCopier, SnapshotError,
+    SnapshotFile, SnapshotManifest, SnapshotPreparation, SnapshotPreparationOptions,
+    WorkspaceSnapshot, WorkspaceSnapshotService,
 };
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};
