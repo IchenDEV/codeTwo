@@ -103,6 +103,49 @@
   --ds-foundation-dark-overlay: oklch(0.08 0.004 265 / 72%);
   --ds-foundation-dark-shadow: rgb(0 0 0 / 34%);
 
+  /* Appearance theme library. Product code references these names; raw palette values stay here. */
+  --ds-theme-code2-light-accent: #3b73f0;
+  --ds-theme-code2-light-background: #ffffff;
+  --ds-theme-code2-light-foreground: #172033;
+  --ds-theme-code2-dark-accent: #77a7ff;
+  --ds-theme-code2-dark-background: #18191d;
+  --ds-theme-code2-dark-foreground: #f2f4f8;
+
+  --ds-theme-ocean-light-accent: #167ea6;
+  --ds-theme-ocean-light-background: #f7fbfc;
+  --ds-theme-ocean-light-foreground: #13242c;
+  --ds-theme-ocean-dark-accent: #66c4e6;
+  --ds-theme-ocean-dark-background: #101d23;
+  --ds-theme-ocean-dark-foreground: #e8f6fa;
+
+  --ds-theme-grove-light-accent: #2f7a58;
+  --ds-theme-grove-light-background: #f8fbf8;
+  --ds-theme-grove-light-foreground: #16251c;
+  --ds-theme-grove-dark-accent: #68c792;
+  --ds-theme-grove-dark-background: #121d17;
+  --ds-theme-grove-dark-foreground: #edf8f0;
+
+  --ds-theme-ember-light-accent: #b65730;
+  --ds-theme-ember-light-background: #fffaf7;
+  --ds-theme-ember-light-foreground: #2d1c16;
+  --ds-theme-ember-dark-accent: #e89268;
+  --ds-theme-ember-dark-background: #211713;
+  --ds-theme-ember-dark-foreground: #fff2ec;
+
+  --ds-theme-iris-light-accent: #7653bd;
+  --ds-theme-iris-light-background: #fbf9ff;
+  --ds-theme-iris-light-foreground: #221a31;
+  --ds-theme-iris-dark-accent: #b49ae8;
+  --ds-theme-iris-dark-background: #191520;
+  --ds-theme-iris-dark-foreground: #f6efff;
+
+  --ds-theme-rose-light-accent: #b04469;
+  --ds-theme-rose-light-background: #fff9fb;
+  --ds-theme-rose-light-foreground: #2b1820;
+  --ds-theme-rose-dark-accent: #ef8eaf;
+  --ds-theme-rose-dark-background: #22141a;
+  --ds-theme-rose-dark-foreground: #fff0f4;
+
   /* Semantic spacing. */
   --ds-space-optical: var(--ds-foundation-space-2);
   --ds-space-inline: var(--ds-foundation-space-4);

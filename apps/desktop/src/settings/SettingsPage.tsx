@@ -1,24 +1,27 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, BrainCircuit, Folder, Keyboard, Package, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, BrainCircuit, Folder, Keyboard, Package, Palette, RotateCcw, SlidersHorizontal } from "lucide-react";
 
 import type { KeymapEntry, Project, ProjectWorktreeMode, ProviderInfo } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
-import { useTheme, type ThemePreference } from "../theme";
+import { resetAppearanceSettings } from "../appearance";
+import { useTheme } from "../theme";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { MemorySettingsPage } from "./MemorySettings";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "general" | "project" | "memory" | "keybindings" | "providers";
+type SettingsTab = "general" | "appearance" | "project" | "memory" | "keybindings" | "providers";
 
 const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey: StringKey }[] = [
   { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+  { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
   { id: "project", icon: Folder, labelKey: "settings.project" },
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
@@ -173,8 +176,9 @@ export function SettingsPage({
   // What "Restore defaults" means depends on where you're standing.
   const restore = () => {
     if (tab === "general") {
-      setTheme("system");
       setLanguage("system");
+    } else if (tab === "appearance") {
+      resetAppearanceSettings();
     } else if (tab === "keybindings") {
       onResetAll?.();
     }
@@ -263,7 +267,7 @@ export function SettingsPage({
             {t("settings.title")}
           </span>
           <div data-tauri-drag-region className="flex-1" />
-          {(tab === "general" || tab === "keybindings") && (
+          {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
             <Button
               variant="ghost"
               size="sm"
@@ -280,19 +284,6 @@ export function SettingsPage({
           <div className="mx-auto w-full max-w-[680px] px-8 pb-20 pt-8">
             {tab === "general" && (
               <Page title={t("settings.general")} description={t("settings.generalHint")}>
-                <Row label={t("settings.theme")} hint={t("settings.themeHint")}>
-                  <Select value={theme} onValueChange={(v) => setTheme(v as ThemePreference)}>
-                    <SelectTrigger size="sm" className="w-44 justify-between">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper" align="end">
-                      <SelectItem value="system">{t("settings.themeSystem")}</SelectItem>
-                      <SelectItem value="light">{t("settings.themeLight")}</SelectItem>
-                      <SelectItem value="dark">{t("settings.themeDark")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Row>
-
                 <Row label={t("settings.language")} hint={t("settings.languageHint")}>
                   <Select value={language} onValueChange={(v) => setLanguage(v as LanguagePreference)}>
                     <SelectTrigger size="sm" className="w-44 justify-between">
@@ -342,6 +333,12 @@ export function SettingsPage({
                     className="h-8 w-44 text-hint"
                   />
                 </Row>
+              </Page>
+            )}
+
+            {tab === "appearance" && (
+              <Page title={t("settings.appearance")} description={t("settings.appearanceHint")}>
+                <AppearanceSettings value={theme} onChange={setTheme} />
               </Page>
             )}
 

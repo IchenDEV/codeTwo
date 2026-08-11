@@ -1,21 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  applyAppearanceSettings,
+  setAppearanceSettings,
+  useAppearanceSettings,
+  type ColorScheme,
+  type ThemePreference,
+} from "./appearance";
 
-/** What actually gets painted. */
-export type ColorScheme = "light" | "dark";
-/** What the user chose. `system` defers to the OS and keeps following it. */
-export type ThemePreference = ColorScheme | "system";
-
-const STORAGE_KEY = "codetwo.theme";
+export type { ColorScheme, ThemePreference } from "./appearance";
 
 function systemScheme(): ColorScheme {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
-}
-
-function storedPreference(): ThemePreference {
-  const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-  return raw === "light" || raw === "dark" || raw === "system" ? raw : "system";
 }
 
 interface ThemeValue {
@@ -40,7 +37,8 @@ const ThemeContext = createContext<ThemeValue>({
  * choice would be silently overridden the next time the OS changed its mind.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [preference, setPreferenceState] = useState<ThemePreference>(storedPreference);
+  const appearance = useAppearanceSettings();
+  const preference = appearance.preference;
   const [system, setSystem] = useState<ColorScheme>(systemScheme);
 
   useEffect(() => {
@@ -55,10 +53,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // shadcn keys dark styles off a `.dark` class; mirror the resolved scheme onto <html>.
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", scheme === "dark");
+    const root = document.documentElement;
+    root.classList.toggle("dark", scheme === "dark");
     // Tells the webview to render form controls and scrollbars in the matching scheme, so the bits
     // the OS draws don't stay light while the app goes dark.
-    document.documentElement.style.colorScheme = scheme;
+    root.style.colorScheme = scheme;
 
     // And tell the *window*. The sidebar's vibrancy is an NSVisualEffectView, which follows the
     // window's appearance rather than our CSS — so picking Dark in the app while macOS is Light
@@ -73,13 +72,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     })();
   }, [scheme]);
 
+  // Palette, type, and surface settings are independent from the native window appearance. Keep
+  // this separate so moving a slider does not send a redundant setTheme call over Tauri IPC.
+  useEffect(() => {
+    applyAppearanceSettings(document.documentElement, appearance, scheme);
+  }, [appearance, scheme]);
+
   const setPreference = useCallback((p: ThemePreference) => {
-    setPreferenceState(p);
-    try {
-      localStorage.setItem(STORAGE_KEY, p);
-    } catch {
-      /* private mode — the choice just won't survive a restart */
-    }
+    setAppearanceSettings({ preference: p });
   }, []);
 
   return (

@@ -15,6 +15,7 @@ export const dom = new GlobalWindow({ url: "http://localhost/" });
 const DOM_KEYS = [
   "window",
   "document",
+  "DocumentFragment",
   "Node",
   "NodeFilter",
   "ShadowRoot",
@@ -23,6 +24,7 @@ const DOM_KEYS = [
   "navigator",
   "HTMLElement",
   "HTMLButtonElement",
+  "HTMLFormElement",
   "HTMLInputElement",
   "HTMLTextAreaElement",
   "HTMLImageElement",
