@@ -123,6 +123,7 @@ import {
   sceneSessionPlan,
   setModel as setSessionModel,
   setSessionScene,
+  usageBySession,
 } from "./bridge";
 import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
@@ -163,6 +164,9 @@ import {
   updateContextWindow,
   type ContextWindowBySession,
 } from "./session/contextWindow";
+// Explicit extension: `session/` holds both `statusline.ts` and `Statusline.tsx`, and bun's
+// resolver matches the pair case-insensitively without it.
+import { deriveBurnRate } from "./session/statusline.ts";
 import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
@@ -477,6 +481,38 @@ export default function App() {
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
   const [contextWindows, setContextWindows] = useState<ContextWindowBySession>({});
+  // Per-session cost/burn for the Composer statusline (R7). The core's `usage_by_session`
+  // command lands in a later wave; until then the bridge feature-detects and this stays null,
+  // which hides the cost segment entirely.
+  const [sessionUsage, setSessionUsage] = useState<{
+    costUsd: number | null;
+    burnRate: number | null;
+  } | null>(null);
+  useEffect(() => {
+    setSessionUsage(null);
+    if (!activeSession) return;
+    let cancelled = false;
+    // Cumulative token counters per poll; burn rate is derived over a trailing window, so the
+    // sample list lives and dies with the active session.
+    const samples: { at: number; input: number; output: number }[] = [];
+    const poll = async () => {
+      const usage = await usageBySession(activeSession);
+      if (cancelled) return;
+      if (!usage) {
+        setSessionUsage(null);
+        return;
+      }
+      samples.push({ at: Date.now(), input: usage.input_tokens, output: usage.output_tokens });
+      if (samples.length > 16) samples.shift();
+      setSessionUsage({ costUsd: usage.cost_usd, burnRate: deriveBurnRate(samples) });
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeSession]);
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
@@ -3062,6 +3098,7 @@ export default function App() {
                   currentModel={currentModel}
                   defaultModel={defaultModel}
                   contextWindow={activeContextWindow(contextWindows, activeSession)}
+                  usage={sessionUsage}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
                     if (!session) return;

@@ -1,0 +1,122 @@
+import { Gauge } from "lucide-react";
+
+import {
+  describeContextWindow,
+  formatExactContextTokens,
+  formatContextWindowPercentage,
+  type ContextWindow,
+} from "./contextWindow";
+// Explicit extension: this dir holds both `statusline.ts` (logic) and `Statusline.tsx` (this
+// file), and bun's resolver matches the pair case-insensitively without it.
+import { contextTone, formatCost } from "./statusline.ts";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useT } from "../i18n";
+import { cn } from "@/lib/utils";
+
+export interface StatuslineUsage {
+  costUsd: number | null;
+  /** Output tokens per minute, derived from successive usage polls. */
+  burnRate: number | null;
+}
+
+/**
+ * The per-session statusline in the Composer controls row (roadmap R7): the context-window
+ * meter that used to be `ContextWindowStatus`, now with a tone dot at 60%/85% fill, plus a
+ * cost segment that only appears once the core's per-session usage command exists (the bridge
+ * feature-detects it; `usage` stays null until then). One Chip-sized control either way.
+ */
+export function Statusline({
+  contextWindow,
+  usage,
+}: {
+  contextWindow: ContextWindow | null;
+  usage: StatuslineUsage | null;
+}) {
+  const t = useT();
+  const display = describeContextWindow(contextWindow);
+  const cost = usage && usage.costUsd !== null ? formatCost(usage.costUsd) : null;
+  const burn =
+    usage && usage.burnRate !== null && Number.isFinite(usage.burnRate)
+      ? t("statusline.burn", { rate: String(Math.round(usage.burnRate)) })
+      : null;
+  if (!contextWindow || !display) {
+    // No provider-reported context yet; the cost segment alone still earns the slot.
+    if (!cost && !burn) return null;
+    return (
+      <span className="flex shrink-0 items-center gap-1.5 px-0 py-1 text-hint text-muted-foreground @lg/composer:px-1.5">
+        {cost && <span>{cost}</span>}
+        {burn && <span>{burn}</span>}
+      </span>
+    );
+  }
+  const exact = t("composer.contextWindowExact", {
+    used: formatExactContextTokens(contextWindow.usedTokens),
+    capacity: formatExactContextTokens(contextWindow.contextWindow),
+    percentage: formatContextWindowPercentage(contextWindow),
+  });
+  const tone = contextTone(display.percentage !== null ? display.percentage / 100 : null);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="meter"
+          aria-valuemin={0}
+          aria-valuemax={contextWindow.contextWindow}
+          aria-valuenow={Math.min(contextWindow.usedTokens, contextWindow.contextWindow)}
+          aria-valuetext={exact}
+          aria-label={exact}
+          title={exact}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 px-0 py-1 text-hint @lg/composer:px-1.5",
+            tone === "warn" && "text-warning",
+            tone === "critical" && "text-destructive",
+            (tone === "ok" || tone === null) && "text-muted-foreground",
+          )}
+        >
+          {/* The dot appears only once the window is filling up — quiet until it matters. */}
+          {(tone === "warn" || tone === "critical") && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                tone === "critical" ? "bg-destructive" : "bg-warning",
+              )}
+            />
+          )}
+          <Gauge className="hidden size-3.5 shrink-0 @lg/composer:inline" aria-hidden="true" />
+          <span className="hidden @lg/composer:inline" aria-hidden="true">
+            {display.compact}
+          </span>
+          <span className="@lg/composer:hidden" aria-hidden="true">
+            {display.capacity}
+          </span>
+          {usage && (cost || burn) && (
+            <span aria-hidden="true" className="hidden items-center gap-1.5 @lg/composer:flex">
+              {cost && (
+                <>
+                  <span>·</span>
+                  <span>{cost}</span>
+                </>
+              )}
+              {burn && (
+                <>
+                  <span>·</span>
+                  <span>{burn}</span>
+                </>
+              )}
+            </span>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <div className="space-y-0.5">
+          <div>
+            {t("statusline.contextTitle")}: {exact}
+          </div>
+          {cost && <div>{t("statusline.cost", { cost })}</div>}
+          {burn && <div>{burn}</div>}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}

@@ -564,6 +564,9 @@ export const en = {
   "scene.escalationCancel": "Cancel",
   "scene.switched": "Scene: {scene}",
   "scene.unresolved": "The saved scene for this session is not installed.",
+  "statusline.contextTitle": "Context window",
+  "statusline.cost": "Cost {cost}",
+  "statusline.burn": "{rate} tok/min",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1099,6 +1102,9 @@ export const zhCN: Record<StringKey, string> = {
   "scene.escalationCancel": "取消",
   "scene.switched": "场景：{scene}",
   "scene.unresolved": "此会话保存的场景未安装。",
+  "statusline.contextTitle": "上下文窗口",
+  "statusline.cost": "费用 {cost}",
+  "statusline.burn": "{rate} token/分钟",
 };
 
 export const LOCALES = {

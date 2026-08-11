@@ -2207,3 +2207,18 @@ export async function getSessionScene(session: string): Promise<SessionSceneStat
   if (!inTauri) return null;
   return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
 }
+
+/** Per-session token/cost totals. The core command lands in a later wave — until then this
+ * resolves null everywhere and the statusline's cost segment stays hidden (feature detect). */
+export interface SessionUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number | null;
+  burn_rate_usd_per_hour: number | null;
+  priced: boolean;
+}
+
+export async function usageBySession(session: string): Promise<SessionUsage | null> {
+  if (!inTauri) return null;
+  return invoke<SessionUsage | null>("usage_by_session", { session }).catch(() => null);
+}
