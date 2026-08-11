@@ -348,6 +348,54 @@ async fn handle(
             true
         }
         Request::Ping { nonce } => send(writer, request.request_id, Response::Pong { nonce }).await,
+        Request::ListSessions { include_archived } => {
+            let sessions = if include_archived {
+                state.engine.list_archived()
+            } else {
+                state.engine.list_sessions()
+            };
+            match sessions {
+                Ok(sessions) => {
+                    send(writer, request.request_id, Response::Sessions { sessions }).await
+                }
+                Err(_) => {
+                    send_error(
+                        writer,
+                        request.request_id,
+                        ErrorKind::Internal,
+                        "session snapshot failed",
+                    )
+                    .await
+                }
+            }
+        }
+        Request::TranscriptPage {
+            session,
+            before,
+            limit,
+        } => match state.engine.transcript_page(&session, before, limit) {
+            Ok(page) => {
+                send(
+                    writer,
+                    request.request_id,
+                    Response::TranscriptPage { page },
+                )
+                .await
+            }
+            Err(_) => {
+                send_error(
+                    writer,
+                    request.request_id,
+                    ErrorKind::Internal,
+                    "transcript snapshot failed",
+                )
+                .await
+            }
+        },
+        Request::ReplaceSkills { skills } => {
+            state.engine.set_skills(SkillLibrary::new(skills));
+            send(writer, request.request_id, Response::SkillsReplaced).await
+        }
         Request::Work {
             request: work_request,
         } => {

@@ -8,8 +8,9 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, RunChange, Task,
-    WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, RunChange, Session,
+    Skill, Task, TranscriptCursor, TranscriptPage, WorkPage, WorkVersioned, Workspace,
+    WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -548,11 +549,34 @@ impl WorkRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Request {
-    Hello { client_version: u16 },
-    Subscribe { cursor: Option<StreamCursor> },
-    Ping { nonce: u64 },
-    Work { request: WorkRequest },
-    Core { op: Op },
+    Hello {
+        client_version: u16,
+    },
+    Subscribe {
+        cursor: Option<StreamCursor>,
+    },
+    Ping {
+        nonce: u64,
+    },
+    ListSessions {
+        #[serde(default)]
+        include_archived: bool,
+    },
+    TranscriptPage {
+        session: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before: Option<TranscriptCursor>,
+        limit: usize,
+    },
+    ReplaceSkills {
+        skills: Vec<Skill>,
+    },
+    Work {
+        request: WorkRequest,
+    },
+    Core {
+        op: Op,
+    },
     Shutdown,
 }
 
@@ -592,6 +616,19 @@ impl RequestEnvelope {
         }
         if let Request::Work { request } = &self.request {
             request.validate()?;
+        }
+        if let Request::TranscriptPage { session, limit, .. } = &self.request {
+            validate_bounded_text(session, 256, "session id")?;
+            if *limit == 0 || *limit > 100 {
+                return Err(EnvelopeError::InvalidField(
+                    "transcript page limit".to_owned(),
+                ));
+            }
+        }
+        if let Request::ReplaceSkills { skills } = &self.request {
+            if skills.len() > 1_024 {
+                return Err(EnvelopeError::InvalidField("skill list length".to_owned()));
+            }
         }
         Ok(())
     }
@@ -941,6 +978,13 @@ pub enum Response {
     Pong {
         nonce: u64,
     },
+    Sessions {
+        sessions: Vec<Session>,
+    },
+    TranscriptPage {
+        page: TranscriptPage,
+    },
+    SkillsReplaced,
     Work {
         response: WorkResponse,
     },
@@ -990,7 +1034,24 @@ impl ResponseEnvelope {
                 validate_bounded_text(message, 256, "error message")?;
             }
             Response::Work { response } => response.validate()?,
-            Response::Pong { .. } | Response::CoreAccepted | Response::Shutdown => {}
+            Response::Sessions { sessions } => {
+                if sessions.len() > 10_000 {
+                    return Err(EnvelopeError::InvalidField(
+                        "session list length".to_owned(),
+                    ));
+                }
+            }
+            Response::TranscriptPage { page } => {
+                if page.entries.len() > 100 {
+                    return Err(EnvelopeError::InvalidField(
+                        "transcript page length".to_owned(),
+                    ));
+                }
+            }
+            Response::Pong { .. }
+            | Response::SkillsReplaced
+            | Response::CoreAccepted
+            | Response::Shutdown => {}
         }
         Ok(())
     }

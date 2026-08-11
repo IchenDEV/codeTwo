@@ -228,7 +228,7 @@ impl SkillPayload {
 }
 
 /// A library entry. Stored on disk (`~/.config/codetwo/skills/`) in M1; in-memory here.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
     pub name: String,

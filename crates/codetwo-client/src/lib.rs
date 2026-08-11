@@ -15,9 +15,10 @@ use std::sync::{Arc, Mutex as StdMutex};
 use codetwo_protocol::{
     read_json, write_json, BriefRevision, BriefSaveResult, ChangeSummary, Deliverable,
     EventEnvelope, Op, Request, RequestEnvelope, ResetReason, Response, ResponseEnvelope,
-    RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, StreamCursor, StreamEpoch,
-    SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest, WorkResponse,
-    WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
+    RollbackReceipt, Run, RunChange, RunStartReceipt, ServerFrame, Session, Skill, StreamCursor,
+    StreamEpoch, SubscribeResult, Task, TranscriptCursor, TranscriptPage, TransportEvent,
+    WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
+    MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedReadHalf, UnixStream};
@@ -83,6 +84,9 @@ enum ExpectedResponse {
     },
     Work,
     Core,
+    Sessions,
+    TranscriptPage,
+    Skills,
     Shutdown,
 }
 
@@ -94,6 +98,9 @@ impl ExpectedResponse {
             Self::Subscribe { .. } => "subscribe",
             Self::Work => "work",
             Self::Core => "core_accepted",
+            Self::Sessions => "sessions",
+            Self::TranscriptPage => "transcript_page",
+            Self::Skills => "skills_replaced",
             Self::Shutdown => "shutdown",
         }
     }
@@ -104,6 +111,9 @@ fn response_name(response: &Response) -> &'static str {
         Response::Hello { .. } => "hello",
         Response::Subscribe(_) => "subscribe",
         Response::Pong { .. } => "pong",
+        Response::Sessions { .. } => "sessions",
+        Response::TranscriptPage { .. } => "transcript_page",
+        Response::SkillsReplaced => "skills_replaced",
         Response::Work { .. } => "work",
         Response::CoreAccepted => "core_accepted",
         Response::Shutdown => "shutdown",
@@ -288,6 +298,60 @@ impl Client {
             Response::Pong { nonce } => Ok(nonce),
             response => Err(ClientError::UnexpectedResponse {
                 expected: "pong",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn list_sessions(&self, include_archived: bool) -> Result<Vec<Session>, ClientError> {
+        match self
+            .request(
+                Request::ListSessions { include_archived },
+                ExpectedResponse::Sessions,
+            )
+            .await?
+        {
+            Response::Sessions { sessions } => Ok(sessions),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "sessions",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn transcript_page(
+        &self,
+        session: String,
+        before: Option<TranscriptCursor>,
+        limit: usize,
+    ) -> Result<TranscriptPage, ClientError> {
+        match self
+            .request(
+                Request::TranscriptPage {
+                    session,
+                    before,
+                    limit,
+                },
+                ExpectedResponse::TranscriptPage,
+            )
+            .await?
+        {
+            Response::TranscriptPage { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "transcript_page",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn replace_skills(&self, skills: Vec<Skill>) -> Result<(), ClientError> {
+        match self
+            .request(Request::ReplaceSkills { skills }, ExpectedResponse::Skills)
+            .await?
+        {
+            Response::SkillsReplaced => Ok(()),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "skills_replaced",
                 actual: response_name(&response),
             }),
         }
@@ -884,6 +948,15 @@ async fn reader_loop(mut reader: OwnedReadHalf, inner: Arc<Inner>) {
                         (ExpectedResponse::Hello, Response::Hello { .. }) => Ok(response.response),
                         (ExpectedResponse::Work, Response::Work { .. }) => Ok(response.response),
                         (ExpectedResponse::Core, Response::CoreAccepted) => Ok(response.response),
+                        (ExpectedResponse::Sessions, Response::Sessions { .. }) => {
+                            Ok(response.response)
+                        }
+                        (ExpectedResponse::TranscriptPage, Response::TranscriptPage { .. }) => {
+                            Ok(response.response)
+                        }
+                        (ExpectedResponse::Skills, Response::SkillsReplaced) => {
+                            Ok(response.response)
+                        }
                         (ExpectedResponse::Shutdown, Response::Shutdown) => Ok(response.response),
                         (
                             ExpectedResponse::Ping { nonce: expected },

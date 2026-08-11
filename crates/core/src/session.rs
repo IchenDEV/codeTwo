@@ -136,7 +136,7 @@ pub enum PendingInputKind {
 }
 
 /// A rendered piece of a message. The transcript is a flat list of these per message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Part {
     Text {
@@ -168,7 +168,7 @@ pub enum Part {
 }
 
 /// One durably ordered transcript part.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TranscriptEntry {
     pub seq: i64,
     pub role: Role,
@@ -178,7 +178,7 @@ pub struct TranscriptEntry {
 /// A turn-aligned slice of a transcript. `next_before` is the exclusive cursor for the next older
 /// page. `snapshot_through` is the newest sequence visible to the read transaction that produced
 /// this page, allowing clients to merge later live events without guessing the persistence edge.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TranscriptPage {
     pub entries: Vec<TranscriptEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -205,7 +205,7 @@ pub struct Message {
     pub parts: Vec<Part>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Session {
     pub id: SessionId,
     pub title: String,

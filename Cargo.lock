@@ -567,7 +567,11 @@ dependencies = [
 name = "codetwo-tui"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
+ "codetwo-client",
  "codetwo-core",
+ "codetwo-daemon",
+ "codetwo-protocol",
  "ratatui",
  "tokio",
  "uuid",

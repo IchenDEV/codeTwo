@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
-    BriefRevision, DocBlock, Event, LaunchSpec, Op, PermissionMode, Provider, ProviderId, Session,
-    SkillLibrary, Store, Task, TaskExperience, TaskStatus, WorkMutationGuard, Workspace,
-    WorkspaceKind, WorkspaceSnapshot,
+    BriefRevision, DocBlock, Event, LaunchSpec, Op, Part, PermissionMode, Provider, ProviderId,
+    Role, Session, SkillLibrary, Store, Task, TaskExperience, TaskStatus, WorkMutationGuard,
+    Workspace, WorkspaceKind, WorkspaceSnapshot,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -280,6 +280,25 @@ async fn core_ops_execute_once_inside_daemon_and_share_the_ordered_stream() {
     let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
     let session = Session::new(ProviderId::Grok, root.path().to_string_lossy().into_owned());
     store.upsert_session(&session).unwrap();
+    store
+        .append_part(
+            &session.id,
+            Role::User,
+            &Part::Prompt {
+                text: "persisted prompt".to_owned(),
+                display: "persisted prompt".to_owned(),
+            },
+        )
+        .unwrap();
+    store
+        .append_part(
+            &session.id,
+            Role::Agent,
+            &Part::Text {
+                text: "persisted answer".to_owned(),
+            },
+        )
+        .unwrap();
     let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
     let socket = daemon.socket_path().to_owned();
     let server = tokio::spawn(daemon.run());
@@ -290,6 +309,14 @@ async fn core_ops_execute_once_inside_daemon_and_share_the_ordered_stream() {
         .subscribe(Some(observer.hello().cursor.clone()))
         .await
         .unwrap();
+    let sessions = observer.list_sessions(false).await.unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, session.id);
+    let transcript = observer
+        .transcript_page(session.id.clone(), None, 20)
+        .await
+        .unwrap();
+    assert_eq!(transcript.entries.len(), 2);
     writer
         .submit(Op::SetPermissionMode {
             session: session.id.clone(),

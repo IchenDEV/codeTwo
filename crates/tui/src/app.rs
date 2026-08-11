@@ -1,19 +1,22 @@
-//! TUI application state + rendering + input handling. The state transitions in [`App::on_engine_event`]
-//! are pure (no engine, no terminal), so they're unit-tested; input handling drives the shared core
-//! [`Engine`] exactly like the desktop bridge does.
+//! TUI application state, rendering, and input handling. The state transitions in
+//! [`App::on_engine_event`] are pure and unit-tested; production input is submitted through the
+//! daemon client using the same narrow contract as the in-process test engine.
 
 use std::collections::{HashMap, VecDeque};
 
+use async_trait::async_trait;
 use codetwo_core::event::Event;
 use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::provider::Provider;
 use codetwo_core::session::{
     Part, PendingInputKind, Role, Session, SessionActivity, SessionRunState, TranscriptEntry,
-    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+    TranscriptPage,
 };
 use codetwo_core::skill::{DocBlock, Skill};
 use codetwo_core::worktree::WorktreeBaseline;
-use codetwo_core::{parse_canvas_history_marker, Engine, Op, StoreError};
+use codetwo_core::{parse_canvas_history_marker, Op};
+#[cfg(test)]
+use codetwo_core::{Engine, StoreError, DEFAULT_TRANSCRIPT_TURNS};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
@@ -21,6 +24,26 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use ratatui::Frame;
+
+#[async_trait]
+pub(crate) trait CoreSubmit: Send + Sync {
+    async fn submit_op(&self, op: Op) -> Result<(), String>;
+}
+
+#[async_trait]
+#[cfg(test)]
+impl CoreSubmit for Engine {
+    async fn submit_op(&self, op: Op) -> Result<(), String> {
+        self.submit(op).await.map_err(|error| error.to_string())
+    }
+}
+
+#[async_trait]
+impl CoreSubmit for codetwo_client::Client {
+    async fn submit_op(&self, op: Op) -> Result<(), String> {
+        self.submit(op).await.map_err(|error| error.to_string())
+    }
+}
 
 pub struct TItem {
     pub kind: &'static str,
@@ -157,19 +180,24 @@ impl App {
     /// Hydrate one persisted session into the existing flat TUI transcript projection. The
     /// caller owns session selection; this method only reads a bounded recent page and replaces
     /// the current transcript with its read-only projection.
+    #[cfg(test)]
     pub fn load_session_history(
         &mut self,
         engine: &Engine,
         session_id: &str,
     ) -> Result<bool, StoreError> {
+        let page = engine.transcript_page(session_id, None, DEFAULT_TRANSCRIPT_TURNS)?;
+        Ok(self.select_session_history(session_id, page))
+    }
+
+    pub fn select_session_history(&mut self, session_id: &str, page: TranscriptPage) -> bool {
         let Some(session) = self
             .sessions
             .iter()
             .find(|session| session.id == session_id)
         else {
-            return Ok(false);
+            return false;
         };
-        let page = engine.transcript_page(session_id, None, DEFAULT_TRANSCRIPT_TURNS)?;
 
         self.active = Some(session.id.clone());
         self.cwd = session.cwd.clone();
@@ -177,12 +205,13 @@ impl App {
         self.sandbox = session.sandbox_policy;
         self.status = format!("session {}", short(&session.id));
         self.hydrate_transcript_page(page);
-        Ok(true)
+        true
     }
 
     /// Select the deterministic first session from the durable list and hydrate its recent
     /// history. `Engine::list_sessions` orders pinned sessions first, then newest sessions, so
     /// this is a stable startup choice without introducing a second session navigator in the TUI.
+    #[cfg(test)]
     pub fn load_recent_session_history(&mut self, engine: &Engine) -> Result<(), StoreError> {
         let Some(session_id) = self.sessions.first().map(|session| session.id.clone()) else {
             return Ok(());
@@ -640,7 +669,7 @@ impl App {
         self.pending_send.take()
     }
 
-    pub async fn handle_key(&mut self, key: KeyEvent, engine: &Engine) {
+    pub async fn handle_key(&mut self, key: KeyEvent, engine: &dyn CoreSubmit) {
         if key.kind != KeyEventKind::Press {
             return;
         }
@@ -680,7 +709,7 @@ impl App {
         }
     }
 
-    async fn handle_permission_key(&mut self, key: KeyEvent, engine: &Engine) {
+    async fn handle_permission_key(&mut self, key: KeyEvent, engine: &dyn CoreSubmit) {
         let Some(perm) = self.permissions.front() else {
             return;
         };
@@ -698,7 +727,7 @@ impl App {
         };
         let perm = self.permissions.pop_front().expect("front existed");
         if let Err(error) = engine
-            .submit(Op::AnswerPermission {
+            .submit_op(Op::AnswerPermission {
                 session: perm.session,
                 request_id: perm.request_id,
                 option_id,
@@ -730,7 +759,7 @@ impl App {
         }
     }
 
-    async fn submit(&mut self, engine: &Engine) {
+    async fn submit(&mut self, engine: &dyn CoreSubmit) {
         if self.pending_prompt.is_some() {
             self.status = "prompt acceptance already pending".into();
             return;
@@ -772,7 +801,7 @@ impl App {
             Some(s) => {
                 let request_id = self.begin_prompt(s.clone(), doc.clone(), Some(user_echo_index));
                 if let Err(error) = engine
-                    .submit(Op::Prompt {
+                    .submit_op(Op::Prompt {
                         session: s,
                         doc,
                         request_id: Some(request_id.clone()),
@@ -797,7 +826,7 @@ impl App {
                 let provider = self.providers[self.provider_idx].id.clone();
                 self.status = "creating session…".into();
                 if let Err(error) = engine
-                    .submit(Op::NewSession {
+                    .submit_op(Op::NewSession {
                         provider,
                         cwd,
                         use_worktree: self.worktree_base.is_some(),
@@ -820,7 +849,7 @@ impl App {
         }
     }
 
-    async fn new_session(&mut self, engine: &Engine) {
+    async fn new_session(&mut self, engine: &dyn CoreSubmit) {
         if self.pending_prompt.is_some() {
             self.status = "prompt acceptance already pending".into();
             return;
@@ -851,7 +880,7 @@ impl App {
         let request_id = self.begin_creation(None, None);
         self.status = "creating session…".into();
         if let Err(error) = engine
-            .submit(Op::NewSession {
+            .submit_op(Op::NewSession {
                 provider,
                 cwd,
                 use_worktree: self.worktree_base.is_some(),
@@ -872,7 +901,7 @@ impl App {
         }
     }
 
-    async fn cycle_mode(&mut self, engine: &Engine) {
+    async fn cycle_mode(&mut self, engine: &dyn CoreSubmit) {
         let next_mode = match self.mode {
             PermissionMode::Ask => PermissionMode::AcceptEdits,
             PermissionMode::AcceptEdits => PermissionMode::Yolo,
@@ -881,7 +910,7 @@ impl App {
         self.status = format!("updating mode to {:?}…", next_mode);
         if let Some(s) = self.active.clone() {
             let _ = engine
-                .submit(Op::SetExecutionPolicy {
+                .submit_op(Op::SetExecutionPolicy {
                     session: s,
                     mode: next_mode,
                     sandbox: self.sandbox,

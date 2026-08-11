@@ -11,6 +11,10 @@ name = "codetwo-tui"
 path = "src/main.rs"
 
 [dependencies]
+async-trait.workspace = true
+codetwo-client.workspace = true
+codetwo-daemon.workspace = true
+codetwo-protocol.workspace = true
 codetwo-core.workspace = true
 tokio.workspace = true
 uuid.workspace = true
