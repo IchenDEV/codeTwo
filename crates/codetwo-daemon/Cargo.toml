@@ -1,0 +1,27 @@
+[package]
+name = "codetwo-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Code2 single-owner local Unix-domain daemon."
+
+[lib]
+name = "codetwo_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "codetwo-daemon"
+path = "src/main.rs"
+
+[dependencies]
+codetwo-protocol.workspace = true
+libc.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+codetwo-client.workspace = true
+tempfile = "3"

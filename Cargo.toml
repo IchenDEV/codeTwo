@@ -9,6 +9,9 @@ members = [
     "crates/core",
     "crates/tui",
     "crates/server",
+    "crates/codetwo-protocol",
+    "crates/codetwo-client",
+    "crates/codetwo-daemon",
     "apps/desktop/src-tauri",
 ]
 
@@ -27,6 +30,10 @@ thiserror = "2"
 async-trait = "0.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
+libc = "0.2"
 
 # Local crates
 codetwo-core = { path = "crates/core" }
+codetwo-protocol = { path = "crates/codetwo-protocol" }
+codetwo-client = { path = "crates/codetwo-client" }
+codetwo-daemon = { path = "crates/codetwo-daemon" }

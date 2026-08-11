@@ -1,0 +1,710 @@
+//! Versioned, domain-free framing and envelopes for the local Code2 transport.
+
+use std::io;
+
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use thiserror::Error;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
+pub const PROTOCOL_VERSION: u16 = 1;
+pub const MAX_FRAME_SIZE: usize = 64 * 1024;
+pub const MAX_EPOCH_LENGTH: usize = 64;
+pub const MAX_REPLAY_EVENTS: usize = 128;
+
+#[derive(Debug, Error)]
+pub enum FrameError {
+    #[error("transport I/O: {0}")]
+    Io(#[from] io::Error),
+    #[error("zero-length frame")]
+    Empty,
+    #[error("frame length {0} exceeds {MAX_FRAME_SIZE} bytes")]
+    Oversized(u32),
+    #[error("truncated frame")]
+    Truncated,
+    #[error("invalid JSON frame: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+pub async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Vec<u8>, FrameError> {
+    let mut prefix = [0u8; 4];
+    reader
+        .read_exact(&mut prefix)
+        .await
+        .map_err(|error| match error.kind() {
+            io::ErrorKind::UnexpectedEof => FrameError::Truncated,
+            _ => FrameError::Io(error),
+        })?;
+    let length = u32::from_be_bytes(prefix);
+    if length == 0 {
+        return Err(FrameError::Empty);
+    }
+    if length as usize > MAX_FRAME_SIZE {
+        return Err(FrameError::Oversized(length));
+    }
+    let mut payload = vec![0u8; length as usize];
+    reader
+        .read_exact(&mut payload)
+        .await
+        .map_err(|error| match error.kind() {
+            io::ErrorKind::UnexpectedEof => FrameError::Truncated,
+            _ => FrameError::Io(error),
+        })?;
+    Ok(payload)
+}
+
+pub async fn read_json<R, T>(reader: &mut R) -> Result<T, FrameError>
+where
+    R: AsyncRead + Unpin,
+    T: DeserializeOwned,
+{
+    Ok(serde_json::from_slice(&read_frame(reader).await?)?)
+}
+
+pub async fn write_json<W, T>(writer: &mut W, value: &T) -> Result<(), FrameError>
+where
+    W: AsyncWrite + Unpin,
+    T: Serialize,
+{
+    let payload = serde_json::to_vec(value)?;
+    if payload.is_empty() {
+        return Err(FrameError::Empty);
+    }
+    if payload.len() > MAX_FRAME_SIZE {
+        return Err(FrameError::Oversized(payload.len() as u32));
+    }
+    writer
+        .write_all(&(payload.len() as u32).to_be_bytes())
+        .await?;
+    writer.write_all(&payload).await?;
+    writer.flush().await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct StreamEpoch(String);
+
+impl StreamEpoch {
+    pub fn new(value: impl Into<String>) -> Result<Self, EnvelopeError> {
+        let value = value.into();
+        validate_bounded_text(&value, MAX_EPOCH_LENGTH, "stream epoch")?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StreamCursor {
+    pub epoch: StreamEpoch,
+    pub sequence: u64,
+}
+
+impl StreamCursor {
+    pub fn new(epoch: StreamEpoch, sequence: u64) -> Self {
+        Self { epoch, sequence }
+    }
+
+    pub fn validate(&self) -> Result<(), EnvelopeError> {
+        self.epoch.validate()
+    }
+}
+
+impl StreamEpoch {
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        validate_bounded_text(&self.0, MAX_EPOCH_LENGTH, "stream epoch")
+    }
+}
+
+fn validate_bounded_text(value: &str, max: usize, field: &str) -> Result<(), EnvelopeError> {
+    if value.is_empty()
+        || value.len() > max
+        || value.trim() != value
+        || value.chars().any(char::is_control)
+    {
+        return Err(EnvelopeError::InvalidField(field.to_owned()));
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResetReason {
+    LegacyCursor,
+    StreamMismatch,
+    ReplayGap,
+    CursorAhead,
+    SubscriberLagged,
+    InvalidRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OwnerState {
+    Ready,
+    Stopping,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum TransportEvent {
+    OwnerLifecycle {
+        state: OwnerState,
+    },
+    Reset {
+        reason: ResetReason,
+        cursor: StreamCursor,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventEnvelope {
+    pub protocol: u16,
+    pub epoch: StreamEpoch,
+    pub sequence: u64,
+    pub event: TransportEvent,
+}
+
+impl EventEnvelope {
+    pub fn new(epoch: StreamEpoch, sequence: u64, event: TransportEvent) -> Self {
+        Self {
+            protocol: PROTOCOL_VERSION,
+            epoch,
+            sequence,
+            event,
+        }
+    }
+
+    pub fn cursor(&self) -> StreamCursor {
+        StreamCursor::new(self.epoch.clone(), self.sequence)
+    }
+
+    pub fn validate(&self) -> Result<(), EnvelopeError> {
+        if self.protocol != PROTOCOL_VERSION {
+            return Err(EnvelopeError::UnsupportedVersion(self.protocol));
+        }
+        self.epoch.validate()?;
+        if self.sequence == 0 {
+            return Err(EnvelopeError::InvalidField("event sequence".to_owned()));
+        }
+        if let TransportEvent::Reset { cursor, .. } = &self.event {
+            cursor.validate()?;
+            if cursor.epoch != self.epoch {
+                return Err(EnvelopeError::InvalidField("reset cursor epoch".to_owned()));
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Request {
+    Hello { client_version: u16 },
+    Subscribe { cursor: Option<StreamCursor> },
+    Ping { nonce: u64 },
+    Shutdown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequestEnvelope {
+    pub protocol: u16,
+    pub request_id: u64,
+    pub request: Request,
+}
+
+impl RequestEnvelope {
+    pub fn new(request_id: u64, request: Request) -> Self {
+        Self {
+            protocol: PROTOCOL_VERSION,
+            request_id,
+            request,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), EnvelopeError> {
+        if self.protocol != PROTOCOL_VERSION {
+            return Err(EnvelopeError::UnsupportedVersion(self.protocol));
+        }
+        if self.request_id == 0 {
+            return Err(EnvelopeError::InvalidField("request id".to_owned()));
+        }
+        if let Request::Hello { client_version } = &self.request {
+            if *client_version != PROTOCOL_VERSION {
+                return Err(EnvelopeError::UnsupportedVersion(*client_version));
+            }
+        }
+        if let Request::Subscribe {
+            cursor: Some(cursor),
+        } = &self.request
+        {
+            cursor.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// Keep the nested discriminator distinct from `Response`'s `kind` field;
+// Response::Subscribe is represented in the same JSON object.
+#[serde(rename_all = "snake_case", tag = "result_kind")]
+pub enum SubscribeResult {
+    Replay {
+        cursor: StreamCursor,
+        events: Vec<EventEnvelope>,
+    },
+    Reset {
+        cursor: StreamCursor,
+        reason: ResetReason,
+    },
+}
+
+impl SubscribeResult {
+    pub fn cursor(&self) -> &StreamCursor {
+        match self {
+            Self::Replay { cursor, .. } | Self::Reset { cursor, .. } => cursor,
+        }
+    }
+
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        let cursor = self.cursor();
+        cursor.validate()?;
+        match self {
+            Self::Reset { .. } => Ok(()),
+            Self::Replay { events, .. } => {
+                if events.len() > MAX_REPLAY_EVENTS {
+                    return Err(EnvelopeError::InvalidField("replay length".to_owned()));
+                }
+                let mut previous: Option<u64> = None;
+                for event in events {
+                    event.validate()?;
+                    if matches!(event.event, TransportEvent::Reset { .. }) {
+                        return Err(EnvelopeError::InvalidField("replay reset event".to_owned()));
+                    }
+                    if event.epoch != cursor.epoch {
+                        return Err(EnvelopeError::InvalidField("replay epoch".to_owned()));
+                    }
+                    if let Some(previous) = previous {
+                        let expected = previous.checked_add(1).ok_or_else(|| {
+                            EnvelopeError::InvalidField("replay sequence overflow".to_owned())
+                        })?;
+                        if event.sequence != expected {
+                            return Err(EnvelopeError::InvalidField("replay sequence".to_owned()));
+                        }
+                    }
+                    previous = Some(event.sequence);
+                }
+                if previous.is_some_and(|last| last != cursor.sequence) {
+                    return Err(EnvelopeError::InvalidField("replay cursor".to_owned()));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorKind {
+    InvalidRequest,
+    UnsupportedVersion,
+    AlreadyRunning,
+    ReplayGap,
+    CursorAhead,
+    StreamMismatch,
+    SubscriberLagged,
+    Internal,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Response {
+    Hello {
+        epoch: StreamEpoch,
+        cursor: StreamCursor,
+    },
+    Subscribe(SubscribeResult),
+    Pong {
+        nonce: u64,
+    },
+    Shutdown,
+    Error {
+        error: ErrorKind,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResponseEnvelope {
+    pub protocol: u16,
+    pub request_id: u64,
+    pub response: Response,
+}
+
+impl ResponseEnvelope {
+    pub fn new(request_id: u64, response: Response) -> Self {
+        Self {
+            protocol: PROTOCOL_VERSION,
+            request_id,
+            response,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), EnvelopeError> {
+        if self.protocol != PROTOCOL_VERSION {
+            return Err(EnvelopeError::UnsupportedVersion(self.protocol));
+        }
+        if self.request_id == 0 {
+            return Err(EnvelopeError::InvalidField("request id".to_owned()));
+        }
+        match &self.response {
+            Response::Hello { epoch, cursor } => {
+                epoch.validate()?;
+                cursor.validate()?;
+                if cursor.epoch != *epoch {
+                    return Err(EnvelopeError::InvalidField("hello cursor epoch".to_owned()));
+                }
+            }
+            Response::Subscribe(result) => {
+                result.validate()?;
+            }
+            Response::Error { message, .. } => {
+                validate_bounded_text(message, 256, "error message")?;
+            }
+            Response::Pong { .. } | Response::Shutdown => {}
+        }
+        Ok(())
+    }
+}
+
+/// Typed server-to-client frames.  The explicit outer tag keeps response and
+/// event directions unambiguous without falling back to untyped JSON values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "frame", content = "payload", rename_all = "snake_case")]
+pub enum ServerFrame {
+    Response(ResponseEnvelope),
+    Event(EventEnvelope),
+}
+
+impl ServerFrame {
+    pub fn response(response: ResponseEnvelope) -> Self {
+        Self::Response(response)
+    }
+
+    pub fn event(event: EventEnvelope) -> Self {
+        Self::Event(event)
+    }
+
+    pub fn validate(&self) -> Result<(), EnvelopeError> {
+        match self {
+            Self::Response(response) => response.validate(),
+            Self::Event(event) => event.validate(),
+        }
+    }
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum EnvelopeError {
+    #[error("unsupported protocol version {0}")]
+    UnsupportedVersion(u16),
+    #[error("invalid {0}")]
+    InvalidField(String),
+}
+
+pub fn validate_replay(
+    epoch: &StreamEpoch,
+    after_sequence: u64,
+    events: &[EventEnvelope],
+) -> Result<StreamCursor, ResetReason> {
+    if after_sequence == u64::MAX && !events.is_empty() {
+        return Err(ResetReason::LegacyCursor);
+    }
+    let mut expected = after_sequence + 1;
+    for event in events {
+        if event.protocol != PROTOCOL_VERSION || event.epoch != *epoch || event.sequence == 0 {
+            return Err(ResetReason::StreamMismatch);
+        }
+        if event.sequence != expected {
+            return Err(if event.sequence > expected {
+                ResetReason::ReplayGap
+            } else {
+                ResetReason::LegacyCursor
+            });
+        }
+        if expected == u64::MAX {
+            if !std::ptr::eq(event, events.last().expect("non-empty replay")) {
+                return Err(ResetReason::LegacyCursor);
+            }
+        } else {
+            expected += 1;
+        }
+    }
+    Ok(StreamCursor::new(
+        epoch.clone(),
+        events.last().map_or(after_sequence, |event| event.sequence),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::duplex;
+
+    #[tokio::test]
+    async fn framed_json_round_trip_and_rejections() {
+        let (mut writer, mut reader) = duplex(1024);
+        let request = RequestEnvelope::new(7, Request::Ping { nonce: 42 });
+        write_json(&mut writer, &request).await.unwrap();
+        let decoded: RequestEnvelope = read_json(&mut reader).await.unwrap();
+        assert_eq!(decoded, request);
+
+        let (mut writer, mut reader) = duplex(128);
+        writer.write_all(&0u32.to_be_bytes()).await.unwrap();
+        drop(writer);
+        assert!(matches!(
+            read_frame(&mut reader).await,
+            Err(FrameError::Empty)
+        ));
+
+        let (mut writer, mut reader) = duplex(128);
+        writer
+            .write_all(&((MAX_FRAME_SIZE as u32) + 1).to_be_bytes())
+            .await
+            .unwrap();
+        drop(writer);
+        assert!(matches!(
+            read_frame(&mut reader).await,
+            Err(FrameError::Oversized(_))
+        ));
+
+        let (mut writer, mut reader) = duplex(128);
+        writer.write_all(&4u32.to_be_bytes()).await.unwrap();
+        writer.write_all(b"x").await.unwrap();
+        drop(writer);
+        assert!(matches!(
+            read_frame(&mut reader).await,
+            Err(FrameError::Truncated)
+        ));
+    }
+
+    #[test]
+    fn envelope_correlation_and_version_validation_is_strict() {
+        let mut request = RequestEnvelope::new(1, Request::Ping { nonce: 7 });
+        assert!(request.validate().is_ok());
+        request.request_id = 0;
+        assert!(
+            matches!(request.validate(), Err(EnvelopeError::InvalidField(field)) if field == "request id")
+        );
+        request.request_id = 1;
+        request.protocol = PROTOCOL_VERSION + 1;
+        assert!(
+            matches!(request.validate(), Err(EnvelopeError::UnsupportedVersion(version)) if version == PROTOCOL_VERSION + 1)
+        );
+
+        let mut response = ResponseEnvelope::new(2, Response::Pong { nonce: 7 });
+        assert!(response.validate().is_ok());
+        response.request_id = 0;
+        assert!(
+            matches!(response.validate(), Err(EnvelopeError::InvalidField(field)) if field == "request id")
+        );
+        response.request_id = 2;
+        response.protocol = PROTOCOL_VERSION + 1;
+        assert!(
+            matches!(response.validate(), Err(EnvelopeError::UnsupportedVersion(version)) if version == PROTOCOL_VERSION + 1)
+        );
+    }
+
+    #[test]
+    fn hello_requires_matching_cursor_epoch() {
+        let epoch = StreamEpoch::new("epoch-a").unwrap();
+        let other = StreamEpoch::new("epoch-b").unwrap();
+        let response = ResponseEnvelope::new(
+            1,
+            Response::Hello {
+                epoch,
+                cursor: StreamCursor::new(other, 0),
+            },
+        );
+        assert!(matches!(
+            response.validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "hello cursor epoch"
+        ));
+    }
+
+    #[test]
+    fn replay_validation_rejects_gap_order_epoch_and_bad_terminal_cursor() {
+        let epoch = StreamEpoch::new("epoch").unwrap();
+        let other = StreamEpoch::new("other").unwrap();
+        let event = |sequence| {
+            EventEnvelope::new(
+                epoch.clone(),
+                sequence,
+                TransportEvent::OwnerLifecycle {
+                    state: OwnerState::Ready,
+                },
+            )
+        };
+        assert_eq!(validate_replay(&epoch, 0, &[event(1)]).unwrap().sequence, 1);
+        assert_eq!(
+            validate_replay(&epoch, 0, &[event(2)]),
+            Err(ResetReason::ReplayGap)
+        );
+        assert_eq!(
+            validate_replay(&epoch, 0, &[event(1), event(3)]),
+            Err(ResetReason::ReplayGap)
+        );
+        let wrong_epoch = EventEnvelope::new(
+            other.clone(),
+            1,
+            TransportEvent::OwnerLifecycle {
+                state: OwnerState::Ready,
+            },
+        );
+        assert_eq!(
+            validate_replay(&epoch, 0, &[wrong_epoch]),
+            Err(ResetReason::StreamMismatch)
+        );
+
+        let invalid_terminal = ResponseEnvelope::new(
+            1,
+            Response::Subscribe(SubscribeResult::Replay {
+                cursor: StreamCursor::new(epoch.clone(), 2),
+                events: vec![event(1)],
+            }),
+        );
+        assert!(matches!(
+            invalid_terminal.validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "replay cursor"
+        ));
+        let empty = ResponseEnvelope::new(
+            1,
+            Response::Subscribe(SubscribeResult::Replay {
+                cursor: StreamCursor::new(epoch.clone(), 2),
+                events: Vec::new(),
+            }),
+        );
+        assert!(empty.validate().is_ok());
+
+        let replay_reset = ResponseEnvelope::new(
+            1,
+            Response::Subscribe(SubscribeResult::Replay {
+                cursor: StreamCursor::new(epoch.clone(), 1),
+                events: vec![EventEnvelope::new(
+                    epoch.clone(),
+                    1,
+                    TransportEvent::Reset {
+                        reason: ResetReason::ReplayGap,
+                        cursor: StreamCursor::new(epoch.clone(), 1),
+                    },
+                )],
+            }),
+        );
+        assert!(matches!(
+            replay_reset.validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "replay reset event"
+        ));
+    }
+
+    #[test]
+    fn nested_reset_cursor_must_match_event_epoch() {
+        let epoch = StreamEpoch::new("epoch").unwrap();
+        let other = StreamEpoch::new("other").unwrap();
+        let event = EventEnvelope::new(
+            epoch,
+            1,
+            TransportEvent::Reset {
+                reason: ResetReason::ReplayGap,
+                cursor: StreamCursor::new(other, 0),
+            },
+        );
+        assert!(matches!(
+            event.validate(),
+            Err(EnvelopeError::InvalidField(field)) if field == "reset cursor epoch"
+        ));
+    }
+
+    #[test]
+    fn max_sequence_is_terminal_and_not_saturating() {
+        let epoch = StreamEpoch::new("epoch").unwrap();
+        let event = |sequence| {
+            EventEnvelope::new(
+                epoch.clone(),
+                sequence,
+                TransportEvent::OwnerLifecycle {
+                    state: OwnerState::Ready,
+                },
+            )
+        };
+        assert_eq!(
+            validate_replay(&epoch, u64::MAX - 1, &[event(u64::MAX)])
+                .unwrap()
+                .sequence,
+            u64::MAX
+        );
+        assert_eq!(
+            validate_replay(&epoch, u64::MAX, &[event(u64::MAX)]),
+            Err(ResetReason::LegacyCursor)
+        );
+        assert_eq!(
+            validate_replay(&epoch, u64::MAX - 1, &[event(u64::MAX), event(u64::MAX)]),
+            Err(ResetReason::LegacyCursor)
+        );
+
+        let terminal = ResponseEnvelope::new(
+            1,
+            Response::Subscribe(SubscribeResult::Replay {
+                cursor: StreamCursor::new(epoch.clone(), u64::MAX),
+                events: vec![event(u64::MAX)],
+            }),
+        );
+        assert!(terminal.validate().is_ok());
+    }
+
+    #[test]
+    fn envelopes_have_no_untyped_payload_escape() {
+        let request = RequestEnvelope::new(1, Request::Ping { nonce: 7 });
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(!json.contains("Value"));
+        assert!(request.validate().is_ok());
+    }
+
+    #[test]
+    fn server_frame_wrapper_round_trips_and_validates_direction() {
+        let epoch = StreamEpoch::new("epoch").unwrap();
+        let response = ServerFrame::response(ResponseEnvelope::new(
+            9,
+            Response::Hello {
+                epoch: epoch.clone(),
+                cursor: StreamCursor::new(epoch.clone(), 0),
+            },
+        ));
+        let encoded = serde_json::to_string(&response).unwrap();
+        assert!(encoded.contains("\"frame\":\"response\""));
+        assert!(!encoded.contains("Value"));
+        assert_eq!(
+            serde_json::from_str::<ServerFrame>(&encoded).unwrap(),
+            response
+        );
+        assert!(response.validate().is_ok());
+
+        let event = ServerFrame::event(EventEnvelope::new(
+            epoch,
+            1,
+            TransportEvent::OwnerLifecycle {
+                state: OwnerState::Ready,
+            },
+        ));
+        assert!(event.validate().is_ok());
+        let mut invalid = event.clone();
+        if let ServerFrame::Event(event) = &mut invalid {
+            event.protocol = PROTOCOL_VERSION + 1;
+        }
+        assert!(matches!(
+            invalid.validate(),
+            Err(EnvelopeError::UnsupportedVersion(version)) if version == PROTOCOL_VERSION + 1
+        ));
+    }
+}

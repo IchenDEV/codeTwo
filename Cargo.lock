@@ -456,6 +456,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "codetwo-client"
+version = "0.0.0"
+dependencies = [
+ "codetwo-protocol",
+ "serde",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "codetwo-core"
 version = "0.0.0"
 dependencies = [
@@ -481,6 +492,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "codetwo-daemon"
+version = "0.0.0"
+dependencies = [
+ "codetwo-client",
+ "codetwo-protocol",
+ "libc",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "codetwo-desktop"
 version = "0.0.0"
 dependencies = [
@@ -494,6 +519,16 @@ dependencies = [
  "tauri-plugin-shell",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "codetwo-protocol"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
 ]
 
 [[package]]
