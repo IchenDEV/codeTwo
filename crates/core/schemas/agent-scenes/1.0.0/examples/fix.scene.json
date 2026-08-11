@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "fix",
+  "version": "1.0.0",
+  "title": "Fix",
+  "description": "Resolve reported failures one by one, keeping the fix summary current.",
+  "icon": "🩹",
+  "localizations": {
+    "zh-CN": { "title": "修复", "description": "逐项修复报告的失败用例，维护修复摘要。" }
+  },
+  "execution": {
+    "session_mode": "auto_edit",
+    "memory_preset": "standard",
+    "plan_first": false
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Fixer",
+        "text": "You are in the fix stage. Work strictly from the carried test report: reproduce each failure before changing code, fix the cause rather than the symptom, and re-run the failing case after each fix. If a failure exposes a design problem larger than a local fix, stop and surface it instead of patching around it."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Failures to fix\n\n{{failures}}\n\n## Constraints\n\n{{constraints}}\n",
+    "slots": [
+      { "id": "failures", "label": "Failing cases (or reference the carried test report)", "kind": "artifact", "required": false },
+      { "id": "constraints", "label": "Constraints on the fix (compatibility, no-regression areas)", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "fix-summary",
+      "title": "Fix summary",
+      "kind": "report",
+      "required": true,
+      "template": "# Fix summary\n\n| Failure | Root cause | Fix | Verified by |\n|---|---|---|---|\n\n## Not fixed (and why)\n"
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ],
+    "next": [
+      { "scene": "test", "label": "Re-run the test stage", "carry": ["fix-summary"] }
+    ]
+  },
+  "constraints": {
+    "guardrails": [
+      "Reproduce before fixing; verify after fixing.",
+      "One failure at a time — do not batch unrelated changes into a single fix."
+    ]
+  }
+}

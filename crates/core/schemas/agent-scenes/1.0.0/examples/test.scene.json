@@ -1,0 +1,60 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "test",
+  "version": "1.0.0",
+  "title": "Test",
+  "description": "Exercise the change against its acceptance criteria and produce a pass/fail test report.",
+  "icon": "🧪",
+  "localizations": {
+    "zh-CN": { "title": "测试", "description": "对照验收标准执行测试，产出通过/失败矩阵报告。" }
+  },
+  "execution": {
+    "session_mode": "auto_edit",
+    "memory_preset": "standard",
+    "plan_first": false
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Tester",
+        "text": "You are in the test stage. Derive test cases from the acceptance criteria and the change summary; run existing suites before writing new tests. Report every failure with a minimal reproduction (command + expected + actual). Do not fix product code in this stage — write findings into the test report instead. Adding or adjusting tests is allowed."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## What to verify\n\n{{targets}}\n\n## Environments / commands\n\n{{environment}}\n",
+    "slots": [
+      { "id": "targets", "label": "Behaviors or criteria to verify", "kind": "multiline", "required": true },
+      { "id": "environment", "label": "Test commands or environments to use", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "test-report",
+      "title": "Test report",
+      "kind": "test_report",
+      "required": true,
+      "template": "# Test report\n\n## Result matrix\n\n| Criterion | Result | Evidence |\n|---|---|---|\n\n## Failures\n\nFor each failure: reproduction command, expected, actual, suspected cause.\n\n## Coverage gaps\n"
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ],
+    "next": [
+      { "scene": "fix", "label": "Fix the reported failures", "carry": ["test-report"] },
+      { "scene": "acceptance", "label": "All green — proceed to acceptance", "carry": ["test-report"] }
+    ]
+  },
+  "hooks": [
+    { "on": "tests_failed", "action": { "kind": "suggest_scene", "scene": "fix" } }
+  ],
+  "constraints": {
+    "guardrails": [
+      "Never mark a criterion passed without runnable evidence.",
+      "Product-code fixes belong to the fix stage; record them as findings here."
+    ]
+  }
+}

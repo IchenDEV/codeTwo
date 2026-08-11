@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json",
+  "title": "Agent Scene Pipeline",
+  "description": "Machine-readable schema for *.pipeline.json in Agent Scenes 1.0.0. A pipeline is an ordered set of stages, each bound to a scene, with gated transitions and artifact carry between stages. The Agent Scenes specification (docs/scenes.md) defines the semantic and operational requirements.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json" },
+    "name": { "$ref": "#/$defs/slug" },
+    "version": { "type": "string" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string" },
+    "icon": { "type": "string", "maxLength": 16 },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "homepage": { "type": "string" },
+    "repository": { "type": "string" },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "localizations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "entry": {
+      "description": "Stage id to start from. Defaults to the first entry of `stages`.",
+      "$ref": "#/$defs/slug"
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/$defs/slug" },
+          "scene": { "$ref": "#/$defs/sceneRef" },
+          "title": { "type": "string" },
+          "gate": {
+            "description": "How entry into this stage is approved: \"suggest\" (banner, user clicks through; default), \"confirm\" (explicit modal confirmation), \"auto\" (host advances without asking; only honored when the target scene does not loosen permissions).",
+            "enum": ["suggest", "confirm", "auto"]
+          },
+          "carry": {
+            "description": "Artifacts from earlier stages to compile into this stage's context. An entry whose `from` stage has not run in this pipeline instance is skipped silently (supports loops and skipped stages).",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": { "$ref": "#/$defs/slug" },
+                "artifact": { "$ref": "#/$defs/artifactId" },
+                "as": {
+                  "description": "Optional label the artifact is presented under in this stage's context.",
+                  "type": "string"
+                }
+              },
+              "required": ["from", "artifact"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["id", "scene"],
+        "additionalProperties": false
+      }
+    },
+    "transitions": {
+      "description": "Non-linear edges. When absent, stages advance linearly in array order, each firing on `exit_criteria_met` with the target stage's gate. Listed transitions replace the default outgoing edge(s) of their `from` stage.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": { "$ref": "#/$defs/slug" },
+          "to": { "$ref": "#/$defs/slug" },
+          "when": { "enum": ["exit_criteria_met", "tests_failed", "user_request"] },
+          "gate": { "enum": ["suggest", "confirm", "auto"] }
+        },
+        "required": ["from", "to", "when"],
+        "additionalProperties": false
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "required": ["$schema", "name", "title", "stages"],
+  "additionalProperties": false,
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!.*(?:--|\\.\\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "artifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "sceneRef": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.:_-]*$"
+    }
+  }
+}

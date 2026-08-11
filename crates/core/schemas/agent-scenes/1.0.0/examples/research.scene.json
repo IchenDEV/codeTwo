@@ -1,0 +1,59 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "research",
+  "version": "1.0.0",
+  "title": "Research",
+  "description": "Survey the problem space read-only and produce a cited research report.",
+  "icon": "🔎",
+  "localizations": {
+    "zh-CN": { "title": "调研", "description": "只读勘察问题空间，产出带引用的调研报告。" }
+  },
+  "execution": {
+    "session_mode": "read_only",
+    "memory_preset": "standard",
+    "worktree": "off",
+    "plan_first": false
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Researcher",
+        "text": "You are in the research stage. Survey the codebase and any referenced material before forming conclusions. Prefer breadth first, then depth on the load-bearing parts. Every factual claim about the code must cite evidence as `path:line`. Distinguish observed facts from inference. Do not propose an implementation plan yet; end with open questions if any remain."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Goal\n\n{{goal}}\n\n## Questions to answer\n\n{{questions}}\n\n## Scope\n\n{{scope}}\n",
+    "slots": [
+      { "id": "goal", "label": "What decision should this research enable?", "kind": "multiline", "required": true },
+      { "id": "questions", "label": "Concrete questions to answer", "kind": "multiline", "required": true },
+      { "id": "scope", "label": "In/out of scope (directories, systems, constraints)", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "research-report",
+      "title": "Research report",
+      "kind": "report",
+      "required": true,
+      "template": "# Research report\n\n## Findings\n\n## Options considered\n\n## Recommendation\n\n## Risks & unknowns\n\n## References\n"
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ],
+    "next": [
+      { "scene": "develop", "label": "Start development from this report", "carry": ["research-report"] }
+    ]
+  },
+  "constraints": {
+    "guardrails": [
+      "Do not modify files; if a change seems necessary, record it in the report instead.",
+      "Cite `path:line` evidence for every claim about the code.",
+      "Surface contradictions between documentation and code rather than resolving them silently."
+    ]
+  }
+}

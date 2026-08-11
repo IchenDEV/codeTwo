@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json",
+  "name": "rnd-lifecycle",
+  "version": "1.0.0",
+  "title": "R&D lifecycle",
+  "description": "The default research → develop → test → fix → acceptance pipeline with a test/fix loop.",
+  "icon": "🔁",
+  "localizations": {
+    "zh-CN": { "title": "研发生命周期", "description": "默认的调研 → 开发 → 测试 → 修复 → 验收流水线，含测试/修复循环。" }
+  },
+  "entry": "research",
+  "stages": [
+    { "id": "research", "scene": "research", "gate": "suggest" },
+    {
+      "id": "develop",
+      "scene": "develop",
+      "gate": "suggest",
+      "carry": [{ "from": "research", "artifact": "research-report" }]
+    },
+    {
+      "id": "test",
+      "scene": "test",
+      "gate": "suggest",
+      "carry": [
+        { "from": "develop", "artifact": "plan" },
+        { "from": "develop", "artifact": "change-summary" },
+        { "from": "fix", "artifact": "fix-summary", "as": "Latest fix summary" }
+      ]
+    },
+    {
+      "id": "fix",
+      "scene": "fix",
+      "gate": "suggest",
+      "carry": [{ "from": "test", "artifact": "test-report" }]
+    },
+    {
+      "id": "acceptance",
+      "scene": "acceptance",
+      "gate": "confirm",
+      "carry": [
+        { "from": "develop", "artifact": "change-summary" },
+        { "from": "test", "artifact": "test-report" }
+      ]
+    }
+  ],
+  "transitions": [
+    { "from": "test", "to": "fix", "when": "tests_failed", "gate": "suggest" },
+    { "from": "test", "to": "acceptance", "when": "exit_criteria_met", "gate": "confirm" },
+    { "from": "fix", "to": "test", "when": "exit_criteria_met", "gate": "suggest" },
+    { "from": "acceptance", "to": "develop", "when": "user_request", "gate": "confirm" }
+  ]
+}
