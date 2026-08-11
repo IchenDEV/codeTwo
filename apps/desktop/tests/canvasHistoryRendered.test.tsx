@@ -66,6 +66,7 @@ describe("Canvas history rendered behavior", () => {
       tools: [],
       plan: [],
       startedAt: 1,
+      endedAt: 2,
     };
     const rendered = mount(<TurnCard turn={turn} canvasSnapshotLoader={async () => snapshot} />);
     await waitFor(() => expect(image(rendered.container, "Board thumbnail")).toBeTruthy());
