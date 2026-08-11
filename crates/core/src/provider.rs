@@ -16,6 +16,7 @@ pub enum ProviderCapabilityId {
     ComputerUse,
     ChromeBrowser,
     CodetwoBrowser,
+    Sites,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -60,6 +60,7 @@ const CAPABILITY_LABELS = {
   computer_use: "Computer Use",
   chrome_browser: "Chrome Browser",
   codetwo_browser: "CodeTwo Browser",
+  sites: "Sites",
 } as const;
 
 // Actions grouped by what they touch — a flat list of twenty-two is hard to scan. Anything not

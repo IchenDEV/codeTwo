@@ -15,6 +15,8 @@ pub enum PermissionContextKind {
     WebsiteAccess,
     SensitiveWebAction,
     ComputerUseApplication,
+    SitesMutation,
+    SitesProduction,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

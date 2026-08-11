@@ -18,7 +18,8 @@ export type ProviderCapabilityId =
   | "image_generation"
   | "computer_use"
   | "chrome_browser"
-  | "codetwo_browser";
+  | "codetwo_browser"
+  | "sites";
 export type CapabilityState = "ready" | "unverified" | "unavailable";
 
 export interface ProviderCapability {
@@ -90,7 +91,9 @@ export type PermissionContextKind =
   | "mcp_elicitation"
   | "website_access"
   | "sensitive_web_action"
-  | "computer_use_application";
+  | "computer_use_application"
+  | "sites_mutation"
+  | "sites_production";
 
 export interface PermissionContext {
   kind: PermissionContextKind;

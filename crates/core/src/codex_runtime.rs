@@ -30,7 +30,10 @@ impl CodexRuntimeDiscovery {
         let host_path = find_chatgpt();
         let evidence = match host_path {
             Some(host_path) => collect_evidence(host_path),
-            None => HostEvidence::default(),
+            None => HostEvidence {
+                config: read_config(),
+                ..HostEvidence::default()
+            },
         };
         evaluate(evidence)
     }
@@ -69,6 +72,8 @@ struct ConfigEvidence {
     computer_plugin: bool,
     browser_plugin: bool,
     chrome_plugin: bool,
+    sites_plugin: bool,
+    sites_version: Option<String>,
     node_repl_path: Option<PathBuf>,
     browser_backends: Vec<String>,
     cua_path: Option<PathBuf>,
@@ -125,7 +130,34 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             "CodeTwo Browser is available only in the macOS desktop runtime.",
             Some("Open this provider in CodeTwo Desktop."),
         ),
+        make_capability(
+            ProviderCapabilityId::Sites,
+            CapabilityState::Unavailable,
+            None,
+            "The official OpenAI Sites plugin was not found in a verified ChatGPT host.",
+            Some("Install or enable the Sites plugin in ChatGPT, then restart CodeTwo."),
+        ),
     ];
+
+    match evidence.config.as_ref() {
+        Ok(config) if config.sites_plugin => update_capability(
+            &mut capabilities,
+            ProviderCapabilityId::Sites,
+            CapabilityState::Unverified,
+            config.sites_version.clone(),
+            "The official OpenAI Sites plugin is enabled; account, workspace, and connector availability are verified on the first real call.",
+            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart CodeTwo."),
+        ),
+        Err(error) => update_capability(
+            &mut capabilities,
+            ProviderCapabilityId::Sites,
+            CapabilityState::Unavailable,
+            None,
+            &format!("Codex config could not be parsed: {error}"),
+            Some("Repair $CODEX_HOME/config.toml and restart CodeTwo; CodeTwo will not modify it."),
+        ),
+        Ok(_) => {}
+    }
 
     let Some(host_path) = evidence.host_path else {
         return CodexRuntimeDiscovery {
@@ -178,6 +210,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             for id in [
                 ProviderCapabilityId::ComputerUse,
                 ProviderCapabilityId::ChromeBrowser,
+                ProviderCapabilityId::Sites,
             ] {
                 update_capability(
                     &mut capabilities,
@@ -253,6 +286,30 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             evidence.host_version.clone(),
             "The Browser/Chrome plugins, chrome backend, or node_repl runtime are missing.",
             Some("Enable the Browser and Chrome plugins, install the extension, then restart CodeTwo."),
+        );
+    }
+
+    if config.sites_plugin {
+        update_capability(
+            &mut capabilities,
+            ProviderCapabilityId::Sites,
+            CapabilityState::Unverified,
+            config.sites_version.clone(),
+            if version_state == CapabilityState::Ready {
+                "The official OpenAI Sites plugin is enabled; account, workspace, and connector availability are verified on the first real call."
+            } else {
+                "The official OpenAI Sites plugin is enabled, but this ChatGPT host version is outside CodeTwo's verified range."
+            },
+            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart CodeTwo."),
+        );
+    } else {
+        update_capability(
+            &mut capabilities,
+            ProviderCapabilityId::Sites,
+            CapabilityState::Unavailable,
+            config.sites_version.clone(),
+            "The official OpenAI Sites plugin is not enabled in the selected Codex configuration.",
+            Some("Enable the Sites plugin in ChatGPT, then restart CodeTwo."),
         );
     }
 
@@ -358,11 +415,44 @@ fn read_config() -> Result<ConfigEvidence, String> {
         computer_plugin: plugin("computer-use@openai-bundled"),
         browser_plugin: plugin("browser@openai-bundled"),
         chrome_plugin: plugin("chrome@openai-bundled"),
+        sites_plugin: plugin("sites@openai-bundled"),
+        sites_version: bundled_plugin_version(&home, "sites"),
         node_repl_path: path(node, "command"),
         browser_backends: backends,
         cua_path: path(env, "SKY_CUA_SERVICE_PATH"),
         cua_signature: None,
     })
+}
+
+fn bundled_plugin_version(codex_home: &Path, plugin_name: &str) -> Option<String> {
+    let root = codex_home
+        .join("plugins/cache/openai-bundled")
+        .join(plugin_name);
+    fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let manifest = entry.path().join(".codex-plugin/plugin.json");
+            let value: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(manifest).ok()?).ok()?;
+            (value.get("name").and_then(serde_json::Value::as_str) == Some(plugin_name))
+                .then(|| {
+                    value
+                        .get("version")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string)
+                })
+                .flatten()
+        })
+        .max_by(|left, right| version_key(left).cmp(&version_key(right)))
+}
+
+fn version_key(version: &str) -> Vec<u64> {
+    version
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse().ok())
+        .collect()
 }
 
 #[cfg(target_os = "macos")]
@@ -462,6 +552,8 @@ mod tests {
                 computer_plugin: true,
                 browser_plugin: true,
                 chrome_plugin: true,
+                sites_plugin: true,
+                sites_version: Some("0.1.34".into()),
                 node_repl_path: Some(std::env::current_exe().unwrap()),
                 browser_backends: vec!["chrome".into(), "iab".into()],
                 cua_path: Some(std::env::current_exe().unwrap()),
@@ -479,6 +571,26 @@ mod tests {
             discovery.capabilities[1].state,
             CapabilityState::Unavailable
         );
+    }
+
+    #[test]
+    fn sites_plugin_can_use_the_pinned_cli_without_a_chatgpt_host() {
+        let discovery = evaluate(HostEvidence {
+            config: Ok(ConfigEvidence {
+                sites_plugin: true,
+                sites_version: Some("0.1.34".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        assert!(discovery.codex_path.is_none());
+        let sites = discovery
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == ProviderCapabilityId::Sites)
+            .unwrap();
+        assert_eq!(sites.state, CapabilityState::Unverified);
+        assert_eq!(sites.version.as_deref(), Some("0.1.34"));
     }
 
     #[test]
@@ -501,6 +613,7 @@ mod tests {
         assert!(discovery.codex_path.is_some());
         assert_eq!(discovery.capabilities[1].state, CapabilityState::Unverified);
         assert_eq!(discovery.capabilities[2].state, CapabilityState::Unverified);
+        assert_eq!(discovery.capabilities[4].state, CapabilityState::Unverified);
     }
 
     #[test]
@@ -512,6 +625,58 @@ mod tests {
         assert_eq!(
             discovery.capabilities[1].state,
             CapabilityState::Unavailable
+        );
+        assert_eq!(
+            discovery.capabilities[4].state,
+            CapabilityState::Unavailable
+        );
+    }
+
+    #[test]
+    fn sites_capability_reports_the_installed_bundled_plugin_version() {
+        let discovery = evaluate(ready_evidence());
+        let sites = discovery
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == ProviderCapabilityId::Sites)
+            .unwrap();
+        assert_eq!(sites.state, CapabilityState::Unverified);
+        assert_eq!(sites.version.as_deref(), Some("0.1.34"));
+    }
+
+    #[test]
+    fn disabled_sites_plugin_is_unavailable_without_affecting_other_tools() {
+        let mut evidence = ready_evidence();
+        evidence.config.as_mut().unwrap().sites_plugin = false;
+        let discovery = evaluate(evidence);
+        let sites = discovery
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == ProviderCapabilityId::Sites)
+            .unwrap();
+        assert_eq!(sites.state, CapabilityState::Unavailable);
+        assert_eq!(discovery.capabilities[0].state, CapabilityState::Ready);
+    }
+
+    #[test]
+    fn bundled_plugin_version_uses_manifest_versions_not_directory_order() {
+        let directory = tempfile::tempdir().unwrap();
+        for version in ["0.1.9", "0.1.34"] {
+            let manifest = directory
+                .path()
+                .join("plugins/cache/openai-bundled/sites")
+                .join(version)
+                .join(".codex-plugin");
+            fs::create_dir_all(&manifest).unwrap();
+            fs::write(
+                manifest.join("plugin.json"),
+                format!(r#"{{"name":"sites","version":"{version}"}}"#),
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            bundled_plugin_version(directory.path(), "sites").as_deref(),
+            Some("0.1.34")
         );
     }
 }

@@ -14,4 +14,27 @@ describe("provider capability wire compatibility", () => {
       }).capabilities,
     ).toEqual([]);
   });
+
+  test("accepts the experimental Sites capability from current backends", () => {
+    const provider = normalizeProviderInfo({
+      id: "codex",
+      display_name: "Codex",
+      available: true,
+      needs_node: true,
+      models: [],
+      capabilities: [
+        {
+          id: "sites",
+          state: "unverified",
+          version: "0.1.34",
+          experimental: true,
+        },
+      ],
+    });
+    expect(provider.capabilities[0]).toMatchObject({
+      id: "sites",
+      state: "unverified",
+      version: "0.1.34",
+    });
+  });
 });

@@ -66,6 +66,16 @@ impl ToolSource {
     fn trusts_local_uri(&self) -> bool {
         self.image_generation || self.trusts_raw_output()
     }
+
+    fn is_sites(&self) -> bool {
+        self.server
+            .as_deref()
+            .is_some_and(|server| server.to_ascii_lowercase().contains("sites"))
+            || self.tool.as_deref().is_some_and(|tool| {
+                let tool = tool.to_ascii_lowercase();
+                tool.starts_with("sites_") || tool.contains("__sites_")
+            })
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -267,14 +277,22 @@ impl ToolOutputNormalizer {
     ) -> NormalizedToolOutput {
         let mut result = NormalizedToolOutput::default();
         if let Some(content) = content {
+            if source.is_sites() {
+                collect_sites_resource_links(content, 0, &mut result.outputs);
+            }
             self.visit(
                 content,
                 source,
                 session_id,
                 tool_call_id,
-                !source.trusts_raw_output(),
+                !source.trusts_raw_output() && !source.is_sites(),
                 &mut result,
             );
+        }
+        if source.is_sites() {
+            if let Some(raw_output) = raw_output {
+                collect_sites_resource_links(raw_output, 0, &mut result.outputs);
+            }
         }
         if source.trusts_raw_output() {
             if let Some(content) = raw_output.and_then(|value| value.pointer("/result/content")) {
@@ -483,10 +501,62 @@ fn safe_display_name(name: Option<&str>, extension: &str) -> String {
 
 fn deduplicate_outputs(outputs: &mut Vec<ToolOutput>) {
     let mut image_ids = std::collections::HashSet::new();
+    let mut resource_links = std::collections::HashSet::new();
     outputs.retain(|output| match output {
         ToolOutput::Image { artifact } => image_ids.insert(artifact.id.clone()),
+        ToolOutput::ResourceLink { name, uri, .. } => {
+            resource_links.insert((name.clone(), uri.clone()))
+        }
         _ => true,
     });
+}
+
+fn collect_sites_resource_links(value: &Value, depth: usize, outputs: &mut Vec<ToolOutput>) {
+    if depth > 8 {
+        return;
+    }
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                collect_sites_resource_links(value, depth + 1, outputs);
+            }
+        }
+        Value::Object(object) => {
+            for (key, value) in object {
+                let label = match key.as_str() {
+                    "url" => Some("Sites production deployment"),
+                    "current_live_url" => Some("Live site"),
+                    "current_preview_url" => Some("Saved version preview"),
+                    _ => None,
+                };
+                if let (Some(label), Some(uri)) = (label, value.as_str()) {
+                    if is_safe_sites_url(uri) {
+                        outputs.push(ToolOutput::ResourceLink {
+                            name: label.into(),
+                            uri: uri.chars().take(8_192).collect(),
+                            mime_type: Some("text/html".into()),
+                        });
+                    }
+                }
+                collect_sites_resource_links(value, depth + 1, outputs);
+            }
+        }
+        Value::String(text) => {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                collect_sites_resource_links(&parsed, depth + 1, outputs);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_safe_sites_url(value: &str) -> bool {
+    url::Url::parse(value).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+    })
 }
 
 #[cfg(test)]
@@ -529,6 +599,58 @@ mod tests {
         };
         assert_eq!((artifact.width, artifact.height), (2, 3));
         assert_eq!(artifacts.get(&artifact.id).unwrap(), png());
+    }
+
+    #[test]
+    fn sites_output_keeps_only_safe_hosted_links_and_drops_credentials() {
+        let normalizer = ToolOutputNormalizer::new(None);
+        let content = json!([{
+            "type": "content",
+            "content": {
+                "type": "text",
+                "text": r#"{"result":{"url":"https://example.sites.openai.com","token":"do-not-store","remote_url":"https://git.example.test/repo"}}"#
+            }
+        }]);
+        let raw_output = json!({
+            "result": {
+                "current_live_url": "https://live.example.test",
+                "current_preview_url": "javascript:alert(1)",
+                "source_repository_credential": { "token": "also-do-not-store" }
+            }
+        });
+        let source = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_deploy_site_version".into()),
+            ..Default::default()
+        };
+
+        let result = normalizer.normalize(
+            Some(&content),
+            Some(&raw_output),
+            &source,
+            "session",
+            "tool",
+        );
+
+        assert_eq!(
+            result.outputs,
+            vec![
+                ToolOutput::ResourceLink {
+                    name: "Sites production deployment".into(),
+                    uri: "https://example.sites.openai.com".into(),
+                    mime_type: Some("text/html".into()),
+                },
+                ToolOutput::ResourceLink {
+                    name: "Live site".into(),
+                    uri: "https://live.example.test".into(),
+                    mime_type: Some("text/html".into()),
+                },
+            ]
+        );
+        let serialized = serde_json::to_string(&result.outputs).unwrap();
+        assert!(!serialized.contains("do-not-store"));
+        assert!(!serialized.contains("remote_url"));
+        assert!(!serialized.contains("javascript:"));
     }
 
     #[test]

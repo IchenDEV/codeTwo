@@ -344,15 +344,28 @@ impl App {
                     let label = if title.is_empty() { id } else { title };
                     self.push("tool", format!("{label} — {status}"));
                     for output in outputs {
-                        if let codetwo_core::ToolOutput::Image { artifact } = output {
-                            let dimensions = format!(" {}×{}", artifact.width, artifact.height);
-                            self.push(
-                                "artifact",
-                                format!(
-                                    "[artifact {}{} · {} bytes · {}]",
-                                    artifact.mime_type, dimensions, artifact.bytes, artifact.id
-                                ),
-                            );
+                        match output {
+                            codetwo_core::ToolOutput::Image { artifact } => {
+                                let dimensions = format!(" {}×{}", artifact.width, artifact.height);
+                                self.push(
+                                    "artifact",
+                                    format!(
+                                        "[artifact {}{} · {} bytes · {}]",
+                                        artifact.mime_type, dimensions, artifact.bytes, artifact.id
+                                    ),
+                                );
+                            }
+                            codetwo_core::ToolOutput::ResourceLink {
+                                name,
+                                uri,
+                                mime_type,
+                            } => {
+                                let mime = mime_type
+                                    .map(|value| format!(" · {value}"))
+                                    .unwrap_or_default();
+                                self.push("resource", format!("[{name}{mime}] {uri}"));
+                            }
+                            codetwo_core::ToolOutput::Text { .. } => {}
                         }
                     }
                 }
@@ -2144,6 +2157,32 @@ mod tests {
         });
         assert_eq!(a.transcript.len(), 1);
         assert_eq!(a.transcript[0].kind, "agent");
+    }
+
+    #[test]
+    fn sites_resource_links_render_as_text_in_the_tui() {
+        let mut a = app();
+        a.active = Some("s".into());
+        a.on_engine_event(Event::ToolCall {
+            session: "s".into(),
+            id: "sites-tool".into(),
+            title: "Deploy site".into(),
+            status: "completed".into(),
+            kind: Some("sites".into()),
+            agent_input: None,
+            outputs: vec![codetwo_core::ToolOutput::ResourceLink {
+                name: "Sites production deployment".into(),
+                uri: "https://example.sites.openai.com".into(),
+                mime_type: Some("text/html".into()),
+            }],
+            transcript_seq: None,
+        });
+
+        assert_eq!(a.transcript.len(), 2);
+        assert_eq!(a.transcript[1].kind, "resource");
+        assert!(a.transcript[1]
+            .text
+            .contains("https://example.sites.openai.com"));
     }
 
     #[test]

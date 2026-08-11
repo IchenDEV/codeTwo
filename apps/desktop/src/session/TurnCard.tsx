@@ -7,6 +7,7 @@ import {
   ChevronUp,
   CircleAlert,
   Download,
+  ExternalLink,
   FolderOpen,
   Loader2,
   ListTodo,
@@ -26,6 +27,7 @@ import { isRunning, type Turn } from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
+  openExternal,
   revealArtifact,
   saveArtifactAs,
   type ArtifactRef,
@@ -61,6 +63,22 @@ function prettySize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function safeResourceLink(uri: string): { uri: string; host: string } | null {
+  try {
+    const parsed = new URL(uri);
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username.length > 0 ||
+      parsed.password.length > 0
+    ) {
+      return null;
+    }
+    return { uri: parsed.toString(), host: parsed.host };
+  } catch {
+    return null;
+  }
 }
 
 function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
@@ -213,6 +231,18 @@ export const TurnCard = memo(function TurnCard({
       ),
     [turn.tools],
   );
+  const resourceLinks = useMemo(() => {
+    const seen = new Set<string>();
+    return turn.tools.flatMap((tool) =>
+      (tool.outputs ?? []).flatMap((output) => {
+        if (output.type !== "resource_link") return [];
+        const safe = safeResourceLink(output.uri);
+        if (!safe || seen.has(safe.uri)) return [];
+        seen.add(safe.uri);
+        return [{ ...output, ...safe }];
+      }),
+    );
+  }, [turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
@@ -335,6 +365,26 @@ export const TurnCard = memo(function TurnCard({
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Generated images">
           {artifacts.map((artifact) => (
             <ArtifactImage key={artifact.id} artifact={artifact} />
+          ))}
+        </div>
+      )}
+
+      {resourceLinks.length > 0 && (
+        <div className="mt-3 flex flex-col gap-1.5" aria-label="Tool links">
+          {resourceLinks.map((link) => (
+            <button
+              key={link.uri}
+              type="button"
+              className="flex min-w-0 items-center gap-2 rounded-(--ds-radius-control) border bg-fill-quiet px-3 py-2 text-left text-fine transition-colors hover:bg-accent/50"
+              title={link.uri}
+              onClick={() => void openExternal(link.uri)}
+            >
+              <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
+              <span className="max-w-52 truncate font-mono text-cap text-muted-foreground">
+                {link.host}
+              </span>
+            </button>
           ))}
         </div>
       )}

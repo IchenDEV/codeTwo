@@ -232,6 +232,8 @@ fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Opt
         Some("image_generation".into())
     } else if server == "codetwo_browser" {
         Some("codetwo_browser".into())
+    } else if server.contains("sites") || tool.starts_with("sites_") || tool.contains("__sites_") {
+        Some("sites".into())
     } else if server.contains("chrome") || tool.contains("chrome") || title.contains("chrome") {
         Some("chrome_browser".into())
     } else if tool.contains("computer") || tool.contains("cua") || title.contains("computer use") {
@@ -271,8 +273,11 @@ fn permission_context(
 ) -> PermissionContext {
     let explicit_elicitation = is_mcp_elicitation(req);
     let lower = title.to_ascii_lowercase();
+    let sites_context = sites_permission_kind(&tool.source);
     let kind =
-        if lower.contains("website access") || lower.contains("site access") {
+        if let Some((kind, _)) = sites_context {
+            kind
+        } else if lower.contains("website access") || lower.contains("site access") {
             PermissionContextKind::WebsiteAccess
         } else if lower.contains("sensitive web action") || lower.contains("confirm browser action")
         {
@@ -302,13 +307,67 @@ fn permission_context(
             .as_ref()
             .and_then(|meta| meta.get("risk"))
             .and_then(Value::as_str)
-            .map(|value| value.chars().take(128).collect()),
+            .map(|value| value.chars().take(128).collect())
+            .or_else(|| sites_context.map(|(_, risk)| risk.to_string())),
         application: req
             .meta
             .as_ref()
             .and_then(|meta| meta.get("application"))
             .and_then(Value::as_str)
             .map(|value| value.chars().take(256).collect()),
+    }
+}
+
+fn sites_permission_kind(source: &ToolSource) -> Option<(PermissionContextKind, &'static str)> {
+    let server = source
+        .server
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool = source
+        .tool
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let is_sites =
+        server.contains("sites") || tool.starts_with("sites_") || tool.contains("__sites_");
+    if !is_sites {
+        return None;
+    }
+
+    let production_or_sensitive = [
+        "deploy_",
+        "delete_site",
+        "update_site_access",
+        "update_environment",
+        "add_custom_domain",
+        "remove_custom_domain",
+        "generate_siwc_bypass_token",
+    ]
+    .iter()
+    .any(|needle| tool.contains(needle));
+    if production_or_sensitive {
+        return Some((
+            PermissionContextKind::SitesProduction,
+            "Production deployment, access, secret, domain, token, or destructive Sites change",
+        ));
+    }
+
+    let read_only = [
+        "sites_get_",
+        "sites_list_",
+        "sites_inspect_",
+        "sites_download_",
+    ]
+    .iter()
+    .any(|prefix| tool.starts_with(prefix));
+    if read_only {
+        None
+    } else {
+        Some((
+            PermissionContextKind::SitesMutation,
+            "Creates or changes hosted Sites state",
+        ))
     }
 }
 
@@ -427,10 +486,19 @@ fn encode_mcp_servers(
 }
 
 const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[CodeTwo desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
+const CODEX_SITES_INSTRUCTIONS: &str = "[CodeTwo Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
 
 fn with_codetwo_browser_routing(prompt: String, enabled: bool) -> String {
     if enabled {
         format!("{CODETWO_BROWSER_ROUTING_INSTRUCTIONS}\n\n{prompt}")
+    } else {
+        prompt
+    }
+}
+
+fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
+    if enabled {
+        format!("{CODEX_SITES_INSTRUCTIONS}\n\n{prompt}")
     } else {
         prompt
     }
@@ -1964,14 +2032,14 @@ impl Engine {
                         )
                     }
                 };
-                let use_internal_browser = {
+                let is_codex = {
                     let sessions = self.state.sessions.lock().unwrap();
                     sessions
                         .get(&session)
                         .map(|runtime| runtime.session.provider == ProviderId::Codex)
                         .unwrap_or(false)
                 };
-                if use_internal_browser {
+                if is_codex {
                     if let Some(config) = &self.state.desktop_mcp {
                         let server = config.server_for_session(&session);
                         if !compiled
@@ -2012,8 +2080,9 @@ impl Engine {
                 };
                 let provider_prompt = with_codetwo_browser_routing(
                     provider_prompt,
-                    use_internal_browser && self.state.desktop_mcp.is_some(),
+                    is_codex && self.state.desktop_mcp.is_some(),
                 );
+                let provider_prompt = with_codex_sites_routing(provider_prompt, is_codex);
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
@@ -3895,9 +3964,12 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        elicitation_message, encode_mcp_servers, with_codetwo_browser_routing, DesktopMcpConfig,
+        elicitation_message, encode_mcp_servers, rich_tool_kind, sites_permission_kind,
+        with_codetwo_browser_routing, with_codex_sites_routing, DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
+    use crate::artifact::ToolSource;
+    use crate::permission::PermissionContextKind;
     use crate::skill::{McpServer, McpTransport};
 
     #[test]
@@ -3957,6 +4029,54 @@ mod mcp_tests {
         assert_eq!(
             with_codetwo_browser_routing("open example.test".into(), false),
             "open example.test"
+        );
+    }
+
+    #[test]
+    fn codex_sites_routing_preserves_the_production_boundary() {
+        let prompt = with_codex_sites_routing("publish the landing page".into(), true);
+        assert!(prompt.contains("use the official OpenAI Sites plugin"));
+        assert!(prompt.contains("every Sites deployment URL is production"));
+        assert!(prompt.contains("require an explicit ACP or MCP approval even in Full Access"));
+        assert!(prompt.ends_with("publish the landing page"));
+
+        assert_eq!(
+            with_codex_sites_routing("local work only".into(), false),
+            "local work only"
+        );
+    }
+
+    #[test]
+    fn sites_tools_have_a_distinct_kind_and_permission_risk() {
+        let source = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_deploy_site_version".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &source, "Deploy site"),
+            Some("sites".into())
+        );
+        assert_eq!(
+            sites_permission_kind(&source).map(|value| value.0),
+            Some(PermissionContextKind::SitesProduction)
+        );
+
+        let read_only = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_get_site".into()),
+            ..Default::default()
+        };
+        assert_eq!(sites_permission_kind(&read_only), None);
+
+        let mutation = ToolSource {
+            server: Some("codex_apps".into()),
+            tool: Some("sites_save_site_version".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            sites_permission_kind(&mutation).map(|value| value.0),
+            Some(PermissionContextKind::SitesMutation)
         );
     }
 
