@@ -9,7 +9,7 @@ mod schema;
 pub(crate) mod store;
 
 pub use domain::{
-    BriefRevision, BriefSaveResult, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
+    BriefRevision, BriefSaveResult, Run, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
     Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 pub use ledger::{

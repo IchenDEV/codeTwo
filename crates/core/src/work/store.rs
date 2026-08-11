@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 
 use super::domain::{
-    BriefRevision, BriefSaveResult, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
+    BriefRevision, BriefSaveResult, Run, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
     Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
@@ -516,13 +516,68 @@ fn deterministic_id(domain: &str, value: &str) -> String {
 pub(crate) fn ensure_session_binding_tx(
     tx: &Transaction<'_>,
     session_id: &str,
+    preferred_task_id: Option<&str>,
 ) -> Result<(), StoreError> {
     if !work_store_marker_applied(tx)? {
         return Ok(());
     }
     let session = load_legacy_session(tx, session_id)?
         .ok_or_else(|| StoreError::Domain(format!("unknown session {session_id}")))?;
+    if let Some(task_id) = preferred_task_id {
+        return bind_existing_task(tx, &session, task_id);
+    }
     backfill_one(tx, &session)?;
+    Ok(())
+}
+
+fn bind_existing_task(
+    tx: &Transaction<'_>,
+    session: &LegacySession,
+    task_id: &str,
+) -> Result<(), StoreError> {
+    if !valid_id(task_id) {
+        return Err(StoreError::Domain("invalid Work task id".to_owned()));
+    }
+    let workspace_root: Option<Option<String>> = tx
+        .query_row(
+            "SELECT w.root_path FROM tasks t
+             JOIN workspaces w ON w.id=t.workspace_id
+             JOIN work_entity_heads h
+               ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0
+             WHERE t.id=?1",
+            [task_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(workspace_root) = workspace_root else {
+        return Err(StoreError::Domain(format!(
+            "unknown active Work task {task_id}"
+        )));
+    };
+    if let Some(workspace_root) = workspace_root {
+        let session_root = session
+            .project_path
+            .as_deref()
+            .filter(|path| !path.trim().is_empty())
+            .unwrap_or(&session.cwd);
+        let workspace_root =
+            fs::canonicalize(&workspace_root).unwrap_or_else(|_| PathBuf::from(&workspace_root));
+        let session_root =
+            fs::canonicalize(session_root).unwrap_or_else(|_| PathBuf::from(session_root));
+        if !session_root.starts_with(&workspace_root) {
+            return Err(StoreError::Domain(
+                "Run working directory is outside its Workspace".to_owned(),
+            ));
+        }
+    }
+    let mut used = BTreeSet::new();
+    let run_index = available_run_index(tx, session, task_id, &mut used)?;
+    let timestamp = normalize_timestamp(session.created_at);
+    tx.execute(
+        "UPDATE sessions SET task_id=?2,run_index=?3,created_at=?4 WHERE id=?1",
+        params![session.id, task_id, run_index, timestamp],
+    )?;
+    ensure_backfill_head(tx, WorkEntityKind::Run, &session.id, timestamp)?;
     Ok(())
 }
 
@@ -810,6 +865,59 @@ impl Store {
         .map_err(StoreError::from)
     }
 
+    pub fn work_get_run(&self, run_id: &str) -> Result<Option<WorkVersioned<Run>>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT s.id,s.task_id,s.run_index,s.provider,s.model,s.activity_json,s.cwd,
+                    s.created_at,h.revision
+             FROM sessions s JOIN work_entity_heads h
+               ON h.entity_kind='run' AND h.entity_id=s.id AND h.deleted=0
+             WHERE s.id=?1 AND s.task_id IS NOT NULL AND s.run_index IS NOT NULL",
+            [run_id],
+            run_from_row,
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
+    pub fn work_list_runs(
+        &self,
+        task_id: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<Run>, StoreError> {
+        validate_page(cursor, limit)?;
+        let after_index = cursor
+            .map(|cursor| {
+                cursor
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|value| *value >= 0)
+                    .ok_or_else(|| StoreError::Domain("invalid Run page cursor".to_owned()))
+            })
+            .transpose()?;
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT s.id,s.task_id,s.run_index,s.provider,s.model,s.activity_json,s.cwd,
+                    s.created_at,h.revision
+             FROM sessions s JOIN work_entity_heads h
+               ON h.entity_kind='run' AND h.entity_id=s.id AND h.deleted=0
+             WHERE s.task_id=?1 AND (?2 IS NULL OR s.run_index > ?2)
+             ORDER BY s.run_index,s.id LIMIT ?3",
+        )?;
+        let rows = statement.query_map(
+            params![task_id, after_index, (limit + 1) as i64],
+            run_from_row,
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = page_cursor(&mut items, limit, |item| item.entity.index.to_string());
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {
         let conn = self.conn.lock().unwrap();
         if !work_store_marker_applied(&conn)? {
@@ -891,6 +999,31 @@ fn task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
         archived: row.get::<_, i64>(8)? != 0,
+    })
+}
+
+fn run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<Run>> {
+    let provider_json: String = row.get(3)?;
+    let activity_json: String = row.get(5)?;
+    let provider = serde_json::from_str(&provider_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    let activity = serde_json::from_str(&activity_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    Ok(WorkVersioned {
+        entity: Run {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            index: row.get(2)?,
+            provider,
+            model: row.get(4)?,
+            activity,
+            cwd: row.get(6)?,
+            created_at: row.get(7)?,
+        },
+        revision: u64::try_from(row.get::<_, i64>(8)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
     })
 }
 

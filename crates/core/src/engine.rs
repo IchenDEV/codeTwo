@@ -1306,6 +1306,7 @@ impl Engine {
                 worktree_base_sha,
                 request_id,
                 initial_policy,
+                task_id,
             } => {
                 let Some(prov) = self
                     .state
@@ -1393,7 +1394,7 @@ impl Engine {
                 }
 
                 if let Some(store) = &self.state.store {
-                    if let Err(e) = store.upsert_session(&sess) {
+                    if let Err(e) = store.upsert_session_for_task(&sess, task_id.as_deref()) {
                         let mut message = format!("couldn't persist new session: {e}");
                         if let (Some((repo, worktree)), Some(baseline)) =
                             (prepared_worktree.as_ref(), sess.worktree_baseline.as_ref())
@@ -3242,6 +3243,7 @@ for line in sys.stdin:
                 worktree_base_sha: None,
                 request_id: Some("create-with-identity".into()),
                 initial_policy: None,
+                task_id: None,
             })
             .await
             .unwrap();

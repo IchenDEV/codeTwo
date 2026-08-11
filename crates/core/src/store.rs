@@ -1465,6 +1465,14 @@ impl Store {
     }
 
     pub fn upsert_session(&self, s: &Session) -> Result<(), StoreError> {
+        self.upsert_session_for_task(s, None)
+    }
+
+    pub fn upsert_session_for_task(
+        &self,
+        s: &Session,
+        task_id: Option<&str>,
+    ) -> Result<(), StoreError> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute(
@@ -1511,7 +1519,7 @@ impl Store {
                 s.memory_write.as_db(),
             ],
         )?;
-        crate::work::store::ensure_session_binding_tx(&tx, &s.id)?;
+        crate::work::store::ensure_session_binding_tx(&tx, &s.id, task_id)?;
         tx.commit()?;
         Ok(())
     }

@@ -985,6 +985,7 @@ for line in sys.stdin:
             worktree_base_sha: None,
             request_id: Some("canvas-new".into()),
             initial_policy: None,
+            task_id: None,
         })
         .await
         .unwrap();

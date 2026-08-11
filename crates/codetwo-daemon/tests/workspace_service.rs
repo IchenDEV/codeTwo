@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
-    BriefRevision, DocBlock, Event, Op, PermissionMode, ProviderId, Session, Store, Task,
-    TaskExperience, Workspace, WorkspaceKind,
+    BriefRevision, DocBlock, Event, LaunchSpec, Op, PermissionMode, Provider, ProviderId, Session,
+    SkillLibrary, Store, Task, TaskExperience, Workspace, WorkspaceKind,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -247,4 +247,141 @@ async fn core_ops_execute_once_inside_daemon_and_share_the_ordered_stream() {
             .permission_mode,
         PermissionMode::Yolo
     );
+}
+
+const MOCK_AGENT: &str = r#"
+import json, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    if message.get("method") == "initialize":
+        print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":{"protocolVersion":1}}), flush=True)
+"#;
+
+fn mock_provider(id: &str) -> Provider {
+    Provider {
+        id: ProviderId::Custom(id.to_owned()),
+        display_name: id.to_owned(),
+        launch: LaunchSpec::new("python3", ["-u", "-c", MOCK_AGENT]),
+        needs_node: false,
+    }
+}
+
+#[tokio::test]
+async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let database = root.path().join("codetwo.db");
+    let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
+    let daemon = Daemon::bind_with_components(
+        &runtime,
+        store,
+        vec![mock_provider("alpha"), mock_provider("beta")],
+        SkillLibrary::default(),
+    )
+    .unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let client = Client::connect(&socket).await.unwrap();
+    let workspace = client
+        .save_workspace(
+            Workspace::new(
+                "Runs",
+                Some(root.path().to_string_lossy().into_owned()),
+                WorkspaceKind::External,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    let task = client
+        .save_task(
+            Task::named(
+                &workspace.entity.id,
+                "Cross-provider task",
+                TaskExperience::Work,
+            ),
+            None,
+        )
+        .await
+        .unwrap();
+    let observer = Client::connect(&socket).await.unwrap();
+    let mut events = observer
+        .subscribe(Some(observer.hello().cursor.clone()))
+        .await
+        .unwrap();
+
+    for (expected_count, provider) in ["alpha", "beta"].into_iter().enumerate() {
+        let request_id = format!("run-{provider}");
+        client
+            .submit(Op::NewSession {
+                provider: ProviderId::Custom(provider.to_owned()),
+                cwd: root.path().to_string_lossy().into_owned(),
+                use_worktree: false,
+                worktree_base: None,
+                worktree_base_sha: None,
+                request_id: Some(request_id.clone()),
+                initial_policy: None,
+                task_id: Some(task.entity.id.clone()),
+            })
+            .await
+            .unwrap();
+        loop {
+            match timeout(Duration::from_secs(2), events.recv())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                SubscriptionMessage::Event(envelope) => match envelope.event {
+                    TransportEvent::Core {
+                        event:
+                            Event::SessionCreated {
+                                request_id: seen, ..
+                            },
+                    } if seen.as_deref() == Some(request_id.as_str()) => break,
+                    TransportEvent::Core {
+                        event:
+                            Event::Error {
+                                request_id: seen,
+                                message,
+                                ..
+                            },
+                    } if seen.as_deref() == Some(request_id.as_str()) => {
+                        panic!("run creation failed: {message}")
+                    }
+                    _ => {}
+                },
+                SubscriptionMessage::Reset { reason, .. } => {
+                    panic!("unexpected stream reset: {reason:?}")
+                }
+            }
+        }
+        let page = client
+            .list_runs(task.entity.id.clone(), None, 50)
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), expected_count + 1, "after {provider}");
+    }
+
+    let page = client
+        .list_runs(task.entity.id.clone(), None, 50)
+        .await
+        .unwrap();
+    assert_eq!(page.items[0].entity.index, 1);
+    assert_eq!(
+        page.items[0].entity.provider,
+        ProviderId::Custom("alpha".into())
+    );
+    assert_eq!(page.items[1].entity.index, 2);
+    assert_eq!(
+        page.items[1].entity.provider,
+        ProviderId::Custom("beta".into())
+    );
+    assert_ne!(page.items[0].entity.id, page.items[1].entity.id);
+
+    client.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
 }

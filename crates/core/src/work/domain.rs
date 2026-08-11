@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::skill::DocBlock;
+use crate::{ProviderId, SessionActivity};
 
 pub const MAX_WORK_PAGE_SIZE: usize = 100;
 
@@ -239,6 +240,31 @@ pub struct BriefRevision {
 pub struct BriefSaveResult {
     pub brief: WorkVersioned<BriefRevision>,
     pub task: WorkVersioned<Task>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Run {
+    pub id: String,
+    pub task_id: String,
+    pub index: i64,
+    pub provider: ProviderId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub activity: SessionActivity,
+    pub cwd: String,
+    pub created_at: i64,
+}
+
+impl Run {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_text("run id", &self.id, 256)?;
+        validate_text("run task id", &self.task_id, 256)?;
+        validate_text("run cwd", &self.cwd, 4096)?;
+        if self.index < 1 || self.created_at < 0 {
+            return Err("invalid Work run".to_owned());
+        }
+        Ok(())
+    }
 }
 
 impl BriefRevision {

@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
     read_json, write_json, BriefRevision, BriefSaveResult, EventEnvelope, Op, Request,
-    RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
+    RequestEnvelope, ResetReason, Response, ResponseEnvelope, Run, ServerFrame, StreamCursor,
     StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest,
     WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
@@ -406,6 +406,28 @@ impl Client {
         }
     }
 
+    pub async fn list_runs(
+        &self,
+        task_id: String,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<Run>, ClientError> {
+        match self
+            .work(WorkRequest::ListRuns {
+                task_id,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::Runs { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "runs",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), ClientError> {
         match self
             .request(Request::Shutdown, ExpectedResponse::Shutdown)
@@ -722,6 +744,7 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::TaskSaved { .. } => "task_saved",
         WorkResponse::Brief { .. } => "brief",
         WorkResponse::BriefSaved { .. } => "brief_saved",
+        WorkResponse::Runs { .. } => "runs",
         WorkResponse::Error { .. } => "error",
     }
 }

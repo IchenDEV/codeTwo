@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
-use codetwo_core::{Engine, Event, Store, StoreError, WorkMutationGuard};
+use codetwo_core::{Engine, Event, Provider, Store, StoreError, WorkMutationGuard};
 use codetwo_protocol::{
     read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
     RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
@@ -59,7 +59,13 @@ impl Daemon {
         let store = Arc::new(Store::open(
             runtime_dir.join("codetwo.db").to_string_lossy().as_ref(),
         )?);
-        Self::bind_owned(runtime_dir, ownership, store)
+        Self::bind_owned(
+            runtime_dir,
+            ownership,
+            store,
+            default_registry(),
+            SkillLibrary::new(builtin_skills()),
+        )
     }
 
     pub fn bind_with_store(
@@ -68,13 +74,32 @@ impl Daemon {
     ) -> Result<Self, DaemonError> {
         let runtime_dir = runtime_dir.as_ref().to_owned();
         let ownership = RuntimeOwnership::acquire(&runtime_dir)?;
-        Self::bind_owned(runtime_dir, ownership, store)
+        Self::bind_owned(
+            runtime_dir,
+            ownership,
+            store,
+            default_registry(),
+            SkillLibrary::new(builtin_skills()),
+        )
+    }
+
+    pub fn bind_with_components(
+        runtime_dir: impl AsRef<Path>,
+        store: Arc<Store>,
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+    ) -> Result<Self, DaemonError> {
+        let runtime_dir = runtime_dir.as_ref().to_owned();
+        let ownership = RuntimeOwnership::acquire(&runtime_dir)?;
+        Self::bind_owned(runtime_dir, ownership, store, providers, skills)
     }
 
     fn bind_owned(
         runtime_dir: PathBuf,
         ownership: RuntimeOwnership,
         store: Arc<Store>,
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
     ) -> Result<Self, DaemonError> {
         let socket_path = runtime_dir.join("daemon.sock");
         ownership.remove_stale_socket(&socket_path)?;
@@ -91,8 +116,7 @@ impl Daemon {
         );
         let (events, _) = broadcast::channel(MAX_REPLAY_EVENTS);
         let (shutdown, _) = watch::channel(false);
-        let skills = SkillLibrary::new(builtin_skills());
-        let (engine, engine_events) = Engine::with_store(default_registry(), skills, store.clone());
+        let (engine, engine_events) = Engine::with_store(providers, skills, store.clone());
         Ok(Self {
             _ownership: ownership,
             listener,
@@ -386,7 +410,23 @@ async fn engine_event_loop(
     state: Arc<State>,
 ) {
     while let Some(event) = receiver.recv().await {
+        let created_run = match &event {
+            Event::SessionCreated { session, .. } => Some(session.clone()),
+            _ => None,
+        };
         append(&state, TransportEvent::Core { event }).await;
+        if let Some(run_id) = created_run {
+            if let Ok(Some(run)) = state.store.work_get_run(&run_id) {
+                append(
+                    &state,
+                    TransportEvent::RunChanged {
+                        run: run.entity,
+                        revision: run.revision,
+                    },
+                )
+                .await;
+            }
+        }
     }
 }
 
@@ -479,6 +519,17 @@ fn dispatch_work(
                 Err(error) => (work_error(error), Vec::new()),
             }
         }
+        WorkRequest::ListRuns {
+            task_id,
+            cursor,
+            limit,
+        } => match state
+            .store
+            .work_list_runs(&task_id, cursor.as_deref(), limit)
+        {
+            Ok(page) => (WorkResponse::Runs { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
     }
 }
 

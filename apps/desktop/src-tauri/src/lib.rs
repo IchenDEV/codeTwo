@@ -2004,6 +2004,7 @@ async fn new_session(
             worktree_base_sha,
             request_id,
             initial_policy,
+            task_id: None,
         })
         .await
         .map_err(|e| e.to_string())

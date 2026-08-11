@@ -7,7 +7,7 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Event, Op, Task, WorkPage, WorkVersioned, Workspace,
+    BriefRevision, BriefSaveResult, Event, Op, Run, Task, WorkPage, WorkVersioned, Workspace,
     WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
@@ -177,6 +177,10 @@ pub enum TransportEvent {
     Core {
         event: Event,
     },
+    RunChanged {
+        run: Run,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -238,6 +242,12 @@ impl EventEnvelope {
                 }
             }
             TransportEvent::Core { .. } => {}
+            TransportEvent::RunChanged { run, revision } => {
+                run.validate().map_err(EnvelopeError::InvalidField)?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField("run revision".to_owned()));
+                }
+            }
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -278,6 +288,12 @@ pub enum WorkRequest {
         brief: BriefRevision,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_revision: Option<u64>,
+    },
+    ListRuns {
+        task_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
     },
 }
 
@@ -342,6 +358,19 @@ impl WorkRequest {
                     return Err(EnvelopeError::InvalidField(
                         "brief expected revision".to_owned(),
                     ));
+                }
+            }
+            Self::ListRuns {
+                task_id,
+                cursor,
+                limit,
+            } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 256, "Run page cursor")?;
                 }
             }
         }
@@ -503,6 +532,9 @@ pub enum WorkResponse {
     BriefSaved {
         result: BriefSaveResult,
     },
+    Runs {
+        page: WorkPage<Run>,
+    },
     Error {
         error: WorkErrorKind,
         message: String,
@@ -588,6 +620,22 @@ impl WorkResponse {
                     return Err(EnvelopeError::InvalidField(
                         "brief save revision".to_owned(),
                     ));
+                }
+            }
+            Self::Runs { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 256, "Run page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField("run revision".to_owned()));
+                    }
                 }
             }
             Self::Error { message, .. } => {

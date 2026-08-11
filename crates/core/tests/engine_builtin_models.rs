@@ -42,6 +42,7 @@ async fn a_silent_provider_still_gets_a_model_list() {
             worktree_base_sha: None,
             request_id: Some("desktop-request".into()),
             initial_policy: None,
+            task_id: None,
         })
         .await
         .unwrap();

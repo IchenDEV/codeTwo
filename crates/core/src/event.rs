@@ -39,6 +39,10 @@ pub enum Op {
         /// first prompt.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         initial_policy: Option<ExecutionPolicy>,
+        /// Bind this new provider session as the next immutable Run of an existing Work Task.
+        /// Omitted by Code clients, which retain one Task per legacy Session.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task_id: Option<String>,
     },
     /// Submit the composed document as one prompt turn. The core compiles it (see [`crate::skill`]).
     Prompt {
