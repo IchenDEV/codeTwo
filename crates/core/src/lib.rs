@@ -19,6 +19,7 @@ pub mod automation;
 pub mod browser;
 pub mod canvas;
 pub mod context;
+pub mod credential;
 pub mod delegate;
 pub mod engine;
 pub mod error;
@@ -73,7 +74,17 @@ pub use canvas::{
     CANVAS_SCHEMA_VERSION, EXCALIDRAW_ENGINE, EXCALIDRAW_ENGINE_VERSION,
 };
 pub use context::{estimate_tokens, ContextUsage};
-pub use engine::{lower_canvas_prompt_payload, Engine, PermissionRouter, SessionHandler};
+pub use credential::{
+    decode_legacy_mcp_server, disabled_legacy_mcp_server, map_keychain_os_status,
+    migrate_json_file, migrate_mcp_config, migrate_plugin_dir, migrate_plugin_metadata,
+    migrate_skill_json_dir, platform_secret_store, sanitize_json_bytes, InMemorySecretStore,
+    MigrationError, MigrationReport, MigrationResult, SecretRef, SecretStore, SecretStoreError,
+    UnsupportedSecretStore,
+};
+pub use engine::{
+    encode_mcp_servers_with_gateway, lower_canvas_prompt_payload, Engine, McpGatewayBroker,
+    PermissionRouter, SessionHandler,
+};
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
@@ -98,7 +109,9 @@ pub use session::{
 };
 pub use skill::{
     canonical_doc_text, compile, compile_with_canvas, CompiledCanvas, CompiledPrompt, DocBlock,
-    McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
+    McpCredentialState, McpCredentialValidation, McpEncodeError, McpGatewayBinding,
+    McpGatewayTransport, McpSecretBinding, McpServer, McpTransport, Skill, SkillKind, SkillLibrary,
+    SkillPayload, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
 pub use store::{SessionSearchHit, Store, StoreError};

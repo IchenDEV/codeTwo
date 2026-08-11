@@ -14,11 +14,20 @@
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+use thiserror::Error;
+
+use crate::credential::{
+    disabled_legacy_mcp_server, migrate_json_file, platform_secret_store, MigrationError,
+    SecretRef, SecretStore,
+};
 
 use crate::canvas::{
     resolve_prompt_payload, CanvasFeatureGate, CanvasPixelPolicy, CanvasPromptPayload,
     CanvasProviderImageCapability, CanvasRef,
 };
+
+pub const WORK_MCP_SERVER_ID: &str = "__codetwo_work_mcp";
+pub const WORK_MCP_PROXY_COMMAND: &str = "codetwo-mcp-proxy";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -30,12 +39,71 @@ pub enum SkillKind {
     Macro,
 }
 
+/// A non-secret MCP env/header binding. The value is held by a [`SecretStore`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct McpSecretBinding {
+    pub name: String,
+    pub secret_ref: SecretRef,
+}
+
+impl McpSecretBinding {
+    pub fn new(name: impl Into<String>, secret_ref: SecretRef) -> Self {
+        Self {
+            name: name.into(),
+            secret_ref,
+        }
+    }
+}
+
+/// Explicit credential status carried with a persisted server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum McpCredentialState {
+    Ready,
+    ReauthRequired {
+        missing_refs: Vec<SecretRef>,
+    },
+    /// The backing store could not be consulted (for example a locked
+    /// Keychain). This is distinct from a confirmed missing reference.
+    Unavailable,
+}
+
+impl Default for McpCredentialState {
+    fn default() -> Self {
+        Self::Ready
+    }
+}
+
+impl McpCredentialState {
+    pub fn is_enabled(&self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
+/// Result of checking references against a credential store. Availability
+/// failures never masquerade as missing references.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpCredentialValidation {
+    Ready,
+    ReauthRequired,
+    Unavailable,
+}
+
+impl McpCredentialValidation {
+    pub fn is_ready(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
 /// An MCP server definition attached by an `Mcp` skill and passed through in `session/new`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpServer {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub credential_state: McpCredentialState,
     #[serde(flatten)]
     pub transport: McpTransport,
 }
@@ -46,15 +114,19 @@ pub enum McpTransport {
     Stdio {
         command: String,
         args: Vec<String>,
-        env: Vec<(String, String)>,
+        env: Vec<McpSecretBinding>,
+        /// Runtime-only environment injected by plugin resolution (for
+        /// example PLUGIN_ROOT/PLUGIN_DATA). It is never persisted or sent
+        /// over the provider wire.
+        launch_env: Vec<(String, String)>,
     },
     Http {
         url: String,
-        headers: Vec<(String, String)>,
+        headers: Vec<McpSecretBinding>,
     },
     Sse {
         url: String,
-        headers: Vec<(String, String)>,
+        headers: Vec<McpSecretBinding>,
     },
 }
 
@@ -67,20 +139,20 @@ impl Serialize for McpTransport {
         struct Stdio<'a> {
             command: &'a str,
             args: &'a [String],
-            env: &'a [(String, String)],
+            env: &'a [McpSecretBinding],
         }
         #[derive(Serialize)]
         struct Remote<'a> {
             #[serde(rename = "type")]
             transport: &'a str,
             url: &'a str,
-            headers: &'a [(String, String)],
+            headers: &'a [McpSecretBinding],
         }
 
         match self {
-            McpTransport::Stdio { command, args, env } => {
-                Stdio { command, args, env }.serialize(serializer)
-            }
+            McpTransport::Stdio {
+                command, args, env, ..
+            } => Stdio { command, args, env }.serialize(serializer),
             McpTransport::Http { url, headers } => Remote {
                 transport: "http",
                 url,
@@ -109,20 +181,25 @@ impl<'de> Deserialize<'de> for McpTransport {
                 command: String,
                 #[serde(default)]
                 args: Vec<String>,
-                #[serde(default)]
-                env: Vec<(String, String)>,
+                #[serde(default, deserialize_with = "deserialize_secret_bindings")]
+                env: Vec<McpSecretBinding>,
             },
             Remote {
                 #[serde(rename = "type", default = "default_http_transport")]
                 transport: String,
                 url: String,
-                #[serde(default)]
-                headers: Vec<(String, String)>,
+                #[serde(default, deserialize_with = "deserialize_secret_bindings")]
+                headers: Vec<McpSecretBinding>,
             },
         }
 
         match Stored::deserialize(deserializer)? {
-            Stored::Stdio { command, args, env } => Ok(McpTransport::Stdio { command, args, env }),
+            Stored::Stdio { command, args, env } => Ok(McpTransport::Stdio {
+                command,
+                args,
+                env,
+                launch_env: Vec::new(),
+            }),
             Stored::Remote {
                 transport,
                 url,
@@ -138,43 +215,261 @@ impl<'de> Deserialize<'de> for McpTransport {
     }
 }
 
+fn deserialize_secret_bindings<'de, D>(deserializer: D) -> Result<Vec<McpSecretBinding>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let entries = value
+        .as_array()
+        .ok_or_else(|| serde::de::Error::custom("MCP credentials must be secret-ref objects"))?;
+    for entry in entries {
+        let object = entry.as_object().ok_or_else(|| {
+            serde::de::Error::custom("MCP credential entries must be secret-ref objects")
+        })?;
+        if object.len() != 2 || !object.contains_key("name") || !object.contains_key("secret_ref") {
+            return Err(serde::de::Error::custom(
+                "MCP credential entries require only name and secret_ref",
+            ));
+        }
+    }
+    serde_json::from_value(value).map_err(serde::de::Error::custom)
+}
+
 fn default_http_transport() -> String {
     "http".into()
 }
 
+/// The local transport exposed by the credential gateway to an ACP provider.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum McpGatewayTransport {
+    Stdio,
+    Http,
+    Sse,
+}
+
+/// Binding supplied by the future daemon gateway (WM-05b).  `endpoint_or_command`
+/// is the gateway's local proxy endpoint/command, never the original remote
+/// MCP endpoint.  `lease_ref` is an opaque, short-lived placeholder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpGatewayBinding {
+    /// Exact MCP server name this lease/proxy belongs to.
+    pub server_id: String,
+    /// Exact run/session scope accepted by the daemon handshake.
+    pub run_id: String,
+    pub transport: McpGatewayTransport,
+    pub endpoint_or_command: String,
+    pub lease_ref: SecretRef,
+    /// Dedicated daemon gateway socket used by the bundled stdio proxy.
+    /// HTTP/SSE bindings leave this unset because their loopback listener is
+    /// encoded directly in `endpoint_or_command`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_socket: Option<String>,
+}
+
+/// Typed failures for provider-wire MCP encoding.  None of these variants
+/// contain credential values.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum McpEncodeError {
+    #[error("MCP server '{server}' requires a credential gateway")]
+    NeedsGateway { server: String },
+    #[error("MCP server '{server}' requires reauthentication")]
+    ReauthRequired {
+        server: String,
+        missing_refs: Vec<SecretRef>,
+    },
+    #[error("MCP server '{server}' credential storage is unavailable")]
+    CredentialStoreUnavailable { server: String },
+    #[error("MCP server '{server}' has no matching gateway transport")]
+    UnsupportedTransport { server: String },
+    #[error("MCP gateway binding is not local")]
+    InvalidGatewayBinding,
+}
+
 impl McpServer {
-    /// Shape this server the way ACP `session/new` expects (`mcpServers[]`).
-    pub fn to_acp_json(&self) -> serde_json::Value {
-        let mut value = match &self.transport {
-            McpTransport::Stdio { command, args, env } => serde_json::json!({
-                "name": self.name,
-                "command": command,
-                "args": args,
-                "env": env.iter()
-                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
-                    .collect::<Vec<_>>(),
-            }),
-            McpTransport::Http { url, headers } => serde_json::json!({
+    /// Build the reserved internal server descriptor.  The descriptor deliberately carries no
+    /// Work contract, workspace path, or credentials; the daemon broker supplies those through an
+    /// opaque run-scoped binding immediately before `session/new`/`session/load`.
+    pub fn work_mcp_internal() -> Self {
+        Self {
+            name: WORK_MCP_SERVER_ID.to_owned(),
+            cwd: None,
+            credential_state: McpCredentialState::Ready,
+            transport: McpTransport::Stdio {
+                command: WORK_MCP_PROXY_COMMAND.to_owned(),
+                args: Vec::new(),
+                env: Vec::new(),
+                launch_env: Vec::new(),
+            },
+        }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.credential_state.is_enabled()
+    }
+
+    pub fn secret_bindings(&self) -> Vec<McpSecretBinding> {
+        match &self.transport {
+            McpTransport::Stdio { env, .. } => env.clone(),
+            McpTransport::Http { headers, .. } | McpTransport::Sse { headers, .. } => {
+                headers.clone()
+            }
+        }
+    }
+
+    /// Validate references without returning any secret material. Missing
+    /// entries become reauthentication-required; store availability failures
+    /// remain explicitly transient and fail closed.
+    pub fn validate_credentials(&mut self, store: &dyn SecretStore) -> McpCredentialValidation {
+        if let McpCredentialState::ReauthRequired { .. } = &self.credential_state {
+            return McpCredentialValidation::ReauthRequired;
+        }
+        let mut missing_refs = Vec::new();
+        let mut unavailable = false;
+        for binding in self.secret_bindings() {
+            match store.get(&binding.secret_ref) {
+                Ok(_) => {}
+                Err(crate::credential::SecretStoreError::NotFound) => {
+                    missing_refs.push(binding.secret_ref)
+                }
+                Err(_) => unavailable = true,
+            }
+        }
+        if unavailable {
+            self.credential_state = McpCredentialState::Unavailable;
+            McpCredentialValidation::Unavailable
+        } else if !missing_refs.is_empty() {
+            self.credential_state = McpCredentialState::ReauthRequired { missing_refs };
+            McpCredentialValidation::ReauthRequired
+        } else {
+            self.credential_state = McpCredentialState::Ready;
+            McpCredentialValidation::Ready
+        }
+    }
+
+    /// Encode only a gateway target for ACP `session/new`.
+    ///
+    /// This intentionally has no legacy literal encoder.  A missing binding
+    /// fails closed with [`McpEncodeError::NeedsGateway`].
+    pub fn to_gateway_acp_json(
+        &self,
+        binding: Option<&McpGatewayBinding>,
+    ) -> Result<serde_json::Value, McpEncodeError> {
+        match &self.credential_state {
+            McpCredentialState::ReauthRequired { missing_refs } => {
+                return Err(McpEncodeError::ReauthRequired {
+                    server: self.name.clone(),
+                    missing_refs: missing_refs.clone(),
+                })
+            }
+            McpCredentialState::Unavailable => {
+                return Err(McpEncodeError::CredentialStoreUnavailable {
+                    server: self.name.clone(),
+                })
+            }
+            McpCredentialState::Ready => {}
+        }
+        let Some(binding) = binding else {
+            return Err(McpEncodeError::NeedsGateway {
+                server: self.name.clone(),
+            });
+        };
+        if binding.server_id != self.name {
+            return Err(McpEncodeError::InvalidGatewayBinding);
+        }
+        let expected = match self.transport {
+            McpTransport::Stdio { .. } => McpGatewayTransport::Stdio,
+            McpTransport::Http { .. } => McpGatewayTransport::Http,
+            McpTransport::Sse { .. } => McpGatewayTransport::Sse,
+        };
+        if expected != binding.transport {
+            return Err(McpEncodeError::UnsupportedTransport {
+                server: self.name.clone(),
+            });
+        }
+        match binding.transport {
+            McpGatewayTransport::Stdio
+                if binding.endpoint_or_command != "codetwo-mcp-proxy"
+                    || binding.proxy_socket.is_none()
+                    || binding.run_id.is_empty() =>
+            {
+                return Err(McpEncodeError::InvalidGatewayBinding)
+            }
+            McpGatewayTransport::Http | McpGatewayTransport::Sse
+                if !is_local_gateway_endpoint(&binding.endpoint_or_command) =>
+            {
+                return Err(McpEncodeError::InvalidGatewayBinding)
+            }
+            _ => {}
+        }
+        let lease_ref = binding.lease_ref.as_str();
+        let mut value = match binding.transport {
+            McpGatewayTransport::Stdio => {
+                let mut args = vec![
+                    "--server".to_string(),
+                    self.name.clone(),
+                    "--run-id".to_string(),
+                    binding.run_id.clone(),
+                    "--lease-ref".to_string(),
+                    lease_ref.to_string(),
+                ];
+                if let Some(socket) = &binding.proxy_socket {
+                    args.push("--socket".to_string());
+                    args.push(socket.clone());
+                }
+                serde_json::json!({
+                    "name": self.name,
+                    "command": binding.endpoint_or_command,
+                    "args": args,
+                })
+            }
+            McpGatewayTransport::Http => serde_json::json!({
                 "name": self.name,
                 "type": "http",
-                "url": url,
-                "headers": headers.iter()
-                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
-                    .collect::<Vec<_>>(),
+                "url": binding.endpoint_or_command,
+                "headers": [{"name": "x-codetwo-lease-ref", "value": lease_ref}],
             }),
-            McpTransport::Sse { url, headers } => serde_json::json!({
+            McpGatewayTransport::Sse => serde_json::json!({
                 "name": self.name,
                 "type": "sse",
-                "url": url,
-                "headers": headers.iter()
-                    .map(|(k, v)| serde_json::json!({ "name": k, "value": v }))
-                    .collect::<Vec<_>>(),
+                "url": binding.endpoint_or_command,
+                "headers": [{"name": "x-codetwo-lease-ref", "value": lease_ref}],
             }),
         };
         if let (Some(cwd), Some(object)) = (&self.cwd, value.as_object_mut()) {
             object.insert("cwd".into(), serde_json::Value::String(cwd.clone()));
         }
-        value
+        Ok(value)
+    }
+
+    /// Migration-only constructor for a legacy JSON object.  This is kept on
+    /// the server type to make the boundary conspicuous in call sites.
+    pub fn from_legacy_json(
+        value: &serde_json::Value,
+        store: &dyn SecretStore,
+    ) -> Result<Self, MigrationError> {
+        crate::credential::decode_legacy_mcp_server(value, store)
+    }
+}
+
+fn is_local_gateway_endpoint(endpoint: &str) -> bool {
+    let Ok(url) = url::Url::parse(endpoint) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
     }
 }
 
@@ -272,6 +567,16 @@ impl SkillLibrary {
     /// Load every `*.json` file in `dir` as a [`Skill`]. A missing directory yields an empty library
     /// (first run); a malformed file is logged and skipped rather than failing the whole load.
     pub fn load_dir(dir: &std::path::Path) -> std::io::Result<SkillLibrary> {
+        let store = platform_secret_store();
+        Self::load_dir_with_secret_store(dir, store.as_ref())
+    }
+
+    /// Load skills after explicit legacy MCP migration.  A store failure keeps
+    /// the source file untouched and returns an in-memory disabled MCP skill.
+    pub fn load_dir_with_secret_store(
+        dir: &std::path::Path,
+        store: &dyn SecretStore,
+    ) -> std::io::Result<SkillLibrary> {
         let entries = match std::fs::read_dir(dir) {
             Ok(e) => e,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -283,10 +588,51 @@ impl SkillLibrary {
         for entry in entries {
             let path = entry?.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                let migration = migrate_json_file(&path, store);
                 let data = std::fs::read_to_string(&path)?;
                 match serde_json::from_str::<Skill>(&data) {
-                    Ok(skill) => skills.push(skill),
-                    Err(e) => tracing::warn!("skill {path:?}: {e}"),
+                    Ok(mut skill) => {
+                        if migration.disabled {
+                            if let SkillPayload::Mcp { server } = &mut skill.payload {
+                                server.credential_state = McpCredentialState::ReauthRequired {
+                                    missing_refs: server
+                                        .secret_bindings()
+                                        .into_iter()
+                                        .map(|binding| binding.secret_ref)
+                                        .collect(),
+                                };
+                            }
+                        } else if let SkillPayload::Mcp { server } = &mut skill.payload {
+                            server.validate_credentials(store);
+                        }
+                        skills.push(skill)
+                    }
+                    Err(error) if migration.disabled => {
+                        // Decode only enough legacy shape to return a disabled
+                        // MCP component; never retain its literal values.
+                        if let Ok(mut raw) = serde_json::from_str::<serde_json::Value>(&data) {
+                            let server_value = raw
+                                .get_mut("payload")
+                                .and_then(|payload| payload.get_mut("server"));
+                            if let Some(server_value) = server_value {
+                                let disabled =
+                                    disabled_legacy_mcp_server(server_value, &error.to_string());
+                                *server_value =
+                                    serde_json::to_value(disabled).map_err(|serialize_error| {
+                                        std::io::Error::new(
+                                            std::io::ErrorKind::InvalidData,
+                                            serialize_error,
+                                        )
+                                    })?;
+                                if let Ok(skill) = serde_json::from_value::<Skill>(raw) {
+                                    skills.push(skill);
+                                    continue;
+                                }
+                            }
+                        }
+                        tracing::warn!("skill {path:?}: malformed MCP configuration")
+                    }
+                    Err(_) => tracing::warn!("skill {path:?}: malformed JSON"),
                 }
             }
         }
@@ -706,10 +1052,12 @@ mod tests {
                     server: McpServer {
                         name: "filesystem".into(),
                         cwd: None,
+                        credential_state: McpCredentialState::Ready,
                         transport: McpTransport::Stdio {
                             command: "mcp-fs".into(),
                             args: vec![],
                             env: vec![],
+                            launch_env: vec![],
                         },
                     },
                 },
@@ -1006,56 +1354,94 @@ mod tests {
     }
 
     #[test]
-    fn mcp_to_acp_json_shape() {
+    fn mcp_gateway_acp_json_shape() {
         let server = McpServer {
             name: "fs".into(),
             cwd: None,
+            credential_state: McpCredentialState::Ready,
             transport: McpTransport::Stdio {
                 command: "mcp-fs".into(),
                 args: vec!["--root".into(), "/tmp".into()],
-                env: vec![("TOKEN".into(), "abc".into())],
+                env: vec![McpSecretBinding::new("TOKEN", SecretRef::new())],
+                launch_env: vec![],
             },
         };
-        let v = server.to_acp_json();
+        assert!(matches!(
+            server.to_gateway_acp_json(None),
+            Err(McpEncodeError::NeedsGateway { .. })
+        ));
+        let v = server
+            .to_gateway_acp_json(Some(&McpGatewayBinding {
+                server_id: "fs".into(),
+                run_id: "run".into(),
+                transport: McpGatewayTransport::Stdio,
+                endpoint_or_command: "codetwo-mcp-proxy".into(),
+                lease_ref: SecretRef::new(),
+                proxy_socket: Some("/tmp/mcp-gateway.sock".into()),
+            }))
+            .unwrap();
         assert_eq!(v["name"], "fs");
-        assert_eq!(v["command"], "mcp-fs");
-        assert_eq!(v["args"][0], "--root");
-        assert_eq!(v["env"][0]["name"], "TOKEN");
-        assert_eq!(v["env"][0]["value"], "abc");
+        assert_eq!(v["command"], "codetwo-mcp-proxy");
+        assert!(v.to_string().contains("lease-ref"));
 
         let remote = McpServer {
             name: "remote".into(),
             cwd: None,
+            credential_state: McpCredentialState::Ready,
             transport: McpTransport::Http {
                 url: "https://mcp.example.test".into(),
-                headers: vec![("Authorization".into(), "Bearer token".into())],
+                headers: vec![McpSecretBinding::new("Authorization", SecretRef::new())],
             },
         };
-        let v = remote.to_acp_json();
+        let v = remote
+            .to_gateway_acp_json(Some(&McpGatewayBinding {
+                server_id: "remote".into(),
+                run_id: "run".into(),
+                transport: McpGatewayTransport::Http,
+                endpoint_or_command: "http://127.0.0.1:4317/mcp".into(),
+                lease_ref: SecretRef::new(),
+                proxy_socket: None,
+            }))
+            .unwrap();
         assert_eq!(v["type"], "http");
-        assert_eq!(v["url"], "https://mcp.example.test");
-        assert_eq!(v["headers"][0]["name"], "Authorization");
+        assert_eq!(v["url"], "http://127.0.0.1:4317/mcp");
+        assert_eq!(v["headers"][0]["name"], "x-codetwo-lease-ref");
 
         let events = McpServer {
             name: "events".into(),
             cwd: None,
+            credential_state: McpCredentialState::Ready,
             transport: McpTransport::Sse {
                 url: "https://mcp.example.test/sse".into(),
                 headers: Vec::new(),
             },
         };
-        let v = events.to_acp_json();
+        let v = events
+            .to_gateway_acp_json(Some(&McpGatewayBinding {
+                server_id: "events".into(),
+                run_id: "run".into(),
+                transport: McpGatewayTransport::Sse,
+                endpoint_or_command: "http://localhost:4317/sse".into(),
+                lease_ref: SecretRef::new(),
+                proxy_socket: None,
+            }))
+            .unwrap();
         assert_eq!(v["type"], "sse");
-        assert_eq!(v["url"], "https://mcp.example.test/sse");
+        assert_eq!(v["url"], "http://localhost:4317/sse");
 
         let stored = serde_json::to_string(&events).unwrap();
         assert!(stored.contains(r#""type":"sse""#));
         let round_trip: McpServer = serde_json::from_str(&stored).unwrap();
         assert!(matches!(round_trip.transport, McpTransport::Sse { .. }));
 
-        // Records written before remote transports were tagged remain readable as HTTP.
-        let legacy: McpServer = serde_json::from_str(
-            r#"{"name":"legacy","url":"https://mcp.example.test","headers":[]}"#,
+        // Literal legacy values are accepted only by the explicit migration decoder.
+        let legacy: McpServer = McpServer::from_legacy_json(
+            &serde_json::json!({
+                "name": "legacy",
+                "url": "https://mcp.example.test",
+                "headers": {"Authorization": "Bearer token"}
+            }),
+            &crate::credential::InMemorySecretStore::default(),
         )
         .unwrap();
         assert!(matches!(legacy.transport, McpTransport::Http { .. }));

@@ -38,3 +38,4 @@ block2 = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSError", "NSLocale", "NSSet", "NSArray"] }
 objc2-speech = { version = "0.3", features = ["SFSpeechRecognizer", "SFSpeechRecognitionRequest", "SFSpeechRecognitionResult", "SFSpeechRecognitionTask", "SFTranscription", "SFErrors", "block2"] }
+security-framework = "3.6"

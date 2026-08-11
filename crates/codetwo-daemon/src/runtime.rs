@@ -30,6 +30,7 @@ use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::{RuntimeOwnership, SocketIdentity};
+use crate::{ToolGateway, DEFAULT_LEASE_TTL};
 
 #[derive(Debug, Error)]
 pub enum DaemonError {
@@ -54,6 +55,7 @@ struct State {
     snapshot_root: PathBuf,
     pending_snapshots: StdMutex<HashMap<String, PendingSnapshot>>,
     engine: Engine,
+    gateway: Arc<ToolGateway>,
     engine_events: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<Event>>>,
     pending_automation_runs: StdMutex<HashMap<String, PendingAutomationRun>>,
     early_automation_sessions: StdMutex<HashMap<String, String>>,
@@ -153,7 +155,14 @@ impl Daemon {
         let snapshot_root = runtime_dir.join("snapshots");
         fs::create_dir_all(&snapshot_root)?;
         fs::set_permissions(&snapshot_root, fs::Permissions::from_mode(0o700))?;
-        let (engine, engine_events) = Engine::with_store(providers, skills, store.clone());
+        let gateway = Arc::new(ToolGateway::new(
+            &runtime_dir,
+            codetwo_core::platform_secret_store(),
+            DEFAULT_LEASE_TTL,
+        ));
+        let gateway_broker: Arc<dyn codetwo_core::McpGatewayBroker> = gateway.clone();
+        let (engine, engine_events) =
+            Engine::with_store_and_mcp_gateway(providers, skills, store.clone(), gateway_broker);
         Ok(Self {
             _ownership: ownership,
             listener,
@@ -170,6 +179,7 @@ impl Daemon {
                 snapshot_root,
                 pending_snapshots: StdMutex::new(HashMap::new()),
                 engine,
+                gateway,
                 engine_events: StdMutex::new(Some(engine_events)),
                 pending_automation_runs: StdMutex::new(HashMap::new()),
                 early_automation_sessions: StdMutex::new(HashMap::new()),
@@ -199,6 +209,16 @@ impl Daemon {
             .ok_or_else(|| io::Error::other("daemon engine events already consumed"))?;
         connections.spawn(engine_event_loop(engine_events, Arc::clone(&self.state)));
         connections.spawn(automation_scheduler_loop(Arc::clone(&self.state)));
+        let gateway = Arc::clone(&self.state.gateway);
+        let gateway_shutdown = self.state.shutdown.subscribe();
+        connections.spawn(async move {
+            let _ = gateway.serve(gateway_shutdown).await;
+        });
+        self.state
+            .gateway
+            .wait_until_ready()
+            .await
+            .map_err(|error| io::Error::other(error.to_string()))?;
         while !*shutdown.borrow() {
             tokio::select! {
                 result = self.listener.accept() => { let (stream, _) = result?; connections.spawn(connection(stream, Arc::clone(&self.state))); }

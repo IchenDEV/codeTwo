@@ -5,7 +5,10 @@
 use std::sync::Arc;
 
 use codetwo_core::acp::{AcpClient, Connection, RecordingHandler};
-use codetwo_core::skill::{McpServer, McpTransport};
+use codetwo_core::skill::{
+    McpCredentialState, McpGatewayBinding, McpGatewayTransport, McpServer, McpTransport,
+};
+use codetwo_core::SecretRef;
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
@@ -29,12 +32,23 @@ where
         let v: Value = serde_json::from_str(&line).unwrap();
         match v.get("method").and_then(|m| m.as_str()) {
             Some("initialize") => {
-                write_line(&mut writer, json!({"jsonrpc":"2.0","id":v["id"],"result":{"protocolVersion":1}})).await;
+                write_line(
+                    &mut writer,
+                    json!({"jsonrpc":"2.0","id":v["id"],"result":{"protocolVersion":1}}),
+                )
+                .await;
             }
             Some("session/new") => {
-                let count = v["params"]["mcpServers"].as_array().map(|a| a.len()).unwrap_or(0);
+                let count = v["params"]["mcpServers"]
+                    .as_array()
+                    .map(|a| a.len())
+                    .unwrap_or(0);
                 let id = if count > 0 { "with-mcp" } else { "no-mcp" };
-                write_line(&mut writer, json!({"jsonrpc":"2.0","id":v["id"],"result":{"sessionId":id}})).await;
+                write_line(
+                    &mut writer,
+                    json!({"jsonrpc":"2.0","id":v["id"],"result":{"sessionId":id}}),
+                )
+                .await;
             }
             _ => {}
         }
@@ -55,12 +69,24 @@ async fn new_session_forwards_mcp_servers() {
     let server = McpServer {
         name: "fs".into(),
         cwd: None,
+        credential_state: McpCredentialState::Ready,
         transport: McpTransport::Stdio {
             command: "mcp-fs".into(),
             args: vec![],
             env: vec![],
+            launch_env: vec![],
         },
     };
-    let sid = client.new_session("/tmp", vec![server.to_acp_json()]).await.unwrap();
+    let wire = server
+        .to_gateway_acp_json(Some(&McpGatewayBinding {
+            server_id: "fs".into(),
+            run_id: "run-1".into(),
+            transport: McpGatewayTransport::Stdio,
+            endpoint_or_command: "codetwo-mcp-proxy".into(),
+            lease_ref: SecretRef::new(),
+            proxy_socket: Some("/tmp/codetwo-mcp.sock".into()),
+        }))
+        .unwrap();
+    let sid = client.new_session("/tmp", vec![wire]).await.unwrap();
     assert_eq!(sid, "with-mcp");
 }

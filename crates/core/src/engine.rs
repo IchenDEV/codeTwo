@@ -40,7 +40,7 @@ use crate::session::{
 };
 use crate::skill::{
     canonical_doc_text, compile_with_canvas, compile_with_sessions, CompiledPrompt, DocBlock,
-    McpServer, McpTransport, SkillLibrary,
+    McpEncodeError, McpGatewayBinding, McpServer, McpTransport, SkillLibrary,
 };
 use crate::store::{SessionSearchHit, Store, StoreError};
 use crate::work::TaskExperience;
@@ -308,10 +308,30 @@ CodeTwo Work Contract\n\
     Ok(Some(contract.chars().take(16_000).collect()))
 }
 
+#[cfg(test)]
 fn encode_mcp_servers(
     servers: &[McpServer],
     caps: AgentCaps,
 ) -> Result<Vec<serde_json::Value>, String> {
+    encode_mcp_servers_with_gateway(servers, caps, &[]).map_err(|error| error.to_string())
+}
+
+pub fn encode_mcp_servers_with_gateway(
+    servers: &[McpServer],
+    caps: AgentCaps,
+    bindings: &[McpGatewayBinding],
+) -> Result<Vec<serde_json::Value>, McpEncodeError> {
+    for (index, binding) in bindings.iter().enumerate() {
+        if !servers
+            .iter()
+            .any(|server| server.name == binding.server_id)
+            || bindings[..index]
+                .iter()
+                .any(|prior| prior.server_id == binding.server_id)
+        {
+            return Err(McpEncodeError::InvalidGatewayBinding);
+        }
+    }
     servers
         .iter()
         .map(|server| {
@@ -321,17 +341,18 @@ fn encode_mcp_servers(
                 McpTransport::Sse { .. } => caps.mcp_sse,
             };
             if supported {
-                Ok(server.to_acp_json())
+                let mut matching = bindings
+                    .iter()
+                    .filter(|binding| binding.server_id == server.name);
+                let binding = matching.next();
+                if matching.next().is_some() {
+                    return Err(McpEncodeError::InvalidGatewayBinding);
+                }
+                server.to_gateway_acp_json(binding)
             } else {
-                let transport = match &server.transport {
-                    McpTransport::Http { .. } => "HTTP",
-                    McpTransport::Sse { .. } => "SSE",
-                    McpTransport::Stdio { .. } => unreachable!(),
-                };
-                Err(format!(
-                    "MCP server '{}' needs {transport} transport, but this agent did not advertise that ACP capability",
-                    server.name
-                ))
+                Err(McpEncodeError::UnsupportedTransport {
+                    server: server.name.clone(),
+                })
             }
         })
         .collect()
@@ -844,6 +865,17 @@ struct EngineState {
     router: PermissionRouter,
     store: Option<Arc<Store>>,
     canvas_gate: CanvasFeatureGate,
+    mcp_gateway: Option<Arc<dyn McpGatewayBroker>>,
+}
+
+#[async_trait]
+pub trait McpGatewayBroker: Send + Sync {
+    async fn issue_bindings(
+        &self,
+        run_id: &str,
+        servers: &[McpServer],
+        caps: AgentCaps,
+    ) -> Result<Vec<McpGatewayBinding>, String>;
 }
 
 /// Owns the sessions and drives providers. Construct with [`Engine::new`], which also hands back the
@@ -857,7 +889,7 @@ impl Engine {
         providers: Vec<Provider>,
         skills: SkillLibrary,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, None, CanvasFeatureGate::default())
+        Self::build(providers, skills, None, CanvasFeatureGate::default(), None)
     }
 
     /// Like [`Engine::new`] but persists sessions and transcripts to `store`.
@@ -866,7 +898,28 @@ impl Engine {
         skills: SkillLibrary,
         store: Arc<Store>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store), CanvasFeatureGate::default())
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            CanvasFeatureGate::default(),
+            None,
+        )
+    }
+
+    pub fn with_store_and_mcp_gateway(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        gateway: Arc<dyn McpGatewayBroker>,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            CanvasFeatureGate::default(),
+            Some(gateway),
+        )
     }
 
     /// Like [`Engine::with_store`] with an explicitly injected Canvas gate for trusted physical
@@ -878,7 +931,7 @@ impl Engine {
         store: Arc<Store>,
         canvas_gate: CanvasFeatureGate,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store), canvas_gate)
+        Self::build(providers, skills, Some(store), canvas_gate, None)
     }
 
     fn build(
@@ -886,6 +939,7 @@ impl Engine {
         skills: SkillLibrary,
         store: Option<Arc<Store>>,
         canvas_gate: CanvasFeatureGate,
+        mcp_gateway: Option<Arc<dyn McpGatewayBroker>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         let (events, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
@@ -904,6 +958,7 @@ impl Engine {
             router,
             store,
             canvas_gate,
+            mcp_gateway,
         });
         (Engine { state }, rx)
     }
@@ -1805,17 +1860,48 @@ impl Engine {
                         return Ok(());
                     }
                 }
-                let mcp = match encode_mcp_servers(&compiled.mcp_servers, caps) {
-                    Ok(mcp) => mcp,
-                    Err(message) => {
-                        turn_lease.fail_provider(message.clone());
-                        self.emit(Event::Error {
-                            session: Some(session),
-                            message,
-                            terminal: true,
-                            request_id,
-                        });
-                        return Ok(());
+                let mcp = if acp_sid.is_some() {
+                    Vec::new()
+                } else {
+                    let gateway_bindings = if compiled.mcp_servers.is_empty() {
+                        Vec::new()
+                    } else if let Some(gateway) = &self.state.mcp_gateway {
+                        match gateway
+                            .issue_bindings(&session, &compiled.mcp_servers, caps)
+                            .await
+                        {
+                            Ok(bindings) => bindings,
+                            Err(message) => {
+                                turn_lease.fail_provider(message.clone());
+                                self.emit(Event::Error {
+                                    session: Some(session),
+                                    message,
+                                    terminal: true,
+                                    request_id,
+                                });
+                                return Ok(());
+                            }
+                        }
+                    } else {
+                        Vec::new()
+                    };
+                    match encode_mcp_servers_with_gateway(
+                        &compiled.mcp_servers,
+                        caps,
+                        &gateway_bindings,
+                    ) {
+                        Ok(mcp) => mcp,
+                        Err(error) => {
+                            let message = error.to_string();
+                            turn_lease.fail_provider(message.clone());
+                            self.emit(Event::Error {
+                                session: Some(session),
+                                message,
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
                     }
                 };
                 // The canonical prompt was already persisted atomically with Running activity.
@@ -3725,27 +3811,39 @@ mod session_management_tests {
 
 #[cfg(test)]
 mod mcp_tests {
-    use super::encode_mcp_servers;
+    use super::{encode_mcp_servers, encode_mcp_servers_with_gateway};
     use crate::acp::wire::AgentCaps;
-    use crate::skill::{McpServer, McpTransport};
+    use crate::credential::SecretRef;
+    use crate::skill::{
+        McpCredentialState, McpGatewayBinding, McpGatewayTransport, McpServer, McpTransport,
+    };
 
     #[test]
     fn remote_transport_requires_advertised_capability() {
         let server = McpServer {
             name: "remote".into(),
             cwd: None,
+            credential_state: McpCredentialState::Ready,
             transport: McpTransport::Http {
                 url: "https://example.test/mcp".into(),
                 headers: Vec::new(),
             },
         };
         assert!(encode_mcp_servers(&[server.clone()], AgentCaps::default()).is_err());
-        let encoded = encode_mcp_servers(
+        let encoded = encode_mcp_servers_with_gateway(
             &[server],
             AgentCaps {
                 mcp_http: true,
                 ..AgentCaps::default()
             },
+            &[McpGatewayBinding {
+                server_id: "remote".into(),
+                run_id: "run-1".into(),
+                transport: McpGatewayTransport::Http,
+                endpoint_or_command: "http://127.0.0.1:4317/mcp".into(),
+                lease_ref: SecretRef::new(),
+                proxy_socket: None,
+            }],
         )
         .unwrap();
         assert_eq!(encoded[0]["type"], "http");

@@ -1,0 +1,21 @@
+[package]
+name = "codetwo-mcp-proxy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Credential-free local MCP proxy for CodeTwo daemon leases."
+
+[[bin]]
+name = "codetwo-mcp-proxy"
+path = "src/main.rs"
+
+[dependencies]
+codetwo-protocol = { path = "../codetwo-protocol" }
+tokio.workspace = true
+thiserror.workspace = true
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+codetwo-core.workspace = true

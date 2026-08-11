@@ -13,9 +13,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+#[cfg(not(test))]
+use crate::credential::platform_secret_store;
+#[cfg(test)]
+use crate::credential::InMemorySecretStore;
+use crate::credential::{
+    decode_legacy_mcp_server, disabled_legacy_mcp_server, sanitize_json_bytes, SecretStore,
+};
 use crate::github_skills::GitHubCheckout;
 use crate::harness::parse_frontmatter;
-use crate::skill::{McpServer, McpTransport, Skill, SkillKind, SkillPayload, SubagentDefinition};
+use crate::skill::{
+    McpCredentialState, McpServer, McpTransport, Skill, SkillKind, SkillPayload, SubagentDefinition,
+};
 
 const RECORD_FILE: &str = "installed-plugin.json";
 const BUNDLE_DIR: &str = "bundle";
@@ -318,6 +327,25 @@ struct McpConfigSource {
 
 /// Build a complete plugin bundle from a verified GitHub checkout.
 pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginError> {
+    let store = default_plugin_store();
+    from_github_with_secret_store(checkout, store.as_ref())
+}
+
+fn default_plugin_store() -> std::sync::Arc<dyn SecretStore> {
+    #[cfg(test)]
+    {
+        std::sync::Arc::new(InMemorySecretStore::default())
+    }
+    #[cfg(not(test))]
+    {
+        platform_secret_store()
+    }
+}
+
+pub fn from_github_with_secret_store(
+    checkout: &GitHubCheckout,
+    store: &dyn SecretStore,
+) -> Result<PluginBundle, PluginError> {
     let selected = checkout
         .selected_root()
         .map_err(|error| PluginError::Invalid(error.to_string()))?;
@@ -415,6 +443,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
         manifest_set.agent_portable,
         native_conventions,
         &mut manifest_set.diagnostics,
+        store,
     )?);
     if components.len() > MAX_COMPONENTS {
         return Err(PluginError::TooManyComponents(MAX_COMPONENTS));
@@ -467,7 +496,13 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
         return Err(PluginError::NoComponents);
     }
 
-    let files = collect_bundle_files(&plugin_root)?;
+    let mut files = collect_bundle_files(&plugin_root)?;
+    for file in &mut files {
+        if file.path.file_name().and_then(|name| name.to_str()) == Some(".mcp.json") {
+            file.bytes = sanitize_json_bytes(&file.bytes, store)
+                .map_err(|_| PluginError::Invalid("MCP credential migration failed".into()))?;
+        }
+    }
     let repository = if manifest.repository.trim().is_empty() {
         format!(
             "https://github.com/{}/{}",
@@ -622,6 +657,17 @@ pub fn install(
 /// Load every installed plugin. Malformed records are logged and skipped so one bad plugin cannot
 /// hide the rest of the library.
 pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError> {
+    let store = default_plugin_store();
+    load_dir_with_secret_store(plugins_dir, store.as_ref())
+}
+
+/// Load installed plugins after migrating their metadata with an explicit
+/// store.  A failed migration leaves the source recoverable and marks the
+/// affected MCP component reauthentication-required when possible.
+pub fn load_dir_with_secret_store(
+    plugins_dir: &Path,
+    store: &dyn SecretStore,
+) -> Result<Vec<InstalledPlugin>, PluginError> {
     let entries = match std::fs::read_dir(plugins_dir) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -634,7 +680,15 @@ pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError>
             continue;
         }
         let plugin_dir = entry.path();
-        let text = match std::fs::read_to_string(plugin_dir.join(RECORD_FILE)) {
+        let record_path = plugin_dir.join(RECORD_FILE);
+        let migration = crate::credential::migrate_json_file(&record_path, store);
+        // Older installs may retain a raw `.mcp.json` inside the preserved
+        // bundle even when their installed record is already reference-only.
+        // Migrate those files before exposing the plugin to callers too.
+        let bundle_migration =
+            crate::credential::migrate_plugin_dir(&plugin_dir.join(BUNDLE_DIR), store);
+        let migration_disabled = migration.disabled || !bundle_migration.failures.is_empty();
+        let text = match std::fs::read_to_string(&record_path) {
             Ok(text) => text,
             Err(error) => {
                 tracing::warn!("plugin {:?}: {error}", plugin_dir);
@@ -643,11 +697,72 @@ pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError>
         };
         match serde_json::from_str::<InstalledPlugin>(&text) {
             Ok(mut plugin) => {
+                if migration_disabled {
+                    for component in &mut plugin.components {
+                        if let SkillPayload::Mcp { server } = &mut component.payload {
+                            server.credential_state = McpCredentialState::ReauthRequired {
+                                missing_refs: server
+                                    .secret_bindings()
+                                    .into_iter()
+                                    .map(|binding| binding.secret_ref)
+                                    .collect(),
+                            };
+                        }
+                    }
+                } else {
+                    for component in &mut plugin.components {
+                        if let SkillPayload::Mcp { server } = &mut component.payload {
+                            server.validate_credentials(store);
+                        }
+                    }
+                }
                 let data_dir = plugin_data_dir(plugins_dir, &plugin.id);
                 resolve_relative_mcp_commands(&mut plugin, &plugin_dir, &data_dir);
                 plugins.push(plugin);
             }
-            Err(error) => tracing::warn!("plugin {:?}: {error}", plugin_dir),
+            Err(_) if migration_disabled => {
+                // Keep a failed legacy record visible but disabled.  Rebuild
+                // only the MCP payloads; all original literal values are
+                // discarded before serde sees the replacement.
+                if let Ok(mut raw) = serde_json::from_str::<Value>(&text) {
+                    if let Some(components) =
+                        raw.get_mut("components").and_then(Value::as_array_mut)
+                    {
+                        for component in components {
+                            let Some(server_value) = component
+                                .get_mut("payload")
+                                .and_then(|payload| payload.get_mut("server"))
+                            else {
+                                continue;
+                            };
+                            let disabled = crate::credential::disabled_legacy_mcp_server(
+                                server_value,
+                                "migration failed",
+                            );
+                            *server_value = serde_json::to_value(disabled)?;
+                        }
+                    }
+                    if let Ok(mut plugin) = serde_json::from_value::<InstalledPlugin>(raw) {
+                        for component in &mut plugin.components {
+                            if let SkillPayload::Mcp { server } = &mut component.payload {
+                                server.credential_state = McpCredentialState::ReauthRequired {
+                                    missing_refs: server
+                                        .secret_bindings()
+                                        .into_iter()
+                                        .map(|binding| binding.secret_ref)
+                                        .collect(),
+                                };
+                            }
+                        }
+                        let data_dir = plugin_data_dir(plugins_dir, &plugin.id);
+                        resolve_relative_mcp_commands(&mut plugin, &plugin_dir, &data_dir);
+                        plugins.push(plugin);
+                        continue;
+                    }
+                }
+                tracing::warn!("plugin {:?}: MCP migration failed", plugin_dir)
+            }
+            Err(_) => tracing::warn!("plugin {:?}: malformed plugin metadata", plugin_dir),
         }
     }
     plugins.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
@@ -1901,6 +2016,7 @@ fn parse_mcp_servers(
     agent_portable: bool,
     native_conventions: bool,
     diagnostics: &mut Vec<PluginDiagnostic>,
+    store: &dyn SecretStore,
 ) -> Result<Vec<Skill>, PluginError> {
     let mut sources = Vec::new();
     if agent_portable {
@@ -1968,7 +2084,13 @@ fn parse_mcp_servers(
                 });
                 continue;
             }
-            match parse_mcp_server(root, &name, config, source_config.strict_agent_plugins) {
+            match parse_mcp_server(
+                root,
+                &name,
+                config,
+                source_config.strict_agent_plugins,
+                store,
+            ) {
                 Ok(server) => components.push(Skill {
                     id: format!("{plugin_id}:mcp:{}", slug_with_hash(&name)),
                     name: name.to_string(),
@@ -2081,6 +2203,7 @@ fn parse_mcp_server(
     name: &str,
     value: &Value,
     strict: bool,
+    store: &dyn SecretStore,
 ) -> Result<McpServer, String> {
     let config = value
         .as_object()
@@ -2109,7 +2232,7 @@ fn parse_mcp_server(
             if strict {
                 validate_stdio_command(root, command, name)?;
             }
-            let args = string_array(config.get("args"), &format!("MCP server {name} args"))
+            let _args = string_array(config.get("args"), &format!("MCP server {name} args"))
                 .map_err(|error| error.to_string())?;
             let env = string_map(config.get("env"), &format!("MCP server {name} env"))
                 .map_err(|error| error.to_string())?;
@@ -2131,15 +2254,23 @@ fn parse_mcp_server(
                         .and_then(|cwd| validate_mcp_cwd(root, cwd, strict, name))
                 })
                 .transpose()?;
-            Ok(McpServer {
-                name: name.into(),
-                cwd,
-                transport: McpTransport::Stdio {
-                    command: command.into(),
-                    args,
-                    env,
-                },
-            })
+            let mut legacy = Value::Object(config.clone());
+            legacy
+                .as_object_mut()
+                .expect("MCP config object")
+                .insert("name".into(), Value::String(name.into()));
+            let mut server = match decode_legacy_mcp_server(&legacy, store) {
+                Ok(server) => server,
+                Err(crate::credential::MigrationError::Store(error)) => {
+                    disabled_legacy_mcp_server(&legacy, &error.to_string())
+                }
+                Err(error) => return Err(error.to_string()),
+            };
+            server.cwd = cwd;
+            if server.is_enabled() {
+                server.validate_credentials(store);
+            }
+            Ok(server)
         }
         "http" | "streamable-http" | "sse" => {
             if strict {
@@ -2158,22 +2289,22 @@ fn parse_mcp_server(
             let headers = string_map(config.get("headers"), &format!("MCP server {name} headers"))
                 .map_err(|error| error.to_string())?;
             validate_headers(&headers, name)?;
-            let transport = if transport_name == "sse" {
-                McpTransport::Sse {
-                    url: url.into(),
-                    headers,
+            let mut legacy = Value::Object(config.clone());
+            legacy
+                .as_object_mut()
+                .expect("MCP config object")
+                .insert("name".into(), Value::String(name.into()));
+            let mut server = match decode_legacy_mcp_server(&legacy, store) {
+                Ok(server) => server,
+                Err(crate::credential::MigrationError::Store(error)) => {
+                    disabled_legacy_mcp_server(&legacy, &error.to_string())
                 }
-            } else {
-                McpTransport::Http {
-                    url: url.into(),
-                    headers,
-                }
+                Err(error) => return Err(error.to_string()),
             };
-            Ok(McpServer {
-                name: name.into(),
-                cwd: None,
-                transport,
-            })
+            if server.is_enabled() {
+                server.validate_credentials(store);
+            }
+            Ok(server)
         }
         other => Err(format!(
             "MCP server {name} has unsupported transport {other}"
@@ -2514,7 +2645,13 @@ fn resolve_relative_mcp_commands(plugin: &mut InstalledPlugin, plugin_dir: &Path
         let SkillPayload::Mcp { server } = &mut component.payload else {
             continue;
         };
-        let McpTransport::Stdio { command, args, env } = &mut server.transport else {
+        let McpTransport::Stdio {
+            command,
+            args,
+            env,
+            launch_env,
+        } = &mut server.transport
+        else {
             continue;
         };
         if let Some(relative) = command.strip_prefix("./") {
@@ -2528,10 +2665,12 @@ fn resolve_relative_mcp_commands(plugin: &mut InstalledPlugin, plugin_dir: &Path
         for arg in args {
             *arg = expand_plugin_variables(arg, &bundle_root, data_dir, &standards);
         }
-        for (_, value) in env.iter_mut() {
-            *value = expand_plugin_variables(value, &bundle_root, data_dir, &standards);
-        }
-        env.retain(|(name, _)| {
+        // MCP env entries are secret references, not plaintext values. Their
+        // referenced values are resolved only by the credential gateway, so
+        // path expansion must never rewrite them here. Runtime-only launch
+        // context is kept separately and omitted from persistence/provider
+        // wire encoding.
+        env.retain(|binding| {
             ![
                 "PLUGIN_ROOT",
                 "PLUGIN_DATA",
@@ -2541,23 +2680,24 @@ fn resolve_relative_mcp_commands(plugin: &mut InstalledPlugin, plugin_dir: &Path
                 "CODEX_PLUGIN_DATA",
             ]
             .iter()
-            .any(|reserved| name.eq_ignore_ascii_case(reserved))
+            .any(|reserved| binding.name.eq_ignore_ascii_case(reserved))
         });
-        env.push(("PLUGIN_ROOT".into(), bundle_root.display().to_string()));
-        env.push(("PLUGIN_DATA".into(), data_dir.display().to_string()));
+        launch_env.clear();
+        launch_env.push(("PLUGIN_ROOT".into(), bundle_root.display().to_string()));
+        launch_env.push(("PLUGIN_DATA".into(), data_dir.display().to_string()));
         if standards.contains(&PluginStandard::ClaudeCode) {
-            env.push((
+            launch_env.push((
                 "CLAUDE_PLUGIN_ROOT".into(),
                 bundle_root.display().to_string(),
             ));
-            env.push(("CLAUDE_PLUGIN_DATA".into(), data_dir.display().to_string()));
+            launch_env.push(("CLAUDE_PLUGIN_DATA".into(), data_dir.display().to_string()));
         }
         if standards.contains(&PluginStandard::Codex) {
-            env.push((
+            launch_env.push((
                 "CODEX_PLUGIN_ROOT".into(),
                 bundle_root.display().to_string(),
             ));
-            env.push(("CODEX_PLUGIN_DATA".into(), data_dir.display().to_string()));
+            launch_env.push(("CODEX_PLUGIN_DATA".into(), data_dir.display().to_string()));
         }
         if let Some(cwd) = &mut server.cwd {
             if let Some(relative) = cwd.strip_prefix("./") {
@@ -3082,7 +3222,13 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        let McpTransport::Stdio { command, args, env } = &server.transport else {
+        let McpTransport::Stdio {
+            command,
+            args,
+            launch_env,
+            ..
+        } = &server.transport
+        else {
             panic!("expected stdio");
         };
         assert!(Path::new(command).is_absolute());
@@ -3091,10 +3237,10 @@ mod tests {
             .cwd
             .as_deref()
             .is_some_and(|cwd| Path::new(cwd).is_absolute()));
-        assert!(env
+        assert!(launch_env
             .iter()
             .any(|(name, value)| name == "PLUGIN_ROOT" && Path::new(value).is_absolute()));
-        assert!(env
+        assert!(launch_env
             .iter()
             .any(|(name, value)| name == "PLUGIN_DATA" && Path::new(value).is_absolute()));
         assert!(plugin_data_dir(&data, &installed.id).is_dir());

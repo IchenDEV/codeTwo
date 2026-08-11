@@ -46,7 +46,15 @@ pub fn parse_catalog(json: &str) -> serde_json::Result<Vec<MarketEntry>> {
     serde_json::from_str(json)
 }
 
-fn fragment(id: &str, name: &str, icon: &str, author: &str, tags: &[&str], desc: &str, text: &str) -> MarketEntry {
+fn fragment(
+    id: &str,
+    name: &str,
+    icon: &str,
+    author: &str,
+    tags: &[&str],
+    desc: &str,
+    text: &str,
+) -> MarketEntry {
     MarketEntry {
         id: id.into(),
         name: name.into(),
@@ -170,10 +178,12 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
                 server: McpServer {
                     name: "browser".into(),
                     cwd: None,
+                    credential_state: Default::default(),
                     transport: McpTransport::Stdio {
                         command: "codetwo-browser-mcp".into(),
                         args: vec![],
                         env: vec![],
+                        launch_env: vec![],
                     },
                 },
             },
@@ -189,10 +199,12 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
                 server: McpServer {
                     name: "web-search".into(),
                     cwd: None,
+                    credential_state: Default::default(),
                     transport: McpTransport::Stdio {
                         command: "mcp-server-web-search".into(),
                         args: vec![],
                         env: vec![],
+                        launch_env: vec![],
                     },
                 },
             },
@@ -208,10 +220,12 @@ pub fn builtin_catalog() -> Vec<MarketEntry> {
                 server: McpServer {
                     name: "filesystem".into(),
                     cwd: None,
+                    credential_state: Default::default(),
                     transport: McpTransport::Stdio {
                         command: "mcp-server-filesystem".into(),
                         args: vec![".".into()],
                         env: vec![],
+                        launch_env: vec![],
                     },
                 },
             },
@@ -250,6 +264,8 @@ mod tests {
 
     #[test]
     fn includes_a_browser_tool_entry() {
-        assert!(builtin_catalog().iter().any(|e| e.id == "browser-tool" && e.kind() == SkillKind::Mcp));
+        assert!(builtin_catalog()
+            .iter()
+            .any(|e| e.id == "browser-tool" && e.kind() == SkillKind::Mcp));
     }
 }

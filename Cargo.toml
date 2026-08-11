@@ -12,6 +12,7 @@ members = [
     "crates/codetwo-protocol",
     "crates/codetwo-client",
     "crates/codetwo-daemon",
+    "crates/codetwo-mcp-proxy",
     "apps/desktop/src-tauri",
 ]
 
