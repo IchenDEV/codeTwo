@@ -43,6 +43,7 @@ use crate::skill::{
     McpServer, McpTransport, SkillLibrary,
 };
 use crate::store::{SessionSearchHit, Store, StoreError};
+use crate::work::TaskExperience;
 use crate::worktree::WorktreeBaseline;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -246,6 +247,65 @@ fn canvas_history_projection(canonical: String, compiled: Option<&CompiledPrompt
         ));
     }
     out
+}
+
+fn work_contract_for_session(
+    store: &Store,
+    session_id: &str,
+    cwd: &str,
+) -> Result<Option<String>, StoreError> {
+    let Some(task) = store.work_task_for_session(session_id)? else {
+        return Ok(None);
+    };
+    if task.experience != TaskExperience::Work {
+        return Ok(None);
+    }
+    let brief = store.work_current_brief(&task.id)?;
+    let mut brief_lines = Vec::new();
+    if let Some(brief) = brief {
+        for block in brief.entity.blocks {
+            let line = match block {
+                DocBlock::Text { text } => text,
+                DocBlock::Skill { skill_id, .. } => format!("Skill: {skill_id}"),
+                DocBlock::File { path } => format!("Input file: {path}"),
+                DocBlock::Image { path } => format!("Input image: {path}"),
+                DocBlock::Canvas {
+                    id,
+                    frozen_revision,
+                    ..
+                } => format!("Input canvas: {id} revision {frozen_revision}"),
+                DocBlock::Session { session_id } => {
+                    format!("Referenced CodeTwo task: {session_id}")
+                }
+            };
+            if !line.trim().is_empty() {
+                brief_lines.push(line);
+            }
+        }
+    }
+    if brief_lines.is_empty() {
+        brief_lines.push("No structured Brief has been saved yet.".to_owned());
+    }
+    let deliverables = std::path::Path::new(cwd).join("Deliverables");
+    let contract = format!(
+        "<codetwo_work_contract>\n\
+CodeTwo Work Contract\n\
+- This is a Work task, not a Code conversation. Produce the requested durable deliverables.\n\
+- Task: {} ({})\n\
+- Workspace: {}\n\
+- Put final output under Deliverables/ (resolved path: {}).\n\
+- Keep progress visible in normal responses and clearly report any blocked user decision.\n\
+- When CodeTwo Work tools are available, register every deliverable and submit the task as ready for review. If those tools are unavailable, finish normally and report the exact deliverable paths for manual review.\n\
+- Do not emit or parse magic JSON as a substitute for the Work tools.\n\
+\nCurrent Task Brief:\n{}\n\
+</codetwo_work_contract>",
+        task.title,
+        task.id,
+        cwd,
+        deliverables.display(),
+        brief_lines.join("\n"),
+    );
+    Ok(Some(contract.chars().take(16_000).collect()))
 }
 
 fn encode_mcp_servers(
@@ -1681,11 +1741,24 @@ impl Engine {
                         }
                     })
                     .unwrap_or_default();
-                let provider_prompt = if memory_context.block.is_empty() {
-                    compiled.prompt.clone()
-                } else {
-                    format!("{}\n\n{}", memory_context.block, compiled.prompt)
-                };
+                let work_contract = self.state.store.as_ref().and_then(|store| {
+                    match work_contract_for_session(store, &session, &cwd) {
+                        Ok(contract) => contract,
+                        Err(error) => {
+                            tracing::warn!("load Work contract failed: {error}");
+                            None
+                        }
+                    }
+                });
+                let provider_prompt = [
+                    (!memory_context.block.is_empty()).then_some(memory_context.block.as_str()),
+                    work_contract.as_deref(),
+                    Some(compiled.prompt.as_str()),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join("\n\n");
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
@@ -2668,6 +2741,91 @@ mod cwd_tests {
         assert!(
             err.contains("/definitely/not/a/real/directory"),
             "got {err}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod work_contract_tests {
+    use std::sync::Arc;
+
+    use super::work_contract_for_session;
+    use crate::{
+        BriefRevision, DocBlock, ProviderId, Session, Store, Task, TaskExperience,
+        WorkMutationGuard, Workspace, WorkspaceKind,
+    };
+
+    #[test]
+    fn contract_is_scoped_to_work_and_contains_the_current_brief() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace_root = root.path().join("workspace");
+        std::fs::create_dir_all(&workspace_root).unwrap();
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let workspace = Workspace::new(
+            "Client research",
+            Some(workspace_root.to_string_lossy().into_owned()),
+            WorkspaceKind::External,
+        );
+        store
+            .work_save_workspace(
+                &workspace,
+                &WorkMutationGuard::new(None, "test", "test", "workspace"),
+            )
+            .unwrap();
+        let task = Task::named(&workspace.id, "Write findings", TaskExperience::Work);
+        store
+            .work_save_task(&task, &WorkMutationGuard::new(None, "test", "test", "task"))
+            .unwrap();
+        store
+            .work_save_brief(
+                BriefRevision::new(
+                    &task.id,
+                    1,
+                    vec![
+                        DocBlock::Text {
+                            text: "Create a concise market memo.".to_owned(),
+                        },
+                        DocBlock::File {
+                            path: "inputs/interviews.md".to_owned(),
+                        },
+                    ],
+                    "test",
+                ),
+                &WorkMutationGuard::new(None, "test", "test", "brief"),
+            )
+            .unwrap();
+        let session = Session::new(
+            ProviderId::Custom("test".to_owned()),
+            workspace_root.to_string_lossy().into_owned(),
+        );
+        store
+            .upsert_session_for_task(&session, Some(&task.id))
+            .unwrap();
+
+        let contract = work_contract_for_session(&store, &session.id, &session.cwd)
+            .unwrap()
+            .unwrap();
+        assert!(contract.contains("CodeTwo Work Contract"));
+        assert!(contract.contains("Create a concise market memo."));
+        assert!(contract.contains("inputs/interviews.md"));
+        assert!(contract.contains("Deliverables/"));
+        assert!(contract.contains("ready for review"));
+        assert!(contract.contains("Do not emit or parse magic JSON"));
+
+        let code_task = Task::named(&workspace.id, "Code task", TaskExperience::Code);
+        store
+            .work_save_task(
+                &code_task,
+                &WorkMutationGuard::new(None, "test", "test", "code-task"),
+            )
+            .unwrap();
+        let code_session = Session::new(ProviderId::Grok, session.cwd.clone());
+        store
+            .upsert_session_for_task(&code_session, Some(&code_task.id))
+            .unwrap();
+        assert_eq!(
+            work_contract_for_session(&store, &code_session.id, &code_session.cwd).unwrap(),
+            None
         );
     }
 }
