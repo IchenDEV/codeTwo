@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
@@ -8,14 +8,15 @@ use std::sync::{Arc, Mutex as StdMutex};
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
-    Engine, Event, Provider, Store, StoreError, WorkArtifactError, WorkArtifactService,
-    WorkMutationGuard,
+    Engine, Event, Op, Provider, RunSnapshot, SnapshotConfig, SnapshotPreparation,
+    SnapshotPreparationOptions, Store, StoreError, WorkArtifactError, WorkArtifactService,
+    WorkMutationGuard, WorkspaceSnapshot, WorkspaceSnapshotService,
 };
 use codetwo_protocol::{
     read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
-    RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
-    StreamEpoch, SubscribeResult, TransportEvent, WorkErrorKind, WorkRequest, WorkResponse,
-    MAX_REPLAY_EVENTS,
+    RequestEnvelope, ResetReason, Response, ResponseEnvelope, RunStartReceipt, ServerFrame,
+    StreamCursor, StreamEpoch, SubscribeResult, TransportEvent, WorkErrorKind, WorkRequest,
+    WorkResponse, MAX_REPLAY_EVENTS,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedWriteHalf, UnixListener, UnixStream};
@@ -44,8 +45,16 @@ struct State {
     shutdown: watch::Sender<bool>,
     store: Arc<Store>,
     artifacts: WorkArtifactService,
+    snapshot_root: PathBuf,
+    pending_snapshots: StdMutex<HashMap<String, PendingSnapshot>>,
     engine: Engine,
     engine_events: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<Event>>>,
+}
+
+struct PendingSnapshot {
+    id: String,
+    task_id: String,
+    snapshot: WorkspaceSnapshot,
 }
 
 pub struct Daemon {
@@ -121,6 +130,9 @@ impl Daemon {
         let (events, _) = broadcast::channel(MAX_REPLAY_EVENTS);
         let (shutdown, _) = watch::channel(false);
         let artifacts = WorkArtifactService::new(store.clone());
+        let snapshot_root = runtime_dir.join("snapshots");
+        fs::create_dir_all(&snapshot_root)?;
+        fs::set_permissions(&snapshot_root, fs::Permissions::from_mode(0o700))?;
         let (engine, engine_events) = Engine::with_store(providers, skills, store.clone());
         Ok(Self {
             _ownership: ownership,
@@ -134,6 +146,8 @@ impl Daemon {
                 shutdown,
                 store,
                 artifacts,
+                snapshot_root,
+                pending_snapshots: StdMutex::new(HashMap::new()),
                 engine,
                 engine_events: StdMutex::new(Some(engine_events)),
             }),
@@ -331,11 +345,28 @@ async fn handle(
         Request::Work {
             request: work_request,
         } => {
-            let (response, events) = dispatch_work(state, request.request_id, work_request);
+            let (response, events) = dispatch_work(state, request.request_id, work_request).await;
             for event in events {
                 append(state, event).await;
             }
             send(writer, request.request_id, Response::Work { response }).await
+        }
+        Request::Core { op }
+            if matches!(
+                &op,
+                Op::NewSession {
+                    task_id: Some(_),
+                    ..
+                }
+            ) =>
+        {
+            send_error(
+                writer,
+                request.request_id,
+                ErrorKind::InvalidRequest,
+                "Work runs must use the Work start-run request",
+            )
+            .await
         }
         Request::Core { op } => match state.engine.submit(op).await {
             Ok(()) => send(writer, request.request_id, Response::CoreAccepted).await,
@@ -417,11 +448,47 @@ async fn engine_event_loop(
 ) {
     while let Some(event) = receiver.recv().await {
         let created_run = match &event {
-            Event::SessionCreated { session, .. } => Some(session.clone()),
+            Event::SessionCreated {
+                session,
+                request_id,
+                ..
+            } => Some((session.clone(), request_id.clone())),
             _ => None,
         };
+        let snapshot_result = created_run.as_ref().and_then(|(run_id, request_id)| {
+            let request_id = request_id.as_ref()?;
+            let pending = state
+                .pending_snapshots
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .remove(request_id)?;
+            let record = RunSnapshot {
+                id: pending.id,
+                task_id: pending.task_id,
+                run_id: run_id.clone(),
+                storage_path: pending
+                    .snapshot
+                    .snapshot_root
+                    .to_string_lossy()
+                    .into_owned(),
+                manifest: pending.snapshot.manifest,
+                not_covered: pending.snapshot.not_covered,
+                created_at: 0,
+            };
+            let guard = WorkMutationGuard::new(
+                None,
+                "daemon",
+                "local_daemon",
+                format!("snapshot:{request_id}"),
+            );
+            Some((
+                run_id.clone(),
+                request_id.clone(),
+                state.store.work_save_run_snapshot(record, &guard),
+            ))
+        });
         append(&state, TransportEvent::Core { event }).await;
-        if let Some(run_id) = created_run {
+        if let Some((run_id, _)) = created_run {
             if let Ok(Some(run)) = state.store.work_get_run(&run_id) {
                 append(
                     &state,
@@ -433,10 +500,43 @@ async fn engine_event_loop(
                 .await;
             }
         }
+        match snapshot_result {
+            Some((_, _, Ok(saved))) => {
+                append(
+                    &state,
+                    TransportEvent::SnapshotPrepared {
+                        snapshot_id: saved.entity.id,
+                        task_id: saved.entity.task_id,
+                        run_id: saved.entity.run_id,
+                        file_count: u64::try_from(saved.entity.manifest.files.len())
+                            .unwrap_or(u64::MAX),
+                        not_covered: u64::try_from(saved.entity.not_covered.len())
+                            .unwrap_or(u64::MAX),
+                        revision: saved.revision,
+                    },
+                )
+                .await;
+            }
+            Some((run_id, request_id, Err(_))) => {
+                append(
+                    &state,
+                    TransportEvent::Core {
+                        event: Event::Error {
+                            session: Some(run_id),
+                            message: "Work snapshot metadata could not be persisted".to_owned(),
+                            terminal: false,
+                            request_id: Some(request_id),
+                        },
+                    },
+                )
+                .await;
+            }
+            None => {}
+        }
     }
 }
 
-fn dispatch_work(
+async fn dispatch_work(
     state: &State,
     request_id: u64,
     request: WorkRequest,
@@ -536,6 +636,87 @@ fn dispatch_work(
             Ok(page) => (WorkResponse::Runs { page }, Vec::new()),
             Err(error) => (work_error(error), Vec::new()),
         },
+        WorkRequest::StartRun {
+            task_id,
+            provider,
+            allow_without_rollback,
+        } => {
+            let workspace_root = match state.store.work_workspace_root_for_task(&task_id) {
+                Ok(root) => root,
+                Err(error) => return (work_error(error), Vec::new()),
+            };
+            let request_id = format!("work-run:{}", Uuid::new_v4().simple());
+            let snapshot_id = Uuid::new_v4().to_string();
+            let snapshot_path = state.snapshot_root.join(&snapshot_id);
+            let service = WorkspaceSnapshotService::new(
+                SnapshotConfig::new(&workspace_root, &snapshot_path).provider_cwd(&workspace_root),
+            );
+            let (snapshot_id, rollback_available, not_covered, prepared_snapshot) = match service
+                .create_with_options(SnapshotPreparationOptions {
+                    allow_without_rollback,
+                }) {
+                Ok(SnapshotPreparation::Snapshot(snapshot)) => {
+                    let count = u64::try_from(snapshot.not_covered.len()).unwrap_or(u64::MAX);
+                    (Some(snapshot_id), true, count, Some(snapshot))
+                }
+                Ok(SnapshotPreparation::NoRollback(preparation)) => (
+                    None,
+                    false,
+                    u64::try_from(preparation.not_covered.len()).unwrap_or(u64::MAX),
+                    None,
+                ),
+                Err(_) => return (invalid_work_response(), Vec::new()),
+            };
+            if let Some(snapshot) = prepared_snapshot {
+                state
+                    .pending_snapshots
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .insert(
+                        request_id.clone(),
+                        PendingSnapshot {
+                            id: snapshot_id.clone().unwrap_or_default(),
+                            task_id: task_id.clone(),
+                            snapshot,
+                        },
+                    );
+            }
+            let submission = state
+                .engine
+                .submit(Op::NewSession {
+                    provider,
+                    cwd: workspace_root.to_string_lossy().into_owned(),
+                    use_worktree: false,
+                    worktree_base: None,
+                    worktree_base_sha: None,
+                    request_id: Some(request_id.clone()),
+                    initial_policy: None,
+                    task_id: Some(task_id),
+                })
+                .await;
+            if submission.is_err() {
+                state
+                    .pending_snapshots
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .remove(&request_id);
+                if rollback_available {
+                    let _ = fs::remove_dir_all(&snapshot_path);
+                }
+                return (invalid_work_response(), Vec::new());
+            }
+            (
+                WorkResponse::RunStarted {
+                    receipt: RunStartReceipt {
+                        request_id,
+                        snapshot_id,
+                        rollback_available,
+                        not_covered,
+                    },
+                },
+                Vec::new(),
+            )
+        }
         WorkRequest::RegisterDeliverable {
             task_id,
             run_id,
@@ -586,6 +767,14 @@ fn local_guard(request_id: u64, expected_revision: Option<u64>) -> WorkMutationG
         format!("local_uid:{}", unsafe { libc::geteuid() }),
         format!("local:{request_id}"),
     )
+}
+
+fn invalid_work_response() -> WorkResponse {
+    WorkResponse::Error {
+        error: WorkErrorKind::InvalidRequest,
+        message: "invalid Work request".to_owned(),
+        current_revision: None,
+    }
 }
 
 fn work_error(error: StoreError) -> WorkResponse {

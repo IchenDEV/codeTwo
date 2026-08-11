@@ -62,6 +62,18 @@ CREATE UNIQUE INDEX IF NOT EXISTS deliverables_current_path
 CREATE INDEX IF NOT EXISTS deliverables_task_path_version
   ON deliverables(task_id, path, version, id);
 
+CREATE TABLE IF NOT EXISTS run_snapshots (
+  id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 256),
+  task_id TEXT NOT NULL REFERENCES tasks(id),
+  run_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),
+  storage_path TEXT NOT NULL CHECK(length(storage_path) BETWEEN 1 AND 4096),
+  manifest_json TEXT NOT NULL,
+  not_covered_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL CHECK(created_at >= 0)
+);
+CREATE INDEX IF NOT EXISTS run_snapshots_task_created
+  ON run_snapshots(task_id, created_at, id);
+
 CREATE TABLE IF NOT EXISTS work_revision_clock (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   high_water INTEGER NOT NULL CHECK(high_water >= 0)

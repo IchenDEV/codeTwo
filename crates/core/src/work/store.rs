@@ -6,8 +6,9 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 
 use super::domain::{
-    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, Task, TaskExperience,
-    TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, RunSnapshot, Task,
+    TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
+    MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
     ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
@@ -951,6 +952,29 @@ impl Store {
         }
     }
 
+    pub fn work_workspace_root_for_task(&self, task_id: &str) -> Result<PathBuf, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let root: Option<Option<String>> = conn
+            .query_row(
+                "SELECT w.root_path FROM tasks t
+                 JOIN work_entity_heads th
+                   ON th.entity_kind='task' AND th.entity_id=t.id AND th.deleted=0
+                 JOIN workspaces w ON w.id=t.workspace_id
+                 JOIN work_entity_heads wh
+                   ON wh.entity_kind='workspace' AND wh.entity_id=w.id AND wh.deleted=0
+                 WHERE t.id=?1",
+                [task_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match root.flatten() {
+            Some(root) => Ok(PathBuf::from(root)),
+            None => Err(StoreError::Domain(
+                "Work Task has no active rooted Workspace".to_owned(),
+            )),
+        }
+    }
+
     pub(crate) fn work_save_deliverable(
         &self,
         deliverable: Deliverable,
@@ -1037,6 +1061,32 @@ impl Store {
             next_cursor,
             high_water: high_water(&conn)?,
         })
+    }
+
+    pub fn work_save_run_snapshot(
+        &self,
+        snapshot: RunSnapshot,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<RunSnapshot>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.save_run_snapshot(snapshot, guard)
+        })
+    }
+
+    pub fn work_snapshot_for_run(&self, run_id: &str) -> Result<Option<RunSnapshot>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT s.id,s.task_id,s.run_id,s.storage_path,s.manifest_json,s.not_covered_json,
+                    s.created_at
+             FROM run_snapshots s JOIN work_entity_heads h
+               ON h.entity_kind='snapshot' AND h.entity_id=s.id AND h.deleted=0
+             WHERE s.run_id=?1",
+            [run_id],
+            run_snapshot_from_row,
+        )
+        .optional()
+        .map_err(StoreError::from)
     }
 
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {
@@ -1172,6 +1222,26 @@ fn deliverable_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersion
         },
         revision: u64::try_from(row.get::<_, i64>(11)?)
             .map_err(|_| rusqlite::Error::InvalidQuery)?,
+    })
+}
+
+fn run_snapshot_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RunSnapshot> {
+    let manifest_json: String = row.get(4)?;
+    let not_covered_json: String = row.get(5)?;
+    let manifest = serde_json::from_str(&manifest_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    let not_covered = serde_json::from_str(&not_covered_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+    Ok(RunSnapshot {
+        id: row.get(0)?,
+        task_id: row.get(1)?,
+        run_id: row.get(2)?,
+        storage_path: row.get(3)?,
+        manifest,
+        not_covered,
+        created_at: row.get(6)?,
     })
 }
 

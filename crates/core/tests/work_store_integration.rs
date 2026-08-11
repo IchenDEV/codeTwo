@@ -540,6 +540,7 @@ fn reopening_a_work_v1_store_installs_additive_artifact_tables() {
     drop(Store::open(path.to_str().unwrap()).unwrap());
     let reopened = Connection::open(&path).unwrap();
     assert!(table_exists(&reopened, "deliverables"));
+    assert!(table_exists(&reopened, "run_snapshots"));
     let integrity: String = reopened
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
         .unwrap();

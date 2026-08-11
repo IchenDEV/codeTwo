@@ -9,8 +9,9 @@ mod schema;
 pub(crate) mod store;
 
 pub use domain::{
-    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, Task, TaskExperience,
-    TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, RunSnapshot, Task,
+    TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
+    MAX_WORK_PAGE_SIZE,
 };
 pub use ledger::{
     entity_head, high_water, install_schema, mutation_history, with_transaction, WorkAuditContext,

@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::skill::DocBlock;
+use crate::work_snapshot::{NotCoveredPath, SnapshotManifest};
 use crate::{ProviderId, SessionActivity};
 
 pub const MAX_WORK_PAGE_SIZE: usize = 100;
@@ -254,6 +255,41 @@ pub struct Run {
     pub activity: SessionActivity,
     pub cwd: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunSnapshot {
+    pub id: String,
+    pub task_id: String,
+    pub run_id: String,
+    pub storage_path: String,
+    pub manifest: SnapshotManifest,
+    pub not_covered: Vec<NotCoveredPath>,
+    pub created_at: i64,
+}
+
+impl RunSnapshot {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_text("snapshot id", &self.id, 256)?;
+        validate_text("snapshot task id", &self.task_id, 256)?;
+        validate_text("snapshot run id", &self.run_id, 256)?;
+        validate_text("snapshot storage path", &self.storage_path, 4096)?;
+        if self.manifest.version != 1 || self.created_at < 0 {
+            return Err("invalid Work snapshot metadata".to_owned());
+        }
+        let mut previous = None;
+        for file in &self.manifest.files {
+            validate_text("snapshot file path", &file.path, 4096)?;
+            if file.blake3.len() != 64
+                || !file.blake3.bytes().all(|byte| byte.is_ascii_hexdigit())
+                || previous.is_some_and(|path: &str| path >= file.path.as_str())
+            {
+                return Err("invalid Work snapshot manifest".to_owned());
+            }
+            previous = Some(file.path.as_str());
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

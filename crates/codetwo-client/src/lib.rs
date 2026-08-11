@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
     read_json, write_json, BriefRevision, BriefSaveResult, Deliverable, EventEnvelope, Op, Request,
-    RequestEnvelope, ResetReason, Response, ResponseEnvelope, Run, ServerFrame, StreamCursor,
-    StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest,
-    WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
+    RequestEnvelope, ResetReason, Response, ResponseEnvelope, Run, RunStartReceipt, ServerFrame,
+    StreamCursor, StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage,
+    WorkRequest, WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedReadHalf, UnixStream};
@@ -428,6 +428,28 @@ impl Client {
         }
     }
 
+    pub async fn start_run(
+        &self,
+        task_id: String,
+        provider: codetwo_protocol::ProviderId,
+        allow_without_rollback: bool,
+    ) -> Result<RunStartReceipt, ClientError> {
+        match self
+            .work(WorkRequest::StartRun {
+                task_id,
+                provider,
+                allow_without_rollback,
+            })
+            .await?
+        {
+            WorkResponse::RunStarted { receipt } => Ok(receipt),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "run_started",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn register_deliverable(
         &self,
         task_id: String,
@@ -789,6 +811,7 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::Brief { .. } => "brief",
         WorkResponse::BriefSaved { .. } => "brief_saved",
         WorkResponse::Runs { .. } => "runs",
+        WorkResponse::RunStarted { .. } => "run_started",
         WorkResponse::DeliverableRegistered { .. } => "deliverable_registered",
         WorkResponse::Deliverables { .. } => "deliverables",
         WorkResponse::Error { .. } => "error",

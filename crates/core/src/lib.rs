@@ -98,9 +98,10 @@ pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use work::{
     entity_head as work_entity_head, high_water as work_high_water,
     install_schema as install_work_schema, mutation_history as work_mutation_history,
-    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, Task, TaskExperience,
-    TaskStatus, WorkAuditContext, WorkEntityHead, WorkEntityKind, WorkMutation, WorkMutationGuard,
-    WorkPage, WorkRunBinding, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, RunSnapshot, Task,
+    TaskExperience, TaskStatus, WorkAuditContext, WorkEntityHead, WorkEntityKind, WorkMutation,
+    WorkMutationGuard, WorkPage, WorkRunBinding, WorkVersioned, Workspace, WorkspaceKind,
+    MAX_WORK_PAGE_SIZE,
 };
 pub use work_artifact::{
     ArtifactRegistration, WorkArtifactError, WorkArtifactService, MAX_WORK_ARTIFACT_BYTES,

@@ -7,8 +7,8 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Deliverable, Event, Op, Run, Task, WorkPage, WorkVersioned,
-    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, Event, Op, ProviderId, Run, Task, WorkPage,
+    WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -181,6 +181,14 @@ pub enum TransportEvent {
         run: Run,
         revision: u64,
     },
+    SnapshotPrepared {
+        snapshot_id: String,
+        task_id: String,
+        run_id: String,
+        file_count: u64,
+        not_covered: u64,
+        revision: u64,
+    },
     DeliverableChanged {
         deliverable: Deliverable,
         revision: u64,
@@ -252,6 +260,20 @@ impl EventEnvelope {
                     return Err(EnvelopeError::InvalidField("run revision".to_owned()));
                 }
             }
+            TransportEvent::SnapshotPrepared {
+                snapshot_id,
+                task_id,
+                run_id,
+                revision,
+                ..
+            } => {
+                validate_bounded_text(snapshot_id, 256, "snapshot id")?;
+                validate_bounded_text(task_id, 256, "task id")?;
+                validate_bounded_text(run_id, 256, "run id")?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField("snapshot revision".to_owned()));
+                }
+            }
             TransportEvent::DeliverableChanged {
                 deliverable,
                 revision,
@@ -311,6 +333,12 @@ pub enum WorkRequest {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
         limit: usize,
+    },
+    StartRun {
+        task_id: String,
+        provider: ProviderId,
+        #[serde(default)]
+        allow_without_rollback: bool,
     },
     RegisterDeliverable {
         task_id: String,
@@ -400,6 +428,12 @@ impl WorkRequest {
                 if let Some(cursor) = cursor {
                     validate_bounded_text(cursor, 256, "Run page cursor")?;
                 }
+            }
+            Self::StartRun {
+                task_id, provider, ..
+            } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+                validate_bounded_text(provider.as_str(), 256, "provider id")?;
             }
             Self::RegisterDeliverable {
                 task_id,
@@ -562,6 +596,15 @@ pub enum WorkErrorKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunStartReceipt {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_id: Option<String>,
+    pub rollback_available: bool,
+    pub not_covered: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum WorkResponse {
     Workspaces {
@@ -584,6 +627,9 @@ pub enum WorkResponse {
     },
     Runs {
         page: WorkPage<Run>,
+    },
+    RunStarted {
+        receipt: RunStartReceipt,
     },
     DeliverableRegistered {
         item: WorkVersioned<Deliverable>,
@@ -692,6 +738,17 @@ impl WorkResponse {
                     if item.revision == 0 {
                         return Err(EnvelopeError::InvalidField("run revision".to_owned()));
                     }
+                }
+            }
+            Self::RunStarted { receipt } => {
+                validate_bounded_text(&receipt.request_id, 256, "run request id")?;
+                if let Some(snapshot_id) = &receipt.snapshot_id {
+                    validate_bounded_text(snapshot_id, 256, "snapshot id")?;
+                }
+                if receipt.rollback_available != receipt.snapshot_id.is_some() {
+                    return Err(EnvelopeError::InvalidField(
+                        "run rollback receipt".to_owned(),
+                    ));
                 }
             }
             Self::DeliverableRegistered { item } => {

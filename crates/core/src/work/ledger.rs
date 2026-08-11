@@ -2,7 +2,7 @@ use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::domain::{
-    BriefRevision, Deliverable, DeliverableSaveResult, Task, WorkVersioned, Workspace,
+    BriefRevision, Deliverable, DeliverableSaveResult, RunSnapshot, Task, WorkVersioned, Workspace,
 };
 use super::schema;
 use crate::store::StoreError;
@@ -628,6 +628,64 @@ impl WorkTransaction<'_> {
             },
             retired,
             changed: true,
+        })
+    }
+
+    pub fn save_run_snapshot(
+        &mut self,
+        mut snapshot: RunSnapshot,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<RunSnapshot>, StoreError> {
+        if guard.expected_revision.is_some() {
+            return Err(StoreError::Domain(
+                "new Snapshots do not accept an expected revision".to_owned(),
+            ));
+        }
+        snapshot.created_at = now_millis();
+        snapshot.validate().map_err(StoreError::Domain)?;
+        let owned: bool = self.transaction.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM sessions s
+               JOIN work_entity_heads rh
+                 ON rh.entity_kind='run' AND rh.entity_id=s.id AND rh.deleted=0
+               JOIN tasks t ON t.id=s.task_id
+               JOIN work_entity_heads th
+                 ON th.entity_kind='task' AND th.entity_id=t.id AND th.deleted=0
+               WHERE s.id=?1 AND s.task_id=?2
+             )",
+            params![snapshot.run_id, snapshot.task_id],
+            |row| row.get(0),
+        )?;
+        if !owned {
+            return Err(StoreError::Domain(
+                "snapshot run/task ownership mismatch".to_owned(),
+            ));
+        }
+        let input = guard.input(
+            WorkEntityKind::Snapshot,
+            snapshot.id.clone(),
+            false,
+            "create",
+        );
+        let revision = self.next_revision(&input)?;
+        self.transaction.execute(
+            "INSERT INTO run_snapshots
+             (id,task_id,run_id,storage_path,manifest_json,not_covered_json,created_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                snapshot.id,
+                snapshot.task_id,
+                snapshot.run_id,
+                snapshot.storage_path,
+                serde_json::to_string(&snapshot.manifest)?,
+                serde_json::to_string(&snapshot.not_covered)?,
+                snapshot.created_at,
+            ],
+        )?;
+        self.append_with_revision(&input, revision)?;
+        Ok(WorkVersioned {
+            entity: snapshot,
+            revision,
         })
     }
 

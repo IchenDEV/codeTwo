@@ -7,6 +7,7 @@ use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
     BriefRevision, DocBlock, Event, LaunchSpec, Op, PermissionMode, Provider, ProviderId, Session,
     SkillLibrary, Store, Task, TaskExperience, WorkMutationGuard, Workspace, WorkspaceKind,
+    WorkspaceSnapshot,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -377,18 +378,25 @@ async fn daemon_registers_versioned_deliverables_from_safe_workspace_paths() {
 }
 
 const MOCK_AGENT: &str = r#"
-import json, sys
+import json, os, sys
 for line in sys.stdin:
     message = json.loads(line)
     if message.get("method") == "initialize":
+        with open(os.environ["CODETWO_TEST_PROVIDER_MARKER"], "w") as marker:
+            marker.write("provider started\n")
         print(json.dumps({"jsonrpc":"2.0","id":message["id"],"result":{"protocolVersion":1}}), flush=True)
 "#;
 
-fn mock_provider(id: &str) -> Provider {
+fn mock_provider(id: &str, marker: &std::path::Path) -> Provider {
+    let mut launch = LaunchSpec::new("python3", ["-u", "-c", MOCK_AGENT]);
+    launch.env.push((
+        "CODETWO_TEST_PROVIDER_MARKER".to_owned(),
+        marker.to_string_lossy().into_owned(),
+    ));
     Provider {
         id: ProviderId::Custom(id.to_owned()),
         display_name: id.to_owned(),
-        launch: LaunchSpec::new("python3", ["-u", "-c", MOCK_AGENT]),
+        launch,
         needs_node: false,
     }
 }
@@ -398,11 +406,17 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
     let root = TempDir::new().unwrap();
     let runtime = root.path().join("runtime");
     let database = root.path().join("codetwo.db");
+    let workspace_root = root.path().join("workspace");
+    std::fs::create_dir_all(&workspace_root).unwrap();
+    let provider_marker = workspace_root.join("provider-started.txt");
     let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
     let daemon = Daemon::bind_with_components(
         &runtime,
-        store,
-        vec![mock_provider("alpha"), mock_provider("beta")],
+        store.clone(),
+        vec![
+            mock_provider("alpha", &provider_marker),
+            mock_provider("beta", &provider_marker),
+        ],
         SkillLibrary::default(),
     )
     .unwrap();
@@ -413,7 +427,7 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
         .save_workspace(
             Workspace::new(
                 "Runs",
-                Some(root.path().to_string_lossy().into_owned()),
+                Some(workspace_root.to_string_lossy().into_owned()),
                 WorkspaceKind::External,
             ),
             None,
@@ -437,21 +451,48 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
         .await
         .unwrap();
 
+    let bypass_client = Client::connect(&socket).await.unwrap();
+    let bypass = bypass_client
+        .submit(Op::NewSession {
+            provider: ProviderId::Custom("alpha".to_owned()),
+            cwd: workspace_root.to_string_lossy().into_owned(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("unsafe-work-bypass".to_owned()),
+            initial_policy: None,
+            task_id: Some(task.entity.id.clone()),
+        })
+        .await
+        .unwrap_err();
+    assert!(
+        bypass.to_string().contains("got error"),
+        "unexpected bypass error: {bypass}"
+    );
+    drop(bypass_client);
+
     for (expected_count, provider) in ["alpha", "beta"].into_iter().enumerate() {
-        let request_id = format!("run-{provider}");
-        client
-            .submit(Op::NewSession {
-                provider: ProviderId::Custom(provider.to_owned()),
-                cwd: root.path().to_string_lossy().into_owned(),
-                use_worktree: false,
-                worktree_base: None,
-                worktree_base_sha: None,
-                request_id: Some(request_id.clone()),
-                initial_policy: None,
-                task_id: Some(task.entity.id.clone()),
-            })
+        let receipt = client
+            .start_run(
+                task.entity.id.clone(),
+                ProviderId::Custom(provider.to_owned()),
+                false,
+            )
             .await
             .unwrap();
+        let request_id = receipt.request_id;
+        assert!(receipt.rollback_available);
+        let snapshot_id = receipt.snapshot_id.as_ref().unwrap();
+        let snapshot =
+            WorkspaceSnapshot::load(runtime.join("snapshots").join(snapshot_id), &workspace_root)
+                .unwrap();
+        if expected_count == 0 {
+            assert!(snapshot
+                .manifest
+                .files
+                .iter()
+                .all(|file| file.path != "provider-started.txt"));
+        }
         loop {
             match timeout(Duration::from_secs(2), events.recv())
                 .await
@@ -487,6 +528,38 @@ async fn provider_switch_creates_a_new_run_without_rewriting_the_old_run() {
             .await
             .unwrap();
         assert_eq!(page.items.len(), expected_count + 1, "after {provider}");
+        let saved_snapshot = store
+            .work_snapshot_for_run(&page.items.last().unwrap().entity.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved_snapshot.id, *snapshot_id);
+        assert_eq!(saved_snapshot.run_id, page.items.last().unwrap().entity.id);
+        loop {
+            match timeout(Duration::from_secs(2), events.recv())
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                SubscriptionMessage::Event(envelope)
+                    if matches!(
+                        envelope.event,
+                        TransportEvent::SnapshotPrepared {
+                            ref snapshot_id,
+                            ref run_id,
+                            revision: 1,
+                            ..
+                        } if snapshot_id == &saved_snapshot.id && run_id == &saved_snapshot.run_id
+                    ) =>
+                {
+                    break
+                }
+                SubscriptionMessage::Event(_) => {}
+                SubscriptionMessage::Reset { reason, .. } => {
+                    panic!("unexpected stream reset: {reason:?}")
+                }
+            }
+        }
+        assert!(workspace_root.join("provider-started.txt").is_file());
     }
 
     let page = client
