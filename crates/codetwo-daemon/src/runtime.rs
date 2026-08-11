@@ -10,7 +10,7 @@ use codetwo_core::skill::{builtin_skills, SkillLibrary};
 use codetwo_core::{
     Engine, Event, Op, Provider, RunSnapshot, SnapshotChangeKind, SnapshotComparison,
     SnapshotConfig, SnapshotPreparation, SnapshotPreparationOptions, Store, StoreError, TaskStatus,
-    WorkArtifactError, WorkArtifactService, WorkMutationGuard, WorkspaceSnapshot,
+    WorkArtifactError, WorkArtifactService, WorkMutationGuard, WorkspaceKind, WorkspaceSnapshot,
     WorkspaceSnapshotService,
 };
 use codetwo_protocol::{
@@ -46,6 +46,7 @@ struct State {
     shutdown: watch::Sender<bool>,
     store: Arc<Store>,
     artifacts: WorkArtifactService,
+    managed_workspace_root: PathBuf,
     snapshot_root: PathBuf,
     pending_snapshots: StdMutex<HashMap<String, PendingSnapshot>>,
     engine: Engine,
@@ -131,6 +132,9 @@ impl Daemon {
         let (events, _) = broadcast::channel(MAX_REPLAY_EVENTS);
         let (shutdown, _) = watch::channel(false);
         let artifacts = WorkArtifactService::new(store.clone());
+        let managed_workspace_root = runtime_dir.join("workspaces");
+        fs::create_dir_all(&managed_workspace_root)?;
+        fs::set_permissions(&managed_workspace_root, fs::Permissions::from_mode(0o700))?;
         let snapshot_root = runtime_dir.join("snapshots");
         fs::create_dir_all(&snapshot_root)?;
         fs::set_permissions(&snapshot_root, fs::Permissions::from_mode(0o700))?;
@@ -147,6 +151,7 @@ impl Daemon {
                 shutdown,
                 store,
                 artifacts,
+                managed_workspace_root,
                 snapshot_root,
                 pending_snapshots: StdMutex::new(HashMap::new()),
                 engine,
@@ -550,9 +555,15 @@ async fn dispatch_work(
             }
         }
         WorkRequest::SaveWorkspace {
-            workspace,
+            mut workspace,
             expected_revision,
         } => {
+            if workspace.kind == WorkspaceKind::Managed
+                && provision_managed_workspace(&state.managed_workspace_root, &mut workspace)
+                    .is_err()
+            {
+                return (invalid_work_response(), Vec::new());
+            }
             let guard = WorkMutationGuard::new(
                 expected_revision,
                 "local_client",
@@ -936,6 +947,51 @@ async fn dispatch_work(
             Err(error) => (work_error(error), Vec::new()),
         },
     }
+}
+
+fn provision_managed_workspace(
+    root: &Path,
+    workspace: &mut codetwo_core::Workspace,
+) -> io::Result<()> {
+    let directory = Uuid::parse_str(&workspace.id)
+        .map(|id| id.to_string())
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "managed Workspace id must be a UUID",
+            )
+        })?;
+    let workspace_dir = root.join(directory);
+    let files = workspace_dir.join("files");
+    if let Some(configured) = workspace.root_path.as_deref() {
+        if Path::new(configured) != files {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "managed Workspace root does not match its service-owned directory",
+            ));
+        }
+    }
+    for path in [&workspace_dir, &files] {
+        if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "managed Workspace directory must not be a symlink",
+            ));
+        }
+    }
+    fs::create_dir_all(&files)?;
+    fs::set_permissions(&workspace_dir, fs::Permissions::from_mode(0o700))?;
+    fs::set_permissions(&files, fs::Permissions::from_mode(0o700))?;
+    let canonical_root = fs::canonicalize(root)?;
+    let canonical_files = fs::canonicalize(&files)?;
+    if !canonical_files.starts_with(&canonical_root) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "managed Workspace escaped its service-owned directory",
+        ));
+    }
+    workspace.root_path = Some(canonical_files.to_string_lossy().into_owned());
+    Ok(())
 }
 
 fn transition_task(

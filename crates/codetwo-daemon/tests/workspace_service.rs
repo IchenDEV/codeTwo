@@ -92,6 +92,52 @@ async fn workspace_writes_are_daemon_owned_revisioned_and_durable() {
 }
 
 #[tokio::test]
+async fn managed_workspace_gets_a_stable_private_files_directory() {
+    let root = TempDir::new().unwrap();
+    let runtime = root.path().join("runtime");
+    let database = root.path().join("codetwo.db");
+    let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
+    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let client = Client::connect(&socket).await.unwrap();
+
+    let saved = client
+        .save_workspace(
+            Workspace::new("Managed work", None, WorkspaceKind::Managed),
+            None,
+        )
+        .await
+        .unwrap();
+    let files = std::path::PathBuf::from(saved.entity.root_path.as_ref().unwrap());
+    assert!(files.is_dir());
+    assert!(files.starts_with(std::fs::canonicalize(runtime.join("workspaces")).unwrap()));
+    assert!(!files.starts_with(std::fs::canonicalize(runtime.join("snapshots")).unwrap()));
+    #[cfg(unix)]
+    assert_eq!(
+        std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&files).unwrap().permissions())
+            & 0o777,
+        0o700
+    );
+
+    client.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let reopened = Store::open(database.to_str().unwrap()).unwrap();
+    let persisted = reopened
+        .work_list_workspaces(None, 50)
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|item| item.entity.id == saved.entity.id)
+        .unwrap();
+    assert_eq!(persisted.entity.root_path, saved.entity.root_path);
+}
+
+#[tokio::test]
 async fn task_and_brief_share_guarded_daemon_state_and_ordered_events() {
     let root = TempDir::new().unwrap();
     let runtime = root.path().join("runtime");
