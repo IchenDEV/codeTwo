@@ -7,8 +7,8 @@ use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub use codetwo_core::{
-    BriefRevision, BriefSaveResult, Event, Op, Run, Task, WorkPage, WorkVersioned, Workspace,
-    WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, Event, Op, Run, Task, WorkPage, WorkVersioned,
+    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 
 pub const PROTOCOL_VERSION: u16 = 1;
@@ -181,6 +181,10 @@ pub enum TransportEvent {
         run: Run,
         revision: u64,
     },
+    DeliverableChanged {
+        deliverable: Deliverable,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -248,6 +252,19 @@ impl EventEnvelope {
                     return Err(EnvelopeError::InvalidField("run revision".to_owned()));
                 }
             }
+            TransportEvent::DeliverableChanged {
+                deliverable,
+                revision,
+            } => {
+                deliverable
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField(
+                        "deliverable revision".to_owned(),
+                    ));
+                }
+            }
             TransportEvent::OwnerLifecycle { .. } => {}
         }
         Ok(())
@@ -290,6 +307,17 @@ pub enum WorkRequest {
         expected_revision: Option<u64>,
     },
     ListRuns {
+        task_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
+    RegisterDeliverable {
+        task_id: String,
+        run_id: String,
+        path: String,
+    },
+    ListDeliverables {
         task_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
@@ -371,6 +399,28 @@ impl WorkRequest {
                 }
                 if let Some(cursor) = cursor {
                     validate_bounded_text(cursor, 256, "Run page cursor")?;
+                }
+            }
+            Self::RegisterDeliverable {
+                task_id,
+                run_id,
+                path,
+            } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+                validate_bounded_text(run_id, 256, "run id")?;
+                validate_bounded_text(path, 4096, "deliverable path")?;
+            }
+            Self::ListDeliverables {
+                task_id,
+                cursor,
+                limit,
+            } => {
+                validate_bounded_text(task_id, 256, "task id")?;
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 8192, "Deliverable page cursor")?;
                 }
             }
         }
@@ -535,6 +585,12 @@ pub enum WorkResponse {
     Runs {
         page: WorkPage<Run>,
     },
+    DeliverableRegistered {
+        item: WorkVersioned<Deliverable>,
+    },
+    Deliverables {
+        page: WorkPage<Deliverable>,
+    },
     Error {
         error: WorkErrorKind,
         message: String,
@@ -635,6 +691,34 @@ impl WorkResponse {
                         .map_err(EnvelopeError::InvalidField)?;
                     if item.revision == 0 {
                         return Err(EnvelopeError::InvalidField("run revision".to_owned()));
+                    }
+                }
+            }
+            Self::DeliverableRegistered { item } => {
+                item.entity
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                if item.revision == 0 {
+                    return Err(EnvelopeError::InvalidField(
+                        "deliverable revision".to_owned(),
+                    ));
+                }
+            }
+            Self::Deliverables { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 8192, "Deliverable page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField(
+                            "deliverable revision".to_owned(),
+                        ));
                     }
                 }
             }

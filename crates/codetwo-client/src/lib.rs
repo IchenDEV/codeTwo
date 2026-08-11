@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_protocol::{
-    read_json, write_json, BriefRevision, BriefSaveResult, EventEnvelope, Op, Request,
+    read_json, write_json, BriefRevision, BriefSaveResult, Deliverable, EventEnvelope, Op, Request,
     RequestEnvelope, ResetReason, Response, ResponseEnvelope, Run, ServerFrame, StreamCursor,
     StreamEpoch, SubscribeResult, Task, TransportEvent, WorkErrorKind, WorkPage, WorkRequest,
     WorkResponse, WorkVersioned, Workspace, MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
@@ -428,6 +428,50 @@ impl Client {
         }
     }
 
+    pub async fn register_deliverable(
+        &self,
+        task_id: String,
+        run_id: String,
+        path: String,
+    ) -> Result<WorkVersioned<Deliverable>, ClientError> {
+        match self
+            .work(WorkRequest::RegisterDeliverable {
+                task_id,
+                run_id,
+                path,
+            })
+            .await?
+        {
+            WorkResponse::DeliverableRegistered { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "deliverable_registered",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn list_deliverables(
+        &self,
+        task_id: String,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<Deliverable>, ClientError> {
+        match self
+            .work(WorkRequest::ListDeliverables {
+                task_id,
+                cursor,
+                limit,
+            })
+            .await?
+        {
+            WorkResponse::Deliverables { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "deliverables",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
     pub async fn shutdown(&self) -> Result<(), ClientError> {
         match self
             .request(Request::Shutdown, ExpectedResponse::Shutdown)
@@ -745,6 +789,8 @@ fn work_response_name(response: &WorkResponse) -> &'static str {
         WorkResponse::Brief { .. } => "brief",
         WorkResponse::BriefSaved { .. } => "brief_saved",
         WorkResponse::Runs { .. } => "runs",
+        WorkResponse::DeliverableRegistered { .. } => "deliverable_registered",
+        WorkResponse::Deliverables { .. } => "deliverables",
         WorkResponse::Error { .. } => "error",
     }
 }

@@ -1,7 +1,9 @@
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::domain::{BriefRevision, Task, Workspace};
+use super::domain::{
+    BriefRevision, Deliverable, DeliverableSaveResult, Task, WorkVersioned, Workspace,
+};
 use super::schema;
 use crate::store::StoreError;
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
@@ -498,6 +500,137 @@ impl WorkTransaction<'_> {
         Ok(brief)
     }
 
+    pub fn save_deliverable(
+        &mut self,
+        mut deliverable: Deliverable,
+        guard: &WorkMutationGuard,
+    ) -> Result<DeliverableSaveResult, StoreError> {
+        if guard.expected_revision.is_some() {
+            return Err(StoreError::Domain(
+                "new Deliverables do not accept an expected revision".to_owned(),
+            ));
+        }
+        let owned: bool = self.transaction.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM sessions s
+               JOIN tasks t ON t.id=s.task_id
+               JOIN work_entity_heads rh
+                 ON rh.entity_kind='run' AND rh.entity_id=s.id AND rh.deleted=0
+               JOIN work_entity_heads th
+                 ON th.entity_kind='task' AND th.entity_id=t.id AND th.deleted=0
+               JOIN work_entity_heads wh
+                 ON wh.entity_kind='workspace' AND wh.entity_id=t.workspace_id AND wh.deleted=0
+               WHERE s.id=?1 AND s.task_id=?2
+             )",
+            params![deliverable.run_id, deliverable.task_id],
+            |row| row.get(0),
+        )?;
+        if !owned {
+            return Err(StoreError::Domain(
+                "deliverable run/task ownership mismatch".to_owned(),
+            ));
+        }
+
+        let current: Option<(Deliverable, u64)> = self
+            .transaction
+            .query_row(
+                "SELECT d.id,d.task_id,d.run_id,d.path,d.mime,d.hash,d.version,d.current,
+                        d.missing,d.created_at,d.updated_at,h.revision
+                 FROM deliverables d JOIN work_entity_heads h
+                   ON h.entity_kind='deliverable' AND h.entity_id=d.id AND h.deleted=0
+                 WHERE d.task_id=?1 AND d.path=?2 AND d.current=1",
+                params![deliverable.task_id, deliverable.path],
+                deliverable_versioned_row,
+            )
+            .optional()?;
+        if let Some((existing, revision)) = &current {
+            if existing.hash == deliverable.hash && !existing.missing {
+                return Ok(DeliverableSaveResult {
+                    item: WorkVersioned {
+                        entity: existing.clone(),
+                        revision: *revision,
+                    },
+                    retired: None,
+                    changed: false,
+                });
+            }
+        }
+
+        let latest_version: Option<i64> = self.transaction.query_row(
+            "SELECT MAX(version) FROM deliverables WHERE task_id=?1 AND path=?2",
+            params![deliverable.task_id, deliverable.path],
+            |row| row.get(0),
+        )?;
+        let now = now_millis();
+        deliverable.version = latest_version
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| StoreError::Domain("deliverable version overflow".to_owned()))?;
+        deliverable.current = true;
+        deliverable.missing = false;
+        deliverable.created_at = now;
+        deliverable.updated_at = now;
+        deliverable.validate().map_err(StoreError::Domain)?;
+
+        let retired = if let Some((mut old, old_revision)) = current {
+            let changed = self.transaction.execute(
+                "UPDATE deliverables SET current=0,updated_at=?2 WHERE id=?1 AND current=1",
+                params![old.id, now],
+            )?;
+            if changed != 1 {
+                return Err(StoreError::Domain(
+                    "current Deliverable changed during registration".to_owned(),
+                ));
+            }
+            old.current = false;
+            old.updated_at = now;
+            let mut retire_input =
+                guard.input(WorkEntityKind::Deliverable, old.id.clone(), false, "retire");
+            retire_input.expected_revision = Some(old_revision);
+            let next_revision = self.next_revision(&retire_input)?;
+            self.append_with_revision(&retire_input, next_revision)?;
+            Some(WorkVersioned {
+                entity: old,
+                revision: next_revision,
+            })
+        } else {
+            None
+        };
+
+        let create_input = guard.input(
+            WorkEntityKind::Deliverable,
+            deliverable.id.clone(),
+            false,
+            "create",
+        );
+        let revision = self.next_revision(&create_input)?;
+        self.transaction.execute(
+            "INSERT INTO deliverables
+             (id,task_id,run_id,path,mime,hash,version,current,missing,created_at,updated_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,1,0,?8,?9)",
+            params![
+                deliverable.id,
+                deliverable.task_id,
+                deliverable.run_id,
+                deliverable.path,
+                deliverable.mime,
+                deliverable.hash,
+                deliverable.version,
+                deliverable.created_at,
+                deliverable.updated_at,
+            ],
+        )?;
+        self.append_with_revision(&create_input, revision)?;
+        Ok(DeliverableSaveResult {
+            item: WorkVersioned {
+                entity: deliverable,
+                revision,
+            },
+            retired,
+            changed: true,
+        })
+    }
+
     pub fn high_water(&self) -> Result<u64, StoreError> {
         high_water(&self.transaction)
     }
@@ -586,6 +719,25 @@ impl WorkTransaction<'_> {
     ) -> Result<WorkMutation, StoreError> {
         append_with_revision_tx(&self.transaction, input, revision, now_millis())
     }
+}
+
+fn deliverable_versioned_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Deliverable, u64)> {
+    Ok((
+        Deliverable {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            run_id: row.get(2)?,
+            path: row.get(3)?,
+            mime: row.get(4)?,
+            hash: row.get(5)?,
+            version: row.get(6)?,
+            current: row.get::<_, i64>(7)? != 0,
+            missing: row.get::<_, i64>(8)? != 0,
+            created_at: row.get(9)?,
+            updated_at: row.get(10)?,
+        },
+        u64::try_from(row.get::<_, i64>(11)?).map_err(|_| rusqlite::Error::InvalidQuery)?,
+    ))
 }
 
 fn append_with_revision_tx(

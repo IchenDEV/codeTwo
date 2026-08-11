@@ -43,6 +43,25 @@ CREATE TABLE IF NOT EXISTS brief_revisions (
 CREATE INDEX IF NOT EXISTS brief_revisions_task_revision
   ON brief_revisions(task_id, revision);
 
+CREATE TABLE IF NOT EXISTS deliverables (
+  id TEXT PRIMARY KEY CHECK(length(id) BETWEEN 1 AND 256),
+  task_id TEXT NOT NULL REFERENCES tasks(id),
+  run_id TEXT NOT NULL REFERENCES sessions(id),
+  path TEXT NOT NULL CHECK(length(path) BETWEEN 1 AND 4096),
+  mime TEXT,
+  hash TEXT NOT NULL CHECK(length(hash) = 64),
+  version INTEGER NOT NULL CHECK(version >= 1),
+  current INTEGER NOT NULL DEFAULT 1 CHECK(current IN (0,1)),
+  missing INTEGER NOT NULL DEFAULT 0 CHECK(missing IN (0,1)),
+  created_at INTEGER NOT NULL CHECK(created_at >= 0),
+  updated_at INTEGER NOT NULL CHECK(updated_at >= created_at),
+  UNIQUE(task_id, path, version)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS deliverables_current_path
+  ON deliverables(task_id, path) WHERE current=1;
+CREATE INDEX IF NOT EXISTS deliverables_task_path_version
+  ON deliverables(task_id, path, version, id);
+
 CREATE TABLE IF NOT EXISTS work_revision_clock (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   high_water INTEGER NOT NULL CHECK(high_water >= 0)

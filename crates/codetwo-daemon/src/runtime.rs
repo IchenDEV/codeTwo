@@ -7,7 +7,10 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use codetwo_core::provider::default_registry;
 use codetwo_core::skill::{builtin_skills, SkillLibrary};
-use codetwo_core::{Engine, Event, Provider, Store, StoreError, WorkMutationGuard};
+use codetwo_core::{
+    Engine, Event, Provider, Store, StoreError, WorkArtifactError, WorkArtifactService,
+    WorkMutationGuard,
+};
 use codetwo_protocol::{
     read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
     RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
@@ -40,6 +43,7 @@ struct State {
     events: broadcast::Sender<EventEnvelope>,
     shutdown: watch::Sender<bool>,
     store: Arc<Store>,
+    artifacts: WorkArtifactService,
     engine: Engine,
     engine_events: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<Event>>>,
 }
@@ -116,6 +120,7 @@ impl Daemon {
         );
         let (events, _) = broadcast::channel(MAX_REPLAY_EVENTS);
         let (shutdown, _) = watch::channel(false);
+        let artifacts = WorkArtifactService::new(store.clone());
         let (engine, engine_events) = Engine::with_store(providers, skills, store.clone());
         Ok(Self {
             _ownership: ownership,
@@ -128,6 +133,7 @@ impl Daemon {
                 events,
                 shutdown,
                 store,
+                artifacts,
                 engine,
                 engine_events: StdMutex::new(Some(engine_events)),
             }),
@@ -530,6 +536,46 @@ fn dispatch_work(
             Ok(page) => (WorkResponse::Runs { page }, Vec::new()),
             Err(error) => (work_error(error), Vec::new()),
         },
+        WorkRequest::RegisterDeliverable {
+            task_id,
+            run_id,
+            path,
+        } => {
+            let guard = local_guard(request_id, None);
+            match state.artifacts.register(&task_id, &run_id, &path, &guard) {
+                Ok(result) => {
+                    let mut events = Vec::new();
+                    if result.changed {
+                        if let Some(retired) = result.retired {
+                            events.push(TransportEvent::DeliverableChanged {
+                                deliverable: retired.entity,
+                                revision: retired.revision,
+                            });
+                        }
+                        events.push(TransportEvent::DeliverableChanged {
+                            deliverable: result.item.entity.clone(),
+                            revision: result.item.revision,
+                        });
+                    }
+                    (
+                        WorkResponse::DeliverableRegistered { item: result.item },
+                        events,
+                    )
+                }
+                Err(error) => (work_artifact_error(error), Vec::new()),
+            }
+        }
+        WorkRequest::ListDeliverables {
+            task_id,
+            cursor,
+            limit,
+        } => match state
+            .store
+            .work_list_deliverables(&task_id, cursor.as_deref(), limit)
+        {
+            Ok(page) => (WorkResponse::Deliverables { page }, Vec::new()),
+            Err(error) => (work_error(error), Vec::new()),
+        },
     }
 }
 
@@ -559,6 +605,21 @@ fn work_error(error: StoreError) -> WorkResponse {
         _ => WorkResponse::Error {
             error: WorkErrorKind::Store,
             message: "Work store unavailable".to_owned(),
+            current_revision: None,
+        },
+    }
+}
+
+fn work_artifact_error(error: WorkArtifactError) -> WorkResponse {
+    match error {
+        WorkArtifactError::Store(error) => work_error(error),
+        WorkArtifactError::Invalid(_)
+        | WorkArtifactError::UnsafePath(_)
+        | WorkArtifactError::Unsupported(_)
+        | WorkArtifactError::Changed
+        | WorkArtifactError::Io { .. } => WorkResponse::Error {
+            error: WorkErrorKind::InvalidRequest,
+            message: "invalid Work request".to_owned(),
             current_revision: None,
         },
     }

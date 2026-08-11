@@ -6,8 +6,8 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use serde::{Deserialize, Serialize};
 
 use super::domain::{
-    BriefRevision, BriefSaveResult, Run, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned,
-    Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
+    BriefRevision, BriefSaveResult, Deliverable, DeliverableSaveResult, Run, Task, TaskExperience,
+    TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE,
 };
 use super::ledger::{
     ensure_backfill_head, entity_head, high_water, install_schema_tx, with_transaction,
@@ -222,6 +222,9 @@ fn quote_identifier(identifier: &str) -> String {
 pub(crate) fn install(conn: &mut Connection) -> Result<(), StoreError> {
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     if work_store_marker_applied(conn)? {
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        install_schema_tx(&tx)?;
+        tx.commit()?;
         return Ok(());
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -918,6 +921,124 @@ impl Store {
         })
     }
 
+    pub(crate) fn work_artifact_root(
+        &self,
+        task_id: &str,
+        run_id: &str,
+    ) -> Result<PathBuf, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let root: Option<Option<String>> = conn
+            .query_row(
+                "SELECT w.root_path FROM sessions s
+                 JOIN work_entity_heads rh
+                   ON rh.entity_kind='run' AND rh.entity_id=s.id AND rh.deleted=0
+                 JOIN tasks t ON t.id=s.task_id
+                 JOIN work_entity_heads th
+                   ON th.entity_kind='task' AND th.entity_id=t.id AND th.deleted=0
+                 JOIN workspaces w ON w.id=t.workspace_id
+                 JOIN work_entity_heads wh
+                   ON wh.entity_kind='workspace' AND wh.entity_id=w.id AND wh.deleted=0
+                 WHERE s.id=?1 AND s.task_id=?2",
+                params![run_id, task_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match root.flatten() {
+            Some(root) => Ok(PathBuf::from(root)),
+            None => Err(StoreError::Domain(
+                "deliverable run has no active rooted Workspace".to_owned(),
+            )),
+        }
+    }
+
+    pub(crate) fn work_save_deliverable(
+        &self,
+        deliverable: Deliverable,
+        guard: &WorkMutationGuard,
+    ) -> Result<DeliverableSaveResult, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        with_transaction(&mut conn, |transaction| {
+            transaction.save_deliverable(deliverable, guard)
+        })
+    }
+
+    pub fn work_list_deliverables(
+        &self,
+        task_id: &str,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<Deliverable>, StoreError> {
+        if limit == 0 || limit > MAX_WORK_PAGE_SIZE {
+            return Err(StoreError::Domain(format!(
+                "Work page limit must be between 1 and {MAX_WORK_PAGE_SIZE}"
+            )));
+        }
+        let after = cursor
+            .map(|cursor| {
+                if cursor.len() > 8192 || cursor.chars().any(char::is_control) {
+                    return Err(StoreError::Domain(
+                        "invalid Deliverable page cursor".to_owned(),
+                    ));
+                }
+                serde_json::from_str::<DeliverableCursor>(cursor)
+                    .map_err(|_| StoreError::Domain("invalid Deliverable page cursor".to_owned()))
+            })
+            .transpose()?;
+        let conn = self.conn.lock().unwrap();
+        let active: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks t JOIN work_entity_heads h
+               ON h.entity_kind='task' AND h.entity_id=t.id AND h.deleted=0 WHERE t.id=?1)",
+            [task_id],
+            |row| row.get(0),
+        )?;
+        if !active {
+            return Err(StoreError::Domain(
+                "deliverable task unavailable".to_owned(),
+            ));
+        }
+        let mut statement = conn.prepare(
+            "SELECT d.id,d.task_id,d.run_id,d.path,d.mime,d.hash,d.version,d.current,d.missing,
+                    d.created_at,d.updated_at,h.revision
+             FROM deliverables d JOIN work_entity_heads h
+               ON h.entity_kind='deliverable' AND h.entity_id=d.id AND h.deleted=0
+             WHERE d.task_id=?1
+               AND (?2 IS NULL OR d.path>?2 OR (d.path=?2 AND d.version>?3)
+                    OR (d.path=?2 AND d.version=?3 AND d.id>?4))
+             ORDER BY d.path,d.version,d.id LIMIT ?5",
+        )?;
+        let rows = statement.query_map(
+            params![
+                task_id,
+                after.as_ref().map(|cursor| cursor.path.as_str()),
+                after.as_ref().map(|cursor| cursor.version),
+                after.as_ref().map(|cursor| cursor.id.as_str()),
+                (limit + 1) as i64,
+            ],
+            deliverable_from_row,
+        )?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = if items.len() > limit {
+            items.truncate(limit);
+            items
+                .last()
+                .map(|item| {
+                    serde_json::to_string(&DeliverableCursor {
+                        path: item.entity.path.clone(),
+                        version: item.entity.version,
+                        id: item.entity.id.clone(),
+                    })
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
+    }
+
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {
         let conn = self.conn.lock().unwrap();
         if !work_store_marker_applied(&conn)? {
@@ -1023,6 +1144,33 @@ fn run_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<Run>>
             created_at: row.get(7)?,
         },
         revision: u64::try_from(row.get::<_, i64>(8)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DeliverableCursor {
+    path: String,
+    version: i64,
+    id: String,
+}
+
+fn deliverable_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkVersioned<Deliverable>> {
+    Ok(WorkVersioned {
+        entity: Deliverable {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            run_id: row.get(2)?,
+            path: row.get(3)?,
+            mime: row.get(4)?,
+            hash: row.get(5)?,
+            version: row.get(6)?,
+            current: row.get::<_, i64>(7)? != 0,
+            missing: row.get::<_, i64>(8)? != 0,
+            created_at: row.get(9)?,
+            updated_at: row.get(10)?,
+        },
+        revision: u64::try_from(row.get::<_, i64>(11)?)
             .map_err(|_| rusqlite::Error::InvalidQuery)?,
     })
 }

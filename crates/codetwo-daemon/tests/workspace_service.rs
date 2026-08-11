@@ -6,7 +6,7 @@ use std::time::Duration;
 use codetwo_client::{Client, SubscriptionMessage};
 use codetwo_core::{
     BriefRevision, DocBlock, Event, LaunchSpec, Op, PermissionMode, Provider, ProviderId, Session,
-    SkillLibrary, Store, Task, TaskExperience, Workspace, WorkspaceKind,
+    SkillLibrary, Store, Task, TaskExperience, WorkMutationGuard, Workspace, WorkspaceKind,
 };
 use codetwo_daemon::Daemon;
 use codetwo_protocol::{TransportEvent, WorkPage};
@@ -247,6 +247,133 @@ async fn core_ops_execute_once_inside_daemon_and_share_the_ordered_stream() {
             .permission_mode,
         PermissionMode::Yolo
     );
+}
+
+#[tokio::test]
+async fn daemon_registers_versioned_deliverables_from_safe_workspace_paths() {
+    let root = TempDir::new().unwrap();
+    let workspace_root = root.path().join("workspace");
+    let deliverables_root = workspace_root.join("Deliverables");
+    std::fs::create_dir_all(&deliverables_root).unwrap();
+    let artifact = deliverables_root.join("report.md");
+    std::fs::write(&artifact, b"version one\n").unwrap();
+
+    let store = Arc::new(Store::open(root.path().join("codetwo.db").to_str().unwrap()).unwrap());
+    let workspace = Workspace::new(
+        "Artifacts",
+        Some(workspace_root.to_string_lossy().into_owned()),
+        WorkspaceKind::External,
+    );
+    store
+        .work_save_workspace(
+            &workspace,
+            &WorkMutationGuard::new(None, "test", "test", "workspace"),
+        )
+        .unwrap();
+    let task = Task::named(&workspace.id, "Artifact task", TaskExperience::Work);
+    store
+        .work_save_task(&task, &WorkMutationGuard::new(None, "test", "test", "task"))
+        .unwrap();
+    let run = Session::new(
+        ProviderId::Custom("artifact-provider".to_owned()),
+        workspace_root.to_string_lossy().into_owned(),
+    );
+    store.upsert_session_for_task(&run, Some(&task.id)).unwrap();
+
+    let runtime = root.path().join("runtime");
+    let daemon = Daemon::bind_with_store(&runtime, store).unwrap();
+    let socket = daemon.socket_path().to_owned();
+    let server = tokio::spawn(daemon.run());
+    let client = Client::connect(&socket).await.unwrap();
+    let observer = Client::connect(&socket).await.unwrap();
+    let mut events = observer
+        .subscribe(Some(observer.hello().cursor.clone()))
+        .await
+        .unwrap();
+
+    let first = client
+        .register_deliverable(
+            task.id.clone(),
+            run.id.clone(),
+            "Deliverables/report.md".to_owned(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first.entity.version, 1);
+    assert!(first.entity.current);
+    assert_eq!(first.entity.hash.len(), 64);
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(envelope.event, TransportEvent::DeliverableChanged { revision: 1, .. })
+    ));
+
+    let repeated = client
+        .register_deliverable(
+            task.id.clone(),
+            run.id.clone(),
+            "Deliverables/report.md".to_owned(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(repeated, first);
+    assert!(timeout(Duration::from_millis(25), events.recv())
+        .await
+        .is_err());
+
+    std::fs::write(&artifact, b"version two\n").unwrap();
+    let second = client
+        .register_deliverable(
+            task.id.clone(),
+            run.id.clone(),
+            "Deliverables/report.md".to_owned(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.entity.version, 2);
+    assert!(second.entity.current);
+    assert_ne!(second.entity.id, first.entity.id);
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(&envelope.event, TransportEvent::DeliverableChanged { deliverable, revision: 2 } if !deliverable.current && deliverable.id == first.entity.id)
+    ));
+    assert!(matches!(
+        events.recv().await.unwrap(),
+        SubscriptionMessage::Event(envelope)
+            if matches!(&envelope.event, TransportEvent::DeliverableChanged { deliverable, revision: 1 } if deliverable.current && deliverable.id == second.entity.id)
+    ));
+
+    let page = observer
+        .list_deliverables(task.id.clone(), None, 50)
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 2);
+    assert!(!page.items[0].entity.current);
+    assert_eq!(page.items[0].entity.version, 1);
+    assert_eq!(page.items[1], second);
+
+    let unsafe_path = client
+        .register_deliverable(task.id.clone(), run.id.clone(), "../outside.md".to_owned())
+        .await
+        .unwrap_err();
+    assert!(unsafe_path.to_string().contains("invalid Work request"));
+
+    let outside = root.path().join("outside.md");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    std::os::unix::fs::symlink(&outside, deliverables_root.join("link.md")).unwrap();
+    let symlink = client
+        .register_deliverable(task.id, run.id, "Deliverables/link.md".to_owned())
+        .await
+        .unwrap_err();
+    assert!(symlink.to_string().contains("invalid Work request"));
+
+    client.shutdown().await.unwrap();
+    timeout(Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
 }
 
 const MOCK_AGENT: &str = r#"

@@ -1,3 +1,4 @@
+use std::path::{Component, Path};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -253,6 +254,65 @@ pub struct Run {
     pub activity: SessionActivity,
     pub cwd: String,
     pub created_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deliverable {
+    pub id: String,
+    pub task_id: String,
+    pub run_id: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime: Option<String>,
+    pub hash: String,
+    pub version: i64,
+    pub current: bool,
+    pub missing: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeliverableSaveResult {
+    pub item: WorkVersioned<Deliverable>,
+    pub retired: Option<WorkVersioned<Deliverable>>,
+    pub changed: bool,
+}
+
+impl Deliverable {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_text("deliverable id", &self.id, 256)?;
+        validate_text("deliverable task id", &self.task_id, 256)?;
+        validate_text("deliverable run id", &self.run_id, 256)?;
+        validate_text("deliverable path", &self.path, 4096)?;
+        if Path::new(&self.path).is_absolute()
+            || self.path.contains('\\')
+            || Path::new(&self.path)
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err("invalid Work deliverable path".to_owned());
+        }
+        if self
+            .mime
+            .as_deref()
+            .is_some_and(|mime| validate_text("deliverable mime", mime, 256).is_err())
+        {
+            return Err("invalid Work deliverable mime".to_owned());
+        }
+        if self.hash.len() != 64
+            || !self
+                .hash
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("invalid Work deliverable hash".to_owned());
+        }
+        if self.version < 1 || self.created_at < 0 || self.updated_at < self.created_at {
+            return Err("invalid Work deliverable metadata".to_owned());
+        }
+        Ok(())
+    }
 }
 
 impl Run {

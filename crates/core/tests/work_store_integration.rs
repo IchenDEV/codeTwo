@@ -527,6 +527,26 @@ fn metadata_only_singletons_do_not_require_a_backup() {
 }
 
 #[test]
+fn reopening_a_work_v1_store_installs_additive_artifact_tables() {
+    let temporary = TempDir::new().unwrap();
+    let path = temporary.path().join("work-v1.db");
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let connection = Connection::open(&path).unwrap();
+    assert_eq!(marker_count(&connection, "work_store_v1"), 1);
+    connection.execute("DROP TABLE deliverables", []).unwrap();
+    assert!(!table_exists(&connection, "deliverables"));
+    drop(connection);
+
+    drop(Store::open(path.to_str().unwrap()).unwrap());
+    let reopened = Connection::open(&path).unwrap();
+    assert!(table_exists(&reopened, "deliverables"));
+    let integrity: String = reopened
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(integrity, "ok");
+}
+
+#[test]
 fn customized_memory_settings_require_a_preintegration_backup() {
     let temporary = TempDir::new().unwrap();
     let path = temporary.path().join("custom-memory-settings.db");
