@@ -564,6 +564,7 @@ export const en = {
   "scene.escalationCancel": "Cancel",
   "scene.switched": "Scene: {scene}",
   "scene.unresolved": "The saved scene for this session is not installed.",
+  "dockFollow.auto": "Following the agent — it is working on this surface",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1099,6 +1100,7 @@ export const zhCN: Record<StringKey, string> = {
   "scene.escalationCancel": "取消",
   "scene.switched": "场景：{scene}",
   "scene.unresolved": "此会话保存的场景未安装。",
+  "dockFollow.auto": "正在跟随智能体——它正在此界面上工作",
 };
 
 export const LOCALES = {

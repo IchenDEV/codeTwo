@@ -207,6 +207,14 @@ import {
   type PermissionQueueItem,
   type SessionCreationShell,
 } from "./session/sessionEvents";
+import {
+  classifyToolSurface,
+  followReduce,
+  initialFollowState,
+  type FollowEvent,
+  type FollowState,
+  type ToolSurfaceHint,
+} from "./session/toolActivity";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
@@ -412,6 +420,12 @@ export default function App() {
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
+  // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
+  // The latch reducer's state lives in a ref because engine events arrive outside render; only
+  // the badge hint is state, so the Dock can mark the surface the agent is working on.
+  const dockTabRef = useRef<DockTab | null>(null);
+  const dockFollowRef = useRef<FollowState>(initialFollowState);
+  const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
   // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
@@ -715,6 +729,59 @@ export default function App() {
       return true;
     },
     [updateRunningSession],
+  );
+
+  // ---- R10 dock follow ----
+  useEffect(() => {
+    dockTabRef.current = dockTab;
+  }, [dockTab]);
+
+  /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
+  const followDockEvent = useCallback((event: FollowEvent) => {
+    const { state, setTab } = followReduce(dockFollowRef.current, event);
+    dockFollowRef.current = state;
+    if (setTab) setDockTab(setTab);
+    if (event.kind === "tool") {
+      setDockAutoHint(
+        state.autoTab
+          ? {
+              surface: state.autoTab,
+              file: state.autoTab === event.hint.surface ? event.hint.file : undefined,
+            }
+          : null,
+      );
+    } else {
+      setDockAutoHint(null);
+    }
+  }, []);
+
+  /** The event ladder's single follow call: classify the active session's tool call and feed the
+   *  reducer. Auto-follow never opens a closed dock — the reducer only records the surface then. */
+  const handleDockFollow = useCallback(
+    (ev: Extract<CoreEvent, { event: "tool_call" }>) => {
+      const hint = classifyToolSurface({
+        kind: ev.kind ?? null,
+        title: ev.title,
+        agentInput: ev.agent_input,
+      });
+      if (!hint) return;
+      followDockEvent({
+        kind: "tool",
+        hint,
+        now: Date.now(),
+        dockOpen: dockTabRef.current !== null,
+      });
+    },
+    [followDockEvent],
+  );
+
+  /** Every user-driven dock change routes here so auto-follow latches off until the run ends. */
+  const manualDockTab = useCallback(
+    (tab: DockTab | null) => {
+      followDockEvent({ kind: "manual", tab });
+      setDockTab(tab);
+    },
+    [followDockEvent],
   );
 
   /** Restore immutable accepted Canvas refs after a terminal provider-image rejection.  The
@@ -1175,6 +1242,11 @@ export default function App() {
           setSessions(applyActivity);
           setArchivedSessions(applyActivity);
           updateRunningSession(ev.session, activityIsBusy(ev.activity));
+          // R10: only a finished run (idle | failed) releases the manual dock latch —
+          // `awaiting_input` counts as busy, so it deliberately keeps it.
+          if (ev.session === activeSessionRef.current && !activityIsBusy(ev.activity)) {
+            followDockEvent({ kind: "run_ended" });
+          }
 
           const state = ev.activity.state;
           const pending = state.kind === "awaiting_input"
@@ -1350,6 +1422,7 @@ export default function App() {
           refreshSessions();
         }
         if (!shouldRenderSessionEvent(ev, activeSessionRef.current, awaitingCreationRequest)) return;
+        if (ev.event === "tool_call") handleDockFollow(ev);
         setTurns((prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined));
       });
     })();
@@ -1360,6 +1433,8 @@ export default function App() {
   }, [
     applyAuthoritativeExecutionPolicy,
     finishPolicyRequest,
+    followDockEvent,
+    handleDockFollow,
     invalidatePendingCreation,
     markSessionStarted,
     markSessionStopped,
@@ -1755,6 +1830,8 @@ export default function App() {
       earlierLoadRef.current = false;
       setLoadingEarlier(false);
       updateTranscriptCursor(null);
+      // R10: focus moved — release the dock-follow latch and drop the stale badge.
+      followDockEvent({ kind: "session_switched" });
       activeSessionRef.current = id;
       if (stored?.model) knownModelsRef.current.set(id, stored.model);
       else knownModelsRef.current.delete(id);
@@ -1852,6 +1929,7 @@ export default function App() {
       refreshProjects,
       toast,
       t,
+      followDockEvent,
       invalidatePendingCreation,
       updateTranscriptCursor,
     ],
@@ -2092,9 +2170,10 @@ export default function App() {
   }, []);
 
   const toggleDock = useCallback((t: DockSurface) => {
-    setDockTab((cur) => (cur === t ? null : t));
+    // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
+    manualDockTab(dockTabRef.current === t ? null : t);
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-  }, []);
+  }, [manualDockTab]);
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
@@ -2472,7 +2551,7 @@ export default function App() {
           toggleDock("git");
           break;
         case "close_panel":
-          setDockTab(null);
+          manualDockTab(null);
           break;
         case "open_skill_picker":
           openSkillPickerRef.current?.();
@@ -2551,6 +2630,7 @@ export default function App() {
       openSourceControl,
       openPluginHub,
       toggleDock,
+      manualDockTab,
       toggleDocMode,
       docMode,
       stepSession,
@@ -2972,7 +3052,7 @@ export default function App() {
               label={t("header.panel")}
               active={dockTab !== null}
               onClick={() => {
-                setDockTab(dockTab ? null : "home");
+                manualDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
@@ -3159,8 +3239,10 @@ export default function App() {
         <Dock
             open={dockTab !== null}
             tab={dockTab}
-            onTab={setDockTab}
-            onClose={() => setDockTab(null)}
+            onTab={manualDockTab}
+            onClose={() => manualDockTab(null)}
+            autoTab={dockAutoHint?.surface ?? null}
+            highlightFile={dockAutoHint?.file ?? null}
             cwd={cwd || null}
             projectPath={activeProject ?? cwd ?? null}
             sessionKey={activeSession ?? "main"}
