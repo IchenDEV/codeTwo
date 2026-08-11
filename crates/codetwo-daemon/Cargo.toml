@@ -15,6 +15,7 @@ name = "codetwo-daemon"
 path = "src/main.rs"
 
 [dependencies]
+codetwo-core.workspace = true
 codetwo-protocol.workspace = true
 libc.workspace = true
 serde.workspace = true

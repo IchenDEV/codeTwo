@@ -6,6 +6,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+pub use codetwo_core::{WorkPage, WorkVersioned, Workspace, WorkspaceKind, MAX_WORK_PAGE_SIZE};
+
 pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_FRAME_SIZE: usize = 64 * 1024;
 pub const MAX_EPOCH_LENGTH: usize = 64;
@@ -157,6 +159,10 @@ pub enum TransportEvent {
         reason: ResetReason,
         cursor: StreamCursor,
     },
+    WorkspaceChanged {
+        workspace: Workspace,
+        revision: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -189,10 +195,64 @@ impl EventEnvelope {
         if self.sequence == 0 {
             return Err(EnvelopeError::InvalidField("event sequence".to_owned()));
         }
-        if let TransportEvent::Reset { cursor, .. } = &self.event {
-            cursor.validate()?;
-            if cursor.epoch != self.epoch {
-                return Err(EnvelopeError::InvalidField("reset cursor epoch".to_owned()));
+        match &self.event {
+            TransportEvent::Reset { cursor, .. } => {
+                cursor.validate()?;
+                if cursor.epoch != self.epoch {
+                    return Err(EnvelopeError::InvalidField("reset cursor epoch".to_owned()));
+                }
+            }
+            TransportEvent::WorkspaceChanged {
+                workspace,
+                revision,
+            } => {
+                workspace.validate().map_err(EnvelopeError::InvalidField)?;
+                if *revision == 0 {
+                    return Err(EnvelopeError::InvalidField("workspace revision".to_owned()));
+                }
+            }
+            TransportEvent::OwnerLifecycle { .. } => {}
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum WorkRequest {
+    ListWorkspaces {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cursor: Option<String>,
+        limit: usize,
+    },
+    SaveWorkspace {
+        workspace: Workspace,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_revision: Option<u64>,
+    },
+}
+
+impl WorkRequest {
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        match self {
+            Self::ListWorkspaces { cursor, limit } => {
+                if *limit == 0 || *limit > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page limit".to_owned()));
+                }
+                if let Some(cursor) = cursor {
+                    validate_bounded_text(cursor, 256, "Work page cursor")?;
+                }
+            }
+            Self::SaveWorkspace {
+                workspace,
+                expected_revision,
+            } => {
+                workspace.validate().map_err(EnvelopeError::InvalidField)?;
+                if *expected_revision == Some(0) {
+                    return Err(EnvelopeError::InvalidField(
+                        "workspace expected revision".to_owned(),
+                    ));
+                }
             }
         }
         Ok(())
@@ -205,6 +265,7 @@ pub enum Request {
     Hello { client_version: u16 },
     Subscribe { cursor: Option<StreamCursor> },
     Ping { nonce: u64 },
+    Work { request: WorkRequest },
     Shutdown,
 }
 
@@ -241,6 +302,9 @@ impl RequestEnvelope {
         } = &self.request
         {
             cursor.validate()?;
+        }
+        if let Request::Work { request } = &self.request {
+            request.validate()?;
         }
         Ok(())
     }
@@ -320,6 +384,66 @@ pub enum ErrorKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkErrorKind {
+    InvalidRequest,
+    RevisionConflict,
+    Store,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum WorkResponse {
+    Workspaces {
+        page: WorkPage<Workspace>,
+    },
+    WorkspaceSaved {
+        item: WorkVersioned<Workspace>,
+    },
+    Error {
+        error: WorkErrorKind,
+        message: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        current_revision: Option<u64>,
+    },
+}
+
+impl WorkResponse {
+    fn validate(&self) -> Result<(), EnvelopeError> {
+        match self {
+            Self::Workspaces { page } => {
+                if page.items.len() > MAX_WORK_PAGE_SIZE {
+                    return Err(EnvelopeError::InvalidField("Work page length".to_owned()));
+                }
+                if let Some(cursor) = &page.next_cursor {
+                    validate_bounded_text(cursor, 256, "Work page cursor")?;
+                }
+                for item in &page.items {
+                    item.entity
+                        .validate()
+                        .map_err(EnvelopeError::InvalidField)?;
+                    if item.revision == 0 {
+                        return Err(EnvelopeError::InvalidField("workspace revision".to_owned()));
+                    }
+                }
+            }
+            Self::WorkspaceSaved { item } => {
+                item.entity
+                    .validate()
+                    .map_err(EnvelopeError::InvalidField)?;
+                if item.revision == 0 {
+                    return Err(EnvelopeError::InvalidField("workspace revision".to_owned()));
+                }
+            }
+            Self::Error { message, .. } => {
+                validate_bounded_text(message, 256, "Work error message")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
 pub enum Response {
     Hello {
@@ -329,6 +453,9 @@ pub enum Response {
     Subscribe(SubscribeResult),
     Pong {
         nonce: u64,
+    },
+    Work {
+        response: WorkResponse,
     },
     Shutdown,
     Error {
@@ -374,6 +501,7 @@ impl ResponseEnvelope {
             Response::Error { message, .. } => {
                 validate_bounded_text(message, 256, "error message")?;
             }
+            Response::Work { response } => response.validate()?,
             Response::Pong { .. } | Response::Shutdown => {}
         }
         Ok(())

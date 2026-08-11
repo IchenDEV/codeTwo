@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Code2 local transport protocol v1."
 
 [dependencies]
+codetwo-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

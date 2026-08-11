@@ -5,8 +5,14 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
-use super::domain::{Task, TaskExperience, TaskStatus, Workspace, WorkspaceKind};
-use super::ledger::{ensure_backfill_head, install_schema_tx, WorkEntityKind};
+use super::domain::{
+    Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace, WorkspaceKind,
+    MAX_WORK_PAGE_SIZE,
+};
+use super::ledger::{
+    ensure_backfill_head, high_water, install_schema_tx, with_transaction, WorkEntityKind,
+    WorkMutationGuard,
+};
 use crate::store::{Store, StoreError};
 
 pub(crate) const WORK_STORE_MARKER: &str = "work_store_v1";
@@ -571,6 +577,82 @@ fn backfill_one(tx: &Transaction<'_>, session: &LegacySession) -> Result<(), Sto
 impl Store {
     pub fn pre_work_store_v1_backup_path(&self) -> Option<PathBuf> {
         self.pre_work_store_v1_backup.clone()
+    }
+
+    pub fn work_save_workspace(
+        &self,
+        workspace: &Workspace,
+        guard: &WorkMutationGuard,
+    ) -> Result<WorkVersioned<Workspace>, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let mutation = with_transaction(&mut conn, |transaction| {
+            transaction.save_workspace(workspace, guard)
+        })?;
+        Ok(WorkVersioned {
+            entity: workspace.clone(),
+            revision: mutation.revision,
+        })
+    }
+
+    pub fn work_list_workspaces(
+        &self,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<WorkPage<Workspace>, StoreError> {
+        if limit == 0 || limit > MAX_WORK_PAGE_SIZE {
+            return Err(StoreError::Domain(format!(
+                "Work page limit must be between 1 and {MAX_WORK_PAGE_SIZE}"
+            )));
+        }
+        if cursor.is_some_and(|value| {
+            value.is_empty()
+                || value.len() > 256
+                || value.trim() != value
+                || value.chars().any(char::is_control)
+        }) {
+            return Err(StoreError::Domain("invalid Work page cursor".to_owned()));
+        }
+
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT w.id,w.name,w.root_path,w.kind,w.created_at,w.updated_at,h.revision
+             FROM workspaces w
+             JOIN work_entity_heads h
+               ON h.entity_kind='workspace' AND h.entity_id=w.id AND h.deleted=0
+             WHERE (?1 IS NULL OR w.id > ?1)
+             ORDER BY w.id
+             LIMIT ?2",
+        )?;
+        let fetch_limit = i64::try_from(limit + 1)
+            .map_err(|_| StoreError::Domain("Work page limit is out of range".to_owned()))?;
+        let rows = statement.query_map(params![cursor, fetch_limit], |row| {
+            let kind: String = row.get(3)?;
+            let revision =
+                u64::try_from(row.get::<_, i64>(6)?).map_err(|_| rusqlite::Error::InvalidQuery)?;
+            Ok(WorkVersioned {
+                entity: Workspace {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    root_path: row.get(2)?,
+                    kind: WorkspaceKind::parse(&kind).ok_or(rusqlite::Error::InvalidQuery)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                },
+                revision,
+            })
+        })?;
+        let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        let next_cursor = if items.len() > limit {
+            items.truncate(limit);
+            items.last().map(|item| item.entity.id.clone())
+        } else {
+            None
+        };
+        Ok(WorkPage {
+            items,
+            next_cursor,
+            high_water: high_water(&conn)?,
+        })
     }
 
     pub fn work_workspace_for_root(&self, root: &str) -> Result<Option<Workspace>, StoreError> {

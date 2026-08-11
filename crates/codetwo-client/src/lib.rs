@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use codetwo_protocol::{
     read_json, write_json, EventEnvelope, Request, RequestEnvelope, ResetReason, Response,
     ResponseEnvelope, ServerFrame, StreamCursor, StreamEpoch, SubscribeResult, TransportEvent,
+    WorkErrorKind, WorkPage, WorkRequest, WorkResponse, WorkVersioned, Workspace,
     MAX_REPLAY_EVENTS, PROTOCOL_VERSION,
 };
 use thiserror::Error;
@@ -49,6 +50,12 @@ pub enum ClientError {
     Subscription(String),
     #[error("subscription receiver closed")]
     SubscriptionClosed,
+    #[error("Work request failed ({error:?}): {message}")]
+    Work {
+        error: WorkErrorKind,
+        message: String,
+        current_revision: Option<u64>,
+    },
 }
 
 /// Items delivered directly by a successful subscription receiver.
@@ -73,6 +80,8 @@ enum ExpectedResponse {
         requested: Option<StreamCursor>,
         sender: mpsc::Sender<SubscriptionMessage>,
     },
+    Work,
+    Shutdown,
 }
 
 impl ExpectedResponse {
@@ -81,6 +90,8 @@ impl ExpectedResponse {
             Self::Hello => "hello",
             Self::Ping { .. } => "pong",
             Self::Subscribe { .. } => "subscribe",
+            Self::Work => "work",
+            Self::Shutdown => "shutdown",
         }
     }
 }
@@ -90,6 +101,7 @@ fn response_name(response: &Response) -> &'static str {
         Response::Hello { .. } => "hello",
         Response::Subscribe(_) => "subscribe",
         Response::Pong { .. } => "pong",
+        Response::Work { .. } => "work",
         Response::Shutdown => "shutdown",
         Response::Error { .. } => "error",
     }
@@ -272,6 +284,81 @@ impl Client {
             Response::Pong { nonce } => Ok(nonce),
             response => Err(ClientError::UnexpectedResponse {
                 expected: "pong",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn list_workspaces(
+        &self,
+        cursor: Option<String>,
+        limit: usize,
+    ) -> Result<WorkPage<Workspace>, ClientError> {
+        match self
+            .work(WorkRequest::ListWorkspaces { cursor, limit })
+            .await?
+        {
+            WorkResponse::Workspaces { page } => Ok(page),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "workspaces",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn save_workspace(
+        &self,
+        workspace: Workspace,
+        expected_revision: Option<u64>,
+    ) -> Result<WorkVersioned<Workspace>, ClientError> {
+        match self
+            .work(WorkRequest::SaveWorkspace {
+                workspace,
+                expected_revision,
+            })
+            .await?
+        {
+            WorkResponse::WorkspaceSaved { item } => Ok(item),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "workspace_saved",
+                actual: work_response_name(&response),
+            }),
+        }
+    }
+
+    pub async fn shutdown(&self) -> Result<(), ClientError> {
+        match self
+            .request(Request::Shutdown, ExpectedResponse::Shutdown)
+            .await?
+        {
+            Response::Shutdown => Ok(()),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "shutdown",
+                actual: response_name(&response),
+            }),
+        }
+    }
+
+    async fn work(&self, request: WorkRequest) -> Result<WorkResponse, ClientError> {
+        match self
+            .request(Request::Work { request }, ExpectedResponse::Work)
+            .await?
+        {
+            Response::Work {
+                response:
+                    WorkResponse::Error {
+                        error,
+                        message,
+                        current_revision,
+                    },
+            } => Err(ClientError::Work {
+                error,
+                message,
+                current_revision,
+            }),
+            Response::Work { response } => Ok(response),
+            response => Err(ClientError::UnexpectedResponse {
+                expected: "work",
                 actual: response_name(&response),
             }),
         }
@@ -498,6 +585,8 @@ async fn reader_loop(mut reader: OwnedReadHalf, inner: Arc<Inner>) {
                     }
                     expected => match (&expected, &response.response) {
                         (ExpectedResponse::Hello, Response::Hello { .. }) => Ok(response.response),
+                        (ExpectedResponse::Work, Response::Work { .. }) => Ok(response.response),
+                        (ExpectedResponse::Shutdown, Response::Shutdown) => Ok(response.response),
                         (
                             ExpectedResponse::Ping { nonce: expected },
                             Response::Pong { nonce: actual },
@@ -529,6 +618,14 @@ async fn reader_loop(mut reader: OwnedReadHalf, inner: Arc<Inner>) {
         }
     };
     inner.fail(terminal).await;
+}
+
+fn work_response_name(response: &WorkResponse) -> &'static str {
+    match response {
+        WorkResponse::Workspaces { .. } => "workspaces",
+        WorkResponse::WorkspaceSaved { .. } => "workspace_saved",
+        WorkResponse::Error { .. } => "error",
+    }
 }
 
 async fn handle_subscribe_response(

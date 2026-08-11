@@ -496,6 +496,7 @@ name = "codetwo-daemon"
 version = "0.0.0"
 dependencies = [
  "codetwo-client",
+ "codetwo-core",
  "codetwo-protocol",
  "libc",
  "serde",
@@ -525,6 +526,7 @@ dependencies = [
 name = "codetwo-protocol"
 version = "0.0.0"
 dependencies = [
+ "codetwo-core",
  "serde",
  "serde_json",
  "thiserror 2.0.19",

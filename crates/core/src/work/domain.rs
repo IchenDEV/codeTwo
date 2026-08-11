@@ -4,6 +4,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::skill::DocBlock;
 
+pub const MAX_WORK_PAGE_SIZE: usize = 100;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkVersioned<T> {
+    pub entity: T,
+    pub revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkPage<T> {
+    pub items: Vec<WorkVersioned<T>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub high_water: u64,
+}
+
 fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -47,7 +63,7 @@ impl WorkspaceKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Workspace {
     pub id: String,
     pub name: String,

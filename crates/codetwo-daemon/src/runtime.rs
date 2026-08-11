@@ -5,10 +5,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use codetwo_core::{Store, StoreError, WorkMutationGuard};
 use codetwo_protocol::{
     read_json, write_json, EnvelopeError, ErrorKind, EventEnvelope, OwnerState, Request,
     RequestEnvelope, ResetReason, Response, ResponseEnvelope, ServerFrame, StreamCursor,
-    StreamEpoch, SubscribeResult, TransportEvent, MAX_REPLAY_EVENTS,
+    StreamEpoch, SubscribeResult, TransportEvent, WorkErrorKind, WorkRequest, WorkResponse,
+    MAX_REPLAY_EVENTS,
 };
 use thiserror::Error;
 use tokio::net::{unix::OwnedWriteHalf, UnixListener, UnixStream};
@@ -26,6 +28,8 @@ pub enum DaemonError {
     Io(#[from] io::Error),
     #[error("protocol: {0}")]
     Protocol(#[from] EnvelopeError),
+    #[error("store: {0}")]
+    Store(#[from] StoreError),
 }
 
 struct State {
@@ -33,6 +37,7 @@ struct State {
     replay: Mutex<VecDeque<EventEnvelope>>,
     events: broadcast::Sender<EventEnvelope>,
     shutdown: watch::Sender<bool>,
+    store: Arc<Store>,
 }
 
 pub struct Daemon {
@@ -47,6 +52,26 @@ impl Daemon {
     pub fn bind(runtime_dir: impl AsRef<Path>) -> Result<Self, DaemonError> {
         let runtime_dir = runtime_dir.as_ref().to_owned();
         let ownership = RuntimeOwnership::acquire(&runtime_dir)?;
+        let store = Arc::new(Store::open(
+            runtime_dir.join("codetwo.db").to_string_lossy().as_ref(),
+        )?);
+        Self::bind_owned(runtime_dir, ownership, store)
+    }
+
+    pub fn bind_with_store(
+        runtime_dir: impl AsRef<Path>,
+        store: Arc<Store>,
+    ) -> Result<Self, DaemonError> {
+        let runtime_dir = runtime_dir.as_ref().to_owned();
+        let ownership = RuntimeOwnership::acquire(&runtime_dir)?;
+        Self::bind_owned(runtime_dir, ownership, store)
+    }
+
+    fn bind_owned(
+        runtime_dir: PathBuf,
+        ownership: RuntimeOwnership,
+        store: Arc<Store>,
+    ) -> Result<Self, DaemonError> {
         let socket_path = runtime_dir.join("daemon.sock");
         ownership.remove_stale_socket(&socket_path)?;
         let listener = UnixListener::bind(&socket_path)?;
@@ -72,6 +97,7 @@ impl Daemon {
                 replay: Mutex::new(VecDeque::from([ready])),
                 events,
                 shutdown,
+                store,
             }),
         })
     }
@@ -256,6 +282,15 @@ async fn handle(
             true
         }
         Request::Ping { nonce } => send(writer, request.request_id, Response::Pong { nonce }).await,
+        Request::Work {
+            request: work_request,
+        } => {
+            let (response, event) = dispatch_work(state, request.request_id, work_request);
+            if let Some(event) = event {
+                append(state, event).await;
+            }
+            send(writer, request.request_id, Response::Work { response }).await
+        }
         Request::Subscribe { cursor } => {
             let receiver = state.events.subscribe();
             let (head, events) = snapshot(state).await;
@@ -315,5 +350,63 @@ async fn handle(
             state.shutdown.send_replace(true);
             false
         }
+    }
+}
+
+fn dispatch_work(
+    state: &State,
+    request_id: u64,
+    request: WorkRequest,
+) -> (WorkResponse, Option<TransportEvent>) {
+    match request {
+        WorkRequest::ListWorkspaces { cursor, limit } => {
+            match state.store.work_list_workspaces(cursor.as_deref(), limit) {
+                Ok(page) => (WorkResponse::Workspaces { page }, None),
+                Err(error) => (work_error(error), None),
+            }
+        }
+        WorkRequest::SaveWorkspace {
+            workspace,
+            expected_revision,
+        } => {
+            let guard = WorkMutationGuard::new(
+                expected_revision,
+                "local_client",
+                format!("local_uid:{}", unsafe { libc::geteuid() }),
+                format!("local:{request_id}"),
+            );
+            match state.store.work_save_workspace(&workspace, &guard) {
+                Ok(item) => {
+                    let event = TransportEvent::WorkspaceChanged {
+                        workspace: item.entity.clone(),
+                        revision: item.revision,
+                    };
+                    (WorkResponse::WorkspaceSaved { item }, Some(event))
+                }
+                Err(error) => (work_error(error), None),
+            }
+        }
+    }
+}
+
+fn work_error(error: StoreError) -> WorkResponse {
+    match error {
+        StoreError::WorkConflict {
+            current_revision, ..
+        } => WorkResponse::Error {
+            error: WorkErrorKind::RevisionConflict,
+            message: "workspace revision conflict".to_owned(),
+            current_revision,
+        },
+        StoreError::Domain(_) => WorkResponse::Error {
+            error: WorkErrorKind::InvalidRequest,
+            message: "invalid Work request".to_owned(),
+            current_revision: None,
+        },
+        _ => WorkResponse::Error {
+            error: WorkErrorKind::Store,
+            message: "Work store unavailable".to_owned(),
+            current_revision: None,
+        },
     }
 }

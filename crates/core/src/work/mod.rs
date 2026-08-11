@@ -8,7 +8,10 @@ mod ledger;
 mod schema;
 pub(crate) mod store;
 
-pub use domain::{BriefRevision, Task, TaskExperience, TaskStatus, Workspace, WorkspaceKind};
+pub use domain::{
+    BriefRevision, Task, TaskExperience, TaskStatus, WorkPage, WorkVersioned, Workspace,
+    WorkspaceKind, MAX_WORK_PAGE_SIZE,
+};
 pub use ledger::{
     entity_head, high_water, install_schema, mutation_history, with_transaction, WorkAuditContext,
     WorkEntityHead, WorkEntityKind, WorkMutation, WorkMutationGuard, WorkTransaction,
