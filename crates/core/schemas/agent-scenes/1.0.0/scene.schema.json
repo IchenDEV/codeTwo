@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "title": "Agent Scene",
+  "description": "Machine-readable schema for *.scene.json in Agent Scenes 1.0.0. A scene is a pure-data bundle that configures a session for one stage of work: execution posture, skills, task brief, expected artifacts, exit criteria, and declarative hooks. The Agent Scenes specification (docs/scenes.md) defines the semantic and operational requirements.",
+  "type": "object",
+  "properties": {
+    "$schema": { "const": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json" },
+    "name": { "$ref": "#/$defs/slug" },
+    "version": { "type": "string" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string" },
+    "icon": { "type": "string", "maxLength": 16 },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "homepage": { "type": "string" },
+    "repository": { "type": "string" },
+    "license": { "type": "string" },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "localizations": {
+      "description": "Display strings per BCP 47 tag. The host picks the best match for the UI locale; `title`/`description` at the top level are the fallback.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "execution": {
+      "description": "Execution posture. Every field is optional; an unset field inherits the session's current value (or the project/user default at session creation). See docs/scenes.md §Binding for which fields apply mid-session vs. only at session creation.",
+      "type": "object",
+      "properties": {
+        "providers": {
+          "description": "Provider ids in preference order (e.g. [\"claude_code\", \"codex\"]). The host uses the first installed entry; an empty or absent list inherits.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "model": { "type": "string" },
+        "reasoning_effort": { "type": "string" },
+        "session_mode": { "enum": ["read_only", "ask", "auto_edit", "full_access"] },
+        "memory_preset": { "enum": ["standard", "read_only", "private", "learn_only"] },
+        "worktree": { "enum": ["off", "current", "origin_default"] },
+        "plan_first": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "skills": {
+      "type": "object",
+      "properties": {
+        "pinned": {
+          "description": "Skill references (see docs/scenes.md §Skill references) surfaced first in the `/` picker while the scene is active. Mcp skills among them are attached at session creation.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/skillRef" }
+        },
+        "inline": {
+          "description": "Fragments defined in-scene, unconditionally prepended to every prompt compiled under this scene (after project rules, before the brief).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "text": { "type": "string", "minLength": 1 },
+              "icon": { "type": "string", "maxLength": 16 }
+            },
+            "required": ["name", "text"],
+            "additionalProperties": false
+          }
+        },
+        "suppress_unpinned": {
+          "description": "When true, the `/` picker shows only pinned and inline skills by default (a \"show all\" affordance must remain reachable). Default false.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "brief": {
+      "description": "The task-brief skeleton offered in the composer when the scene activates on an empty document.",
+      "type": "object",
+      "properties": {
+        "template": {
+          "description": "Markdown skeleton. `{{slot-id}}` placeholders are rendered as fillable fields per `slots`.",
+          "type": "string",
+          "minLength": 1
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "$ref": "#/$defs/slug" },
+              "label": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["text", "multiline", "select", "file", "artifact"] },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "required": { "type": "boolean" },
+              "default": { "type": "string" }
+            },
+            "required": ["id", "label", "kind"],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": { "properties": { "kind": { "const": "select" } } },
+                "then": { "required": ["options"] }
+              }
+            ]
+          }
+        },
+        "clarify": {
+          "description": "How the agent should resolve an underspecified brief: structured multiple-choice questions (default), free-form questions, or proceed without asking.",
+          "enum": ["multi_choice", "free_form", "off"]
+        }
+      },
+      "required": ["template"],
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "description": "Outputs this scene is expected to produce. Required artifacts feed the default exit criterion and the pipeline carry mechanism.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/$defs/artifactId" },
+          "title": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["document", "plan", "report", "test_report", "checklist", "diff", "link", "custom"] },
+          "required": { "type": "boolean" },
+          "template": {
+            "description": "Markdown skeleton the agent is instructed to follow when producing this artifact.",
+            "type": "string"
+          },
+          "description": { "type": "string" }
+        },
+        "required": ["id", "title", "kind"],
+        "additionalProperties": false
+      }
+    },
+    "exit": {
+      "type": "object",
+      "properties": {
+        "criteria": {
+          "description": "All listed criteria must hold before the host surfaces the scene-complete suggestion. Absent criteria default to [{\"kind\": \"required_artifacts\"}, {\"kind\": \"user_confirm\"}].",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": { "enum": ["required_artifacts", "checklist_complete", "tests_pass", "user_confirm", "custom"] },
+              "artifact": { "$ref": "#/$defs/artifactId" },
+              "description": { "type": "string" }
+            },
+            "required": ["kind"],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": { "properties": { "kind": { "const": "checklist_complete" } } },
+                "then": { "required": ["artifact"] }
+              },
+              {
+                "if": { "properties": { "kind": { "const": "custom" } } },
+                "then": { "required": ["description"] }
+              }
+            ]
+          }
+        },
+        "next": {
+          "description": "Scenes to suggest when the exit criteria hold. `carry` names this scene's artifacts to compile into the next scene's context.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scene": { "$ref": "#/$defs/sceneRef" },
+              "label": { "type": "string" },
+              "carry": { "type": "array", "items": { "$ref": "#/$defs/artifactId" } }
+            },
+            "required": ["scene"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "hooks": {
+      "description": "Declarative event bindings. Actions are limited to the allowlist below; a scene can never execute arbitrary commands. `schedule` hooks are inert until the user enables scheduling for the project.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "on": { "enum": ["enter", "turn_end", "artifact_produced", "exit_criteria_met", "tests_failed", "schedule"] },
+          "artifact": { "$ref": "#/$defs/artifactId" },
+          "schedule": {
+            "description": "Five-field cron expression. Only meaningful (and required) when `on` is \"schedule\".",
+            "type": "string"
+          },
+          "action": {
+            "type": "object",
+            "properties": {
+              "kind": { "enum": ["suggest_scene", "suggest_next", "run_macro", "notify"] },
+              "scene": { "$ref": "#/$defs/sceneRef" },
+              "macro": { "$ref": "#/$defs/skillRef" },
+              "args": {
+                "description": "Slot values for `run_macro`, keyed by slot name. Values may reference artifacts as {{artifact:<id>}}.",
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "message": { "type": "string" }
+            },
+            "required": ["kind"],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": { "properties": { "kind": { "const": "suggest_scene" } } },
+                "then": { "required": ["scene"] }
+              },
+              {
+                "if": { "properties": { "kind": { "const": "run_macro" } } },
+                "then": { "required": ["macro"] }
+              },
+              {
+                "if": { "properties": { "kind": { "const": "notify" } } },
+                "then": { "required": ["message"] }
+              }
+            ]
+          }
+        },
+        "required": ["on", "action"],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": { "properties": { "on": { "const": "schedule" } } },
+            "then": { "required": ["schedule"] }
+          }
+        ]
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "properties": {
+        "guardrails": {
+          "description": "Short imperative rules injected with the scene's inline fragments (e.g. \"Do not modify files; produce findings instead.\"). Guardrails are prompt-level guidance; `execution.session_mode` remains the enforcement boundary.",
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tools": {
+          "description": "Advisory tool-name hints forwarded to providers that support tool gating. Not an enforcement boundary.",
+          "type": "object",
+          "properties": {
+            "allow": { "type": "array", "items": { "type": "string" } },
+            "deny": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "description": "Vendor extensions, namespaced by reverse-DNS or product key. Hosts must ignore unknown extensions.",
+      "type": "object",
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "required": ["$schema", "name", "title"],
+  "additionalProperties": false,
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!.*(?:--|\\.\\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "artifactId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+    },
+    "skillRef": {
+      "description": "A skill reference: a bare library id, `harness:<harness>:<skill-dir>`, or `<plugin-id>:<component>:<slug>`. Resolution and precedence are defined in docs/scenes.md §Skill references.",
+      "type": "string",
+      "minLength": 1
+    },
+    "sceneRef": {
+      "description": "A scene reference: a bare scene name resolved by precedence (project > user > plugin > builtin), or `<source>:<name>` to pin the source.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9.:_-]*$"
+    }
+  }
+}

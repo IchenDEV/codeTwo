@@ -8,6 +8,7 @@ import type {
   WorktreeBaselineOption,
 } from "../bridge";
 import type { SessionMode } from "./mode";
+import type { SceneInfo } from "./scene";
 
 /**
  * Everything configured once per session rather than once per turn.
@@ -41,4 +42,14 @@ export interface SessionConfig {
   onMemoryPolicy: (read: MemoryAccess, write: MemoryAccess) => void;
   /** Whether a session exists yet — some controls have nothing to act on before that. */
   hasSession: boolean;
+  /** Resolved scenes (project > user > plugin > builtin) for the scene chip and pickers. */
+  scenes: SceneInfo[];
+  activeScene: SceneInfo | null;
+  onScene: (reference: string | null, strength: "soft" | "full") => void;
+  /** The user overrode a field the active scene sets (chip shows "customized", scene unchanged). */
+  sceneCustomized: boolean;
+  /** Soft-apply deferrals (providers/model/effort/worktree) — non-empty shows the partial dot. */
+  scenePendingFields: string[];
+  /** New session, full-apply, in the active scene — closes the soft-apply gap. */
+  onRestartInScene: () => void;
 }

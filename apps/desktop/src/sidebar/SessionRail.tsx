@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Folder,
   FolderPlus,
+  LayoutGrid,
   PanelLeft,
   Pencil,
   Pin,
@@ -86,6 +87,8 @@ export function SessionRail({
   onToggleCollapse,
   width,
   onWidth,
+  needsMeCount,
+  onOpenMissionControl,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -128,6 +131,9 @@ export function SessionRail({
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
+  /** Sessions waiting on input or failed — the mission-control button's attention badge. */
+  needsMeCount: number;
+  onOpenMissionControl: () => void;
 }) {
   const t = useT();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
@@ -299,8 +305,11 @@ export function SessionRail({
           <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
           <span className="min-w-0 flex-1" />
           {isAwaitingInput ? (
-            <span className="flex shrink-0 items-center gap-1 text-warning">
-              <span className="size-1.5 rounded-full bg-warning" />
+            <span
+              className="flex shrink-0 items-center gap-1 text-warning"
+              title={t("mission.awaiting")}
+            >
+              <span className="size-1.5 animate-pulse rounded-full bg-warning" />
               {t("session.awaitingInput")}
             </span>
           ) : isFailed ? (
@@ -350,6 +359,28 @@ export function SessionRail({
           {t("app.name")}
         </span>
         <div data-tauri-drag-region className="min-w-0 flex-1" />
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
+              variant="ghost"
+              size="icon"
+              className="relative size-7 shrink-0 text-muted-foreground"
+              aria-label={t("mission.open")}
+              onClick={onOpenMissionControl}
+            >
+              <LayoutGrid className="size-4" />
+              {needsMeCount > 0 && (
+                <span
+                  aria-label={t("mission.awaiting")}
+                  className="absolute right-0 top-0 flex size-3.5 items-center justify-center rounded-full bg-warning text-cap font-semibold leading-none text-background"
+                >
+                  {needsMeCount}
+                </span>
+              )}
+            </Button>}
+          />
+          <TooltipContent side="right">{t("mission.open")}</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={<Button

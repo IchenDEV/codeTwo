@@ -16,10 +16,12 @@
 pub mod acp;
 pub mod activity;
 pub mod artifact;
+pub mod brief;
 pub mod browser;
 pub mod canvas;
 pub mod codex_runtime;
 pub mod context;
+pub mod cost;
 pub mod delegate;
 pub mod engine;
 pub mod error;
@@ -39,11 +41,15 @@ pub mod project;
 pub mod provider;
 pub mod pty;
 pub mod rules;
+pub mod scene;
+pub mod scene_artifact;
+pub mod scene_runtime;
 pub mod session;
 pub mod skill;
 pub mod source_control;
 pub mod store;
 pub mod term;
+pub mod testsignal;
 pub mod tmux;
 pub mod usage;
 pub mod voice;
@@ -89,16 +95,36 @@ pub use provider::{
     ProviderCapability, ProviderCapabilityId, ProviderId,
 };
 pub use pty::PtySession;
+pub use scene::{
+    apply_execution, is_artifact_id, is_slug, memory_preset_policy, outgoing_edges, plan_apply,
+    policy_session_mode, prompt_preamble, session_mode_policy, validate_pipeline, validate_scene,
+    ApplyStrength, BriefClarify, CarriedArtifact, CarrySpec, EffectiveTransition,
+    EscalationRequired, ExitCriterion, ExitCriterionKind, Gate, HookAction, HookActionKind,
+    HookEvent, NextSuggestion, PendingField, Pipeline, PipelineStage, PipelineTransition,
+    ResolvedPipeline, ResolvedScene, Scene, SceneApplyPlan, SceneArtifactKind, SceneArtifactSpec,
+    SceneBrief, SceneConstraints, SceneExecution, SceneExit, SceneHook, SceneInlineFragment,
+    SceneLibrary, SceneLocalization, SceneMemoryPreset, SceneSessionMode, SceneSessionParams,
+    SceneSkills, SceneSource, SceneWorktree, ToolHints, TransitionTrigger, PIPELINE_SCHEMA_ID,
+    SCENE_SCHEMA_ID,
+};
+pub use scene_artifact::{
+    extract_artifact_blocks, SceneArtifactRecord, SceneArtifactStore, MAX_CARRY_CONTENT_BYTES,
+};
+pub use scene_runtime::{evaluate_exit, ExitEvaluation, SceneRuntime};
 pub use session::{
     MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,
     SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
     TranscriptEntry, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS,
 };
 pub use skill::{
-    canonical_doc_text, compile, compile_with_canvas, CompiledCanvas, CompiledPrompt, DocBlock,
-    McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SubagentDefinition,
+    canonical_doc_text, compile, compile_full, compile_with_canvas, CompiledCanvas, CompiledPrompt,
+    DocBlock, McpServer, McpTransport, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef,
+    SlotKind, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
-pub use store::{SessionSearchHit, Store, StoreError};
+pub use store::{IssueDelegation, 
+    PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store, StoreError,
+};
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};

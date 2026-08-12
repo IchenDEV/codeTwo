@@ -60,6 +60,8 @@ function countLabels(plugin: PluginInfo, labels: Record<string, string>) {
     [plugin.counts.lsp_servers, labels.lsp],
     [plugin.counts.monitors, labels.monitors],
     [plugin.counts.apps, labels.apps],
+    [plugin.counts.scenes, labels.scenes],
+    [plugin.counts.pipelines, labels.pipelines],
   ] as const;
 }
 
@@ -198,6 +200,8 @@ export function PluginHub({
     lsp: t("pluginHub.lsp"),
     monitors: t("pluginHub.monitors"),
     apps: t("pluginHub.apps"),
+    scenes: t("pluginHub.scenes"),
+    pipelines: t("pluginHub.pipelines"),
   };
   const standardLabel = (standard: PluginInfo["standard"]) =>
     t(`pluginHub.standard.${standard}` as "pluginHub.standard.agent_plugins");

@@ -107,6 +107,56 @@ CREATE TABLE IF NOT EXISTS projects (
   added_at       INTEGER NOT NULL DEFAULT 0,
   default_worktree_mode TEXT
 );
+CREATE TABLE IF NOT EXISTS scene_artifacts (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene_ref             TEXT NOT NULL,
+  artifact_key          TEXT NOT NULL,
+  kind                  TEXT NOT NULL,
+  title                 TEXT NOT NULL,
+  session_id            TEXT NOT NULL,
+  pipeline_instance_id  TEXT,
+  stage_id              TEXT,
+  artifact_id           TEXT NOT NULL,
+  version               INTEGER NOT NULL,
+  pinned                INTEGER NOT NULL DEFAULT 0,
+  created_at            INTEGER NOT NULL,
+  FOREIGN KEY (artifact_id) REFERENCES artifacts(id)
+);
+CREATE INDEX IF NOT EXISTS scene_artifacts_session  ON scene_artifacts(session_id, artifact_key, version);
+CREATE INDEX IF NOT EXISTS scene_artifacts_pipeline ON scene_artifacts(pipeline_instance_id, stage_id, artifact_key);
+CREATE TABLE IF NOT EXISTS pipeline_instances (
+  id            TEXT PRIMARY KEY,
+  pipeline_ref  TEXT NOT NULL,
+  project_path  TEXT NOT NULL,
+  current_stage TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'active',
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pipeline_transitions (
+  instance_id TEXT NOT NULL,
+  seq         INTEGER NOT NULL,
+  from_stage  TEXT,
+  to_stage    TEXT NOT NULL,
+  trigger     TEXT NOT NULL,
+  gate        TEXT NOT NULL,
+  session_id  TEXT,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (instance_id, seq)
+);
+CREATE TABLE IF NOT EXISTS issue_delegations (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  source       TEXT NOT NULL,
+  issue_id     TEXT NOT NULL,
+  issue_title  TEXT NOT NULL DEFAULT '',
+  scene_ref    TEXT NOT NULL,
+  scene_title  TEXT NOT NULL DEFAULT '',
+  session_id   TEXT,
+  comment_url  TEXT,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS issue_delegations_issue
+  ON issue_delegations(source, issue_id, created_at);
 ";
 
 /// A workspace the user works in. Sessions belong to one by their source `project_path`.
@@ -118,6 +168,47 @@ pub struct Project {
     pub last_opened_at: i64,
     /// `None` follows the current draft/session; `Local` is an explicit no-worktree default.
     pub default_worktree_mode: Option<ProjectWorktreeMode>,
+}
+
+/// One "issue delegated to a scene" event — the accountability trail R12 renders on the issue.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct IssueDelegation {
+    pub id: i64,
+    pub source: String,
+    pub issue_id: String,
+    pub issue_title: String,
+    pub scene_ref: String,
+    pub scene_title: String,
+    pub session_id: Option<String>,
+    pub comment_url: Option<String>,
+    pub created_at: i64,
+}
+
+/// One running (or finished) pipeline for one project (R9). `current_stage` is the stage the
+/// newest transition entered; `status` is `active` | `completed` | `abandoned`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PipelineInstance {
+    pub id: String,
+    pub pipeline_ref: String,
+    pub project_path: String,
+    pub current_stage: String,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// One recorded stage transition. `from_stage = None` is the entry transition; `gate` is the gate
+/// actually used, post-downgrade.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PipelineTransitionRecord {
+    pub instance_id: String,
+    pub seq: i64,
+    pub from_stage: Option<String>,
+    pub to_stage: String,
+    pub trigger: String,
+    pub gate: String,
+    pub session_id: Option<String>,
+    pub created_at: i64,
 }
 
 /// One best conversation-content match per session.
@@ -230,6 +321,15 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
         .collect()
 }
 
+/// Wall-clock milliseconds, the timestamp unit every other scene-layer row uses.
+fn unix_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
+
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
     let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let names = statement.query_map([], |row| row.get::<_, String>(1))?;
@@ -331,6 +431,29 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "sessions",
         "memory_write",
         "memory_write TEXT NOT NULL DEFAULT 'inherit'",
+    )?;
+    ensure_column(&tx, "sessions", "active_scene", "active_scene TEXT")?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "scene_customized",
+        "scene_customized INTEGER NOT NULL DEFAULT 0",
+    )?;
+    // Pipeline bindings (R9): which instance and stage a session works for, if any.
+    ensure_column(
+        &tx,
+        "sessions",
+        "pipeline_instance_id",
+        "pipeline_instance_id TEXT",
+    )?;
+    ensure_column(&tx, "sessions", "pipeline_stage", "pipeline_stage TEXT")?;
+    // Scene `schedule` hooks are inert until explicitly enabled per project (off by default;
+    // docs/scenes.md §hooks).
+    ensure_column(
+        &tx,
+        "projects",
+        "scheduling_enabled",
+        "scheduling_enabled INTEGER NOT NULL DEFAULT 0",
     )?;
     // A legacy local session's cwd is its source project. A legacy worktree row no longer contains
     // enough information to recover the source safely, so leave it unknown instead of
@@ -1362,6 +1485,38 @@ impl Store {
         Ok(())
     }
 
+    /// Enable/disable scene `schedule` hooks for one project. Off by default: a scene definition
+    /// alone must never start timed work (docs/scenes.md §Security).
+    pub fn set_project_scheduling(&self, path: &str, enabled: bool) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE projects SET scheduling_enabled=?2 WHERE path=?1",
+            rusqlite::params![path, enabled as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn project_scheduling(&self, path: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let enabled: Option<i64> = conn
+            .query_row(
+                "SELECT scheduling_enabled FROM projects WHERE path=?1",
+                [path],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(enabled.unwrap_or(0) != 0)
+    }
+
+    /// Paths of projects with scheduling enabled — the scene runtime's 30 s tick scans only these.
+    pub fn scheduled_projects(&self) -> Result<Vec<String>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT path FROM projects WHERE scheduling_enabled<>0 ORDER BY path")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        Ok(rows.filter_map(|row| row.ok()).collect())
+    }
+
     /// Forget a project. Its sessions are left alone — removing a project from the list is a
     /// bookkeeping act, not a request to delete months of transcripts.
     pub fn remove_project(&self, path: &str) -> Result<(), StoreError> {
@@ -1799,6 +1954,304 @@ impl Store {
         Ok((MemoryAccess::from_db(&read), MemoryAccess::from_db(&write)))
     }
 
+    /// Persist (or clear, with `None`) the session's active scene reference.
+    pub fn set_session_scene(
+        &self,
+        session_id: &str,
+        scene_ref: Option<&str>,
+        customized: bool,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET active_scene=?2,scene_customized=?3 WHERE id=?1",
+            rusqlite::params![session_id, scene_ref, customized as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn session_scene(&self, session_id: &str) -> Result<Option<(String, bool)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let (scene_ref, customized): (Option<String>, i64) = conn.query_row(
+            "SELECT active_scene,scene_customized FROM sessions WHERE id=?1",
+            [session_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(scene_ref.map(|r| (r, customized != 0)))
+    }
+
+    // ---- pipeline instances (R9) ------------------------------------------------------------
+
+    /// Create one instance at its entry stage. Ids mirror session id generation (UUID v4); the
+    /// caller records the `entry` transition separately so the transition log stays the single
+    /// history of stage entries (loop counts are COUNT(transitions to stage)).
+    pub fn create_pipeline_instance(
+        &self,
+        pipeline_ref: &str,
+        project_path: &str,
+        entry_stage: &str,
+    ) -> Result<PipelineInstance, StoreError> {
+        let instance = PipelineInstance {
+            id: uuid::Uuid::new_v4().to_string(),
+            pipeline_ref: pipeline_ref.to_string(),
+            project_path: project_path.to_string(),
+            current_stage: entry_stage.to_string(),
+            status: "active".to_string(),
+            created_at: unix_millis(),
+            updated_at: unix_millis(),
+        };
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO pipeline_instances
+               (id,pipeline_ref,project_path,current_stage,status,created_at,updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![
+                instance.id,
+                instance.pipeline_ref,
+                instance.project_path,
+                instance.current_stage,
+                instance.status,
+                instance.created_at,
+                instance.updated_at,
+            ],
+        )?;
+        Ok(instance)
+    }
+
+    pub fn get_pipeline_instance(
+        &self,
+        instance_id: &str,
+    ) -> Result<Option<PipelineInstance>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        Ok(conn
+            .query_row(
+                "SELECT id,pipeline_ref,project_path,current_stage,status,created_at,updated_at
+                 FROM pipeline_instances WHERE id=?1",
+                [instance_id],
+                pipeline_instance_row,
+            )
+            .optional()?)
+    }
+
+    /// A project's instances, newest first.
+    pub fn list_pipeline_instances(
+        &self,
+        project_path: &str,
+    ) -> Result<Vec<PipelineInstance>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,pipeline_ref,project_path,current_stage,status,created_at,updated_at
+             FROM pipeline_instances WHERE project_path=?1 ORDER BY created_at DESC, id DESC",
+        )?;
+        let rows = stmt.query_map([project_path], pipeline_instance_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// Append one transition (seq = MAX+1) and move the instance to its target stage, atomically.
+    pub fn record_pipeline_transition(
+        &self,
+        instance_id: &str,
+        from_stage: Option<&str>,
+        to_stage: &str,
+        trigger: &str,
+        gate: &str,
+        session_id: Option<&str>,
+    ) -> Result<PipelineTransitionRecord, StoreError> {
+        let created_at = unix_millis();
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let seq: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(seq),0)+1 FROM pipeline_transitions WHERE instance_id=?1",
+            [instance_id],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "INSERT INTO pipeline_transitions
+               (instance_id,seq,from_stage,to_stage,trigger,gate,session_id,created_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                instance_id,
+                seq,
+                from_stage,
+                to_stage,
+                trigger,
+                gate,
+                session_id,
+                created_at,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE pipeline_instances SET current_stage=?2, updated_at=?3 WHERE id=?1",
+            rusqlite::params![instance_id, to_stage, created_at],
+        )?;
+        tx.commit()?;
+        Ok(PipelineTransitionRecord {
+            instance_id: instance_id.to_string(),
+            seq,
+            from_stage: from_stage.map(str::to_string),
+            to_stage: to_stage.to_string(),
+            trigger: trigger.to_string(),
+            gate: gate.to_string(),
+            session_id: session_id.map(str::to_string),
+            created_at,
+        })
+    }
+
+    /// The transition history of one instance in order.
+    pub fn list_pipeline_transitions(
+        &self,
+        instance_id: &str,
+    ) -> Result<Vec<PipelineTransitionRecord>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT instance_id,seq,from_stage,to_stage,trigger,gate,session_id,created_at
+             FROM pipeline_transitions WHERE instance_id=?1 ORDER BY seq ASC",
+        )?;
+        let rows = stmt.query_map([instance_id], |row| {
+            Ok(PipelineTransitionRecord {
+                instance_id: row.get(0)?,
+                seq: row.get(1)?,
+                from_stage: row.get(2)?,
+                to_stage: row.get(3)?,
+                trigger: row.get(4)?,
+                gate: row.get(5)?,
+                session_id: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// `active` | `completed` | `abandoned`.
+    pub fn set_pipeline_status(&self, instance_id: &str, status: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pipeline_instances SET status=?2, updated_at=?3 WHERE id=?1",
+            rusqlite::params![instance_id, status, unix_millis()],
+        )?;
+        Ok(())
+    }
+
+    /// Bind (or with `None`, unbind) a session to one stage of one instance.
+    pub fn bind_session_to_stage(
+        &self,
+        session_id: &str,
+        binding: Option<(&str, &str)>,
+    ) -> Result<(), StoreError> {
+        let (instance_id, stage_id) = match binding {
+            Some((instance, stage)) => (Some(instance), Some(stage)),
+            None => (None, None),
+        };
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET pipeline_instance_id=?2, pipeline_stage=?3 WHERE id=?1",
+            rusqlite::params![session_id, instance_id, stage_id],
+        )?;
+        Ok(())
+    }
+
+    /// Record a delegation of an issue to a scene. The session id is unknown at delegation time
+    /// (a session only exists after the first Run) and lands later via
+    /// [`Store::set_issue_delegation_session`]; the tracker comment URL likewise.
+    pub fn record_issue_delegation(
+        &self,
+        source: &str,
+        issue_id: &str,
+        issue_title: &str,
+        scene_ref: &str,
+        scene_title: &str,
+    ) -> Result<i64, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO issue_delegations
+             (source, issue_id, issue_title, scene_ref, scene_title, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![source, issue_id, issue_title, scene_ref, scene_title, unix_millis()],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn set_issue_delegation_session(
+        &self,
+        id: i64,
+        session_id: &str,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE issue_delegations SET session_id=?2 WHERE id=?1",
+            rusqlite::params![id, session_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_issue_delegation_comment(&self, id: i64, url: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE issue_delegations SET comment_url=?2 WHERE id=?1",
+            rusqlite::params![id, url],
+        )?;
+        Ok(())
+    }
+
+    /// Newest-first delegation history for one issue.
+    pub fn list_issue_delegations(
+        &self,
+        source: &str,
+        issue_id: &str,
+    ) -> Result<Vec<IssueDelegation>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, source, issue_id, issue_title, scene_ref, scene_title, session_id,
+                    comment_url, created_at
+             FROM issue_delegations WHERE source=?1 AND issue_id=?2
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![source, issue_id], |row| {
+            Ok(IssueDelegation {
+                id: row.get(0)?,
+                source: row.get(1)?,
+                issue_id: row.get(2)?,
+                issue_title: row.get(3)?,
+                scene_ref: row.get(4)?,
+                scene_title: row.get(5)?,
+                session_id: row.get(6)?,
+                comment_url: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    /// The session's pipeline binding, if any: `(instance_id, stage_id)`.
+    pub fn session_pipeline(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<(String, String)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(Option<String>, Option<String>)> = conn
+            .query_row(
+                "SELECT pipeline_instance_id,pipeline_stage FROM sessions WHERE id=?1",
+                [session_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(instance, stage)| Some((instance?, stage?))))
+    }
+
+    /// Sessions currently bound to an instance, as `(session_id, stage_id)` pairs.
+    pub fn sessions_for_pipeline(
+        &self,
+        instance_id: &str,
+    ) -> Result<Vec<(String, String)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,pipeline_stage FROM sessions
+             WHERE pipeline_instance_id=?1 AND pipeline_stage IS NOT NULL
+             ORDER BY created_at ASC",
+        )?;
+        let rows = stmt.query_map([instance_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     /// Publish the completed assistant answer into FTS exactly once. Stored chunks remain the
     /// transcript source of truth; only the first text row of the current turn owns the derived
     /// projection, keeping one searchable document per assistant turn.
@@ -2211,6 +2664,18 @@ fn parse_title_origin(value: &str) -> SessionTitleOrigin {
         "manual" => SessionTitleOrigin::Manual,
         _ => SessionTitleOrigin::Default,
     }
+}
+
+fn pipeline_instance_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PipelineInstance> {
+    Ok(PipelineInstance {
+        id: row.get(0)?,
+        pipeline_ref: row.get(1)?,
+        project_path: row.get(2)?,
+        current_stage: row.get(3)?,
+        status: row.get(4)?,
+        created_at: row.get(5)?,
+        updated_at: row.get(6)?,
+    })
 }
 
 fn search_hit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionSearchHit> {
@@ -3844,5 +4309,109 @@ mod tests {
             .get_canvas_snapshot_frozen(&draft.id, 2)
             .unwrap()
             .is_none());
+    }
+
+    // ---- pipeline instances (R9) -------------------------------------------------------------
+
+    #[test]
+    fn pipeline_instance_and_transition_round_trip() {
+        let store = Store::open_in_memory().unwrap();
+        let instance = store
+            .create_pipeline_instance("builtin:rnd-lifecycle", "/work", "research")
+            .unwrap();
+        assert_eq!(instance.current_stage, "research");
+        assert_eq!(instance.status, "active");
+
+        let fetched = store.get_pipeline_instance(&instance.id).unwrap().unwrap();
+        assert_eq!(fetched, instance);
+        assert!(store.get_pipeline_instance("missing").unwrap().is_none());
+
+        let listed = store.list_pipeline_instances("/work").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, instance.id);
+        assert!(store.list_pipeline_instances("/other").unwrap().is_empty());
+
+        store.set_pipeline_status(&instance.id, "completed").unwrap();
+        let fetched = store.get_pipeline_instance(&instance.id).unwrap().unwrap();
+        assert_eq!(fetched.status, "completed");
+    }
+
+    #[test]
+    fn pipeline_transitions_increment_seq_and_move_the_stage() {
+        let store = Store::open_in_memory().unwrap();
+        let instance = store
+            .create_pipeline_instance("builtin:rnd-lifecycle", "/work", "research")
+            .unwrap();
+        let entry = store
+            .record_pipeline_transition(&instance.id, None, "research", "entry", "suggest", None)
+            .unwrap();
+        assert_eq!(entry.seq, 1);
+        assert_eq!(entry.from_stage, None);
+
+        let next = store
+            .record_pipeline_transition(
+                &instance.id,
+                Some("research"),
+                "develop",
+                "exit_criteria_met",
+                "suggest",
+                Some("s1"),
+            )
+            .unwrap();
+        assert_eq!(next.seq, 2);
+        assert_eq!(next.session_id.as_deref(), Some("s1"));
+
+        let current = store.get_pipeline_instance(&instance.id).unwrap().unwrap();
+        assert_eq!(current.current_stage, "develop");
+
+        let history = store.list_pipeline_transitions(&instance.id).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0], entry);
+        assert_eq!(history[1], next);
+        // Loop count is COUNT(transitions to stage): re-entering develop bumps it.
+        store
+            .record_pipeline_transition(
+                &instance.id,
+                Some("develop"),
+                "develop",
+                "user_request",
+                "confirm",
+                None,
+            )
+            .unwrap();
+        let to_develop = store
+            .list_pipeline_transitions(&instance.id)
+            .unwrap()
+            .iter()
+            .filter(|t| t.to_stage == "develop")
+            .count();
+        assert_eq!(to_develop, 2);
+    }
+
+    #[test]
+    fn session_pipeline_binding_round_trips() {
+        let store = Store::open_in_memory().unwrap();
+        let mut session = Session::new(ProviderId::ClaudeCode, "/work");
+        session.id = "s1".into();
+        store.upsert_session(&session).unwrap();
+
+        assert_eq!(store.session_pipeline("s1").unwrap(), None);
+        store
+            .bind_session_to_stage("s1", Some(("inst-1", "develop")))
+            .unwrap();
+        assert_eq!(
+            store.session_pipeline("s1").unwrap(),
+            Some(("inst-1".to_string(), "develop".to_string()))
+        );
+        assert_eq!(
+            store.sessions_for_pipeline("inst-1").unwrap(),
+            vec![("s1".to_string(), "develop".to_string())]
+        );
+
+        store.bind_session_to_stage("s1", None).unwrap();
+        assert_eq!(store.session_pipeline("s1").unwrap(), None);
+        assert!(store.sessions_for_pipeline("inst-1").unwrap().is_empty());
+        // An unknown session is None, not an error (the reader is called from event glue).
+        assert_eq!(store.session_pipeline("missing").unwrap(), None);
     }
 }

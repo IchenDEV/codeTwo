@@ -198,6 +198,11 @@ struct ToolContext {
     title: String,
     kind: Option<String>,
     source: ToolSource,
+    /// Set at the initial ToolCall when [`crate::testsignal::classify_test_command`] recognizes a
+    /// test run; carried through updates so the terminal status can emit [`Event::TestSignal`].
+    test_command: Option<String>,
+    /// One signal per tool call: set when the terminal outcome has been emitted.
+    test_signaled: bool,
 }
 
 fn bounded_string(value: Option<&Value>, key: &str) -> Option<String> {
@@ -756,12 +761,22 @@ mod usage_update_tests {
             })
             .await;
 
+        // The legacy rolling projection precedes the authoritative context-window figure.
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::Usage {
+                session,
+                input_tokens: 53_000,
+                output_tokens: 0,
+            }) if session == "session-1"
+        ));
         assert!(matches!(
             received.recv().await,
             Some(Event::ContextWindow {
                 session,
                 used_tokens: 53_000,
                 context_window: 200_000,
+                cost_usd: None,
             }) if session == "session-1"
         ));
 
@@ -827,11 +842,20 @@ impl ClientHandler for SessionHandler {
                 let title = tc.title.unwrap_or_default();
                 let status = tc.status.unwrap_or_else(|| "pending".into());
                 let source = tool_source(&title, tc.raw_input.as_ref());
+                // Classified against the raw ACP kind (only execute/None may signal), before the
+                // rich-kind projection rewrites it for the UI.
+                let test_command = crate::testsignal::classify_test_command(
+                    provider_kind.as_deref(),
+                    &title,
+                    tc.raw_input.as_ref(),
+                );
                 let tool_kind = rich_tool_kind(provider_kind, &source, &title);
                 let context = ToolContext {
                     title: title.clone(),
                     kind: tool_kind.clone(),
                     source,
+                    test_command,
+                    test_signaled: false,
                 };
                 self.remember_tool(&tc.tool_call_id, context.clone());
                 let normalized = self.normalizer.normalize(
@@ -883,6 +907,9 @@ impl ClientHandler for SessionHandler {
                         title: title.clone(),
                         kind: kind.clone(),
                         source: source.clone(),
+                        // The initial ToolCall owns classification; updates only carry it through.
+                        test_command: previous.test_command.clone(),
+                        test_signaled: previous.test_signaled,
                     },
                 );
                 let normalized = self.normalizer.normalize(
@@ -936,15 +963,27 @@ impl ClientHandler for SessionHandler {
                 None,
                 Vec::new(),
             ),
-            SessionUpdate::UsageUpdate { used, size, .. } => (
-                Some(Event::ContextWindow {
-                    session,
-                    used_tokens: used,
-                    context_window: size,
-                }),
-                None,
-                Vec::new(),
-            ),
+            SessionUpdate::UsageUpdate { used, size, cost } => {
+                // The legacy rolling-usage projection for cost tracking. ACP reports one context
+                // figure, not an input/output split, so the whole count rides `input_tokens`.
+                self.emit(Event::Usage {
+                    session: session.clone(),
+                    input_tokens: used,
+                    output_tokens: 0,
+                });
+                (
+                    Some(Event::ContextWindow {
+                        session,
+                        used_tokens: used,
+                        context_window: size,
+                        // Only a plainly numeric cost is forwarded; structured provider cost
+                        // objects stay out of the context-window contract.
+                        cost_usd: cost.as_ref().and_then(Value::as_f64),
+                    }),
+                    None,
+                    Vec::new(),
+                )
+            }
             // Our own echoed input and any image/resource chunks aren't rendered/persisted here.
             _ => (None, None, Vec::new()),
         };
@@ -954,6 +993,34 @@ impl ClientHandler for SessionHandler {
         let transcript_seq = part
             .as_ref()
             .and_then(|part| self.persist(Role::Agent, part));
+        // Terminal outcome of a classified test run — once per tool call, decided by the pure
+        // heuristic ([`crate::testsignal`]); never inferred from stderr or non-terminal states.
+        let test_signal = match &event {
+            Some(Event::ToolCall {
+                id,
+                status,
+                outputs,
+                ..
+            }) if status == "completed" || status == "failed" => {
+                let mut contexts = self.tool_contexts.lock().unwrap();
+                match contexts.get_mut(id) {
+                    Some(context) if context.test_command.is_some() && !context.test_signaled => {
+                        crate::testsignal::test_outcome(status, outputs).map(|outcome| {
+                            context.test_signaled = true;
+                            Event::TestSignal {
+                                session: self.session_id.clone(),
+                                tool_call_id: id.clone(),
+                                command: context.test_command.clone().unwrap_or_default(),
+                                passed: outcome.passed,
+                                exit_code: outcome.exit_code,
+                            }
+                        })
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
         if let Some(mut event) = event {
             match &mut event {
                 Event::AgentText {
@@ -975,6 +1042,9 @@ impl ClientHandler for SessionHandler {
                 _ => {}
             }
             self.emit(event);
+        }
+        if let Some(signal) = test_signal {
+            self.emit(signal);
         }
         for warning in warnings {
             self.emit(Event::Error {
@@ -1092,6 +1162,11 @@ struct EngineState {
     /// Shared + mutable so the library-management UI can add/remove skills that the picker and the
     /// prompt compiler see immediately.
     skills: Arc<Mutex<SkillLibrary>>,
+    /// Resolved scene library for prompt-preamble injection ([`Engine::set_scenes`], mirroring
+    /// skills). Empty until a frontend supplies one; every lookup degrades to "no scene".
+    scenes: Mutex<Arc<crate::scene::SceneLibrary>>,
+    /// Scene-artifact capture layer for the TurnEnded auto-capture glue; `None` without a store.
+    scene_artifacts: Mutex<Option<crate::scene_artifact::SceneArtifactStore>>,
     events: mpsc::UnboundedSender<Event>,
     sessions: Mutex<HashMap<SessionId, SessionRuntime>>,
     activity: ActivityTracker,
@@ -1211,6 +1286,8 @@ impl Engine {
         let state = Arc::new(EngineState {
             providers,
             skills: Arc::new(Mutex::new(skills)),
+            scenes: Mutex::new(Arc::new(crate::scene::SceneLibrary::default())),
+            scene_artifacts: Mutex::new(None),
             events,
             sessions: Mutex::new(HashMap::new()),
             activity,
@@ -1241,6 +1318,17 @@ impl Engine {
     /// Replace the skill library (after add/remove on disk).
     pub fn set_skills(&self, library: SkillLibrary) {
         *self.state.skills.lock().unwrap() = library;
+    }
+
+    /// Replace the resolved scene library (mirroring [`Engine::set_skills`]; the desktop's
+    /// `reload_scenes` calls both). Prompts compiled afterwards see the new definitions.
+    pub fn set_scenes(&self, library: Arc<crate::scene::SceneLibrary>) {
+        *self.state.scenes.lock().unwrap() = library;
+    }
+
+    /// Attach the scene-artifact capture layer (desktop wiring; mirrors store wiring).
+    pub fn set_scene_artifacts(&self, artifacts: crate::scene_artifact::SceneArtifactStore) {
+        *self.state.scene_artifacts.lock().unwrap() = Some(artifacts);
     }
 
     fn session_for_checkout_validation(&self, id: &str) -> Result<Option<Session>, String> {
@@ -2032,6 +2120,59 @@ impl Engine {
                         )
                     }
                 };
+                // Scene preamble (R8): guardrails, inline fragments, artifact-capture and clarify
+                // instructions of the session's persisted active scene, injected AFTER project
+                // rules and BEFORE the user's document. An unresolvable reference degrades to no
+                // preamble — never an error.
+                let scene_preamble = self.state.store.as_ref().and_then(|store| {
+                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    let entry = scenes.resolve(&scene_ref)?;
+                    // R9: a stage-bound session compiles its stage's `carry` list against the
+                    // newest stored versions on every prompt — the artifact store, not session
+                    // memory, is the inter-stage contract. Unbound sessions carry nothing.
+                    let carried: Vec<crate::scene::CarriedArtifact> = store
+                        .session_pipeline(&session)
+                        .ok()
+                        .flatten()
+                        .and_then(|(instance_id, stage_id)| {
+                            let instance = store.get_pipeline_instance(&instance_id).ok().flatten()?;
+                            let pipeline = scenes.resolve_pipeline(&instance.pipeline_ref)?;
+                            let stage = pipeline
+                                .pipeline
+                                .stages
+                                .iter()
+                                .find(|stage| stage.id == stage_id)?;
+                            let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                            Some(artifacts.resolve_carry(&instance_id, stage))
+                        })
+                        .unwrap_or_default();
+                    let preamble = crate::scene::prompt_preamble(&entry.scene, &carried);
+                    (!preamble.trim().is_empty()).then_some(preamble)
+                });
+                if let Some(preamble) = scene_preamble {
+                    // The compiler emits `rules ⧺ "\n\n" ⧺ rest`; splice the preamble between the
+                    // two so project rules stay first, exactly as the normative order requires.
+                    let rules_context =
+                        crate::rules::to_context(&crate::rules::load(std::path::Path::new(&cwd)));
+                    if compiled.prompt.is_empty() {
+                        compiled.prompt = preamble;
+                    } else if !rules_context.is_empty()
+                        && compiled.prompt.starts_with(&rules_context)
+                    {
+                        let rest = compiled.prompt[rules_context.len()..].to_string();
+                        compiled.prompt = format!(
+                            "{rules_context}\n\n{preamble}{}",
+                            if rest.is_empty() {
+                                String::new()
+                            } else {
+                                format!("\n\n{}", rest.trim_start_matches('\n'))
+                            }
+                        );
+                    } else {
+                        compiled.prompt = format!("{preamble}\n\n{}", compiled.prompt);
+                    }
+                }
                 let is_codex = {
                     let sessions = self.state.sessions.lock().unwrap();
                     sessions
@@ -2408,6 +2549,17 @@ impl Engine {
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
                 let memory_project = images_cwd.clone();
+                // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
+                // carries plain handles instead of engine references. Best-effort by design:
+                // no active scene, no declared artifacts, or no capture layer all mean "skip".
+                let scene_capture = self.state.store.as_ref().and_then(|store| {
+                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    let entry = scenes.resolve(&scene_ref)?;
+                    let specs = entry.scene.artifacts.clone();
+                    let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                    (!specs.is_empty()).then_some((scene_ref, specs, artifacts))
+                });
                 let mut canvas_image_blocks = Vec::new();
                 for canvas in &compiled.canvases {
                     match lower_canvas_prompt_payload(
@@ -2486,6 +2638,59 @@ impl Engine {
                                             }
                                             Err(e) => {
                                                 tracing::warn!("capture memory failed: {e}")
+                                            }
+                                        }
+                                    }
+                                    // Scene artifact auto-capture (R8): scan the turn's agent
+                                    // text for declared `artifact:<id>` fenced blocks (the
+                                    // convention the preamble teaches), record each version, and
+                                    // announce it before TurnEnded so exit evaluation sees it.
+                                    if let (Some((scene_ref, specs, artifacts)), Some(seq)) =
+                                        (scene_capture, transcript_seq)
+                                    {
+                                        let agent_text: String = store
+                                            .transcript_with_seq(&sess_for_task)
+                                            .unwrap_or_default()
+                                            .into_iter()
+                                            .filter(|(part_seq, role, _)| {
+                                                *part_seq > seq && *role == Role::Agent
+                                            })
+                                            .filter_map(|(_, _, part)| match part {
+                                                Part::Text { text } => Some(text),
+                                                _ => None,
+                                            })
+                                            .collect();
+                                        for (id, content) in
+                                            crate::scene_artifact::extract_artifact_blocks(
+                                                &agent_text,
+                                                &specs,
+                                            )
+                                        {
+                                            let Some(spec) =
+                                                specs.iter().find(|spec| spec.id == id)
+                                            else {
+                                                continue;
+                                            };
+                                            match artifacts.record(
+                                                &scene_ref,
+                                                spec,
+                                                &sess_for_task,
+                                                None,
+                                                &content,
+                                            ) {
+                                                Ok(record) => {
+                                                    let _ = events.send(Event::ArtifactProduced {
+                                                        session: sess_for_task.clone(),
+                                                        scene_ref: scene_ref.clone(),
+                                                        artifact_key: record.artifact_key,
+                                                        kind: record.kind,
+                                                        version: record.version,
+                                                        record_id: record.id,
+                                                    });
+                                                }
+                                                Err(error) => tracing::warn!(
+                                                    "scene artifact capture failed: {error}"
+                                                ),
                                             }
                                         }
                                     }

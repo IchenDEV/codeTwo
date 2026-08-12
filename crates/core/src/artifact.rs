@@ -151,7 +151,10 @@ impl ArtifactStore {
             }
         }
 
-        let display_name = safe_display_name(display_name, verified.extension);
+        let display_name = safe_display_name(
+            display_name,
+            &format!("generated-image.{}", verified.extension),
+        );
         let created_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -199,6 +202,99 @@ impl ArtifactStore {
             bytes: bytes.len() as u64,
             width: verified.width,
             height: verified.height,
+            display_name: effective_name,
+        })
+    }
+
+    /// Store a UTF-8 text document (a scene artifact's content) through the same content-addressed
+    /// blob layer as images. `width`/`height` are 0 — the documented "not an image" sentinel — so
+    /// the wire shape stays compatible without a migration. `tool_call_id` is synthetic for scene
+    /// captures (`scene:<artifact_key>`).
+    pub fn save_document(
+        &self,
+        text: &str,
+        mime_type: &str,
+        display_name: Option<&str>,
+        session_id: &str,
+        tool_call_id: &str,
+    ) -> Result<ArtifactRef, ArtifactError> {
+        let extension = match mime_type {
+            "text/markdown" => "md",
+            "text/plain" => "txt",
+            _ => return Err(ArtifactError::UnsupportedFormat),
+        };
+        let bytes = text.as_bytes();
+        if bytes.len() > MAX_ARTIFACT_BYTES {
+            return Err(ArtifactError::TooLarge(bytes.len()));
+        }
+        fs::create_dir_all(self.root.as_ref())?;
+        let digest = blake3::hash(bytes).to_hex().to_string();
+        let storage_name = format!("{digest}.{extension}");
+        let path = self.root.join(&storage_name);
+        if !path.is_file() {
+            let temporary = self
+                .root
+                .join(format!(".{}.{}.tmp", digest, uuid::Uuid::new_v4()));
+            let mut file = fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(&temporary)?;
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            if let Err(error) = fs::rename(&temporary, &path) {
+                let _ = fs::remove_file(&temporary);
+                if !path.is_file() {
+                    return Err(error.into());
+                }
+            }
+        }
+
+        let display_name = safe_display_name(display_name, &format!("document.{extension}"));
+        let created_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .min(i64::MAX as u128) as i64;
+        let conn = self.store.conn.lock().unwrap();
+        let existing: Option<(String, String)> = conn
+            .query_row(
+                "SELECT id,display_name FROM artifacts WHERE digest=?1",
+                [&digest],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let (id, effective_name) = match existing {
+            Some(existing) => existing,
+            None => {
+                let id = uuid::Uuid::new_v4().to_string();
+                conn.execute(
+                    "INSERT INTO artifacts
+                     (id,digest,mime_type,byte_count,width,height,display_name,storage_name,created_at)
+                     VALUES (?1,?2,?3,?4,0,0,?5,?6,?7)",
+                    rusqlite::params![
+                        id,
+                        digest,
+                        mime_type,
+                        bytes.len() as i64,
+                        display_name,
+                        storage_name,
+                        created_at,
+                    ],
+                )?;
+                (id, display_name)
+            }
+        };
+        conn.execute(
+            "INSERT OR IGNORE INTO artifact_refs (session_id,tool_call_id,artifact_id)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![session_id, tool_call_id, id],
+        )?;
+        Ok(ArtifactRef {
+            id,
+            mime_type: mime_type.into(),
+            bytes: bytes.len() as u64,
+            width: 0,
+            height: 0,
             display_name: effective_name,
         })
     }
@@ -480,9 +576,10 @@ fn image_bytes(
     ))
 }
 
-fn safe_display_name(name: Option<&str>, extension: &str) -> String {
-    let fallback = format!("generated-image.{extension}");
-    let Some(name) = name else { return fallback };
+fn safe_display_name(name: Option<&str>, fallback: &str) -> String {
+    let Some(name) = name else {
+        return fallback.to_string();
+    };
     let name = Path::new(name)
         .file_name()
         .and_then(|value| value.to_str())
@@ -493,7 +590,7 @@ fn safe_display_name(name: Option<&str>, extension: &str) -> String {
         .take(128)
         .collect();
     if filtered.trim().is_empty() {
-        fallback
+        fallback.to_string()
     } else {
         filtered
     }
@@ -685,6 +782,41 @@ mod tests {
             "tool-1",
         );
         assert!(result.outputs.is_empty());
+    }
+
+    #[test]
+    fn save_document_dedupes_and_uses_zero_dimension_sentinel() {
+        let dir = tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let artifacts = ArtifactStore::from_store(store).unwrap();
+
+        let first = artifacts
+            .save_document("# Plan\n\n- [ ] step", "text/markdown", None, "s1", "scene:plan")
+            .unwrap();
+        assert_eq!((first.width, first.height), (0, 0));
+        assert_eq!(first.mime_type, "text/markdown");
+        assert_eq!(first.display_name, "document.md");
+        assert_eq!(
+            artifacts.get(&first.id).unwrap(),
+            b"# Plan\n\n- [ ] step".to_vec()
+        );
+
+        // Same content again — content addressing must return the same artifact id.
+        let second = artifacts
+            .save_document("# Plan\n\n- [ ] step", "text/markdown", None, "s1", "scene:plan")
+            .unwrap();
+        assert_eq!(second.id, first.id);
+    }
+
+    #[test]
+    fn save_document_rejects_unknown_mime_types() {
+        let dir = tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let artifacts = ArtifactStore::from_store(store).unwrap();
+        assert!(matches!(
+            artifacts.save_document("<html/>", "text/html", None, "s1", "t1"),
+            Err(ArtifactError::UnsupportedFormat)
+        ));
     }
 
     #[test]

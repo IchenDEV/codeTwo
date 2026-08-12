@@ -39,6 +39,16 @@ export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo 
   return { ...provider, capabilities: provider.capabilities ?? [] };
 }
 
+/** One typed macro slot as `list_skills` reports it (core `SlotDef`, Agent Scenes vocabulary). */
+export interface MacroSlotInfo {
+  id: string;
+  label?: string;
+  kind?: "text" | "multiline" | "select" | "file" | "artifact";
+  options?: string[];
+  required?: boolean;
+  default?: string;
+}
+
 export interface SkillInfo {
   id: string;
   name: string;
@@ -48,6 +58,10 @@ export interface SkillInfo {
   /// Harness display name ("Claude Code" …) for skills auto-discovered from a product's skill
   /// directory; null for library skills.
   source: string | null;
+  /// Macro payload metadata so the `/` picker can render the R1 slot card without a second
+  /// fetch. Absent for every other kind (and for backends predating the fields).
+  macro_template?: string | null;
+  macro_slots?: MacroSlotInfo[] | null;
 }
 
 export type PermissionMode = "ask" | "accept_edits" | "yolo";
@@ -243,7 +257,10 @@ export type DocBlock =
   | { type: "file"; path: string }
   | { type: "image"; path: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
-  | { type: "session"; session_id: string };
+  | { type: "session"; session_id: string }
+  // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
+  // `DocBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
+  | { type: "issue"; source: string; id: string; title: string; url: string; body: string };
 
 /// One-line description of a doc block, used for summaries and browser-mode previews.
 export function describeBlock(b: DocBlock): string {
@@ -260,6 +277,8 @@ export function describeBlock(b: DocBlock): string {
       return `[canvas:${b.id}@${b.frozen_revision}]`;
     case "session":
       return `[chat:${b.session_id.slice(0, 8)}]`;
+    case "issue":
+      return `[issue:${b.source}#${b.id}]`;
   }
 }
 
@@ -322,7 +341,13 @@ export type CoreEvent =
       context?: PermissionContext;
     }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
-  | { event: "context_window"; session: string; used_tokens: number; context_window: number }
+  | {
+      event: "context_window";
+      session: string;
+      used_tokens: number;
+      context_window: number;
+      cost_usd?: number | null;
+    }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
   | {
@@ -338,6 +363,54 @@ export type CoreEvent =
       message: string;
       terminal: boolean;
       request_id?: string | null;
+    }
+  | {
+      event: "test_signal";
+      session: string;
+      tool_call_id: string;
+      command: string;
+      passed: boolean;
+      exit_code?: number | null;
+    }
+  | {
+      event: "artifact_produced";
+      session: string;
+      scene_ref: string;
+      artifact_key: string;
+      kind: string;
+      version: number;
+      record_id: number;
+    }
+  | {
+      event: "exit_criteria_met";
+      session: string;
+      scene_ref: string;
+      satisfied: string[];
+      unverified: string[];
+      state_key: string;
+    }
+  | {
+      event: "hook_suggestion";
+      session: string;
+      scene_ref: string;
+      on: string;
+      kind: string;
+      target_scene?: string | null;
+      carry?: string[];
+      message?: string | null;
+      pipeline_instance?: string | null;
+      to_stage?: string | null;
+      state_key: string;
+    }
+  | { event: "hook_turn_started"; session: string; scene_ref: string; macro_id: string }
+  | {
+      event: "session_cost";
+      session: string;
+      input_tokens: number;
+      output_tokens: number;
+      cost_usd?: number | null;
+      burn_rate_usd_per_hour?: number | null;
+      priced: boolean;
     };
 
 export interface PtyOutput {
@@ -404,7 +477,8 @@ export interface TranscriptPage {
 
 export type SkillPayload =
   | { kind: "fragment"; text: string }
-  | { kind: "macro"; template: string; slots: string[] };
+  // Core's untagged slot deserializer accepts bare legacy ids and full slot objects (R2).
+  | { kind: "macro"; template: string; slots: (string | MacroSlotInfo)[] };
 
 export interface Skill {
   id: string;
@@ -436,7 +510,14 @@ const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment", source: null },
   { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
   { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment", source: null },
-  { id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null },
+  {
+    id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null,
+    macro_template: "Write a {{style}} commit message for changes to {{scope}}.",
+    macro_slots: [
+      { id: "style", label: "Style", kind: "select", options: ["conventional", "descriptive"], required: true },
+      { id: "scope", label: "Scope", kind: "text" },
+    ],
+  },
   { id: "demo:skill:review", name: "Release Review", description: "Review a release against its acceptance criteria", icon: null, kind: "agent_skill", source: "Plugin · Developer Toolkit" },
   { id: "demo:agent:research", name: "Researcher", description: "Collect primary evidence before implementation", icon: null, kind: "subagent", source: "Plugin · Developer Toolkit" },
   { id: "demo:mcp:docs", name: "docs-search", description: "MCP server from Developer Toolkit", icon: null, kind: "mcp", source: "Plugin · Developer Toolkit" },
@@ -1189,6 +1270,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["refresh_git", "Mod+G", "Refresh git status"],
   ["prev_session", "Mod+Alt+ArrowUp", "Previous session"],
   ["next_session", "Mod+Alt+ArrowDown", "Next session"],
+  ["open_mission_control", "Mod+Shift+O", "Open mission control"],
 ];
 
 export async function getKeymap(): Promise<KeymapEntry[]> {
@@ -1253,6 +1335,9 @@ export interface PluginCounts {
   lsp_servers: number;
   monitors: number;
   apps: number;
+  /** Agent Scenes components (R14); serde-defaulted server-side, so always present here. */
+  scenes: number;
+  pipelines: number;
 }
 
 export type PluginStandard = "agent_plugins" | "codex" | "claude_code" | "conventional";
@@ -1436,6 +1521,8 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             lsp_servers: 1,
             monitors: 0,
             apps: 0,
+            scenes: 1,
+            pipelines: 1,
           },
           extension_components: [
             {
@@ -2114,4 +2201,464 @@ export async function onPtyExit(cb: (id: string) => void): Promise<() => void> {
 
 export function providerLabel(p: string | { custom: string }): string {
   return typeof p === "string" ? p : p.custom;
+}
+
+// ---- scenes (Agent Scenes 1.0.0; see docs/scenes.md) ---------------------------------------
+
+import type { SceneInfo } from "./session/scene";
+
+export interface SceneEscalation {
+  from: string;
+  to: string;
+}
+
+export interface SceneApplyOutcome {
+  applied: string[];
+  pending: string[];
+  escalation: SceneEscalation | null;
+  plan_first: boolean | null;
+  suppress_unpinned: boolean;
+  pinned_skills: string[];
+}
+
+export interface SceneSessionParams {
+  provider: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
+  use_worktree: boolean | null;
+  worktree_base: WorktreeBaselineKind | null;
+  initial_policy: { mode: PermissionMode; sandbox: Sandbox } | null;
+}
+
+export interface SceneSessionPlanOutcome {
+  params: SceneSessionParams | null;
+  escalation: SceneEscalation | null;
+}
+
+export interface SessionSceneState {
+  reference: string;
+  customized: boolean;
+  resolved: boolean;
+}
+
+/// Every scene call degrades on a missing backend command (feature-detect: catch → fallback),
+/// so a frontend running against an older core hides the affordance instead of breaking.
+/** Browser-preview stand-ins (same convention as FALLBACK_SKILLS): the five builtin scenes. */
+const FALLBACK_SCENES: SceneInfo[] = (
+  [
+    ["research", "Research", "调研", "🔎", "read_only", "Survey the problem space read-only and produce a cited research report."],
+    ["develop", "Develop", "开发", "🛠️", "auto_edit", "Plan-first implementation in an isolated worktree."],
+    ["test", "Test", "测试", "🧪", "auto_edit", "Exercise the change against its acceptance criteria."],
+    ["fix", "Fix", "修复", "🩹", "auto_edit", "Resolve reported failures one by one."],
+    ["acceptance", "Acceptance", "验收", "✅", "read_only", "Read-only verification against the original acceptance criteria."],
+  ] as const
+).map(([name, title, zh, icon, mode, description]) => ({
+  reference: `builtin:${name}`,
+  name,
+  title,
+  description,
+  icon,
+  source: "builtin" as const,
+  keywords: [],
+  has_brief: true,
+  localizations: { "zh-CN": { title: zh } },
+  execution: { session_mode: mode } as SceneInfo["execution"],
+  artifacts: [],
+})) as SceneInfo[];
+
+export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
+  if (!inTauri) return FALLBACK_SCENES;
+  return invoke<SceneInfo[]>("list_scenes", { cwd: cwd ?? null }).catch(() => []);
+}
+
+export async function getScene(
+  reference: string,
+): Promise<{ reference: string; source: string; scene: unknown } | null> {
+  if (!inTauri) return null;
+  return invoke<{ reference: string; source: string; scene: unknown }>("get_scene", {
+    reference,
+  }).catch(() => null);
+}
+
+export async function applySceneToSession(
+  session: string,
+  reference: string,
+  confirmEscalation: boolean,
+): Promise<SceneApplyOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<SceneApplyOutcome>("apply_scene", {
+    session,
+    reference,
+    confirmEscalation,
+  }).catch(() => null);
+}
+
+export async function sceneSessionPlan(
+  reference: string,
+  confirmEscalation: boolean,
+): Promise<SceneSessionPlanOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<SceneSessionPlanOutcome>("scene_session_plan", {
+    reference,
+    confirmEscalation,
+  }).catch(() => null);
+}
+
+export async function setSessionScene(
+  session: string,
+  reference: string | null,
+  customized: boolean,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_session_scene", { session, reference, customized }).catch(() => {});
+}
+
+export async function getSessionScene(session: string): Promise<SessionSceneState | null> {
+  if (!inTauri) return null;
+  return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
+}
+
+/** Diff stat of a session's own checkout, shaped for display. Null when unknown or not a repo. */
+export interface SessionDiffStat {
+  files: number;
+  additions: number;
+  deletions: number;
+}
+
+export async function sessionDiffStat(session: string): Promise<SessionDiffStat | null> {
+  if (!inTauri) return null;
+  return invoke<GitDiffStat | null>("session_diff_stat", { session })
+    .then((stat) =>
+      stat ? { files: stat.files, additions: stat.added, deletions: stat.deleted } : null,
+    )
+    .catch(() => null);
+}
+
+/** Per-session token/cost totals. The core command lands in a later wave — until then this
+ * resolves null everywhere and the statusline's cost segment stays hidden (feature detect). */
+export interface SessionUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number | null;
+  burn_rate_usd_per_hour: number | null;
+  priced: boolean;
+}
+
+export async function usageBySession(session: string): Promise<SessionUsage | null> {
+  if (!inTauri) return null;
+  return invoke<SessionUsage | null>("usage_by_session", { session }).catch(() => null);
+}
+
+// ---- scene artifacts (R4) -------------------------------------------------------------------
+
+/** One captured version of one scene artifact, as `list_scene_artifacts` reports it. */
+export interface SceneArtifactRecord {
+  id: number;
+  scene_ref: string;
+  artifact_key: string;
+  kind: string;
+  title: string;
+  session_id: string;
+  pipeline_instance_id: string | null;
+  stage_id: string | null;
+  artifact: ArtifactRef;
+  version: number;
+  pinned: boolean;
+  created_at: number;
+}
+
+/// Same degradation contract as the scene calls above: against an older core the commands are
+/// missing and every call quietly reports "no artifacts" instead of breaking the surface.
+export async function listSceneArtifacts(session: string): Promise<SceneArtifactRecord[]> {
+  if (!inTauri) return [];
+  return invoke<SceneArtifactRecord[]>("list_scene_artifacts", { session }).catch(() => []);
+}
+
+export async function sceneArtifactContent(recordId: number): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("scene_artifact_content", { recordId }).catch(() => null);
+}
+
+export async function recordSceneArtifact(
+  session: string,
+  artifactKey: string,
+  content: string,
+): Promise<SceneArtifactRecord | null> {
+  if (!inTauri) return null;
+  return invoke<SceneArtifactRecord>("record_scene_artifact", {
+    session,
+    artifactKey,
+    content,
+  }).catch(() => null);
+}
+
+export async function pinSceneArtifact(
+  session: string,
+  artifactKey: string,
+  version: number | null,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("pin_scene_artifact", { session, artifactKey, version }).catch(() => {});
+}
+
+// ---- issue write path (R12) -----------------------------------------------------------------
+
+/**
+ * Post a delegation comment on a GitHub ("github") or Linear ("linear") issue; resolves to the
+ * comment URL. Linear needs the caller-held API token (same source as `listLinearIssues`).
+ * Null when unavailable: browser preview, older core, or the comment failed to post.
+ */
+export async function commentIssue(
+  cwd: string,
+  source: string,
+  id: string,
+  body: string,
+  token?: string,
+): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("comment_issue", { cwd, source, id, body, token: token ?? null }).catch(
+    () => null,
+  );
+}
+
+// ---- voice → structured brief (R11) --------------------------------------------------------
+
+import type { SceneSlotDef } from "./session/scene";
+
+/**
+ * Heuristically distribute a finished dictation across a scene brief's slots (core-side keyword
+ * sectioning; no model call). Null on browser preview, an older core, or any failure — the caller
+ * must fall back to inserting the raw transcript so it is never lost.
+ */
+export async function structureBrief(
+  transcript: string,
+  slots: SceneSlotDef[],
+): Promise<Record<string, string> | null> {
+  if (!inTauri) return null;
+  return invoke<Record<string, string>>("structure_brief", { transcript, slots }).catch(() => null);
+}
+
+// ---- template-from-history (R2) --------------------------------------------------------------
+
+/** Heuristic `{{slot-N}}` proposal over a past prompt, as `propose_macro_slots` reports it. */
+export interface ProposedMacro {
+  template: string;
+  slots: SceneSlotDef[];
+}
+
+/**
+ * Null on browser preview or an older core (missing command) — the template dialog then opens as
+ * a plain manual editor over the raw prompt instead of breaking.
+ */
+export async function proposeMacroSlots(text: string): Promise<ProposedMacro | null> {
+  if (!inTauri) return null;
+  return invoke<ProposedMacro>("propose_macro_slots", { text }).catch(() => null);
+}
+
+// ---- scene hooks (R8) -----------------------------------------------------------------------
+
+/// Remember a completion-banner dismissal so the same exit state never re-fires this session.
+export async function dismissSceneBanner(session: string, stateKey: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("dismiss_scene_banner", { session, stateKey }).catch(() => {});
+}
+
+/// Enable/disable scene `schedule` hooks for one project (off by default).
+export async function setProjectScheduling(path: string, enabled: boolean): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_project_scheduling", { path, enabled }).catch(() => {});
+}
+
+// ---- pipeline instances (R9) ----------------------------------------------------------------
+
+/** One resolved pipeline definition, as `list_pipelines` reports it. */
+export interface PipelineInfo {
+  reference: string;
+  name: string;
+  title: string;
+  description: string;
+  icon: string | null;
+  source: string;
+  stage_count: number;
+}
+
+/** One running (or finished) pipeline instance. */
+export interface PipelineInstance {
+  id: string;
+  pipeline_ref: string;
+  project_path: string;
+  current_stage: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PipelineTransitionRecord {
+  instance_id: string;
+  seq: number;
+  from_stage: string | null;
+  to_stage: string;
+  trigger: string;
+  gate: string;
+  session_id: string | null;
+  created_at: number;
+}
+
+/** One stage on the horizontal stage track. */
+export interface PipelineStageStatus {
+  id: string;
+  scene_ref: string;
+  title: string;
+  state: "done" | "current" | "pending";
+  gate: string;
+  loop_count: number;
+  sessions: string[];
+  artifacts: SceneArtifactRecord[];
+}
+
+export interface PipelineInstanceDetail {
+  instance: PipelineInstance;
+  transitions: PipelineTransitionRecord[];
+  stages: PipelineStageStatus[];
+}
+
+export interface PipelineStartOutcome {
+  detail: PipelineInstanceDetail;
+  applied_scene: SceneApplyOutcome | null;
+}
+
+export interface PipelineAdvanceOutcome {
+  instance: PipelineInstance;
+  applied_scene: SceneApplyOutcome | null;
+  session_plan: SceneSessionParams | null;
+  escalation: SceneEscalation | null;
+  carried: string[];
+}
+
+/// Same degradation contract as the other scene calls: on an older core every call quietly
+/// reports "no pipelines" instead of breaking the surface.
+export async function listPipelines(): Promise<PipelineInfo[]> {
+  if (!inTauri) return [];
+  return invoke<PipelineInfo[]>("list_pipelines", {}).catch(() => []);
+}
+
+export async function startPipeline(
+  reference: string,
+  projectPath: string,
+  session: string | null,
+): Promise<PipelineStartOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineStartOutcome>("start_pipeline", {
+    reference,
+    projectPath,
+    session,
+  }).catch(() => null);
+}
+
+export async function advancePipeline(
+  instanceId: string,
+  toStage: string,
+  session: string | null,
+  confirm: boolean,
+): Promise<PipelineAdvanceOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineAdvanceOutcome>("advance_pipeline", {
+    instanceId,
+    toStage,
+    session,
+    confirm,
+  }).catch(() => null);
+}
+
+export async function bindPipelineSession(
+  instanceId: string,
+  stageId: string,
+  session: string,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("bind_pipeline_session", { instanceId, stageId, session }).catch(() => {});
+}
+
+export async function getPipelineInstance(
+  instanceId: string,
+): Promise<PipelineInstanceDetail | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineInstanceDetail>("get_pipeline_instance", { instanceId }).catch(() => null);
+}
+
+export async function listPipelineInstances(projectPath: string): Promise<PipelineInstance[]> {
+  if (!inTauri) return [];
+  return invoke<PipelineInstance[]>("list_pipeline_instances", { projectPath }).catch(() => []);
+}
+
+/** The active session's pipeline binding — the stage track renders only when this is set. */
+export async function sessionPipeline(
+  session: string,
+): Promise<{ instance_id: string; stage_id: string } | null> {
+  if (!inTauri) return null;
+  return invoke<{ instance_id: string; stage_id: string } | null>("session_pipeline", {
+    session,
+  }).catch(() => null);
+}
+
+// ---- issue delegation trail (R12 cleanup) ----------------------------------------------------
+
+/** One "delegated to scene" event on an issue's accountability trail. */
+export interface IssueDelegation {
+  id: number;
+  source: string;
+  issue_id: string;
+  issue_title: string;
+  scene_ref: string;
+  scene_title: string;
+  session_id: string | null;
+  comment_url: string | null;
+  created_at: number;
+}
+
+export async function recordIssueDelegation(
+  source: string,
+  issueId: string,
+  issueTitle: string,
+  sceneRef: string,
+  sceneTitle: string,
+): Promise<number | null> {
+  if (!inTauri) return null;
+  return invoke<number>("record_issue_delegation", {
+    source,
+    issueId,
+    issueTitle,
+    sceneRef,
+    sceneTitle,
+  }).catch(() => null);
+}
+
+export async function setIssueDelegationSession(id: number, session: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_issue_delegation_session", { id, session }).catch(() => {});
+}
+
+export async function setIssueDelegationComment(id: number, url: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_issue_delegation_comment", { id, url }).catch(() => {});
+}
+
+export async function listIssueDelegations(
+  source: string,
+  issueId: string,
+): Promise<IssueDelegation[]> {
+  if (!inTauri) return [];
+  return invoke<IssueDelegation[]>("list_issue_delegations", { source, issueId }).catch(() => []);
+}
+
+/** Whether scene `schedule` hooks are enabled for this project (off by default). */
+export async function getProjectScheduling(path: string): Promise<boolean> {
+  if (!inTauri) return false;
+  return invoke<boolean>("get_project_scheduling", { path }).catch(() => false);
+}
+
+/** Lossy SKILL.md export of a scene (docs/scenes.md §Interop); null when it cannot resolve. */
+export async function exportSceneSkillMd(reference: string): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("export_scene_skill_md", { reference }).catch(() => null);
 }

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "release-notes",
+  "version": "1.0.0",
+  "title": "Release notes",
+  "description": "Turn diffs, commits, and change summaries into audience-appropriate release notes with a highlights digest.",
+  "icon": "📣",
+  "keywords": ["office", "release", "changelog", "notes"],
+  "localizations": {
+    "zh-CN": {
+      "title": "发布说明",
+      "description": "把 diff、提交与变更摘要整理成面向目标读者的发布说明，并附亮点摘要。"
+    }
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Release writer",
+        "text": "You are writing release notes. Work only from the change evidence in front of you (diffs, commit messages, change summaries, test reports). Group changes by user-visible effect, not by file. Match the tone and detail level to the selected audience: developers get precise technical detail, users get outcomes and upgrade steps, stakeholders get impact and risk. Call out breaking changes and migrations first."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Version\n\n{{version}}\n\n## Change sources\n\n{{sources}}\n\n## Audience\n\n{{audience}}\n",
+    "slots": [
+      { "id": "version", "label": "Version being released", "kind": "text", "required": true },
+      { "id": "sources", "label": "Change sources (commit range, PRs, carried change summaries)", "kind": "multiline", "required": false },
+      { "id": "audience", "label": "Primary audience", "kind": "select", "options": ["developers", "users", "stakeholders"], "required": false, "default": "users" }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "release-notes",
+      "title": "Release notes",
+      "kind": "document",
+      "required": true,
+      "template": "# Release <version>\n\n## Breaking changes\n\n## New\n\n## Improved\n\n## Fixed\n\n## Upgrade notes\n"
+    },
+    {
+      "id": "highlights",
+      "title": "Highlights digest",
+      "kind": "report",
+      "description": "Three to five headline items for announcements."
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ]
+  },
+  "constraints": {
+    "guardrails": [
+      "Write from diff/commit evidence; never invent changes.",
+      "A change you cannot trace to a commit, PR, or carried summary does not go in the notes.",
+      "Lead with breaking changes and required migrations."
+    ]
+  }
+}

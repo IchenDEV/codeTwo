@@ -45,6 +45,7 @@ import {
   gitStatus,
   githubImportPlugin,
   installMarketplacePlugin,
+  commentIssue,
   issueContext,
   listArchivedSessions,
   listMemoryReceipts,
@@ -117,7 +118,29 @@ import {
   type WorktreeBaselineKind,
   type WorktreeBaselineOption,
   type WorkspaceContentMatch,
+  type PipelineInfo,
+  type PipelineInstanceDetail,
+  advancePipeline,
+  applySceneToSession,
+  dismissSceneBanner,
+  bindPipelineSession,
+  getPipelineInstance,
+  recordIssueDelegation,
+  setIssueDelegationComment,
+  setIssueDelegationSession,
+  getSessionScene,
+  listPipelines,
+  listScenes,
+  recordSceneArtifact,
+  sceneSessionPlan,
+  sessionPipeline,
+  setModel as setSessionModel,
+  setSessionScene,
+  startPipeline,
+  structureBrief,
+  usageBySession,
 } from "./bridge";
+import { makeTranscriptHandler } from "./voice/VoiceButton";
 import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
@@ -141,6 +164,18 @@ import {
   withSessionExecutionPolicy,
   type SessionMode,
 } from "./session/mode";
+import {
+  escalationNeeded,
+  nextSceneInRing,
+  sceneCustomized,
+  softApplyPending,
+  MEMORY_PRESET_POLICY,
+  sceneEffortChoice,
+  type SceneInfo,
+} from "./session/scene";
+import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
+import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
+import { StageTrack } from "./session/StageTrack";
 import { Composer } from "./session/Composer";
 import {
   activeContextWindow,
@@ -148,11 +183,16 @@ import {
   updateContextWindow,
   type ContextWindowBySession,
 } from "./session/contextWindow";
+// Explicit extension: `session/` holds both `statusline.ts` and `Statusline.tsx`, and bun's
+// resolver matches the pair case-insensitively without it.
+import { deriveBurnRate } from "./session/statusline.ts";
 import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
+import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
+import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import { petAnimationForActivity } from "./pet/state";
 import {
@@ -193,8 +233,18 @@ import {
   type PermissionQueueItem,
   type SessionCreationShell,
 } from "./session/sessionEvents";
+import {
+  classifyToolSurface,
+  followReduce,
+  initialFollowState,
+  type FollowEvent,
+  type FollowState,
+  type ToolSurfaceHint,
+} from "./session/toolActivity";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
+import { MissionControlDialog } from "./sidebar/MissionControl";
+import { needsMeCount } from "./sidebar/missionControl.ts";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
@@ -372,6 +422,8 @@ export default function App() {
   const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
   const permission = permissionQueue[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
+  /** R2 "save as template": the prompt text the TemplateDialog opens over. */
+  const [templateDraft, setTemplateDraft] = useState<string | null>(null);
   const [gitWorkspace, setGitWorkspace] = useState<WorkspaceLoadState<GitWorkspaceData>>({
     cwd: ".",
     loading: true,
@@ -397,8 +449,50 @@ export default function App() {
   const [showFiles, setShowFiles] = useState(false);
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
+  const [showMissionControl, setShowMissionControl] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
+  // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
+  // The latch reducer's state lives in a ref because engine events arrive outside render; only
+  // the badge hint is state, so the Dock can mark the surface the agent is working on.
+  const dockTabRef = useRef<DockTab | null>(null);
+  const dockFollowRef = useRef<FollowState>(initialFollowState);
+  const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
+  // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
+  const [scenes, setScenes] = useState<SceneInfo[]>([]);
+  /** The active scene's canonical reference for the focused session (or the draft). */
+  const [activeSceneName, setActiveSceneName] = useState<string | null>(null);
+  const [scenePendingFields, setScenePendingFields] = useState<string[]>([]);
+  const [showScenePicker, setShowScenePicker] = useState(false);
+  const [sceneEscalation, setSceneEscalation] = useState<{
+    reference: string;
+    kind: "soft" | "restart" | "pipeline" | "pipeline_new";
+    from: SessionMode;
+    to: SessionMode;
+    /** Set for kind "pipeline": confirming re-calls advance_pipeline with confirm=true. */
+    pipeline?: { instanceId: string; toStage: string };
+  } | null>(null);
+  /** Scene completion/suggestion banner above the composer (R8); latest state key wins. */
+  const [sceneBanner, setSceneBanner] = useState<SceneBannerState | null>(null);
+  // ---- R9 pipeline instances (docs/scenes.md §Pipelines) ----
+  const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
+  /** The active session's instance projection; the stage track renders only while this is set. */
+  const [pipelineDetail, setPipelineDetail] = useState<PipelineInstanceDetail | null>(null);
+  /** Scene to bind to the next created session (full-apply handshake). */
+  const pendingSceneRef = useRef<string | null>(null);
+  /** Per-session scene memory so switching sessions restores each one's scene. */
+  const sceneBySessionRef = useRef(new Map<string, string>());
+  const scenesRef = useRef<SceneInfo[]>([]);
+  const activeSceneNameRef = useRef<string | null>(null);
+  /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
+  const sceneEffortAppliedRef = useRef(new Set<string>());
+  /** Stage binding for the next created session (advance-in-new-session handshake). */
+  const pendingPipelineBindRef = useRef<{ instanceId: string; stageId: string } | null>(null);
+  /** Delegation row awaiting its session id (issue delegated → session created on first Run). */
+  const pendingDelegationRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeSceneNameRef.current = activeSceneName;
+  }, [activeSceneName]);
   const [canvasFeature, setCanvasFeature] = useState<CanvasFeatureState>({
     feature: "CODETWO_CANVAS_INPUT_V1",
     enabled: false,
@@ -442,6 +536,38 @@ export default function App() {
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
   const [contextWindows, setContextWindows] = useState<ContextWindowBySession>({});
+  // Per-session cost/burn for the Composer statusline (R7). The core's `usage_by_session`
+  // command lands in a later wave; until then the bridge feature-detects and this stays null,
+  // which hides the cost segment entirely.
+  const [sessionUsage, setSessionUsage] = useState<{
+    costUsd: number | null;
+    burnRate: number | null;
+  } | null>(null);
+  useEffect(() => {
+    setSessionUsage(null);
+    if (!activeSession) return;
+    let cancelled = false;
+    // Cumulative token counters per poll; burn rate is derived over a trailing window, so the
+    // sample list lives and dies with the active session.
+    const samples: { at: number; input: number; output: number }[] = [];
+    const poll = async () => {
+      const usage = await usageBySession(activeSession);
+      if (cancelled) return;
+      if (!usage) {
+        setSessionUsage(null);
+        return;
+      }
+      samples.push({ at: Date.now(), input: usage.input_tokens, output: usage.output_tokens });
+      if (samples.length > 16) samples.shift();
+      setSessionUsage({ costUsd: usage.cost_usd, burnRate: deriveBurnRate(samples) });
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeSession]);
   // Projects are the rail's organising idea: the conversation list and the git section below it
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
@@ -538,9 +664,70 @@ export default function App() {
   const insertFileRef = useRef<((path: string) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
+  const insertMarkdownRef = useRef<
+    ((markdown: string, mode: "replace" | "append") => Promise<void>) | null
+  >(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
+  const insertBriefRef = useRef<((scene: SceneInfo, values?: Record<string, string>) => void) | null>(null);
+  // R12: issue references insert as dedicated provenance-carrying blocks, not plain text.
+  const insertIssueRef = useRef<
+    ((issue: Issue, context: string, delegatedScene?: string) => void) | null
+  >(null);
+  /**
+   * An issue block staged for a delegated draft, consumed right after `createSession`'s
+   * synchronous reset (mirror of `pendingSceneRef`; the editor itself survives New — only a
+   * locale change remounts it — so the next tick is the "editor ready" point).
+   */
+  const pendingIssueInsertRef = useRef<
+    { issue: Issue; context: string; delegatedScene: string } | null
+  >(null);
   const activeSessionRef = useRef<string | null>(null);
+  // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
+  // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
+  const [planDocPending, setPlanDocPending] = useState<string | null>(null);
+  /** The edited plan IS the next prompt: it opens into this session's composer document. */
+  const openPlanAsDocument = useCallback(
+    (entries: string[]) => {
+      const markdown = planChecklistMarkdown(entries);
+      if (docEmpty) {
+        void insertMarkdownRef.current?.(markdown, "replace");
+        setDocMode(true);
+      } else {
+        setPlanDocPending(markdown);
+      }
+    },
+    [docEmpty, setDocMode],
+  );
+  const resolvePlanDocPending = useCallback(
+    (mode: "replace" | "append" | null) => {
+      const markdown = planDocPending;
+      setPlanDocPending(null);
+      if (!markdown || !mode) return;
+      void insertMarkdownRef.current?.(markdown, mode);
+      setDocMode(true);
+    },
+    [planDocPending, setDocMode],
+  );
+  const pinPlanArtifact = useCallback(
+    (markdown: string) => {
+      const session = activeSessionRef.current;
+      if (!session) return;
+      void recordSceneArtifact(session, "plan", markdown).then((record) => {
+        if (record) toast(t("planDoc.pinned"), "success");
+        else toast(t("planDoc.pinFailed"), "error");
+      });
+    },
+    [t, toast],
+  );
+  const canPinPlan = (
+    scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
+  ).some((artifact) => artifact.kind === "plan");
+  // ---- R2 template-from-history (docs/design/scenes-impl-frontend.md Item 8) ----
+  // Stable so the memoized TurnCards don't re-render on every App render.
+  const openTemplateDraft = useCallback((promptText: string) => {
+    setTemplateDraft(promptText);
+  }, []);
   const currentModelRef = useRef<string | null>(null);
   currentModelRef.current = currentModel;
   // Model changes invalidate the old provider context immediately. Keep the pending id until the
@@ -689,6 +876,59 @@ export default function App() {
       return true;
     },
     [updateRunningSession],
+  );
+
+  // ---- R10 dock follow ----
+  useEffect(() => {
+    dockTabRef.current = dockTab;
+  }, [dockTab]);
+
+  /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
+  const followDockEvent = useCallback((event: FollowEvent) => {
+    const { state, setTab } = followReduce(dockFollowRef.current, event);
+    dockFollowRef.current = state;
+    if (setTab) setDockTab(setTab);
+    if (event.kind === "tool") {
+      setDockAutoHint(
+        state.autoTab
+          ? {
+              surface: state.autoTab,
+              file: state.autoTab === event.hint.surface ? event.hint.file : undefined,
+            }
+          : null,
+      );
+    } else {
+      setDockAutoHint(null);
+    }
+  }, []);
+
+  /** The event ladder's single follow call: classify the active session's tool call and feed the
+   *  reducer. Auto-follow never opens a closed dock — the reducer only records the surface then. */
+  const handleDockFollow = useCallback(
+    (ev: Extract<CoreEvent, { event: "tool_call" }>) => {
+      const hint = classifyToolSurface({
+        kind: ev.kind ?? null,
+        title: ev.title,
+        agentInput: ev.agent_input,
+      });
+      if (!hint) return;
+      followDockEvent({
+        kind: "tool",
+        hint,
+        now: Date.now(),
+        dockOpen: dockTabRef.current !== null,
+      });
+    },
+    [followDockEvent],
+  );
+
+  /** Every user-driven dock change routes here so auto-follow latches off until the run ends. */
+  const manualDockTab = useCallback(
+    (tab: DockTab | null) => {
+      followDockEvent({ kind: "manual", tab });
+      setDockTab(tab);
+    },
+    [followDockEvent],
   );
 
   /** Restore immutable accepted Canvas refs after a terminal provider-image rejection.  The
@@ -1023,6 +1263,49 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          {
+            // Delegation trail: the delegated draft just became a real session.
+            const delegation = pendingDelegationRef.current;
+            if (delegation !== null) {
+              pendingDelegationRef.current = null;
+              void setIssueDelegationSession(delegation, ev.session);
+            }
+          }
+          {
+            // Advance-in-new-session handshake: bind the created session to its pipeline stage.
+            const bind = pendingPipelineBindRef.current;
+            if (bind) {
+              pendingPipelineBindRef.current = null;
+              void bindPipelineSession(bind.instanceId, bind.stageId, ev.session).then(
+                async () => {
+                  const detail = await getPipelineInstance(bind.instanceId);
+                  if (activeSessionRef.current === ev.session) setPipelineDetail(detail);
+                },
+              );
+            }
+          }
+          {
+            // Full-apply handshake: bind the staged scene to the session the moment it exists.
+            const pendingScene = pendingSceneRef.current;
+            if (pendingScene) {
+              pendingSceneRef.current = null;
+              sceneBySessionRef.current.set(ev.session, pendingScene);
+              void setSessionScene(ev.session, pendingScene, false);
+              const scene = scenesRef.current.find((s) => s.reference === pendingScene);
+              if (scene?.execution?.model) {
+                void setSessionModel(ev.session, scene.execution.model);
+              }
+              setActiveSceneName(pendingScene);
+              // Reasoning effort has no provider-stable config id before the session reports
+              // its options, so it stays pending even after a full apply.
+              setScenePendingFields(
+                scene?.execution?.reasoning_effort ? ["reasoning_effort"] : [],
+              );
+            } else {
+              setActiveSceneName(sceneBySessionRef.current.get(ev.session) ?? null);
+              setScenePendingFields([]);
+            }
+          }
           memoryReceiptsRef.current = [];
           // The creation event carries the cwd that was persisted before publication. File, Git,
           // terminal and hook surfaces switch with the active id even if a best-effort list/preview
@@ -1127,6 +1410,11 @@ export default function App() {
           setSessions(applyActivity);
           setArchivedSessions(applyActivity);
           updateRunningSession(ev.session, activityIsBusy(ev.activity));
+          // R10: only a finished run (idle | failed) releases the manual dock latch —
+          // `awaiting_input` counts as busy, so it deliberately keeps it.
+          if (ev.session === activeSessionRef.current && !activityIsBusy(ev.activity)) {
+            followDockEvent({ kind: "run_ended" });
+          }
 
           const state = ev.activity.state;
           const pending = state.kind === "awaiting_input"
@@ -1151,6 +1439,25 @@ export default function App() {
           // This is deliberately handled before transcript projection: a context update is
           // session state, never a persisted/rendered transcript part.
           setContextWindows((previous) => updateContextWindow(previous, ev));
+          return;
+        }
+        if (
+          ev.event === "exit_criteria_met" ||
+          ev.event === "hook_suggestion" ||
+          ev.event === "test_signal" ||
+          ev.event === "artifact_produced" ||
+          ev.event === "hook_turn_started" ||
+          ev.event === "session_cost"
+        ) {
+          // Scene-layer facts (R8) are session state, never transcript parts. Only the two
+          // banner-worthy ones render; the rest are consumed by the core's SceneRuntime.
+          if (
+            (ev.event === "exit_criteria_met" || ev.event === "hook_suggestion") &&
+            ev.session === activeSessionRef.current
+          ) {
+            const banner = sceneBannerFromEvent(ev);
+            if (banner) setSceneBanner(banner);
+          }
           return;
         }
         if (ev.event === "models") {
@@ -1188,6 +1495,29 @@ export default function App() {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
             setDefaultModel((prev) => prev ?? model.current);
+          }
+          {
+            // The scene's reasoning_effort had to pend until the provider named its effort
+            // option (binding matrix); the first matching report applies it, once per session.
+            const scene = scenesRef.current.find(
+              (s) => s.reference === activeSceneNameRef.current,
+            );
+            const wanted = scene?.execution?.reasoning_effort;
+            if (wanted && !sceneEffortAppliedRef.current.has(ev.session)) {
+              const choice = sceneEffortChoice(ev.options, wanted);
+              if (choice) {
+                sceneEffortAppliedRef.current.add(ev.session);
+                void setConfigOption(ev.session, choice.configId, choice.value)
+                  .then(() => {
+                    setScenePendingFields((prev) =>
+                      prev.filter((field) => field !== "reasoning_effort"),
+                    );
+                  })
+                  .catch(() => {
+                    sceneEffortAppliedRef.current.delete(ev.session);
+                  });
+              }
+            }
           }
           return;
         }
@@ -1302,6 +1632,7 @@ export default function App() {
           refreshSessions();
         }
         if (!shouldRenderSessionEvent(ev, activeSessionRef.current, awaitingCreationRequest)) return;
+        if (ev.event === "tool_call") handleDockFollow(ev);
         setTurns((prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined));
       });
     })();
@@ -1312,6 +1643,8 @@ export default function App() {
   }, [
     applyAuthoritativeExecutionPolicy,
     finishPolicyRequest,
+    followDockEvent,
+    handleDockFollow,
     invalidatePendingCreation,
     markSessionStarted,
     markSessionStopped,
@@ -1551,6 +1884,12 @@ export default function App() {
     memoryReceiptsRef.current = [];
     setMemoryRead("inherit");
     setMemoryWrite("inherit");
+    // A plain new session starts sceneless; the restart-in-scene flow stages its scene first
+    // and keeps it through this reset.
+    if (pendingSceneRef.current === null) {
+      setActiveSceneName(null);
+      setScenePendingFields([]);
+    }
     setCwd(source);
     // Pressing New while already on the unsent blank draft is a focus/reset no-op for workspace
     // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
@@ -1701,6 +2040,8 @@ export default function App() {
       earlierLoadRef.current = false;
       setLoadingEarlier(false);
       updateTranscriptCursor(null);
+      // R10: focus moved — release the dock-follow latch and drop the stale badge.
+      followDockEvent({ kind: "session_switched" });
       activeSessionRef.current = id;
       if (stored?.model) knownModelsRef.current.set(id, stored.model);
       else knownModelsRef.current.delete(id);
@@ -1708,6 +2049,20 @@ export default function App() {
       activeSessionProvenanceRef.current = provenance;
       setActiveSessionReceipt(provenance);
       setActiveSession(id);
+      {
+        // Restore this session's scene; fall back to the persisted reference on first visit.
+        const remembered = sceneBySessionRef.current.get(id) ?? null;
+        setActiveSceneName(remembered);
+        setScenePendingFields([]);
+        if (remembered === null) {
+          void getSessionScene(id).then((state) => {
+            if (!state || activeSessionRef.current !== id) return;
+            sceneBySessionRef.current.set(id, state.reference);
+            setActiveSceneName(state.reference);
+            if (!state.resolved) toast(t("scene.unresolved"), "error");
+          });
+        }
+      }
       setSessionLoading(true);
       setTurns([]);
       // Models belong to a session. The agent only reports its own menu at session/new — which for
@@ -1784,6 +2139,7 @@ export default function App() {
       refreshProjects,
       toast,
       t,
+      followDockEvent,
       invalidatePendingCreation,
       updateTranscriptCursor,
     ],
@@ -1873,6 +2229,41 @@ export default function App() {
   useEffect(() => {
     refreshSkills();
   }, [refreshSkills]);
+
+  // Scenes rescan with the workspace, same contract as skills. Degrades to [] on an older core.
+  useEffect(() => {
+    void listScenes(cwd || ".").then((next) => {
+      scenesRef.current = next;
+      setScenes(next);
+    });
+    // Pipelines resolve from the same library; the palette's "start pipeline" commands feed here.
+    void listPipelines().then(setPipelines);
+  }, [cwd]);
+
+  // The stage track follows the active session's pipeline binding (R9). Refetched at turn
+  // boundaries and on banner changes — auto advances, loop re-entries, and artifact captures all
+  // land there. Degrades to hidden (null) on an older core or an unbound session.
+  useEffect(() => {
+    const session = activeSession;
+    if (!session) {
+      setPipelineDetail(null);
+      return;
+    }
+    let cancelled = false;
+    void sessionPipeline(session).then((binding) => {
+      if (cancelled) return;
+      if (!binding) {
+        setPipelineDetail(null);
+        return;
+      }
+      void getPipelineInstance(binding.instance_id).then((detail) => {
+        if (!cancelled) setPipelineDetail(detail);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession, turns.length, sceneBanner]);
 
   const saveDraft = useCallback(async () => {
     if (!skillDraft || skillDraft.name.trim().length === 0) return;
@@ -2011,14 +2402,15 @@ export default function App() {
 
   const insertIssue = useCallback(async (issue: Issue) => {
     const ctx = await issueContext(issue);
-    insertTextRef.current?.(ctx);
+    insertIssueRef.current?.(issue, ctx);
     setShowIssues(false);
   }, []);
 
   const toggleDock = useCallback((t: DockSurface) => {
-    setDockTab((cur) => (cur === t ? null : t));
+    // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
+    manualDockTab(dockTabRef.current === t ? null : t);
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-  }, []);
+  }, [manualDockTab]);
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
@@ -2268,6 +2660,292 @@ export default function App() {
    * Every action in the keymap must land here. An action with no arm is a key that silently does
    * nothing — `open_skill_picker` and `focus_editor` were exactly that.
    */
+  /**
+   * Soft-apply a scene (or clear with null). Tightening applies silently; loosening stops here
+   * and raises the escalation dialog — the rule is absolute, so this is the only UI path in.
+   */
+  const applySceneChoice = useCallback(
+    (reference: string | null, opts?: { confirmed?: boolean }) => {
+      const session = activeSessionRef.current;
+      if (reference === null) {
+        setActiveSceneName(null);
+        setScenePendingFields([]);
+        pendingSceneRef.current = null;
+        if (session) {
+          sceneBySessionRef.current.delete(session);
+          void setSessionScene(session, null, false);
+        }
+        return;
+      }
+      const scene = scenesRef.current.find((s) => s.reference === reference);
+      if (!scene) return;
+      const confirmed = opts?.confirmed ?? false;
+      const escalation = escalationNeeded(scene, sessionMode(mode, sandbox));
+      if (escalation && !confirmed) {
+        setSceneEscalation({ reference, kind: "soft", ...escalation });
+        return;
+      }
+      const live = {
+        mode: sessionMode(mode, sandbox),
+        memoryRead,
+        memoryWrite,
+        planFirst: planMode,
+        provider,
+        model: currentModel,
+      };
+      const execution = scene.execution;
+      if (execution?.session_mode) onSessionModeChange(execution.session_mode);
+      if (execution?.memory_preset) {
+        const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
+        onMemoryPolicyChange(preset.read, preset.write);
+      }
+      if (execution?.plan_first !== undefined) setPlanMode(execution.plan_first);
+      setActiveSceneName(reference);
+      setScenePendingFields(softApplyPending(scene, live));
+      if (session) {
+        sceneBySessionRef.current.set(session, reference);
+        void applySceneToSession(session, reference, confirmed).then((outcome) => {
+          // The core re-checks against the persisted policy; if it disagrees, nothing was
+          // applied there — surface the same dialog instead of drifting.
+          if (outcome?.escalation) {
+            setSceneEscalation({
+              reference,
+              kind: "soft",
+              from: outcome.escalation.from as SessionMode,
+              to: outcome.escalation.to as SessionMode,
+            });
+          }
+        });
+      } else {
+        pendingSceneRef.current = reference;
+      }
+      toast(t("scene.switched", { scene: scene.title }));
+    },
+    [
+      mode,
+      sandbox,
+      memoryRead,
+      memoryWrite,
+      planMode,
+      provider,
+      currentModel,
+      onSessionModeChange,
+      onMemoryPolicyChange,
+      toast,
+      t,
+    ],
+  );
+
+  /** Full-apply: a fresh session in the active scene, closing the soft-apply gap. */
+  const restartInScene = useCallback(
+    async (confirmed = false) => {
+      const reference = activeSceneNameRef.current;
+      if (!reference) return;
+      const plan = await sceneSessionPlan(reference, confirmed);
+      if (!plan) return;
+      if (plan.escalation) {
+        setSceneEscalation({
+          reference,
+          kind: "restart",
+          from: plan.escalation.from as SessionMode,
+          to: plan.escalation.to as SessionMode,
+        });
+        return;
+      }
+      pendingSceneRef.current = reference;
+      createSession();
+      const params = plan.params;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      // The draft reset cleared the posture; re-apply the scene's fields to the new draft.
+      applySceneChoice(reference, { confirmed: true });
+      pendingSceneRef.current = reference;
+    },
+    [applySceneChoice, createSession],
+  );
+
+  /** The pinned scene reference a pipeline stage's bare scene name resolves to, when installed. */
+  const resolveStageScene = useCallback((target: string) => {
+    return (
+      scenesRef.current.find((s) => s.reference === target || s.name === target)?.reference ??
+      target
+    );
+  }, []);
+
+  /** Refresh the local scene chip state after the core soft-applied a stage's scene (R9). */
+  const syncSessionScene = useCallback(async (session: string) => {
+    const state = await getSessionScene(session);
+    if (!state) return;
+    sceneBySessionRef.current.set(session, state.reference);
+    setActiveSceneName(state.reference);
+    setScenePendingFields([]);
+  }, []);
+
+  /**
+   * Advance a pipeline instance for the active session (R9). The command re-checks escalation
+   * (refuse-and-report); a report raises the shared SceneEscalationDialog, and confirming
+   * re-calls with confirm=true.
+   */
+  const advancePipelineChoice = useCallback(
+    async (instanceId: string, toStage: string, confirmed = false) => {
+      const session = activeSessionRef.current;
+      const outcome = await advancePipeline(instanceId, toStage, session, confirmed);
+      if (!outcome) return;
+      const escalation = outcome.escalation ?? outcome.applied_scene?.escalation ?? null;
+      if (escalation) {
+        const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
+        setSceneEscalation({
+          reference: resolveStageScene(stage?.scene_ref ?? toStage),
+          kind: "pipeline",
+          from: escalation.from as SessionMode,
+          to: escalation.to as SessionMode,
+          pipeline: { instanceId, toStage },
+        });
+        return;
+      }
+      if (session) await syncSessionScene(session);
+      const detail = await getPipelineInstance(instanceId);
+      setPipelineDetail(detail);
+      const stage = detail?.stages.find((s) => s.id === toStage);
+      toast(t("stage.advanced", { stage: stage?.title ?? toStage }));
+    },
+    [pipelineDetail, resolveStageScene, syncSessionScene, toast, t],
+  );
+
+  /**
+   * Advance into the next stage in a FRESH session (full-apply): the backend records the
+   * transition and returns the stage scene's session plan; the created session is bound to the
+   * stage via pendingPipelineBindRef once `session_created` arrives.
+   */
+  const advancePipelineInNewSession = useCallback(
+    async (instanceId: string, toStage: string, confirmed = false) => {
+      const outcome = await advancePipeline(instanceId, toStage, null, confirmed);
+      if (!outcome) return;
+      if (outcome.escalation) {
+        const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
+        setSceneEscalation({
+          reference: resolveStageScene(stage?.scene_ref ?? toStage),
+          kind: "pipeline_new",
+          from: outcome.escalation.from as SessionMode,
+          to: outcome.escalation.to as SessionMode,
+          pipeline: { instanceId, toStage },
+        });
+        return;
+      }
+      const detail = await getPipelineInstance(instanceId);
+      setPipelineDetail(detail);
+      const stage = detail?.stages.find((s) => s.id === toStage);
+      const reference = resolveStageScene(stage?.scene_ref ?? toStage);
+      pendingSceneRef.current = reference;
+      pendingPipelineBindRef.current = { instanceId, stageId: toStage };
+      createSession();
+      const params = outcome.session_plan;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      applySceneChoice(reference, { confirmed: true });
+      pendingSceneRef.current = reference;
+      toast(t("stage.advancedNew", { stage: stage?.title ?? toStage }));
+    },
+    [applySceneChoice, createSession, pipelineDetail, resolveStageScene, toast, t],
+  );
+
+  /** Start a pipeline in the current project, binding the active session to its entry stage. */
+  const startPipelineChoice = useCallback(
+    async (reference: string) => {
+      const session = activeSessionRef.current;
+      const outcome = await startPipeline(reference, cwd || ".", session);
+      if (!outcome) return;
+      setPipelineDetail(outcome.detail);
+      if (session) await syncSessionScene(session);
+      // An entry scene looser than the session's posture applied nothing (refuse-and-report);
+      // the binding landed, so confirming just soft-applies the entry scene.
+      const escalation = outcome.applied_scene?.escalation;
+      const entry = outcome.detail.stages.find((s) => s.state === "current");
+      if (escalation && entry) {
+        setSceneEscalation({
+          reference: resolveStageScene(entry.scene_ref),
+          kind: "soft",
+          from: escalation.from as SessionMode,
+          to: escalation.to as SessionMode,
+        });
+      }
+      const title = pipelines.find((p) => p.reference === reference)?.title ?? reference;
+      toast(t("stage.started", { pipeline: title }));
+    },
+    [cwd, pipelines, resolveStageScene, syncSessionScene, toast, t],
+  );
+
+  /**
+   * Delegate an issue into a scene (R12): a fresh draft fully applied to that scene, opened with
+   * the issue as a provenance-carrying block. Mirrors `restartInScene` rather than reusing it —
+   * that flow is bound to the *active* scene and has no post-create insert seam.
+   */
+  const onDelegateIssue = useCallback(
+    async (issue: Issue, sceneReference: string) => {
+      const scene = scenesRef.current.find((s) => s.reference === sceneReference);
+      if (!scene) return;
+      const ctx = await issueContext(issue);
+      const plan = await sceneSessionPlan(sceneReference, false);
+      if (!plan) return;
+      if (plan.escalation) {
+        // Delegation never loosens the sandbox silently: same chokepoint dialog, same rule.
+        // Confirming soft-applies the scene; delegation itself stays a deliberate re-run.
+        setSceneEscalation({
+          reference: sceneReference,
+          kind: "soft",
+          from: plan.escalation.from as SessionMode,
+          to: plan.escalation.to as SessionMode,
+        });
+        return;
+      }
+      pendingSceneRef.current = sceneReference;
+      pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
+      // Accountability trail: record the delegation now (session id lands on session_created).
+      const delegationId = await recordIssueDelegation(
+        issue.source,
+        issue.id,
+        issue.title,
+        sceneReference,
+        scene.title,
+      );
+      if (delegationId !== null) pendingDelegationRef.current = delegationId;
+      createSession();
+      const params = plan.params;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      applySceneChoice(sceneReference, { confirmed: true });
+      pendingSceneRef.current = sceneReference;
+      // Consume after createSession's synchronous reset settles — the same tick ordering its own
+      // focus timeout uses; the mounted editor survives New, so the ref is live by then.
+      setTimeout(() => {
+        const pending = pendingIssueInsertRef.current;
+        pendingIssueInsertRef.current = null;
+        if (pending) {
+          insertIssueRef.current?.(pending.issue, pending.context, pending.delegatedScene);
+        }
+      }, 0);
+      setShowIssues(false);
+      toast(t("issueDeleg.toast", { id: issue.id, scene: scene.title }), "success");
+      // Best-effort attribution on the tracker, fire-and-forget. GitHub only: Linear's comment
+      // call needs the caller-held API token `listLinearIssues` uses, which this surface does
+      // not hold — skipped rather than failing.
+      if (issue.source === "github") {
+        void commentIssue(
+          cwd || ".",
+          issue.source,
+          issue.id,
+          t("issueDeleg.commentBody", { scene: scene.title }),
+        ).then((url) => {
+          if (url && delegationId !== null) void setIssueDelegationComment(delegationId, url);
+        });
+      }
+    },
+    [applySceneChoice, createSession, cwd, toast, t],
+  );
+
   const dispatchAction = useCallback(
     (action: string) => {
       switch (action) {
@@ -2291,7 +2969,7 @@ export default function App() {
           toggleDock("git");
           break;
         case "close_panel":
-          setDockTab(null);
+          manualDockTab(null);
           break;
         case "open_skill_picker":
           openSkillPickerRef.current?.();
@@ -2343,6 +3021,17 @@ export default function App() {
         case "refresh_git":
           refreshGit();
           break;
+        case "cycle_scene": {
+          const next = nextSceneInRing([], scenesRef.current, activeSceneNameRef.current);
+          if (next) applySceneChoice(next);
+          break;
+        }
+        case "open_scene_picker":
+          setShowScenePicker(true);
+          break;
+        case "open_mission_control":
+          setShowMissionControl(true);
+          break;
         default:
           // A binding pointing at an action this frontend doesn't implement.
           toast(`No handler for "${action}".`, "error");
@@ -2362,10 +3051,12 @@ export default function App() {
       openSourceControl,
       openPluginHub,
       toggleDock,
+      manualDockTab,
       toggleDocMode,
       docMode,
       stepSession,
       toast,
+      applySceneChoice,
     ],
   );
 
@@ -2391,6 +3082,15 @@ export default function App() {
     },
     { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
     {
+      id: "template-from-last",
+      label: t("templateFrom.palette"),
+      // No-op with no history: the most recent user turn's prompt is the source.
+      run: () => {
+        const last = [...turns].reverse().find((turn) => turn.prompt.trim().length > 0);
+        if (last) setTemplateDraft(last.prompt);
+      },
+    },
+    {
       id: "rail",
       label: displayedRailCollapsed ? "Expand the sidebar" : "Collapse the sidebar",
       run: toggleDisplayedRail,
@@ -2403,6 +3103,18 @@ export default function App() {
     { id: "gitpanel", label: "Toggle git panel", hint: hint("toggle_git"), run: () => toggleDock("git") },
     { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
     { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
+    { id: "scene", label: t("scene.pickerTitle"), hint: hint("cycle_scene"), run: () => setShowScenePicker(true) },
+    { id: "mission", label: t("action.open_mission_control"), hint: hint("open_mission_control"), run: () => setShowMissionControl(true) },
+    ...scenes.map((s) => ({
+      id: `scene-${s.reference}`,
+      label: `${t("scene.chip")}: ${s.title}`,
+      run: () => applySceneChoice(s.reference),
+    })),
+    ...pipelines.map((p) => ({
+      id: `pipeline-${p.reference}`,
+      label: t("stage.startPipeline", { pipeline: p.title }),
+      run: () => void startPipelineChoice(p.reference),
+    })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
       label: `Run script: ${s.name || s.id}`,
@@ -2575,6 +3287,32 @@ export default function App() {
     memoryWrite,
     onMemoryPolicy: onMemoryPolicyChange,
     hasSession: activeSession !== null,
+    scenes,
+    activeScene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+    onScene: (reference, strength) => {
+      if (strength === "full") {
+        if (reference !== null) {
+          setActiveSceneName(reference);
+          void restartInScene();
+        }
+      } else {
+        applySceneChoice(reference);
+      }
+    },
+    sceneCustomized: (() => {
+      const scene = scenes.find((s) => s.reference === activeSceneName);
+      if (!scene) return false;
+      return sceneCustomized(scene, {
+        mode: sessionMode(mode, sandbox),
+        memoryRead,
+        memoryWrite,
+        planFirst: planMode,
+        provider,
+        model: currentModel,
+      });
+    })(),
+    scenePendingFields,
+    onRestartInScene: () => void restartInScene(),
   };
 
   return (
@@ -2669,6 +3407,8 @@ export default function App() {
           collapsed={displayedRailCollapsed}
           overlay={narrowLayout}
           onToggleCollapse={toggleDisplayedRail}
+          needsMeCount={needsMeCount(sessions)}
+          onOpenMissionControl={() => setShowMissionControl(true)}
         />
 
         {/* ---------------- the session column ---------------- */}
@@ -2750,11 +3490,20 @@ export default function App() {
               label={t("header.panel")}
               active={dockTab !== null}
               onClick={() => {
-                setDockTab(dockTab ? null : "home");
+                manualDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
           </header>
+
+          {/* Horizontal stage track (R9): rendered above the transcript only while the active
+              session is bound to a pipeline instance. */}
+          {pipelineDetail && activeSession && (
+            <StageTrack
+              detail={pipelineDetail}
+              onSelectSession={(id) => void selectSession(id)}
+            />
+          )}
 
           {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
@@ -2769,6 +3518,10 @@ export default function App() {
                 loadingEarlier={loadingEarlier}
                 onLoadEarlier={() => void loadEarlierTranscript()}
                 scroll={transcriptScroll}
+                onOpenPlanAsDocument={openPlanAsDocument}
+                onPinPlanArtifact={pinPlanArtifact}
+                canPinPlan={canPinPlan}
+                onSaveTemplate={openTemplateDraft}
                 petAnimation={petAnimation}
                 onVoiceText={(text) => insertTextRef.current?.(text)}
               />
@@ -2823,6 +3576,30 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
+                  session, rendered above the composer. Dismissal is remembered by the core. */}
+              {sceneBanner && sceneBanner.session === activeSession && !activeArchived && (
+                <SceneBanner
+                  banner={sceneBanner}
+                  scenes={scenes}
+                  onApplyScene={(reference) => {
+                    applySceneChoice(reference);
+                    setSceneBanner(null);
+                  }}
+                  onAdvancePipeline={(instanceId, toStage) => {
+                    void advancePipelineChoice(instanceId, toStage);
+                    setSceneBanner(null);
+                  }}
+                  onAdvancePipelineNewSession={(instanceId, toStage) => {
+                    void advancePipelineInNewSession(instanceId, toStage);
+                    setSceneBanner(null);
+                  }}
+                  onDismiss={() => {
+                    void dismissSceneBanner(sceneBanner.session, sceneBanner.stateKey);
+                    setSceneBanner(null);
+                  }}
+                />
+              )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
                   config={sessionConfig}
@@ -2842,6 +3619,7 @@ export default function App() {
                   currentModel={currentModel}
                   defaultModel={defaultModel}
                   contextWindow={activeContextWindow(contextWindows, activeSession)}
+                  usage={sessionUsage}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
                     if (!session) return;
@@ -2900,9 +3678,21 @@ export default function App() {
                   canvasEnabled={canvasFeature.enabled}
                   onInsertCanvas={() => void insertCanvasRef.current?.()}
                   onVoiceText={(t) => insertTextRef.current?.(t)}
+                  // R11: with an active-scene brief, a finished dictation is structured into a
+                  // pre-filled brief card; any failure degrades to the raw-text insert above.
+                  // No brief → the handler is undefined and voice behaves exactly as before.
+                  onVoiceTranscript={makeTranscriptHandler({
+                    scene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+                    structureBrief,
+                    insertBrief: (scene, values) => insertBriefRef.current?.(scene, values),
+                    insertText: (text) => insertTextRef.current?.(text),
+                    onDegrade: () => toast(t("voice.structureFailed"), "error"),
+                  })}
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}
+                  sessionId={activeSession}
+                  insertBriefRef={insertBriefRef}
                 >
                   <DocEditor
                     key={editorKey}
@@ -2915,8 +3705,20 @@ export default function App() {
                     insertFileRef={insertFileRef}
                     focusRef={focusEditorRef}
                     clearRef={clearEditorRef}
+                    insertMarkdownRef={insertMarkdownRef}
                     openSkillPickerRef={openSkillPickerRef}
+                    sceneSkills={(() => {
+                      const scene = scenes.find((s) => s.reference === activeSceneName);
+                      return scene?.skills
+                        ? {
+                            pinned: scene.skills.pinned ?? [],
+                            suppressUnpinned: scene.skills.suppress_unpinned ?? false,
+                          }
+                        : null;
+                    })()}
                     insertSkillRef={insertSkillRef}
+                    insertBriefRef={insertBriefRef}
+                    insertIssueRef={insertIssueRef}
                     canvasEnabled={canvasFeature.enabled}
                     canvasRuntime={canvasRuntime}
                     createCanvas={createCanvas}
@@ -2939,8 +3741,10 @@ export default function App() {
         <Dock
             open={dockTab !== null}
             tab={dockTab}
-            onTab={setDockTab}
-            onClose={() => setDockTab(null)}
+            onTab={manualDockTab}
+            onClose={() => manualDockTab(null)}
+            autoTab={dockAutoHint?.surface ?? null}
+            highlightFile={dockAutoHint?.file ?? null}
             cwd={cwd || null}
             projectPath={activeProject ?? cwd ?? null}
             sessionKey={activeSession ?? "main"}
@@ -3117,10 +3921,68 @@ export default function App() {
       )}
       {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
       {showIssues && (
-        <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
+        <IssuesModal
+          cwd={cwd || "."}
+          scenes={scenes}
+          onInsert={(i) => void insertIssue(i)}
+          onDelegate={(i, sceneReference) => void onDelegateIssue(i, sceneReference)}
+          onOpenSession={(session) => {
+            setShowIssues(false);
+            void selectSession(session);
+          }}
+          onClose={() => setShowIssues(false)}
+        />
       )}
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
       {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
+      {showMissionControl && (
+        <MissionControlDialog
+          sessions={sessions}
+          runningSessions={runningSessions}
+          contextWindows={contextWindows}
+          sceneBySession={sceneBySessionRef.current}
+          onSelect={(id) => void selectSession(id)}
+          onReview={openSourceControl}
+          onClose={() => setShowMissionControl(false)}
+        />
+      )}
+      {showScenePicker && (
+        <ScenePicker
+          scenes={scenes}
+          active={scenes.find((s) => s.reference === activeSceneName) ?? null}
+          onScene={(reference) => applySceneChoice(reference)}
+          onClose={() => setShowScenePicker(false)}
+        />
+      )}
+      {sceneEscalation && (
+        <SceneEscalationDialog
+          sceneLabel={
+            scenes.find((s) => s.reference === sceneEscalation.reference)?.title ??
+            sceneEscalation.reference
+          }
+          from={sceneEscalation.from}
+          to={sceneEscalation.to}
+          onConfirm={() => {
+            const pending = sceneEscalation;
+            setSceneEscalation(null);
+            if (pending.kind === "soft") applySceneChoice(pending.reference, { confirmed: true });
+            else if (pending.kind === "pipeline" && pending.pipeline)
+              void advancePipelineChoice(
+                pending.pipeline.instanceId,
+                pending.pipeline.toStage,
+                true,
+              );
+            else if (pending.kind === "pipeline_new" && pending.pipeline)
+              void advancePipelineInNewSession(
+                pending.pipeline.instanceId,
+                pending.pipeline.toStage,
+                true,
+              );
+            else void restartInScene(true);
+          }}
+          onCancel={() => setSceneEscalation(null)}
+        />
+      )}
       {showFiles && (
         <FileBrowserModal
           cwd={cwd || "."}
@@ -3137,6 +3999,28 @@ export default function App() {
           onOpen={(match) => openFileTab(match.path, match)}
           onClose={() => setShowWorkspaceSearch(false)}
         />
+      )}
+
+      {planDocPending && (
+        <Dialog open onOpenChange={(o) => !o && resolvePlanDocPending(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("planDoc.title")}</DialogTitle>
+            </DialogHeader>
+            <p className="text-ui text-muted-foreground">{t("planDoc.confirm")}</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => resolvePlanDocPending(null)}>
+                {t("planDoc.cancel")}
+              </Button>
+              <Button variant="secondary" onClick={() => resolvePlanDocPending("append")}>
+                {t("planDoc.append")}
+              </Button>
+              <Button onClick={() => resolvePlanDocPending("replace")}>
+                {t("planDoc.replace")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {skillDraft && (
@@ -3164,6 +4048,18 @@ export default function App() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {templateDraft !== null && (
+        <TemplateDialog
+          source={templateDraft}
+          onClose={() => setTemplateDraft(null)}
+          onSaved={() => {
+            setTemplateDraft(null);
+            void refreshSkills();
+            toast(t("templateFrom.saved"), "success");
+          }}
+        />
       )}
 
       {permission && (

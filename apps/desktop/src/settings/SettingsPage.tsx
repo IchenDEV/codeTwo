@@ -19,6 +19,8 @@ import {
   type Project,
   type ProjectWorktreeMode,
   type ProviderInfo,
+  getProjectScheduling,
+  setProjectScheduling,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
@@ -31,6 +33,7 @@ import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -180,6 +183,12 @@ export function SettingsPage({
   const term = useTerminalSettings();
   const [tab, setTab] = useState<SettingsTab>("general");
   const [projectModeSaving, setProjectModeSaving] = useState(false);
+  // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
+  const [schedulingEnabled, setSchedulingEnabled] = useState(false);
+  useEffect(() => {
+    if (!project) return;
+    void getProjectScheduling(project.path).then(setSchedulingEnabled);
+  }, [project]);
   const [browserOrigins, setBrowserOrigins] = useState<string[]>([]);
 
   useEffect(() => {
@@ -423,6 +432,19 @@ export function SettingsPage({
                           </SelectItem>
                         </SelectContent>
                       </Select>
+                    </Row>
+                    <Row
+                      label={t("settings.scheduling")}
+                      hint={t("settings.schedulingHint")}
+                    >
+                      <Checkbox
+                        checked={schedulingEnabled}
+                        onCheckedChange={(checked) => {
+                          const enabled = checked === true;
+                          setSchedulingEnabled(enabled);
+                          void setProjectScheduling(project.path, enabled);
+                        }}
+                      />
                     </Row>
                     <Row label={t("settings.projectPath")}>
                       <span className="max-w-72 truncate font-mono text-fine text-muted-foreground" title={project.path}>

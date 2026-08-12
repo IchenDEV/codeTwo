@@ -1,10 +1,9 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
   FileText,
-  Gauge,
   GitBranch,
   ListChecks,
   Lock,
@@ -18,20 +17,20 @@ import {
   Square,
   Store,
   Ticket,
+  TriangleAlert,
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
+import type { SceneInfo } from "./scene";
+import { briefOfferVisible } from "../editor/slotCard";
+import { SceneChip } from "./SceneChip";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ConfigOptionInfo, ModelChoice } from "../bridge";
-import {
-  describeContextWindow,
-  formatExactContextTokens,
-  formatContextWindowPercentage,
-  type ContextWindow,
-} from "./contextWindow";
+import type { ContextWindow } from "./contextWindow";
+import { Statusline, type StatuslineUsage } from "./Statusline";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -73,6 +72,8 @@ interface ComposerProps {
   currentModel: string | null;
   /** The current session's authoritative provider context usage/capacity, if reported. */
   contextWindow: ContextWindow | null;
+  /** Per-session cost/burn for the statusline; null until the core's usage command exists. */
+  usage?: StatuslineUsage | null;
   /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
   defaultModel: string | null;
   onModel: (id: string) => void;
@@ -93,16 +94,22 @@ interface ComposerProps {
   canvasEnabled: boolean;
   onInsertCanvas: () => void;
   onVoiceText: (text: string) => void;
+  /** R11: present only when the active scene has a brief — voice then structures into it. */
+  onVoiceTranscript?: (full: string) => Promise<void>;
   runHint: string;
   skillHint: string;
   filesHint: string;
+  /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
+  sessionId?: string | null;
+  /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
+  insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
 }
 
 /**
  * A status chip in the control row — reads as text, behaves as a button. Forwards its ref so it can
  * be a Radix popover trigger.
  */
-const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
+export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
   ({ children, tone, className, ...props }, ref) => (
     <button
       ref={ref}
@@ -136,7 +143,7 @@ function DefaultBadge() {
 }
 
 /** One selectable row of a picker menu: the current choice sits on a filled background. */
-function MenuRow({
+export function MenuRow({
   selected,
   isDefault,
   label,
@@ -191,7 +198,7 @@ interface PickerRow {
  * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
  * asked you about four other things first. Each control row chip now opens only its own list.
  */
-function ModePicker({ config }: { config: SessionConfig }) {
+export function ModePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active = sessionMode(config.mode, config.sandbox);
@@ -248,7 +255,7 @@ const MEMORY_PRESETS = [
   { id: "learn_only", read: "deny", write: "allow" },
 ] as const;
 
-function MemoryPicker({ config }: { config: SessionConfig }) {
+export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active =
@@ -293,7 +300,7 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
 const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
 /** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
-function WorktreePicker({ config }: { config: SessionConfig }) {
+export function WorktreePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const selectedKind = config.hasSession
@@ -403,7 +410,7 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-function ProviderPicker({ config }: { config: SessionConfig }) {
+export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -469,46 +476,6 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
   );
 }
 
-function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
-  const t = useT();
-  const display = describeContextWindow(value);
-  if (!value || !display) return null;
-  const exact = t("composer.contextWindowExact", {
-    used: formatExactContextTokens(value.usedTokens),
-    capacity: formatExactContextTokens(value.contextWindow),
-    percentage: formatContextWindowPercentage(value),
-  });
-  const warning = display.percentage !== null && display.percentage >= 80;
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span
-          role="meter"
-          aria-valuemin={0}
-          aria-valuemax={value.contextWindow}
-          aria-valuenow={Math.min(value.usedTokens, value.contextWindow)}
-          aria-valuetext={exact}
-          aria-label={exact}
-          title={exact}
-          className={cn(
-            "flex shrink-0 items-center gap-1 px-0 py-1 text-hint @lg/composer:px-1.5",
-            warning ? "text-warning" : "text-muted-foreground",
-          )}
-        >
-          <Gauge className="hidden size-3.5 shrink-0 @lg/composer:inline" aria-hidden="true" />
-          <span className="hidden @lg/composer:inline" aria-hidden="true">
-            {display.compact}
-          </span>
-          <span className="@lg/composer:hidden" aria-hidden="true">
-            {display.capacity}
-          </span>
-        </span>}
-      />
-      <TooltipContent>{exact}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
@@ -530,7 +497,7 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
  * config decides. Everything is hidden until a session exists, because before that there's nothing
  * to ask.
  */
-function ModelPicker({
+export function ModelPicker({
   models,
   current,
   defaultModel,
@@ -712,6 +679,7 @@ export function Composer({
   currentModel,
   defaultModel,
   contextWindow,
+  usage = null,
   onModel,
   configOptions,
   onConfigOption,
@@ -728,11 +696,48 @@ export function Composer({
   canvasEnabled,
   onInsertCanvas,
   onVoiceText,
+  onVoiceTranscript,
   runHint,
   skillHint,
   filesHint,
+  sessionId,
+  insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+
+  // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
+  // Dismissal is remembered per session for the Composer's lifetime — a dismissed offer must not
+  // come back on every keystroke-then-clear, but a new session gets a fresh offer.
+  const briefDismissedRef = useRef(new Set<string>());
+  const [, bumpBriefDismissals] = useState(0);
+  const sessionKey = sessionId ?? "draft";
+  const activeBrief = config.activeScene?.brief ?? null;
+  const insertBrief = () => {
+    const scene = config.activeScene;
+    if (scene?.brief) insertBriefRef?.current?.(scene);
+  };
+  const dismissBrief = () => {
+    briefDismissedRef.current.add(sessionKey);
+    bumpBriefDismissals((n) => n + 1);
+  };
+  const showBriefOffer = briefOfferVisible({
+    docMode,
+    docEmpty,
+    hasBrief: activeBrief !== null,
+    dismissed: briefDismissedRef.current.has(sessionKey),
+  });
+
+  // Required slot-card fields still empty — published by the editor on document change (same
+  // window-event seam as `codetwo-open-provider-picker`). A warning near Run, never a block.
+  const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
+  useEffect(() => {
+    const onRequiredSlots = (event: Event) => {
+      const detail = (event as CustomEvent<string[]>).detail;
+      setUnfilledRequired(Array.isArray(detail) ? detail : []);
+    };
+    window.addEventListener("codetwo-required-slots", onRequiredSlots);
+    return () => window.removeEventListener("codetwo-required-slots", onRequiredSlots);
+  }, []);
   // Leave room for at least a few transcript lines, whatever the window size — including when a
   // height saved on a tall window is restored on a short one. Only the applied height is clamped;
   // the saved preference comes back in full once there's room again.
@@ -807,6 +812,14 @@ export function Composer({
               <Sparkles />
               {t("composer.newSkill")}
             </DropdownMenuItem>
+            {/* With content already in the document the floating offer stays away; the brief is
+                still one menu entry away while a scene with one is active. */}
+            {activeBrief && !docEmpty && (
+              <DropdownMenuItem onClick={insertBrief}>
+                <ListChecks />
+                {t("brief.menuInsert")}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
@@ -814,40 +827,20 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Provider, model, effort, then access — cause before effect: the provider decides which
-          models exist, the model decides which efforts exist, and access frames the run. Each
-          chip opens only itself. */}
-      <ProviderPicker config={config} />
-
-      <ModelPicker
+      {/* One scene chip replaces the posture row (docs/scenes.md §UI contract): the scene sets
+          provider/model/permissions/memory/plan-first/worktree, and opening the chip still
+          exposes each picker unchanged for manual overrides. */}
+      <SceneChip
+        config={config}
         models={models}
-        current={currentModel}
+        currentModel={currentModel}
         defaultModel={defaultModel}
-        provider={config.provider}
         onModel={onModel}
         configOptions={configOptions}
         onConfigOption={onConfigOption}
-        hasSession={config.hasSession}
       />
 
-      <ContextWindowStatus value={contextWindow} />
-
-      <ModePicker config={config} />
-
-      <MemoryPicker config={config} />
-
-      {/* A boolean needs no view to choose from: the chip *is* the control. */}
-      <Chip
-        title={t("config.planFirstHint")}
-        aria-pressed={config.planMode}
-        className={cn(config.planMode && "text-primary hover:text-primary")}
-        onClick={() => config.onPlan(!config.planMode)}
-      >
-        <ListChecks className="size-3.5 shrink-0" />
-        <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
-      </Chip>
-
-      <WorktreePicker config={config} />
+      <Statusline contextWindow={contextWindow} usage={usage ?? null} />
 
       <div className="flex-1" />
 
@@ -868,7 +861,24 @@ export function Composer({
         <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
       </Tooltip>
 
-      <VoiceButton onText={onVoiceText} />
+      <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
+
+      {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
+      {unfilledRequired.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger
+            render={<Chip tone="warning" aria-label={t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}>
+              <TriangleAlert className="size-3.5 shrink-0" />
+              <span className="hidden @lg/composer:inline">
+                {t("slotCard.requiredShort", { count: unfilledRequired.length })}
+              </span>
+            </Chip>}
+          />
+          <TooltipContent>
+            {t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
@@ -975,6 +985,27 @@ export function Composer({
           >
             {children}
           </div>
+
+          {/* R5: an empty page in an active scene with a brief offers to start from it. A
+              positioned overlay inside the same tree (see the reconciliation note above) — it
+              never auto-inserts, and dismissing it keeps it away for this session. Only rendered
+              in doc mode, where the card is `relative`. */}
+          {showBriefOffer && config.activeScene && (
+            <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
+              <div className="glass-raised canvas-ui-module pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 border px-3 py-2 shadow-raised">
+                <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate text-ui text-muted-foreground">
+                  {t("brief.offer", { scene: config.activeScene.title })}
+                </span>
+                <Button size="sm" className="shrink-0" onClick={insertBrief}>
+                  {t("brief.insert")}
+                </Button>
+                <Button size="sm" variant="ghost" className="shrink-0" onClick={dismissBrief}>
+                  {t("brief.dismiss")}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside

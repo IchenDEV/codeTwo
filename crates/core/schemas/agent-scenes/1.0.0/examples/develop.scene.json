@@ -1,0 +1,68 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "develop",
+  "version": "1.0.0",
+  "title": "Develop",
+  "description": "Plan-first implementation in an isolated worktree, producing a plan and a change summary.",
+  "icon": "🛠️",
+  "localizations": {
+    "zh-CN": { "title": "开发", "description": "在隔离 worktree 中计划先行地实现，产出计划与变更摘要。" }
+  },
+  "execution": {
+    "session_mode": "auto_edit",
+    "memory_preset": "standard",
+    "worktree": "current",
+    "plan_first": true
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Implementer",
+        "text": "You are in the development stage. Follow the approved plan; when reality diverges from the plan, update the plan artifact first, then continue. Keep changes minimal and consistent with surrounding code. Note every deviation from the acceptance criteria in the change summary."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Goal\n\n{{goal}}\n\n## Acceptance criteria\n\n{{acceptance}}\n\n## Out of scope\n\n{{out-of-scope}}\n",
+    "slots": [
+      { "id": "goal", "label": "What should exist when this is done?", "kind": "multiline", "required": true },
+      { "id": "acceptance", "label": "Verifiable acceptance criteria (one per line)", "kind": "multiline", "required": true },
+      { "id": "out-of-scope", "label": "What must NOT change", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "plan",
+      "title": "Implementation plan",
+      "kind": "plan",
+      "required": true,
+      "template": "# Plan\n\n## Approach\n\n## Steps\n\n## Files touched\n\n## Risks\n"
+    },
+    {
+      "id": "change-summary",
+      "title": "Change summary",
+      "kind": "report",
+      "required": true,
+      "template": "# Change summary\n\n## What changed and why\n\n## How to verify\n\n## Deviations from plan\n"
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ],
+    "next": [
+      { "scene": "test", "label": "Run the test stage against these changes", "carry": ["plan", "change-summary"] }
+    ]
+  },
+  "hooks": [
+    { "on": "exit_criteria_met", "action": { "kind": "suggest_next" } }
+  ],
+  "constraints": {
+    "guardrails": [
+      "Do not start editing before the plan artifact exists and is approved.",
+      "Keep the change summary current: update it in the same turn as the change it describes."
+    ]
+  }
+}

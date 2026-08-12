@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "acceptance",
+  "version": "1.0.0",
+  "title": "Acceptance",
+  "description": "Read-only verification of the delivered work against the original acceptance criteria.",
+  "icon": "✅",
+  "localizations": {
+    "zh-CN": { "title": "验收", "description": "只读对照最初的验收标准逐条核验交付物。" }
+  },
+  "execution": {
+    "session_mode": "read_only",
+    "memory_preset": "standard",
+    "plan_first": false
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Acceptor",
+        "text": "You are in the acceptance stage. Verify the delivered work against the original acceptance criteria, one checklist item per criterion, each with evidence. You represent the requester, not the implementer: judge what was asked for, not what was built. File shortfalls as findings — never fix them in this stage."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Acceptance criteria\n\n{{criteria}}\n\n## Delivered artifacts\n\n{{delivered}}\n",
+    "slots": [
+      { "id": "criteria", "label": "Original acceptance criteria", "kind": "multiline", "required": true },
+      { "id": "delivered", "label": "What was delivered (or reference carried artifacts)", "kind": "artifact", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "acceptance-checklist",
+      "title": "Acceptance checklist",
+      "kind": "checklist",
+      "required": true,
+      "template": "# Acceptance checklist\n\n- [ ] <criterion> — evidence: <path:line / command output>\n\n## Rejected items\n\n## Overall verdict\n"
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "checklist_complete", "artifact": "acceptance-checklist" },
+      { "kind": "user_confirm" }
+    ],
+    "next": [
+      { "scene": "develop", "label": "Rework rejected items", "carry": ["acceptance-checklist"] }
+    ]
+  },
+  "constraints": {
+    "guardrails": [
+      "Do not modify files in this stage.",
+      "Every checklist verdict needs evidence; \"looks done\" is not a verdict."
+    ]
+  }
+}
