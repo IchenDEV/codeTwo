@@ -663,6 +663,10 @@ export const en = {
   "stage.startPipeline": "Start pipeline: {pipeline}",
   "stage.started": "Pipeline started: {pipeline}",
   "stage.advanced": "Stage: {stage}",
+  "pluginHub.scenes": "Scenes",
+  "pluginHub.pipelines": "Pipelines",
+  "scene.exportSkill": "Export SKILL.md",
+  "scene.exportSkillDone": "Exported {name}-SKILL.md",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1295,6 +1299,10 @@ export const zhCN: Record<StringKey, string> = {
   "stage.startPipeline": "启动流水线：{pipeline}",
   "stage.started": "流水线已启动：{pipeline}",
   "stage.advanced": "阶段：{stage}",
+  "pluginHub.scenes": "场景",
+  "pluginHub.pipelines": "流水线",
+  "scene.exportSkill": "导出 SKILL.md",
+  "scene.exportSkillDone": "已导出 {name}-SKILL.md",
 };
 
 export const LOCALES = {

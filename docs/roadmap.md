@@ -1,9 +1,10 @@
 # Product roadmap — accepted changes
 
-Status: **R1–R12 implemented 2026-08-12** on `feat/scenes-v1` (accepted 2026-08-11). The Agent
+Status: **R1–R14 implemented 2026-08-12** on `feat/scenes-v1` (accepted 2026-08-11). The Agent
 Scenes standard lives at `docs/scenes.md` + `crates/core/schemas/agent-scenes/1.0.0/`; the
 implementation design records are `docs/design/scenes-impl-core.md` and
-`docs/design/scenes-impl-frontend.md`. R13/R14 (office scene packs, distribution) remain open.
+`docs/design/scenes-impl-frontend.md`. R13 ships as the `packs/office-starter/` starter pack;
+R14 as plugin scene/pipeline components plus SKILL.md export (docs/scenes.md §Starter packs).
 Item ids (`R1`…) are for cross-referencing in PRs.
 
 Implementation notes vs. this document (accepted deviations): R2's slot proposal and R11's brief
@@ -97,11 +98,16 @@ that later extends to non-code work items.
 ## P3
 
 ### R13 — Office scene packs pilot (strategy)
+**Implemented 2026-08-12** as the `packs/office-starter/` plugin (three scenes + the
+`office-delivery` pipeline; content only, no format changes).
 Three packs built on R3–R9 with existing users: incident retrospective, release notes, tech design
 review. Semi-technical scenarios with natural structure/artifacts/stages — the lowest-friction
 bridge from IDE toward office work. Packaging only; the scene format is already domain-neutral.
 
 ### R14 — Scene pack distribution (strategy)
+**Implemented 2026-08-12**: `PluginCounts` gains `scenes`/`pipelines` (validated at install,
+invalid files skipped non-fatally), the scene loader reads installed plugins'
+`bundle/scenes/`, and `scene::export_skill_md` covers the §Interop SKILL.md export.
 Scenes/pipelines as plugin components (schema-validated, pure data — the hub pipeline in
 `crates/core/src/plugin.rs` already models component counts), plus SKILL.md export for
 skill-only hosts as specified in `docs/scenes.md` §Interop.

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, ListChecks, RotateCcw } from "lucide-react";
+import { ChevronDown, Clapperboard, Download, ListChecks, RotateCcw } from "lucide-react";
 
 import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
-import type { ConfigOptionInfo, ModelChoice } from "../bridge";
+import { exportSceneSkillMd, type ConfigOptionInfo, type ModelChoice } from "../bridge";
+import { useToast } from "../ui/toast";
 import type { ContextWindow } from "./contextWindow";
 import {
   Chip,
@@ -221,6 +222,20 @@ export function ScenePicker({
 }) {
   const t = useT();
   const { locale } = useLanguage();
+  const toast = useToast();
+  // Lossy SKILL.md export (docs/scenes.md §Interop), downloaded as a Blob through a transient
+  // anchor — deliberately no Tauri save-dialog plumbing for a plain text file.
+  const exportSkill = async (scene: SceneInfo) => {
+    const md = await exportSceneSkillMd(scene.reference);
+    if (md === null) return;
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${scene.name}-SKILL.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast(t("scene.exportSkillDone", { name: scene.name }), "success");
+  };
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-md">
@@ -240,18 +255,31 @@ export function ScenePicker({
             }}
           />
           {scenes.map((scene) => (
-            <MenuRow
-              key={scene.reference}
-              selected={active?.reference === scene.reference}
-              isDefault={false}
-              label={`${scene.icon ? `${scene.icon} ` : ""}${sceneTitle(scene, locale)}`}
-              detail={scene.localizations[locale]?.description ?? scene.description}
-              leading={<SourceBadge source={scene.source} />}
-              onClick={() => {
-                onScene(scene.reference);
-                onClose();
-              }}
-            />
+            <div key={scene.reference} className="flex items-center gap-1">
+              <div className="min-w-0 flex-1">
+                <MenuRow
+                  selected={active?.reference === scene.reference}
+                  isDefault={false}
+                  label={`${scene.icon ? `${scene.icon} ` : ""}${sceneTitle(scene, locale)}`}
+                  detail={scene.localizations[locale]?.description ?? scene.description}
+                  leading={<SourceBadge source={scene.source} />}
+                  onClick={() => {
+                    onScene(scene.reference);
+                    onClose();
+                  }}
+                />
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground"
+                title={t("scene.exportSkill")}
+                aria-label={t("scene.exportSkill")}
+                onClick={() => void exportSkill(scene)}
+              >
+                <Download className="size-3.5" />
+              </Button>
+            </div>
           ))}
         </div>
       </DialogContent>

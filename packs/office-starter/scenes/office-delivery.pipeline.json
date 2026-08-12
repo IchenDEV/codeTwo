@@ -1,0 +1,35 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/pipeline.schema.json",
+  "name": "office-delivery",
+  "version": "1.0.0",
+  "title": "Office delivery",
+  "description": "Design review → develop → test → release notes. The develop and test stages use bare references that resolve to the builtin scenes by precedence — a deliberate cross-pack reference.",
+  "icon": "📦",
+  "keywords": ["office", "delivery", "pipeline"],
+  "localizations": {
+    "zh-CN": {
+      "title": "办公交付",
+      "description": "方案评审 → 开发 → 测试 → 发布说明。develop 与 test 阶段使用裸引用，按优先级解析到内置场景 —— 有意演示跨包引用。"
+    }
+  },
+  "entry": "design-review",
+  "stages": [
+    { "id": "design-review", "scene": "design-review", "gate": "suggest" },
+    {
+      "id": "develop",
+      "scene": "develop",
+      "gate": "suggest",
+      "carry": [{ "from": "design-review", "artifact": "review-notes" }]
+    },
+    { "id": "test", "scene": "test", "gate": "suggest" },
+    {
+      "id": "release-notes",
+      "scene": "release-notes",
+      "gate": "confirm",
+      "carry": [
+        { "from": "develop", "artifact": "change-summary" },
+        { "from": "test", "artifact": "test-report" }
+      ]
+    }
+  ]
+}
