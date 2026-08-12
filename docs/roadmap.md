@@ -1,9 +1,15 @@
 # Product roadmap — accepted changes
 
-Status: **accepted 2026-08-11**. This is the full change list from the product/UX research review,
-accepted as a whole. The Agent Scenes standard (P0 prerequisite) is already authored: see
-`docs/scenes.md` and `crates/core/schemas/agent-scenes/1.0.0/`. Everything below is implementation
-work, ordered by priority. Item ids (`R1`…) are for cross-referencing in PRs.
+Status: **R1–R12 implemented 2026-08-12** on `feat/scenes-v1` (accepted 2026-08-11). The Agent
+Scenes standard lives at `docs/scenes.md` + `crates/core/schemas/agent-scenes/1.0.0/`; the
+implementation design records are `docs/design/scenes-impl-core.md` and
+`docs/design/scenes-impl-frontend.md`. R13/R14 (office scene packs, distribution) remain open.
+Item ids (`R1`…) are for cross-referencing in PRs.
+
+Implementation notes vs. this document (accepted deviations): R2's slot proposal and R11's brief
+structuring ship as core heuristics (no model call) with lossless degradation; R7 pricing is a
+conservative built-in prefix table (unknown models show tokens only); scene `enter` hooks fire via
+`SceneRuntime::scene_activated`, wired when scene application lands runtime-side.
 
 The four pain points this roadmap answers:
 
