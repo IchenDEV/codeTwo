@@ -98,6 +98,9 @@ mock.module("../src/skillInline", () => ({
     // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
     // suites exercising slotCard serialization must still see the real behavior.
     if (block.type === "slotCard") return realSlotCard.slotCardToDocBlocks(block.props);
+    // Same leak rule for issue references (R12): the issueBlock suite must see the real
+    // serialization (header-stripped body, provenance kept off the prompt record).
+    if (block.type === "issueRef") return realDocToBlocks({ document: [block] } as never);
     // Same leak rule for artifact mentions: delegate the whole paragraph to the real walker so
     // inline ordering and token emission stay exact for the artifactMention suite.
     if (Array.isArray(block.content) && block.content.some((inline: any) => inline?.type === "artifactMention")) {

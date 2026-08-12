@@ -20,6 +20,7 @@ import {
 } from "../skillInline";
 import { FileMenu, type AtItem, type ChatItem, type FileItem } from "./FileMenu";
 import { focusSlotCardField, normalizeSlots, unfilledRequiredSlots } from "./slotCard";
+import { issueContextMarkdown } from "./issueBlock";
 import type { SceneInfo } from "../session/scene";
 import {
   listArchivedSessions,
@@ -29,6 +30,7 @@ import {
   type CanvasDraft,
   type CanvasPixelPolicy,
   type DocBlock,
+  type Issue,
   type SkillInfo,
 } from "../bridge";
 import { useColorScheme } from "../theme";
@@ -64,6 +66,11 @@ interface EditorProps {
   // Composer inserts the active scene's brief as a slot card at the document top (R5); R11 may
   // pass model-structured values to pre-fill the fields.
   insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
+  // App inserts an issue reference (R12) as a dedicated card — `context` is the compiled
+  // `issueContext()` markdown the block serializes back into; `delegatedScene` is provenance.
+  insertIssueRef?: MutableRefObject<
+    ((issue: Issue, context: string, delegatedScene?: string) => void) | null
+  >;
   /** Composer-owned Canvas insertion/freeze seams. Canvas authoring is hidden when the gate is off. */
   canvasEnabled: boolean;
   canvasRuntime: CanvasBlockRuntime | null;
@@ -228,6 +235,7 @@ export function DocEditor({
   openSkillPickerRef,
   insertSkillRef,
   insertBriefRef,
+  insertIssueRef,
   canvasEnabled,
   canvasRuntime,
   createCanvas,
@@ -324,6 +332,21 @@ export function DocEditor({
           return {
             type: "paragraph",
             content: [{ type: "sessionMention", props: { sessionId: block.session_id } }, " "],
+          };
+        case "issue":
+          // Rebuild the embedded context the same way the core compile arm does (state "open"),
+          // so a recovered issue card serializes back to the identical `DocBlock::Issue`.
+          return {
+            type: "issueRef",
+            props: {
+              source: block.source,
+              issueId: block.id,
+              title: block.title,
+              url: block.url,
+              state: "open",
+              context: issueContextMarkdown(block),
+              delegatedScene: "",
+            },
           };
       }
     });
@@ -541,6 +564,29 @@ export function DocEditor({
       onEmptyChange(false);
       focusSlotCardField(id);
     };
+    if (insertIssueRef) insertIssueRef.current = (issue: Issue, context: string, delegatedScene = "") => {
+      const last = editor.document[editor.document.length - 1];
+      if (!last) return;
+      editor.insertBlocks(
+        [
+          {
+            type: "issueRef",
+            props: {
+              source: issue.source,
+              issueId: issue.id,
+              title: issue.title,
+              url: issue.url,
+              state: issue.state,
+              context,
+              delegatedScene,
+            },
+          },
+        ],
+        last,
+        "after",
+      );
+      onEmptyChange(false);
+    };
     insertCanvasDraftRef.current = insertCanvasDraft;
     restoreCanvasDocumentRef.current = restoreCanvasDocument;
     insertCanvasRef.current = async () => {
@@ -579,12 +625,13 @@ export function DocEditor({
       openSkillPickerRef.current = null;
       insertSkillRef.current = null;
       if (insertBriefRef) insertBriefRef.current = null;
+      if (insertIssueRef) insertIssueRef.current = null;
       insertCanvasRef.current = null;
       insertCanvasDraftRef.current = null;
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();

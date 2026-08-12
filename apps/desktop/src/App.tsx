@@ -45,6 +45,7 @@ import {
   gitStatus,
   githubImportPlugin,
   installMarketplacePlugin,
+  commentIssue,
   issueContext,
   listArchivedSessions,
   listMemoryReceipts,
@@ -627,6 +628,18 @@ export default function App() {
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const insertBriefRef = useRef<((scene: SceneInfo, values?: Record<string, string>) => void) | null>(null);
+  // R12: issue references insert as dedicated provenance-carrying blocks, not plain text.
+  const insertIssueRef = useRef<
+    ((issue: Issue, context: string, delegatedScene?: string) => void) | null
+  >(null);
+  /**
+   * An issue block staged for a delegated draft, consumed right after `createSession`'s
+   * synchronous reset (mirror of `pendingSceneRef`; the editor itself survives New — only a
+   * locale change remounts it — so the next tick is the "editor ready" point).
+   */
+  const pendingIssueInsertRef = useRef<
+    { issue: Issue; context: string; delegatedScene: string } | null
+  >(null);
   const activeSessionRef = useRef<string | null>(null);
   // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
   // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
@@ -2252,7 +2265,7 @@ export default function App() {
 
   const insertIssue = useCallback(async (issue: Issue) => {
     const ctx = await issueContext(issue);
-    insertTextRef.current?.(ctx);
+    insertIssueRef.current?.(issue, ctx);
     setShowIssues(false);
   }, []);
 
@@ -2613,6 +2626,64 @@ export default function App() {
       pendingSceneRef.current = reference;
     },
     [applySceneChoice, createSession],
+  );
+
+  /**
+   * Delegate an issue into a scene (R12): a fresh draft fully applied to that scene, opened with
+   * the issue as a provenance-carrying block. Mirrors `restartInScene` rather than reusing it —
+   * that flow is bound to the *active* scene and has no post-create insert seam.
+   */
+  const onDelegateIssue = useCallback(
+    async (issue: Issue, sceneReference: string) => {
+      const scene = scenesRef.current.find((s) => s.reference === sceneReference);
+      if (!scene) return;
+      const ctx = await issueContext(issue);
+      const plan = await sceneSessionPlan(sceneReference, false);
+      if (!plan) return;
+      if (plan.escalation) {
+        // Delegation never loosens the sandbox silently: same chokepoint dialog, same rule.
+        // Confirming soft-applies the scene; delegation itself stays a deliberate re-run.
+        setSceneEscalation({
+          reference: sceneReference,
+          kind: "soft",
+          from: plan.escalation.from as SessionMode,
+          to: plan.escalation.to as SessionMode,
+        });
+        return;
+      }
+      pendingSceneRef.current = sceneReference;
+      pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
+      createSession();
+      const params = plan.params;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      applySceneChoice(sceneReference, { confirmed: true });
+      pendingSceneRef.current = sceneReference;
+      // Consume after createSession's synchronous reset settles — the same tick ordering its own
+      // focus timeout uses; the mounted editor survives New, so the ref is live by then.
+      setTimeout(() => {
+        const pending = pendingIssueInsertRef.current;
+        pendingIssueInsertRef.current = null;
+        if (pending) {
+          insertIssueRef.current?.(pending.issue, pending.context, pending.delegatedScene);
+        }
+      }, 0);
+      setShowIssues(false);
+      toast(t("issueDeleg.toast", { id: issue.id, scene: scene.title }), "success");
+      // Best-effort attribution on the tracker, fire-and-forget. GitHub only: Linear's comment
+      // call needs the caller-held API token `listLinearIssues` uses, which this surface does
+      // not hold — skipped rather than failing.
+      if (issue.source === "github") {
+        void commentIssue(
+          cwd || ".",
+          issue.source,
+          issue.id,
+          t("issueDeleg.commentBody", { scene: scene.title }),
+        );
+      }
+    },
+    [applySceneChoice, createSession, cwd, toast, t],
   );
 
   const dispatchAction = useCallback(
@@ -3328,6 +3399,7 @@ export default function App() {
                     openSkillPickerRef={openSkillPickerRef}
                     insertSkillRef={insertSkillRef}
                     insertBriefRef={insertBriefRef}
+                    insertIssueRef={insertIssueRef}
                     canvasEnabled={canvasFeature.enabled}
                     canvasRuntime={canvasRuntime}
                     createCanvas={createCanvas}
@@ -3530,7 +3602,13 @@ export default function App() {
       )}
       {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
       {showIssues && (
-        <IssuesModal cwd={cwd || "."} onInsert={(i) => void insertIssue(i)} onClose={() => setShowIssues(false)} />
+        <IssuesModal
+          cwd={cwd || "."}
+          scenes={scenes}
+          onInsert={(i) => void insertIssue(i)}
+          onDelegate={(i, sceneReference) => void onDelegateIssue(i, sceneReference)}
+          onClose={() => setShowIssues(false)}
+        />
       )}
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
       {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}

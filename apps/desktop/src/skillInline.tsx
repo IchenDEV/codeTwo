@@ -22,6 +22,7 @@ import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
 import { rehydrateEnvelope } from "./canvas/serialize";
 import { workspaceReferenceBlock } from "./editor/workspaceReference";
 import { SlotCardBlock, slotCardToDocBlocks, type SlotCardProps } from "./editor/slotCard";
+import { IssueRefBlock, issueRefToDocBlock, type IssueRefProps } from "./editor/issueBlock";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
  * `docToBlocks`; it is only an in-memory editing cache so an inline Canvas can reconnect without
@@ -747,6 +748,7 @@ export const schema = BlockNoteSchema.create({
     browserNote: BrowserNoteBlock,
     canvas: CanvasBlock,
     slotCard: SlotCardBlock,
+    issueRef: IssueRefBlock,
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
@@ -775,6 +777,14 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
       flush();
       const text = String((block.props as { context?: string }).context ?? "");
       if (text.trim()) out.push({ type: "text", text });
+      continue;
+    }
+    // An issue reference serializes into the core `DocBlock::Issue` (R12): snapshot fields plus
+    // the body portion of the embedded context, so compiling stays offline-safe and byte-stable.
+    if (block.type === "issueRef") {
+      flush();
+      const docBlock = issueRefToDocBlock(block.props as unknown as IssueRefProps);
+      if (docBlock) out.push(docBlock);
       continue;
     }
     if (block.type === "canvas") {
