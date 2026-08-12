@@ -356,6 +356,14 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "scene_customized",
         "scene_customized INTEGER NOT NULL DEFAULT 0",
     )?;
+    // Scene `schedule` hooks are inert until explicitly enabled per project (off by default;
+    // docs/scenes.md §hooks).
+    ensure_column(
+        &tx,
+        "projects",
+        "scheduling_enabled",
+        "scheduling_enabled INTEGER NOT NULL DEFAULT 0",
+    )?;
     // A legacy local session's cwd is its source project. A legacy worktree row no longer contains
     // enough information to recover the source safely, so leave it unknown instead of
     // misidentifying the isolated checkout as a project. Keep this idempotent in case a previous
@@ -1384,6 +1392,38 @@ impl Store {
             rusqlite::params![path, mode.map(ProjectWorktreeMode::as_db)],
         )?;
         Ok(())
+    }
+
+    /// Enable/disable scene `schedule` hooks for one project. Off by default: a scene definition
+    /// alone must never start timed work (docs/scenes.md §Security).
+    pub fn set_project_scheduling(&self, path: &str, enabled: bool) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE projects SET scheduling_enabled=?2 WHERE path=?1",
+            rusqlite::params![path, enabled as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn project_scheduling(&self, path: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let enabled: Option<i64> = conn
+            .query_row(
+                "SELECT scheduling_enabled FROM projects WHERE path=?1",
+                [path],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(enabled.unwrap_or(0) != 0)
+    }
+
+    /// Paths of projects with scheduling enabled — the scene runtime's 30 s tick scans only these.
+    pub fn scheduled_projects(&self) -> Result<Vec<String>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT path FROM projects WHERE scheduling_enabled<>0 ORDER BY path")?;
+        let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        Ok(rows.filter_map(|row| row.ok()).collect())
     }
 
     /// Forget a project. Its sessions are left alone — removing a project from the list is a

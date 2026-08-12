@@ -189,6 +189,10 @@ pub enum Event {
         session: SessionId,
         used_tokens: u64,
         context_window: u64,
+        /// Provider-reported cumulative cost in USD, forwarded when the ACP usage update carries a
+        /// numeric cost. Optional-field append: older payloads without it still deserialize.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cost_usd: Option<f64>,
     },
     /// The models this session can run on: the agent's own list (reported at `session/new` and
     /// echoed after a switch), or [`crate::models::builtin_models`] for its provider — emitted as
@@ -218,6 +222,77 @@ pub enum Event {
     TurnEnded {
         session: SessionId,
         stop_reason: String,
+    },
+    /// A terminal tool call the engine's conservative heuristic recognized as a test run
+    /// ([`crate::testsignal`]). Feeds scene `tests_failed` hooks and the `tests_pass` exit
+    /// criterion; consumers must tolerate it never firing.
+    TestSignal {
+        session: SessionId,
+        tool_call_id: String,
+        /// The classified command, bounded to 256 chars.
+        command: String,
+        passed: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+    },
+    /// One captured version of a declared scene artifact (auto-capture at turn end, or a manual
+    /// pin). `record_id` resolves content via the scene-artifact store.
+    ArtifactProduced {
+        session: SessionId,
+        scene_ref: String,
+        artifact_key: String,
+        kind: String,
+        version: i64,
+        record_id: i64,
+    },
+    /// All machine-checkable exit criteria of the session's active scene hold. `state_key` is the
+    /// debounce identity: the completion banner never re-fires for the same key.
+    ExitCriteriaMet {
+        session: SessionId,
+        scene_ref: String,
+        satisfied: Vec<String>,
+        unverified: Vec<String>,
+        state_key: String,
+    },
+    /// Render-only outcome of a scene hook's suggest/notify action. The frontend renders it; it
+    /// never acts on the session by itself.
+    HookSuggestion {
+        session: SessionId,
+        scene_ref: String,
+        /// The hook event that fired ("tests_failed", "exit_criteria_met", …).
+        on: String,
+        /// The action kind ("suggest_scene" | "suggest_next" | "notify").
+        kind: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_scene: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        carry: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pipeline_instance: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        to_stage: Option<String>,
+        state_key: String,
+    },
+    /// A hook-initiated `run_macro` turn was submitted — the transcript attribution for automatic
+    /// prompts (at most one in flight per session).
+    HookTurnStarted {
+        session: SessionId,
+        scene_ref: String,
+        macro_id: String,
+    },
+    /// Per-session cost projection (R7 tracker). `priced: false` means no price table entry
+    /// matched and only token counts are meaningful.
+    SessionCost {
+        session: SessionId,
+        input_tokens: u64,
+        output_tokens: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cost_usd: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        burn_rate_usd_per_hour: Option<f64>,
+        priced: bool,
     },
     Error {
         session: Option<SessionId>,
@@ -303,6 +378,7 @@ mod tests {
             session: "session-1".into(),
             used_tokens: 53_000,
             context_window: 200_000,
+            cost_usd: None,
         })
         .unwrap();
 
@@ -310,6 +386,7 @@ mod tests {
         assert_eq!(value["session"], "session-1");
         assert_eq!(value["used_tokens"], 53_000);
         assert_eq!(value["context_window"], 200_000);
+        assert!(value.get("cost_usd").is_none());
     }
 
     #[test]
@@ -413,5 +490,171 @@ mod tests {
             value["activity"]["state"]["pending"][0]["input_id"],
             "permission-1"
         );
+    }
+
+    #[test]
+    fn context_window_without_cost_still_deserializes() {
+        let event: Event = serde_json::from_value(serde_json::json!({
+            "event": "context_window",
+            "session": "session-1",
+            "used_tokens": 1_000,
+            "context_window": 200_000
+        }))
+        .unwrap();
+        assert!(matches!(event, Event::ContextWindow { cost_usd: None, .. }));
+
+        let value = serde_json::to_value(Event::ContextWindow {
+            session: "session-1".into(),
+            used_tokens: 1_000,
+            context_window: 200_000,
+            cost_usd: Some(0.42),
+        })
+        .unwrap();
+        assert_eq!(value["cost_usd"], 0.42);
+    }
+
+    #[test]
+    fn test_signal_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::TestSignal {
+            session: "session-1".into(),
+            tool_call_id: "tool-1".into(),
+            command: "cargo test".into(),
+            passed: false,
+            exit_code: Some(101),
+        })
+        .unwrap();
+        assert_eq!(value["event"], "test_signal");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["tool_call_id"], "tool-1");
+        assert_eq!(value["command"], "cargo test");
+        assert_eq!(value["passed"], false);
+        assert_eq!(value["exit_code"], 101);
+
+        let value = serde_json::to_value(Event::TestSignal {
+            session: "session-1".into(),
+            tool_call_id: "tool-1".into(),
+            command: "cargo test".into(),
+            passed: true,
+            exit_code: None,
+        })
+        .unwrap();
+        assert!(value.get("exit_code").is_none());
+    }
+
+    #[test]
+    fn artifact_produced_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::ArtifactProduced {
+            session: "session-1".into(),
+            scene_ref: "builtin:test".into(),
+            artifact_key: "test-report".into(),
+            kind: "test_report".into(),
+            version: 2,
+            record_id: 7,
+        })
+        .unwrap();
+        assert_eq!(value["event"], "artifact_produced");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["scene_ref"], "builtin:test");
+        assert_eq!(value["artifact_key"], "test-report");
+        assert_eq!(value["kind"], "test_report");
+        assert_eq!(value["version"], 2);
+        assert_eq!(value["record_id"], 7);
+    }
+
+    #[test]
+    fn exit_criteria_met_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::ExitCriteriaMet {
+            session: "session-1".into(),
+            scene_ref: "builtin:test".into(),
+            satisfied: vec!["required_artifacts".into()],
+            unverified: vec!["manual review".into()],
+            state_key: "required_artifacts,user_confirm".into(),
+        })
+        .unwrap();
+        assert_eq!(value["event"], "exit_criteria_met");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["scene_ref"], "builtin:test");
+        assert_eq!(value["satisfied"][0], "required_artifacts");
+        assert_eq!(value["unverified"][0], "manual review");
+        assert_eq!(value["state_key"], "required_artifacts,user_confirm");
+    }
+
+    #[test]
+    fn hook_suggestion_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::HookSuggestion {
+            session: "session-1".into(),
+            scene_ref: "builtin:test".into(),
+            on: "tests_failed".into(),
+            kind: "suggest_scene".into(),
+            target_scene: Some("fix".into()),
+            carry: vec!["test-report".into()],
+            message: None,
+            pipeline_instance: None,
+            to_stage: None,
+            state_key: "tool-1".into(),
+        })
+        .unwrap();
+        assert_eq!(value["event"], "hook_suggestion");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["scene_ref"], "builtin:test");
+        assert_eq!(value["on"], "tests_failed");
+        assert_eq!(value["kind"], "suggest_scene");
+        assert_eq!(value["target_scene"], "fix");
+        assert_eq!(value["carry"][0], "test-report");
+        assert_eq!(value["state_key"], "tool-1");
+        assert!(value.get("message").is_none());
+        assert!(value.get("pipeline_instance").is_none());
+        assert!(value.get("to_stage").is_none());
+
+        let value = serde_json::to_value(Event::HookSuggestion {
+            session: "session-1".into(),
+            scene_ref: "builtin:test".into(),
+            on: "turn_end".into(),
+            kind: "notify".into(),
+            target_scene: None,
+            carry: Vec::new(),
+            message: Some("done".into()),
+            pipeline_instance: None,
+            to_stage: None,
+            state_key: "1".into(),
+        })
+        .unwrap();
+        assert_eq!(value["message"], "done");
+        assert!(value.get("target_scene").is_none());
+        assert!(value.get("carry").is_none());
+    }
+
+    #[test]
+    fn hook_turn_started_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::HookTurnStarted {
+            session: "session-1".into(),
+            scene_ref: "builtin:test".into(),
+            macro_id: "commit-macro".into(),
+        })
+        .unwrap();
+        assert_eq!(value["event"], "hook_turn_started");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["scene_ref"], "builtin:test");
+        assert_eq!(value["macro_id"], "commit-macro");
+    }
+
+    #[test]
+    fn session_cost_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::SessionCost {
+            session: "session-1".into(),
+            input_tokens: 1_000,
+            output_tokens: 250,
+            cost_usd: Some(0.12),
+            burn_rate_usd_per_hour: None,
+            priced: true,
+        })
+        .unwrap();
+        assert_eq!(value["event"], "session_cost");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["input_tokens"], 1_000);
+        assert_eq!(value["output_tokens"], 250);
+        assert_eq!(value["cost_usd"], 0.12);
+        assert_eq!(value["priced"], true);
+        assert!(value.get("burn_rate_usd_per_hour").is_none());
     }
 }

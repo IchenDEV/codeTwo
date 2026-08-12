@@ -67,6 +67,18 @@ export interface SceneInfo {
   brief?: SceneBrief | null;
   artifacts: SceneArtifactDef[];
   skills?: SceneSkills | null;
+  /** Appended for R8's completion banner: exit criteria and next-scene suggestions. */
+  exit?: {
+    criteria?: { kind: string; artifact?: string | null; description?: string | null }[];
+    next?: SceneNextSuggestion[];
+  } | null;
+}
+
+/** One `exit.next` entry — a suggested follow-up scene with its carry set. */
+export interface SceneNextSuggestion {
+  scene: string;
+  label?: string | null;
+  carry?: string[];
 }
 
 export type MemoryPresetId = "standard" | "read_only" | "private" | "learn_only";

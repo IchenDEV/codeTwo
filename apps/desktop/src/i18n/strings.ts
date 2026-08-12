@@ -645,6 +645,12 @@ export const en = {
   "templateFrom.cancel": "Cancel",
   "templateFrom.save": "Save template",
   "templateFrom.saved": "Template saved",
+  "sceneBanner.complete": "Stage complete — every declared artifact is in.",
+  "sceneBanner.unverified": "Unverified: {items}",
+  "sceneBanner.suggest": "Suggested next scene: {scene}",
+  "sceneBanner.start": "Start {scene}",
+  "sceneBanner.carrying": "Carrying: {artifacts}",
+  "sceneBanner.dismiss": "Dismiss",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1259,6 +1265,12 @@ export const zhCN: Record<StringKey, string> = {
   "templateFrom.cancel": "取消",
   "templateFrom.save": "保存模板",
   "templateFrom.saved": "模板已保存",
+  "sceneBanner.complete": "产出齐备 — 本阶段声明的工件已全部就绪。",
+  "sceneBanner.unverified": "待确认：{items}",
+  "sceneBanner.suggest": "建议进入场景：{scene}",
+  "sceneBanner.start": "进入{scene}",
+  "sceneBanner.carrying": "携带：{artifacts}",
+  "sceneBanner.dismiss": "关闭",
 };
 
 export const LOCALES = {

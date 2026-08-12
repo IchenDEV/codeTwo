@@ -119,6 +119,7 @@ import {
   type WorktreeBaselineOption,
   type WorkspaceContentMatch,
   applySceneToSession,
+  dismissSceneBanner,
   getSessionScene,
   listScenes,
   recordSceneArtifact,
@@ -161,6 +162,7 @@ import {
   type SceneInfo,
 } from "./session/scene";
 import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
+import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
 import { Composer } from "./session/Composer";
 import {
   activeContextWindow,
@@ -454,6 +456,8 @@ export default function App() {
     from: SessionMode;
     to: SessionMode;
   } | null>(null);
+  /** Scene completion/suggestion banner above the composer (R8); latest state key wins. */
+  const [sceneBanner, setSceneBanner] = useState<SceneBannerState | null>(null);
   /** Scene to bind to the next created session (full-apply handshake). */
   const pendingSceneRef = useRef<string | null>(null);
   /** Per-session scene memory so switching sessions restores each one's scene. */
@@ -1379,6 +1383,25 @@ export default function App() {
           // This is deliberately handled before transcript projection: a context update is
           // session state, never a persisted/rendered transcript part.
           setContextWindows((previous) => updateContextWindow(previous, ev));
+          return;
+        }
+        if (
+          ev.event === "exit_criteria_met" ||
+          ev.event === "hook_suggestion" ||
+          ev.event === "test_signal" ||
+          ev.event === "artifact_produced" ||
+          ev.event === "hook_turn_started" ||
+          ev.event === "session_cost"
+        ) {
+          // Scene-layer facts (R8) are session state, never transcript parts. Only the two
+          // banner-worthy ones render; the rest are consumed by the core's SceneRuntime.
+          if (
+            (ev.event === "exit_criteria_met" || ev.event === "hook_suggestion") &&
+            ev.session === activeSessionRef.current
+          ) {
+            const banner = sceneBannerFromEvent(ev);
+            if (banner) setSceneBanner(banner);
+          }
           return;
         }
         if (ev.event === "models") {
@@ -3307,6 +3330,22 @@ export default function App() {
                     </Button>
                   </div>
                 </div>
+              )}
+              {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
+                  session, rendered above the composer. Dismissal is remembered by the core. */}
+              {sceneBanner && sceneBanner.session === activeSession && !activeArchived && (
+                <SceneBanner
+                  banner={sceneBanner}
+                  scenes={scenes}
+                  onApplyScene={(reference) => {
+                    applySceneChoice(reference);
+                    setSceneBanner(null);
+                  }}
+                  onDismiss={() => {
+                    void dismissSceneBanner(sceneBanner.session, sceneBanner.stateKey);
+                    setSceneBanner(null);
+                  }}
+                />
               )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
