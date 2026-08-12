@@ -724,10 +724,12 @@ pub mod cron {
                 Err(_) => return false,
             }
         };
+        // Range bounds stay raw: normalizing `hi` would fold a day-of-week `*` (0–7) or `5-7`
+        // upper bound of 7 down to 0 and empty the range. Sunday-as-7 is instead honored by
+        // also accepting a normalized value of 0 wherever raw 7 would fall inside the range.
         let value = normalize(value, max);
-        let lo = normalize(lo, max);
-        let hi = normalize(hi, max);
-        value >= lo && value <= hi && (value - lo) % step == 0
+        let in_range = |v: u32| v >= lo && v <= hi && (v - lo) % step == 0;
+        in_range(value) || (max == 7 && value == 0 && in_range(7))
     }
 
     /// Day-of-week 7 is Sunday (0); everything else passes through.
