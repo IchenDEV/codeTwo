@@ -151,6 +151,159 @@ pub fn parse_linear(value: &serde_json::Value) -> Vec<Issue> {
         .collect()
 }
 
+// ---- Write path (R12): delegation comments --------------------------------------------------
+
+/// True when `id` is a plain GitHub issue number: non-empty, ASCII digits only. The number is
+/// passed as a `gh` argument, so anything else is rejected before a process is spawned.
+pub fn valid_github_issue_id(id: &str) -> bool {
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Post a comment via `gh issue comment <id> --body-file -`. The body travels over stdin — no
+/// arg-length or quoting hazards. Returns the comment URL `gh` prints on stdout.
+pub async fn comment_github(cwd: &Path, id: &str, body: &str) -> std::io::Result<String> {
+    if !valid_github_issue_id(id) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid GitHub issue id: {id}"),
+        ));
+    }
+    let mut child = Command::new("gh")
+        .args(["issue", "comment", id, "--body-file", "-"])
+        .current_dir(cwd)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        stdin.write_all(body.as_bytes()).await?;
+        // Dropping stdin closes the pipe so `gh` sees EOF.
+    }
+    let out = child.wait_with_output().await?;
+    if !out.status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// POST a GraphQL request to Linear. Unlike the read-path list query, the request body is built
+/// with `serde_json::json!` (never `format!` into JSON) and sent with `--data-binary @-` over
+/// stdin, so user-supplied identifiers and comment bodies can never break out of the payload.
+async fn linear_graphql(
+    token: &str,
+    request: &serde_json::Value,
+) -> std::io::Result<serde_json::Value> {
+    let payload = serde_json::to_vec(request)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let mut child = Command::new("curl")
+        .args([
+            "-s",
+            "-X",
+            "POST",
+            "https://api.linear.app/graphql",
+            "-H",
+            &format!("Authorization: {token}"),
+            "-H",
+            "Content-Type: application/json",
+            "--data-binary",
+            "@-",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        stdin.write_all(&payload).await?;
+    }
+    let out = child.wait_with_output().await?;
+    if !out.status.success() {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "curl failed"));
+    }
+    serde_json::from_slice(&out.stdout)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+/// Resolve a Linear identifier to the internal issue id `commentCreate` needs. Linear's
+/// `issue(id:)` accepts human identifiers like `ENG-123` as well as UUIDs, so one query suffices.
+pub async fn resolve_linear_issue_id(token: &str, identifier: &str) -> std::io::Result<String> {
+    let request = serde_json::json!({
+        "query": "query Resolve($id: String!) { issue(id: $id) { id } }",
+        "variables": { "id": identifier },
+    });
+    let value = linear_graphql(token, &request).await?;
+    parse_linear_issue_id(&value).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Linear issue not found: {identifier}"),
+        )
+    })
+}
+
+/// Extract `data.issue.id` from a Linear GraphQL response. Public for testing.
+pub fn parse_linear_issue_id(value: &serde_json::Value) -> Option<String> {
+    value
+        .get("data")?
+        .get("issue")?
+        .get("id")?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Post a comment on a Linear issue (internal id, from [`resolve_linear_issue_id`]). Returns the
+/// comment URL.
+pub async fn comment_linear(token: &str, issue_id: &str, body: &str) -> std::io::Result<String> {
+    let request = serde_json::json!({
+        "query": "mutation Comment($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success comment { url } } }",
+        "variables": { "issueId": issue_id, "body": body },
+    });
+    let value = linear_graphql(token, &request).await?;
+    parse_linear_comment(&value)
+}
+
+/// Extract the comment URL from a `commentCreate` response; `success: false` (or a malformed
+/// response) is an error. Public for testing.
+pub fn parse_linear_comment(value: &serde_json::Value) -> std::io::Result<String> {
+    let payload = value.get("data").and_then(|d| d.get("commentCreate"));
+    let success = payload
+        .and_then(|p| p.get("success"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !success {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Linear commentCreate did not succeed",
+        ));
+    }
+    Ok(payload
+        .and_then(|p| p.get("comment"))
+        .and_then(|c| c.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
+/// Delegation activity-trail body: attribution line, session title, then the produced artifacts
+/// as a bullet list of `(title, url-or-summary)` pairs. The list is skipped when empty.
+pub fn delegation_comment(
+    scene_ref: &str,
+    session_title: &str,
+    artifacts: &[(String, String)],
+) -> String {
+    let mut s = format!("Delegated to Code2 scene `{scene_ref}`\n\nSession: {session_title}");
+    if !artifacts.is_empty() {
+        s.push_str("\n\nArtifacts:");
+        for (title, link) in artifacts {
+            s.push_str(&format!("\n- {title} — {link}"));
+        }
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +351,85 @@ mod tests {
         assert_eq!(issues[0].id, "ENG-1");
         assert_eq!(issues[0].state, "In Progress");
         assert_eq!(issues[0].source, "linear");
+    }
+
+    #[test]
+    fn github_issue_id_validation() {
+        assert!(valid_github_issue_id("42"));
+        assert!(valid_github_issue_id("0071"));
+        assert!(!valid_github_issue_id(""));
+        assert!(!valid_github_issue_id("ENG-123"));
+        assert!(!valid_github_issue_id("12x"));
+        assert!(!valid_github_issue_id("-1"));
+        assert!(!valid_github_issue_id("4 2"));
+        // Non-ASCII digits must be rejected too — the id becomes a `gh` argument.
+        assert!(!valid_github_issue_id("١٢"));
+    }
+
+    #[test]
+    fn parse_linear_issue_id_found() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"data":{"issue":{"id":"uuid-123"}}}"#).unwrap();
+        assert_eq!(parse_linear_issue_id(&v), Some("uuid-123".to_string()));
+    }
+
+    #[test]
+    fn parse_linear_issue_id_missing() {
+        let v: serde_json::Value = serde_json::from_str(r#"{"data":{"issue":null}}"#).unwrap();
+        assert_eq!(parse_linear_issue_id(&v), None);
+    }
+
+    #[test]
+    fn parse_linear_issue_id_malformed() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"errors":[{"message":"nope"}]}"#).unwrap();
+        assert_eq!(parse_linear_issue_id(&v), None);
+        let v: serde_json::Value = serde_json::from_str(r#"{"data":{"issue":{"id":7}}}"#).unwrap();
+        assert_eq!(parse_linear_issue_id(&v), None);
+    }
+
+    #[test]
+    fn parse_linear_comment_success() {
+        let v: serde_json::Value = serde_json::from_str(
+            r#"{"data":{"commentCreate":{"success":true,"comment":{"url":"https://linear.app/c/1"}}}}"#,
+        )
+        .unwrap();
+        assert_eq!(parse_linear_comment(&v).unwrap(), "https://linear.app/c/1");
+    }
+
+    #[test]
+    fn parse_linear_comment_failure() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"data":{"commentCreate":{"success":false}}}"#).unwrap();
+        assert!(parse_linear_comment(&v).is_err());
+    }
+
+    #[test]
+    fn parse_linear_comment_malformed() {
+        let v: serde_json::Value =
+            serde_json::from_str(r#"{"errors":[{"message":"unauthorized"}]}"#).unwrap();
+        assert!(parse_linear_comment(&v).is_err());
+    }
+
+    #[test]
+    fn delegation_comment_with_artifacts() {
+        let artifacts = vec![
+            ("Plan v2".to_string(), "https://x/plan".to_string()),
+            ("Diff summary".to_string(), "3 files changed".to_string()),
+        ];
+        let c = delegation_comment("review-loop", "Fix login flakiness", &artifacts);
+        assert!(c.starts_with("Delegated to Code2 scene `review-loop`"));
+        assert!(c.contains("Session: Fix login flakiness"));
+        assert!(c.contains("\n- Plan v2 — https://x/plan"));
+        assert!(c.contains("\n- Diff summary — 3 files changed"));
+    }
+
+    #[test]
+    fn delegation_comment_without_artifacts_skips_list() {
+        let c = delegation_comment("review-loop", "Fix login flakiness", &[]);
+        assert!(c.contains("Delegated to Code2 scene `review-loop`"));
+        assert!(c.contains("Session: Fix login flakiness"));
+        assert!(!c.contains("Artifacts"));
+        assert!(!c.contains("\n- "));
     }
 }

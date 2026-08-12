@@ -429,6 +429,20 @@ pub enum DocBlock {
     Artifact {
         record_id: i64,
     },
+    /// A referenced issue-tracker item (delegation provenance). The snapshot is embedded at
+    /// insert time — the composer already fetched it — so compiling is offline-safe and an issue
+    /// mention never lands in `unresolved`.
+    Issue {
+        /// `github` | `linear`.
+        source: String,
+        id: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        url: String,
+        #[serde(default)]
+        body: String,
+    },
 }
 
 /// Plain, user-authored representation of a composed document.
@@ -453,6 +467,7 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
             DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
+            DocBlock::Issue { source, id, .. } => format!("[issue:{source}#{id}]"),
         })
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -644,6 +659,25 @@ pub fn compile_full(
                     }
                     None => out.unresolved.push(format!("artifact:{record_id}")),
                 }
+            }
+            DocBlock::Issue {
+                source,
+                id,
+                title,
+                url,
+                body,
+            } => {
+                // The snapshot was embedded at insert time, so this renders offline with the
+                // exact byte shape of `issues::Issue::to_context` — never `unresolved`.
+                let issue = crate::issues::Issue {
+                    id: id.clone(),
+                    title: title.clone(),
+                    state: "open".into(),
+                    url: url.clone(),
+                    body: body.clone(),
+                    source: source.clone(),
+                };
+                parts.push(issue.to_context());
             }
             DocBlock::Text { text } => {
                 let t = text.trim_end();
@@ -1015,6 +1049,45 @@ mod tests {
         let resolve = |_: i64| -> Option<(String, String)> { None };
         let compiled = compile_full(&doc, &lib, None, None, Some(&resolve));
         assert_eq!(compiled.unresolved, vec!["artifact:9".to_string()]);
+    }
+
+    #[test]
+    fn issue_mention_canonical_text() {
+        let doc = vec![
+            DocBlock::Issue {
+                source: "github".into(),
+                id: "42".into(),
+                title: "Fix login".into(),
+                url: "https://github.com/o/r/issues/42".into(),
+                body: String::new(),
+            },
+            DocBlock::Text {
+                text: "Please handle this.".into(),
+            },
+        ];
+        assert_eq!(
+            canonical_doc_text(&doc),
+            "[issue:github#42]\n\nPlease handle this."
+        );
+    }
+
+    #[test]
+    fn issue_mention_compiles_title_url_body_and_stays_resolved() {
+        let lib = sample_library();
+        let doc = vec![DocBlock::Issue {
+            source: "linear".into(),
+            id: "ENG-9".into(),
+            title: "Speed up CI".into(),
+            url: "https://linear.app/t/ENG-9".into(),
+            body: "Cache the toolchain.".into(),
+        }];
+        // Plain `compile` (no resolvers, no cwd) is enough: the snapshot is embedded.
+        let compiled = compile(&doc, &lib);
+        assert!(compiled.prompt.contains("linear #ENG-9"));
+        assert!(compiled.prompt.contains("Speed up CI"));
+        assert!(compiled.prompt.contains("https://linear.app/t/ENG-9"));
+        assert!(compiled.prompt.contains("Cache the toolchain."));
+        assert!(compiled.unresolved.is_empty());
     }
 
     #[test]
