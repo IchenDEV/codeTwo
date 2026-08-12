@@ -172,6 +172,7 @@ import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
+import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
@@ -402,6 +403,8 @@ export default function App() {
   const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
   const permission = permissionQueue[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
+  /** R2 "save as template": the prompt text the TemplateDialog opens over. */
+  const [templateDraft, setTemplateDraft] = useState<string | null>(null);
   const [gitWorkspace, setGitWorkspace] = useState<WorkspaceLoadState<GitWorkspaceData>>({
     cwd: ".",
     loading: true,
@@ -666,6 +669,11 @@ export default function App() {
   const canPinPlan = (
     scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
   ).some((artifact) => artifact.kind === "plan");
+  // ---- R2 template-from-history (docs/design/scenes-impl-frontend.md Item 8) ----
+  // Stable so the memoized TurnCards don't re-render on every App render.
+  const openTemplateDraft = useCallback((promptText: string) => {
+    setTemplateDraft(promptText);
+  }, []);
   const currentModelRef = useRef<string | null>(null);
   currentModelRef.current = currentModel;
   // Model changes invalidate the old provider context immediately. Keep the pending id until the
@@ -2749,6 +2757,15 @@ export default function App() {
     },
     { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
     {
+      id: "template-from-last",
+      label: t("templateFrom.palette"),
+      // No-op with no history: the most recent user turn's prompt is the source.
+      run: () => {
+        const last = [...turns].reverse().find((turn) => turn.prompt.trim().length > 0);
+        if (last) setTemplateDraft(last.prompt);
+      },
+    },
+    {
       id: "rail",
       label: displayedRailCollapsed ? "Expand the sidebar" : "Collapse the sidebar",
       run: toggleDisplayedRail,
@@ -3165,6 +3182,7 @@ export default function App() {
                 onOpenPlanAsDocument={openPlanAsDocument}
                 onPinPlanArtifact={pinPlanArtifact}
                 canPinPlan={canPinPlan}
+                onSaveTemplate={openTemplateDraft}
               />
             )}
 
@@ -3623,6 +3641,18 @@ export default function App() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {templateDraft !== null && (
+        <TemplateDialog
+          source={templateDraft}
+          onClose={() => setTemplateDraft(null)}
+          onSaved={() => {
+            setTemplateDraft(null);
+            void refreshSkills();
+            toast(t("templateFrom.saved"), "success");
+          }}
+        />
       )}
 
       {permission && (

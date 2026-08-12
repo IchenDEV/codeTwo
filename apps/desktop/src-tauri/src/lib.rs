@@ -419,6 +419,20 @@ fn save_skill(state: State<'_, AppState>, skill: Skill) -> Result<(), String> {
     Ok(())
 }
 
+/// R2 "save as template": heuristic slot proposal over a past prompt. Pure core call — no model
+/// in v1; the frontend degrades to a manual editor identically when this command is missing.
+#[derive(Serialize)]
+struct ProposedMacro {
+    template: String,
+    slots: Vec<SlotDef>,
+}
+
+#[tauri::command]
+fn propose_macro_slots(text: String) -> ProposedMacro {
+    let (template, slots) = codetwo_core::skill::propose_macro_slots(&text);
+    ProposedMacro { template, slots }
+}
+
 #[tauri::command]
 fn delete_skill(state: State<'_, AppState>, id: String) -> Result<(), String> {
     SkillLibrary::delete_from_dir(&state.skills_dir, &id).map_err(|e| e.to_string())?;
@@ -3053,7 +3067,8 @@ pub fn run() {
             scene_artifact_content,
             record_scene_artifact,
             pin_scene_artifact,
-            comment_issue
+            comment_issue,
+            propose_macro_slots
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

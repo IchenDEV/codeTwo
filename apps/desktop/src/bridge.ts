@@ -418,7 +418,8 @@ export interface TranscriptPage {
 
 export type SkillPayload =
   | { kind: "fragment"; text: string }
-  | { kind: "macro"; template: string; slots: string[] };
+  // Core's untagged slot deserializer accepts bare legacy ids and full slot objects (R2).
+  | { kind: "macro"; template: string; slots: (string | MacroSlotInfo)[] };
 
 export interface Skill {
   id: string;
@@ -2331,4 +2332,23 @@ export async function commentIssue(
   return invoke<string>("comment_issue", { cwd, source, id, body, token: token ?? null }).catch(
     () => null,
   );
+}
+
+// ---- template-from-history (R2) --------------------------------------------------------------
+
+import type { SceneSlotDef } from "./session/scene";
+
+/** Heuristic `{{slot-N}}` proposal over a past prompt, as `propose_macro_slots` reports it. */
+export interface ProposedMacro {
+  template: string;
+  slots: SceneSlotDef[];
+}
+
+/**
+ * Null on browser preview or an older core (missing command) — the template dialog then opens as
+ * a plain manual editor over the raw prompt instead of breaking.
+ */
+export async function proposeMacroSlots(text: string): Promise<ProposedMacro | null> {
+  if (!inTauri) return null;
+  return invoke<ProposedMacro>("propose_macro_slots", { text }).catch(() => null);
 }

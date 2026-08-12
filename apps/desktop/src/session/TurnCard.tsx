@@ -11,6 +11,7 @@ import {
   FolderOpen,
   Loader2,
   ListTodo,
+  MoreHorizontal,
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -35,6 +36,12 @@ import {
 } from "../bridge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -230,6 +237,7 @@ export const TurnCard = memo(function TurnCard({
   onOpenPlanAsDocument,
   onPinPlanArtifact,
   canPinPlan = false,
+  onSaveTemplate,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
@@ -239,6 +247,8 @@ export const TurnCard = memo(function TurnCard({
   onPinPlanArtifact?: (markdown: string) => void;
   /** True when the active scene declares a `plan`-kind artifact. */
   canPinPlan?: boolean;
+  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+  onSaveTemplate?: (promptText: string) => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -305,7 +315,27 @@ export const TurnCard = memo(function TurnCard({
     // conversation advancing rather than the list redrawing.
     <article aria-busy={running} className="animate-rise-in py-5">
       {/* prompt */}
-      <div className="flex justify-end">
+      <div className="group/prompt flex items-start justify-end gap-1">
+        {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
+            button so future turn actions slot in beside "Save as template…". */}
+        {onSaveTemplate && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t("templateFrom.menu")}
+                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+              >
+                <MoreHorizontal className="size-3.5" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onSaveTemplate(history.visiblePrompt)}>
+                {t("templateFrom.saveAs")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
           <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
           {promptIsLong && (
