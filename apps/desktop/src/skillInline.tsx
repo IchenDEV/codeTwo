@@ -355,6 +355,28 @@ export const SessionMentionInline = createReactInlineContentSpec(
   },
 );
 
+// An inline mention of a stored scene-artifact version (R4). The document keeps only the record
+// id; docToBlocks emits the `{{artifact:<id>}}` interpolation token, which run_macro-style
+// interpolation (and core's `compile_full` for richer flows) resolves into the stored content.
+export const ArtifactInline = createReactInlineContentSpec(
+  {
+    type: "artifactMention",
+    propSchema: {
+      artifactId: { default: "" },
+      title: { default: "" },
+      kind: { default: "" },
+    },
+    content: "none",
+  } as const,
+  {
+    render: (props) => (
+      <span className="chat-chip" contentEditable={false}>
+        ⌘ {props.inlineContent.props.title || props.inlineContent.props.artifactId}
+      </span>
+    ),
+  },
+);
+
 // A browser annotation as a first-class document block, not a paragraph of markdown. The raw
 // context text (`**Browser context** — …`) is what the *agent* needs; a person composing a prompt
 // around three of them needs a card: where, which element, what was said, what was dialled in.
@@ -731,6 +753,7 @@ export const schema = BlockNoteSchema.create({
     skill: SkillInline,
     fileMention: FileInline,
     sessionMention: SessionMentionInline,
+    artifactMention: ArtifactInline,
   },
 });
 
@@ -799,6 +822,10 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           flush();
           const props = inline.props as { sessionId: string };
           out.push({ type: "session", session_id: props.sessionId });
+        } else if (inline.type === "artifactMention") {
+          flush();
+          const props = inline.props as { artifactId: string };
+          out.push({ type: "text", text: "{{artifact:" + props.artifactId + "}}" });
         } else if (inline.type === "link") {
           const parts = (inline.content as Array<{ text?: string }> | undefined) ?? [];
           buf += parts.map((c) => c.text ?? "").join("");

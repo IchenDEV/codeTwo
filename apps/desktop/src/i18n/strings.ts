@@ -593,6 +593,16 @@ export const en = {
   "statusline.cost": "Cost {cost}",
   "statusline.burn": "{rate} tok/min",
   "dockFollow.auto": "Following the agent — it is working on this surface",
+  "planDoc.open": "Open as document",
+  "planDoc.pin": "Pin as artifact",
+  "planDoc.title": "Open plan as document",
+  "planDoc.confirm":
+    "The composer already has content. Replace it with the plan, or append the plan below it?",
+  "planDoc.replace": "Replace",
+  "planDoc.append": "Append",
+  "planDoc.cancel": "Cancel",
+  "planDoc.pinned": "Plan pinned as a scene artifact",
+  "planDoc.pinFailed": "Could not pin the plan",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1157,6 +1167,15 @@ export const zhCN: Record<StringKey, string> = {
   "statusline.cost": "费用 {cost}",
   "statusline.burn": "{rate} token/分钟",
   "dockFollow.auto": "正在跟随智能体——它正在此界面上工作",
+  "planDoc.open": "以文档打开",
+  "planDoc.pin": "钉为工件",
+  "planDoc.title": "将计划打开为文档",
+  "planDoc.confirm": "编辑器中已有内容。用计划替换现有内容，还是追加到末尾？",
+  "planDoc.replace": "替换",
+  "planDoc.append": "追加",
+  "planDoc.cancel": "取消",
+  "planDoc.pinned": "计划已钉为场景工件",
+  "planDoc.pinFailed": "无法钉住计划",
 };
 
 export const LOCALES = {

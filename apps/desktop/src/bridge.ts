@@ -2260,3 +2260,55 @@ export async function usageBySession(session: string): Promise<SessionUsage | nu
   if (!inTauri) return null;
   return invoke<SessionUsage | null>("usage_by_session", { session }).catch(() => null);
 }
+
+// ---- scene artifacts (R4) -------------------------------------------------------------------
+
+/** One captured version of one scene artifact, as `list_scene_artifacts` reports it. */
+export interface SceneArtifactRecord {
+  id: number;
+  scene_ref: string;
+  artifact_key: string;
+  kind: string;
+  title: string;
+  session_id: string;
+  pipeline_instance_id: string | null;
+  stage_id: string | null;
+  artifact: ArtifactRef;
+  version: number;
+  pinned: boolean;
+  created_at: number;
+}
+
+/// Same degradation contract as the scene calls above: against an older core the commands are
+/// missing and every call quietly reports "no artifacts" instead of breaking the surface.
+export async function listSceneArtifacts(session: string): Promise<SceneArtifactRecord[]> {
+  if (!inTauri) return [];
+  return invoke<SceneArtifactRecord[]>("list_scene_artifacts", { session }).catch(() => []);
+}
+
+export async function sceneArtifactContent(recordId: number): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("scene_artifact_content", { recordId }).catch(() => null);
+}
+
+export async function recordSceneArtifact(
+  session: string,
+  artifactKey: string,
+  content: string,
+): Promise<SceneArtifactRecord | null> {
+  if (!inTauri) return null;
+  return invoke<SceneArtifactRecord>("record_scene_artifact", {
+    session,
+    artifactKey,
+    content,
+  }).catch(() => null);
+}
+
+export async function pinSceneArtifact(
+  session: string,
+  artifactKey: string,
+  version: number | null,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("pin_scene_artifact", { session, artifactKey, version }).catch(() => {});
+}

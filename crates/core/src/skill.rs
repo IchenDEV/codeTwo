@@ -425,6 +425,10 @@ pub enum DocBlock {
     Session {
         session_id: String,
     },
+    /// A stored scene-artifact version; its content is inlined as labeled context at compile time.
+    Artifact {
+        record_id: i64,
+    },
 }
 
 /// Plain, user-authored representation of a composed document.
@@ -448,6 +452,7 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
             DocBlock::Session { session_id } => {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
+            DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
         })
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -479,6 +484,9 @@ pub struct CompiledPrompt {
     pub sessions: Vec<String>,
     /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
+    /// Scene-artifact record ids inlined via artifact mentions.
+    #[serde(default)]
+    pub artifacts: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -557,6 +565,20 @@ pub fn compile_with_sessions(
     cwd: Option<&std::path::Path>,
     resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
 ) -> CompiledPrompt {
+    compile_full(doc, library, cwd, resolve_session, None)
+}
+
+/// Like [`compile_with_sessions`], but also able to resolve scene-artifact mentions:
+/// `resolve_artifact` maps a record id to a `(label, content)` pair (`None` for an unknown id),
+/// which is inlined as a labeled context block. The compiler stays store-agnostic — callers with
+/// a [`crate::scene_artifact::SceneArtifactStore`] pass a closure over it.
+pub fn compile_full(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
+) -> CompiledPrompt {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
 
@@ -612,6 +634,15 @@ pub fn compile_with_sessions(
                         parts.push(ctx);
                     }
                     _ => out.unresolved.push(format!("session:{session_id}")),
+                }
+            }
+            DocBlock::Artifact { record_id } => {
+                match resolve_artifact.and_then(|resolve| resolve(*record_id)) {
+                    Some((label, content)) => {
+                        out.artifacts.push(*record_id);
+                        parts.push(format!("**Artifact: {label}**\n\n{}", content.trim_end()));
+                    }
+                    None => out.unresolved.push(format!("artifact:{record_id}")),
                 }
             }
             DocBlock::Text { text } => {
@@ -949,6 +980,50 @@ mod tests {
         let compiled = compile(&doc, &lib);
         assert!(compiled.sessions.is_empty());
         assert_eq!(compiled.unresolved, vec!["session:ghost".to_string()]);
+    }
+
+    #[test]
+    fn artifact_mention_inlines_resolved_content_as_labeled_block() {
+        let lib = sample_library();
+        let doc = vec![
+            DocBlock::Artifact { record_id: 7 },
+            DocBlock::Text {
+                text: "Execute this plan.".into(),
+            },
+        ];
+        let resolve = |id: i64| -> Option<(String, String)> {
+            (id == 7).then(|| ("Plan v2".to_string(), "- [ ] step one\n".to_string()))
+        };
+        let compiled = compile_full(&doc, &lib, None, None, Some(&resolve));
+        assert_eq!(compiled.artifacts, vec![7]);
+        assert!(compiled.prompt.contains("**Artifact: Plan v2**"));
+        assert!(compiled.prompt.contains("- [ ] step one"));
+        assert!(compiled.prompt.contains("Execute this plan."));
+        assert!(compiled.unresolved.is_empty());
+        assert_eq!(canonical_doc_text(&doc), "[artifact:7]\n\nExecute this plan.");
+    }
+
+    #[test]
+    fn artifact_mention_without_resolver_is_unresolved() {
+        let lib = sample_library();
+        let doc = vec![DocBlock::Artifact { record_id: 9 }];
+        // Existing entry points delegate with no artifact resolver.
+        let compiled = compile(&doc, &lib);
+        assert!(compiled.artifacts.is_empty());
+        assert_eq!(compiled.unresolved, vec!["artifact:9".to_string()]);
+
+        let resolve = |_: i64| -> Option<(String, String)> { None };
+        let compiled = compile_full(&doc, &lib, None, None, Some(&resolve));
+        assert_eq!(compiled.unresolved, vec!["artifact:9".to_string()]);
+    }
+
+    #[test]
+    fn compiled_prompt_without_artifacts_field_still_deserializes() {
+        let stored: CompiledPrompt = serde_json::from_str(
+            r#"{"prompt":"p","mcp_servers":[],"agent_skills":[],"files":[],"images":[],"unresolved":[]}"#,
+        )
+        .unwrap();
+        assert!(stored.artifacts.is_empty());
     }
 
     #[test]

@@ -107,6 +107,23 @@ CREATE TABLE IF NOT EXISTS projects (
   added_at       INTEGER NOT NULL DEFAULT 0,
   default_worktree_mode TEXT
 );
+CREATE TABLE IF NOT EXISTS scene_artifacts (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  scene_ref             TEXT NOT NULL,
+  artifact_key          TEXT NOT NULL,
+  kind                  TEXT NOT NULL,
+  title                 TEXT NOT NULL,
+  session_id            TEXT NOT NULL,
+  pipeline_instance_id  TEXT,
+  stage_id              TEXT,
+  artifact_id           TEXT NOT NULL,
+  version               INTEGER NOT NULL,
+  pinned                INTEGER NOT NULL DEFAULT 0,
+  created_at            INTEGER NOT NULL,
+  FOREIGN KEY (artifact_id) REFERENCES artifacts(id)
+);
+CREATE INDEX IF NOT EXISTS scene_artifacts_session  ON scene_artifacts(session_id, artifact_key, version);
+CREATE INDEX IF NOT EXISTS scene_artifacts_pipeline ON scene_artifacts(pipeline_instance_id, stage_id, artifact_key);
 ";
 
 /// A workspace the user works in. Sessions belong to one by their source `project_path`.

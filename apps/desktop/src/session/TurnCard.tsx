@@ -153,6 +153,21 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
+/**
+ * Plan entries → checklist markdown (R4 plan-as-document). Transcript plan entries are plain
+ * strings — the engine keeps only the entry content — so an entry already carrying a checkbox
+ * marker keeps its state and everything else starts unchecked.
+ */
+export function planChecklistMarkdown(entries: readonly string[]): string {
+  return entries
+    .map((entry) => {
+      const marked = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/.exec(entry);
+      if (marked) return `- [${marked[1] === " " ? " " : "x"}] ${marked[2]}`;
+      return `- [ ] ${entry}`;
+    })
+    .join("\n");
+}
+
 function canvasKey(canvas: CanvasHistoryMarker): string {
   return `${canvas.id}:${canvas.revision}`;
 }
@@ -212,9 +227,18 @@ function Detail({
 export const TurnCard = memo(function TurnCard({
   turn,
   canvasSnapshotLoader = canvasGetSnapshot,
+  onOpenPlanAsDocument,
+  onPinPlanArtifact,
+  canPinPlan = false,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
+  /** Opens the plan in the composer document (R4). Absent → the affordance is hidden. */
+  onOpenPlanAsDocument?: (entries: string[]) => void;
+  /** Pins the plan as a scene artifact. Only offered while `canPinPlan` is set. */
+  onPinPlanArtifact?: (markdown: string) => void;
+  /** True when the active scene declares a `plan`-kind artifact. */
+  canPinPlan?: boolean;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -467,6 +491,28 @@ export const TurnCard = memo(function TurnCard({
                 <li key={i}>{p}</li>
               ))}
             </ol>
+            {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {onOpenPlanAsDocument && (
+                  <button
+                    type="button"
+                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                    onClick={() => onOpenPlanAsDocument([...turn.plan])}
+                  >
+                    {t("planDoc.open")}
+                  </button>
+                )}
+                {canPinPlan && onPinPlanArtifact && (
+                  <button
+                    type="button"
+                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                    onClick={() => onPinPlanArtifact(planChecklistMarkdown(turn.plan))}
+                  >
+                    {t("planDoc.pin")}
+                  </button>
+                )}
+              </div>
+            )}
           </Detail>
 
           <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>

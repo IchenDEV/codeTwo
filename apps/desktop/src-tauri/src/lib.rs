@@ -29,7 +29,11 @@ use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
 use codetwo_core::provider::{
     registry_with_codex_runtime, Provider, ProviderCapability, ProviderId,
 };
-use codetwo_core::scene::{self, ApplyStrength, Pipeline, Scene, SceneLibrary, SceneSource};
+use codetwo_core::scene::{
+    self, ApplyStrength, Pipeline, Scene, SceneArtifactKind, SceneArtifactSpec, SceneLibrary,
+    SceneSource,
+};
+use codetwo_core::scene_artifact::{SceneArtifactRecord, SceneArtifactStore};
 use codetwo_core::skill::{
     builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef,
 };
@@ -94,6 +98,8 @@ struct AppState {
     /// Resolved scene/pipeline library (project > user > plugin > builtin). Reloaded alongside
     /// skills whenever the workspace changes.
     scenes: Mutex<Arc<SceneLibrary>>,
+    /// Versioned scene-artifact captures over the shared content-addressed blob layer (R4).
+    scene_artifacts: SceneArtifactStore,
     /// Last workspace the frontend listed skills for; harness skill discovery scans its
     /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
     skills_cwd: Mutex<Option<PathBuf>>,
@@ -763,6 +769,82 @@ fn get_session_scene(
         reference,
         customized,
     }))
+}
+
+// ---- scene artifacts (R4) -------------------------------------------------------------------
+
+#[tauri::command]
+fn list_scene_artifacts(
+    state: State<'_, AppState>,
+    session: String,
+) -> Result<Vec<SceneArtifactRecord>, String> {
+    state
+        .scene_artifacts
+        .list_for_session(&session)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn scene_artifact_content(state: State<'_, AppState>, record_id: i64) -> Result<String, String> {
+    state
+        .scene_artifacts
+        .content(record_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Manual capture (the guaranteed path — "pin as artifact" / R4 plan save). The scene reference
+/// and spec come from the session's active scene; a key the scene does not declare degrades to
+/// kind `custom` with the key as its title rather than failing the save.
+#[tauri::command]
+fn record_scene_artifact(
+    state: State<'_, AppState>,
+    session: String,
+    artifact_key: String,
+    content: String,
+) -> Result<SceneArtifactRecord, String> {
+    let scene_ref = state
+        .store
+        .session_scene(&session)
+        .map_err(|e| e.to_string())?
+        .map(|(reference, _)| reference)
+        .unwrap_or_default();
+    let spec = {
+        let lib = state.scenes.lock().unwrap().clone();
+        lib.resolve(&scene_ref)
+            .and_then(|entry| {
+                entry
+                    .scene
+                    .artifacts
+                    .iter()
+                    .find(|artifact| artifact.id == artifact_key)
+                    .cloned()
+            })
+            .unwrap_or_else(|| SceneArtifactSpec {
+                id: artifact_key.clone(),
+                title: artifact_key.clone(),
+                kind: SceneArtifactKind::Custom,
+                required: false,
+                template: None,
+                description: None,
+            })
+    };
+    state
+        .scene_artifacts
+        .record(&scene_ref, &spec, &session, None, &content)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pin_scene_artifact(
+    state: State<'_, AppState>,
+    session: String,
+    artifact_key: String,
+    version: Option<i64>,
+) -> Result<(), String> {
+    state
+        .scene_artifacts
+        .pin(&session, &artifact_key, version)
+        .map_err(|e| e.to_string())
 }
 
 // ---- provider-neutral memory ----------------------------------------------------------------
@@ -2696,6 +2778,10 @@ pub fn run() {
             if let Err(error) = store.purge_expired_canvases(now_millis()) {
                 eprintln!("canvas tombstone cleanup failed: {error}");
             }
+            let scene_artifacts = SceneArtifactStore::new(
+                store.clone(),
+                ArtifactStore::from_store(store.clone()).ok_or("artifact storage unavailable")?,
+            );
 
             let skills_dir = data_dir.join("skills");
             let plugins_dir = data_dir.join("plugins");
@@ -2773,6 +2859,7 @@ pub fn run() {
                 skills_dir,
                 plugins_dir,
                 scenes: Mutex::new(Arc::new(SceneLibrary::builtin())),
+                scene_artifacts,
                 skills_cwd: Mutex::new(None),
                 keymap: Mutex::new(keymap),
                 keymap_path,
@@ -2933,7 +3020,11 @@ pub fn run() {
             scene_session_plan,
             set_session_scene,
             get_session_scene,
-            session_diff_stat
+            session_diff_stat,
+            list_scene_artifacts,
+            scene_artifact_content,
+            record_scene_artifact,
+            pin_scene_artifact
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")
