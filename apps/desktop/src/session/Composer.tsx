@@ -30,7 +30,8 @@ import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ConfigOptionInfo, ModelChoice } from "../bridge";
 import type { ContextWindow } from "./contextWindow";
-import { Statusline, type StatuslineUsage } from "./Statusline";
+// Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
+import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

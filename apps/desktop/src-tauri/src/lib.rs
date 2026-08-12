@@ -5,6 +5,7 @@
 //! (`codetwo_core::term`) keyed by a stable id; the frontend attaches to one and streams it over
 //! `pty-output`.
 
+mod automation;
 mod browser;
 mod browser_mcp;
 mod lsp;
@@ -3562,6 +3563,22 @@ pub fn run() {
             });
             tauri::async_runtime::spawn(scene_runtime.clone().schedule_loop());
 
+            // User automations use the same event bus and engine as interactive sessions. Any
+            // in-flight receipt from a previous process is terminal: providers cannot survive the
+            // desktop host, so showing it as still running would be dishonest.
+            if let Err(error) = store.interrupt_active_automation_runs(now_millis()) {
+                eprintln!("automation startup reconciliation failed: {error}");
+            }
+            let automation_runtime = Arc::new(automation::AutomationRuntime::new(
+                engine.clone(),
+                store.clone(),
+                events.clone(),
+                app.handle().clone(),
+            ));
+            tauri::async_runtime::spawn(automation_runtime.clone().schedule_loop());
+            tauri::async_runtime::spawn(automation_runtime.clone().event_loop());
+            app.manage(automation::AutomationState(automation_runtime));
+
             let keymap_path = data_dir.join("keymap.json");
             let keymap = Keymap::load(&keymap_path);
 
@@ -3760,7 +3777,14 @@ pub fn run() {
             set_issue_delegation_comment,
             list_issue_delegations,
             get_project_scheduling,
-            export_scene_skill_md
+            export_scene_skill_md,
+            automation::list_automations,
+            automation::create_automation,
+            automation::update_automation,
+            automation::set_automation_enabled,
+            automation::delete_automation,
+            automation::list_automation_runs,
+            automation::run_automation_now
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

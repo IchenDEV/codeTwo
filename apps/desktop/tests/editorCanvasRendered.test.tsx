@@ -49,7 +49,6 @@ const realDocToBlocks = realSkillInline.docToBlocks;
 const mockedCanvasRuntimeContext = React.createContext<any>(null);
 const realFileMenu = await import("../src/editor/FileMenu");
 const realTheme = await import("../src/theme");
-const realI18n = await import("../src/i18n");
 const realBridge = await import("../src/bridge");
 
 mock.module("@blocknote/core", () => ({
@@ -124,7 +123,6 @@ mock.module("../src/skillInline", () => ({
 }));
 mock.module("../src/editor/FileMenu", () => ({ ...realFileMenu, FileMenu: () => null }));
 mock.module("../src/theme", () => ({ ...realTheme, useColorScheme: () => editorScheme }));
-mock.module("../src/i18n", () => ({ ...realI18n, useT: () => (key: string) => key }));
 mock.module("../src/bridge", () => ({
   ...realBridge,
   listArchivedSessions: async () => [],
