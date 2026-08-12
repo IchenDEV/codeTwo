@@ -603,6 +603,12 @@ export const en = {
   "planDoc.cancel": "Cancel",
   "planDoc.pinned": "Plan pinned as a scene artifact",
   "planDoc.pinFailed": "Could not pin the plan",
+  "issueDeleg.delegate": "Delegate…",
+  "issueDeleg.noScenes": "No scenes available",
+  "issueDeleg.pill": "delegated to {scene}",
+  "issueDeleg.remove": "Remove",
+  "issueDeleg.toast": "Delegated #{id} → {scene} (you stay assignee)",
+  "issueDeleg.commentBody": "Delegated to scene \"{scene}\" via Code2 — assignee unchanged.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1176,6 +1182,12 @@ export const zhCN: Record<StringKey, string> = {
   "planDoc.cancel": "取消",
   "planDoc.pinned": "计划已钉为场景工件",
   "planDoc.pinFailed": "无法钉住计划",
+  "issueDeleg.delegate": "委派…",
+  "issueDeleg.noScenes": "暂无可用场景",
+  "issueDeleg.pill": "已委派给 {scene}",
+  "issueDeleg.remove": "移除",
+  "issueDeleg.toast": "已委派 #{id} → {scene}（你仍是负责人）",
+  "issueDeleg.commentBody": "已通过 Code2 委派给场景「{scene}」——负责人不变。",
 };
 
 export const LOCALES = {

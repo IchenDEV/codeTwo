@@ -257,7 +257,10 @@ export type DocBlock =
   | { type: "file"; path: string }
   | { type: "image"; path: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
-  | { type: "session"; session_id: string };
+  | { type: "session"; session_id: string }
+  // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
+  // `DocBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
+  | { type: "issue"; source: string; id: string; title: string; url: string; body: string };
 
 /// One-line description of a doc block, used for summaries and browser-mode previews.
 export function describeBlock(b: DocBlock): string {
@@ -274,6 +277,8 @@ export function describeBlock(b: DocBlock): string {
       return `[canvas:${b.id}@${b.frozen_revision}]`;
     case "session":
       return `[chat:${b.session_id.slice(0, 8)}]`;
+    case "issue":
+      return `[issue:${b.source}#${b.id}]`;
   }
 }
 
