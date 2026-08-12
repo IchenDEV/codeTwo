@@ -1471,6 +1471,34 @@ fn issue_context(issue: Issue) -> String {
     issue.to_context()
 }
 
+/// Post a delegation comment on an issue; returns the comment URL. `github` uses the
+/// authenticated `gh` CLI in `cwd`; `linear` needs the caller-supplied token (same source as
+/// `list_linear_issues` — the frontend holds it) and resolves the human identifier first.
+#[tauri::command]
+async fn comment_issue(
+    cwd: String,
+    source: String,
+    id: String,
+    body: String,
+    token: Option<String>,
+) -> Result<String, String> {
+    match source.as_str() {
+        "github" => issues::comment_github(std::path::Path::new(&cwd), &id, &body)
+            .await
+            .map_err(|e| e.to_string()),
+        "linear" => {
+            let token = token.ok_or_else(|| "Linear token required".to_string())?;
+            let issue_id = issues::resolve_linear_issue_id(&token, &id)
+                .await
+                .map_err(|e| e.to_string())?;
+            issues::comment_linear(&token, &issue_id, &body)
+                .await
+                .map_err(|e| e.to_string())
+        }
+        other => Err(format!("unknown issue source: {other}")),
+    }
+}
+
 // ---- Canvas Input V1 -------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
@@ -3024,7 +3052,8 @@ pub fn run() {
             list_scene_artifacts,
             scene_artifact_content,
             record_scene_artifact,
-            pin_scene_artifact
+            pin_scene_artifact,
+            comment_issue
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

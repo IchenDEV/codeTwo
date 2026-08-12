@@ -2312,3 +2312,23 @@ export async function pinSceneArtifact(
   if (!inTauri) return;
   await invoke("pin_scene_artifact", { session, artifactKey, version }).catch(() => {});
 }
+
+// ---- issue write path (R12) -----------------------------------------------------------------
+
+/**
+ * Post a delegation comment on a GitHub ("github") or Linear ("linear") issue; resolves to the
+ * comment URL. Linear needs the caller-held API token (same source as `listLinearIssues`).
+ * Null when unavailable: browser preview, older core, or the comment failed to post.
+ */
+export async function commentIssue(
+  cwd: string,
+  source: string,
+  id: string,
+  body: string,
+  token?: string,
+): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("comment_issue", { cwd, source, id, body, token: token ?? null }).catch(
+    () => null,
+  );
+}
