@@ -651,6 +651,18 @@ export const en = {
   "sceneBanner.start": "Start {scene}",
   "sceneBanner.carrying": "Carrying: {artifacts}",
   "sceneBanner.dismiss": "Dismiss",
+  "stage.track": "Pipeline stages",
+  "stage.state.done": "Done",
+  "stage.state.current": "Current",
+  "stage.state.pending": "Pending",
+  "stage.loop": "×{count}",
+  "stage.confirmGate": "Entering this stage asks first",
+  "stage.artifacts": "Artifacts",
+  "stage.sessions": "Sessions",
+  "stage.empty": "Nothing yet",
+  "stage.startPipeline": "Start pipeline: {pipeline}",
+  "stage.started": "Pipeline started: {pipeline}",
+  "stage.advanced": "Stage: {stage}",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1271,6 +1283,18 @@ export const zhCN: Record<StringKey, string> = {
   "sceneBanner.start": "进入{scene}",
   "sceneBanner.carrying": "携带：{artifacts}",
   "sceneBanner.dismiss": "关闭",
+  "stage.track": "流水线阶段",
+  "stage.state.done": "已完成",
+  "stage.state.current": "进行中",
+  "stage.state.pending": "待开始",
+  "stage.loop": "×{count}",
+  "stage.confirmGate": "进入该阶段前需确认",
+  "stage.artifacts": "工件",
+  "stage.sessions": "会话",
+  "stage.empty": "暂无内容",
+  "stage.startPipeline": "启动流水线：{pipeline}",
+  "stage.started": "流水线已启动：{pipeline}",
+  "stage.advanced": "阶段：{stage}",
 };
 
 export const LOCALES = {

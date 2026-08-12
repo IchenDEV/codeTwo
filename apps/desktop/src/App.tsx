@@ -118,14 +118,21 @@ import {
   type WorktreeBaselineKind,
   type WorktreeBaselineOption,
   type WorkspaceContentMatch,
+  type PipelineInfo,
+  type PipelineInstanceDetail,
+  advancePipeline,
   applySceneToSession,
   dismissSceneBanner,
+  getPipelineInstance,
   getSessionScene,
+  listPipelines,
   listScenes,
   recordSceneArtifact,
   sceneSessionPlan,
+  sessionPipeline,
   setModel as setSessionModel,
   setSessionScene,
+  startPipeline,
   structureBrief,
   usageBySession,
 } from "./bridge";
@@ -163,6 +170,7 @@ import {
 } from "./session/scene";
 import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
 import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
+import { StageTrack } from "./session/StageTrack";
 import { Composer } from "./session/Composer";
 import {
   activeContextWindow,
@@ -452,12 +460,18 @@ export default function App() {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [sceneEscalation, setSceneEscalation] = useState<{
     reference: string;
-    kind: "soft" | "restart";
+    kind: "soft" | "restart" | "pipeline";
     from: SessionMode;
     to: SessionMode;
+    /** Set for kind "pipeline": confirming re-calls advance_pipeline with confirm=true. */
+    pipeline?: { instanceId: string; toStage: string };
   } | null>(null);
   /** Scene completion/suggestion banner above the composer (R8); latest state key wins. */
   const [sceneBanner, setSceneBanner] = useState<SceneBannerState | null>(null);
+  // ---- R9 pipeline instances (docs/scenes.md §Pipelines) ----
+  const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
+  /** The active session's instance projection; the stage track renders only while this is set. */
+  const [pipelineDetail, setPipelineDetail] = useState<PipelineInstanceDetail | null>(null);
   /** Scene to bind to the next created session (full-apply handshake). */
   const pendingSceneRef = useRef<string | null>(null);
   /** Per-session scene memory so switching sessions restores each one's scene. */
@@ -2157,7 +2171,34 @@ export default function App() {
       scenesRef.current = next;
       setScenes(next);
     });
+    // Pipelines resolve from the same library; the palette's "start pipeline" commands feed here.
+    void listPipelines().then(setPipelines);
   }, [cwd]);
+
+  // The stage track follows the active session's pipeline binding (R9). Refetched at turn
+  // boundaries and on banner changes — auto advances, loop re-entries, and artifact captures all
+  // land there. Degrades to hidden (null) on an older core or an unbound session.
+  useEffect(() => {
+    const session = activeSession;
+    if (!session) {
+      setPipelineDetail(null);
+      return;
+    }
+    let cancelled = false;
+    void sessionPipeline(session).then((binding) => {
+      if (cancelled) return;
+      if (!binding) {
+        setPipelineDetail(null);
+        return;
+      }
+      void getPipelineInstance(binding.instance_id).then((detail) => {
+        if (!cancelled) setPipelineDetail(detail);
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession, turns.length, sceneBanner]);
 
   const saveDraft = useCallback(async () => {
     if (!skillDraft || skillDraft.name.trim().length === 0) return;
@@ -2659,6 +2700,80 @@ export default function App() {
     [applySceneChoice, createSession],
   );
 
+  /** The pinned scene reference a pipeline stage's bare scene name resolves to, when installed. */
+  const resolveStageScene = useCallback((target: string) => {
+    return (
+      scenesRef.current.find((s) => s.reference === target || s.name === target)?.reference ??
+      target
+    );
+  }, []);
+
+  /** Refresh the local scene chip state after the core soft-applied a stage's scene (R9). */
+  const syncSessionScene = useCallback(async (session: string) => {
+    const state = await getSessionScene(session);
+    if (!state) return;
+    sceneBySessionRef.current.set(session, state.reference);
+    setActiveSceneName(state.reference);
+    setScenePendingFields([]);
+  }, []);
+
+  /**
+   * Advance a pipeline instance for the active session (R9). The command re-checks escalation
+   * (refuse-and-report); a report raises the shared SceneEscalationDialog, and confirming
+   * re-calls with confirm=true.
+   */
+  const advancePipelineChoice = useCallback(
+    async (instanceId: string, toStage: string, confirmed = false) => {
+      const session = activeSessionRef.current;
+      const outcome = await advancePipeline(instanceId, toStage, session, confirmed);
+      if (!outcome) return;
+      const escalation = outcome.escalation ?? outcome.applied_scene?.escalation ?? null;
+      if (escalation) {
+        const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
+        setSceneEscalation({
+          reference: resolveStageScene(stage?.scene_ref ?? toStage),
+          kind: "pipeline",
+          from: escalation.from as SessionMode,
+          to: escalation.to as SessionMode,
+          pipeline: { instanceId, toStage },
+        });
+        return;
+      }
+      if (session) await syncSessionScene(session);
+      const detail = await getPipelineInstance(instanceId);
+      setPipelineDetail(detail);
+      const stage = detail?.stages.find((s) => s.id === toStage);
+      toast(t("stage.advanced", { stage: stage?.title ?? toStage }));
+    },
+    [pipelineDetail, resolveStageScene, syncSessionScene, toast, t],
+  );
+
+  /** Start a pipeline in the current project, binding the active session to its entry stage. */
+  const startPipelineChoice = useCallback(
+    async (reference: string) => {
+      const session = activeSessionRef.current;
+      const outcome = await startPipeline(reference, cwd || ".", session);
+      if (!outcome) return;
+      setPipelineDetail(outcome.detail);
+      if (session) await syncSessionScene(session);
+      // An entry scene looser than the session's posture applied nothing (refuse-and-report);
+      // the binding landed, so confirming just soft-applies the entry scene.
+      const escalation = outcome.applied_scene?.escalation;
+      const entry = outcome.detail.stages.find((s) => s.state === "current");
+      if (escalation && entry) {
+        setSceneEscalation({
+          reference: resolveStageScene(entry.scene_ref),
+          kind: "soft",
+          from: escalation.from as SessionMode,
+          to: escalation.to as SessionMode,
+        });
+      }
+      const title = pipelines.find((p) => p.reference === reference)?.title ?? reference;
+      toast(t("stage.started", { pipeline: title }));
+    },
+    [cwd, pipelines, resolveStageScene, syncSessionScene, toast, t],
+  );
+
   /**
    * Delegate an issue into a scene (R12): a fresh draft fully applied to that scene, opened with
    * the issue as a provenance-carrying block. Mirrors `restartInScene` rather than reusing it —
@@ -2880,6 +2995,11 @@ export default function App() {
       id: `scene-${s.reference}`,
       label: `${t("scene.chip")}: ${s.title}`,
       run: () => applySceneChoice(s.reference),
+    })),
+    ...pipelines.map((p) => ({
+      id: `pipeline-${p.reference}`,
+      label: t("stage.startPipeline", { pipeline: p.title }),
+      run: () => void startPipelineChoice(p.reference),
     })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
@@ -3262,6 +3382,15 @@ export default function App() {
             />
           </header>
 
+          {/* Horizontal stage track (R9): rendered above the transcript only while the active
+              session is bound to a pipeline instance. */}
+          {pipelineDetail && activeSession && (
+            <StageTrack
+              detail={pipelineDetail}
+              onSelectSession={(id) => void selectSession(id)}
+            />
+          )}
+
           {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
@@ -3339,6 +3468,10 @@ export default function App() {
                   scenes={scenes}
                   onApplyScene={(reference) => {
                     applySceneChoice(reference);
+                    setSceneBanner(null);
+                  }}
+                  onAdvancePipeline={(instanceId, toStage) => {
+                    void advancePipelineChoice(instanceId, toStage);
                     setSceneBanner(null);
                   }}
                   onDismiss={() => {
@@ -3700,6 +3833,12 @@ export default function App() {
             const pending = sceneEscalation;
             setSceneEscalation(null);
             if (pending.kind === "soft") applySceneChoice(pending.reference, { confirmed: true });
+            else if (pending.kind === "pipeline" && pending.pipeline)
+              void advancePipelineChoice(
+                pending.pipeline.instanceId,
+                pending.pipeline.toStage,
+                true,
+              );
             else void restartInScene(true);
           }}
           onCancel={() => setSceneEscalation(null)}

@@ -1199,6 +1199,58 @@ pub fn prompt_preamble(scene: &Scene, carried: &[CarriedArtifact]) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Pipeline transition evaluation (R9 append — scene.rs is otherwise frozen)
+// ---------------------------------------------------------------------------
+
+/// One effective outgoing edge of a pipeline stage, with the trigger and gate resolved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectiveTransition {
+    pub to: String,
+    pub when: TransitionTrigger,
+    pub gate: Gate,
+}
+
+/// The effective outgoing edges of `stage_id` (docs/scenes.md §Pipelines): listed transitions
+/// with `from == stage_id` REPLACE the default edge entirely; absent any, the default is the next
+/// stage in array order with `when = exit_criteria_met` and the target stage's gate (or
+/// [`Gate::Suggest`]). The last stage with no listed transitions has no edges — the pipeline
+/// completes there. An unknown stage id yields no edges (degrade, never error).
+pub fn outgoing_edges(pipeline: &Pipeline, stage_id: &str) -> Vec<EffectiveTransition> {
+    let stage_gate = |id: &str| {
+        pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.id == id)
+            .and_then(|stage| stage.gate)
+            .unwrap_or(Gate::Suggest)
+    };
+    let listed: Vec<EffectiveTransition> = pipeline
+        .transitions
+        .iter()
+        .filter(|transition| transition.from == stage_id)
+        .map(|transition| EffectiveTransition {
+            to: transition.to.clone(),
+            when: transition.when,
+            gate: transition.gate.unwrap_or_else(|| stage_gate(&transition.to)),
+        })
+        .collect();
+    if !listed.is_empty() {
+        return listed;
+    }
+    let Some(index) = pipeline.stages.iter().position(|stage| stage.id == stage_id) else {
+        return Vec::new();
+    };
+    match pipeline.stages.get(index + 1) {
+        Some(next) => vec![EffectiveTransition {
+            to: next.id.clone(),
+            when: TransitionTrigger::ExitCriteriaMet,
+            gate: next.gate.unwrap_or(Gate::Suggest),
+        }],
+        None => Vec::new(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1496,5 +1548,83 @@ mod tests {
         assert!(preamble.contains("(from research, v2)"));
 
         assert_eq!(prompt_preamble(&minimal_scene("y"), &[]), "");
+    }
+
+    #[test]
+    fn outgoing_edges_against_the_rnd_lifecycle_fixture() {
+        let lib = SceneLibrary::builtin();
+        let pipeline = &lib.resolve_pipeline("rnd-lifecycle").unwrap().pipeline;
+
+        // No listed transitions from research/develop: the default next-in-array edge, firing on
+        // exit_criteria_met with the target stage's gate.
+        assert_eq!(
+            outgoing_edges(pipeline, "research"),
+            vec![EffectiveTransition {
+                to: "develop".into(),
+                when: TransitionTrigger::ExitCriteriaMet,
+                gate: Gate::Suggest,
+            }]
+        );
+
+        // The test stage's listed edges REPLACE the default (which would have been fix): a
+        // tests_failed loop into fix and a confirm-gated advance to acceptance.
+        let test_edges = outgoing_edges(pipeline, "test");
+        assert_eq!(
+            test_edges,
+            vec![
+                EffectiveTransition {
+                    to: "fix".into(),
+                    when: TransitionTrigger::TestsFailed,
+                    gate: Gate::Suggest,
+                },
+                EffectiveTransition {
+                    to: "acceptance".into(),
+                    when: TransitionTrigger::ExitCriteriaMet,
+                    gate: Gate::Confirm,
+                },
+            ]
+        );
+
+        // fix → test loop on exit_criteria_met.
+        assert_eq!(
+            outgoing_edges(pipeline, "fix"),
+            vec![EffectiveTransition {
+                to: "test".into(),
+                when: TransitionTrigger::ExitCriteriaMet,
+                gate: Gate::Suggest,
+            }]
+        );
+
+        // The last stage's only listed edge is the user_request rework loop; without it the
+        // stage would have no edges at all.
+        assert_eq!(
+            outgoing_edges(pipeline, "acceptance"),
+            vec![EffectiveTransition {
+                to: "develop".into(),
+                when: TransitionTrigger::UserRequest,
+                gate: Gate::Confirm,
+            }]
+        );
+
+        assert!(outgoing_edges(pipeline, "missing").is_empty());
+    }
+
+    #[test]
+    fn outgoing_edges_last_stage_without_listed_transitions_is_empty() {
+        let pipeline: Pipeline = serde_json::from_str(&format!(
+            r#"{{"$schema":"{PIPELINE_SCHEMA_ID}","name":"two-step","title":"T",
+                "stages":[{{"id":"a","scene":"research"}},{{"id":"b","scene":"develop","gate":"confirm"}}]}}"#
+        ))
+        .unwrap();
+        // Default edge inherits the TARGET stage's gate.
+        assert_eq!(
+            outgoing_edges(&pipeline, "a"),
+            vec![EffectiveTransition {
+                to: "b".into(),
+                when: TransitionTrigger::ExitCriteriaMet,
+                gate: Gate::Confirm,
+            }]
+        );
+        assert!(outgoing_edges(&pipeline, "b").is_empty());
     }
 }

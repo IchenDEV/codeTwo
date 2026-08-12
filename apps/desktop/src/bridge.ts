@@ -2440,3 +2440,135 @@ export async function setProjectScheduling(path: string, enabled: boolean): Prom
   if (!inTauri) return;
   await invoke("set_project_scheduling", { path, enabled }).catch(() => {});
 }
+
+// ---- pipeline instances (R9) ----------------------------------------------------------------
+
+/** One resolved pipeline definition, as `list_pipelines` reports it. */
+export interface PipelineInfo {
+  reference: string;
+  name: string;
+  title: string;
+  description: string;
+  icon: string | null;
+  source: string;
+  stage_count: number;
+}
+
+/** One running (or finished) pipeline instance. */
+export interface PipelineInstance {
+  id: string;
+  pipeline_ref: string;
+  project_path: string;
+  current_stage: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PipelineTransitionRecord {
+  instance_id: string;
+  seq: number;
+  from_stage: string | null;
+  to_stage: string;
+  trigger: string;
+  gate: string;
+  session_id: string | null;
+  created_at: number;
+}
+
+/** One stage on the horizontal stage track. */
+export interface PipelineStageStatus {
+  id: string;
+  scene_ref: string;
+  title: string;
+  state: "done" | "current" | "pending";
+  gate: string;
+  loop_count: number;
+  sessions: string[];
+  artifacts: SceneArtifactRecord[];
+}
+
+export interface PipelineInstanceDetail {
+  instance: PipelineInstance;
+  transitions: PipelineTransitionRecord[];
+  stages: PipelineStageStatus[];
+}
+
+export interface PipelineStartOutcome {
+  detail: PipelineInstanceDetail;
+  applied_scene: SceneApplyOutcome | null;
+}
+
+export interface PipelineAdvanceOutcome {
+  instance: PipelineInstance;
+  applied_scene: SceneApplyOutcome | null;
+  session_plan: SceneSessionParams | null;
+  escalation: SceneEscalation | null;
+  carried: string[];
+}
+
+/// Same degradation contract as the other scene calls: on an older core every call quietly
+/// reports "no pipelines" instead of breaking the surface.
+export async function listPipelines(): Promise<PipelineInfo[]> {
+  if (!inTauri) return [];
+  return invoke<PipelineInfo[]>("list_pipelines", {}).catch(() => []);
+}
+
+export async function startPipeline(
+  reference: string,
+  projectPath: string,
+  session: string | null,
+): Promise<PipelineStartOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineStartOutcome>("start_pipeline", {
+    reference,
+    projectPath,
+    session,
+  }).catch(() => null);
+}
+
+export async function advancePipeline(
+  instanceId: string,
+  toStage: string,
+  session: string | null,
+  confirm: boolean,
+): Promise<PipelineAdvanceOutcome | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineAdvanceOutcome>("advance_pipeline", {
+    instanceId,
+    toStage,
+    session,
+    confirm,
+  }).catch(() => null);
+}
+
+export async function bindPipelineSession(
+  instanceId: string,
+  stageId: string,
+  session: string,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("bind_pipeline_session", { instanceId, stageId, session }).catch(() => {});
+}
+
+export async function getPipelineInstance(
+  instanceId: string,
+): Promise<PipelineInstanceDetail | null> {
+  if (!inTauri) return null;
+  return invoke<PipelineInstanceDetail>("get_pipeline_instance", { instanceId }).catch(() => null);
+}
+
+export async function listPipelineInstances(projectPath: string): Promise<PipelineInstance[]> {
+  if (!inTauri) return [];
+  return invoke<PipelineInstance[]>("list_pipeline_instances", { projectPath }).catch(() => []);
+}
+
+/** The active session's pipeline binding — the stage track renders only when this is set. */
+export async function sessionPipeline(
+  session: string,
+): Promise<{ instance_id: string; stage_id: string } | null> {
+  if (!inTauri) return null;
+  return invoke<{ instance_id: string; stage_id: string } | null>("session_pipeline", {
+    session,
+  }).catch(() => null);
+}

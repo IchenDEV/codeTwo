@@ -19,6 +19,9 @@ export interface SceneBannerState {
   carry: string[];
   message: string | null;
   unverified: string[];
+  /** Set on pipeline-driven `suggest_next` (R9): accepting advances the instance, not just the scene. */
+  pipelineInstance: string | null;
+  toStage: string | null;
 }
 
 /** Project the two banner-worthy core events into banner state; anything else is `null`. */
@@ -35,6 +38,8 @@ export function sceneBannerFromEvent(
       carry: [],
       message: null,
       unverified: ev.unverified ?? [],
+      pipelineInstance: null,
+      toStage: null,
     };
   }
   if (ev.kind !== "suggest_scene" && ev.kind !== "suggest_next" && ev.kind !== "notify") {
@@ -49,6 +54,8 @@ export function sceneBannerFromEvent(
     carry: ev.carry ?? [],
     message: ev.message ?? null,
     unverified: [],
+    pipelineInstance: ev.pipeline_instance ?? null,
+    toStage: ev.to_stage ?? null,
   };
 }
 
@@ -75,11 +82,14 @@ export function SceneBanner({
   banner,
   scenes,
   onApplyScene,
+  onAdvancePipeline,
   onDismiss,
 }: {
   banner: SceneBannerState;
   scenes: SceneInfo[];
   onApplyScene: (reference: string) => void;
+  /** Pipeline-driven suggestions advance the instance through the command layer (R9). */
+  onAdvancePipeline?: (instanceId: string, toStage: string) => void;
   onDismiss: () => void;
 }) {
   const t = useT();
@@ -130,7 +140,15 @@ export function SceneBanner({
                         ? t("sceneBanner.carrying", { artifacts: carry.join(", ") })
                         : undefined
                     }
-                    onClick={() => onApplyScene(resolved.reference)}
+                    onClick={() => {
+                      // A pipeline suggestion advances the instance (escalation re-checked by the
+                      // command); a plain suggestion just applies the scene.
+                      if (banner.pipelineInstance && banner.toStage && onAdvancePipeline) {
+                        onAdvancePipeline(banner.pipelineInstance, banner.toStage);
+                      } else {
+                        onApplyScene(resolved.reference);
+                      }
+                    }}
                   >
                     {suggestion.label ??
                       t("sceneBanner.start", { scene: sceneTitle(resolved, locale) })}

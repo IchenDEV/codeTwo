@@ -8,7 +8,9 @@
 //! Security posture (docs/scenes.md §Security): actions are an allowlist
 //! (`suggest_scene`/`suggest_next`/`notify` render, `run_macro` submits ONE attributed prompt
 //! within the session's current permission mode). There is deliberately no code path from a hook
-//! to [`Op::SetExecutionPolicy`] — a scene can never loosen permissions through its hooks.
+//! to [`Op::SetExecutionPolicy`] — a scene can never loosen permissions through its hooks. The
+//! one policy-changing path here is the pipeline `auto` gate (R9), and it is only honored when
+//! [`apply_execution`] with `user_confirmed = false` succeeds — i.e. it can only ever tighten.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
@@ -16,7 +18,11 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::broadcast;
 
 use crate::event::{Event, Op};
-use crate::scene::{ExitCriterionKind, HookActionKind, HookEvent, Scene, SceneHook, SceneLibrary};
+use crate::permission::ExecutionPolicy;
+use crate::scene::{
+    apply_execution, memory_preset_policy, outgoing_edges, ExitCriterionKind, Gate,
+    HookActionKind, HookEvent, Scene, SceneHook, SceneLibrary, TransitionTrigger,
+};
 use crate::scene_artifact::SceneArtifactStore;
 use crate::skill::{DocBlock, SkillLibrary, SkillPayload};
 use crate::store::Store;
@@ -148,6 +154,9 @@ impl SceneRuntime {
                             None,
                         );
                     }
+                    // Pipeline edges (R9): a red signal in a stage-bound session may fire a
+                    // `tests_failed` transition (e.g. the test → fix loop).
+                    self.pipeline_on_trigger(session, TransitionTrigger::TestsFailed, tool_call_id);
                 }
             }
             Event::ArtifactProduced {
@@ -497,6 +506,202 @@ impl SceneRuntime {
             &evaluation.state_key,
             None,
         );
+        // Pipeline edges (R9). Inside the once-per-state block above, so a stage's completion
+        // steers its pipeline exactly once per exit state.
+        self.pipeline_on_trigger(
+            session,
+            TransitionTrigger::ExitCriteriaMet,
+            &evaluation.state_key,
+        );
+    }
+
+    /// A stage-bound session produced a transition trigger: resolve the effective edge, apply the
+    /// gate rule, and either advance in place (`auto`, tighten-only) or emit a `suggest_next`
+    /// suggestion carrying the pipeline coordinates (docs/design/scenes-impl-core.md §5.2).
+    fn pipeline_on_trigger(&self, session: &str, trigger: TransitionTrigger, state_key: &str) {
+        let Some((instance_id, stage_id)) = self.store.session_pipeline(session).ok().flatten()
+        else {
+            return;
+        };
+        let Some(instance) = self.store.get_pipeline_instance(&instance_id).ok().flatten() else {
+            return;
+        };
+        // Only an active instance advances, and only through the session bound to its current
+        // stage — a session left behind by a loop must not steer the pipeline.
+        if instance.status != "active" || instance.current_stage != stage_id {
+            return;
+        }
+        let scenes = self.scenes.read().unwrap().clone();
+        let Some(resolved) = scenes.resolve_pipeline(&instance.pipeline_ref) else {
+            return;
+        };
+        let pipeline = resolved.pipeline.clone();
+        let Some(edge) = outgoing_edges(&pipeline, &stage_id)
+            .into_iter()
+            .find(|edge| edge.when == trigger)
+        else {
+            return;
+        };
+        let trigger_str = transition_trigger_name(trigger);
+        if !self.claim_pipeline(
+            session,
+            format!("pipeline:{instance_id}:{trigger_str}:{state_key}"),
+        ) {
+            return;
+        }
+
+        let current_stage = pipeline.stages.iter().find(|stage| stage.id == stage_id);
+        let target_stage = pipeline.stages.iter().find(|stage| stage.id == edge.to);
+        let target_entry = target_stage.and_then(|stage| scenes.resolve(&stage.scene));
+        let current_policy = self.store.get_session(session).ok().flatten().map(|row| {
+            ExecutionPolicy {
+                mode: row.permission_mode,
+                sandbox: row.sandbox_policy,
+            }
+        });
+        // The session's stored scene names this stage's work; fall back to the stage binding.
+        let scene_ref = self
+            .store
+            .session_scene(session)
+            .ok()
+            .flatten()
+            .map(|(reference, _)| reference)
+            .or_else(|| current_stage.map(|stage| stage.scene.clone()))
+            .unwrap_or_default();
+
+        // `auto` is honored only when the target cannot loosen (apply_execution with
+        // user_confirmed = false succeeds) AND the current stage's scene does not require
+        // user_confirm to exit; otherwise the escalation rule wins and it downgrades to suggest.
+        let mut gate = edge.gate;
+        if gate == Gate::Auto {
+            let honored = (|| {
+                let target_scene = &target_entry?.scene;
+                let policy = current_policy.as_ref()?;
+                let target_mode = target_scene
+                    .execution
+                    .as_ref()
+                    .and_then(|execution| execution.session_mode);
+                if apply_execution(policy, target_mode, false).is_err() {
+                    return Some(false);
+                }
+                let current_scene = &scenes.resolve(&current_stage?.scene)?.scene;
+                let needs_confirm = current_scene
+                    .effective_criteria()
+                    .iter()
+                    .any(|criterion| criterion.kind == ExitCriterionKind::UserConfirm);
+                Some(!needs_confirm)
+            })()
+            .unwrap_or(false);
+            if !honored {
+                gate = Gate::Suggest;
+            }
+        }
+
+        let carry: Vec<String> = target_stage
+            .map(|stage| {
+                stage
+                    .carry
+                    .iter()
+                    .map(|carry| carry.artifact.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let target_ref = target_entry
+            .map(crate::scene::SceneLibrary::reference_for)
+            .or_else(|| target_stage.map(|stage| stage.scene.clone()));
+
+        if gate == Gate::Auto {
+            // Honored auto: record the transition and soft-apply the target scene to the same
+            // session. The policy change routes through apply_execution above, so by construction
+            // it only ever tightens.
+            if let Err(error) = self.store.record_pipeline_transition(
+                &instance_id,
+                Some(&stage_id),
+                &edge.to,
+                trigger_str,
+                "auto",
+                Some(session),
+            ) {
+                tracing::warn!("couldn't record pipeline transition: {error}");
+                return;
+            }
+            if let Err(error) = self
+                .store
+                .bind_session_to_stage(session, Some((&instance_id, &edge.to)))
+            {
+                tracing::warn!("couldn't rebind session to stage: {error}");
+            }
+            let Some(target_ref) = target_ref else {
+                return;
+            };
+            if let Err(error) = self.store.set_session_scene(session, Some(&target_ref), false) {
+                tracing::warn!("couldn't persist advanced scene: {error}");
+            }
+            if let Some(target_scene) = target_entry.map(|entry| &entry.scene) {
+                if let (Some(policy), Some(mode)) = (
+                    current_policy.as_ref(),
+                    target_scene
+                        .execution
+                        .as_ref()
+                        .and_then(|execution| execution.session_mode),
+                ) {
+                    if let Ok(Some(next)) = apply_execution(policy, Some(mode), false) {
+                        (self.submit)(Op::SetExecutionPolicy {
+                            session: session.to_string(),
+                            mode: next.mode,
+                            sandbox: next.sandbox,
+                            request_id: None,
+                        });
+                    }
+                }
+                if let Some(preset) = target_scene
+                    .execution
+                    .as_ref()
+                    .and_then(|execution| execution.memory_preset)
+                {
+                    let (read, write) = memory_preset_policy(preset);
+                    if let Err(error) = self.store.set_session_memory_policy(session, read, write)
+                    {
+                        tracing::warn!("couldn't apply advanced memory preset: {error}");
+                    }
+                }
+            }
+            self.scene_activated(session, Some(target_ref.as_str()));
+        } else {
+            // suggest / confirm / downgraded auto: render-only. The frontend advances through the
+            // command layer, which re-checks escalation.
+            let _ = self.emit.send(Event::HookSuggestion {
+                session: session.to_string(),
+                scene_ref,
+                on: trigger_str.to_string(),
+                kind: "suggest_next".into(),
+                target_scene: target_ref,
+                carry,
+                message: None,
+                pipeline_instance: Some(instance_id),
+                to_stage: Some(edge.to),
+                state_key: state_key.to_string(),
+            });
+        }
+    }
+
+    /// One pipeline steering decision per `(instance, trigger, state)` — same in-memory debounce
+    /// semantics as hook fires.
+    fn claim_pipeline(&self, session: &str, key: String) -> bool {
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions
+            .entry(session.to_string())
+            .or_default()
+            .fired
+            .insert(key)
+    }
+}
+
+fn transition_trigger_name(trigger: TransitionTrigger) -> &'static str {
+    match trigger {
+        TransitionTrigger::ExitCriteriaMet => "exit_criteria_met",
+        TransitionTrigger::TestsFailed => "tests_failed",
+        TransitionTrigger::UserRequest => "user_request",
     }
 }
 
@@ -794,11 +999,19 @@ mod tests {
     }
 
     fn harness(dir: &std::path::Path, scene: &Scene, skills: SkillLibrary) -> Harness {
+        harness_with(dir, library_with(scene), skills)
+    }
+
+    fn harness_with(
+        dir: &std::path::Path,
+        library: Arc<SceneLibrary>,
+        skills: SkillLibrary,
+    ) -> Harness {
         let (store, artifacts) = artifact_store(dir);
         let (emit, events) = broadcast::channel(64);
         let (op_tx, ops) = mpsc::channel();
         let runtime = SceneRuntime::new(
-            library_with(scene),
+            library,
             Arc::new(Mutex::new(skills)),
             store,
             artifacts.clone(),
@@ -1387,5 +1600,261 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(19_723), (2024, 1, 1)); // 2024-01-01
         assert_eq!(civil_from_days(20_312), (2025, 8, 12)); // leap-year traversal
+    }
+
+    // ---- pipeline steering (R9) --------------------------------------------------------------
+
+    fn named_scene(name: &str, extra: serde_json::Value) -> Scene {
+        let mut base = serde_json::json!({
+            "$schema": crate::scene::SCENE_SCHEMA_ID,
+            "name": name,
+            "title": name.to_uppercase(),
+        });
+        base.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(base).unwrap()
+    }
+
+    fn library_with_pipeline(
+        scenes: &[Scene],
+        pipeline: serde_json::Value,
+    ) -> Arc<SceneLibrary> {
+        let dir = tempdir().unwrap();
+        for scene in scenes {
+            std::fs::write(
+                dir.path().join(format!("{}.scene.json", scene.name)),
+                serde_json::to_string(scene).unwrap(),
+            )
+            .unwrap();
+        }
+        let name = pipeline["name"].as_str().unwrap().to_string();
+        std::fs::write(
+            dir.path().join(format!("{name}.pipeline.json")),
+            serde_json::to_string(&pipeline).unwrap(),
+        )
+        .unwrap();
+        Arc::new(SceneLibrary::load(Some(dir.path()), None, &[]))
+    }
+
+    /// A bound session at stage `a` with its required artifact captured, one turn from firing
+    /// exit criteria. Returns the instance id.
+    fn bound_pipeline_harness(
+        dir: &std::path::Path,
+        scene_a: Scene,
+        scene_b: Scene,
+        transitions: serde_json::Value,
+    ) -> (Harness, String) {
+        let pipeline = serde_json::json!({
+            "$schema": crate::scene::PIPELINE_SCHEMA_ID,
+            "name": "p",
+            "title": "P",
+            "stages": [
+                { "id": "a", "scene": "a" },
+                { "id": "b", "scene": "b", "carry": [{ "from": "a", "artifact": "report" }] }
+            ],
+            "transitions": transitions,
+        });
+        let h = harness_with(
+            dir,
+            library_with_pipeline(&[scene_a, scene_b], pipeline),
+            SkillLibrary::default(),
+        );
+        let store = h.runtime.store.clone();
+        let mut session =
+            crate::session::Session::new(crate::provider::ProviderId::ClaudeCode, "/work");
+        session.id = "s1".to_string();
+        store.upsert_session(&session).unwrap();
+        store.set_session_scene("s1", Some("project:a"), false).unwrap();
+        let instance = store.create_pipeline_instance("p", "/work", "a").unwrap();
+        store
+            .record_pipeline_transition(&instance.id, None, "a", "entry", "suggest", Some("s1"))
+            .unwrap();
+        store
+            .bind_session_to_stage("s1", Some((&instance.id, "a")))
+            .unwrap();
+        let spec = SceneArtifactSpec {
+            id: "report".into(),
+            title: "Report".into(),
+            kind: SceneArtifactKind::Report,
+            required: true,
+            template: None,
+            description: None,
+        };
+        h.artifacts
+            .record("project:a", &spec, "s1", Some((&instance.id, "a")), "findings")
+            .unwrap();
+        (h, instance.id)
+    }
+
+    fn turn_ended() -> Event {
+        Event::TurnEnded {
+            session: "s1".into(),
+            stop_reason: "EndTurn".into(),
+        }
+    }
+
+    fn pipeline_suggestions(events: Vec<Event>) -> Vec<(String, String, Vec<String>, String)> {
+        events
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::HookSuggestion {
+                    kind,
+                    pipeline_instance: Some(instance),
+                    to_stage: Some(stage),
+                    carry,
+                    ..
+                } => Some((kind, stage, carry, instance)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pipeline_suggestion_carries_instance_stage_and_carry_keys() {
+        let dir = tempdir().unwrap();
+        let scene_a = named_scene(
+            "a",
+            serde_json::json!({
+                "artifacts": [{ "id": "report", "title": "Report", "kind": "report", "required": true }]
+            }),
+        );
+        let scene_b = named_scene("b", serde_json::json!({}));
+        // No listed transitions: the default a → b edge at the suggest gate.
+        let (mut h, instance_id) =
+            bound_pipeline_harness(dir.path(), scene_a, scene_b, serde_json::json!([]));
+
+        h.runtime.on_event(&turn_ended());
+        let fired = pipeline_suggestions(drain(&mut h.events));
+        assert_eq!(fired.len(), 1);
+        let (kind, to_stage, carry, instance) = &fired[0];
+        assert_eq!(kind, "suggest_next");
+        assert_eq!(to_stage, "b");
+        assert_eq!(carry, &vec!["report".to_string()]);
+        assert_eq!(instance, &instance_id);
+        // Render-only: nothing advanced.
+        let store = h.runtime.store.clone();
+        assert_eq!(store.list_pipeline_transitions(&instance_id).unwrap().len(), 1);
+        assert_eq!(
+            store.session_pipeline("s1").unwrap(),
+            Some((instance_id, "a".to_string()))
+        );
+    }
+
+    #[test]
+    fn honored_auto_advances_in_place_and_only_tightens() {
+        let dir = tempdir().unwrap();
+        // Explicit criteria WITHOUT user_confirm, so auto may be honored.
+        let scene_a = named_scene(
+            "a",
+            serde_json::json!({
+                "artifacts": [{ "id": "report", "title": "Report", "kind": "report", "required": true }],
+                "exit": { "criteria": [{ "kind": "required_artifacts" }] }
+            }),
+        );
+        // read_only tightens the default ask/workspace_write posture.
+        let scene_b = named_scene(
+            "b",
+            serde_json::json!({ "execution": { "session_mode": "read_only" } }),
+        );
+        let (mut h, instance_id) = bound_pipeline_harness(
+            dir.path(),
+            scene_a,
+            scene_b,
+            serde_json::json!([{ "from": "a", "to": "b", "when": "exit_criteria_met", "gate": "auto" }]),
+        );
+
+        h.runtime.on_event(&turn_ended());
+        assert!(pipeline_suggestions(drain(&mut h.events)).is_empty());
+
+        let store = h.runtime.store.clone();
+        let transitions = store.list_pipeline_transitions(&instance_id).unwrap();
+        assert_eq!(transitions.len(), 2);
+        assert_eq!(transitions[1].to_stage, "b");
+        assert_eq!(transitions[1].trigger, "exit_criteria_met");
+        assert_eq!(transitions[1].gate, "auto");
+        assert_eq!(transitions[1].session_id.as_deref(), Some("s1"));
+        assert_eq!(
+            store.get_pipeline_instance(&instance_id).unwrap().unwrap().current_stage,
+            "b"
+        );
+        assert_eq!(
+            store.session_pipeline("s1").unwrap(),
+            Some((instance_id, "b".to_string()))
+        );
+        assert_eq!(
+            store.session_scene("s1").unwrap().map(|(reference, _)| reference),
+            Some("project:b".to_string())
+        );
+        // The tighten went through the escalation chokepoint and produced exactly one policy op.
+        let ops: Vec<Op> = h.ops.try_iter().collect();
+        assert_eq!(ops.len(), 1);
+        match &ops[0] {
+            Op::SetExecutionPolicy { session, mode, sandbox, .. } => {
+                assert_eq!(session, "s1");
+                assert_eq!(*mode, PermissionMode::Ask);
+                assert_eq!(*sandbox, SandboxPolicy::ReadOnly);
+            }
+            other => panic!("unexpected op {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auto_downgrades_to_suggest_on_a_loosening_target() {
+        let dir = tempdir().unwrap();
+        let scene_a = named_scene(
+            "a",
+            serde_json::json!({
+                "artifacts": [{ "id": "report", "title": "Report", "kind": "report", "required": true }],
+                "exit": { "criteria": [{ "kind": "required_artifacts" }] }
+            }),
+        );
+        let scene_b = named_scene(
+            "b",
+            serde_json::json!({ "execution": { "session_mode": "full_access" } }),
+        );
+        let (mut h, instance_id) = bound_pipeline_harness(
+            dir.path(),
+            scene_a,
+            scene_b,
+            serde_json::json!([{ "from": "a", "to": "b", "when": "exit_criteria_met", "gate": "auto" }]),
+        );
+
+        h.runtime.on_event(&turn_ended());
+        let fired = pipeline_suggestions(drain(&mut h.events));
+        assert_eq!(fired.len(), 1, "loosening auto must downgrade to a suggestion");
+        assert_eq!(fired[0].1, "b");
+        let store = h.runtime.store.clone();
+        assert_eq!(store.list_pipeline_transitions(&instance_id).unwrap().len(), 1);
+        assert!(h.ops.try_iter().next().is_none(), "nothing may change policy");
+    }
+
+    #[test]
+    fn auto_downgrades_to_suggest_when_exit_requires_user_confirm() {
+        let dir = tempdir().unwrap();
+        // Default criteria (no explicit `exit`) include user_confirm — auto must not skip the user.
+        let scene_a = named_scene(
+            "a",
+            serde_json::json!({
+                "artifacts": [{ "id": "report", "title": "Report", "kind": "report", "required": true }]
+            }),
+        );
+        let scene_b = named_scene(
+            "b",
+            serde_json::json!({ "execution": { "session_mode": "read_only" } }),
+        );
+        let (mut h, instance_id) = bound_pipeline_harness(
+            dir.path(),
+            scene_a,
+            scene_b,
+            serde_json::json!([{ "from": "a", "to": "b", "when": "exit_criteria_met", "gate": "auto" }]),
+        );
+
+        h.runtime.on_event(&turn_ended());
+        let fired = pipeline_suggestions(drain(&mut h.events));
+        assert_eq!(fired.len(), 1, "user_confirm in the stage's criteria downgrades auto");
+        let store = h.runtime.store.clone();
+        assert_eq!(store.list_pipeline_transitions(&instance_id).unwrap().len(), 1);
+        assert!(h.ops.try_iter().next().is_none());
     }
 }
