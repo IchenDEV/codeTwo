@@ -589,6 +589,9 @@ export const en = {
   "mission.files": "{n} files",
   "mission.review": "Review",
   "mission.empty": "No sessions yet. Threads you start will report in here.",
+  "statusline.contextTitle": "Context window",
+  "statusline.cost": "Cost {cost}",
+  "statusline.burn": "{rate} tok/min",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1149,6 +1152,9 @@ export const zhCN: Record<StringKey, string> = {
   "mission.files": "{n} 个文件",
   "mission.review": "评审",
   "mission.empty": "还没有会话。你启动的线程会在这里汇报。",
+  "statusline.contextTitle": "上下文窗口",
+  "statusline.cost": "费用 {cost}",
+  "statusline.burn": "{rate} token/分钟",
 };
 
 export const LOCALES = {
