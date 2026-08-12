@@ -21,6 +21,7 @@ pub mod browser;
 pub mod canvas;
 pub mod codex_runtime;
 pub mod context;
+pub mod cost;
 pub mod delegate;
 pub mod engine;
 pub mod error;

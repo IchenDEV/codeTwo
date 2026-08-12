@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 
 use codetwo_core::browser::Annotation;
 use codetwo_core::codex_runtime::CodexRuntimeDiscovery;
+use codetwo_core::cost::{SessionCostSnapshot, SessionCostTracker};
 use codetwo_core::event::ModelChoice;
 use codetwo_core::git::{self, Checkpoint, DiffResult, DiffScope, DiffStat, GitStatus};
 use codetwo_core::github_skills;
@@ -103,6 +104,9 @@ struct AppState {
     scene_artifacts: SceneArtifactStore,
     /// Scene hook dispatcher (R8), fed by one broadcast-subscription task spawned in `setup`.
     scene_runtime: Arc<SceneRuntime>,
+    /// Per-session cost tracker (R7), fed by the same broadcast-subscription task as the scene
+    /// runtime. In-memory only; totals reset on restart.
+    cost: Arc<SessionCostTracker>,
     /// Last workspace the frontend listed skills for; harness skill discovery scans its
     /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
     skills_cwd: Mutex<Option<PathBuf>>,
@@ -2514,9 +2518,20 @@ async fn set_model(
 ) -> Result<(), String> {
     state
         .engine
-        .submit(Op::SetModel { session, model })
+        .submit(Op::SetModel {
+            session: session.clone(),
+            model: model.clone(),
+        })
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // R7: record the chosen model for cost pricing immediately; the agent's `models` echo
+    // re-confirms it through the broadcast feeder.
+    if let Ok(Some(record)) = state.store.get_session(&session) {
+        state
+            .cost
+            .set_session_model(&session, record.provider.as_str(), &model);
+    }
+    Ok(())
 }
 
 /// Set an agent-reported session config option (model, reasoning effort, …). The engine forwards
@@ -2569,6 +2584,13 @@ async fn usage_report() -> UsageReport {
         by_source: codetwo_core::usage::by_source(&scan.records),
         transcripts: scan.transcripts,
     }
+}
+
+/// R7: current cost/usage snapshot for one session, or `None` when nothing was observed yet.
+/// Wire shape matches the frontend's `SessionUsage` interface.
+#[tauri::command]
+fn usage_by_session(state: State<'_, AppState>, session: String) -> Option<SessionCostSnapshot> {
+    state.cost.snapshot(&session)
 }
 
 // ---- voice input (G11) -------------------------------------------------------------------------
@@ -2800,6 +2822,64 @@ fn with_terminal<T>(
     f(term).map_err(|e| e.to_string())
 }
 
+/// R7: fold one broadcast event into the session-cost tracker, learning the session's
+/// (provider, model) where the backend knows it, and emit a throttled [`Event::SessionCost`]
+/// after each usage-bearing event.
+///
+/// Model discovery is two-pronged: the `Models` event carries the agent-reported current model
+/// id, and the store keeps the provider (plus any persisted model) for sessions whose agent never
+/// reports one. The `set_model` command additionally records the chosen model directly.
+fn feed_cost_tracker(
+    cost: &SessionCostTracker,
+    store: &Store,
+    events: &broadcast::Sender<Event>,
+    last_emit: &mut HashMap<String, std::time::Instant>,
+    event: &Event,
+) {
+    match event {
+        Event::Models {
+            session, current, ..
+        } if !current.is_empty() => {
+            if let Ok(Some(record)) = store.get_session(session) {
+                cost.set_session_model(session, record.provider.as_str(), current);
+            }
+        }
+        Event::Usage { session, .. } | Event::ContextWindow { session, .. }
+            if !cost.has_model(session) =>
+        {
+            if let Ok(Some(record)) = store.get_session(session) {
+                if let Some(model) = record.model.as_deref() {
+                    cost.set_session_model(session, record.provider.as_str(), model);
+                }
+            }
+        }
+        _ => {}
+    }
+    cost.observe(event);
+
+    let session = match event {
+        Event::Usage { session, .. } | Event::ContextWindow { session, .. } => session,
+        _ => return,
+    };
+    let due = last_emit
+        .get(session)
+        .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(1));
+    if !due {
+        return;
+    }
+    if let Some(snap) = cost.snapshot(session) {
+        last_emit.insert(session.clone(), std::time::Instant::now());
+        let _ = events.send(Event::SessionCost {
+            session: session.clone(),
+            input_tokens: snap.input_tokens,
+            output_tokens: snap.output_tokens,
+            cost_usd: snap.cost_usd,
+            burn_rate_usd_per_hour: snap.burn_rate_usd_per_hour,
+            priced: snap.priced,
+        });
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Launched from Finder we inherit a bare PATH, and every CLI we shell out to — the provider
@@ -2945,12 +3025,29 @@ pub fn run() {
                 }),
                 events.clone(),
             ));
+            // R7: the cost tracker rides the same subscription task as the scene runtime — one
+            // subscriber, two consumers — rather than opening a second `subscribe()`.
+            let cost = Arc::new(SessionCostTracker::new());
             let hook_runtime = scene_runtime.clone();
             let mut hook_sub = events.subscribe();
+            let cost_feed = cost.clone();
+            let cost_store = store.clone();
+            let cost_events = events.clone();
             tauri::async_runtime::spawn(async move {
+                // Per-session throttle for `Event::SessionCost` emission (≥1 s apart).
+                let mut last_cost_emit: HashMap<String, std::time::Instant> = HashMap::new();
                 loop {
                     match hook_sub.recv().await {
-                        Ok(ev) => hook_runtime.on_event(&ev),
+                        Ok(ev) => {
+                            feed_cost_tracker(
+                                &cost_feed,
+                                &cost_store,
+                                &cost_events,
+                                &mut last_cost_emit,
+                                &ev,
+                            );
+                            hook_runtime.on_event(&ev);
+                        }
                         Err(broadcast::error::RecvError::Lagged(n)) => {
                             eprintln!("scene hook pump lagged; dropped {n} events");
                         }
@@ -2975,6 +3072,7 @@ pub fn run() {
                 scenes: Mutex::new(initial_scenes),
                 scene_artifacts,
                 scene_runtime,
+                cost,
                 skills_cwd: Mutex::new(None),
                 keymap: Mutex::new(keymap),
                 keymap_path,
@@ -3144,7 +3242,8 @@ pub fn run() {
             structure_brief,
             propose_macro_slots,
             dismiss_scene_banner,
-            set_project_scheduling
+            set_project_scheduling,
+            usage_by_session
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")
