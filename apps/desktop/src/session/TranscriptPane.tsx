@@ -15,6 +15,10 @@ interface TranscriptPaneProps {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   scroll: TranscriptScrollController;
+  /** R4 plan-as-document affordances, threaded through to each turn's Plan detail. */
+  onOpenPlanAsDocument?: (entries: string[]) => void;
+  onPinPlanArtifact?: (markdown: string) => void;
+  canPinPlan?: boolean;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -26,6 +30,9 @@ export function TranscriptPane({
   loadingEarlier,
   onLoadEarlier,
   scroll,
+  onOpenPlanAsDocument,
+  onPinPlanArtifact,
+  canPinPlan,
 }: TranscriptPaneProps) {
   const t = useT();
   const Root = variant === "side" ? "aside" : "section";
@@ -90,7 +97,12 @@ export function TranscriptPane({
                     key={turn.transcriptStartSeq ?? turn.id}
                     style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
                   >
-                    <TurnCard turn={turn} />
+                    <TurnCard
+                      turn={turn}
+                      onOpenPlanAsDocument={onOpenPlanAsDocument}
+                      onPinPlanArtifact={onPinPlanArtifact}
+                      canPinPlan={canPinPlan}
+                    />
                   </li>
                 ))}
               </ol>

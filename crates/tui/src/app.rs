@@ -1279,6 +1279,7 @@ fn summarize(doc: &[DocBlock]) -> String {
                 }
             ),
             DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
+            DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
         })
         .collect::<Vec<_>>()
         .join(" ")

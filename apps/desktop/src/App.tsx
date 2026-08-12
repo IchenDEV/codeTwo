@@ -120,6 +120,7 @@ import {
   applySceneToSession,
   getSessionScene,
   listScenes,
+  recordSceneArtifact,
   sceneSessionPlan,
   setModel as setSessionModel,
   setSessionScene,
@@ -172,6 +173,7 @@ import {
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
 import { TranscriptPane } from "./session/TranscriptPane";
+import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import {
   applyEvent,
@@ -617,10 +619,53 @@ export default function App() {
   const insertFileRef = useRef<((path: string) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
+  const insertMarkdownRef = useRef<
+    ((markdown: string, mode: "replace" | "append") => Promise<void>) | null
+  >(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
   const insertBriefRef = useRef<((scene: SceneInfo, values?: Record<string, string>) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
+  // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
+  // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
+  const [planDocPending, setPlanDocPending] = useState<string | null>(null);
+  /** The edited plan IS the next prompt: it opens into this session's composer document. */
+  const openPlanAsDocument = useCallback(
+    (entries: string[]) => {
+      const markdown = planChecklistMarkdown(entries);
+      if (docEmpty) {
+        void insertMarkdownRef.current?.(markdown, "replace");
+        setDocMode(true);
+      } else {
+        setPlanDocPending(markdown);
+      }
+    },
+    [docEmpty, setDocMode],
+  );
+  const resolvePlanDocPending = useCallback(
+    (mode: "replace" | "append" | null) => {
+      const markdown = planDocPending;
+      setPlanDocPending(null);
+      if (!markdown || !mode) return;
+      void insertMarkdownRef.current?.(markdown, mode);
+      setDocMode(true);
+    },
+    [planDocPending, setDocMode],
+  );
+  const pinPlanArtifact = useCallback(
+    (markdown: string) => {
+      const session = activeSessionRef.current;
+      if (!session) return;
+      void recordSceneArtifact(session, "plan", markdown).then((record) => {
+        if (record) toast(t("planDoc.pinned"), "success");
+        else toast(t("planDoc.pinFailed"), "error");
+      });
+    },
+    [t, toast],
+  );
+  const canPinPlan = (
+    scenes.find((s) => s.reference === activeSceneName)?.artifacts ?? []
+  ).some((artifact) => artifact.kind === "plan");
   const currentModelRef = useRef<string | null>(null);
   currentModelRef.current = currentModel;
   // Model changes invalidate the old provider context immediately. Keep the pending id until the
@@ -3117,6 +3162,9 @@ export default function App() {
                 loadingEarlier={loadingEarlier}
                 onLoadEarlier={() => void loadEarlierTranscript()}
                 scroll={transcriptScroll}
+                onOpenPlanAsDocument={openPlanAsDocument}
+                onPinPlanArtifact={pinPlanArtifact}
+                canPinPlan={canPinPlan}
               />
             )}
 
@@ -3264,6 +3312,7 @@ export default function App() {
                     insertFileRef={insertFileRef}
                     focusRef={focusEditorRef}
                     clearRef={clearEditorRef}
+                    insertMarkdownRef={insertMarkdownRef}
                     openSkillPickerRef={openSkillPickerRef}
                     insertSkillRef={insertSkillRef}
                     insertBriefRef={insertBriefRef}
@@ -3525,6 +3574,28 @@ export default function App() {
           onOpen={(match) => openFileTab(match.path, match)}
           onClose={() => setShowWorkspaceSearch(false)}
         />
+      )}
+
+      {planDocPending && (
+        <Dialog open onOpenChange={(o) => !o && resolvePlanDocPending(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("planDoc.title")}</DialogTitle>
+            </DialogHeader>
+            <p className="text-ui text-muted-foreground">{t("planDoc.confirm")}</p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => resolvePlanDocPending(null)}>
+                {t("planDoc.cancel")}
+              </Button>
+              <Button variant="secondary" onClick={() => resolvePlanDocPending("append")}>
+                {t("planDoc.append")}
+              </Button>
+              <Button onClick={() => resolvePlanDocPending("replace")}>
+                {t("planDoc.replace")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {skillDraft && (

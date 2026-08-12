@@ -53,6 +53,11 @@ interface EditorProps {
   focusRef: MutableRefObject<(() => void) | null>;
   // App empties the document after a successful send.
   clearRef: MutableRefObject<(() => void) | null>;
+  // App opens a turn's plan as a document (R4): markdown is parsed into BlockNote blocks and
+  // either replaces the document or is appended after it.
+  insertMarkdownRef?: MutableRefObject<
+    ((markdown: string, mode: "replace" | "append") => Promise<void>) | null
+  >;
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
   // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
   insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;
@@ -219,6 +224,7 @@ export function DocEditor({
   insertFileRef,
   focusRef,
   clearRef,
+  insertMarkdownRef,
   openSkillPickerRef,
   insertSkillRef,
   insertBriefRef,
@@ -478,6 +484,17 @@ export function DocEditor({
       editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "" }]);
       onEmptyChange(true);
     };
+    if (insertMarkdownRef) insertMarkdownRef.current = async (markdown, mode) => {
+      const blocks = await editor.tryParseMarkdownToBlocks(markdown);
+      if (blocks.length === 0) return;
+      if (mode === "replace") {
+        editor.replaceBlocks(editor.document, blocks as never);
+      } else {
+        const last = editor.document[editor.document.length - 1];
+        if (last) editor.insertBlocks(blocks as never, last, "after");
+      }
+      onEmptyChange(false);
+    };
     openSkillPickerRef.current = () => {
       editor.focus();
       editor.openSuggestionMenu("/");
@@ -558,6 +575,7 @@ export function DocEditor({
       insertFileRef.current = null;
       focusRef.current = null;
       clearRef.current = null;
+      if (insertMarkdownRef) insertMarkdownRef.current = null;
       openSkillPickerRef.current = null;
       insertSkillRef.current = null;
       if (insertBriefRef) insertBriefRef.current = null;
@@ -566,7 +584,7 @@ export function DocEditor({
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();
