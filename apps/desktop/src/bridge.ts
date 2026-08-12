@@ -1189,6 +1189,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["refresh_git", "Mod+G", "Refresh git status"],
   ["prev_session", "Mod+Alt+ArrowUp", "Previous session"],
   ["next_session", "Mod+Alt+ArrowDown", "Next session"],
+  ["open_mission_control", "Mod+Shift+O", "Open mission control"],
 ];
 
 export async function getKeymap(): Promise<KeymapEntry[]> {
@@ -2206,4 +2207,20 @@ export async function setSessionScene(
 export async function getSessionScene(session: string): Promise<SessionSceneState | null> {
   if (!inTauri) return null;
   return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
+}
+
+/** Diff stat of a session's own checkout, shaped for display. Null when unknown or not a repo. */
+export interface SessionDiffStat {
+  files: number;
+  additions: number;
+  deletions: number;
+}
+
+export async function sessionDiffStat(session: string): Promise<SessionDiffStat | null> {
+  if (!inTauri) return null;
+  return invoke<GitDiffStat | null>("session_diff_stat", { session })
+    .then((stat) =>
+      stat ? { files: stat.files, additions: stat.added, deletions: stat.deleted } : null,
+    )
+    .catch(() => null);
 }

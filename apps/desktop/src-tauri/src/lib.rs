@@ -933,6 +933,28 @@ async fn git_diff_stat(cwd: String) -> Result<DiffStat, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Diff stat for a session's own checkout (worktree-aware: `cwd` already points inside the
+/// isolated checkout for worktree sessions). Unknown session → `None`, so the mission-control
+/// dialog renders a dash instead of an error.
+#[tauri::command]
+async fn session_diff_stat(
+    state: State<'_, AppState>,
+    session: String,
+) -> Result<Option<DiffStat>, String> {
+    let cwd = state
+        .store
+        .get_session(&session)
+        .map_err(|e| e.to_string())?
+        .map(|s| s.cwd);
+    let Some(cwd) = cwd else {
+        return Ok(None);
+    };
+    git::diff_stat(std::path::Path::new(&cwd))
+        .await
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn git_stage_paths(cwd: String, paths: Vec<String>) -> Result<(), String> {
     git::stage_paths(std::path::Path::new(&cwd), &paths)
@@ -2894,7 +2916,8 @@ pub fn run() {
             apply_scene,
             scene_session_plan,
             set_session_scene,
-            get_session_scene
+            get_session_scene,
+            session_diff_stat
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

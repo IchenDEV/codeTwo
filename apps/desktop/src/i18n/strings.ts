@@ -564,6 +564,18 @@ export const en = {
   "scene.escalationCancel": "Cancel",
   "scene.switched": "Scene: {scene}",
   "scene.unresolved": "The saved scene for this session is not installed.",
+  "action.open_mission_control": "Open mission control",
+  "mission.title": "Mission control",
+  "mission.hint": "Every session, what it needs from you, and one click into review.",
+  "mission.open": "Open mission control",
+  "mission.awaiting": "Waiting on your input",
+  "mission.state.running": "Running",
+  "mission.state.awaiting_input": "Waiting on input",
+  "mission.state.failed": "Failed",
+  "mission.state.idle": "Idle",
+  "mission.files": "{n} files",
+  "mission.review": "Review",
+  "mission.empty": "No sessions yet. Threads you start will report in here.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1099,6 +1111,18 @@ export const zhCN: Record<StringKey, string> = {
   "scene.escalationCancel": "取消",
   "scene.switched": "场景：{scene}",
   "scene.unresolved": "此会话保存的场景未安装。",
+  "action.open_mission_control": "打开任务总控",
+  "mission.title": "任务总控",
+  "mission.hint": "所有会话的状态、等你处理的事项，以及一键进入评审。",
+  "mission.open": "打开任务总控",
+  "mission.awaiting": "等待你的输入",
+  "mission.state.running": "运行中",
+  "mission.state.awaiting_input": "等待输入",
+  "mission.state.failed": "失败",
+  "mission.state.idle": "空闲",
+  "mission.files": "{n} 个文件",
+  "mission.review": "评审",
+  "mission.empty": "还没有会话。你启动的线程会在这里汇报。",
 };
 
 export const LOCALES = {
