@@ -56,6 +56,11 @@ pub struct PluginCounts {
     pub monitors: usize,
     #[serde(default)]
     pub apps: usize,
+    /// Agent Scenes 1.0.0 components (`scenes/*.scene.json`); defaulted so pre-R14 records load.
+    #[serde(default)]
+    pub scenes: usize,
+    #[serde(default)]
+    pub pipelines: usize,
 }
 
 impl PluginCounts {
@@ -69,6 +74,8 @@ impl PluginCounts {
             + self.lsp_servers
             + self.monitors
             + self.apps
+            + self.scenes
+            + self.pipelines
     }
 }
 
@@ -421,6 +428,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
     }
 
     let scaffolds = discover_scaffolds(&plugin_root)?;
+    let (scene_count, pipeline_count) = count_scene_components(&plugin_root);
     let counts = PluginCounts {
         skills: components
             .iter()
@@ -462,6 +470,8 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             .iter()
             .filter(|item| item.kind == "app")
             .count(),
+        scenes: scene_count,
+        pipelines: pipeline_count,
     };
     if counts.total() == 0 {
         return Err(PluginError::NoComponents);
@@ -2348,6 +2358,64 @@ fn discover_scaffolds(root: &Path) -> Result<Vec<PluginScaffold>, PluginError> {
     Ok(scaffolds)
 }
 
+/// Count the plugin's Agent Scenes components: `scenes/*.scene.json` and `scenes/*.pipeline.json`
+/// documents, serde-parsed and validated against the 1.0.0 schemas at install/parse time. Invalid
+/// or unreadable files are warned about and skipped — never fatal to the install (docs/scenes.md:
+/// same posture as `SkillLibrary::load_dir`). The bundle collector already preserves the
+/// directory verbatim; hosts read the installed copy back through [`plugin_scenes_dir`].
+fn count_scene_components(root: &Path) -> (usize, usize) {
+    let dir = root.join("scenes");
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("plugin scenes dir {dir:?}: {error}");
+            }
+            return (0, 0);
+        }
+    };
+    let mut scenes = 0;
+    let mut pipelines = 0;
+    let mut paths: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
+    paths.sort();
+    for path in paths {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if name.ends_with(".scene.json") {
+            let parsed = std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|data| {
+                    serde_json::from_str::<crate::scene::Scene>(&data).map_err(|e| e.to_string())
+                })
+                .and_then(|scene| crate::scene::validate_scene(&scene).map(|()| scene));
+            match parsed {
+                Ok(_) => scenes += 1,
+                Err(error) => tracing::warn!("plugin scene {path:?}: {error} (skipped)"),
+            }
+        } else if name.ends_with(".pipeline.json") {
+            let parsed = std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())
+                .and_then(|data| {
+                    serde_json::from_str::<crate::scene::Pipeline>(&data).map_err(|e| e.to_string())
+                })
+                .and_then(|pipeline| crate::scene::validate_pipeline(&pipeline).map(|()| pipeline));
+            match parsed {
+                Ok(_) => pipelines += 1,
+                Err(error) => tracing::warn!("plugin pipeline {path:?}: {error} (skipped)"),
+            }
+        }
+    }
+    (scenes, pipelines)
+}
+
+/// Where an installed plugin's scene components live on disk. [`install`] preserves the verified
+/// bundle under `<plugins_dir>/<id>/bundle/`, so the scene loader must read
+/// `<plugins_dir>/<id>/bundle/scenes` — this helper keeps that layout knowledge in one place.
+pub fn plugin_scenes_dir(plugins_dir: &Path, id: &str) -> PathBuf {
+    plugins_dir.join(id).join(BUNDLE_DIR).join("scenes")
+}
+
 fn collect_bundle_files(root: &Path) -> Result<Vec<PluginFile>, PluginError> {
     let mut files = Vec::new();
     let mut bytes = 0;
@@ -3349,5 +3417,59 @@ mod tests {
         let _ = std::fs::remove_dir_all(data);
         let _ = std::fs::remove_dir_all(project);
         let _ = std::fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn counts_scene_components_and_skips_invalid_files() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-plugin-scenes-{}", uuid::Uuid::new_v4()));
+        write(
+            &root.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"scene-pack","version":"1.0.0","description":"Scenes only"
+            }"#,
+        );
+        write(
+            &root.join("scenes/valid.scene.json"),
+            &format!(
+                r#"{{"$schema":"{}","name":"valid","title":"Valid scene"}}"#,
+                crate::scene::SCENE_SCHEMA_ID
+            ),
+        );
+        // Malformed JSON: must be warned about and skipped, never failing the install.
+        write(&root.join("scenes/broken.scene.json"), "{not json");
+        write(
+            &root.join("scenes/flow.pipeline.json"),
+            &format!(
+                r#"{{"$schema":"{}","name":"flow","title":"Flow","stages":[{{"id":"a","scene":"valid"}}]}}"#,
+                crate::scene::PIPELINE_SCHEMA_ID
+            ),
+        );
+
+        let bundle = from_github(&checkout(root.clone())).unwrap();
+        assert_eq!(bundle.plugin.counts.scenes, 1, "invalid scene must be skipped");
+        assert_eq!(bundle.plugin.counts.pipelines, 1);
+        // A scenes-only pack has no other components: scenes must keep it installable.
+        assert_eq!(bundle.plugin.counts.total(), 2);
+
+        // The install layout keeps the bundle verbatim; the scene loader path must point at it.
+        let data =
+            std::env::temp_dir().join(format!("codetwo-plugin-data-{}", uuid::Uuid::new_v4()));
+        let plugin_id = bundle.plugin.id.clone();
+        install(&data, bundle).unwrap();
+        let scenes_dir = plugin_scenes_dir(&data, &plugin_id);
+        assert!(scenes_dir.join("valid.scene.json").is_file());
+
+        // Old records without the new count fields must keep deserializing (serde defaults).
+        let legacy: PluginCounts = serde_json::from_str(
+            r#"{"skills":1,"subagents":0,"mcp_servers":0,"scaffolds":0}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.scenes, 0);
+        assert_eq!(legacy.pipelines, 0);
+
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(data);
     }
 }

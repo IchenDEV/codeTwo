@@ -154,7 +154,9 @@ fn reload_scenes(state: &AppState) {
                 .into_iter()
                 .filter(|plugin| plugin.enabled)
                 .map(|plugin| {
-                    let dir = state.plugins_dir.join(&plugin.id).join("scenes");
+                    // R14: installs preserve the verified bundle under `<id>/bundle/`, so scene
+                    // components are read back from `<id>/bundle/scenes` via the shared helper.
+                    let dir = plugin::plugin_scenes_dir(&state.plugins_dir, &plugin.id);
                     (plugin.id, dir)
                 })
                 .collect()
@@ -1324,6 +1326,17 @@ fn session_pipeline(
             instance_id,
             stage_id,
         }))
+}
+
+/// Lossy SKILL.md export of a resolved scene (docs/scenes.md §Interop). The frontend downloads
+/// the returned text itself (Blob + anchor) — no dialog plumbing on this side.
+#[tauri::command]
+fn export_scene_skill_md(state: State<'_, AppState>, reference: String) -> Result<String, String> {
+    let lib = state.scenes.lock().unwrap().clone();
+    let entry = lib
+        .resolve(&reference)
+        .ok_or_else(|| format!("unknown scene `{reference}`"))?;
+    Ok(codetwo_core::scene::export_skill_md(&entry.scene))
 }
 
 // ---- provider-neutral memory ----------------------------------------------------------------
@@ -3741,7 +3754,8 @@ pub fn run() {
             set_issue_delegation_session,
             set_issue_delegation_comment,
             list_issue_delegations,
-            get_project_scheduling
+            get_project_scheduling,
+            export_scene_skill_md
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

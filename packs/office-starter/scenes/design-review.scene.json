@@ -1,0 +1,63 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "design-review",
+  "version": "1.0.0",
+  "title": "Tech design review",
+  "description": "Read-only review of a technical design document against the codebase: evidence-based review notes plus a risk register.",
+  "icon": "🧐",
+  "keywords": ["office", "design", "review", "architecture"],
+  "localizations": {
+    "zh-CN": {
+      "title": "技术方案评审",
+      "description": "只读地将技术方案文档对照代码库评审：产出基于证据的评审意见与风险清单。"
+    }
+  },
+  "execution": {
+    "session_mode": "read_only"
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Design reviewer",
+        "text": "You are reviewing a technical design, not implementing it. Check every claim the document makes about the existing system against the code and cite `path:line` evidence. Evaluate the design against the stated constraints and review focus; for each concern, state severity, the evidence, and a question or alternative — never a patch. Surface what the document does not say (unhandled failure modes, migration, rollback) as explicit risks."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Design document\n\n{{design-doc}}\n\n## Review focus\n\n{{focus}}\n\n## Constraints\n\n{{constraints}}\n",
+    "slots": [
+      { "id": "design-doc", "label": "Design document to review", "kind": "file", "required": true },
+      { "id": "focus", "label": "What the review should focus on", "kind": "multiline", "required": false },
+      { "id": "constraints", "label": "Constraints the design must respect (SLOs, compatibility, deadlines)", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "review-notes",
+      "title": "Review notes",
+      "kind": "report",
+      "required": true,
+      "template": "# Design review\n\n## Verdict\n\n## Strengths\n\n## Concerns (with evidence)\n\n## Open questions\n\n## Suggested changes to the document\n"
+    },
+    {
+      "id": "risk-register",
+      "title": "Risk register",
+      "kind": "checklist",
+      "description": "One checkbox per identified risk, checked off as the design addresses it."
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ]
+  },
+  "constraints": {
+    "guardrails": [
+      "Every claim about the existing system cites `path:line` evidence.",
+      "Review only — do not write fixes or patches in this scene; record them as suggested changes.",
+      "Distinguish blocking concerns from preferences, and say which is which."
+    ]
+  }
+}

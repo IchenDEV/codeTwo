@@ -1251,6 +1251,93 @@ pub fn outgoing_edges(pipeline: &Pipeline, stage_id: &str) -> Vec<EffectiveTrans
 }
 
 // ---------------------------------------------------------------------------
+// SKILL.md export (R14 append — scene.rs is otherwise frozen)
+// ---------------------------------------------------------------------------
+
+/// Double-quoted YAML scalar, safe for arbitrary titles/descriptions in frontmatter.
+fn yaml_quote(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for c in value.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A code fence longer than any backtick run inside `text` (at least the standard three), so the
+/// brief template can itself contain fenced blocks without breaking the export.
+fn fence_for(text: &str) -> String {
+    let mut longest = 0usize;
+    let mut run = 0usize;
+    for c in text.chars() {
+        if c == '`' {
+            run += 1;
+            longest = longest.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    "`".repeat((longest + 1).max(3))
+}
+
+/// Export a scene as a SKILL.md document for hosts that only speak Agent Skills
+/// (docs/scenes.md §Interop). Deliberately lossy: only the prompt-shaped parts survive —
+/// guardrails, inline fragments, and the brief template as a suggested prompt skeleton. The
+/// exporter must say what was lost, so the document ends with a note naming the execution
+/// posture, artifacts, exit criteria, and hooks that did not survive.
+pub fn export_skill_md(scene: &Scene) -> String {
+    let description = if scene.description.trim().is_empty() {
+        &scene.title
+    } else {
+        &scene.description
+    };
+    let mut out = format!(
+        "---\nname: {}\ndescription: {}\n---\n\n# {}\n",
+        yaml_quote(&scene.name),
+        yaml_quote(description),
+        scene.title,
+    );
+
+    if let Some(constraints) = &scene.constraints {
+        if !constraints.guardrails.is_empty() {
+            out.push_str("\n## Guardrails\n\n");
+            for rule in &constraints.guardrails {
+                out.push_str("- ");
+                out.push_str(rule);
+                out.push('\n');
+            }
+        }
+    }
+
+    if let Some(skills) = &scene.skills {
+        for fragment in &skills.inline {
+            out.push_str(&format!("\n## {}\n\n{}\n", fragment.name, fragment.text));
+        }
+    }
+
+    if let Some(brief) = &scene.brief {
+        let fence = fence_for(&brief.template);
+        out.push_str(&format!(
+            "\n## Suggested prompt skeleton\n\n{fence}\n{}\n{fence}\n",
+            brief.template.trim_end_matches('\n'),
+        ));
+    }
+
+    out.push_str(&format!(
+        "\n> Lossy export: the execution posture, artifacts, exit criteria, and hooks of scene \
+         `{}` do not survive SKILL.md and were omitted.\n",
+        scene.name
+    ));
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1626,5 +1713,68 @@ mod tests {
             }]
         );
         assert!(outgoing_edges(&pipeline, "b").is_empty());
+    }
+
+    #[test]
+    fn export_skill_md_structure_and_lossy_note() {
+        let mut scene = minimal_scene("review");
+        scene.title = "Design review".into();
+        scene.description = "Evidence-based review".into();
+        scene.constraints = Some(SceneConstraints {
+            guardrails: vec!["Cite evidence.".into(), "Do not fix in this scene.".into()],
+            tools: None,
+        });
+        scene.skills = Some(SceneSkills {
+            pinned: vec!["some:skill".into()],
+            inline: vec![SceneInlineFragment {
+                name: "Reviewer".into(),
+                text: "Read before judging.".into(),
+                icon: None,
+            }],
+            suppress_unpinned: false,
+        });
+        scene.brief = Some(SceneBrief {
+            template: "## Focus\n\n{{focus}}\n".into(),
+            slots: Vec::new(),
+            clarify: None,
+        });
+
+        let md = export_skill_md(&scene);
+        assert!(md.starts_with("---\nname: \"review\"\ndescription: \"Evidence-based review\"\n---\n"));
+        let guardrails = md.find("## Guardrails").unwrap();
+        assert!(md.contains("- Cite evidence.\n- Do not fix in this scene.\n"));
+        let fragment = md.find("## Reviewer").unwrap();
+        assert!(md.contains("Read before judging."));
+        let skeleton = md.find("## Suggested prompt skeleton").unwrap();
+        assert!(md.contains("```\n## Focus\n\n{{focus}}\n```"));
+        let lossy = md.find("> Lossy export:").unwrap();
+        assert!(guardrails < fragment && fragment < skeleton && skeleton < lossy);
+        // §Interop requires the exporter to name exactly what did not survive.
+        assert!(md.contains("execution posture, artifacts, exit criteria, and hooks"));
+        assert!(md.contains("`review`"));
+    }
+
+    #[test]
+    fn export_skill_md_minimal_scene_is_still_valid() {
+        let scene = minimal_scene("bare");
+        let md = export_skill_md(&scene);
+        // Nothing exportable: valid frontmatter (description falls back to the title), the title
+        // heading, and the lossy note — nothing else.
+        assert!(md.starts_with("---\nname: \"bare\"\ndescription: \"T\"\n---\n\n# T\n"));
+        assert!(!md.contains("## Guardrails"));
+        assert!(!md.contains("## Suggested prompt skeleton"));
+        assert!(md.trim_end().ends_with("were omitted."));
+    }
+
+    #[test]
+    fn export_skill_md_fences_grow_past_template_backticks() {
+        let mut scene = minimal_scene("fenced");
+        scene.brief = Some(SceneBrief {
+            template: "```sh\necho hi\n```\n".into(),
+            slots: Vec::new(),
+            clarify: None,
+        });
+        let md = export_skill_md(&scene);
+        assert!(md.contains("````\n```sh\necho hi\n```\n````"));
     }
 }

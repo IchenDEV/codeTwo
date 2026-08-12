@@ -1,0 +1,82 @@
+{
+  "$schema": "https://agent-scenes.org/schemas/1.0.0/scene.schema.json",
+  "name": "incident-retro",
+  "version": "1.0.0",
+  "title": "Incident retrospective",
+  "description": "Reconstruct an incident read-only from its evidence: timeline, five-whys analysis, a blameless retro report, and tracked action items.",
+  "icon": "🚨",
+  "keywords": ["office", "incident", "retrospective", "postmortem"],
+  "localizations": {
+    "zh-CN": {
+      "title": "事故复盘",
+      "description": "只读地基于证据重建事故：时间线、五问分析、免责复盘报告与可跟踪的行动项。"
+    }
+  },
+  "execution": {
+    "session_mode": "read_only"
+  },
+  "skills": {
+    "inline": [
+      {
+        "name": "Retro facilitator",
+        "text": "You are facilitating a blameless incident retrospective. Reconstruct what happened strictly from the provided sources (logs, chat transcripts, monitoring, tickets); cite the source for every timeline entry. Ask about systems and processes, never about individual fault. Separate observed facts from inference, and keep the five-whys chain anchored to evidence at each step."
+      }
+    ]
+  },
+  "brief": {
+    "template": "## Incident summary\n\n{{summary}}\n\n## Timeline sources\n\n{{sources}}\n\n## Impact\n\n{{impact}}\n",
+    "slots": [
+      { "id": "summary", "label": "What happened, in a few sentences", "kind": "multiline", "required": true },
+      { "id": "sources", "label": "Timeline sources (logs, chats, dashboards, tickets)", "kind": "multiline", "required": false },
+      { "id": "impact", "label": "Who/what was affected, and for how long", "kind": "multiline", "required": false }
+    ],
+    "clarify": "multi_choice"
+  },
+  "artifacts": [
+    {
+      "id": "timeline",
+      "title": "Incident timeline",
+      "kind": "report",
+      "description": "Chronological reconstruction of the incident, each entry citing its source."
+    },
+    {
+      "id": "five-whys",
+      "title": "Five-whys analysis",
+      "kind": "report",
+      "description": "Root-cause chain, each step anchored to evidence."
+    },
+    {
+      "id": "retro-report",
+      "title": "Retro report",
+      "kind": "report",
+      "required": true,
+      "template": "# Incident retro\n\n## Summary\n\n## Timeline\n\n## Impact\n\n## Root cause\n\n## What went well\n\n## What went poorly\n\n## Where we got lucky\n"
+    },
+    {
+      "id": "action-items",
+      "title": "Action items",
+      "kind": "checklist",
+      "required": true,
+      "description": "Concrete, owned follow-ups; one checkbox per item."
+    }
+  ],
+  "exit": {
+    "criteria": [
+      { "kind": "required_artifacts" },
+      { "kind": "user_confirm" }
+    ]
+  },
+  "hooks": [
+    {
+      "on": "exit_criteria_met",
+      "action": { "kind": "notify", "message": "Retro artifacts are complete — review the report and action items." }
+    }
+  ],
+  "constraints": {
+    "guardrails": [
+      "Blameless: describe systems and processes, never individual fault.",
+      "Every timeline entry cites its source; unverifiable claims are marked as such.",
+      "Do not modify files; this scene only reads evidence and produces reports."
+    ]
+  }
+}

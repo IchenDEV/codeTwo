@@ -1335,6 +1335,9 @@ export interface PluginCounts {
   lsp_servers: number;
   monitors: number;
   apps: number;
+  /** Agent Scenes components (R14); serde-defaulted server-side, so always present here. */
+  scenes: number;
+  pipelines: number;
 }
 
 export type PluginStandard = "agent_plugins" | "codex" | "claude_code" | "conventional";
@@ -1518,6 +1521,8 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             lsp_servers: 1,
             monitors: 0,
             apps: 0,
+            scenes: 1,
+            pipelines: 1,
           },
           extension_components: [
             {
@@ -2627,4 +2632,10 @@ export async function listIssueDelegations(
 export async function getProjectScheduling(path: string): Promise<boolean> {
   if (!inTauri) return false;
   return invoke<boolean>("get_project_scheduling", { path }).catch(() => false);
+}
+
+/** Lossy SKILL.md export of a scene (docs/scenes.md §Interop); null when it cannot resolve. */
+export async function exportSceneSkillMd(reference: string): Promise<string | null> {
+  if (!inTauri) return null;
+  return invoke<string>("export_scene_skill_md", { reference }).catch(() => null);
 }
