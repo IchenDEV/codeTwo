@@ -19,6 +19,8 @@ interface TranscriptPaneProps {
   onOpenPlanAsDocument?: (entries: string[]) => void;
   onPinPlanArtifact?: (markdown: string) => void;
   canPinPlan?: boolean;
+  /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
+  onSaveTemplate?: (promptText: string) => void;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -33,6 +35,7 @@ export function TranscriptPane({
   onOpenPlanAsDocument,
   onPinPlanArtifact,
   canPinPlan,
+  onSaveTemplate,
 }: TranscriptPaneProps) {
   const t = useT();
   const Root = variant === "side" ? "aside" : "section";
@@ -102,6 +105,7 @@ export function TranscriptPane({
                       onOpenPlanAsDocument={onOpenPlanAsDocument}
                       onPinPlanArtifact={onPinPlanArtifact}
                       canPinPlan={canPinPlan}
+                      onSaveTemplate={onSaveTemplate}
                     />
                   </li>
                 ))}

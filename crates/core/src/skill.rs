@@ -257,6 +257,135 @@ where
         .collect())
 }
 
+/// True for a whitespace-free token that looks like a workspace file path: contains a `/`, is not
+/// a URL, and its last segment carries a short alphanumeric extension (`src/main.rs`, `a/b.tsx`).
+fn path_like(value: &str) -> bool {
+    if value.contains("://") || value.contains(char::is_whitespace) || !value.contains('/') {
+        return false;
+    }
+    let name = value.rsplit('/').next().unwrap_or("");
+    match name.rsplit_once('.') {
+        Some((stem, ext)) => {
+            !stem.is_empty()
+                && (1..=8).contains(&ext.len())
+                && ext.chars().all(|c| c.is_ascii_alphanumeric())
+        }
+        None => false,
+    }
+}
+
+/// Sentence punctuation that should not ride along when a bare token becomes a slot value.
+fn is_trailing_punct(c: char) -> bool {
+    matches!(c, ',' | '.' | ';' | ':' | ')' | ']' | '}' | '!' | '?')
+}
+
+/// Whitespace-collapsed, length-capped label for a proposed slot.
+fn proposed_label(value: &str) -> String {
+    let collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut label: String = collapsed.chars().take(32).collect();
+    if collapsed.chars().count() > 32 {
+        label.push('…');
+    }
+    label
+}
+
+/// Heuristic "save as template" proposal (R2). Quoted strings, inline code spans, and
+/// path-looking tokens become `{{slot-N}}` slots (kind `file` for paths, `text` otherwise; the
+/// original value is kept as the slot default). Identical values dedupe to one slot; at most six
+/// distinct slots are proposed — later candidates are left verbatim. No model call: this is the
+/// v1 chokepoint the frontend degrades over identically when the command is missing.
+pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
+    const MAX_SLOTS: usize = 6;
+    const MAX_VALUE_LEN: usize = 120;
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut slots: Vec<SlotDef> = Vec::new();
+
+    // Existing slot for the value, or a fresh `slot-N` while under the cap. None → leave as-is.
+    let token_for = |value: &str, slots: &mut Vec<SlotDef>| -> Option<String> {
+        if let Some(existing) = slots.iter().find(|s| s.default.as_deref() == Some(value)) {
+            return Some(format!("{{{{{}}}}}", existing.id));
+        }
+        if slots.len() >= MAX_SLOTS {
+            return None;
+        }
+        let id = format!("slot-{}", slots.len() + 1);
+        let kind = if path_like(value) {
+            SlotKind::File
+        } else {
+            SlotKind::Text
+        };
+        slots.push(SlotDef {
+            id: id.clone(),
+            label: proposed_label(value),
+            kind,
+            options: Vec::new(),
+            required: false,
+            default: Some(value.to_string()),
+        });
+        Some(format!("{{{{{id}}}}}"))
+    };
+
+    // ASCII delimiters never occur inside multi-byte UTF-8 sequences, so byte scanning with
+    // slicing at delimiter positions stays on char boundaries.
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'`' || b == b'"' || b == b'\'' {
+            // A `'` only opens a quote at a word boundary — apostrophes stay prose.
+            let opens = b != b'\'' || i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+            let close = if opens {
+                (i + 1..bytes.len()).take_while(|&j| bytes[j] != b'\n').find(|&j| bytes[j] == b)
+            } else {
+                None
+            };
+            if let Some(end) = close {
+                let inner = &text[i + 1..end];
+                let closes = b != b'\''
+                    || bytes.get(end + 1).is_none_or(|c| !c.is_ascii_alphanumeric());
+                if closes && !inner.trim().is_empty() && inner.len() <= MAX_VALUE_LEN {
+                    if let Some(token) = token_for(inner, &mut slots) {
+                        // Keep the delimiters: the template reads as the prompt did.
+                        out.push(b as char);
+                        out.push_str(&token);
+                        out.push(b as char);
+                        i = end + 1;
+                        continue;
+                    }
+                }
+            }
+            out.push(b as char);
+            i += 1;
+            continue;
+        }
+        if b.is_ascii_whitespace() {
+            out.push(b as char);
+            i += 1;
+            continue;
+        }
+        // Bare token; stop at quote/code delimiters so `path:"a/b.rs"` still finds its quote.
+        let start = i;
+        while i < bytes.len()
+            && !bytes[i].is_ascii_whitespace()
+            && !matches!(bytes[i], b'`' | b'"')
+        {
+            i += 1;
+        }
+        let token = &text[start..i];
+        let trimmed = token.trim_end_matches(is_trailing_punct);
+        if path_like(trimmed) && trimmed.len() <= MAX_VALUE_LEN {
+            if let Some(slot_token) = token_for(trimmed, &mut slots) {
+                out.push_str(&slot_token);
+                out.push_str(&token[trimmed.len()..]);
+                continue;
+            }
+        }
+        out.push_str(token);
+    }
+
+    (out, slots)
+}
+
 /// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
 /// registration, so Code2 also keeps a deterministic inline delegation fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1445,5 +1574,39 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(legacy.transport, McpTransport::Http { .. }));
+    }
+
+    #[test]
+    fn propose_macro_slots_extracts_quotes_paths_and_code_spans() {
+        let (template, slots) = propose_macro_slots(
+            r#"Refactor `parse_input` in src/lib/parser.rs and rename "old name" to "new name"."#,
+        );
+        assert_eq!(
+            template,
+            "Refactor `{{slot-1}}` in {{slot-2}} and rename \"{{slot-3}}\" to \"{{slot-4}}\"."
+        );
+        assert_eq!(slots.len(), 4);
+        assert_eq!(slots[0].kind, SlotKind::Text);
+        assert_eq!(slots[0].default.as_deref(), Some("parse_input"));
+        assert_eq!(slots[1].kind, SlotKind::File);
+        assert_eq!(slots[1].default.as_deref(), Some("src/lib/parser.rs"));
+        assert_eq!(slots[1].label, "src/lib/parser.rs");
+        assert_eq!(slots[3].id, "slot-4");
+    }
+
+    #[test]
+    fn propose_macro_slots_dedupes_and_caps_at_six() {
+        let (template, slots) = propose_macro_slots(r#""a" "b" "c" "d" "e" "f" "g" "a""#);
+        assert_eq!(slots.len(), 6, "seventh distinct value stays verbatim");
+        assert!(template.ends_with(r#""g" "{{slot-1}}""#), "template was {template}");
+        assert_eq!(template.matches("{{slot-1}}").count(), 2);
+    }
+
+    #[test]
+    fn propose_macro_slots_leaves_prose_alone() {
+        let text = "Don't touch anything here; it's plain prose with a trailing URL https://a.b/c.html";
+        let (template, slots) = propose_macro_slots(text);
+        assert_eq!(template, text);
+        assert!(slots.is_empty(), "apostrophes and URLs are not slot candidates");
     }
 }
