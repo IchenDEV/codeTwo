@@ -2128,9 +2128,25 @@ impl Engine {
                     let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
                     let scenes = self.state.scenes.lock().unwrap().clone();
                     let entry = scenes.resolve(&scene_ref)?;
-                    // R9: pass SceneArtifactStore::resolve_carry output here once sessions carry
-                    // pipeline bindings — the pipeline columns don't exist yet.
-                    let carried: Vec<crate::scene::CarriedArtifact> = Vec::new();
+                    // R9: a stage-bound session compiles its stage's `carry` list against the
+                    // newest stored versions on every prompt — the artifact store, not session
+                    // memory, is the inter-stage contract. Unbound sessions carry nothing.
+                    let carried: Vec<crate::scene::CarriedArtifact> = store
+                        .session_pipeline(&session)
+                        .ok()
+                        .flatten()
+                        .and_then(|(instance_id, stage_id)| {
+                            let instance = store.get_pipeline_instance(&instance_id).ok().flatten()?;
+                            let pipeline = scenes.resolve_pipeline(&instance.pipeline_ref)?;
+                            let stage = pipeline
+                                .pipeline
+                                .stages
+                                .iter()
+                                .find(|stage| stage.id == stage_id)?;
+                            let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                            Some(artifacts.resolve_carry(&instance_id, stage))
+                        })
+                        .unwrap_or_default();
                     let preamble = crate::scene::prompt_preamble(&entry.scene, &carried);
                     (!preamble.trim().is_empty()).then_some(preamble)
                 });

@@ -639,14 +639,25 @@ async fn apply_scene(
     reference: String,
     confirm_escalation: bool,
 ) -> Result<SceneApplyOutcome, String> {
+    apply_scene_to(&state, &session, &reference, confirm_escalation).await
+}
+
+/// The body of `apply_scene`, callable from the pipeline commands (R9) so stage advances share
+/// the exact refuse-and-report escalation semantics.
+async fn apply_scene_to(
+    state: &AppState,
+    session: &str,
+    reference: &str,
+    confirm_escalation: bool,
+) -> Result<SceneApplyOutcome, String> {
     let (scene_ref, scene, plan) = {
         let lib = state.scenes.lock().unwrap().clone();
         let entry = lib
-            .resolve(&reference)
+            .resolve(reference)
             .ok_or_else(|| format!("unknown scene `{reference}`"))?;
         let current = state
             .store
-            .get_session(&session)
+            .get_session(session)
             .map_err(|e| e.to_string())?
             .map(|s| ExecutionPolicy {
                 mode: s.permission_mode,
@@ -680,7 +691,7 @@ async fn apply_scene(
         state
             .engine
             .submit(Op::SetExecutionPolicy {
-                session: session.clone(),
+                session: session.to_string(),
                 mode: policy.mode,
                 sandbox: policy.sandbox,
                 request_id: None,
@@ -692,7 +703,7 @@ async fn apply_scene(
     if let Some((read, write)) = plan.memory {
         state
             .store
-            .set_session_memory_policy(&session, read, write)
+            .set_session_memory_policy(session, read, write)
             .map_err(|e| e.to_string())?;
         applied.push("memory_preset");
     }
@@ -701,7 +712,7 @@ async fn apply_scene(
     }
     state
         .store
-        .set_session_scene(&session, Some(&scene_ref), false)
+        .set_session_scene(session, Some(&scene_ref), false)
         .map_err(|e| e.to_string())?;
 
     let skills = scene.skills.unwrap_or_default();
@@ -723,9 +734,18 @@ fn scene_session_plan(
     reference: String,
     confirm_escalation: bool,
 ) -> Result<SceneSessionPlanOutcome, String> {
+    scene_session_plan_for(&state, &reference, confirm_escalation)
+}
+
+/// The body of `scene_session_plan`, callable from `advance_pipeline` when no session is given.
+fn scene_session_plan_for(
+    state: &AppState,
+    reference: &str,
+    confirm_escalation: bool,
+) -> Result<SceneSessionPlanOutcome, String> {
     let lib = state.scenes.lock().unwrap().clone();
     let entry = lib
-        .resolve(&reference)
+        .resolve(reference)
         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
     let scene_ref = SceneLibrary::reference_for(entry);
     let plan = scene::plan_apply(
@@ -890,6 +910,406 @@ fn dismiss_scene_banner(state: State<'_, AppState>, session: String, state_key: 
 #[tauri::command]
 fn set_project_scheduling(state: State<'_, AppState>, path: String, enabled: bool) {
     state.scene_runtime.set_scheduling(&path, enabled);
+}
+
+// ---- pipeline instances (R9) ----------------------------------------------------------------
+
+use codetwo_core::store::{PipelineInstance, PipelineTransitionRecord};
+
+fn gate_str(gate: codetwo_core::Gate) -> &'static str {
+    match gate {
+        codetwo_core::Gate::Suggest => "suggest",
+        codetwo_core::Gate::Confirm => "confirm",
+        codetwo_core::Gate::Auto => "auto",
+    }
+}
+
+fn trigger_str(when: codetwo_core::TransitionTrigger) -> &'static str {
+    match when {
+        codetwo_core::TransitionTrigger::ExitCriteriaMet => "exit_criteria_met",
+        codetwo_core::TransitionTrigger::TestsFailed => "tests_failed",
+        codetwo_core::TransitionTrigger::UserRequest => "user_request",
+    }
+}
+
+/// One stage on the horizontal stage track: done / current / pending, its loop count, the
+/// sessions that worked it, and its captured artifacts.
+#[derive(Serialize)]
+struct StageStatus {
+    id: String,
+    scene_ref: String,
+    title: String,
+    state: &'static str,
+    gate: &'static str,
+    loop_count: usize,
+    sessions: Vec<String>,
+    artifacts: Vec<SceneArtifactRecord>,
+}
+
+#[derive(Serialize)]
+struct PipelineInstanceDetail {
+    instance: PipelineInstance,
+    transitions: Vec<PipelineTransitionRecord>,
+    stages: Vec<StageStatus>,
+}
+
+#[derive(Serialize)]
+struct PipelineStartOutcome {
+    detail: PipelineInstanceDetail,
+    applied_scene: Option<SceneApplyOutcome>,
+}
+
+#[derive(Serialize)]
+struct PipelineAdvanceOutcome {
+    instance: PipelineInstance,
+    applied_scene: Option<SceneApplyOutcome>,
+    session_plan: Option<codetwo_core::SceneSessionParams>,
+    escalation: Option<EscalationOut>,
+    carried: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SessionPipelineOut {
+    instance_id: String,
+    stage_id: String,
+}
+
+/// Assemble the stage-track projection: state from the transition log + current stage, loop
+/// count = COUNT(transitions into the stage), sessions from live bindings plus the log.
+fn pipeline_detail(
+    state: &AppState,
+    instance: PipelineInstance,
+) -> Result<PipelineInstanceDetail, String> {
+    let transitions = state
+        .store
+        .list_pipeline_transitions(&instance.id)
+        .map_err(|e| e.to_string())?;
+    let bound = state
+        .store
+        .sessions_for_pipeline(&instance.id)
+        .map_err(|e| e.to_string())?;
+    let artifacts = state
+        .scene_artifacts
+        .list_for_instance(&instance.id)
+        .unwrap_or_default();
+    let lib = state.scenes.lock().unwrap().clone();
+    let stages = lib
+        .resolve_pipeline(&instance.pipeline_ref)
+        .map(|entry| {
+            entry
+                .pipeline
+                .stages
+                .iter()
+                .map(|stage| {
+                    let loop_count = transitions
+                        .iter()
+                        .filter(|transition| transition.to_stage == stage.id)
+                        .count();
+                    let stage_state = if instance.current_stage == stage.id {
+                        "current"
+                    } else if loop_count > 0 {
+                        "done"
+                    } else {
+                        "pending"
+                    };
+                    let title = stage
+                        .title
+                        .clone()
+                        .or_else(|| lib.resolve(&stage.scene).map(|s| s.scene.title.clone()))
+                        .unwrap_or_else(|| stage.id.clone());
+                    let mut sessions: Vec<String> = bound
+                        .iter()
+                        .filter(|(_, bound_stage)| *bound_stage == stage.id)
+                        .map(|(session, _)| session.clone())
+                        .collect();
+                    for transition in &transitions {
+                        if transition.to_stage != stage.id {
+                            continue;
+                        }
+                        if let Some(session) = &transition.session_id {
+                            if !sessions.contains(session) {
+                                sessions.push(session.clone());
+                            }
+                        }
+                    }
+                    StageStatus {
+                        id: stage.id.clone(),
+                        scene_ref: stage.scene.clone(),
+                        title,
+                        state: stage_state,
+                        gate: gate_str(stage.gate.unwrap_or(codetwo_core::Gate::Suggest)),
+                        loop_count,
+                        sessions,
+                        artifacts: artifacts
+                            .iter()
+                            .filter(|record| record.stage_id.as_deref() == Some(stage.id.as_str()))
+                            .cloned()
+                            .collect(),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(PipelineInstanceDetail {
+        instance,
+        transitions,
+        stages,
+    })
+}
+
+/// Create an instance at the entry stage and record the `entry` transition. With a session, bind
+/// it to the entry stage and soft-apply the entry scene (escalation refuse-and-report, exactly
+/// like `apply_scene` — the binding still lands so the track renders; the posture waits for the
+/// user's confirmation).
+#[tauri::command]
+async fn start_pipeline(
+    state: State<'_, AppState>,
+    reference: String,
+    project_path: String,
+    session: Option<String>,
+) -> Result<PipelineStartOutcome, String> {
+    let (pipeline_ref, entry_stage, entry_scene, entry_gate) = {
+        let lib = state.scenes.lock().unwrap().clone();
+        let entry = lib
+            .resolve_pipeline(&reference)
+            .ok_or_else(|| format!("unknown pipeline `{reference}`"))?;
+        let pipeline = &entry.pipeline;
+        let stage_id = pipeline
+            .entry
+            .clone()
+            .unwrap_or_else(|| pipeline.stages[0].id.clone());
+        let stage = pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.id == stage_id)
+            .ok_or_else(|| format!("pipeline entry `{stage_id}` names no stage"))?;
+        (
+            SceneLibrary::pipeline_reference_for(entry),
+            stage_id,
+            stage.scene.clone(),
+            stage.gate.unwrap_or(codetwo_core::Gate::Suggest),
+        )
+    };
+    let instance = state
+        .store
+        .create_pipeline_instance(&pipeline_ref, &project_path, &entry_stage)
+        .map_err(|e| e.to_string())?;
+    state
+        .store
+        .record_pipeline_transition(
+            &instance.id,
+            None,
+            &entry_stage,
+            "entry",
+            gate_str(entry_gate),
+            session.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+    let mut applied_scene = None;
+    if let Some(session) = session.as_deref() {
+        state
+            .store
+            .bind_session_to_stage(session, Some((&instance.id, &entry_stage)))
+            .map_err(|e| e.to_string())?;
+        applied_scene = Some(apply_scene_to(&state, session, &entry_scene, false).await?);
+    }
+    let instance = state
+        .store
+        .get_pipeline_instance(&instance.id)
+        .map_err(|e| e.to_string())?
+        .ok_or("pipeline instance vanished")?;
+    Ok(PipelineStartOutcome {
+        detail: pipeline_detail(&state, instance)?,
+        applied_scene,
+    })
+}
+
+/// Move an instance to `to_stage`. With a session: soft-apply the target scene first (unconfirmed
+/// escalation ⇒ NOTHING recorded, refuse-and-report), then record + rebind. Without one: return
+/// the full-apply `SceneSessionParams` for the frontend to create the session and call
+/// `bind_pipeline_session`.
+#[tauri::command]
+async fn advance_pipeline(
+    state: State<'_, AppState>,
+    instance_id: String,
+    to_stage: String,
+    session: Option<String>,
+    confirm: bool,
+) -> Result<PipelineAdvanceOutcome, String> {
+    let instance = state
+        .store
+        .get_pipeline_instance(&instance_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("unknown pipeline instance `{instance_id}`"))?;
+    let (stage, trigger, gate) = {
+        let lib = state.scenes.lock().unwrap().clone();
+        let resolved = lib
+            .resolve_pipeline(&instance.pipeline_ref)
+            .ok_or_else(|| format!("unknown pipeline `{}`", instance.pipeline_ref))?;
+        let stage = resolved
+            .pipeline
+            .stages
+            .iter()
+            .find(|stage| stage.id == to_stage)
+            .ok_or_else(|| format!("unknown stage `{to_stage}`"))?
+            .clone();
+        // A listed/default edge names the trigger and gate; any other jump is a user request.
+        let edge = scene::outgoing_edges(&resolved.pipeline, &instance.current_stage)
+            .into_iter()
+            .find(|edge| edge.to == to_stage);
+        match edge {
+            Some(edge) => (stage, trigger_str(edge.when), gate_str(edge.gate)),
+            None => (
+                stage,
+                "user_request",
+                if confirm { "confirm" } else { "suggest" },
+            ),
+        }
+    };
+
+    let mut applied_scene = None;
+    let mut session_plan = None;
+    match session.as_deref() {
+        Some(session_id) => {
+            let outcome = apply_scene_to(&state, session_id, &stage.scene, confirm).await?;
+            if outcome.escalation.is_some() {
+                // Refuse-and-report: the scene applied nothing, so the pipeline moves nothing.
+                return Ok(PipelineAdvanceOutcome {
+                    instance,
+                    applied_scene: Some(outcome),
+                    session_plan: None,
+                    escalation: None,
+                    carried: Vec::new(),
+                });
+            }
+            applied_scene = Some(outcome);
+        }
+        None => {
+            let plan = scene_session_plan_for(&state, &stage.scene, confirm)?;
+            if let Some(escalation) = plan.escalation {
+                return Ok(PipelineAdvanceOutcome {
+                    instance,
+                    applied_scene: None,
+                    session_plan: None,
+                    escalation: Some(escalation),
+                    carried: Vec::new(),
+                });
+            }
+            session_plan = plan.params;
+        }
+    }
+
+    state
+        .store
+        .record_pipeline_transition(
+            &instance_id,
+            Some(&instance.current_stage),
+            &to_stage,
+            trigger,
+            gate,
+            session.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+    if let Some(session_id) = session.as_deref() {
+        state
+            .store
+            .bind_session_to_stage(session_id, Some((&instance_id, &to_stage)))
+            .map_err(|e| e.to_string())?;
+    }
+    let carried: Vec<String> = state
+        .scene_artifacts
+        .resolve_carry(&instance_id, &stage)
+        .into_iter()
+        .map(|artifact| artifact.label)
+        .collect();
+    let instance = state
+        .store
+        .get_pipeline_instance(&instance_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("pipeline instance vanished")?;
+    Ok(PipelineAdvanceOutcome {
+        instance,
+        applied_scene,
+        session_plan,
+        escalation: None,
+        carried,
+    })
+}
+
+/// Bind a (typically fresh) session to one stage; also points the session at the stage's scene so
+/// preamble and carry compile on its next prompt.
+#[tauri::command]
+fn bind_pipeline_session(
+    state: State<'_, AppState>,
+    instance_id: String,
+    stage_id: String,
+    session: String,
+) -> Result<(), String> {
+    state
+        .store
+        .bind_session_to_stage(&session, Some((&instance_id, &stage_id)))
+        .map_err(|e| e.to_string())?;
+    let scene_ref = state
+        .store
+        .get_pipeline_instance(&instance_id)
+        .ok()
+        .flatten()
+        .and_then(|instance| {
+            let lib = state.scenes.lock().unwrap().clone();
+            let resolved = lib.resolve_pipeline(&instance.pipeline_ref)?;
+            resolved
+                .pipeline
+                .stages
+                .iter()
+                .find(|stage| stage.id == stage_id)
+                .map(|stage| stage.scene.clone())
+        });
+    if let Some(scene_ref) = scene_ref {
+        let _ = state
+            .store
+            .set_session_scene(&session, Some(&scene_ref), false);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_pipeline_instance(
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> Result<PipelineInstanceDetail, String> {
+    let instance = state
+        .store
+        .get_pipeline_instance(&instance_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("unknown pipeline instance `{instance_id}`"))?;
+    pipeline_detail(&state, instance)
+}
+
+#[tauri::command]
+fn list_pipeline_instances(
+    state: State<'_, AppState>,
+    project_path: String,
+) -> Result<Vec<PipelineInstance>, String> {
+    state
+        .store
+        .list_pipeline_instances(&project_path)
+        .map_err(|e| e.to_string())
+}
+
+/// The session's pipeline binding, if any — the frontend keys the stage track off this.
+#[tauri::command]
+fn session_pipeline(
+    state: State<'_, AppState>,
+    session: String,
+) -> Result<Option<SessionPipelineOut>, String> {
+    Ok(state
+        .store
+        .session_pipeline(&session)
+        .map_err(|e| e.to_string())?
+        .map(|(instance_id, stage_id)| SessionPipelineOut {
+            instance_id,
+            stage_id,
+        }))
 }
 
 // ---- provider-neutral memory ----------------------------------------------------------------
@@ -3243,7 +3663,13 @@ pub fn run() {
             propose_macro_slots,
             dismiss_scene_banner,
             set_project_scheduling,
-            usage_by_session
+            usage_by_session,
+            start_pipeline,
+            advance_pipeline,
+            bind_pipeline_session,
+            get_pipeline_instance,
+            list_pipeline_instances,
+            session_pipeline
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

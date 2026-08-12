@@ -96,15 +96,16 @@ pub use provider::{
 };
 pub use pty::PtySession;
 pub use scene::{
-    apply_execution, is_artifact_id, is_slug, memory_preset_policy, plan_apply,
+    apply_execution, is_artifact_id, is_slug, memory_preset_policy, outgoing_edges, plan_apply,
     policy_session_mode, prompt_preamble, session_mode_policy, validate_pipeline, validate_scene,
-    ApplyStrength, BriefClarify, CarriedArtifact, CarrySpec, EscalationRequired, ExitCriterion,
-    ExitCriterionKind, Gate, HookAction, HookActionKind, HookEvent, NextSuggestion, PendingField,
-    Pipeline, PipelineStage, PipelineTransition, ResolvedPipeline, ResolvedScene, Scene,
-    SceneApplyPlan, SceneArtifactKind, SceneArtifactSpec, SceneBrief, SceneConstraints,
-    SceneExecution, SceneExit, SceneHook, SceneInlineFragment, SceneLibrary, SceneLocalization,
-    SceneMemoryPreset, SceneSessionMode, SceneSessionParams, SceneSkills, SceneSource,
-    SceneWorktree, ToolHints, TransitionTrigger, PIPELINE_SCHEMA_ID, SCENE_SCHEMA_ID,
+    ApplyStrength, BriefClarify, CarriedArtifact, CarrySpec, EffectiveTransition,
+    EscalationRequired, ExitCriterion, ExitCriterionKind, Gate, HookAction, HookActionKind,
+    HookEvent, NextSuggestion, PendingField, Pipeline, PipelineStage, PipelineTransition,
+    ResolvedPipeline, ResolvedScene, Scene, SceneApplyPlan, SceneArtifactKind, SceneArtifactSpec,
+    SceneBrief, SceneConstraints, SceneExecution, SceneExit, SceneHook, SceneInlineFragment,
+    SceneLibrary, SceneLocalization, SceneMemoryPreset, SceneSessionMode, SceneSessionParams,
+    SceneSkills, SceneSource, SceneWorktree, ToolHints, TransitionTrigger, PIPELINE_SCHEMA_ID,
+    SCENE_SCHEMA_ID,
 };
 pub use scene_artifact::{
     extract_artifact_blocks, SceneArtifactRecord, SceneArtifactStore, MAX_CARRY_CONTENT_BYTES,
@@ -121,7 +122,9 @@ pub use skill::{
     SlotKind, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
-pub use store::{SessionSearchHit, Store, StoreError};
+pub use store::{
+    PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store, StoreError,
+};
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};
