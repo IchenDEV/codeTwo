@@ -6,6 +6,9 @@ import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { useAppearanceSettings } from "../appearance";
+import { CodeTwoPet } from "../pet/CodeTwoPet";
+import type { CodeTwoPetAnimation } from "../pet/state";
 
 interface TranscriptPaneProps {
   variant: "main" | "side";
@@ -15,6 +18,8 @@ interface TranscriptPaneProps {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   scroll: TranscriptScrollController;
+  petAnimation: CodeTwoPetAnimation;
+  onVoiceText: (text: string) => void;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -26,8 +31,11 @@ export function TranscriptPane({
   loadingEarlier,
   onLoadEarlier,
   scroll,
+  petAnimation,
+  onVoiceText,
 }: TranscriptPaneProps) {
   const t = useT();
+  const appearance = useAppearanceSettings();
   const Root = variant === "side" ? "aside" : "section";
 
   return (
@@ -94,6 +102,9 @@ export function TranscriptPane({
                   </li>
                 ))}
               </ol>
+              {variant === "main" && appearance.petEnabled ? (
+                <CodeTwoPet animation={petAnimation} onVoiceText={onVoiceText} />
+              ) : null}
             </>
           )}
         </div>
