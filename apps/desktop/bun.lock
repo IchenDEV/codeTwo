@@ -10,6 +10,7 @@
         "@blocknote/mantine": "^0.25.0",
         "@blocknote/react": "^0.25.0",
         "@excalidraw/excalidraw": "0.18.1",
+        "@petx/react": "0.2.0",
         "@shikijs/monaco": "^4.4.1",
         "@tauri-apps/api": "^2.0.0",
         "@tauri-apps/plugin-dialog": "^2.7.2",
@@ -202,6 +203,10 @@
     "@mantine/utils": ["@mantine/utils@6.0.22", "", { "peerDependencies": { "react": ">=16.8.0" } }, "sha512-RSKlNZvxhMCkOFZ6slbYvZYbWjHUM+PxDQnupIOxIdsTZQQjx/BFfrfJ7kQFOP+g7MtpOds8weAetEs5obwMOQ=="],
 
     "@mermaid-js/parser": ["@mermaid-js/parser@0.6.3", "", { "dependencies": { "langium": "3.3.1" } }, "sha512-lnjOhe7zyHjc+If7yT4zoedx2vo4sHaTmtkl1+or8BRTnCtDmcTpAjpzDSfCZrshM5bCoz0GyidzadJAH1xobA=="],
+
+    "@petx/core": ["@petx/core@0.2.0", "", {}, "sha512-27hREQU7miWMk4C6rPKx0WlDD3X6sAoxZ27RF2fNaHx90y/BcW4UIr6qRcb7wn3jMBywZpu1VfdMqn32nvx32Q=="],
+
+    "@petx/react": ["@petx/react@0.2.0", "", { "dependencies": { "@petx/core": "0.2.0" }, "peerDependencies": { "react": ">=18" } }, "sha512-qzUwBUHxRFMgrxBUbChalkJRFhEnpMi8jVta4Mx/SqNHk0xQQbBHE39FMxvuXawEPYdFaIft4c500lRJse1S0g=="],
 
     "@popperjs/core": ["@popperjs/core@2.11.8", "", {}, "sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A=="],
 

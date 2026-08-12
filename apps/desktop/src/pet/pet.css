@@ -1,0 +1,71 @@
+.codetwo-pet-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--ds-space-module-inset);
+  margin-block: var(--ds-space-section) var(--ds-space-page);
+}
+
+.codetwo-pet-mascot {
+  position: relative;
+  display: grid;
+  cursor: pointer;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  border-radius: var(--ds-radius-modal);
+  outline: none;
+}
+
+.codetwo-pet-mascot::after {
+  position: absolute;
+  right: var(--ds-space-section);
+  bottom: var(--ds-space-module-inset);
+  left: var(--ds-space-section);
+  height: var(--ds-space-module-inset);
+  content: "";
+  background: color-mix(in oklch, var(--ds-color-text) 12%, transparent);
+  border-radius: 50%;
+  filter: blur(var(--ds-space-module-inset));
+  opacity: 0.48;
+}
+
+.codetwo-pet-mascot:hover {
+  background: color-mix(in oklch, var(--ds-color-fill-quiet) 68%, transparent);
+}
+
+.codetwo-pet-mascot:focus-visible {
+  box-shadow: 0 0 0 var(--ds-focus-width) var(--ds-color-focus);
+}
+
+.codetwo-pet-mascot .codex-pet {
+  position: relative;
+  z-index: 1;
+}
+
+.codetwo-pet-mascot .codex-pet::before {
+  image-rendering: auto;
+}
+
+.codetwo-pet-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-module-inset);
+}
+
+.codetwo-pet-controls button {
+  width: calc(var(--ds-control-field) + var(--ds-space-module-inset));
+  height: calc(var(--ds-control-field) + var(--ds-space-module-inset));
+  background: color-mix(in oklch, var(--ds-color-surface) 82%, transparent);
+  border-radius: 50%;
+  box-shadow: var(--ds-elevation-raised);
+  backdrop-filter: blur(var(--ds-space-module-inset));
+}
+
+@media (max-width: 720px) {
+  .codetwo-pet-stage {
+    margin-block: var(--ds-space-module-inset) var(--ds-space-section);
+  }
+}

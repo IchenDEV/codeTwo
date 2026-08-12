@@ -10,6 +10,8 @@ import "./styles.css";
 
 const showDesignSystem =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");
+const showPetPreview =
+  import.meta.env.DEV && new URLSearchParams(window.location.search).has("pet-preview");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -22,7 +24,11 @@ document.addEventListener("contextmenu", (e) => {
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
-  const Root = showDesignSystem ? (await import("./design/DesignSystemPreview")).DesignSystemPreview : App;
+  const Root = showPetPreview
+    ? (await import("./pet/PetPreview")).PetPreview
+    : showDesignSystem
+      ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
+      : App;
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>

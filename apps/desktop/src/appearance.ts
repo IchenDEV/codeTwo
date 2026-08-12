@@ -23,6 +23,7 @@ export interface AppearanceSettings {
   preference: ThemePreference;
   activeThemeId: string;
   customThemes: AppearanceTheme[];
+  petEnabled: boolean;
   uiFont: UiFontId;
   codeFont: CodeFontId;
   uiFontSize: number;
@@ -93,6 +94,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   preference: "system",
   activeThemeId: "code2",
   customThemes: [],
+  petEnabled: true,
   uiFont: "system",
   codeFont: "system-mono",
   uiFontSize: 13,
@@ -174,6 +176,9 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
       ? candidate.activeThemeId
       : DEFAULT_APPEARANCE_SETTINGS.activeThemeId,
     customThemes,
+    petEnabled: typeof candidate.petEnabled === "boolean"
+      ? candidate.petEnabled
+      : DEFAULT_APPEARANCE_SETTINGS.petEnabled,
     uiFont: includesId(UI_FONTS, candidate.uiFont) ? candidate.uiFont : DEFAULT_APPEARANCE_SETTINGS.uiFont,
     codeFont: includesId(CODE_FONTS, candidate.codeFont) ? candidate.codeFont : DEFAULT_APPEARANCE_SETTINGS.codeFont,
     uiFontSize: clamp(candidate.uiFontSize, 12, 16, DEFAULT_APPEARANCE_SETTINGS.uiFontSize),
