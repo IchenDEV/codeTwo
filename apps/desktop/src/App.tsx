@@ -194,6 +194,7 @@ import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
+import { petAnimationForActivity } from "./pet/state";
 import {
   applyEvent,
   canvasAcceptedRequestKey,
@@ -363,8 +364,8 @@ function IconAction({
 }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
+      <TooltipTrigger
+        render={<Button
           variant={active ? "secondary" : "ghost"}
           size="icon"
           aria-label={label}
@@ -372,8 +373,8 @@ function IconAction({
           onClick={onClick}
         >
           <Icon className="size-4" />
-        </Button>
-      </TooltipTrigger>
+        </Button>}
+      />
       <TooltipContent>
         {label}
         {hint && <span className="ml-1.5 opacity-60">{hint}</span>}
@@ -593,13 +594,22 @@ export default function App() {
     activeSession,
     pendingPolicySessions,
   );
-  const awaitingInput = activeSession
+  const activeRunState = activeSession
     ? sessionActivity(
         sessions.find((session) => session.id === activeSession) ??
           archivedSessions.find((session) => session.id === activeSession) ??
           {},
-      ).state.kind === "awaiting_input"
-    : false;
+      ).state
+    : null;
+  const awaitingInput = activeRunState?.kind === "awaiting_input";
+  const latestTurn = turns[turns.length - 1];
+  const petAnimation = petAnimationForActivity({
+    loading: sessionLoading,
+    running,
+    awaitingInput,
+    failed: activeRunState?.kind === "failed" || Boolean(latestTurn?.error),
+    completed: Boolean(latestTurn?.endedAt),
+  });
   // The right panel's file editor: open tabs in open order, and which one is showing. Every tab
   // is directly editable — unsaved-ness lives in files/dirty.ts, which the close guard reads.
   const [openFiles, setOpenFiles] = useState<string[]>([]);
@@ -3512,6 +3522,8 @@ export default function App() {
                 onPinPlanArtifact={pinPlanArtifact}
                 canPinPlan={canPinPlan}
                 onSaveTemplate={openTemplateDraft}
+                petAnimation={petAnimation}
+                onVoiceText={(text) => insertTextRef.current?.(text)}
               />
             )}
 

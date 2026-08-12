@@ -554,16 +554,16 @@ export function BrowserPanel({
         )}
 
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger asChild>
-            <Button
+          <PopoverTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-7 text-muted-foreground"
               title={t("browser.more")}
             >
               <MoreVertical className="size-3.5" />
-            </Button>
-          </PopoverTrigger>
+            </Button>}
+          />
           <PopoverContent align="end" className="w-60 p-1">
             <MenuItem
               icon={RotateCw}

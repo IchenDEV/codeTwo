@@ -268,8 +268,8 @@ export function VoiceButton({
         : t("voice.hold");
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
+      <TooltipTrigger
+        render={<Button
           variant={mode === "listening" ? "destructive" : "ghost"}
           size="icon"
           aria-label={label}
@@ -287,8 +287,8 @@ export function VoiceButton({
               (mode === "transcribing" || mode === "structuring") && "animate-spin",
             )}
           />
-        </Button>
-      </TooltipTrigger>
+        </Button>}
+      />
       <TooltipContent>
         {label}
         {hint && <span className="ml-1.5 opacity-60">{hint}</span>}

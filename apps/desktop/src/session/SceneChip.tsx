@@ -72,8 +72,8 @@ export function SceneChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           title={t("scene.chip")}
           aria-label={`${t("scene.chip")}: ${label}`}
           className={cn(active && "text-foreground")}
@@ -101,18 +101,12 @@ export function SceneChip({
             />
           )}
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent
         align="start"
         side="top"
         className="w-96 p-1.5"
-        onInteractOutside={(e) => {
-          // Nested Radix popovers (the pickers below) portal to <body>; interacting with them
-          // must not close this shell.
-          const target = e.target as HTMLElement | null;
-          if (target?.closest("[data-radix-popper-content-wrapper]")) e.preventDefault();
-        }}
       >
         {/* The pickers hide their labels via @container/composer queries; re-establish the
             container inside the portal so they render exactly as they do in the row. */}

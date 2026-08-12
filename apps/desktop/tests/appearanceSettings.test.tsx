@@ -9,8 +9,10 @@ const { AppearanceSettings } = await import("../src/settings/AppearanceSettings"
 const {
   getAppearanceSettings,
   importAppearanceTheme,
+  normalizeAppearanceSettings,
   resetAppearanceSettings,
   serializeAppearanceTheme,
+  setAppearanceSettings,
 } = await import("../src/appearance");
 
 function installThemeTokens() {
@@ -67,6 +69,24 @@ describe("Appearance settings", () => {
 
     expect(view.container.querySelectorAll(".appearance-system-half")).toHaveLength(2);
     expect(view.container.querySelectorAll(".appearance-mini-app")).toHaveLength(4);
+
+    view.unmount();
+  });
+
+  test("shows the session pet by default and persists an explicit hide", async () => {
+    activateDom();
+    expect(normalizeAppearanceSettings({}).petEnabled).toBe(true);
+    setAppearanceSettings({ petEnabled: true });
+    const view = mount(<Harness />);
+    await flush();
+
+    const checkbox = view.container.querySelector<HTMLButtonElement>('[role="checkbox"]');
+    expect(checkbox?.hasAttribute("data-checked")).toBe(true);
+    expect(getAppearanceSettings().petEnabled).toBe(true);
+
+    checkbox?.click();
+    await flush();
+    expect(getAppearanceSettings().petEnabled).toBe(false);
 
     view.unmount();
   });

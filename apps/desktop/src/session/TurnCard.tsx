@@ -320,17 +320,17 @@ export const TurnCard = memo(function TurnCard({
             button so future turn actions slot in beside "Save as template…". */}
         {onSaveTemplate && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
+            <DropdownMenuTrigger
+              render={<button
                 type="button"
                 aria-label={t("templateFrom.menu")}
                 className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
               >
                 <MoreHorizontal className="size-3.5" aria-hidden />
-              </button>
-            </DropdownMenuTrigger>
+              </button>}
+            />
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => onSaveTemplate(history.visiblePrompt)}>
+              <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
                 {t("templateFrom.saveAs")}
               </DropdownMenuItem>
             </DropdownMenuContent>

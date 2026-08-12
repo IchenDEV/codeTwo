@@ -57,8 +57,8 @@ export function Statusline({
   const tone = contextTone(display.percentage !== null ? display.percentage / 100 : null);
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <span
+      <TooltipTrigger
+        render={<span
           role="meter"
           aria-valuemin={0}
           aria-valuemax={contextWindow.contextWindow}
@@ -106,8 +106,8 @@ export function Statusline({
               )}
             </span>
           )}
-        </span>
-      </TooltipTrigger>
+        </span>}
+      />
       <TooltipContent>
         <div className="space-y-0.5">
           <div>

@@ -288,8 +288,8 @@ export function FileViewer({
 
         {!isImage && (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
+            <TooltipTrigger
+              render={<Button
                 variant="ghost"
                 size="icon"
                 className="size-7"
@@ -297,18 +297,18 @@ export function FileViewer({
                 onClick={openDraft}
               >
                 <MessageSquarePlus className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
+              </Button>}
+            />
             <TooltipContent>{t("files.comment")}</TooltipContent>
           </Tooltip>
         )}
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7" onClick={() => onInsert(path)}>
+          <TooltipTrigger
+            render={<Button variant="ghost" size="icon" className="size-7" onClick={() => onInsert(path)}>
               <AtSign className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("files.insert")}</TooltipContent>
         </Tooltip>
 

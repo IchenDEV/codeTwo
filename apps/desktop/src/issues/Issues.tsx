@@ -155,17 +155,17 @@ export function IssuesModal({
                   Add to prompt
                 </Button>
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
+                  <DropdownMenuTrigger
+                    render={<Button size="sm" variant="outline">
                       {t("issueDeleg.delegate")}
-                    </Button>
-                  </DropdownMenuTrigger>
+                    </Button>}
+                  />
                   <DropdownMenuContent align="end">
                     {scenes.length === 0 && (
                       <DropdownMenuItem disabled>{t("issueDeleg.noScenes")}</DropdownMenuItem>
                     )}
                     {scenes.map((s) => (
-                      <DropdownMenuItem key={s.reference} onSelect={() => onDelegate(it, s.reference)}>
+                      <DropdownMenuItem key={s.reference} onClick={() => onDelegate(it, s.reference)}>
                         {s.icon ? <span aria-hidden>{s.icon}</span> : null}
                         {s.title}
                       </DropdownMenuItem>

@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -359,8 +360,8 @@ export function SessionRail({
         </span>
         <div data-tauri-drag-region className="min-w-0 flex-1" />
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="relative size-7 shrink-0 text-muted-foreground"
@@ -376,13 +377,13 @@ export function SessionRail({
                   {needsMeCount}
                 </span>
               )}
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent side="right">{t("mission.open")}</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-7 shrink-0 text-muted-foreground"
@@ -390,8 +391,8 @@ export function SessionRail({
               onClick={onToggleCollapse}
             >
               <PanelLeft className="size-4" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
@@ -409,8 +410,8 @@ export function SessionRail({
           )}
         </button>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-8 shrink-0"
@@ -418,8 +419,8 @@ export function SessionRail({
               onClick={onNew}
             >
               <SquarePen className="size-4" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent side="right">
             {t("rail.newSession")} <span className="ml-1 opacity-60">{newHint}</span>
           </TooltipContent>
@@ -450,48 +451,52 @@ export function SessionRail({
           />
         ) : (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
+            <DropdownMenuTrigger
+              render={<button
                 className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
                 title={activeProject ?? undefined}
               >
                 <Folder className="size-3.5 shrink-0" />
                 <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
                 <ChevronDown className="size-3 shrink-0 opacity-50" />
-              </button>
-            </DropdownMenuTrigger>
+              </button>}
+            />
             <DropdownMenuContent align="end" className="w-60">
-              {projects.map((p) => (
-                <DropdownMenuItem key={p.path} onSelect={() => onSelectProject(p.path)}>
-                  <Folder className={cn(p.path === activeProject && "text-primary")} />
-                  <span className="min-w-0 flex-1 truncate" title={p.path}>
-                    {p.name}
-                  </span>
-                  <span className="shrink-0 text-fine text-muted-foreground">
-                    {shortAge(p.last_opened_at)}
-                  </span>
-                </DropdownMenuItem>
-              ))}
+              <DropdownMenuGroup>
+                {projects.map((p) => (
+                  <DropdownMenuItem key={p.path} onClick={() => onSelectProject(p.path)}>
+                    <Folder className={cn(p.path === activeProject && "text-primary")} />
+                    <span className="min-w-0 flex-1 truncate" title={p.path}>
+                      {p.name}
+                    </span>
+                    <span className="shrink-0 text-fine text-muted-foreground">
+                      {shortAge(p.last_opened_at)}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onAddProject}>
-                <FolderPlus />
-                {t("rail.addProject")}
-              </DropdownMenuItem>
-              {activeProject && (
-                <>
-                  <DropdownMenuItem onSelect={() => setRenamingProject(activeProjectName ?? "")}>
-                    <Pencil />
-                    {t("rail.renameProject")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onSelect={() => onRemoveProject(activeProject)}
-                  >
-                    <Trash2 />
-                    {t("rail.removeProject")}
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={onAddProject}>
+                  <FolderPlus />
+                  {t("rail.addProject")}
+                </DropdownMenuItem>
+                {activeProject && (
+                  <>
+                    <DropdownMenuItem onClick={() => setRenamingProject(activeProjectName ?? "")}>
+                      <Pencil />
+                      {t("rail.renameProject")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => onRemoveProject(activeProject)}
+                    >
+                      <Trash2 />
+                      {t("rail.removeProject")}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -557,29 +562,29 @@ export function SessionRail({
             {model}
           </span>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
+            <TooltipTrigger
+              render={<Button
                 variant="ghost"
                 size="icon"
                 className="size-7 shrink-0 text-muted-foreground"
                 onClick={onOpenMarket}
               >
                 <Store className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
+              </Button>}
+            />
             <TooltipContent>{t("composer.market")}</TooltipContent>
           </Tooltip>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
+            <TooltipTrigger
+              render={<Button
                 variant="ghost"
                 size="icon"
                 className="size-7 shrink-0 text-muted-foreground"
                 onClick={onOpenSettings}
               >
                 <Settings className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
+              </Button>}
+            />
             <TooltipContent>{t("header.settings")}</TooltipContent>
           </Tooltip>
         </div>
