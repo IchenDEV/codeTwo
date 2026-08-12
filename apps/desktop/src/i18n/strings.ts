@@ -651,6 +651,8 @@ export const en = {
   "sceneBanner.start": "Start {scene}",
   "sceneBanner.carrying": "Carrying: {artifacts}",
   "sceneBanner.dismiss": "Dismiss",
+  "sceneBanner.newSession": "Enter in a new session",
+  "sceneBanner.newSessionHint": "Advance the pipeline stage in a fresh session with the stage scene fully applied.",
   "stage.track": "Pipeline stages",
   "stage.state.done": "Done",
   "stage.state.current": "Current",
@@ -662,6 +664,7 @@ export const en = {
   "stage.empty": "Nothing yet",
   "stage.startPipeline": "Start pipeline: {pipeline}",
   "stage.started": "Pipeline started: {pipeline}",
+  "stage.advancedNew": "Advancing to {stage} in a new session…",
   "stage.advanced": "Stage: {stage}",
 } as const;
 
@@ -1283,6 +1286,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneBanner.start": "进入{scene}",
   "sceneBanner.carrying": "携带：{artifacts}",
   "sceneBanner.dismiss": "关闭",
+  "sceneBanner.newSession": "在新会话中进入",
+  "sceneBanner.newSessionHint": "在全新会话中进入下一阶段，阶段场景完整生效。",
   "stage.track": "流水线阶段",
   "stage.state.done": "已完成",
   "stage.state.current": "进行中",
@@ -1294,6 +1299,7 @@ export const zhCN: Record<StringKey, string> = {
   "stage.empty": "暂无内容",
   "stage.startPipeline": "启动流水线：{pipeline}",
   "stage.started": "流水线已启动：{pipeline}",
+  "stage.advancedNew": "正在新会话中进入 {stage}…",
   "stage.advanced": "阶段：{stage}",
 };
 

@@ -714,6 +714,8 @@ async fn apply_scene_to(
         .store
         .set_session_scene(session, Some(&scene_ref), false)
         .map_err(|e| e.to_string())?;
+    // A scene became active on a live session: fire its `enter` hooks.
+    state.scene_runtime.scene_activated(session, Some(&scene_ref));
 
     let skills = scene.skills.unwrap_or_default();
     Ok(SceneApplyOutcome {
@@ -802,7 +804,13 @@ fn set_session_scene(
     state
         .store
         .set_session_scene(&session, reference.as_deref(), customized)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    // Fired here too so the full-apply handshake (frontend persists the scene right after
+    // session_created) triggers `enter` hooks; clearing a scene resets the runtime state.
+    state
+        .scene_runtime
+        .scene_activated(&session, reference.as_deref());
+    Ok(())
 }
 
 #[tauri::command]
@@ -1268,6 +1276,7 @@ fn bind_pipeline_session(
         let _ = state
             .store
             .set_session_scene(&session, Some(&scene_ref), false);
+        state.scene_runtime.scene_activated(&session, Some(&scene_ref));
     }
     Ok(())
 }

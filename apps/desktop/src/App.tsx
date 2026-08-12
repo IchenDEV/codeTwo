@@ -123,6 +123,7 @@ import {
   advancePipeline,
   applySceneToSession,
   dismissSceneBanner,
+  bindPipelineSession,
   getPipelineInstance,
   getSessionScene,
   listPipelines,
@@ -166,6 +167,7 @@ import {
   sceneCustomized,
   softApplyPending,
   MEMORY_PRESET_POLICY,
+  sceneEffortChoice,
   type SceneInfo,
 } from "./session/scene";
 import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
@@ -460,7 +462,7 @@ export default function App() {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [sceneEscalation, setSceneEscalation] = useState<{
     reference: string;
-    kind: "soft" | "restart" | "pipeline";
+    kind: "soft" | "restart" | "pipeline" | "pipeline_new";
     from: SessionMode;
     to: SessionMode;
     /** Set for kind "pipeline": confirming re-calls advance_pipeline with confirm=true. */
@@ -478,6 +480,10 @@ export default function App() {
   const sceneBySessionRef = useRef(new Map<string, string>());
   const scenesRef = useRef<SceneInfo[]>([]);
   const activeSceneNameRef = useRef<string | null>(null);
+  /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
+  const sceneEffortAppliedRef = useRef(new Set<string>());
+  /** Stage binding for the next created session (advance-in-new-session handshake). */
+  const pendingPipelineBindRef = useRef<{ instanceId: string; stageId: string } | null>(null);
   useEffect(() => {
     activeSceneNameRef.current = activeSceneName;
   }, [activeSceneName]);
@@ -1243,6 +1249,19 @@ export default function App() {
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
           {
+            // Advance-in-new-session handshake: bind the created session to its pipeline stage.
+            const bind = pendingPipelineBindRef.current;
+            if (bind) {
+              pendingPipelineBindRef.current = null;
+              void bindPipelineSession(bind.instanceId, bind.stageId, ev.session).then(
+                async () => {
+                  const detail = await getPipelineInstance(bind.instanceId);
+                  if (activeSessionRef.current === ev.session) setPipelineDetail(detail);
+                },
+              );
+            }
+          }
+          {
             // Full-apply handshake: bind the staged scene to the session the moment it exists.
             const pendingScene = pendingSceneRef.current;
             if (pendingScene) {
@@ -1453,6 +1472,29 @@ export default function App() {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
             setDefaultModel((prev) => prev ?? model.current);
+          }
+          {
+            // The scene's reasoning_effort had to pend until the provider named its effort
+            // option (binding matrix); the first matching report applies it, once per session.
+            const scene = scenesRef.current.find(
+              (s) => s.reference === activeSceneNameRef.current,
+            );
+            const wanted = scene?.execution?.reasoning_effort;
+            if (wanted && !sceneEffortAppliedRef.current.has(ev.session)) {
+              const choice = sceneEffortChoice(ev.options, wanted);
+              if (choice) {
+                sceneEffortAppliedRef.current.add(ev.session);
+                void setConfigOption(ev.session, choice.configId, choice.value)
+                  .then(() => {
+                    setScenePendingFields((prev) =>
+                      prev.filter((field) => field !== "reasoning_effort"),
+                    );
+                  })
+                  .catch(() => {
+                    sceneEffortAppliedRef.current.delete(ev.session);
+                  });
+              }
+            }
           }
           return;
         }
@@ -2748,6 +2790,44 @@ export default function App() {
     [pipelineDetail, resolveStageScene, syncSessionScene, toast, t],
   );
 
+  /**
+   * Advance into the next stage in a FRESH session (full-apply): the backend records the
+   * transition and returns the stage scene's session plan; the created session is bound to the
+   * stage via pendingPipelineBindRef once `session_created` arrives.
+   */
+  const advancePipelineInNewSession = useCallback(
+    async (instanceId: string, toStage: string, confirmed = false) => {
+      const outcome = await advancePipeline(instanceId, toStage, null, confirmed);
+      if (!outcome) return;
+      if (outcome.escalation) {
+        const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
+        setSceneEscalation({
+          reference: resolveStageScene(stage?.scene_ref ?? toStage),
+          kind: "pipeline_new",
+          from: outcome.escalation.from as SessionMode,
+          to: outcome.escalation.to as SessionMode,
+          pipeline: { instanceId, toStage },
+        });
+        return;
+      }
+      const detail = await getPipelineInstance(instanceId);
+      setPipelineDetail(detail);
+      const stage = detail?.stages.find((s) => s.id === toStage);
+      const reference = resolveStageScene(stage?.scene_ref ?? toStage);
+      pendingSceneRef.current = reference;
+      pendingPipelineBindRef.current = { instanceId, stageId: toStage };
+      createSession();
+      const params = outcome.session_plan;
+      if (params?.provider) setProvider(params.provider);
+      if (params?.use_worktree === false) setWorktreeBase(null);
+      else if (params?.worktree_base) setWorktreeBase(params.worktree_base);
+      applySceneChoice(reference, { confirmed: true });
+      pendingSceneRef.current = reference;
+      toast(t("stage.advancedNew", { stage: stage?.title ?? toStage }));
+    },
+    [applySceneChoice, createSession, pipelineDetail, resolveStageScene, toast, t],
+  );
+
   /** Start a pipeline in the current project, binding the active session to its entry stage. */
   const startPipelineChoice = useCallback(
     async (reference: string) => {
@@ -3474,6 +3554,10 @@ export default function App() {
                     void advancePipelineChoice(instanceId, toStage);
                     setSceneBanner(null);
                   }}
+                  onAdvancePipelineNewSession={(instanceId, toStage) => {
+                    void advancePipelineInNewSession(instanceId, toStage);
+                    setSceneBanner(null);
+                  }}
                   onDismiss={() => {
                     void dismissSceneBanner(sceneBanner.session, sceneBanner.stateKey);
                     setSceneBanner(null);
@@ -3835,6 +3919,12 @@ export default function App() {
             if (pending.kind === "soft") applySceneChoice(pending.reference, { confirmed: true });
             else if (pending.kind === "pipeline" && pending.pipeline)
               void advancePipelineChoice(
+                pending.pipeline.instanceId,
+                pending.pipeline.toStage,
+                true,
+              );
+            else if (pending.kind === "pipeline_new" && pending.pipeline)
+              void advancePipelineInNewSession(
                 pending.pipeline.instanceId,
                 pending.pipeline.toStage,
                 true,

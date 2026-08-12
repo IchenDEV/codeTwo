@@ -185,3 +185,30 @@ export function nextSceneInRing(
   const next = order[(index + 1) % order.length];
   return next === active ? null : next;
 }
+
+/** The slice of a session config option the effort matcher needs (mirrors bridge's shape). */
+export interface EffortOptionLike {
+  id: string;
+  category?: string | null;
+  choices: { id: string; name?: string | null }[];
+}
+
+/**
+ * Resolve a scene's `reasoning_effort` against the session's reported config options.
+ * The effort config id is provider-specific and unknowable before the session reports it —
+ * this is why the binding matrix defers the field; once options arrive, apply it exactly once.
+ */
+export function sceneEffortChoice(
+  options: readonly EffortOptionLike[],
+  effort: string,
+): { configId: string; value: string } | null {
+  const option = options.find(
+    (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
+  );
+  if (!option) return null;
+  const wanted = effort.toLowerCase();
+  const choice = option.choices.find(
+    (c) => c.id.toLowerCase() === wanted || (c.name ?? "").toLowerCase() === wanted,
+  );
+  return choice ? { configId: option.id, value: choice.id } : null;
+}

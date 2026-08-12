@@ -83,6 +83,7 @@ export function SceneBanner({
   scenes,
   onApplyScene,
   onAdvancePipeline,
+  onAdvancePipelineNewSession,
   onDismiss,
 }: {
   banner: SceneBannerState;
@@ -90,6 +91,8 @@ export function SceneBanner({
   onApplyScene: (reference: string) => void;
   /** Pipeline-driven suggestions advance the instance through the command layer (R9). */
   onAdvancePipeline?: (instanceId: string, toStage: string) => void;
+  /** Advance the pipeline stage in a fresh session (full-apply) instead of the current one. */
+  onAdvancePipelineNewSession?: (instanceId: string, toStage: string) => void;
   onDismiss: () => void;
 }) {
   const t = useT();
@@ -155,6 +158,18 @@ export function SceneBanner({
                   </Button>
                 );
               })}
+              {banner.pipelineInstance && banner.toStage && onAdvancePipelineNewSession && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title={t("sceneBanner.newSessionHint")}
+                  onClick={() =>
+                    onAdvancePipelineNewSession(banner.pipelineInstance!, banner.toStage!)
+                  }
+                >
+                  {t("sceneBanner.newSession")}
+                </Button>
+              )}
             </div>
           )}
         </div>
