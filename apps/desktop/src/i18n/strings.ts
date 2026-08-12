@@ -615,6 +615,10 @@ export const en = {
     "off or has no on-device model for your language. Allow it under Privacy & Security → " +
     "Speech Recognition, or point CODETWO_TRANSCRIBE_CMD at a local transcriber.",
   "voice.structureFailed": "Couldn't structure the dictation into the brief — inserted the raw transcript instead.",
+  "issueDeleg.activity": "Delegation history",
+  "issueDeleg.none": "No delegations yet.",
+  "issueDeleg.openSession": "Open session",
+  "issueDeleg.comment": "Tracker comment",
   "issueDeleg.delegate": "Delegate…",
   "issueDeleg.noScenes": "No scenes available",
   "issueDeleg.pill": "delegated to {scene}",
@@ -1250,6 +1254,10 @@ export const zhCN: Record<StringKey, string> = {
     "听写不可用：此 WebView 没有语音 API，且系统识别器已关闭或没有你所用语言的本地模型。" +
     "请在“隐私与安全 → 语音识别”中允许，或将 CODETWO_TRANSCRIBE_CMD 指向本地转写器。",
   "voice.structureFailed": "无法将听写整理进简报——已按原文插入。",
+  "issueDeleg.activity": "委派历史",
+  "issueDeleg.none": "尚无委派记录。",
+  "issueDeleg.openSession": "打开会话",
+  "issueDeleg.comment": "跟踪器评论",
   "issueDeleg.delegate": "委派…",
   "issueDeleg.noScenes": "暂无可用场景",
   "issueDeleg.pill": "已委派给 {scene}",

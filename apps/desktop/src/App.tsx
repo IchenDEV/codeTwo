@@ -125,6 +125,9 @@ import {
   dismissSceneBanner,
   bindPipelineSession,
   getPipelineInstance,
+  recordIssueDelegation,
+  setIssueDelegationComment,
+  setIssueDelegationSession,
   getSessionScene,
   listPipelines,
   listScenes,
@@ -484,6 +487,8 @@ export default function App() {
   const sceneEffortAppliedRef = useRef(new Set<string>());
   /** Stage binding for the next created session (advance-in-new-session handshake). */
   const pendingPipelineBindRef = useRef<{ instanceId: string; stageId: string } | null>(null);
+  /** Delegation row awaiting its session id (issue delegated → session created on first Run). */
+  const pendingDelegationRef = useRef<number | null>(null);
   useEffect(() => {
     activeSceneNameRef.current = activeSceneName;
   }, [activeSceneName]);
@@ -1248,6 +1253,14 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          {
+            // Delegation trail: the delegated draft just became a real session.
+            const delegation = pendingDelegationRef.current;
+            if (delegation !== null) {
+              pendingDelegationRef.current = null;
+              void setIssueDelegationSession(delegation, ev.session);
+            }
+          }
           {
             // Advance-in-new-session handshake: bind the created session to its pipeline stage.
             const bind = pendingPipelineBindRef.current;
@@ -2879,6 +2892,15 @@ export default function App() {
       }
       pendingSceneRef.current = sceneReference;
       pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
+      // Accountability trail: record the delegation now (session id lands on session_created).
+      const delegationId = await recordIssueDelegation(
+        issue.source,
+        issue.id,
+        issue.title,
+        sceneReference,
+        scene.title,
+      );
+      if (delegationId !== null) pendingDelegationRef.current = delegationId;
       createSession();
       const params = plan.params;
       if (params?.provider) setProvider(params.provider);
@@ -2906,7 +2928,9 @@ export default function App() {
           issue.source,
           issue.id,
           t("issueDeleg.commentBody", { scene: scene.title }),
-        );
+        ).then((url) => {
+          if (url && delegationId !== null) void setIssueDelegationComment(delegationId, url);
+        });
       }
     },
     [applySceneChoice, createSession, cwd, toast, t],
@@ -3881,6 +3905,10 @@ export default function App() {
           scenes={scenes}
           onInsert={(i) => void insertIssue(i)}
           onDelegate={(i, sceneReference) => void onDelegateIssue(i, sceneReference)}
+          onOpenSession={(session) => {
+            setShowIssues(false);
+            void selectSession(session);
+          }}
           onClose={() => setShowIssues(false)}
         />
       )}

@@ -1981,6 +1981,59 @@ fn structure_brief(transcript: String, slots: Vec<SlotDef>) -> HashMap<String, S
     codetwo_core::brief::structure_brief_heuristic(&transcript, &slots)
 }
 
+// ---- issue delegation trail (R12) -------------------------------------------------------------
+
+#[tauri::command]
+fn record_issue_delegation(
+    state: State<'_, AppState>,
+    source: String,
+    issue_id: String,
+    issue_title: String,
+    scene_ref: String,
+    scene_title: String,
+) -> Result<i64, String> {
+    state
+        .store
+        .record_issue_delegation(&source, &issue_id, &issue_title, &scene_ref, &scene_title)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_issue_delegation_session(
+    state: State<'_, AppState>,
+    id: i64,
+    session: String,
+) -> Result<(), String> {
+    state
+        .store
+        .set_issue_delegation_session(id, &session)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn set_issue_delegation_comment(
+    state: State<'_, AppState>,
+    id: i64,
+    url: String,
+) -> Result<(), String> {
+    state
+        .store
+        .set_issue_delegation_comment(id, &url)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_issue_delegations(
+    state: State<'_, AppState>,
+    source: String,
+    issue_id: String,
+) -> Result<Vec<codetwo_core::IssueDelegation>, String> {
+    state
+        .store
+        .list_issue_delegations(&source, &issue_id)
+        .map_err(|e| e.to_string())
+}
+
 // ---- Canvas Input V1 -------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
@@ -3678,7 +3731,11 @@ pub fn run() {
             bind_pipeline_session,
             get_pipeline_instance,
             list_pipeline_instances,
-            session_pipeline
+            session_pipeline,
+            record_issue_delegation,
+            set_issue_delegation_session,
+            set_issue_delegation_comment,
+            list_issue_delegations
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

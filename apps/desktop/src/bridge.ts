@@ -2572,3 +2572,53 @@ export async function sessionPipeline(
     session,
   }).catch(() => null);
 }
+
+// ---- issue delegation trail (R12 cleanup) ----------------------------------------------------
+
+/** One "delegated to scene" event on an issue's accountability trail. */
+export interface IssueDelegation {
+  id: number;
+  source: string;
+  issue_id: string;
+  issue_title: string;
+  scene_ref: string;
+  scene_title: string;
+  session_id: string | null;
+  comment_url: string | null;
+  created_at: number;
+}
+
+export async function recordIssueDelegation(
+  source: string,
+  issueId: string,
+  issueTitle: string,
+  sceneRef: string,
+  sceneTitle: string,
+): Promise<number | null> {
+  if (!inTauri) return null;
+  return invoke<number>("record_issue_delegation", {
+    source,
+    issueId,
+    issueTitle,
+    sceneRef,
+    sceneTitle,
+  }).catch(() => null);
+}
+
+export async function setIssueDelegationSession(id: number, session: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_issue_delegation_session", { id, session }).catch(() => {});
+}
+
+export async function setIssueDelegationComment(id: number, url: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_issue_delegation_comment", { id, url }).catch(() => {});
+}
+
+export async function listIssueDelegations(
+  source: string,
+  issueId: string,
+): Promise<IssueDelegation[]> {
+  if (!inTauri) return [];
+  return invoke<IssueDelegation[]>("list_issue_delegations", { source, issueId }).catch(() => []);
+}

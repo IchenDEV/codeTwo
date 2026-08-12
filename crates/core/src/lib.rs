@@ -122,7 +122,7 @@ pub use skill::{
     SlotKind, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
-pub use store::{
+pub use store::{IssueDelegation, 
     PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store, StoreError,
 };
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};

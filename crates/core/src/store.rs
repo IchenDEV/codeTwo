@@ -144,6 +144,19 @@ CREATE TABLE IF NOT EXISTS pipeline_transitions (
   created_at  INTEGER NOT NULL,
   PRIMARY KEY (instance_id, seq)
 );
+CREATE TABLE IF NOT EXISTS issue_delegations (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  source       TEXT NOT NULL,
+  issue_id     TEXT NOT NULL,
+  issue_title  TEXT NOT NULL DEFAULT '',
+  scene_ref    TEXT NOT NULL,
+  scene_title  TEXT NOT NULL DEFAULT '',
+  session_id   TEXT,
+  comment_url  TEXT,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS issue_delegations_issue
+  ON issue_delegations(source, issue_id, created_at);
 ";
 
 /// A workspace the user works in. Sessions belong to one by their source `project_path`.
@@ -155,6 +168,20 @@ pub struct Project {
     pub last_opened_at: i64,
     /// `None` follows the current draft/session; `Local` is an explicit no-worktree default.
     pub default_worktree_mode: Option<ProjectWorktreeMode>,
+}
+
+/// One "issue delegated to a scene" event — the accountability trail R12 renders on the issue.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct IssueDelegation {
+    pub id: i64,
+    pub source: String,
+    pub issue_id: String,
+    pub issue_title: String,
+    pub scene_ref: String,
+    pub scene_title: String,
+    pub session_id: Option<String>,
+    pub comment_url: Option<String>,
+    pub created_at: i64,
 }
 
 /// One running (or finished) pipeline for one project (R9). `current_stage` is the stage the
@@ -2120,6 +2147,78 @@ impl Store {
             rusqlite::params![session_id, instance_id, stage_id],
         )?;
         Ok(())
+    }
+
+    /// Record a delegation of an issue to a scene. The session id is unknown at delegation time
+    /// (a session only exists after the first Run) and lands later via
+    /// [`Store::set_issue_delegation_session`]; the tracker comment URL likewise.
+    pub fn record_issue_delegation(
+        &self,
+        source: &str,
+        issue_id: &str,
+        issue_title: &str,
+        scene_ref: &str,
+        scene_title: &str,
+    ) -> Result<i64, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO issue_delegations
+             (source, issue_id, issue_title, scene_ref, scene_title, created_at)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![source, issue_id, issue_title, scene_ref, scene_title, unix_millis()],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn set_issue_delegation_session(
+        &self,
+        id: i64,
+        session_id: &str,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE issue_delegations SET session_id=?2 WHERE id=?1",
+            rusqlite::params![id, session_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_issue_delegation_comment(&self, id: i64, url: &str) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE issue_delegations SET comment_url=?2 WHERE id=?1",
+            rusqlite::params![id, url],
+        )?;
+        Ok(())
+    }
+
+    /// Newest-first delegation history for one issue.
+    pub fn list_issue_delegations(
+        &self,
+        source: &str,
+        issue_id: &str,
+    ) -> Result<Vec<IssueDelegation>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, source, issue_id, issue_title, scene_ref, scene_title, session_id,
+                    comment_url, created_at
+             FROM issue_delegations WHERE source=?1 AND issue_id=?2
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![source, issue_id], |row| {
+            Ok(IssueDelegation {
+                id: row.get(0)?,
+                source: row.get(1)?,
+                issue_id: row.get(2)?,
+                issue_title: row.get(3)?,
+                scene_ref: row.get(4)?,
+                scene_title: row.get(5)?,
+                session_id: row.get(6)?,
+                comment_url: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        Ok(rows.filter_map(Result::ok).collect())
     }
 
     /// The session's pipeline binding, if any: `(instance_id, stage_id)`.
