@@ -93,6 +93,8 @@ interface ComposerProps {
   canvasEnabled: boolean;
   onInsertCanvas: () => void;
   onVoiceText: (text: string) => void;
+  /** R11: present only when the active scene has a brief — voice then structures into it. */
+  onVoiceTranscript?: (full: string) => Promise<void>;
   runHint: string;
   skillHint: string;
   filesHint: string;
@@ -693,6 +695,7 @@ export function Composer({
   canvasEnabled,
   onInsertCanvas,
   onVoiceText,
+  onVoiceTranscript,
   runHint,
   skillHint,
   filesHint,
@@ -855,7 +858,7 @@ export function Composer({
         <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
       </Tooltip>
 
-      <VoiceButton onText={onVoiceText} />
+      <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
 
       {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
       {unfilledRequired.length > 0 && (

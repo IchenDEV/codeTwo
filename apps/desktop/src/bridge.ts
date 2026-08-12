@@ -2332,3 +2332,20 @@ export async function commentIssue(
     () => null,
   );
 }
+
+// ---- voice → structured brief (R11) --------------------------------------------------------
+
+import type { SceneSlotDef } from "./session/scene";
+
+/**
+ * Heuristically distribute a finished dictation across a scene brief's slots (core-side keyword
+ * sectioning; no model call). Null on browser preview, an older core, or any failure — the caller
+ * must fall back to inserting the raw transcript so it is never lost.
+ */
+export async function structureBrief(
+  transcript: string,
+  slots: SceneSlotDef[],
+): Promise<Record<string, string> | null> {
+  if (!inTauri) return null;
+  return invoke<Record<string, string>>("structure_brief", { transcript, slots }).catch(() => null);
+}

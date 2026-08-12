@@ -1499,6 +1499,14 @@ async fn comment_issue(
     }
 }
 
+/// R11: distribute a finished dictation across a scene brief's slots — a pure keyword heuristic
+/// in core (no model call). The frontend treats an empty map as failure and falls back to
+/// inserting the raw transcript.
+#[tauri::command]
+fn structure_brief(transcript: String, slots: Vec<SlotDef>) -> HashMap<String, String> {
+    codetwo_core::brief::structure_brief_heuristic(&transcript, &slots)
+}
+
 // ---- Canvas Input V1 -------------------------------------------------------------------------
 
 #[derive(Serialize, Clone)]
@@ -3053,7 +3061,8 @@ pub fn run() {
             scene_artifact_content,
             record_scene_artifact,
             pin_scene_artifact,
-            comment_issue
+            comment_issue,
+            structure_brief
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")
