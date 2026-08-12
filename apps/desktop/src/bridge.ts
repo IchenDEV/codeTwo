@@ -2243,8 +2243,31 @@ export interface SessionSceneState {
 
 /// Every scene call degrades on a missing backend command (feature-detect: catch → fallback),
 /// so a frontend running against an older core hides the affordance instead of breaking.
+/** Browser-preview stand-ins (same convention as FALLBACK_SKILLS): the five builtin scenes. */
+const FALLBACK_SCENES: SceneInfo[] = (
+  [
+    ["research", "Research", "调研", "🔎", "read_only", "Survey the problem space read-only and produce a cited research report."],
+    ["develop", "Develop", "开发", "🛠️", "auto_edit", "Plan-first implementation in an isolated worktree."],
+    ["test", "Test", "测试", "🧪", "auto_edit", "Exercise the change against its acceptance criteria."],
+    ["fix", "Fix", "修复", "🩹", "auto_edit", "Resolve reported failures one by one."],
+    ["acceptance", "Acceptance", "验收", "✅", "read_only", "Read-only verification against the original acceptance criteria."],
+  ] as const
+).map(([name, title, zh, icon, mode, description]) => ({
+  reference: `builtin:${name}`,
+  name,
+  title,
+  description,
+  icon,
+  source: "builtin" as const,
+  keywords: [],
+  has_brief: true,
+  localizations: { "zh-CN": { title: zh } },
+  execution: { session_mode: mode } as SceneInfo["execution"],
+  artifacts: [],
+})) as SceneInfo[];
+
 export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
-  if (!inTauri) return [];
+  if (!inTauri) return FALLBACK_SCENES;
   return invoke<SceneInfo[]>("list_scenes", { cwd: cwd ?? null }).catch(() => []);
 }
 
