@@ -82,6 +82,8 @@ export function Dock({
   onCloseFile,
   width,
   onWidth,
+  autoTab,
+  highlightFile,
 }: {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive and the
       collapse can actually animate — unmounting was why closing used to just blink away. */
@@ -115,6 +117,11 @@ export function Dock({
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
+  /** R10 dock follow: the surface the agent is working on right now — its tab gets a subtle
+      primary pulse, never a forced switch. */
+  autoTab?: DockSurface | null;
+  /** The file the agent last touched, marked in the files tree while nothing is open. */
+  highlightFile?: string | null;
 }) {
   const t = useT();
   const dirtyPaths = useDirtyPaths();
@@ -280,9 +287,18 @@ export function Dock({
               <TabsTrigger
                 key={id}
                 value={id}
-                className="gap-1.5 rounded-md px-2 text-hint text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent"
+                title={autoTab === id ? t("dockFollow.auto") : undefined}
+                className={cn(
+                  "gap-1.5 rounded-md px-2 text-hint text-muted-foreground shadow-none data-[state=active]:bg-accent data-[state=active]:shadow-none dark:data-[state=active]:border-transparent dark:data-[state=active]:bg-accent",
+                  // R10 dock follow — the SessionRail activity idiom: a pulsing primary dot on
+                  // the surface the agent is working, whether or not it's the visible one.
+                  autoTab === id && "text-primary",
+                )}
               >
                 <Icon className="size-3.5" /> {t(titleKey)}
+                {autoTab === id && (
+                  <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -437,7 +453,14 @@ export function Dock({
           </div>
 
           <div className="flex w-60 shrink-0 flex-col border-l">
-            <FilePanel cwd={cwd} onInsert={onInsertFile} onOpen={onOpenFile} openPath={activeFile} />
+            {/* R10: while no file is open in the viewer, mark the file the agent last touched —
+                the tree's existing openPath mechanism, not a forced reveal. */}
+            <FilePanel
+              cwd={cwd}
+              onInsert={onInsertFile}
+              onOpen={onOpenFile}
+              openPath={activeFile ?? highlightFile ?? null}
+            />
           </div>
         </TabsContent>
 

@@ -592,6 +592,7 @@ export const en = {
   "statusline.contextTitle": "Context window",
   "statusline.cost": "Cost {cost}",
   "statusline.burn": "{rate} tok/min",
+  "dockFollow.auto": "Following the agent — it is working on this surface",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1155,6 +1156,7 @@ export const zhCN: Record<StringKey, string> = {
   "statusline.contextTitle": "上下文窗口",
   "statusline.cost": "费用 {cost}",
   "statusline.burn": "{rate} token/分钟",
+  "dockFollow.auto": "正在跟随智能体——它正在此界面上工作",
 };
 
 export const LOCALES = {
