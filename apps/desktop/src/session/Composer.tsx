@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
@@ -6,6 +6,7 @@ import {
   FileText,
   Gauge,
   GitBranch,
+  ListChecks,
   Lock,
   LockOpen,
   Loader2,
@@ -17,9 +18,12 @@ import {
   Square,
   Store,
   Ticket,
+  TriangleAlert,
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
+import type { SceneInfo } from "./scene";
+import { briefOfferVisible } from "../editor/slotCard";
 import { SceneChip } from "./SceneChip";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
@@ -95,6 +99,10 @@ interface ComposerProps {
   runHint: string;
   skillHint: string;
   filesHint: string;
+  /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
+  sessionId?: string | null;
+  /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
+  insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
 }
 
 /**
@@ -730,8 +738,44 @@ export function Composer({
   runHint,
   skillHint,
   filesHint,
+  sessionId,
+  insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+
+  // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
+  // Dismissal is remembered per session for the Composer's lifetime — a dismissed offer must not
+  // come back on every keystroke-then-clear, but a new session gets a fresh offer.
+  const briefDismissedRef = useRef(new Set<string>());
+  const [, bumpBriefDismissals] = useState(0);
+  const sessionKey = sessionId ?? "draft";
+  const activeBrief = config.activeScene?.brief ?? null;
+  const insertBrief = () => {
+    const scene = config.activeScene;
+    if (scene?.brief) insertBriefRef?.current?.(scene);
+  };
+  const dismissBrief = () => {
+    briefDismissedRef.current.add(sessionKey);
+    bumpBriefDismissals((n) => n + 1);
+  };
+  const showBriefOffer = briefOfferVisible({
+    docMode,
+    docEmpty,
+    hasBrief: activeBrief !== null,
+    dismissed: briefDismissedRef.current.has(sessionKey),
+  });
+
+  // Required slot-card fields still empty — published by the editor on document change (same
+  // window-event seam as `codetwo-open-provider-picker`). A warning near Run, never a block.
+  const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
+  useEffect(() => {
+    const onRequiredSlots = (event: Event) => {
+      const detail = (event as CustomEvent<string[]>).detail;
+      setUnfilledRequired(Array.isArray(detail) ? detail : []);
+    };
+    window.addEventListener("codetwo-required-slots", onRequiredSlots);
+    return () => window.removeEventListener("codetwo-required-slots", onRequiredSlots);
+  }, []);
   // Leave room for at least a few transcript lines, whatever the window size — including when a
   // height saved on a tall window is restored on a short one. Only the applied height is clamped;
   // the saved preference comes back in full once there's room again.
@@ -805,6 +849,14 @@ export function Composer({
             <Sparkles />
             {t("composer.newSkill")}
           </DropdownMenuItem>
+          {/* With content already in the document the floating offer stays away; the brief is
+              still one menu entry away while a scene with one is active. */}
+          {activeBrief && !docEmpty && (
+            <DropdownMenuItem onSelect={insertBrief}>
+              <ListChecks />
+              {t("brief.menuInsert")}
+            </DropdownMenuItem>
+          )}
           <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
           </p>
@@ -846,6 +898,23 @@ export function Composer({
       </Tooltip>
 
       <VoiceButton onText={onVoiceText} />
+
+      {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
+      {unfilledRequired.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Chip tone="warning" aria-label={t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}>
+              <TriangleAlert className="size-3.5 shrink-0" />
+              <span className="hidden @lg/composer:inline">
+                {t("slotCard.requiredShort", { count: unfilledRequired.length })}
+              </span>
+            </Chip>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
@@ -950,6 +1019,27 @@ export function Composer({
           >
             {children}
           </div>
+
+          {/* R5: an empty page in an active scene with a brief offers to start from it. A
+              positioned overlay inside the same tree (see the reconciliation note above) — it
+              never auto-inserts, and dismissing it keeps it away for this session. Only rendered
+              in doc mode, where the card is `relative`. */}
+          {showBriefOffer && config.activeScene && (
+            <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
+              <div className="glass-raised canvas-ui-module pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 border px-3 py-2 shadow-raised">
+                <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate text-ui text-muted-foreground">
+                  {t("brief.offer", { scene: config.activeScene.title })}
+                </span>
+                <Button size="sm" className="shrink-0" onClick={insertBrief}>
+                  {t("brief.insert")}
+                </Button>
+                <Button size="sm" variant="ghost" className="shrink-0" onClick={dismissBrief}>
+                  {t("brief.dismiss")}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside

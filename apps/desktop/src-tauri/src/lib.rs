@@ -26,13 +26,13 @@ use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
 use codetwo_core::plugin_marketplace::{self, MarketplacePluginSource, PluginMarketplace};
 use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
-use codetwo_core::scene::{
-    self, ApplyStrength, Pipeline, Scene, SceneLibrary, SceneSource,
-};
 use codetwo_core::provider::{
     registry_with_codex_runtime, Provider, ProviderCapability, ProviderId,
 };
-use codetwo_core::skill::{builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary};
+use codetwo_core::scene::{self, ApplyStrength, Pipeline, Scene, SceneLibrary, SceneSource};
+use codetwo_core::skill::{
+    builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef,
+};
 use codetwo_core::source_control::{self, SourceControlInfo};
 use codetwo_core::store::Project;
 use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
@@ -173,6 +173,12 @@ struct SkillInfo {
     kind: String,
     /// Harness display name ("Claude Code" …) for auto-discovered skills; `None` for library ones.
     source: Option<String>,
+    /// Macro payload metadata so the `/` picker can render the inline slot card without a second
+    /// fetch. `None` for every other kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    macro_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    macro_slots: Option<Vec<SlotDef>>,
 }
 
 #[derive(Serialize, Clone)]
@@ -373,16 +379,26 @@ fn list_skills(state: State<'_, AppState>, cwd: Option<String>) -> Vec<SkillInfo
     let lib = lib.lock().unwrap();
     let mut out: Vec<SkillInfo> = lib
         .all()
-        .map(|s| SkillInfo {
-            id: s.id.clone(),
-            name: s.name.clone(),
-            description: s.description.clone(),
-            icon: s.icon.clone(),
-            kind: kind_str(s.kind()),
-            source: s
-                .source
-                .clone()
-                .or_else(|| harness::source_label(&s.id).map(str::to_string)),
+        .map(|s| {
+            let (macro_template, macro_slots) = match &s.payload {
+                SkillPayload::Macro { template, slots } => {
+                    (Some(template.clone()), Some(slots.clone()))
+                }
+                _ => (None, None),
+            };
+            SkillInfo {
+                id: s.id.clone(),
+                name: s.name.clone(),
+                description: s.description.clone(),
+                icon: s.icon.clone(),
+                kind: kind_str(s.kind()),
+                source: s
+                    .source
+                    .clone()
+                    .or_else(|| harness::source_label(&s.id).map(str::to_string)),
+                macro_template,
+                macro_slots,
+            }
         })
         .collect();
     // Library skills first, then each harness's group, name-sorted — the map iterates randomly.

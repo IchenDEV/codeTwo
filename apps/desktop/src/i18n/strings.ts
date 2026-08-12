@@ -564,6 +564,19 @@ export const en = {
   "scene.escalationCancel": "Cancel",
   "scene.switched": "Scene: {scene}",
   "scene.unresolved": "The saved scene for this session is not installed.",
+
+  "slotCard.macro": "Macro",
+  "slotCard.brief": "Brief",
+  "slotCard.remove": "Remove",
+  "slotCard.pickFile": "Choose file…",
+  "slotCard.selectPlaceholder": "Select…",
+  "slotCard.noArtifacts": "No artifacts carried",
+  "slotCard.requiredShort": "{count} required",
+  "slotCard.requiredWarning": "Required fields not filled: {slots}",
+  "brief.offer": "Start from the {scene} brief",
+  "brief.insert": "Insert",
+  "brief.dismiss": "Dismiss",
+  "brief.menuInsert": "Insert brief",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1099,6 +1112,19 @@ export const zhCN: Record<StringKey, string> = {
   "scene.escalationCancel": "取消",
   "scene.switched": "场景：{scene}",
   "scene.unresolved": "此会话保存的场景未安装。",
+
+  "slotCard.macro": "宏",
+  "slotCard.brief": "任务书",
+  "slotCard.remove": "移除",
+  "slotCard.pickFile": "选择文件…",
+  "slotCard.selectPlaceholder": "请选择…",
+  "slotCard.noArtifacts": "没有可引用的产物",
+  "slotCard.requiredShort": "{count} 项必填",
+  "slotCard.requiredWarning": "必填字段尚未填写：{slots}",
+  "brief.offer": "从“{scene}”任务书开始",
+  "brief.insert": "插入",
+  "brief.dismiss": "关闭",
+  "brief.menuInsert": "插入任务书",
 };
 
 export const LOCALES = {

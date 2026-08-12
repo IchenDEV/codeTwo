@@ -41,6 +41,7 @@ const realCore = await import("@blocknote/core");
 const realMantine = await import("@blocknote/mantine");
 const realReact = await import("@blocknote/react");
 const realSkillInline = await import("../src/skillInline");
+const realSlotCard = await import("../src/editor/slotCard");
 const actualCanvasRuntimeContext = realSkillInline.CanvasBlockRuntimeContext;
 const mockedCanvasRuntimeContext = React.createContext<any>(null);
 const realFileMenu = await import("../src/editor/FileMenu");
@@ -91,6 +92,9 @@ mock.module("../src/skillInline", () => ({
     if (block.type === "canvas") {
       return [{ type: "canvas", id: block.props.id, frozen_revision: block.props.revision, pixel_policy: block.props.pixelPolicy }];
     }
+    // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
+    // suites exercising slotCard serialization must still see the real behavior.
+    if (block.type === "slotCard") return realSlotCard.slotCardToDocBlocks(block.props);
     if (block.type === "image") return [{ type: "image", path: block.props.url }];
     const text = typeof block.content === "string"
       ? block.content
