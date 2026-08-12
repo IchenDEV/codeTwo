@@ -152,6 +152,7 @@ impl ActivityTracker {
         session: &str,
         title: String,
         options: Vec<(String, String)>,
+        option_kinds: BTreeMap<String, String>,
         context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
         let _transition = self.inner.transitions.lock().unwrap();
@@ -171,6 +172,7 @@ impl ActivityTracker {
                 kind: PendingInputKind::Permission,
                 title,
                 options,
+                option_kinds,
                 sequence,
                 context,
             };
@@ -527,6 +529,7 @@ mod tests {
                 "session",
                 "First".into(),
                 vec![("allow-1".into(), "Allow".into())],
+                BTreeMap::new(),
                 PermissionContext::default(),
             )
             .unwrap();
@@ -535,6 +538,7 @@ mod tests {
                 "session",
                 "Second".into(),
                 vec![("allow-2".into(), "Allow".into())],
+                BTreeMap::new(),
                 PermissionContext::default(),
             )
             .unwrap();
@@ -591,6 +595,7 @@ mod tests {
                 "session",
                 "One".into(),
                 vec![],
+                BTreeMap::new(),
                 PermissionContext::default(),
             )
             .unwrap();
@@ -599,6 +604,7 @@ mod tests {
                 "session",
                 "Two".into(),
                 vec![],
+                BTreeMap::new(),
                 PermissionContext::default(),
             )
             .unwrap();

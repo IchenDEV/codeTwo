@@ -8,7 +8,7 @@
 //! Both frontends use this identically: the Tauri bridge forwards `Op`s and streams `Event`s over a
 //! channel; the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -77,10 +77,13 @@ impl PermissionRouter {
         session: &str,
         title: String,
         options: Vec<(String, String)>,
+        option_kinds: BTreeMap<String, String>,
         context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
         match &self.tracker {
-            Some(tracker) => tracker.park_permission(session, title, options, context),
+            Some(tracker) => {
+                tracker.park_permission(session, title, options, option_kinds, context)
+            }
             None => {
                 let request_id = uuid::Uuid::new_v4().to_string();
                 let receiver = self.park(request_id.clone());
@@ -507,6 +510,29 @@ fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
     } else {
         prompt
     }
+}
+
+/// Decode the adapter-owned idempotency key carried through the existing `NewSession` request id.
+/// JSON keeps arbitrary T3 thread/command identifiers unambiguous without widening the public Op.
+fn t3_session_create_receipt(request_id: Option<&str>) -> Option<(String, String)> {
+    let encoded = request_id?.strip_prefix("t3-create:")?;
+    let (command_id, public_thread_id): (String, String) = serde_json::from_str(encoded).ok()?;
+    if command_id.trim().is_empty() || public_thread_id.trim().is_empty() {
+        return None;
+    }
+    Some((command_id, public_thread_id))
+}
+
+fn t3_prompt_receipt(request_id: Option<&str>) -> Option<(String, Option<String>)> {
+    let encoded = request_id?.strip_prefix("t3-command:")?;
+    if let Ok((command_id, message_id)) = serde_json::from_str::<(String, String)>(encoded) {
+        if !command_id.trim().is_empty() && !message_id.trim().is_empty() {
+            return Some((command_id, Some(message_id)));
+        }
+        return None;
+    }
+    // Accept the pre-message-id encoding for in-flight migrations and non-T3 test callers.
+    (!encoded.trim().is_empty()).then(|| (encoded.to_string(), None))
 }
 
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
@@ -1103,10 +1129,16 @@ impl ClientHandler for SessionHandler {
                     .iter()
                     .map(|o| (o.option_id.clone(), o.name.clone()))
                     .collect::<Vec<_>>();
+                let option_kinds = req
+                    .options
+                    .iter()
+                    .map(|option| (option.option_id.clone(), option.kind.clone()))
+                    .collect::<BTreeMap<_, _>>();
                 let Some((request_id, rx)) = self.router.park_permission(
                     &self.session_id,
                     title.clone(),
                     options.clone(),
+                    option_kinds,
                     context.clone(),
                 ) else {
                     return RequestPermissionResponse {
@@ -1301,6 +1333,19 @@ impl Engine {
 
     pub fn router(&self) -> &PermissionRouter {
         &self.state.router
+    }
+
+    /// Atomically resolve one pending permission. Protocol adapters use the boolean result as the
+    /// business acknowledgement; a stale/duplicate answer must not be reported as accepted.
+    pub fn answer_permission(
+        &self,
+        session: &str,
+        request_id: &str,
+        option_id: Option<&str>,
+    ) -> bool {
+        self.state
+            .router
+            .answer_for_session(session, request_id, option_id)
     }
 
     /// The shared skill library (for the picker / management UI).
@@ -1769,6 +1814,65 @@ impl Engine {
                 request_id,
                 initial_policy,
             } => {
+                let creation_receipt = t3_session_create_receipt(request_id.as_deref());
+                if let (Some(store), Some((command_id, public_thread_id))) =
+                    (&self.state.store, creation_receipt.as_ref())
+                {
+                    match store.command_receipt("t3-create", command_id) {
+                        Ok(Some((session_id, subject_id, _)))
+                            if subject_id.as_deref() == Some(public_thread_id.as_str()) =>
+                        {
+                            match store.get_session(&session_id) {
+                                Ok(Some(existing)) => {
+                                    self.emit(Event::SessionCreated {
+                                        session: existing.id,
+                                        cwd: existing.cwd,
+                                        project_path: existing.project_path,
+                                        worktree_path: existing.worktree_path,
+                                        worktree_baseline: existing.worktree_baseline,
+                                        request_id,
+                                    });
+                                }
+                                Ok(None) => self.emit(Event::Error {
+                                    session: None,
+                                    message: "T3 session receipt points to a missing session".into(),
+                                    terminal: true,
+                                    request_id,
+                                }),
+                                Err(error) => self.emit(Event::Error {
+                                    session: None,
+                                    message: format!(
+                                        "couldn't load the session recorded for the T3 command: {error}"
+                                    ),
+                                    terminal: true,
+                                    request_id,
+                                }),
+                            }
+                            return Ok(());
+                        }
+                        Ok(Some(_)) => {
+                            self.emit(Event::Error {
+                                session: None,
+                                message: "T3 command id was already used for another thread".into(),
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            self.emit(Event::Error {
+                                session: None,
+                                message: format!(
+                                    "couldn't check the durable T3 session receipt: {error}"
+                                ),
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                    }
+                }
                 let Some(prov) = self
                     .state
                     .providers
@@ -1855,7 +1959,17 @@ impl Engine {
                 }
 
                 if let Some(store) = &self.state.store {
-                    if let Err(e) = store.upsert_session(&sess) {
+                    let persisted = match creation_receipt.as_ref() {
+                        Some((command_id, public_thread_id)) => store
+                            .upsert_session_with_command_receipt(
+                                "t3-create",
+                                command_id,
+                                public_thread_id,
+                                &sess,
+                            ),
+                        None => store.upsert_session(&sess),
+                    };
+                    if let Err(e) = persisted {
                         let mut message = format!("couldn't persist new session: {e}");
                         if let (Some((repo, worktree)), Some(baseline)) =
                             (prepared_worktree.as_ref(), sess.worktree_baseline.as_ref())
@@ -2034,14 +2148,31 @@ impl Engine {
 
                 // Acceptance is one transaction when persistence is configured: the canonical
                 // prompt and Running activity either both commit or neither does.
-                let transcript_seq = if let Some(store) = &self.state.store {
-                    match store.append_prompt_and_activity(
-                        &session,
-                        &prompt_part,
-                        expected_activity_revision,
-                        &running_activity,
-                    ) {
-                        Ok(seq) => Some(seq),
+                let (transcript_seq, replayed) = if let Some(store) = &self.state.store {
+                    let persisted = if let Some((command_id, message_id)) =
+                        t3_prompt_receipt(request_id.as_deref())
+                    {
+                        store.append_prompt_activity_and_receipt(
+                            "t3-prompt",
+                            &command_id,
+                            message_id.as_deref(),
+                            &session,
+                            &prompt_part,
+                            expected_activity_revision,
+                            &running_activity,
+                        )
+                    } else {
+                        store
+                            .append_prompt_and_activity(
+                                &session,
+                                &prompt_part,
+                                expected_activity_revision,
+                                &running_activity,
+                            )
+                            .map(|seq| (seq, false))
+                    };
+                    match persisted {
+                        Ok((seq, replayed)) => (Some(seq), replayed),
                         Err(error) => {
                             drop(turn_lease);
                             self.emit(Event::Error {
@@ -2054,8 +2185,15 @@ impl Engine {
                         }
                     }
                 } else {
-                    None
+                    (None, false)
                 };
+                if replayed {
+                    drop(turn_lease);
+                    // The original accepted turn may already be finished. Reusing TurnStarted for
+                    // a durable receipt replay would fabricate a running turn in every frontend;
+                    // the protocol adapter verifies the receipt directly after submit instead.
+                    return Ok(());
+                }
                 let activity_was_persisted = self.state.store.is_some();
                 if !turn_lease.commit_running(running_activity, activity_was_persisted) {
                     self.emit(Event::Error {
@@ -2136,7 +2274,8 @@ impl Engine {
                         .ok()
                         .flatten()
                         .and_then(|(instance_id, stage_id)| {
-                            let instance = store.get_pipeline_instance(&instance_id).ok().flatten()?;
+                            let instance =
+                                store.get_pipeline_instance(&instance_id).ok().flatten()?;
                             let pipeline = scenes.resolve_pipeline(&instance.pipeline_ref)?;
                             let stage = pipeline
                                 .pipeline
@@ -2731,9 +2870,7 @@ impl Engine {
                 request_id,
                 option_id,
             } => {
-                self.state
-                    .router
-                    .answer_for_session(&session, &request_id, option_id.as_deref());
+                self.answer_permission(&session, &request_id, option_id.as_deref());
             }
 
             Op::SetPermissionMode { session, mode } => {
@@ -2757,12 +2894,18 @@ impl Engine {
                 // Tell the agent, then record it. Storing it without the ACP call would leave the
                 // UI claiming a model the agent never switched to. Before the first prompt there's
                 // no ACP session to tell, so the choice is just recorded and `session/new` sends it.
-                let target = {
+                let live = {
                     let map = self.state.sessions.lock().unwrap();
-                    map.get(&session)
-                        .map(|r| (r.client.clone(), r.acp_session_id.clone()))
+                    map.get(&session).map(|runtime| {
+                        (
+                            runtime.client.clone(),
+                            runtime.acp_session_id.clone(),
+                            runtime.session.clone(),
+                            runtime.models.clone(),
+                        )
+                    })
                 };
-                if let Some((client, Some(acp_sid))) = target {
+                if let Some((client, Some(acp_sid), _, _)) = live.as_ref() {
                     if let Err(e) = client.set_model(&acp_sid, &model).await {
                         // t3code's `requiresNewThreadForModelChange` honesty: the agent can't
                         // change models mid-conversation, so say what *would* work instead of
@@ -2778,19 +2921,63 @@ impl Engine {
                         return Ok(());
                     }
                 }
-                let available = {
-                    let mut map = self.state.sessions.lock().unwrap();
-                    match map.get_mut(&session) {
-                        Some(rt) => {
-                            rt.session.model = Some(model.clone());
-                            if let Some(store) = &self.state.store {
-                                let _ = store.upsert_session(&rt.session);
+                let (mut updated, available, was_live) = match live {
+                    Some((_, _, stored_session, models)) => (stored_session, models, true),
+                    None => match &self.state.store {
+                        Some(store) => match store.get_session(&session) {
+                            Ok(Some(stored_session)) => {
+                                let models = builtin_models(&stored_session.provider);
+                                (stored_session, models, false)
                             }
-                            rt.models.clone()
+                            Ok(None) => {
+                                self.emit(Event::Error {
+                                    session: Some(session),
+                                    message: "couldn't change model: no such session".into(),
+                                    terminal: false,
+                                    request_id: None,
+                                });
+                                return Ok(());
+                            }
+                            Err(error) => {
+                                self.emit(Event::Error {
+                                    session: Some(session),
+                                    message: format!(
+                                        "couldn't load session to change model: {error}"
+                                    ),
+                                    terminal: false,
+                                    request_id: None,
+                                });
+                                return Ok(());
+                            }
+                        },
+                        None => {
+                            self.emit(Event::Error {
+                                session: Some(session),
+                                message: "couldn't change model: no such session".into(),
+                                terminal: false,
+                                request_id: None,
+                            });
+                            return Ok(());
                         }
-                        None => Vec::new(),
-                    }
+                    },
                 };
+                updated.model = Some(model.clone());
+                if let Some(store) = &self.state.store {
+                    if let Err(error) = store.upsert_session(&updated) {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!("couldn't persist model change: {error}"),
+                            terminal: false,
+                            request_id: None,
+                        });
+                        return Ok(());
+                    }
+                }
+                if was_live {
+                    if let Some(runtime) = self.state.sessions.lock().unwrap().get_mut(&session) {
+                        runtime.session.model = Some(model.clone());
+                    }
+                }
                 self.emit(Event::Models {
                     session,
                     available,

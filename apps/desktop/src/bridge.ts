@@ -1649,14 +1649,19 @@ export async function remoteStatus(): Promise<RemoteStatus | null> {
   return inTauri ? invoke<RemoteStatus | null>("remote_status") : null;
 }
 
+/** The wire protocol expected by the client consuming a pairing link. */
+export type RemoteClientProtocol = "t3" | "legacy";
+
 /** Mint a fresh one-time pairing link for an advertised endpoint (URL + optional QR SVG). */
 export async function remotePairingLink(
   endpointId?: string,
+  clientProtocol: RemoteClientProtocol = "t3",
   ttlSecs?: number,
 ): Promise<RemotePairingLink | null> {
   return inTauri
     ? invoke<RemotePairingLink>("remote_pairing_link", {
         endpointId: endpointId ?? null,
+        clientProtocol,
         ttlSecs: ttlSecs ?? null,
       })
     : null;

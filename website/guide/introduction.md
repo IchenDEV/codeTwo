@@ -53,12 +53,13 @@ skills, git, and the PTY. Three frontends link it:
 | --- | --- |
 | Desktop | Tauri v2 + React + BlockNote |
 | Terminal | ratatui |
-| Remote | `codetwo-server` (Axum WebSocket) + a mobile web client |
+| Remote | Axum WebSocket + T3 Code mobile compatibility + a mobile web client |
 
 Read more in the [Architecture](/reference/architecture) reference.
 
 ## Status
 
 Code2 is early but functional and heavily tested (offline test suite across the core, TUI, and
-server). Some things are intentionally out of scope today — a native mobile app, hosted/tunneled
-remote access, and a visual browser element-picker. See the [FAQ](/reference/faq).
+server). Code2 does not ship its own native mobile binary; the remote listener works with T3 Code
+mobile over a local LAN or Tailscale tailnet instead. Hosted relay access and a visual browser
+element-picker remain out of scope. See the [FAQ](/reference/faq).

@@ -57,12 +57,12 @@ cargo run -p codetwo-server            # prints a one-time pairing URL + token +
 
 ## Remote control
 
-`codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a t3code-style
-pairing flow — a one-time pairing link (QR) is exchanged for a per-device bearer, which buys
-single-use WebSocket tickets; devices persist and can be revoked — and serves a small mobile web
-client at `/`. It shares `~/.codetwo/codetwo.db`, so it sees the same sessions as the desktop app.
-From the desktop you can also start it in-process (Command palette → "Remote control" → turn on
-network access) sharing the *live* engine, so remote and local drive the same running sessions.
+`codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a one-time pairing
+flow and serves a small mobile web client at `/`. From the desktop you can also start the listener
+in-process (Command palette → "Remote control" → turn on network access), where it exposes the
+native T3 Code discovery, OAuth token-exchange, ticket and Effect RPC protocols as well. Scan its
+`/pair#token=…` QR in T3 Code mobile to connect to the same live sessions over a local LAN or a
+Tailscale tailnet. Devices persist and can be revoked.
 
 To actually drive an agent, one provider must be on PATH: `grok` (native ACP), or Node for
 `npx @agentclientprotocol/claude-agent-acp` (Claude Code) /

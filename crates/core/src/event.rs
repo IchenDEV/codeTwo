@@ -474,6 +474,7 @@ mod tests {
                         kind: PendingInputKind::Permission,
                         title: "Run command".into(),
                         options: vec![("allow".into(), "Allow".into())],
+                        option_kinds: Default::default(),
                         sequence: 1,
                         context: Default::default(),
                     }],
