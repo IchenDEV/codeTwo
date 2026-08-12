@@ -124,8 +124,10 @@ import {
   sceneSessionPlan,
   setModel as setSessionModel,
   setSessionScene,
+  structureBrief,
   usageBySession,
 } from "./bridge";
+import { makeTranscriptHandler } from "./voice/VoiceButton";
 import { PluginHub } from "./market/Market";
 import { SettingsPage } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
@@ -3295,6 +3297,16 @@ export default function App() {
                   canvasEnabled={canvasFeature.enabled}
                   onInsertCanvas={() => void insertCanvasRef.current?.()}
                   onVoiceText={(t) => insertTextRef.current?.(t)}
+                  // R11: with an active-scene brief, a finished dictation is structured into a
+                  // pre-filled brief card; any failure degrades to the raw-text insert above.
+                  // No brief → the handler is undefined and voice behaves exactly as before.
+                  onVoiceTranscript={makeTranscriptHandler({
+                    scene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+                    structureBrief,
+                    insertBrief: (scene, values) => insertBriefRef.current?.(scene, values),
+                    insertText: (text) => insertTextRef.current?.(text),
+                    onDegrade: () => toast(t("voice.structureFailed"), "error"),
+                  })}
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}

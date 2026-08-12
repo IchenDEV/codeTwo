@@ -16,6 +16,7 @@
 pub mod acp;
 pub mod activity;
 pub mod artifact;
+pub mod brief;
 pub mod browser;
 pub mod canvas;
 pub mod codex_runtime;

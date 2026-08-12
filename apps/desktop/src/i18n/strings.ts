@@ -603,6 +603,18 @@ export const en = {
   "planDoc.cancel": "Cancel",
   "planDoc.pinned": "Plan pinned as a scene artifact",
   "planDoc.pinFailed": "Could not pin the plan",
+  "voice.hold": "Voice input — hold to talk, or click to toggle dictation",
+  "voice.stop": "Stop listening",
+  "voice.structuring": "Structuring your dictation…",
+  "voice.noMicApi": "This webview exposes no microphone API.",
+  "voice.noSpeech": "No speech detected.",
+  "voice.transcribeFailed": "Transcription failed: {error}",
+  "voice.micUnavailable": "Microphone unavailable: {error}",
+  "voice.unavailable":
+    "Dictation isn't available: this webview has no speech API, and the system recognizer is " +
+    "off or has no on-device model for your language. Allow it under Privacy & Security → " +
+    "Speech Recognition, or point CODETWO_TRANSCRIBE_CMD at a local transcriber.",
+  "voice.structureFailed": "Couldn't structure the dictation into the brief — inserted the raw transcript instead.",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1176,6 +1188,17 @@ export const zhCN: Record<StringKey, string> = {
   "planDoc.cancel": "取消",
   "planDoc.pinned": "计划已钉为场景工件",
   "planDoc.pinFailed": "无法钉住计划",
+  "voice.hold": "语音输入——按住说话，或点按切换听写",
+  "voice.stop": "停止聆听",
+  "voice.structuring": "正在整理听写内容…",
+  "voice.noMicApi": "此 WebView 未提供麦克风 API。",
+  "voice.noSpeech": "未检测到语音。",
+  "voice.transcribeFailed": "转写失败：{error}",
+  "voice.micUnavailable": "麦克风不可用：{error}",
+  "voice.unavailable":
+    "听写不可用：此 WebView 没有语音 API，且系统识别器已关闭或没有你所用语言的本地模型。" +
+    "请在“隐私与安全 → 语音识别”中允许，或将 CODETWO_TRANSCRIBE_CMD 指向本地转写器。",
+  "voice.structureFailed": "无法将听写整理进简报——已按原文插入。",
 };
 
 export const LOCALES = {
