@@ -207,6 +207,56 @@ pub enum SlotKind {
     Artifact,
 }
 
+impl SlotDef {
+    /// A plain text slot with no label — what a legacy `slots: ["style"]` entry migrates to.
+    pub fn text(id: impl Into<String>) -> Self {
+        SlotDef {
+            id: id.into(),
+            label: String::new(),
+            kind: SlotKind::Text,
+            options: Vec::new(),
+            required: false,
+            default: None,
+        }
+    }
+}
+
+/// Legacy macro definitions saved `slots` as bare id strings; keep those constructions compiling.
+impl From<String> for SlotDef {
+    fn from(id: String) -> Self {
+        SlotDef::text(id)
+    }
+}
+
+impl From<&str> for SlotDef {
+    fn from(id: &str) -> Self {
+        SlotDef::text(id)
+    }
+}
+
+/// Backward-compatible `Macro.slots` deserializer: an on-disk entry may be a bare id string
+/// (legacy) or a full slot object (current). Serialization always writes the object shape.
+fn deserialize_slots<'de, D>(deserializer: D) -> Result<Vec<SlotDef>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SlotDefOrName {
+        Def(SlotDef),
+        Name(String),
+    }
+
+    let raw = Vec::<SlotDefOrName>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .map(|entry| match entry {
+            SlotDefOrName::Def(def) => def,
+            SlotDefOrName::Name(id) => SlotDef::text(id),
+        })
+        .collect())
+}
+
 /// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
 /// registration, so Code2 also keeps a deterministic inline delegation fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -240,7 +290,8 @@ pub enum SkillPayload {
     },
     Macro {
         template: String,
-        slots: Vec<String>,
+        #[serde(default, deserialize_with = "deserialize_slots")]
+        slots: Vec<SlotDef>,
     },
 }
 
@@ -576,8 +627,19 @@ pub fn compile_with_sessions(
                 };
                 match &skill.payload {
                     SkillPayload::Fragment { text } => parts.push(text.trim().to_string()),
-                    SkillPayload::Macro { template, .. } => {
-                        parts.push(substitute(template, params).trim().to_string())
+                    SkillPayload::Macro { template, slots } => {
+                        // Effective params = slot defaults overlaid by what the user filled in.
+                        // A slot with neither keeps the leave-`{{slot}}`-as-is behavior.
+                        let mut effective: HashMap<String, String> = HashMap::new();
+                        for slot in slots {
+                            if let Some(default) = &slot.default {
+                                effective.insert(slot.id.clone(), default.clone());
+                            }
+                        }
+                        for (key, value) in params {
+                            effective.insert(key.clone(), value.clone());
+                        }
+                        parts.push(substitute(template, &effective).trim().to_string())
                     }
                     SkillPayload::AgentSkill {
                         skill_ref,
@@ -682,7 +744,24 @@ pub fn builtin_skills() -> Vec<Skill> {
             source: None,
             payload: SkillPayload::Macro {
                 template: "Write a {{style}} commit message for changes to {{scope}}.".into(),
-                slots: vec!["style".into(), "scope".into()],
+                slots: vec![
+                    SlotDef {
+                        id: "style".into(),
+                        label: "Style".into(),
+                        kind: SlotKind::Select,
+                        options: vec!["conventional".into(), "descriptive".into()],
+                        required: true,
+                        default: None,
+                    },
+                    SlotDef {
+                        id: "scope".into(),
+                        label: "Scope".into(),
+                        kind: SlotKind::Text,
+                        options: Vec::new(),
+                        required: false,
+                        default: None,
+                    },
+                ],
             },
         },
     ]
@@ -1032,6 +1111,136 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_string_slots_deserialize_as_text_slots() {
+        let skill: Skill = serde_json::from_str(
+            r#"{"id":"commit","name":"Commit","payload":{"kind":"macro",
+                "template":"Write a {{style}} message for {{scope}}.",
+                "slots":["style","scope"]}}"#,
+        )
+        .unwrap();
+        let SkillPayload::Macro { slots, .. } = &skill.payload else {
+            panic!("expected macro payload");
+        };
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0], SlotDef::text("style"));
+        assert_eq!(slots[1].id, "scope");
+        assert_eq!(slots[1].kind, SlotKind::Text);
+        assert!(slots[1].label.is_empty());
+        assert!(!slots[1].required);
+    }
+
+    #[test]
+    fn typed_slots_round_trip_and_serialize_as_objects() {
+        let skill = Skill {
+            id: "commit".into(),
+            name: "Commit".into(),
+            description: String::new(),
+            icon: None,
+            source: None,
+            payload: SkillPayload::Macro {
+                template: "Write a {{style}} message.".into(),
+                slots: vec![SlotDef {
+                    id: "style".into(),
+                    label: "Style".into(),
+                    kind: SlotKind::Select,
+                    options: vec!["conventional".into(), "descriptive".into()],
+                    required: true,
+                    default: Some("conventional".into()),
+                }],
+            },
+        };
+        let json = serde_json::to_value(&skill).unwrap();
+        // Serialization always writes the object shape — never the legacy bare string.
+        assert!(json["payload"]["slots"][0].is_object());
+        assert_eq!(json["payload"]["slots"][0]["kind"], "select");
+        assert_eq!(json["payload"]["slots"][0]["options"][1], "descriptive");
+        let back: Skill = serde_json::from_value(json).unwrap();
+        assert_eq!(back.payload, skill.payload);
+    }
+
+    #[test]
+    fn mixed_slot_array_deserializes() {
+        let skill: Skill = serde_json::from_str(
+            r#"{"id":"m","name":"M","payload":{"kind":"macro","template":"{{a}} {{b}}",
+                "slots":["a",{"id":"b","label":"B","kind":"select","options":["x"],"required":true}]}}"#,
+        )
+        .unwrap();
+        let SkillPayload::Macro { slots, .. } = &skill.payload else {
+            panic!("expected macro payload");
+        };
+        assert_eq!(slots[0], SlotDef::text("a"));
+        assert_eq!(slots[1].kind, SlotKind::Select);
+        assert_eq!(slots[1].options, vec!["x".to_string()]);
+        assert!(slots[1].required);
+    }
+
+    #[test]
+    fn macro_compile_applies_slot_defaults_and_user_overrides() {
+        let lib = SkillLibrary::new([Skill {
+            id: "commit".into(),
+            name: "Commit".into(),
+            description: String::new(),
+            icon: None,
+            source: None,
+            payload: SkillPayload::Macro {
+                template: "Write a {{style}} message for {{scope}}.".into(),
+                slots: vec![
+                    SlotDef {
+                        default: Some("conventional".into()),
+                        ..SlotDef::text("style")
+                    },
+                    SlotDef::text("scope"),
+                ],
+            },
+        }]);
+
+        // No user params: the default fills its slot; a slot with no default keeps the
+        // placeholder (today's behavior).
+        let compiled = compile(
+            &[DocBlock::Skill {
+                skill_id: "commit".into(),
+                params: HashMap::new(),
+            }],
+            &lib,
+        );
+        assert_eq!(
+            compiled.prompt,
+            "Write a conventional message for {{scope}}."
+        );
+
+        // A user param overrides the default.
+        let compiled = compile(
+            &[DocBlock::Skill {
+                skill_id: "commit".into(),
+                params: HashMap::from([
+                    ("style".into(), "descriptive".into()),
+                    ("scope".into(), "auth".into()),
+                ]),
+            }],
+            &lib,
+        );
+        assert_eq!(compiled.prompt, "Write a descriptive message for auth.");
+    }
+
+    #[test]
+    fn builtin_commit_macro_has_typed_slots() {
+        let skills = builtin_skills();
+        let commit = skills.iter().find(|s| s.id == "commit-macro").unwrap();
+        let SkillPayload::Macro { slots, .. } = &commit.payload else {
+            panic!("expected macro payload");
+        };
+        let style = slots.iter().find(|s| s.id == "style").unwrap();
+        assert_eq!(style.kind, SlotKind::Select);
+        assert_eq!(
+            style.options,
+            vec!["conventional".to_string(), "descriptive".to_string()]
+        );
+        assert!(style.required);
+        let scope = slots.iter().find(|s| s.id == "scope").unwrap();
+        assert_eq!(scope.kind, SlotKind::Text);
     }
 
     #[test]

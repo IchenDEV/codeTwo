@@ -39,6 +39,16 @@ export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo 
   return { ...provider, capabilities: provider.capabilities ?? [] };
 }
 
+/** One typed macro slot as `list_skills` reports it (core `SlotDef`, Agent Scenes vocabulary). */
+export interface MacroSlotInfo {
+  id: string;
+  label?: string;
+  kind?: "text" | "multiline" | "select" | "file" | "artifact";
+  options?: string[];
+  required?: boolean;
+  default?: string;
+}
+
 export interface SkillInfo {
   id: string;
   name: string;
@@ -48,6 +58,10 @@ export interface SkillInfo {
   /// Harness display name ("Claude Code" …) for skills auto-discovered from a product's skill
   /// directory; null for library skills.
   source: string | null;
+  /// Macro payload metadata so the `/` picker can render the R1 slot card without a second
+  /// fetch. Absent for every other kind (and for backends predating the fields).
+  macro_template?: string | null;
+  macro_slots?: MacroSlotInfo[] | null;
 }
 
 export type PermissionMode = "ask" | "accept_edits" | "yolo";
@@ -436,7 +450,14 @@ const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment", source: null },
   { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
   { id: "security-audit", name: "Security Audit", description: "Find vulns", icon: "🛡️", kind: "fragment", source: null },
-  { id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null },
+  {
+    id: "commit-macro", name: "Commit Message", description: "Commit macro", icon: "📝", kind: "macro", source: null,
+    macro_template: "Write a {{style}} commit message for changes to {{scope}}.",
+    macro_slots: [
+      { id: "style", label: "Style", kind: "select", options: ["conventional", "descriptive"], required: true },
+      { id: "scope", label: "Scope", kind: "text" },
+    ],
+  },
   { id: "demo:skill:review", name: "Release Review", description: "Review a release against its acceptance criteria", icon: null, kind: "agent_skill", source: "Plugin · Developer Toolkit" },
   { id: "demo:agent:research", name: "Researcher", description: "Collect primary evidence before implementation", icon: null, kind: "subagent", source: "Plugin · Developer Toolkit" },
   { id: "demo:mcp:docs", name: "docs-search", description: "MCP server from Developer Toolkit", icon: null, kind: "mcp", source: "Plugin · Developer Toolkit" },

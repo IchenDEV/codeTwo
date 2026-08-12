@@ -21,6 +21,7 @@ import { exportCanvasPng } from "./canvas/export";
 import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
 import { rehydrateEnvelope } from "./canvas/serialize";
 import { workspaceReferenceBlock } from "./editor/workspaceReference";
+import { SlotCardBlock, slotCardToDocBlocks, type SlotCardProps } from "./editor/slotCard";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
  * `docToBlocks`; it is only an in-memory editing cache so an inline Canvas can reconnect without
@@ -723,6 +724,7 @@ export const schema = BlockNoteSchema.create({
     ...defaultBlockSpecs,
     browserNote: BrowserNoteBlock,
     canvas: CanvasBlock,
+    slotCard: SlotCardBlock,
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
@@ -770,6 +772,14 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
       const props = block.props as { url?: string; name?: string };
       const path = String(props.url ?? props.name ?? "");
       if (path) out.push({ type: "image", path });
+      continue;
+    }
+    // A slot card serializes from its JSON-encoded props: a macro card becomes one skill block
+    // with filled params; a brief card becomes the template's prose interleaved with values.
+    // Corrupt JSON degrades to empty slots/values rather than dropping the block.
+    if (block.type === "slotCard") {
+      flush();
+      out.push(...slotCardToDocBlocks(block.props as unknown as SlotCardProps));
       continue;
     }
     const content = block.content;

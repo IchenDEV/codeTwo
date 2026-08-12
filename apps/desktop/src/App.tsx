@@ -566,6 +566,7 @@ export default function App() {
   const clearEditorRef = useRef<(() => void) | null>(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
+  const insertBriefRef = useRef<((scene: SceneInfo, values?: Record<string, string>) => void) | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   const currentModelRef = useRef<string | null>(null);
   currentModelRef.current = currentModel;
@@ -3123,6 +3124,8 @@ export default function App() {
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}
+                  sessionId={activeSession}
+                  insertBriefRef={insertBriefRef}
                 >
                   <DocEditor
                     key={editorKey}
@@ -3137,6 +3140,7 @@ export default function App() {
                     clearRef={clearEditorRef}
                     openSkillPickerRef={openSkillPickerRef}
                     insertSkillRef={insertSkillRef}
+                    insertBriefRef={insertBriefRef}
                     canvasEnabled={canvasFeature.enabled}
                     canvasRuntime={canvasRuntime}
                     createCanvas={createCanvas}

@@ -19,6 +19,8 @@ import {
   type CodeTwoEditor,
 } from "../skillInline";
 import { FileMenu, type AtItem, type ChatItem, type FileItem } from "./FileMenu";
+import { focusSlotCardField, normalizeSlots, unfilledRequiredSlots } from "./slotCard";
+import type { SceneInfo } from "../session/scene";
 import {
   listArchivedSessions,
   listFiles,
@@ -54,6 +56,9 @@ interface EditorProps {
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
   // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
   insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;
+  // Composer inserts the active scene's brief as a slot card at the document top (R5); R11 may
+  // pass model-structured values to pre-fill the fields.
+  insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
   /** Composer-owned Canvas insertion/freeze seams. Canvas authoring is hidden when the gate is off. */
   canvasEnabled: boolean;
   canvasRuntime: CanvasBlockRuntime | null;
@@ -103,6 +108,12 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
       group: s.source ?? "Code2 components",
       icon,
       onItemClick: () => {
+        // A macro with slot metadata gets the parameterized card (R1); everything else — and a
+        // legacy macro without metadata — keeps the inline chip.
+        if (s.macro_slots != null) {
+          insertSlotCardForSkill(editor, s);
+          return;
+        }
         editor.insertInlineContent([
           { type: "skill", props: { skillId: s.id, name: s.name, icon: s.icon ?? "✦" } },
           " ",
@@ -110,6 +121,39 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
       },
     };
   });
+}
+
+/** A collision-safe BlockNote id so the just-inserted card's first field can be focused. */
+function freshSlotCardId(): string {
+  return `slotcard-${Date.now().toString(36)}-${Math.floor(Math.random() * 0xffffff).toString(36)}`;
+}
+
+/** Insert a macro slot card after the caret block and move focus into its first field. */
+function insertSlotCardForSkill(editor: CodeTwoEditor, skill: SkillInfo): void {
+  const anchor = editor.getTextCursorPosition().block ?? editor.document[editor.document.length - 1];
+  if (!anchor) return;
+  const id = freshSlotCardId();
+  editor.insertBlocks(
+    [
+      {
+        id,
+        type: "slotCard",
+        props: {
+          mode: "macro",
+          skillId: skill.id,
+          title: skill.name,
+          icon: skill.icon ?? "",
+          template: skill.macro_template ?? "",
+          slots: JSON.stringify(normalizeSlots(skill.macro_slots ?? [])),
+          values: "{}",
+        },
+      },
+      { type: "paragraph", content: "" },
+    ],
+    anchor,
+    "after",
+  );
+  focusSlotCardField(id);
 }
 
 function canvasSlashItem(onInsert: () => void): DefaultReactSuggestionItem {
@@ -177,6 +221,7 @@ export function DocEditor({
   clearRef,
   openSkillPickerRef,
   insertSkillRef,
+  insertBriefRef,
   canvasEnabled,
   canvasRuntime,
   createCanvas,
@@ -291,6 +336,7 @@ export function DocEditor({
   }, [canvasEnabled, editor, onEmptyChange]);
 
   const canvasHandles = useRef(new Map<string, import("../skillInline").CanvasBlockHandle>());
+  const lastRequiredKey = useRef<string>("");
   const previousCanvasIds = useRef(new Set<string>());
   const nonEmptyCanvasIds = useRef(new Set<string>());
   const tombstonedCanvasIds = useRef(new Set<string>());
@@ -380,6 +426,14 @@ export function DocEditor({
     }
     previousCanvasIds.current = currentIds;
     onEmptyChange(docToBlocks(editor).length === 0);
+    // Composer's Run-row hint listens for this (same window-event seam as the provider picker):
+    // required slot-card fields without a value or default — a warning, never a send block.
+    const unfilled = unfilledRequiredSlots(editor);
+    const key = unfilled.join(" ");
+    if (key !== lastRequiredKey.current) {
+      lastRequiredKey.current = key;
+      window.dispatchEvent(new CustomEvent("codetwo-required-slots", { detail: unfilled }));
+    }
   }, [editor, editorCanvasRuntime, onEmptyChange]);
 
   useEffect(() => {
@@ -430,11 +484,45 @@ export function DocEditor({
     };
     insertSkillRef.current = (skill: SkillInfo) => {
       editor.focus();
+      // Same split as the `/` picker: macros carrying slot metadata become a slot card.
+      if (skill.macro_slots != null) {
+        insertSlotCardForSkill(editor, skill);
+        onEmptyChange(false);
+        return;
+      }
       editor.insertInlineContent([
         { type: "skill", props: { skillId: skill.id, name: skill.name, icon: skill.icon ?? "✦" } },
         " ",
       ]);
       onEmptyChange(false);
+    };
+    if (insertBriefRef) insertBriefRef.current = (scene: SceneInfo, values: Record<string, string> = {}) => {
+      const brief = scene.brief;
+      if (!brief) return;
+      const first = editor.document[0];
+      if (!first) return;
+      const id = freshSlotCardId();
+      editor.insertBlocks(
+        [
+          {
+            id,
+            type: "slotCard",
+            props: {
+              mode: "brief",
+              sceneName: scene.name,
+              title: scene.title,
+              icon: scene.icon ?? "",
+              template: brief.template,
+              slots: JSON.stringify(normalizeSlots(brief.slots ?? [])),
+              values: JSON.stringify(values),
+            },
+          },
+        ],
+        first,
+        "before",
+      );
+      onEmptyChange(false);
+      focusSlotCardField(id);
     };
     insertCanvasDraftRef.current = insertCanvasDraft;
     restoreCanvasDocumentRef.current = restoreCanvasDocument;
@@ -472,12 +560,13 @@ export function DocEditor({
       clearRef.current = null;
       openSkillPickerRef.current = null;
       insertSkillRef.current = null;
+      if (insertBriefRef) insertBriefRef.current = null;
       insertCanvasRef.current = null;
       insertCanvasDraftRef.current = null;
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();
