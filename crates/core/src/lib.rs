@@ -16,6 +16,7 @@
 pub mod acp;
 pub mod activity;
 pub mod artifact;
+pub mod automation;
 pub mod brief;
 pub mod browser;
 pub mod canvas;
@@ -59,6 +60,10 @@ pub mod worktree;
 
 pub use activity::{ActivityTracker, TurnLease};
 pub use artifact::{ArtifactRef, ArtifactStore, ToolOutput, ToolOutputNormalizer};
+pub use automation::{
+    next_automation_run_after, Automation, AutomationInput, AutomationRun,
+    AutomationRunStatus,
+};
 pub use browser::Annotation;
 pub use canvas::{
     canvas_search_projection, deterministic_summary, encode_canvas_history_marker, normalize_media,

@@ -154,6 +154,7 @@ import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
 import type { FileRevealTarget } from "./files/FileViewer";
 import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { UsageModal } from "./usage/Usage";
+import { AutomationsPage } from "./automation/AutomationsPage";
 import type { SessionConfig } from "./session/config";
 import {
   SESSION_MODES,
@@ -243,7 +244,7 @@ import {
 } from "./session/toolActivity";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
-import { MissionControlDialog } from "./sidebar/MissionControl";
+import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { needsMeCount } from "./sidebar/missionControl.ts";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
@@ -434,6 +435,7 @@ export default function App() {
   // type in.
   const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
+  const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showPluginHub, setShowPluginHub] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
@@ -3069,6 +3071,7 @@ export default function App() {
     { id: "sc", label: "Source control", hint: hint("open_source_control"), run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
+    { id: "automations", label: t("automations.title"), run: () => setShowAutomations(true) },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
     { id: "search", label: "Search workspace contents", hint: hint("search_workspace"), run: () => setShowWorkspaceSearch(true) },
@@ -3335,6 +3338,18 @@ export default function App() {
             setCapturing(null);
           }}
         />
+      ) : showAutomations ? (
+        <AutomationsPage
+          projects={projects}
+          providers={providers}
+          defaultProject={(activeProject ?? cwd) || "."}
+          defaultProvider={provider}
+          onClose={() => setShowAutomations(false)}
+          onOpenSession={(session) => {
+            setShowAutomations(false);
+            void selectSession(session);
+          }}
+        />
       ) : (
       // page-in makes the return from settings (which remounts this whole subtree) a transition
       // rather than a cut, and doubles as the app's own opening animation.
@@ -3398,6 +3413,7 @@ export default function App() {
           model={modelLabel}
           provider={provider}
           onOpenMarket={openPluginHub}
+          onOpenAutomations={() => setShowAutomations(true)}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}

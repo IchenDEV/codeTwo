@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
+  CalendarClock,
   Check,
   CircleAlert,
   ChevronDown,
@@ -78,6 +79,7 @@ export function SessionRail({
   model,
   provider,
   onOpenMarket,
+  onOpenAutomations,
   newHint,
   searchHint,
   onOpenSearch,
@@ -118,6 +120,7 @@ export function SessionRail({
   model: string;
   provider: string;
   onOpenMarket: () => void;
+  onOpenAutomations: () => void;
   newHint: string;
   /** The palette's shortcut, shown in the search box. */
   searchHint: string;
@@ -561,6 +564,20 @@ export function SessionRail({
           <span className="min-w-0 flex-1 truncate text-ui font-medium" title={t("composer.model")}>
             {model}
           </span>
+          <Tooltip>
+            <TooltipTrigger
+              render={<Button
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 text-muted-foreground"
+                aria-label={t("automations.title")}
+                onClick={onOpenAutomations}
+              >
+                <CalendarClock className="size-3.5" />
+              </Button>}
+            />
+            <TooltipContent>{t("automations.title")}</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger
               render={<Button

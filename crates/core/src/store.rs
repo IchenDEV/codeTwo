@@ -48,6 +48,8 @@ pub enum StoreError {
         protocol: String,
         command_id: String,
     },
+    #[error("invalid automation: {0}")]
+    InvalidAutomation(String),
 }
 
 const SCHEMA: &str = "
@@ -667,6 +669,7 @@ impl Store {
         migrate(&conn)?;
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
+        crate::automation::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
             artifact_root: Path::new(path)
@@ -685,6 +688,7 @@ impl Store {
         migrate(&conn)?;
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
+        crate::automation::install(&conn)?;
         let store = Self {
             conn: Mutex::new(conn),
             artifact_root: None,

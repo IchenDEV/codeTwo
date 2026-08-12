@@ -72,6 +72,56 @@ export interface ExecutionPolicy {
   sandbox: Sandbox;
 }
 
+export interface Automation {
+  id: string;
+  name: string;
+  prompt: string;
+  project_path: string;
+  provider: string | { custom: string };
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  use_worktree: boolean;
+  permission_mode: PermissionMode;
+  sandbox_policy: Sandbox;
+  next_run_at: number | null;
+  last_run_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AutomationInput {
+  name: string;
+  prompt: string;
+  projectPath: string;
+  provider: string | { custom: string };
+  cron: string;
+  timezone: string;
+  enabled: boolean;
+  useWorktree: boolean;
+  permissionMode: PermissionMode;
+  sandboxPolicy: Sandbox;
+}
+
+export type AutomationRunStatus =
+  | "starting"
+  | "running"
+  | "needs_attention"
+  | "succeeded"
+  | "failed"
+  | "interrupted";
+
+export interface AutomationRun {
+  id: string;
+  automation_id: string;
+  session_id: string | null;
+  status: AutomationRunStatus;
+  scheduled_for: number;
+  started_at: number;
+  finished_at: number | null;
+  error: string | null;
+}
+
 export interface SessionInfo {
   id: string;
   title: string;
@@ -621,6 +671,49 @@ export async function listWorktreeBaselines(cwd: string): Promise<WorktreeBaseli
 
 export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {
   if (inTauri) await invoke("submit_prompt", { session, doc, requestId });
+}
+
+export async function listAutomations(): Promise<Automation[]> {
+  return inTauri ? invoke<Automation[]>("list_automations") : [];
+}
+
+export async function createAutomation(input: AutomationInput): Promise<Automation> {
+  return invoke<Automation>("create_automation", { input });
+}
+
+export async function updateAutomation(id: string, input: AutomationInput): Promise<Automation> {
+  return invoke<Automation>("update_automation", { id, input });
+}
+
+export async function setAutomationEnabled(id: string, enabled: boolean): Promise<Automation> {
+  return invoke<Automation>("set_automation_enabled", { id, enabled });
+}
+
+export async function deleteAutomation(id: string): Promise<boolean> {
+  return invoke<boolean>("delete_automation", { id });
+}
+
+export async function listAutomationRuns(
+  automationId?: string | null,
+  limit = 50,
+): Promise<AutomationRun[]> {
+  return inTauri
+    ? invoke<AutomationRun[]>("list_automation_runs", {
+        automationId: automationId ?? null,
+        limit,
+      })
+    : [];
+}
+
+export async function runAutomationNow(id: string): Promise<AutomationRun> {
+  return invoke<AutomationRun>("run_automation_now", { id });
+}
+
+export async function onAutomationChanged(
+  cb: (automationId: string) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<string>("automation-changed", (event) => cb(event.payload));
 }
 
 export async function answerPermission(session: string, requestId: string, optionId: string | null): Promise<void> {
