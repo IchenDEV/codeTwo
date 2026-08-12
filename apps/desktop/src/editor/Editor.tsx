@@ -21,6 +21,7 @@ import {
 import { FileMenu, type AtItem, type ChatItem, type FileItem } from "./FileMenu";
 import { focusSlotCardField, normalizeSlots, unfilledRequiredSlots } from "./slotCard";
 import { issueContextMarkdown } from "./issueBlock";
+import { orderSkillsForScene } from "../session/scene";
 import type { SceneInfo } from "../session/scene";
 import {
   listArchivedSessions,
@@ -32,6 +33,7 @@ import {
   type DocBlock,
   type Issue,
   type SkillInfo,
+  listSceneArtifacts,
 } from "../bridge";
 import { useColorScheme } from "../theme";
 import { useT } from "../i18n";
@@ -61,6 +63,9 @@ interface EditorProps {
     ((markdown: string, mode: "replace" | "append") => Promise<void>) | null
   >;
   openSkillPickerRef: MutableRefObject<(() => void) | null>;
+  // Active scene's skill palette: pinned skills lead the `/` picker; with suppress_unpinned the
+  // rest hide behind a "show all" row (always reachable, per docs/scenes.md).
+  sceneSkills?: { pinned: string[]; suppressUnpinned: boolean } | null;
   // Plugin Hub inserts a specific component directly instead of reopening the slash picker.
   insertSkillRef: MutableRefObject<((skill: SkillInfo) => void) | null>;
   // Composer inserts the active scene's brief as a slot card at the document top (R5); R11 may
@@ -133,6 +138,40 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
       },
     };
   });
+}
+
+
+/**
+ * Scene-aware `/` items: pinned first; with suppress_unpinned the rest collapse behind one
+ * "Show all skills" row that reopens the picker un-suppressed (sticky until the next insert).
+ */
+function sceneSkillItems(
+  editor: CodeTwoEditor,
+  skills: SkillInfo[],
+  sceneSkills: { pinned: string[]; suppressUnpinned: boolean } | null,
+  showAllRef: MutableRefObject<boolean>,
+): DefaultReactSuggestionItem[] {
+  const scene = sceneSkills
+    ? ({ skills: { pinned: sceneSkills.pinned, suppress_unpinned: sceneSkills.suppressUnpinned } } as never)
+    : null;
+  const { items, hiddenCount } = orderSkillsForScene(skills, scene, showAllRef.current);
+  const pinnedSet = new Set(sceneSkills?.pinned ?? []);
+  const rendered = skillItems(editor, items).map((item, index) =>
+    pinnedSet.has(items[index].id) ? { ...item, group: "Scene" } : item,
+  );
+  if (hiddenCount > 0) {
+    rendered.push({
+      title: `Show all skills (${hiddenCount} more)`,
+      subtext: "The active scene focuses the picker on its pinned skills.",
+      group: "Scene",
+      icon: <Sparkles className="size-3.5" />,
+      onItemClick: () => {
+        showAllRef.current = true;
+        setTimeout(() => editor.openSuggestionMenu("/"), 0);
+      },
+    });
+  }
+  return rendered;
 }
 
 /** A collision-safe BlockNote id so the just-inserted card's first field can be focused. */
@@ -233,6 +272,7 @@ export function DocEditor({
   clearRef,
   insertMarkdownRef,
   openSkillPickerRef,
+  sceneSkills = null,
   insertSkillRef,
   insertBriefRef,
   insertIssueRef,
@@ -246,6 +286,8 @@ export function DocEditor({
   canvasDeliveryErrorRef,
   onEmptyChange,
 }: EditorProps) {
+  // Sticky within the session: once expanded, the picker stays un-suppressed.
+  const showAllSkillsRef = useRef(false);
   const t = useT();
   // The Composer's color scheme is transient UI state. Keep it outside the Canvas envelope so a
   // live theme change updates mounted editable blocks without rewriting readonly/history data.
@@ -637,12 +679,31 @@ export function DocEditor({
     observeDocument();
   }, [observeDocument]);
 
+  // Stored scene artifacts for the active session, filtered by title (R4 cleanup: the spec's
+  // "@-menu Artifacts section"). Degrades to nothing without a session or on an older core.
+  const artifactMenuItems = async (query: string, session: string | null) => {
+    if (!session) return [] as import("./FileMenu").ArtifactAtItem[];
+    const records = await listSceneArtifacts(session);
+    const needle = query.toLowerCase();
+    return records
+      .filter((r) => !needle || r.title.toLowerCase().includes(needle))
+      .slice(0, 12)
+      .map((r) => ({
+        kind: "artifact" as const,
+        recordId: r.id,
+        title: r.title,
+        artifactKind: r.kind,
+        version: r.version,
+      }));
+  };
+
   const getAtItems = async (query: string): Promise<AtItem[]> => {
-    const [chats, files] = await Promise.all([
+    const [chats, artifacts, files] = await Promise.all([
       chatMenuItems(query, sessionId),
+      artifactMenuItems(query, sessionId),
       fileMenuItems(cwd, query),
     ]);
-    return [...chats, ...files];
+    return [...chats, ...artifacts, ...files];
   };
 
   return (
@@ -658,7 +719,7 @@ export function DocEditor({
           getItems={async (query) =>
             filterSuggestionItems(
               [
-                ...skillItems(editor, skills),
+                ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
                 ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
                 // Drop the media blocks: they need an upload handler this app doesn't configure, so
                 // they insert an "Add file" placeholder that can never be filled and never reaches
@@ -683,7 +744,16 @@ export function DocEditor({
             editor.insertInlineContent([
               item.kind === "chat"
                 ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
-                : { type: "fileMention", props: { path: item.path } },
+                : item.kind === "artifact"
+                  ? {
+                      type: "artifactMention",
+                      props: {
+                        artifactId: String(item.recordId),
+                        title: item.title,
+                        kind: item.artifactKind,
+                      },
+                    }
+                  : { type: "fileMention", props: { path: item.path } },
               " ",
             ]);
           }}

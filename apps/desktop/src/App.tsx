@@ -3695,6 +3695,15 @@ export default function App() {
                     clearRef={clearEditorRef}
                     insertMarkdownRef={insertMarkdownRef}
                     openSkillPickerRef={openSkillPickerRef}
+                    sceneSkills={(() => {
+                      const scene = scenes.find((s) => s.reference === activeSceneName);
+                      return scene?.skills
+                        ? {
+                            pinned: scene.skills.pinned ?? [],
+                            suppressUnpinned: scene.skills.suppress_unpinned ?? false,
+                          }
+                        : null;
+                    })()}
                     insertSkillRef={insertSkillRef}
                     insertBriefRef={insertBriefRef}
                     insertIssueRef={insertIssueRef}

@@ -920,6 +920,11 @@ fn set_project_scheduling(state: State<'_, AppState>, path: String, enabled: boo
     state.scene_runtime.set_scheduling(&path, enabled);
 }
 
+#[tauri::command]
+fn get_project_scheduling(state: State<'_, AppState>, path: String) -> Result<bool, String> {
+    state.store.project_scheduling(&path).map_err(|e| e.to_string())
+}
+
 // ---- pipeline instances (R9) ----------------------------------------------------------------
 
 use codetwo_core::store::{PipelineInstance, PipelineTransitionRecord};
@@ -3735,7 +3740,8 @@ pub fn run() {
             record_issue_delegation,
             set_issue_delegation_session,
             set_issue_delegation_comment,
-            list_issue_delegations
+            list_issue_delegations,
+            get_project_scheduling
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

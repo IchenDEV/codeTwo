@@ -2622,3 +2622,9 @@ export async function listIssueDelegations(
   if (!inTauri) return [];
   return invoke<IssueDelegation[]>("list_issue_delegations", { source, issueId }).catch(() => []);
 }
+
+/** Whether scene `schedule` hooks are enabled for this project (off by default). */
+export async function getProjectScheduling(path: string): Promise<boolean> {
+  if (!inTauri) return false;
+  return invoke<boolean>("get_project_scheduling", { path }).catch(() => false);
+}

@@ -54,32 +54,57 @@ export function splitOptions(raw: string): string[] {
  * Pure draft validation: every `{{token}}` needs a slot row and vice versa, ids must be slugs,
  * and a select must list options. Non-empty result disables Save.
  */
+/** Localizable validation message: a `templateFrom.err*` key plus its interpolation vars. */
+type DraftError = { key: string; vars: Record<string, string | number> };
+
+const DRAFT_ERROR_EN: Record<string, string> = {
+  "templateFrom.errSlug": 'Slot {index}: id "{id}" is not a slug (lowercase letters, digits, - or _).',
+  "templateFrom.errDuplicate": 'Slot {index}: duplicate id "{id}".',
+  "templateFrom.errNoToken": 'Slot "{id}" never appears in the template as {token}.',
+  "templateFrom.errNoOptions": 'Slot "{id}" is a select but lists no options.',
+  "templateFrom.errNoRow": "Template token {token} has no slot row.",
+};
+
+/** English fallback so the pure validator stays testable without an i18n provider. */
+function formatDraftError(error: DraftError): string {
+  let out = DRAFT_ERROR_EN[error.key] ?? error.key;
+  for (const [name, value] of Object.entries(error.vars)) {
+    out = out.replaceAll(`{${name}}`, String(value));
+  }
+  return out;
+}
+
 export function validateMacroDraft(
   template: string,
   slots: readonly Pick<SlotRow, "id" | "kind" | "options">[],
+  translate?: (key: string, vars: Record<string, string | number>) => string,
 ): string[] {
-  const errors: string[] = [];
+  const errors: DraftError[] = [];
   const tokens = new Set<string>();
   for (const match of template.matchAll(TOKEN_PATTERN)) tokens.add(match[1]);
   const ids = new Set<string>();
   for (const [index, slot] of slots.entries()) {
     const id = slot.id.trim();
     if (!ID_PATTERN.test(id)) {
-      errors.push(`Slot ${index + 1}: id "${id}" is not a slug (lowercase letters, digits, - or _).`);
+      errors.push({ key: "templateFrom.errSlug", vars: { index: index + 1, id } });
     } else if (ids.has(id)) {
-      errors.push(`Slot ${index + 1}: duplicate id "${id}".`);
+      errors.push({ key: "templateFrom.errDuplicate", vars: { index: index + 1, id } });
     } else if (!tokens.has(id)) {
-      errors.push(`Slot "${id}" never appears in the template as {{${id}}}.`);
+      errors.push({ key: "templateFrom.errNoToken", vars: { id, token: `{{${id}}}` } });
     }
     ids.add(id);
     if (slot.kind === "select" && splitOptions(slot.options).length === 0) {
-      errors.push(`Slot "${id}" is a select but lists no options.`);
+      errors.push({ key: "templateFrom.errNoOptions", vars: { id } });
     }
   }
   for (const token of tokens) {
-    if (!ids.has(token)) errors.push(`Template token {{${token}}} has no slot row.`);
+    if (!ids.has(token)) {
+      errors.push({ key: "templateFrom.errNoRow", vars: { token: `{{${token}}}` } });
+    }
   }
-  return errors;
+  return errors.map((error) =>
+    translate ? translate(error.key, error.vars) : formatDraftError(error),
+  );
 }
 
 /** Same id derivation the App's skill-draft flow uses. */
@@ -146,7 +171,7 @@ export function TemplateDialog({
     };
   }, [propose, source]);
 
-  const errors = validateMacroDraft(template, slots);
+  const errors = validateMacroDraft(template, slots, (key, vars) => t(key as never, vars));
 
   // Committing on the native `input` event (slotCard idiom) keeps one write per edit in browsers
   // and in happy-dom, whose own-instance `value` property defeats React's change tracker. The

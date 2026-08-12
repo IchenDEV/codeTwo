@@ -6,6 +6,7 @@ import {
   FileText,
   FileType,
   MessageSquare,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import type { SuggestionMenuProps } from "@blocknote/react";
@@ -33,8 +34,18 @@ export interface ChatItem {
   when: number;
 }
 
-/** Everything the `@` picker can insert: past chats first, then workspace files. */
-export type AtItem = ChatItem | FileItem;
+/** One stored scene artifact, offered for `@`-mentioning its content as context (R4). */
+export interface ArtifactAtItem {
+  kind: "artifact";
+  recordId: number;
+  title: string;
+  /** Declared scene-artifact kind ("plan", "report", …) — drawn as the row's right-hand hint. */
+  artifactKind: string;
+  version: number;
+}
+
+/** Everything the `@` picker can insert: chats, then artifacts, then workspace files. */
+export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
 const BY_EXTENSION: Record<string, LucideIcon> = {
   ts: FileCode, tsx: FileCode, js: FileCode, jsx: FileCode, rs: FileCode, py: FileCode,
@@ -56,6 +67,12 @@ function parts(item: FileItem): [string, string, string] {
   if (!item.hit) return [item.name, "", ""];
   const [from, to] = item.hit;
   return [item.name.slice(0, from), item.name.slice(from, to), item.name.slice(to)];
+}
+
+function itemKey(item: AtItem): string {
+  if (item.kind === "chat") return item.id;
+  if (item.kind === "artifact") return `artifact-${item.recordId}`;
+  return item.path;
 }
 
 /** Muted group label — only drawn when the list actually mixes chats and files. */
@@ -109,6 +126,7 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
 
   const hasChats = items.some((i) => i.kind === "chat");
   const firstFile = items.findIndex((i) => i.kind === "file");
+  const firstArtifact = items.findIndex((i) => i.kind === "artifact");
 
   return (
     <div
@@ -117,7 +135,23 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
     >
       {items.map((item, i) => {
         const row =
-          item.kind === "chat" ? (
+          item.kind === "artifact" ? (
+            <button
+              key={`artifact-${item.recordId}`}
+              data-row={i}
+              onClick={() => onItemClick?.(item)}
+              className={cn(
+                "flex w-full items-baseline gap-2 rounded-(--ds-radius-micro) px-2 py-1 text-left transition-colors",
+                i === selectedIndex ? "bg-accent" : "hover:bg-accent/50",
+              )}
+            >
+              <Package className="size-3.5 shrink-0 self-center text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate text-ui">{item.title}</span>
+              <span className="shrink-0 text-fine text-muted-foreground/70">
+                {item.artifactKind} · v{item.version}
+              </span>
+            </button>
+          ) : item.kind === "chat" ? (
             <button
               key={item.id}
               data-row={i}
@@ -165,15 +199,23 @@ export function FileMenu({ items, loadingState, selectedIndex, onItemClick }: Su
         // Labels only when both kinds show — a pure file list needs no "Files" caption.
         if (hasChats && i === 0) {
           return (
-            <div key={`chats-${item.kind === "chat" ? item.id : item.path}`}>
+            <div key={`chats-${itemKey(item)}`}>
               <GroupLabel>{t("files.chatsGroup")}</GroupLabel>
+              {row}
+            </div>
+          );
+        }
+        if (i === firstArtifact && (hasChats || firstFile >= 0)) {
+          return (
+            <div key={`artifacts-${itemKey(item)}`}>
+              <GroupLabel>{t("files.artifactsGroup")}</GroupLabel>
               {row}
             </div>
           );
         }
         if (hasChats && i === firstFile) {
           return (
-            <div key={`files-${item.kind === "chat" ? item.id : item.path}`}>
+            <div key={`files-${itemKey(item)}`}>
               <GroupLabel>{t("files.filesGroup")}</GroupLabel>
               {row}
             </div>

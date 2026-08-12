@@ -212,3 +212,32 @@ export function sceneEffortChoice(
   );
   return choice ? { configId: option.id, value: choice.id } : null;
 }
+
+/** The slice of a skill listing the scene-aware `/` picker needs. */
+export interface SkillLike {
+  id: string;
+}
+
+/**
+ * Order the `/` picker for the active scene: pinned skills first (in pin order), the rest after.
+ * With `suppress_unpinned` and `showAll` false, unpinned skills are hidden behind a "show all"
+ * affordance — hiddenCount tells the picker how many wait behind it (spec: the affordance must
+ * always remain reachable).
+ */
+export function orderSkillsForScene<T extends SkillLike>(
+  skills: readonly T[],
+  scene: SceneInfo | null,
+  showAll: boolean,
+): { items: T[]; hiddenCount: number } {
+  const pinned = scene?.skills?.pinned ?? [];
+  if (pinned.length === 0) return { items: [...skills], hiddenCount: 0 };
+  const rank = new Map(pinned.map((id, index) => [id, index]));
+  const front = [...skills]
+    .filter((s) => rank.has(s.id))
+    .sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  const rest = skills.filter((s) => !rank.has(s.id));
+  if (scene?.skills?.suppress_unpinned && !showAll) {
+    return { items: front, hiddenCount: rest.length };
+  }
+  return { items: [...front, ...rest], hiddenCount: 0 };
+}
