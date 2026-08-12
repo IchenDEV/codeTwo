@@ -43,6 +43,11 @@ pub enum StoreError {
         expected: u64,
         actual: u64,
     },
+    #[error("command receipt conflict for {protocol}:{command_id}")]
+    CommandReceiptConflict {
+        protocol: String,
+        command_id: String,
+    },
 }
 
 const SCHEMA: &str = "
@@ -78,6 +83,14 @@ CREATE TABLE IF NOT EXISTS parts (
 );
 CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
 CREATE INDEX IF NOT EXISTS parts_session_role_seq ON parts(session_id, role, seq);
+CREATE TABLE IF NOT EXISTS command_receipts (
+  protocol   TEXT NOT NULL,
+  command_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  subject_id TEXT,
+  sequence   INTEGER NOT NULL,
+  PRIMARY KEY (protocol, command_id)
+);
 CREATE TABLE IF NOT EXISTS artifacts (
   id           TEXT PRIMARY KEY,
   digest       TEXT NOT NULL UNIQUE,
@@ -433,6 +446,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "memory_write TEXT NOT NULL DEFAULT 'inherit'",
     )?;
     ensure_column(&tx, "sessions", "active_scene", "active_scene TEXT")?;
+    ensure_column(&tx, "command_receipts", "subject_id", "subject_id TEXT")?;
     ensure_column(
         &tx,
         "sessions",
@@ -1630,8 +1644,7 @@ impl Store {
         Ok(out)
     }
 
-    pub fn upsert_session(&self, s: &Session) -> Result<(), StoreError> {
-        let conn = self.conn.lock().unwrap();
+    fn upsert_session_on(conn: &Connection, s: &Session) -> Result<(), StoreError> {
         conn.execute(
             "INSERT INTO sessions
                (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write)
@@ -1676,6 +1689,45 @@ impl Store {
                 s.memory_write.as_db(),
             ],
         )?;
+        Ok(())
+    }
+
+    pub fn upsert_session(&self, s: &Session) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        Self::upsert_session_on(&conn, s)
+    }
+
+    /// Persist a newly created session and its external command identity in one transaction.
+    pub fn upsert_session_with_command_receipt(
+        &self,
+        protocol: &str,
+        command_id: &str,
+        subject_id: &str,
+        session: &Session,
+    ) -> Result<(), StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM command_receipts WHERE protocol=?1 AND command_id=?2
+             )",
+            rusqlite::params![protocol, command_id],
+            |row| row.get(0),
+        )?;
+        if exists {
+            return Err(StoreError::CommandReceiptConflict {
+                protocol: protocol.to_string(),
+                command_id: command_id.to_string(),
+            });
+        }
+        Self::upsert_session_on(&tx, session)?;
+        tx.execute(
+            "INSERT INTO command_receipts
+             (protocol,command_id,session_id,subject_id,sequence)
+             VALUES (?1,?2,?3,?4,-1)",
+            rusqlite::params![protocol, command_id, session.id, subject_id],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -1844,6 +1896,139 @@ impl Store {
         )?;
         tx.commit()?;
         Ok(seq)
+    }
+
+    /// Atomically accept a protocol command with its prompt and Running activity. A duplicate
+    /// `(protocol, command_id)` returns the original receipt without appending another prompt.
+    pub fn append_prompt_activity_and_receipt(
+        &self,
+        protocol: &str,
+        command_id: &str,
+        subject_id: Option<&str>,
+        session_id: &str,
+        prompt: &Part,
+        expected_revision: u64,
+        activity: &SessionActivity,
+    ) -> Result<(i64, bool), StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        if let Some((accepted_session, accepted_subject, sequence)) = tx
+            .query_row(
+                "SELECT session_id,subject_id,sequence FROM command_receipts
+                 WHERE protocol=?1 AND command_id=?2",
+                rusqlite::params![protocol, command_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                },
+            )
+            .optional()?
+        {
+            if accepted_session != session_id
+                || subject_id.is_some_and(|subject| accepted_subject.as_deref() != Some(subject))
+            {
+                return Err(StoreError::CommandReceiptConflict {
+                    protocol: protocol.to_string(),
+                    command_id: command_id.to_string(),
+                });
+            }
+            tx.commit()?;
+            return Ok((sequence, true));
+        }
+
+        let stored: Option<Option<String>> = tx
+            .query_row(
+                "SELECT activity_json FROM sessions WHERE id=?1",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let stored = stored.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        let current: SessionActivity = stored
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or_default();
+        if current.revision != expected_revision
+            || activity.revision != expected_revision.saturating_add(1)
+        {
+            return Err(StoreError::ActivityConflict {
+                session_id: session_id.to_string(),
+                expected: expected_revision,
+                actual: current.revision,
+            });
+        }
+
+        let seq: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(seq), -1) + 1 FROM parts WHERE session_id=?1",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        let search_text = match prompt {
+            Part::Prompt { text, .. } => Some(text.chars().take(262_144).collect::<String>()),
+            _ => None,
+        };
+        tx.execute(
+            "INSERT INTO parts (session_id,seq,role,part_json,search_text)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                session_id,
+                seq,
+                serde_json::to_string(&Role::User)?,
+                serde_json::to_string(prompt)?,
+                search_text.as_deref(),
+            ],
+        )?;
+        tx.execute(
+            "UPDATE sessions SET activity_json=?2 WHERE id=?1",
+            rusqlite::params![session_id, serde_json::to_string(activity)?],
+        )?;
+        tx.execute(
+            "INSERT INTO command_receipts
+             (protocol,command_id,session_id,subject_id,sequence)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![protocol, command_id, session_id, subject_id, seq],
+        )?;
+        tx.commit()?;
+        Ok((seq, false))
+    }
+
+    /// Look up a durable protocol command accepted in the prompt transaction.
+    pub fn command_receipt(
+        &self,
+        protocol: &str,
+        command_id: &str,
+    ) -> Result<Option<(String, Option<String>, i64)>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT session_id,subject_id,sequence FROM command_receipts
+             WHERE protocol=?1 AND command_id=?2",
+            rusqlite::params![protocol, command_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(StoreError::from)
+    }
+
+    /// External message ids keyed by the canonical transcript sequence they were accepted with.
+    pub fn command_receipt_subjects(
+        &self,
+        protocol: &str,
+        session_id: &str,
+    ) -> Result<HashMap<i64, String>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT sequence,subject_id FROM command_receipts
+             WHERE protocol=?1 AND session_id=?2 AND subject_id IS NOT NULL",
+        )?;
+        let rows = statement.query_map(rusqlite::params![protocol, session_id], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.collect::<rusqlite::Result<HashMap<_, _>>>()
+            .map_err(StoreError::from)
     }
 
     /// A new process cannot recover provider children or parked oneshots. Convert every persisted
@@ -2165,7 +2350,14 @@ impl Store {
             "INSERT INTO issue_delegations
              (source, issue_id, issue_title, scene_ref, scene_title, created_at)
              VALUES (?1,?2,?3,?4,?5,?6)",
-            rusqlite::params![source, issue_id, issue_title, scene_ref, scene_title, unix_millis()],
+            rusqlite::params![
+                source,
+                issue_id,
+                issue_title,
+                scene_ref,
+                scene_title,
+                unix_millis()
+            ],
         )?;
         Ok(conn.last_insert_rowid())
     }
@@ -3173,6 +3365,7 @@ mod tests {
                     kind: PendingInputKind::Permission,
                     title: "Run tests".into(),
                     options: vec![("allow".into(), "Allow".into())],
+                    option_kinds: Default::default(),
                     sequence: 1,
                     context: Default::default(),
                 }],
@@ -3247,6 +3440,92 @@ mod tests {
     }
 
     #[test]
+    fn protocol_command_receipt_replays_in_the_prompt_transaction() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Grok, "/work");
+        store.upsert_session(&session).unwrap();
+        let running = SessionActivity {
+            revision: 1,
+            state: SessionRunState::Running {
+                turn_id: "turn-atomic".into(),
+                prompt_request_id: Some("t3-command:command-1".into()),
+            },
+        };
+        let prompt = Part::Prompt {
+            text: "exactly once".into(),
+            display: "exactly once".into(),
+        };
+
+        assert_eq!(
+            store
+                .append_prompt_activity_and_receipt(
+                    "t3-prompt",
+                    "command-1",
+                    Some("message-1"),
+                    &session.id,
+                    &prompt,
+                    0,
+                    &running,
+                )
+                .unwrap(),
+            (0, false)
+        );
+        assert_eq!(
+            store
+                .append_prompt_activity_and_receipt(
+                    "t3-prompt",
+                    "command-1",
+                    Some("message-1"),
+                    &session.id,
+                    &prompt,
+                    0,
+                    &running,
+                )
+                .unwrap(),
+            (0, true)
+        );
+        assert_eq!(store.transcript(&session.id).unwrap().len(), 1);
+        assert_eq!(
+            store.command_receipt("t3-prompt", "command-1").unwrap(),
+            Some((session.id.clone(), Some("message-1".into()), 0))
+        );
+        assert_eq!(
+            store
+                .command_receipt_subjects("t3-prompt", &session.id)
+                .unwrap()
+                .get(&0)
+                .map(String::as_str),
+            Some("message-1")
+        );
+    }
+
+    #[test]
+    fn session_creation_and_external_identity_commit_atomically() {
+        let store = Store::open_in_memory().unwrap();
+        let first = Session::new(ProviderId::Grok, "/first");
+        store
+            .upsert_session_with_command_receipt("t3-create", "create-1", "public-thread-1", &first)
+            .unwrap();
+        assert!(store.get_session(&first.id).unwrap().is_some());
+        assert_eq!(
+            store.command_receipt("t3-create", "create-1").unwrap(),
+            Some((first.id.clone(), Some("public-thread-1".into()), -1))
+        );
+
+        let second = Session::new(ProviderId::Grok, "/second");
+        assert!(matches!(
+            store.upsert_session_with_command_receipt(
+                "t3-create",
+                "create-1",
+                "public-thread-2",
+                &second,
+            ),
+            Err(StoreError::CommandReceiptConflict { .. })
+        ));
+        assert!(store.get_session(&second.id).unwrap().is_none());
+    }
+
+    #[test]
     fn startup_normalizes_only_in_flight_activity_as_interrupted() {
         let store = Store::open_in_memory().unwrap();
         let mut running = Session::new(ProviderId::Grok, "/running");
@@ -3268,6 +3547,7 @@ mod tests {
                     kind: PendingInputKind::Permission,
                     title: "Approve".into(),
                     options: vec![],
+                    option_kinds: Default::default(),
                     sequence: 9,
                     context: Default::default(),
                 }],
@@ -4331,7 +4611,9 @@ mod tests {
         assert_eq!(listed[0].id, instance.id);
         assert!(store.list_pipeline_instances("/other").unwrap().is_empty());
 
-        store.set_pipeline_status(&instance.id, "completed").unwrap();
+        store
+            .set_pipeline_status(&instance.id, "completed")
+            .unwrap();
         let fetched = store.get_pipeline_instance(&instance.id).unwrap().unwrap();
         assert_eq!(fetched.status, "completed");
     }

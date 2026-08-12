@@ -28,9 +28,8 @@ Yes — any ACP-speaking command works. The provider registry is just a launch s
 
 ### What's not built yet?
 
-- A native **mobile app** (remote uses a mobile web client instead).
-- **Hosted / tunneled** remote access (today it's LAN + token; front it with a tunnel for untrusted
-  networks).
+- A Code2-branded native **mobile app** (use T3 Code mobile or the built-in mobile web client).
+- A Code2-hosted **relay** (today it's direct LAN or Tailscale + token).
 - A **visual browser element-picker** (annotate captures the URL + your note instead).
 - **Packaged installers** / notarization — you run from source for now.
 

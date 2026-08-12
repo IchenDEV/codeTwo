@@ -9,6 +9,7 @@ import {
   type RemoteDevice,
   type RemoteEndpoint,
   type RemotePairingLink,
+  type RemoteClientProtocol,
   type RemoteStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 function defaultEndpointId(status: RemoteStatus | null): string | null {
   if (!status) return null;
   return (
-    status.endpoints.find((endpoint) => endpoint.id === "lan" && endpoint.qr_shareable)?.id ??
+    status.endpoints.find((endpoint) => endpoint.id.startsWith("lan-") && endpoint.qr_shareable)?.id ??
     status.endpoints.find((endpoint) => endpoint.qr_shareable)?.id ??
     status.endpoints[0]?.id ??
     null
@@ -30,19 +31,24 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   if (!endpoint.qr_shareable) {
     return "Works only in another browser on this computer. Other devices cannot reach 127.0.0.1, so no QR code is shown.";
   }
+  if (endpoint.id.startsWith("tailnet-")) {
+    return "Best-effort 100.64/10 match. Verify this address in Tailscale; it works when both devices share the tailnet and its access policy allows this port.";
+  }
   return "Devices on the same network can scan this code or open the link.";
 }
 
 /**
- * Remote control, t3code-style: toggle network access, mint one-time pairing links (URL + QR), and
- * manage paired devices. A paired device drives the same live engine/sessions as this app; pairing
- * survives restarts, and revoking a device cuts it off immediately.
+ * Remote control for T3 Code mobile and Code2's browser client: toggle network access, mint
+ * one-time pairing links (URL + QR), and manage paired devices. A paired device drives the same
+ * live engine/sessions as this app; pairing survives restarts, and revoking a device cuts it off
+ * immediately.
  */
 export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
+  const [clientProtocol, setClientProtocol] = useState<RemoteClientProtocol>("t3");
   const [busy, setBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -64,22 +70,25 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   }, [applyStatus]);
   useEffect(refresh, [refresh]);
 
-  const mintLink = useCallback(async (endpointId: string | null) => {
-    const request = ++linkRequest.current;
-    setLinkBusy(true);
-    setErr(null);
-    try {
-      const next = await remotePairingLink(endpointId ?? undefined);
-      if (request !== linkRequest.current) return;
-      setLink(next);
-      if (next) setSelectedEndpointId(next.endpoint_id);
-      setCopied(false);
-    } catch (e) {
-      if (request === linkRequest.current) setErr(String(e));
-    } finally {
-      if (request === linkRequest.current) setLinkBusy(false);
-    }
-  }, []);
+  const mintLink = useCallback(
+    async (endpointId: string | null, protocol: RemoteClientProtocol = clientProtocol) => {
+      const request = ++linkRequest.current;
+      setLinkBusy(true);
+      setErr(null);
+      try {
+        const next = await remotePairingLink(endpointId ?? undefined, protocol);
+        if (request !== linkRequest.current) return;
+        setLink(next);
+        if (next) setSelectedEndpointId(next.endpoint_id);
+        setCopied(false);
+      } catch (e) {
+        if (request === linkRequest.current) setErr(String(e));
+      } finally {
+        if (request === linkRequest.current) setLinkBusy(false);
+      }
+    },
+    [clientProtocol],
+  );
 
   const turnOn = async () => {
     setBusy(true);
@@ -117,6 +126,13 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     void mintLink(endpointId);
   };
 
+  const selectClientProtocol = (protocol: string) => {
+    if (protocol !== "t3" && protocol !== "legacy") return;
+    setClientProtocol(protocol);
+    setLink(null);
+    if (status) void mintLink(selectedEndpointId, protocol);
+  };
+
   const copy = async () => {
     if (!link) return;
     try {
@@ -129,8 +145,13 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   };
 
   const revoke = async (id: string) => {
-    await remoteRevokeDevice(id).catch(() => {});
-    remoteDevices().then(setDevices).catch(() => {});
+    setErr(null);
+    try {
+      await remoteRevokeDevice(id);
+      setDevices(await remoteDevices());
+    } catch (error) {
+      setErr(String(error));
+    }
   };
 
   const selectedEndpoint = status?.endpoints.find((endpoint) => endpoint.id === selectedEndpointId);
@@ -140,7 +161,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Remote control</DialogTitle>
+          <DialogTitle>Remote connections</DialogTitle>
         </DialogHeader>
 
         {status ? (
@@ -153,6 +174,21 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               <Button variant="outline" size="sm" disabled={busy} onClick={() => void turnOff()}>
                 Turn off
               </Button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label id="remote-client-label" className="text-ui font-medium">
+                Client
+              </label>
+              <Select value={clientProtocol} onValueChange={(value) => value && selectClientProtocol(value)}>
+                <SelectTrigger className="w-full" aria-labelledby="remote-client-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="t3">T3 Code mobile</SelectItem>
+                  <SelectItem value="legacy">Code2 browser</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">
@@ -187,9 +223,13 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             {link ? (
               <div className="space-y-2 rounded-md border p-3" aria-busy={linkBusy}>
                 <p className="text-hint text-muted-foreground">
-                  {linkEndpoint?.qr_shareable
-                    ? "Scan or open on the other device. "
-                    : "Copy this link into another browser on this computer. "}
+                  {clientProtocol === "t3"
+                    ? linkEndpoint?.qr_shareable
+                      ? "Scan this inside T3 Code mobile. "
+                      : "Loopback is not reachable from T3 Code mobile; choose a LAN or verified tailnet address. "
+                    : linkEndpoint?.qr_shareable
+                      ? "Open this link in a browser on the same network or tailnet. "
+                      : "Copy this link into another browser on this computer. "}
                   The link is <b>one-time</b> and expires in {Math.round(link.expires_in / 60)} minutes;
                   the device stays paired after that.
                 </p>
@@ -233,9 +273,9 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Drive Code2 from your phone, tablet, or another machine on the same network. Turning
-              this on serves the app's live sessions on all network interfaces; access requires
-              pairing with a one-time link.
+              Connect the T3 Code mobile app, or drive Code2 from a browser on another device over
+              the same LAN or Tailscale tailnet. Turning this on serves the app's live sessions on
+              all network interfaces; access requires pairing with a one-time link.
             </p>
             <Button disabled={busy} onClick={() => void turnOn()}>
               {busy ? "Starting…" : "Turn on network access"}

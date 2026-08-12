@@ -1902,6 +1902,7 @@ fn remote_pairing_link(
     state: State<'_, AppState>,
     ttl_secs: Option<u64>,
     endpoint_id: Option<String>,
+    client_protocol: Option<String>,
 ) -> Result<RemotePairingLink, String> {
     let guard = state.remote.lock().unwrap();
     let h = guard.as_ref().ok_or("turn on network access first")?;
@@ -1910,7 +1911,11 @@ fn remote_pairing_link(
     let ttl = std::time::Duration::from_secs(
         ttl_secs.unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
     );
-    let token = h.auth.issue_pairing_token(ttl);
+    let token = match client_protocol.as_deref().unwrap_or("t3") {
+        "t3" => h.auth.issue_t3_pairing_token(ttl),
+        "legacy" => h.auth.issue_pairing_token(ttl),
+        protocol => return Err(format!("unsupported remote client protocol: {protocol}")),
+    };
     let url = codetwo_server::pairing_url_for_endpoint(&endpoint.url, &token);
     let qr_svg = if endpoint.qr_shareable {
         codetwo_server::pairing_qr_svg(&url).unwrap_or_default()
@@ -1933,8 +1938,8 @@ fn remote_devices(state: State<'_, AppState>) -> Vec<codetwo_server::DeviceInfo>
 
 /// Revoke a paired device: its bearer (and any pending tickets) stop working immediately.
 #[tauri::command]
-fn remote_revoke_device(state: State<'_, AppState>, id: String) -> bool {
-    remote_auth(&state).revoke_device(&id)
+fn remote_revoke_device(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    remote_auth(&state).try_revoke_device(&id)
 }
 
 // ---- issues (F14) ----------------------------------------------------------------------------

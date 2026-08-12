@@ -1914,6 +1914,7 @@ mod tests {
             kind: PendingInputKind::Permission,
             title: format!("permission {id}"),
             options: vec![("allow".into(), "Allow".into())],
+            option_kinds: Default::default(),
             context: Default::default(),
             sequence,
         }

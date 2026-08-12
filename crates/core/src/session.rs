@@ -8,6 +8,7 @@ use crate::provider::ProviderId;
 use crate::worktree::{DirectoryIdentity, ResolvedWorktreeBaseline};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// Our own session id (a UUID). Distinct from the provider's ACP session id, which we store
 /// separately so we can resume via ACP `session/load`.
@@ -126,6 +127,10 @@ pub struct PendingInput {
     pub kind: PendingInputKind,
     pub title: String,
     pub options: Vec<(String, String)>,
+    /// ACP permission option kind keyed by option id. Kept separately so existing frontend option
+    /// tuples retain their wire shape while protocol adapters can distinguish once/always/reject.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub option_kinds: BTreeMap<String, String>,
     pub sequence: u64,
     #[serde(default)]
     pub context: crate::permission::PermissionContext,
@@ -395,6 +400,7 @@ mod tests {
                     kind: PendingInputKind::Permission,
                     title: "Run tests".into(),
                     options: vec![("allow".into(), "Allow".into())],
+                    option_kinds: BTreeMap::from([("allow".into(), "allow_once".into())]),
                     sequence: 7,
                     context: Default::default(),
                 }],
