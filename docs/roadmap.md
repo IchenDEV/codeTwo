@@ -9,8 +9,13 @@ Item ids (`R1`…) are for cross-referencing in PRs.
 
 Implementation notes vs. this document (accepted deviations): R2's slot proposal and R11's brief
 structuring ship as core heuristics (no model call) with lossless degradation; R7 pricing is a
-conservative built-in prefix table (unknown models show tokens only); scene `enter` hooks fire via
-`SceneRuntime::scene_activated`, wired when scene application lands runtime-side.
+conservative built-in prefix table (unknown models show tokens only). Post-R12 cleanup wired the
+remaining seams: scene `enter` hooks fire on apply/bind, `reasoning_effort` applies once the
+session reports its effort option, pipeline suggestions can advance into a fresh session, issue
+delegations keep an accountability trail, pinned scene skills focus the `/` picker, and per-project
+scene scheduling has a Settings toggle. Known deliberate gaps: Linear delegation needs a Linear
+token surface (listing UI does not exist yet); cron schedules evaluate in UTC; dock auto-follow
+marks but does not scroll-reveal files.
 
 The four pain points this roadmap answers:
 
