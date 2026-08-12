@@ -209,6 +209,8 @@ import {
 } from "./session/sessionEvents";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
+import { MissionControlDialog } from "./sidebar/MissionControl";
+import { needsMeCount } from "./sidebar/missionControl.ts";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
@@ -411,6 +413,7 @@ export default function App() {
   const [showFiles, setShowFiles] = useState(false);
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
+  const [showMissionControl, setShowMissionControl] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [docEmpty, setDocEmpty] = useState(true);
   // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
@@ -2533,6 +2536,9 @@ export default function App() {
         case "open_scene_picker":
           setShowScenePicker(true);
           break;
+        case "open_mission_control":
+          setShowMissionControl(true);
+          break;
         default:
           // A binding pointing at an action this frontend doesn't implement.
           toast(`No handler for "${action}".`, "error");
@@ -2595,6 +2601,7 @@ export default function App() {
     { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
     { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
     { id: "scene", label: t("scene.pickerTitle"), hint: hint("cycle_scene"), run: () => setShowScenePicker(true) },
+    { id: "mission", label: t("action.open_mission_control"), hint: hint("open_mission_control"), run: () => setShowMissionControl(true) },
     ...scenes.map((s) => ({
       id: `scene-${s.reference}`,
       label: `${t("scene.chip")}: ${s.title}`,
@@ -2892,6 +2899,8 @@ export default function App() {
           collapsed={displayedRailCollapsed}
           overlay={narrowLayout}
           onToggleCollapse={toggleDisplayedRail}
+          needsMeCount={needsMeCount(sessions)}
+          onOpenMissionControl={() => setShowMissionControl(true)}
         />
 
         {/* ---------------- the session column ---------------- */}
@@ -3345,6 +3354,17 @@ export default function App() {
       )}
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
       {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
+      {showMissionControl && (
+        <MissionControlDialog
+          sessions={sessions}
+          runningSessions={runningSessions}
+          contextWindows={contextWindows}
+          sceneBySession={sceneBySessionRef.current}
+          onSelect={(id) => void selectSession(id)}
+          onReview={openSourceControl}
+          onClose={() => setShowMissionControl(false)}
+        />
+      )}
       {showScenePicker && (
         <ScenePicker
           scenes={scenes}
