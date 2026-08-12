@@ -34,6 +34,7 @@ use codetwo_core::scene::{
     SceneSource,
 };
 use codetwo_core::scene_artifact::{SceneArtifactRecord, SceneArtifactStore};
+use codetwo_core::scene_runtime::SceneRuntime;
 use codetwo_core::skill::{
     builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef,
 };
@@ -100,6 +101,8 @@ struct AppState {
     scenes: Mutex<Arc<SceneLibrary>>,
     /// Versioned scene-artifact captures over the shared content-addressed blob layer (R4).
     scene_artifacts: SceneArtifactStore,
+    /// Scene hook dispatcher (R8), fed by one broadcast-subscription task spawned in `setup`.
+    scene_runtime: Arc<SceneRuntime>,
     /// Last workspace the frontend listed skills for; harness skill discovery scans its
     /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
     skills_cwd: Mutex<Option<PathBuf>>,
@@ -153,8 +156,15 @@ fn reload_scenes(state: &AppState) {
                 .collect()
         })
         .unwrap_or_default();
-    let lib = SceneLibrary::load(project_dir.as_deref(), user_dir.as_deref(), &plugins);
-    *state.scenes.lock().unwrap() = Arc::new(lib);
+    let lib = Arc::new(SceneLibrary::load(
+        project_dir.as_deref(),
+        user_dir.as_deref(),
+        &plugins,
+    ));
+    *state.scenes.lock().unwrap() = lib.clone();
+    // Keep the engine's preamble compiler and the hook runtime on the same resolved library.
+    state.engine.set_scenes(lib.clone());
+    state.scene_runtime.set_scenes(lib);
 }
 
 #[derive(Serialize, Clone)]
@@ -446,6 +456,8 @@ struct SceneInfo {
     brief: Option<codetwo_core::SceneBrief>,
     artifacts: Vec<codetwo_core::SceneArtifactSpec>,
     skills: Option<codetwo_core::SceneSkills>,
+    /// Appended for R8's completion banner: exit criteria and next-scene suggestions.
+    exit: Option<codetwo_core::SceneExit>,
 }
 
 impl SceneInfo {
@@ -469,6 +481,7 @@ impl SceneInfo {
             brief: entry.scene.brief.clone(),
             artifacts: entry.scene.artifacts.clone(),
             skills: entry.scene.skills.clone(),
+            exit: entry.scene.exit.clone(),
         }
     }
 }
@@ -845,6 +858,20 @@ fn pin_scene_artifact(
         .scene_artifacts
         .pin(&session, &artifact_key, version)
         .map_err(|e| e.to_string())
+}
+
+// ---- scene hooks (R8) -----------------------------------------------------------------------
+
+/// Remember a completion-banner dismissal: the same exit state never re-fires for this session.
+#[tauri::command]
+fn dismiss_scene_banner(state: State<'_, AppState>, session: String, state_key: String) {
+    state.scene_runtime.dismiss_banner(&session, &state_key);
+}
+
+/// Enable/disable scene `schedule` hooks for one project (off by default).
+#[tauri::command]
+fn set_project_scheduling(state: State<'_, AppState>, path: String, enabled: bool) {
+    state.scene_runtime.set_scheduling(&path, enabled);
 }
 
 // ---- provider-neutral memory ----------------------------------------------------------------
@@ -2846,6 +2873,43 @@ pub fn run() {
                 }
             });
 
+            // Scene layer (R8): the engine compiles preambles and captures artifacts against the
+            // builtin library until the first workspace-scoped `reload_scenes` refines it, and the
+            // hook runtime consumes the same broadcast bus every other subscriber uses.
+            let initial_scenes = Arc::new(SceneLibrary::builtin());
+            engine.set_scenes(initial_scenes.clone());
+            engine.set_scene_artifacts(scene_artifacts.clone());
+            let submit_engine = engine.clone();
+            let scene_runtime = Arc::new(SceneRuntime::new(
+                initial_scenes.clone(),
+                engine.skills(),
+                store.clone(),
+                scene_artifacts.clone(),
+                Box::new(move |op| {
+                    let engine = submit_engine.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(error) = engine.submit(op).await {
+                            eprintln!("hook prompt submission failed: {error}");
+                        }
+                    });
+                }),
+                events.clone(),
+            ));
+            let hook_runtime = scene_runtime.clone();
+            let mut hook_sub = events.subscribe();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    match hook_sub.recv().await {
+                        Ok(ev) => hook_runtime.on_event(&ev),
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            eprintln!("scene hook pump lagged; dropped {n} events");
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            });
+            tauri::async_runtime::spawn(scene_runtime.clone().schedule_loop());
+
             let keymap_path = data_dir.join("keymap.json");
             let keymap = Keymap::load(&keymap_path);
 
@@ -2858,8 +2922,9 @@ pub fn run() {
                 events,
                 skills_dir,
                 plugins_dir,
-                scenes: Mutex::new(Arc::new(SceneLibrary::builtin())),
+                scenes: Mutex::new(initial_scenes),
                 scene_artifacts,
+                scene_runtime,
                 skills_cwd: Mutex::new(None),
                 keymap: Mutex::new(keymap),
                 keymap_path,
@@ -3024,7 +3089,9 @@ pub fn run() {
             list_scene_artifacts,
             scene_artifact_content,
             record_scene_artifact,
-            pin_scene_artifact
+            pin_scene_artifact,
+            dismiss_scene_banner,
+            set_project_scheduling
         ])
         .build(tauri::generate_context!())
         .expect("error while running Code2")

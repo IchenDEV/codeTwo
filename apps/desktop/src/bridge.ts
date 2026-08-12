@@ -336,7 +336,13 @@ export type CoreEvent =
       context?: PermissionContext;
     }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
-  | { event: "context_window"; session: string; used_tokens: number; context_window: number }
+  | {
+      event: "context_window";
+      session: string;
+      used_tokens: number;
+      context_window: number;
+      cost_usd?: number | null;
+    }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
   | {
@@ -352,6 +358,54 @@ export type CoreEvent =
       message: string;
       terminal: boolean;
       request_id?: string | null;
+    }
+  | {
+      event: "test_signal";
+      session: string;
+      tool_call_id: string;
+      command: string;
+      passed: boolean;
+      exit_code?: number | null;
+    }
+  | {
+      event: "artifact_produced";
+      session: string;
+      scene_ref: string;
+      artifact_key: string;
+      kind: string;
+      version: number;
+      record_id: number;
+    }
+  | {
+      event: "exit_criteria_met";
+      session: string;
+      scene_ref: string;
+      satisfied: string[];
+      unverified: string[];
+      state_key: string;
+    }
+  | {
+      event: "hook_suggestion";
+      session: string;
+      scene_ref: string;
+      on: string;
+      kind: string;
+      target_scene?: string | null;
+      carry?: string[];
+      message?: string | null;
+      pipeline_instance?: string | null;
+      to_stage?: string | null;
+      state_key: string;
+    }
+  | { event: "hook_turn_started"; session: string; scene_ref: string; macro_id: string }
+  | {
+      event: "session_cost";
+      session: string;
+      input_tokens: number;
+      output_tokens: number;
+      cost_usd?: number | null;
+      burn_rate_usd_per_hour?: number | null;
+      priced: boolean;
     };
 
 export interface PtyOutput {
@@ -2311,4 +2365,18 @@ export async function pinSceneArtifact(
 ): Promise<void> {
   if (!inTauri) return;
   await invoke("pin_scene_artifact", { session, artifactKey, version }).catch(() => {});
+}
+
+// ---- scene hooks (R8) -----------------------------------------------------------------------
+
+/// Remember a completion-banner dismissal so the same exit state never re-fires this session.
+export async function dismissSceneBanner(session: string, stateKey: string): Promise<void> {
+  if (!inTauri) return;
+  await invoke("dismiss_scene_banner", { session, stateKey }).catch(() => {});
+}
+
+/// Enable/disable scene `schedule` hooks for one project (off by default).
+export async function setProjectScheduling(path: string, enabled: boolean): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_project_scheduling", { path, enabled }).catch(() => {});
 }

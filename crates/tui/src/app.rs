@@ -469,6 +469,14 @@ impl App {
                     self.push("end", stop_reason);
                 }
             }
+            // Scene hook/exit/cost projections (R8) are rendered by the desktop; the TUI keeps
+            // the match exhaustive and stays quiet until it grows a banner surface.
+            Event::TestSignal { .. }
+            | Event::ArtifactProduced { .. }
+            | Event::ExitCriteriaMet { .. }
+            | Event::HookSuggestion { .. }
+            | Event::HookTurnStarted { .. }
+            | Event::SessionCost { .. } => {}
             Event::Error {
                 session,
                 message,

@@ -603,6 +603,12 @@ export const en = {
   "planDoc.cancel": "Cancel",
   "planDoc.pinned": "Plan pinned as a scene artifact",
   "planDoc.pinFailed": "Could not pin the plan",
+  "sceneBanner.complete": "Stage complete — every declared artifact is in.",
+  "sceneBanner.unverified": "Unverified: {items}",
+  "sceneBanner.suggest": "Suggested next scene: {scene}",
+  "sceneBanner.start": "Start {scene}",
+  "sceneBanner.carrying": "Carrying: {artifacts}",
+  "sceneBanner.dismiss": "Dismiss",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -1176,6 +1182,12 @@ export const zhCN: Record<StringKey, string> = {
   "planDoc.cancel": "取消",
   "planDoc.pinned": "计划已钉为场景工件",
   "planDoc.pinFailed": "无法钉住计划",
+  "sceneBanner.complete": "产出齐备 — 本阶段声明的工件已全部就绪。",
+  "sceneBanner.unverified": "待确认：{items}",
+  "sceneBanner.suggest": "建议进入场景：{scene}",
+  "sceneBanner.start": "进入{scene}",
+  "sceneBanner.carrying": "携带：{artifacts}",
+  "sceneBanner.dismiss": "关闭",
 };
 
 export const LOCALES = {

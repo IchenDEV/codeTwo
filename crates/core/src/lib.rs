@@ -41,11 +41,13 @@ pub mod pty;
 pub mod rules;
 pub mod scene;
 pub mod scene_artifact;
+pub mod scene_runtime;
 pub mod session;
 pub mod skill;
 pub mod source_control;
 pub mod store;
 pub mod term;
+pub mod testsignal;
 pub mod tmux;
 pub mod usage;
 pub mod voice;
@@ -105,6 +107,7 @@ pub use scene::{
 pub use scene_artifact::{
     extract_artifact_blocks, SceneArtifactRecord, SceneArtifactStore, MAX_CARRY_CONTENT_BYTES,
 };
+pub use scene_runtime::{evaluate_exit, ExitEvaluation, SceneRuntime};
 pub use session::{
     MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,
     SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
@@ -118,4 +121,5 @@ pub use skill::{
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
 pub use store::{SessionSearchHit, Store, StoreError};
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
+pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};
