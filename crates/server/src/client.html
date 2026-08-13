@@ -53,6 +53,18 @@
       .sess.running { border-color: #2563eb; }
       .sess.awaiting_input { border-color: #eab308; color: #fde68a; }
       .sess.failed { border-color: #ef4444; color: #fecaca; }
+      main[hidden], #sessions[hidden] { display: none; }
+      #views { margin-left: auto; display: flex; gap: 4px; }
+      #views button { padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 999px; }
+      #views button.active { background: #1e2a4a; border-color: #2563eb; }
+      #term-view { display: flex; flex-direction: column; height: calc(100vh - 42px); }
+      #term-view[hidden] { display: none; }
+      #term-bar { display: flex; gap: 6px; padding: 8px; background: #171a21; align-items: center; flex-wrap: wrap; }
+      #term-bar select { max-width: 12rem; }
+      #term-status { color: #9ca3af; font-size: 12px; }
+      #term-status.err { color: #f87171; }
+      #term-mount { flex: 1; min-height: 0; padding: 4px 0 0 6px; background: #000; }
+      #term-mount .xterm { height: 100%; }
       #pairing { position: fixed; inset: 0; background: #0f1115; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
       #pairing.show { display: flex; }
       #pairing h2 { margin: 0; }
@@ -60,7 +72,13 @@
     </style>
   </head>
   <body>
-    <header><span class="dot" id="status"></span> Code2 remote</header>
+    <header>
+      <span class="dot" id="status"></span> Code2 remote
+      <nav id="views">
+        <button id="view-chat" type="button" class="active">Chat</button>
+        <button id="view-term" type="button">Terminal</button>
+      </nav>
+    </header>
     <div id="sessions"></div>
     <div id="perm"></div>
     <main>
@@ -90,6 +108,15 @@
         <button class="run" id="run">Run ▸</button>
       </div>
     </main>
+    <section id="term-view" hidden>
+      <div id="term-bar">
+        <select id="term-list" title="terminal"></select>
+        <button id="term-new" type="button">New terminal</button>
+        <button id="term-kill" type="button">Kill</button>
+        <span id="term-status" role="status" aria-live="polite"></span>
+      </div>
+      <div id="term-mount"></div>
+    </section>
     <div id="pairing">
       <h2>Not paired</h2>
       <p id="pairing-msg">
@@ -1624,7 +1651,214 @@
         };
       }
 
-      maybePair().then(() => connect());
+      // ---- remote terminal ------------------------------------------------------------------
+      // A real shell on the paired machine: the server owns the emulator (Ghostty VT + PTY), the
+      // browser renders it with xterm.js loaded lazily from the embedded /term/ assets. Attaching
+      // by id means a reload — or a second device — resumes the same shell instead of spawning a
+      // fresh one.
+      const TERM_ID_KEY = "codetwo.remote.terminal";
+      const mainView = document.querySelector("main");
+      const termView = document.getElementById("term-view");
+      const termListEl = document.getElementById("term-list");
+      const termStatusEl = document.getElementById("term-status");
+      const termMountEl = document.getElementById("term-mount");
+      const viewChatButton = document.getElementById("view-chat");
+      const viewTermButton = document.getElementById("view-term");
+      let termLibPromise = null;
+      let term = null;
+      let termFit = null;
+      let termWs = null;
+      let termActiveId = null;
+      let termRetryTimer = null;
+
+      function setTermStatus(text, error = false) {
+        termStatusEl.textContent = text || "";
+        termStatusEl.classList.toggle("err", Boolean(error));
+      }
+
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("failed to load " + src));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function loadTermLib() {
+        if (!termLibPromise) {
+          const link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = "/term/xterm.css";
+          document.head.appendChild(link);
+          termLibPromise = loadScript("/term/xterm.min.js").then(() => loadScript("/term/addon-fit.min.js"));
+        }
+        await termLibPromise;
+      }
+
+      async function termTicket() {
+        const bearer = localStorage.getItem(BEARER_KEY);
+        if (!bearer) { showPairing(); throw new Error("not paired"); }
+        const r = await fetch("/api/ws-ticket", { method: "POST", headers: { Authorization: "Bearer " + bearer } });
+        if (r.status === 401) {
+          localStorage.removeItem(BEARER_KEY);
+          showPairing("This device's access was revoked or reset. Pair again with a fresh link from the desktop app.");
+          throw new Error("access revoked");
+        }
+        if (!r.ok) throw new Error("ticket request failed: " + r.status);
+        return (await r.json()).ticket;
+      }
+
+      async function refreshTermList() {
+        const bearer = localStorage.getItem(BEARER_KEY);
+        if (!bearer) return;
+        try {
+          const r = await fetch("/api/terminals", { headers: { Authorization: "Bearer " + bearer } });
+          if (!r.ok) return;
+          const terminals = await r.json();
+          const ids = terminals.map((t) => t.id);
+          if (termActiveId && !ids.includes(termActiveId)) ids.unshift(termActiveId);
+          termListEl.replaceChildren();
+          for (const id of ids) {
+            const option = document.createElement("option");
+            const info = terminals.find((t) => t.id === id);
+            option.value = id;
+            option.textContent = info?.title ? `${id} — ${info.title}` : id;
+            option.selected = id === termActiveId;
+            termListEl.appendChild(option);
+          }
+        } catch { /* listing is cosmetic; the attach flow reports real errors */ }
+      }
+
+      function newTermId() {
+        return "web-" + Math.random().toString(36).slice(2, 8);
+      }
+
+      function closeTerminalSocket() {
+        if (termRetryTimer) { clearTimeout(termRetryTimer); termRetryTimer = null; }
+        if (termWs) { termWs.onclose = null; termWs.close(); termWs = null; }
+      }
+
+      async function openTerminal(id) {
+        await loadTermLib();
+        closeTerminalSocket();
+        termActiveId = id;
+        localStorage.setItem(TERM_ID_KEY, id);
+        if (!term) {
+          term = new Terminal({ scrollback: 10000, fontSize: 14, cursorBlink: true });
+          termFit = new FitAddon.FitAddon();
+          term.loadAddon(termFit);
+          term.open(termMountEl);
+          term.onData((data) => {
+            if (termWs?.readyState === 1) termWs.send(JSON.stringify({ op: "input", data }));
+          });
+          term.onResize(({ rows, cols }) => {
+            if (termWs?.readyState === 1) termWs.send(JSON.stringify({ op: "resize", rows, cols }));
+          });
+        }
+        termFit.fit();
+        setTermStatus("Connecting…");
+        const ticket = await termTicket();
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(`${proto}//${location.host}/ws/terminal?ticket=${encodeURIComponent(ticket)}`);
+        termWs = ws;
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ op: "attach", id, rows: term.rows, cols: term.cols }));
+        };
+        ws.onmessage = (message) => {
+          const msg = JSON.parse(message.data);
+          if (msg.kind === "attached") {
+            term.reset();
+            if (msg.restore) term.write(msg.restore);
+            setTermStatus(msg.created ? "Shell started" : "Reattached" + (msg.title ? " · " + msg.title : ""));
+            void refreshTermList();
+          } else if (msg.kind === "data") {
+            term.write(msg.data);
+          } else if (msg.kind === "title") {
+            setTermStatus(msg.title);
+          } else if (msg.kind === "exit") {
+            setTermStatus("Terminal exited");
+            ws.onclose = null;
+            ws.close();
+            if (termWs === ws) termWs = null;
+            void refreshTermList();
+          } else if (msg.kind === "error") {
+            setTermStatus(msg.message, true);
+          }
+        };
+        ws.onclose = () => {
+          if (termWs !== ws) return;
+          termWs = null;
+          setTermStatus("Terminal disconnected — retrying…");
+          scheduleTermRetry(id);
+        };
+      }
+
+      // Keep retrying while the server is unreachable; only a lost pairing ends the loop (the
+      // pairing overlay is already up at that point).
+      function scheduleTermRetry(id) {
+        if (termRetryTimer) return;
+        termRetryTimer = setTimeout(() => {
+          termRetryTimer = null;
+          void openTerminal(id).catch((error) => {
+            setTermStatus(error.message, true);
+            if (error.message !== "not paired" && error.message !== "access revoked") {
+              scheduleTermRetry(id);
+            }
+          });
+        }, 1500);
+      }
+
+      function showView(name) {
+        const isTerm = name === "term";
+        termView.hidden = !isTerm;
+        mainView.hidden = isTerm;
+        sessionsEl.hidden = isTerm;
+        viewChatButton.classList.toggle("active", !isTerm);
+        viewTermButton.classList.toggle("active", isTerm);
+        if (isTerm) {
+          if (!termWs && !termRetryTimer) {
+            const saved = localStorage.getItem(TERM_ID_KEY) || newTermId();
+            void refreshTermList();
+            void openTerminal(saved).catch((error) => {
+              setTermStatus(error.message, true);
+              if (error.message !== "not paired" && error.message !== "access revoked") scheduleTermRetry(saved);
+            });
+          } else {
+            termFit?.fit();
+          }
+        }
+      }
+      viewChatButton.onclick = () => showView("chat");
+      viewTermButton.onclick = () => showView("term");
+      termListEl.onchange = () => {
+        if (termListEl.value && termListEl.value !== termActiveId) {
+          void openTerminal(termListEl.value).catch((error) => setTermStatus(error.message, true));
+        }
+      };
+      document.getElementById("term-new").onclick = () => {
+        void openTerminal(newTermId()).catch((error) => setTermStatus(error.message, true));
+      };
+      document.getElementById("term-kill").onclick = () => {
+        if (termWs?.readyState === 1) {
+          termWs.onclose = null;
+          termWs.send(JSON.stringify({ op: "kill" }));
+          termWs.close();
+          termWs = null;
+          setTermStatus("Terminal killed");
+          void refreshTermList();
+        }
+      };
+      window.addEventListener("resize", () => {
+        if (!termView.hidden) termFit?.fit();
+      });
+
+      maybePair().then(() => {
+        connect();
+        // /terminal deep-links straight into the machine's shell, t3code-style.
+        if (location.pathname === "/terminal") showView("term");
+      });
     </script>
   </body>
 </html>
