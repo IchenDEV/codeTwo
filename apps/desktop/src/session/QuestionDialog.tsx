@@ -1,4 +1,4 @@
-import { MessageCircleQuestion } from "lucide-react";
+import { Check, MessageCircleQuestion } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -46,21 +46,26 @@ function OptionButton({
       aria-checked={selected}
       onClick={onPick}
       className={cn(
-        "flex w-full flex-col items-start gap-0.5 rounded-(--ds-radius-control) border px-3 py-2 text-left transition-colors",
-        selected
-          ? "border-primary bg-primary/10"
-          : "hover:border-foreground/20 hover:bg-accent/50",
+        "flex w-full items-start gap-2 rounded-(--ds-radius-control) border px-3 py-2 text-left transition-colors",
+        // Selection is carried by fill and a check mark rather than a border colour: the design
+        // system reserves static borders, and a tick reads at a glance in either theme.
+        selected ? "bg-primary/10" : "hover:bg-accent/50",
       )}
     >
-      <span className="text-ui font-medium text-foreground">{option.label}</span>
-      {option.description && (
-        <span className="text-fine text-muted-foreground">{option.description}</span>
-      )}
-      {option.preview && selected && (
-        <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded bg-fill-quiet px-2 py-1.5 font-mono text-cap text-muted-foreground">
-          {option.preview}
-        </pre>
-      )}
+      <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
+        {selected && <Check className="size-3.5 text-primary" aria-hidden />}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-ui font-medium text-foreground">{option.label}</span>
+        {option.description && (
+          <span className="text-fine text-muted-foreground">{option.description}</span>
+        )}
+        {option.preview && selected && (
+          <pre className="mt-1 max-h-40 w-full overflow-auto whitespace-pre-wrap rounded-(--ds-radius-micro) bg-fill-quiet px-2 py-1.5 font-mono text-cap text-muted-foreground">
+            {option.preview}
+          </pre>
+        )}
+      </span>
     </button>
   );
 }
