@@ -58,7 +58,11 @@ cargo run -p codetwo-server            # prints a one-time pairing URL + token +
 ## Remote control
 
 `codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a one-time pairing
-flow and serves a small mobile web client at `/`. From the desktop you can also start the listener
+flow and serves a small mobile web client at `/`. The client's **Terminal** view (also reachable
+directly at `/terminal`) opens a real shell on the machine, t3code-style: the server hosts the
+emulator (`core::term`, Ghostty VT + PTY) and the browser renders it with an embedded xterm.js, so
+a terminal survives reloads and can be shared by several paired devices attaching to the same id
+(`/ws/terminal`, ticket-gated like `/ws`). From the desktop you can also start the listener
 in-process (Command palette → "Remote control" → turn on network access), where it exposes the
 native T3 Code discovery, OAuth token-exchange, ticket and Effect RPC protocols as well. Scan its
 `/pair#token=…` QR in T3 Code mobile to connect to the same live sessions over a local LAN or a

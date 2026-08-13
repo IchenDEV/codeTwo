@@ -20,6 +20,7 @@
 
 mod auth;
 pub mod t3_compat;
+pub mod terminal;
 
 pub use auth::{AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, WS_TICKET_TTL};
 
@@ -508,6 +509,7 @@ struct ServerState {
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
     t3: Arc<t3_compat::T3CompatState>,
+    terminals: Arc<terminal::TerminalRegistry>,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -565,13 +567,19 @@ pub async fn bind_and_serve_with_canvas(
         store,
         canvas_gate,
         t3: t3.clone(),
+        terminals: Arc::new(terminal::TerminalRegistry::default()),
     });
     let app = Router::new()
         .route("/", get(index))
         .route("/pair", get(index))
+        .route("/terminal", get(index))
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/terminals", get(list_terminals))
+        .route("/api/terminals/:id/kill", post(kill_terminal))
+        .route("/term/*path", get(term_asset))
+        .route("/ws/terminal", any(terminal_ws_handler))
         .route("/api/canvas/feature", get(canvas_feature))
         .route("/api/canvas/media/normalize", post(canvas_normalize_media))
         .route("/api/canvas/drafts", post(canvas_create_draft))
@@ -1041,6 +1049,66 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, st, device_id))
 }
 
+/// List live terminals so a reconnecting browser can reattach instead of respawning.
+async fn list_terminals(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    Json(st.terminals.list()).into_response()
+}
+
+/// Kill a terminal outright (the WS `kill` op works too; this covers viewers that only hold the
+/// listing).
+async fn kill_terminal(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    if st.terminals.kill(&id) {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "no such terminal").into_response()
+    }
+}
+
+/// Upgrade a terminal socket. Accepts the legacy single-use `ticket`, or a T3 `wsTicket` whose
+/// profile carries the `terminal:operate` scope.
+async fn terminal_ws_handler(
+    ws: WebSocketUpgrade,
+    Query(q): Query<HashMap<String, String>>,
+    State(st): State<Arc<ServerState>>,
+) -> Response {
+    let device_id = if let Some(ticket) = q.get("wsTicket") {
+        match st.auth.take_ws_ticket_profile(ticket) {
+            Some(authorization)
+                if authorization
+                    .scopes
+                    .iter()
+                    .any(|scope| scope == "terminal:operate") =>
+            {
+                authorization.device_id
+            }
+            Some(_) => {
+                return (StatusCode::FORBIDDEN, "missing terminal:operate scope").into_response()
+            }
+            None => return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response(),
+        }
+    } else {
+        match q
+            .get("ticket")
+            .and_then(|ticket| st.auth.take_ws_ticket(ticket))
+        {
+            Some(device_id) => device_id,
+            None => return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response(),
+        }
+    };
+    let registry = st.terminals.clone();
+    ws.on_upgrade(move |socket| terminal::handle_socket(socket, registry, device_id))
+}
+
 fn validate_canvas_op(st: &ServerState, _device_id: &str, op: &Op) -> Result<(), CanvasError> {
     let Op::Prompt { doc, .. } = op else {
         return Ok(());
@@ -1238,6 +1306,24 @@ async fn index() -> Html<&'static str> {
 }
 
 include!(concat!(env!("OUT_DIR"), "/canvas_assets.rs"));
+include!(concat!(env!("OUT_DIR"), "/term_assets.rs"));
+
+/// Embedded xterm.js bundle for the remote terminal view. Same traversal rules as the Canvas
+/// island: only compile-time embedded names resolve, nothing touches the filesystem at runtime.
+async fn term_asset(Path(path): Path<String>) -> Response {
+    if path.is_empty() || path.contains('/') || path.contains('\\') || path.starts_with('.') {
+        return (StatusCode::NOT_FOUND, "terminal asset not found").into_response();
+    }
+    let Some((_, bytes)) = TERM_ASSETS.iter().find(|(name, _)| *name == path) else {
+        return (StatusCode::NOT_FOUND, "terminal asset not found").into_response();
+    };
+    let mut response = (*bytes).to_vec().into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(canvas_asset_mime(&path)),
+    );
+    response
+}
 
 /// Compile-time embedded Canvas island paths, exposed only for integration probes and packaged
 /// host diagnostics.  The returned names are generated from `assets/canvas`, so callers never
