@@ -18,6 +18,7 @@ import {
   Pin,
   Search,
   Settings,
+  SquareKanban,
   SquarePen,
   Store,
   Trash2,
@@ -103,6 +104,8 @@ export function SessionRail({
   onWidth,
   needsMeCount,
   onOpenMissionControl,
+  taskBoardOpen,
+  onOpenTaskBoard,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -149,6 +152,8 @@ export function SessionRail({
   /** Sessions waiting on input or failed — the mission-control button's attention badge. */
   needsMeCount: number;
   onOpenMissionControl: () => void;
+  taskBoardOpen: boolean;
+  onOpenTaskBoard: () => void;
 }) {
   const t = useT();
   const toast = useToast();
@@ -594,11 +599,27 @@ export function SessionRail({
         <Tooltip>
           <TooltipTrigger
             render={<Button
+              variant={taskBoardOpen ? "secondary" : "ghost"}
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={t("taskboard.title")}
+              aria-pressed={taskBoardOpen}
+              onClick={onOpenTaskBoard}
+            >
+              <SquareKanban data-icon="inline-start" aria-hidden />
+            </Button>}
+          />
+          <TooltipContent side="right">{t("taskboard.title")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
               variant="ghost"
               size="icon"
               className="size-7 shrink-0 text-muted-foreground"
               aria-label={t("rail.collapse")}
               onClick={onToggleCollapse}
+              disabled={taskBoardOpen && !overlay}
             >
               <PanelLeft className="size-4" />
             </Button>}

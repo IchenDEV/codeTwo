@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   BarChart3,
   Check,
@@ -101,6 +101,7 @@ export function EnvironmentPopover({
   onOpenUsage,
   onOpenMarket,
   onOpenSettings,
+  suppressed = false,
 }: {
   project: string | null;
   projectPath: string | null;
@@ -116,12 +117,18 @@ export function EnvironmentPopover({
   onOpenUsage: () => void;
   onOpenMarket: () => void;
   onOpenSettings: () => void;
+  /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
+  suppressed?: boolean;
 }) {
   const t = useT();
   const toast = useToast();
   const [open, setOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const isRepo = git?.is_repo === true;
+
+  useEffect(() => {
+    if (suppressed) setOpen(false);
+  }, [suppressed]);
 
   const changeDetail = git === null ? (
     "…"
@@ -166,8 +173,9 @@ export function EnvironmentPopover({
 
   return (
     <Popover
-      open={open}
+      open={!suppressed && open}
       onOpenChange={(next, eventDetails) => {
+        if (suppressed) return;
         if (!next && eventDetails.reason === "outside-press") {
           eventDetails.cancel();
           return;
