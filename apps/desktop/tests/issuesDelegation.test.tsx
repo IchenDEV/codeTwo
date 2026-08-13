@@ -114,8 +114,9 @@ describe("IssuesModal delegation", () => {
     expect(button(dom.document.body, "Add to prompt")).toBeTruthy();
     await openDelegateMenu();
     const labels = menuItems().map((item) => item.textContent?.trim());
-    expect(labels).toContain("🛠️Develop");
-    expect(labels).toContain("🔍Review");
+    expect(labels).toContain("Develop");
+    expect(labels).toContain("Review");
+    expect(labels.join(" ")).not.toMatch(/[🛠🔍]/u);
   });
 
   test("picking a scene reports the issue and that scene's reference", async () => {

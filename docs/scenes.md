@@ -190,6 +190,24 @@ guidance, deliberately *not* enforcement; `execution.session_mode` remains the e
 boundary and the docs must never present guardrails as a sandbox. `tools.allow`/`deny` are
 advisory hints forwarded to providers that support tool gating; ignored elsewhere.
 
+## Auto Scene
+
+Auto Scene is an explicit per-session mode. When enabled, the host gives the Agent the resolved
+scene catalog and a bounded `scene_select` tool. With no active scene, the Agent selects one before
+substantive work. On later turns it may keep the current scene or switch when the task changes.
+The selected scene remains visible in the composer as `Auto · <scene>`; the session stores both
+the Auto flag and the concrete active scene independently.
+
+`scene_select` accepts only an installed scene reference and a short user-visible reason. A
+successful call soft-applies that scene and returns its prompt preamble so the Agent follows the
+new guardrails, skills, artifact contract, and clarification behavior in the same turn. The tool
+cannot create or edit scene definitions, disable Auto Scene, or select an uninstalled reference.
+
+Auto Scene does not bypass the escalation rule. A tighter or equivalent posture can apply
+directly. A switch that would loosen the session mode stops at an explicit user approval; until
+approval, nothing is applied. The Agent's own text is never accepted as evidence that a scene or
+permission changed.
+
 ### `extensions`
 
 Namespaced vendor escape hatch, same contract as plugins: hosts must ignore unknown extensions,

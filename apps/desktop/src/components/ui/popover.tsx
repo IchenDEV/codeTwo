@@ -17,21 +17,27 @@ function PopoverTrigger({
 
 function PopoverContent({
   className,
+  size = "default",
   align = "center",
   alignOffset = 0,
+  anchor,
+  positionMethod,
   side = "bottom",
   sideOffset = 4,
   ...props
 }: PopoverPrimitive.Popup.Props &
+  { size?: "default" | "wide" } &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "anchor" | "positionMethod" | "side" | "sideOffset"
   >) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}
+        anchor={anchor}
+        positionMethod={positionMethod}
         side={side}
         sideOffset={sideOffset}
         className="isolate z-50"
@@ -39,7 +45,8 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "glass-raised pop-layer z-50 w-72 origin-(--transform-origin) rounded-md p-4 text-popover-foreground shadow-raised ring-1 ring-foreground/10 outline-hidden",
+            "glass-raised pop-layer z-50 origin-(--transform-origin) rounded-md p-4 text-popover-foreground shadow-raised ring-1 ring-foreground/10 outline-hidden",
+            size === "wide" ? "w-2xl max-w-(--available-width)" : "w-72",
             className
           )}
           {...props}

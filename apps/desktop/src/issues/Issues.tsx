@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Clapperboard } from "lucide-react";
 import { listGithubIssues, listIssueDelegations, type Issue, type IssueDelegation } from "../bridge";
 import type { SceneInfo } from "../session/scene";
 import { useT } from "../i18n";
@@ -166,7 +166,7 @@ export function IssuesModal({
                     )}
                     {scenes.map((s) => (
                       <DropdownMenuItem key={s.reference} onClick={() => onDelegate(it, s.reference)}>
-                        {s.icon ? <span aria-hidden>{s.icon}</span> : null}
+                        <Clapperboard />
                         {s.title}
                       </DropdownMenuItem>
                     ))}

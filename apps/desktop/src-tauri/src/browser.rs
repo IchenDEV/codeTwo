@@ -1282,6 +1282,19 @@ struct BrokerResponse {
     approval: Option<BrokerApproval>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AutoSceneChanged {
+    session: String,
+    reference: String,
+    title: String,
+    reason: String,
+    pending: Vec<String>,
+    plan_first: Option<bool>,
+    memory_read: codetwo_core::MemoryAccess,
+    memory_write: codetwo_core::MemoryAccess,
+}
+
 impl BrokerResponse {
     fn result(value: impl Serialize) -> Self {
         Self {
@@ -1354,6 +1367,104 @@ async fn dispatch_broker(
     let params = &request.params;
     let response: Result<serde_json::Value, String> = async {
         match request.method.as_str() {
+            "scene_select" => {
+                let reference = required_string(params, "reference")?;
+                let reason = required_string(params, "reason")?
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if reason.is_empty() {
+                    return Err("reason is required".into());
+                }
+                let reason: String = reason.chars().take(240).collect();
+                let app_state = controller.app.state::<crate::AppState>();
+                if !app_state
+                    .store
+                    .session_auto_scene(&request.session)
+                    .map_err(|error| error.to_string())?
+                {
+                    return Err("Auto Scene is not enabled for this session".into());
+                }
+                let (canonical, title, instructions) = {
+                    let scenes = app_state.scenes.lock().unwrap().clone();
+                    let entry = scenes
+                        .resolve(&reference)
+                        .ok_or_else(|| format!("unknown scene `{reference}`"))?;
+                    (
+                        codetwo_core::SceneLibrary::reference_for(entry),
+                        entry.scene.title.clone(),
+                        codetwo_core::scene::prompt_preamble(&entry.scene, &[]),
+                    )
+                };
+                let current = app_state
+                    .store
+                    .session_scene(&request.session)
+                    .map_err(|error| error.to_string())?
+                    .and_then(|(reference, _)| {
+                        let scenes = app_state.scenes.lock().unwrap().clone();
+                        scenes
+                            .resolve(&reference)
+                            .map(codetwo_core::SceneLibrary::reference_for)
+                    });
+                let (changed, pending, plan_first) = if current.as_deref() == Some(&canonical) {
+                    (false, Vec::new(), None)
+                } else {
+                    let outcome = crate::apply_scene_to(
+                        app_state.inner(),
+                        &request.session,
+                        &canonical,
+                        request.approved,
+                    )
+                    .await?;
+                    if let Some(escalation) = outcome.escalation {
+                        return Err(format!(
+                            "approval:scene:{}:{}:{}",
+                            escalation.from, escalation.to, title
+                        ));
+                    }
+                    (
+                        true,
+                        outcome
+                            .pending
+                            .iter()
+                            .map(|field| (*field).to_string())
+                            .collect(),
+                        outcome.plan_first,
+                    )
+                };
+                let (memory_read, memory_write) = app_state
+                    .store
+                    .session_memory_policy(&request.session)
+                    .map_err(|error| error.to_string())?;
+                if changed {
+                    let _ = controller.app.emit(
+                        "auto-scene-changed",
+                        AutoSceneChanged {
+                            session: request.session.clone(),
+                            reference: canonical.clone(),
+                            title: title.clone(),
+                            reason: reason.clone(),
+                            pending: pending.clone(),
+                            plan_first,
+                            memory_read,
+                            memory_write,
+                        },
+                    );
+                }
+                Ok(serde_json::json!({
+                    "selected": canonical,
+                    "title": title,
+                    "reason": reason,
+                    "changed": changed,
+                    "pending": pending,
+                    "instructions": instructions,
+                    "message": if changed {
+                        "Scene applied. Follow `instructions` for the current turn."
+                    } else {
+                        "Scene already active. Continue following `instructions`."
+                    }
+                }))
+            }
             "browser_tabs" => {
                 let command = params
                     .get("command")
@@ -1512,6 +1623,22 @@ async fn dispatch_broker(
             "Allow this sensitive web action once?",
             None,
         ),
+        Err(error) if error.starts_with("approval:scene:") => {
+            let mut parts = error.splitn(5, ':');
+            let _approval = parts.next();
+            let _scene = parts.next();
+            let from = parts.next().unwrap_or("current mode");
+            let to = parts.next().unwrap_or("a looser mode");
+            let title = parts.next().unwrap_or("the selected scene");
+            BrokerResponse::approval(
+                "scene_escalation",
+                "Allow looser scene permissions?",
+                &format!(
+                    "The agent wants to switch to “{title}”, which raises this session from {from} to {to}. Allow this switch once?"
+                ),
+                None,
+            )
+        }
         Err(error) => BrokerResponse::error(error),
     }
 }

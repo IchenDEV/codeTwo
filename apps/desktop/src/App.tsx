@@ -61,6 +61,7 @@ import {
   newSession,
   onBrowserAgentActivity,
   onBrowserDownloadBlocked,
+  onAutoSceneChanged,
   onEngineEvent,
   openProject,
   pickPluginMarketplace,
@@ -129,6 +130,7 @@ import {
   setIssueDelegationComment,
   setIssueDelegationSession,
   getSessionScene,
+  getSessionAutoScene,
   listPipelines,
   listScenes,
   recordSceneArtifact,
@@ -136,6 +138,7 @@ import {
   sessionPipeline,
   setModel as setSessionModel,
   setSessionScene,
+  setSessionAutoScene,
   startPipeline,
   structureBrief,
   usageBySession,
@@ -175,6 +178,8 @@ import {
   type SceneInfo,
 } from "./session/scene";
 import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
+import type { SceneEditorRequest } from "./session/SceneEditor";
+import { SceneStudio } from "./session/SceneStudio";
 import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
 import { StageTrack } from "./session/StageTrack";
 import { Composer } from "./session/Composer";
@@ -384,6 +389,14 @@ function IconAction({
   );
 }
 
+/** Preserve the selected wording while making its provenance unmistakable in the next prompt. */
+function selectedExcerptMarkdown(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => `> ${line}`)
+    .join("\n");
+}
+
 export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -464,8 +477,11 @@ export default function App() {
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
   /** The active scene's canonical reference for the focused session (or the draft). */
   const [activeSceneName, setActiveSceneName] = useState<string | null>(null);
+  const [autoScene, setAutoScene] = useState(false);
   const [scenePendingFields, setScenePendingFields] = useState<string[]>([]);
   const [showScenePicker, setShowScenePicker] = useState(false);
+  const [showSceneStudio, setShowSceneStudio] = useState(false);
+  const [sceneEditorRequest, setSceneEditorRequest] = useState<SceneEditorRequest | null>(null);
   const [sceneEscalation, setSceneEscalation] = useState<{
     reference: string;
     kind: "soft" | "restart" | "pipeline" | "pipeline_new";
@@ -484,8 +500,10 @@ export default function App() {
   const pendingSceneRef = useRef<string | null>(null);
   /** Per-session scene memory so switching sessions restores each one's scene. */
   const sceneBySessionRef = useRef(new Map<string, string>());
+  const autoSceneBySessionRef = useRef(new Map<string, boolean>());
   const scenesRef = useRef<SceneInfo[]>([]);
   const activeSceneNameRef = useRef<string | null>(null);
+  const autoSceneRef = useRef(false);
   /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
   const sceneEffortAppliedRef = useRef(new Set<string>());
   /** Stage binding for the next created session (advance-in-new-session handshake). */
@@ -495,6 +513,9 @@ export default function App() {
   useEffect(() => {
     activeSceneNameRef.current = activeSceneName;
   }, [activeSceneName]);
+  useEffect(() => {
+    autoSceneRef.current = autoScene;
+  }, [autoScene]);
   const [canvasFeature, setCanvasFeature] = useState<CanvasFeatureState>({
     feature: "CODETWO_CANVAS_INPUT_V1",
     enabled: false,
@@ -1265,6 +1286,7 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          autoSceneBySessionRef.current.set(ev.session, autoSceneRef.current);
           {
             // Delegation trail: the delegated draft just became a real session.
             const delegation = pendingDelegationRef.current;
@@ -1340,11 +1362,14 @@ export default function App() {
                 ? [{ id: block.id, revision: block.frozen_revision }]
                 : []),
             });
-            void setSessionMemoryPolicy(
-              ev.session,
-              memoryReadRef.current,
-              memoryWriteRef.current,
-            )
+            void Promise.all([
+              setSessionMemoryPolicy(
+                ev.session,
+                memoryReadRef.current,
+                memoryWriteRef.current,
+              ),
+              setSessionAutoScene(ev.session, autoSceneRef.current),
+            ])
               .then(() => submitPrompt(ev.session, pending.doc, pending.promptRequestId))
               .then(() => {
                 refreshSessions();
@@ -1380,11 +1405,14 @@ export default function App() {
                 }
               });
           } else {
-            void setSessionMemoryPolicy(
-              ev.session,
-              memoryReadRef.current,
-              memoryWriteRef.current,
-            )
+            void Promise.all([
+              setSessionMemoryPolicy(
+                ev.session,
+                memoryReadRef.current,
+                memoryWriteRef.current,
+              ),
+              setSessionAutoScene(ev.session, autoSceneRef.current),
+            ])
               .then(refreshSessions)
               .catch((error) => toast(String(error), "error"));
           }
@@ -1658,6 +1686,33 @@ export default function App() {
     updateRunningSession,
   ]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void onAutoSceneChanged((event) => {
+      sceneBySessionRef.current.set(event.session, event.reference);
+      autoSceneBySessionRef.current.set(event.session, true);
+      if (event.session !== activeSessionRef.current) return;
+      setActiveSceneName(event.reference);
+      setAutoScene(true);
+      setScenePendingFields(event.pending);
+      memoryReadRef.current = event.memoryRead;
+      memoryWriteRef.current = event.memoryWrite;
+      setMemoryRead(event.memoryRead);
+      setMemoryWrite(event.memoryWrite);
+      if (event.planFirst !== null) setPlanMode(event.planFirst);
+      toast(
+        t("scene.autoSwitched", { scene: event.title, reason: event.reason }),
+        "success",
+      );
+      void refreshSessions();
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [refreshSessions, t, toast]);
+
   // Rendered QA has no Tauri event bridge in the Vite shell. This query-controlled fixture is
   // development-only and is replaced at build time, so production never gets a fake default.
   useEffect(() => {
@@ -1920,6 +1975,44 @@ export default function App() {
     invalidatePendingCreation,
   ]);
 
+  const addSelectedText = useCallback(
+    (text: string) => {
+      void insertMarkdownRef.current?.(
+        selectedExcerptMarkdown(text),
+        docEmpty ? "replace" : "append",
+      );
+      setDocMode(true);
+      setTimeout(() => focusEditorRef.current?.(), 0);
+    },
+    [docEmpty, setDocMode],
+  );
+
+  const explainSelectedText = useCallback(
+    (text: string) => {
+      const markdown = `${t("selection.moreDetailsPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
+      void insertMarkdownRef.current?.(markdown, docEmpty ? "replace" : "append");
+      setDocMode(true);
+      setTimeout(() => focusEditorRef.current?.(), 0);
+    },
+    [docEmpty, setDocMode, t],
+  );
+
+  const askSelectedTextInSideChat = useCallback(
+    (text: string) => {
+      const markdown = `${t("selection.askInSideChatPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
+      createSession();
+      clearEditorRef.current?.();
+      setDocMode(true);
+      // `createSession` resets the active shell synchronously; insert once the surviving editor has
+      // observed that draft transition. Its transcript will then occupy the side-chat column.
+      setTimeout(() => {
+        void insertMarkdownRef.current?.(markdown, "replace");
+        focusEditorRef.current?.();
+      }, 0);
+    },
+    [createSession, setDocMode, t],
+  );
+
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
@@ -2052,18 +2145,24 @@ export default function App() {
       setActiveSessionReceipt(provenance);
       setActiveSession(id);
       {
-        // Restore this session's scene; fall back to the persisted reference on first visit.
+        // Restore the concrete scene and Agent-owned routing independently: Auto can be enabled
+        // before the Agent has selected the first scene.
         const remembered = sceneBySessionRef.current.get(id) ?? null;
+        const rememberedAuto = autoSceneBySessionRef.current.get(id) ?? false;
         setActiveSceneName(remembered);
+        setAutoScene(rememberedAuto);
         setScenePendingFields([]);
-        if (remembered === null) {
-          void getSessionScene(id).then((state) => {
-            if (!state || activeSessionRef.current !== id) return;
+        void Promise.all([getSessionScene(id), getSessionAutoScene(id)]).then(
+          ([state, enabled]) => {
+            if (activeSessionRef.current !== id) return;
+            autoSceneBySessionRef.current.set(id, enabled);
+            setAutoScene(enabled);
+            if (!state) return;
             sceneBySessionRef.current.set(id, state.reference);
             setActiveSceneName(state.reference);
             if (!state.resolved) toast(t("scene.unresolved"), "error");
-          });
-        }
+          },
+        );
       }
       setSessionLoading(true);
       setTurns([]);
@@ -2232,15 +2331,19 @@ export default function App() {
     refreshSkills();
   }, [refreshSkills]);
 
+  const refreshScenes = useCallback(async () => {
+    const next = await listScenes(cwd || ".");
+    scenesRef.current = next;
+    setScenes(next);
+    return next;
+  }, [cwd]);
+
   // Scenes rescan with the workspace, same contract as skills. Degrades to [] on an older core.
   useEffect(() => {
-    void listScenes(cwd || ".").then((next) => {
-      scenesRef.current = next;
-      setScenes(next);
-    });
+    void refreshScenes();
     // Pipelines resolve from the same library; the palette's "start pipeline" commands feed here.
     void listPipelines().then(setPipelines);
-  }, [cwd]);
+  }, [refreshScenes]);
 
   // The stage track follows the active session's pipeline binding (R9). Refetched at turn
   // boundaries and on banner changes — auto advances, loop re-entries, and artifact captures all
@@ -2669,6 +2772,12 @@ export default function App() {
   const applySceneChoice = useCallback(
     (reference: string | null, opts?: { confirmed?: boolean }) => {
       const session = activeSessionRef.current;
+      autoSceneRef.current = false;
+      setAutoScene(false);
+      if (session) {
+        autoSceneBySessionRef.current.set(session, false);
+        void setSessionAutoScene(session, false);
+      }
       if (reference === null) {
         setActiveSceneName(null);
         setScenePendingFields([]);
@@ -2737,6 +2846,16 @@ export default function App() {
       t,
     ],
   );
+
+  const setAutoSceneChoice = useCallback((enabled: boolean) => {
+    const session = activeSessionRef.current;
+    autoSceneRef.current = enabled;
+    setAutoScene(enabled);
+    if (session) {
+      autoSceneBySessionRef.current.set(session, enabled);
+      void setSessionAutoScene(session, enabled);
+    }
+  }, []);
 
   /** Full-apply: a fresh session in the active scene, closing the soft-apply gap. */
   const restartInScene = useCallback(
@@ -3107,6 +3226,10 @@ export default function App() {
     { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
     { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
     { id: "scene", label: t("scene.pickerTitle"), hint: hint("cycle_scene"), run: () => setShowScenePicker(true) },
+    { id: "scene-studio", label: t("sceneEditor.manage"), run: () => {
+      setSceneEditorRequest(null);
+      setShowSceneStudio(true);
+    } },
     { id: "mission", label: t("action.open_mission_control"), hint: hint("open_mission_control"), run: () => setShowMissionControl(true) },
     ...scenes.map((s) => ({
       id: `scene-${s.reference}`,
@@ -3292,6 +3415,8 @@ export default function App() {
     hasSession: activeSession !== null,
     scenes,
     activeScene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+    autoScene,
+    onAutoScene: setAutoSceneChoice,
     onScene: (reference, strength) => {
       if (strength === "full") {
         if (reference !== null) {
@@ -3301,6 +3426,10 @@ export default function App() {
       } else {
         applySceneChoice(reference);
       }
+    },
+    onManageScenes: () => {
+      setSceneEditorRequest(null);
+      setShowSceneStudio(true);
     },
     sceneCustomized: (() => {
       const scene = scenes.find((s) => s.reference === activeSceneName);
@@ -3316,6 +3445,36 @@ export default function App() {
     })(),
     scenePendingFields,
     onRestartInScene: () => void restartInScene(),
+  };
+
+  const handleSceneSaved = (saved: SceneInfo) => {
+    const previous = sceneEditorRequest?.kind === "edit"
+      ? sceneEditorRequest.scene.reference
+      : null;
+    if (previous && previous === activeSceneNameRef.current && previous !== saved.reference) {
+      activeSceneNameRef.current = saved.reference;
+      setActiveSceneName(saved.reference);
+      if (activeSession) {
+        sceneBySessionRef.current.set(activeSession, saved.reference);
+        void setSessionScene(activeSession, saved.reference, false);
+      }
+    }
+    void refreshScenes();
+    setSceneEditorRequest(null);
+  };
+
+  const handleSceneDeleted = (reference: string) => {
+    if (reference === activeSceneNameRef.current) {
+      activeSceneNameRef.current = null;
+      setActiveSceneName(null);
+      setScenePendingFields([]);
+      if (activeSession) {
+        sceneBySessionRef.current.delete(activeSession);
+        void setSessionScene(activeSession, null, false);
+      }
+    }
+    void refreshScenes();
+    setSceneEditorRequest(null);
   };
 
   return (
@@ -3348,6 +3507,23 @@ export default function App() {
           onOpenSession={(session) => {
             setShowAutomations(false);
             void selectSession(session);
+          }}
+        />
+      ) : showSceneStudio ? (
+        <SceneStudio
+          scenes={scenes}
+          active={scenes.find((scene) => scene.reference === activeSceneName) ?? null}
+          request={sceneEditorRequest}
+          providers={providers}
+          skills={skills}
+          cwd={cwd || "."}
+          onRequest={setSceneEditorRequest}
+          onScene={(reference) => applySceneChoice(reference)}
+          onSaved={handleSceneSaved}
+          onDeleted={handleSceneDeleted}
+          onClose={() => {
+            setSceneEditorRequest(null);
+            setShowSceneStudio(false);
           }}
         />
       ) : (
@@ -3431,14 +3607,13 @@ export default function App() {
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* The native traffic lights sit about 6px below a plain 40px row's midpoint. Match the
-              rail's optical centre so the breadcrumb and controls share one title-bar baseline.
-              With the rail collapsed, the inset clears the lights and the expand button takes the
-              wordmark's place. */}
+          {/* Symmetric block padding keeps the 28px controls optically centred on the 40px title
+              line, matching the rail and dock headers. With the rail collapsed, the inset clears
+              the traffic lights and the expand button takes the wordmark's place. */}
           <header
             data-tauri-drag-region
             className={cn(
-              "flex items-center gap-1.5 border-b pr-3 pt-3",
+              "flex shrink-0 items-center gap-1.5 border-b py-1.5 pr-3",
               displayedRailCollapsed ? "pl-[78px]" : "pl-3",
             )}
           >
@@ -3540,6 +3715,9 @@ export default function App() {
                 onSaveTemplate={openTemplateDraft}
                 petAnimation={petAnimation}
                 onVoiceText={(text) => insertTextRef.current?.(text)}
+                onAddSelection={addSelectedText}
+                onExplainSelection={explainSelectedText}
+                onAskSelectionInSideChat={askSelectedTextInSideChat}
               />
             )}
 
@@ -3966,7 +4144,24 @@ export default function App() {
         <ScenePicker
           scenes={scenes}
           active={scenes.find((s) => s.reference === activeSceneName) ?? null}
+          auto={autoScene}
+          onAuto={setAutoSceneChoice}
           onScene={(reference) => applySceneChoice(reference)}
+          onCreate={() => {
+            setShowScenePicker(false);
+            setSceneEditorRequest({ kind: "create" });
+            setShowSceneStudio(true);
+          }}
+          onEdit={(scene) => {
+            setShowScenePicker(false);
+            setSceneEditorRequest({ kind: "edit", scene });
+            setShowSceneStudio(true);
+          }}
+          onDuplicate={(scene) => {
+            setShowScenePicker(false);
+            setSceneEditorRequest({ kind: "duplicate", scene });
+            setShowSceneStudio(true);
+          }}
           onClose={() => setShowScenePicker(false)}
         />
       )}

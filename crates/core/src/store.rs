@@ -455,6 +455,12 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "scene_customized",
         "scene_customized INTEGER NOT NULL DEFAULT 0",
     )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "scene_auto",
+        "scene_auto INTEGER NOT NULL DEFAULT 0",
+    )?;
     // Pipeline bindings (R9): which instance and stage a session works for, if any.
     ensure_column(
         &tx,
@@ -2168,6 +2174,31 @@ impl Store {
         Ok(scene_ref.map(|r| (r, customized != 0)))
     }
 
+    /// Whether the agent may select and switch scenes for this session. This is deliberately
+    /// independent from `active_scene`: Auto can be on before the first scene has been chosen.
+    pub fn set_session_auto_scene(
+        &self,
+        session_id: &str,
+        enabled: bool,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sessions SET scene_auto=?2 WHERE id=?1",
+            rusqlite::params![session_id, enabled as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn session_auto_scene(&self, session_id: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let enabled: i64 = conn.query_row(
+            "SELECT scene_auto FROM sessions WHERE id=?1",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        Ok(enabled != 0)
+    }
+
     // ---- pipeline instances (R9) ------------------------------------------------------------
 
     /// Create one instance at its entry stage. Ids mirror session id generation (UUID v4); the
@@ -3340,6 +3371,19 @@ mod tests {
             store.session_memory_policy(&a.id).unwrap(),
             (MemoryAccess::Allow, MemoryAccess::Deny)
         );
+    }
+
+    #[test]
+    fn auto_scene_is_off_by_default_and_persists_per_session() {
+        let store = Store::open_in_memory().unwrap();
+        let session = Session::new(ProviderId::Codex, "/work");
+        store.upsert_session(&session).unwrap();
+
+        assert!(!store.session_auto_scene(&session.id).unwrap());
+        store.set_session_auto_scene(&session.id, true).unwrap();
+        assert!(store.session_auto_scene(&session.id).unwrap());
+        store.set_session_auto_scene(&session.id, false).unwrap();
+        assert!(!store.session_auto_scene(&session.id).unwrap());
     }
 
     #[test]

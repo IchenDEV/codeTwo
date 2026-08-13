@@ -236,6 +236,173 @@ async fn mcp_elicitation_still_parks_in_full_access() {
 }
 
 #[tokio::test]
+async fn internal_auto_scene_selection_does_not_ask_before_the_broker() {
+    let (events_tx, mut events_rx) = mpsc::unbounded_channel::<Event>();
+    let router = PermissionRouter::default();
+    let policy = Arc::new(Mutex::new(PermissionPolicy::default()));
+    let handler = Arc::new(SessionHandler::new(
+        "s1".into(),
+        events_tx,
+        policy,
+        router,
+        None,
+    ));
+    handler
+        .session_update(SessionNotification {
+            session_id: "provider-session".into(),
+            update: SessionUpdate::ToolCall(ToolCall {
+                tool_call_id: "scene-select".into(),
+                title: Some("mcp.codetwo_scenes.scene_select".into()),
+                kind: Some("other".into()),
+                status: Some("pending".into()),
+                content: None,
+                raw_input: Some(json!({
+                    "server": "codetwo_scenes",
+                    "tool": "scene_select"
+                })),
+                raw_output: None,
+                meta: None,
+            }),
+        })
+        .await;
+    assert!(matches!(
+        events_rx.recv().await,
+        Some(Event::ToolCall { .. })
+    ));
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        handler.request_permission(RequestPermissionRequest {
+            session_id: "provider-session".into(),
+            tool_call: json!({
+                "toolCallId": "scene-select",
+                "title": "mcp.codetwo_scenes.scene_select",
+                "kind": "other"
+            }),
+            options: vec![
+                PermissionOption {
+                    option_id: "allow".into(),
+                    name: "Allow once".into(),
+                    kind: "allow_once".into(),
+                },
+                PermissionOption {
+                    option_id: "reject".into(),
+                    name: "Reject".into(),
+                    kind: "reject_once".into(),
+                },
+            ],
+            meta: Some(json!({"is_mcp_tool_approval": true})),
+        }),
+    )
+    .await
+    .expect("the authenticated internal selector should not be parked");
+    assert!(matches!(
+        response.outcome,
+        PermissionOutcome::Selected { option_id } if option_id == "allow"
+    ));
+    assert!(
+        events_rx.try_recv().is_err(),
+        "no permission dialog should surface"
+    );
+}
+
+#[tokio::test]
+async fn internal_auto_scene_permission_escalation_still_asks() {
+    let (events_tx, mut events_rx) = mpsc::unbounded_channel::<Event>();
+    let router = PermissionRouter::default();
+    let handler = Arc::new(SessionHandler::new(
+        "s1".into(),
+        events_tx,
+        Arc::new(Mutex::new(PermissionPolicy::default())),
+        router.clone(),
+        None,
+    ));
+    handler
+        .session_update(SessionNotification {
+            session_id: "provider-session".into(),
+            update: SessionUpdate::ToolCall(ToolCall {
+                tool_call_id: "scene-escalation".into(),
+                title: Some("mcp.codetwo_scenes.scene_select".into()),
+                kind: Some("other".into()),
+                status: Some("pending".into()),
+                content: None,
+                raw_input: Some(json!({
+                    "server": "codetwo_scenes",
+                    "tool": "scene_select"
+                })),
+                raw_output: None,
+                meta: None,
+            }),
+        })
+        .await;
+    assert!(matches!(
+        events_rx.recv().await,
+        Some(Event::ToolCall { .. })
+    ));
+
+    let pending = tokio::spawn({
+        let handler = handler.clone();
+        async move {
+            handler
+                .request_permission(RequestPermissionRequest {
+                    session_id: "provider-session".into(),
+                    tool_call: json!({
+                        "toolCallId": "scene-escalation",
+                        "title": "mcp.codetwo_scenes.scene_select",
+                        "kind": "other",
+                        "content": [{
+                            "type": "content",
+                            "content": {
+                                "type": "text",
+                                "text": "Allow looser scene permissions?"
+                            }
+                        }]
+                    }),
+                    options: vec![
+                        PermissionOption {
+                            option_id: "allow".into(),
+                            name: "Allow once".into(),
+                            kind: "allow_once".into(),
+                        },
+                        PermissionOption {
+                            option_id: "reject".into(),
+                            name: "Reject".into(),
+                            kind: "reject_once".into(),
+                        },
+                    ],
+                    meta: Some(json!({"is_mcp_tool_approval": true})),
+                })
+                .await
+        }
+    });
+    let request_id = match events_rx.recv().await.expect("permission event") {
+        Event::PermissionRequest {
+            request_id,
+            context,
+            ..
+        } => {
+            assert_eq!(context.kind, PermissionContextKind::McpElicitation);
+            request_id
+        }
+        other => panic!("unexpected event: {other:?}"),
+    };
+    assert!(
+        !pending.is_finished(),
+        "permission escalation must stay parked"
+    );
+    assert!(router.answer(
+        &request_id,
+        PermissionOutcome::Selected {
+            option_id: "reject".into()
+        }
+    ));
+    assert!(matches!(
+        pending.await.unwrap().outcome,
+        PermissionOutcome::Selected { option_id } if option_id == "reject"
+    ));
+}
+
+#[tokio::test]
 async fn sites_production_action_still_parks_in_full_access() {
     let (events_tx, mut events_rx) = mpsc::unbounded_channel::<Event>();
     let router = PermissionRouter::default();

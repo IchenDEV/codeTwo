@@ -8,7 +8,14 @@ use std::io::{BufRead, BufReader, Write};
 
 use serde_json::{json, Value};
 
-const INSTRUCTIONS: &str = "For ordinary browser requests use CodeTwo Browser by default. Use Chrome only when the user explicitly asks for Chrome, an existing tab, or an existing login state. Never claim an action completed until the tool result confirms it. Website access and sensitive actions may require user approval; file uploads require user takeover.";
+const BROWSER_INSTRUCTIONS: &str = "For ordinary browser requests use CodeTwo Browser by default. Use Chrome only when the user explicitly asks for Chrome, an existing tab, or an existing login state. Never claim an action completed until the tool result confirms it. Website access and sensitive actions may require user approval; file uploads require user takeover.";
+const SCENE_INSTRUCTIONS: &str = "Use scene_select only when CodeTwo Auto Scene is enabled in the prompt. Select an exact installed reference. Follow the returned current-turn scene instructions. A permission-loosening switch requires user approval and is not applied until confirmed.";
+
+#[derive(Clone, Copy)]
+enum McpSurface {
+    Browser,
+    Scenes,
+}
 
 #[cfg(unix)]
 struct Sidecar {
@@ -17,6 +24,7 @@ struct Sidecar {
     key: String,
     session_origins: BTreeSet<String>,
     next_request_id: u64,
+    surface: McpSurface,
 }
 
 #[cfg(unix)]
@@ -31,6 +39,10 @@ impl Sidecar {
             key: read("CODETWO_BROWSER_SESSION_KEY")?,
             session_origins: BTreeSet::new(),
             next_request_id: 1,
+            surface: match std::env::var("CODETWO_DESKTOP_MCP_SURFACE").as_deref() {
+                Ok("scenes") => McpSurface::Scenes,
+                _ => McpSurface::Browser,
+            },
         })
     }
 
@@ -249,8 +261,8 @@ fn broker_result(response: Value) -> Result<Value, String> {
     }
 }
 
-fn tools() -> Value {
-    json!([
+fn tools(surface: McpSurface) -> Value {
+    let all = json!([
         {
             "name": "browser_tabs",
             "description": "List, create, select, or close CodeTwo Browser tabs.",
@@ -325,8 +337,43 @@ fn tools() -> Value {
                 "required": ["tabId"],
                 "additionalProperties": false
             }
+        },
+        {
+            "name": "scene_select",
+            "description": "Select an installed CodeTwo scene for this Auto Scene session. Returns the scene instructions for the current turn. Permission increases require user approval.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "reference": { "type": "string", "description": "Exact scene reference from the prompt catalog." },
+                    "reason": { "type": "string", "description": "Short user-visible reason this scene best fits the current task." }
+                },
+                "required": ["reference", "reason"],
+                "additionalProperties": false
+            }
         }
-    ])
+    ]);
+    let allowed: &[&str] = match surface {
+        McpSurface::Browser => &[
+            "browser_tabs",
+            "browser_navigate",
+            "browser_snapshot",
+            "browser_act",
+            "browser_finalize",
+        ],
+        McpSurface::Scenes => &["scene_select"],
+    };
+    Value::Array(
+        all.as_array()
+            .into_iter()
+            .flatten()
+            .filter(|tool| {
+                tool.get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| allowed.contains(&name))
+            })
+            .cloned()
+            .collect(),
+    )
 }
 
 fn tool_content(result: Value) -> Value {
@@ -385,10 +432,13 @@ pub fn run() -> Result<(), String> {
                 "protocolVersion": message.pointer("/params/protocolVersion").and_then(Value::as_str).unwrap_or("2025-06-18"),
                 "capabilities": { "tools": { "listChanged": false } },
                 "serverInfo": { "name": "codetwo_browser", "version": env!("CARGO_PKG_VERSION") },
-                "instructions": INSTRUCTIONS,
+                "instructions": match sidecar.surface {
+                    McpSurface::Browser => BROWSER_INSTRUCTIONS,
+                    McpSurface::Scenes => SCENE_INSTRUCTIONS,
+                },
             })),
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(json!({ "tools": tools() })),
+            "tools/list" => Ok(json!({ "tools": tools(sidecar.surface) })),
             "tools/call" => {
                 let name = message
                     .pointer("/params/name")
@@ -421,19 +471,19 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{accepted_approval_scope, tool_content, tools};
+    use super::{accepted_approval_scope, tool_content, tools, McpSurface};
 
     #[test]
-    fn exposes_only_the_five_fixed_tools() {
-        let definitions = tools();
-        let names = definitions
+    fn exposes_browser_tools_and_the_bounded_auto_scene_selector() {
+        let browser = tools(McpSurface::Browser);
+        let browser_names = browser
             .as_array()
             .unwrap()
             .iter()
             .map(|tool| tool.get("name").unwrap().as_str().unwrap())
             .collect::<Vec<_>>();
         assert_eq!(
-            names,
+            browser_names,
             [
                 "browser_tabs",
                 "browser_navigate",
@@ -442,7 +492,15 @@ mod tests {
                 "browser_finalize"
             ]
         );
-        assert!(!serde_json::to_string(&tools())
+        let scenes = tools(McpSurface::Scenes);
+        let scene_names = scenes
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tool| tool.get("name").unwrap().as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(scene_names, ["scene_select"]);
+        assert!(!serde_json::to_string(&browser)
             .unwrap()
             .contains("javascript"));
     }

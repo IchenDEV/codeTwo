@@ -45,7 +45,12 @@ export interface SessionConfig {
   /** Resolved scenes (project > user > plugin > builtin) for the scene chip and pickers. */
   scenes: SceneInfo[];
   activeScene: SceneInfo | null;
+  /** Agent-owned scene routing for this session. The currently selected scene remains visible. */
+  autoScene: boolean;
+  onAutoScene: (enabled: boolean) => void;
   onScene: (reference: string | null, strength: "soft" | "full") => void;
+  /** Opens the complete scene library where scenes can be created, edited, or duplicated. */
+  onManageScenes: () => void;
   /** The user overrode a field the active scene sets (chip shows "customized", scene unchanged). */
   sceneCustomized: boolean;
   /** Soft-apply deferrals (providers/model/effort/worktree) — non-empty shows the partial dot. */
