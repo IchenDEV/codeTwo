@@ -3223,6 +3223,32 @@ fn usage_by_session(state: State<'_, AppState>, session: String) -> Option<Sessi
     state.cost.snapshot(&session)
 }
 
+#[derive(Serialize)]
+struct UsageHistoryReport {
+    history: codetwo_core::usage::UsageHistory,
+    by_source: Vec<codetwo_core::usage::SourceUsage>,
+}
+
+/// Time-bucketed usage for the trend chart, plus per-provider totals with a best-effort cost
+/// estimate over the same range. `days <= 7` buckets hourly, anything longer buckets daily.
+#[tauri::command]
+async fn usage_history(days: u32) -> UsageHistoryReport {
+    let scan = tokio::task::spawn_blocking(codetwo_core::usage::scan_all_with_count)
+        .await
+        .unwrap_or_default();
+    let now = codetwo_core::session::now_millis();
+    let (bucket_secs, bucket_count) = if days <= 7 {
+        (3_600i64, 7 * 24)
+    } else {
+        (86_400i64, 30)
+    };
+    let cutoff = now - bucket_secs * 1000 * bucket_count as i64;
+    UsageHistoryReport {
+        history: codetwo_core::usage::history(&scan.records, now, bucket_secs, bucket_count),
+        by_source: codetwo_core::usage::by_source_detailed(&scan.records, cutoff),
+    }
+}
+
 // ---- voice input (G11) -------------------------------------------------------------------------
 
 /// Whether a local transcriber is configured/detected (the UI falls back to the webview's own
@@ -3834,6 +3860,7 @@ pub fn run() {
             voice_available,
             transcribe_audio,
             usage_report,
+            usage_history,
             new_session,
             submit_prompt,
             answer_permission,
