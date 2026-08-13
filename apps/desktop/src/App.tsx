@@ -250,6 +250,7 @@ import {
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
+import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 import { needsMeCount } from "./sidebar/missionControl.ts";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
@@ -465,6 +466,7 @@ export default function App() {
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
   const [showUsage, setShowUsage] = useState(false);
   const [showMissionControl, setShowMissionControl] = useState(false);
+  const [showTaskBoard, setShowTaskBoard] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
@@ -668,6 +670,11 @@ export default function App() {
     if (narrowLayout) setNarrowRailOpen((open) => !open);
     else toggleRail();
   }, [narrowLayout, toggleRail]);
+  const openTaskBoard = useCallback(() => {
+    setShowTaskBoard(true);
+    if (narrowLayout) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
   // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
   // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
   // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it,
@@ -676,6 +683,13 @@ export default function App() {
   const docMode = docModeRaw !== 0;
   const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
   const mainRef = useRef<HTMLElement | null>(null);
+  const sessionWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const workspace = sessionWorkspaceRef.current;
+    if (!workspace) return;
+    if (showTaskBoard) workspace.setAttribute("inert", "");
+    else workspace.removeAttribute("inert");
+  }, [showTaskBoard]);
   const toast = useToast();
   const t = useT();
   const { locale } = useLanguage();
@@ -1212,6 +1226,15 @@ export default function App() {
   const activeProjectName = useMemo(
     () => projects.find((p) => p.path === activeProject)?.name ?? null,
     [projects, activeProject],
+  );
+
+  const taskBoardSessions = useMemo(
+    () =>
+      [...sessions, ...archivedSessions].map((session) => ({
+        id: session.id,
+        title: session.title,
+      })),
+    [archivedSessions, sessions],
   );
 
   // The rail's status card names the model the next turn runs on. Same two sources as the
@@ -1924,6 +1947,7 @@ export default function App() {
     }
 
     invalidatePendingCreation();
+    setShowTaskBoard(false);
     sessionLoadSeq.current += 1;
     setSessionLoading(false);
     setPendingSessionRunning(false);
@@ -2106,6 +2130,7 @@ export default function App() {
     async (id: string) => {
       // An explicit navigation wins over any in-flight session creation. Its late SessionCreated
       // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
+      setShowTaskBoard(false);
       invalidatePendingCreation();
       const stored =
         sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
@@ -3191,6 +3216,7 @@ export default function App() {
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
     { id: "automations", label: t("automations.title"), run: () => setShowAutomations(true) },
+    { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
     { id: "search", label: "Search workspace contents", hint: hint("search_workspace"), run: () => setShowWorkspaceSearch(true) },
@@ -3575,10 +3601,12 @@ export default function App() {
           activeSession={activeSession}
           runningSessions={runningSessions}
           onSelect={(id) => {
+            setShowTaskBoard(false);
             void selectSession(id);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNew={() => {
+            setShowTaskBoard(false);
             void createSession();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -3601,10 +3629,31 @@ export default function App() {
           onToggleCollapse={toggleDisplayedRail}
           needsMeCount={needsMeCount(sessions)}
           onOpenMissionControl={() => setShowMissionControl(true)}
+          taskBoardOpen={showTaskBoard}
+          onOpenTaskBoard={() => {
+            if (showTaskBoard) setShowTaskBoard(false);
+            else openTaskBoard();
+          }}
         />
 
-        {/* ---------------- the session column ---------------- */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
+        {showTaskBoard && (
+          <TaskBoardPage
+            onClose={() => setShowTaskBoard(false)}
+            sessions={taskBoardSessions}
+            onOpenSession={(id) => {
+              setShowTaskBoard(false);
+              void selectSession(id);
+            }}
+          />
+        )}
+
+        <div
+          ref={sessionWorkspaceRef}
+          aria-hidden={showTaskBoard || undefined}
+          className={showTaskBoard ? "hidden" : "contents"}
+        >
+            {/* ---------------- the session column ---------------- */}
+            <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
           {/* Symmetric block padding keeps the 28px controls optically centred on the 40px title
@@ -3658,6 +3707,7 @@ export default function App() {
             )}
 
             <EnvironmentPopover
+              suppressed={showTaskBoard}
               project={activeProjectName}
               projectPath={activeProjectName ? activeProject : null}
               projects={projects}
@@ -3927,41 +3977,42 @@ export default function App() {
               </div>
             </div>
           </div>
-        </main>
+            </main>
 
-        {/* ---------------- side dock ---------------- */}
-        {/* Always mounted: closing animates the width to zero instead of unmounting, which both
-            plays the full collapse and keeps shells alive across close/open. */}
-        <Dock
-            open={dockTab !== null}
-            tab={dockTab}
-            onTab={manualDockTab}
-            onClose={() => manualDockTab(null)}
-            autoTab={dockAutoHint?.surface ?? null}
-            highlightFile={dockAutoHint?.file ?? null}
-            cwd={cwd || null}
-            projectPath={activeProject ?? cwd ?? null}
-            sessionKey={activeSession ?? "main"}
-            git={git}
-            onRefreshGit={refreshGit}
-            onOpenSourceControl={openSourceControl}
-            browserUrl={browserUrl}
-            onNavigate={setBrowserUrl}
-            onAnnotate={(n) => void annotate(n)}
-            onInsertFile={(p) => insertFileRef.current?.(p)}
-            onSendText={(text) => insertTextRef.current?.(text)}
-            onOpenFile={openFileTab}
-            openFiles={openFiles}
-            activeFile={activeFile}
-            fileReveal={fileReveal}
-            onActiveFile={(path) => {
-              setActiveFile(path);
-              setFileReveal(null);
-            }}
-            onCloseFile={closeFileTab}
-            width={dockWidth}
-            onWidth={setDockWidth}
-          />
+            {/* ---------------- side dock ---------------- */}
+            {/* Always mounted: closing animates the width to zero instead of unmounting, which both
+                plays the full collapse and keeps shells alive across close/open. */}
+            <Dock
+              open={dockTab !== null}
+              tab={dockTab}
+              onTab={manualDockTab}
+              onClose={() => manualDockTab(null)}
+              autoTab={dockAutoHint?.surface ?? null}
+              highlightFile={dockAutoHint?.file ?? null}
+              cwd={cwd || null}
+              projectPath={activeProject ?? cwd ?? null}
+              sessionKey={activeSession ?? "main"}
+              git={git}
+              onRefreshGit={refreshGit}
+              onOpenSourceControl={openSourceControl}
+              browserUrl={browserUrl}
+              onNavigate={setBrowserUrl}
+              onAnnotate={(n) => void annotate(n)}
+              onInsertFile={(p) => insertFileRef.current?.(p)}
+              onSendText={(text) => insertTextRef.current?.(text)}
+              onOpenFile={openFileTab}
+              openFiles={openFiles}
+              activeFile={activeFile}
+              fileReveal={fileReveal}
+              onActiveFile={(path) => {
+                setActiveFile(path);
+                setFileReveal(null);
+              }}
+              onCloseFile={closeFileTab}
+              width={dockWidth}
+              onWidth={setDockWidth}
+            />
+        </div>
       </div>
       )}
 
