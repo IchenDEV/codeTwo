@@ -41,11 +41,14 @@ const realCore = await import("@blocknote/core");
 const realMantine = await import("@blocknote/mantine");
 const realReact = await import("@blocknote/react");
 const realSkillInline = await import("../src/skillInline");
+const realSlotCard = await import("../src/editor/slotCard");
 const actualCanvasRuntimeContext = realSkillInline.CanvasBlockRuntimeContext;
+// Bind the real walker by value now: mock.module patches the namespace's live bindings, so
+// reading `realSkillInline.docToBlocks` later would resolve to the fake and recurse.
+const realDocToBlocks = realSkillInline.docToBlocks;
 const mockedCanvasRuntimeContext = React.createContext<any>(null);
 const realFileMenu = await import("../src/editor/FileMenu");
 const realTheme = await import("../src/theme");
-const realI18n = await import("../src/i18n");
 const realBridge = await import("../src/bridge");
 
 mock.module("@blocknote/core", () => ({
@@ -91,6 +94,17 @@ mock.module("../src/skillInline", () => ({
     if (block.type === "canvas") {
       return [{ type: "canvas", id: block.props.id, frozen_revision: block.props.revision, pixel_policy: block.props.pixelPolicy }];
     }
+    // Keep the fake faithful for slot cards: bun module mocks leak across test files, so later
+    // suites exercising slotCard serialization must still see the real behavior.
+    if (block.type === "slotCard") return realSlotCard.slotCardToDocBlocks(block.props);
+    // Same leak rule for issue references (R12): the issueBlock suite must see the real
+    // serialization (header-stripped body, provenance kept off the prompt record).
+    if (block.type === "issueRef") return realDocToBlocks({ document: [block] } as never);
+    // Same leak rule for artifact mentions: delegate the whole paragraph to the real walker so
+    // inline ordering and token emission stay exact for the artifactMention suite.
+    if (Array.isArray(block.content) && block.content.some((inline: any) => inline?.type === "artifactMention")) {
+      return realDocToBlocks({ document: [block] } as never);
+    }
     if (block.type === "image") return [{ type: "image", path: block.props.url }];
     const text = typeof block.content === "string"
       ? block.content
@@ -109,7 +123,6 @@ mock.module("../src/skillInline", () => ({
 }));
 mock.module("../src/editor/FileMenu", () => ({ ...realFileMenu, FileMenu: () => null }));
 mock.module("../src/theme", () => ({ ...realTheme, useColorScheme: () => editorScheme }));
-mock.module("../src/i18n", () => ({ ...realI18n, useT: () => (key: string) => key }));
 mock.module("../src/bridge", () => ({
   ...realBridge,
   listArchivedSessions: async () => [],

@@ -4,10 +4,11 @@
 //! JSON, and the server streams `Event` JSON back. The same engine can be shared with the desktop
 //! app (via the broadcast sender), so remote and local see one set of sessions.
 //!
-//! Access is gated t3code-style (see [`auth`]): a one-time pairing token (in the pairing URL's
-//! fragment) is exchanged at `POST /api/pair` for a per-device bearer; the bearer buys short-lived
-//! single-use WebSocket tickets at `POST /api/ws-ticket`; and `/ws?ticket=…` is the only place a
-//! credential ever appears in a query string.
+//! Access is gated by protocol-bound credentials (see [`auth`]): one-time pairing tokens are
+//! exchanged for per-device bearers, which buy short-lived single-use WebSocket tickets. Legacy
+//! Code2 browser clients use `/api/pair`, `/api/ws-ticket`, and `/ws?ticket=…`; T3 Code clients use
+//! `/oauth/token`, `/api/auth/websocket-ticket`, and `/ws?wsTicket=…`. Only those single-use tickets
+//! ever appear in a query string.
 //!
 //! Wire protocol (over the socket):
 //! - client → server: a raw [`Op`] object, e.g. `{"op":"prompt","session":"…","doc":[…]}`, or a
@@ -18,11 +19,13 @@
 //!   `{"kind":"sessions_error",…}` frames, never successful empty lists.
 
 mod auth;
+pub mod t3_compat;
+pub mod terminal;
 
 pub use auth::{AuthState, Device, DeviceInfo, Paired, DEFAULT_PAIRING_TTL, WS_TICKET_TTL};
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -37,10 +40,9 @@ use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
 
 use codetwo_core::{
-    CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput, CanvasRevision,
-    CanvasStaticAsset, DocBlock, Engine, Event, Op, Session,
-    SessionId, Store, TranscriptCursor, TranscriptEntry,
-    DEFAULT_TRANSCRIPT_TURNS,
+    CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
+    CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, Op, Session, SessionId, Store,
+    TranscriptCursor, TranscriptEntry, DEFAULT_TRANSCRIPT_TURNS,
 };
 
 #[derive(Serialize)]
@@ -506,6 +508,8 @@ struct ServerState {
     auth: Arc<AuthState>,
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
+    t3: Arc<t3_compat::T3CompatState>,
+    terminals: Arc<terminal::TerminalRegistry>,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -552,18 +556,30 @@ pub async fn bind_and_serve_with_canvas(
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    let t3 = Arc::new(
+        t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
+    );
     let state = Arc::new(ServerState {
         engine,
         events,
         auth,
         store,
         canvas_gate,
+        t3: t3.clone(),
+        terminals: Arc::new(terminal::TerminalRegistry::default()),
     });
     let app = Router::new()
         .route("/", get(index))
+        .route("/pair", get(index))
+        .route("/terminal", get(index))
         .route("/health", get(|| async { "ok" }))
         .route("/api/pair", post(pair))
         .route("/api/ws-ticket", post(ws_ticket))
+        .route("/api/terminals", get(list_terminals))
+        .route("/api/terminals/:id/kill", post(kill_terminal))
+        .route("/term/*path", get(term_asset))
+        .route("/ws/terminal", any(terminal_ws_handler))
         .route("/api/canvas/feature", get(canvas_feature))
         .route("/api/canvas/media/normalize", post(canvas_normalize_media))
         .route("/api/canvas/drafts", post(canvas_create_draft))
@@ -608,9 +624,12 @@ pub async fn bind_and_serve_with_canvas(
         // Axum 0.7/matchit 0.7 uses `/*path` for a safe terminal catch-all.
         .route("/canvas/*path", get(canvas_asset))
         .route("/ws", any(ws_handler))
-        .layer(DefaultBodyLimit::max(codetwo_core::canvas::MAX_CANVAS_TOTAL_BYTES + 4_000_000))
-        .layer(axum::middleware::map_response(no_store_headers))
-        .with_state(state);
+        .with_state(state)
+        .merge(t3_compat::router(t3))
+        .layer(DefaultBodyLimit::max(
+            codetwo_core::canvas::MAX_CANVAS_TOTAL_BYTES + 4_000_000,
+        ))
+        .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
@@ -672,10 +691,7 @@ fn parse_revision(value: &str) -> Result<CanvasRevision, Response> {
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid canvas revision").into_response())
 }
 
-async fn canvas_feature(
-    State(st): State<Arc<ServerState>>,
-    headers: HeaderMap,
-) -> Response {
+async fn canvas_feature(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
     if let Err(response) = require_device(&st, &headers) {
         return response;
     }
@@ -774,11 +790,12 @@ async fn canvas_normalize_draft_media(
         return canvas_error(error);
     }
     match st.store.get_canvas_draft(&id, &owner) {
-        Ok(Some(_)) => match codetwo_core::normalize_media(&body.bytes, body.declared_mime.as_deref())
-        {
-            Ok(asset) => Json(CanvasBytesReply::from(asset)).into_response(),
-            Err(error) => canvas_error(error),
-        },
+        Ok(Some(_)) => {
+            match codetwo_core::normalize_media(&body.bytes, body.declared_mime.as_deref()) {
+                Ok(asset) => Json(CanvasBytesReply::from(asset)).into_response(),
+                Err(error) => canvas_error(error),
+            }
+        }
         Ok(None) => (StatusCode::NOT_FOUND, "canvas draft not found").into_response(),
         Err(error) => canvas_error(error),
     }
@@ -838,7 +855,11 @@ async fn canvas_get_asset(
         Err(response) => return response,
     };
     match st.store.get_canvas_snapshot_frozen(&id, revision) {
-        Ok(Some(snapshot)) => match snapshot.assets.into_iter().find(|asset| asset.id == asset_id) {
+        Ok(Some(snapshot)) => match snapshot
+            .assets
+            .into_iter()
+            .find(|asset| asset.id == asset_id)
+        {
             Some(asset) => {
                 let mime = HeaderValue::from_str(&asset.mime_type)
                     .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
@@ -866,13 +887,16 @@ async fn canvas_get_export(
         Err(response) => return response,
     };
     match st.store.get_canvas_snapshot_frozen(&id, revision) {
-        Ok(Some(snapshot)) => match snapshot.exports.into_iter().find(|export| export.id == export_id) {
+        Ok(Some(snapshot)) => match snapshot
+            .exports
+            .into_iter()
+            .find(|export| export.id == export_id)
+        {
             Some(export) => {
                 let mut response = export.bytes.into_response();
-                response.headers_mut().insert(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_static("image/png"),
-                );
+                response
+                    .headers_mut()
+                    .insert(header::CONTENT_TYPE, HeaderValue::from_static("image/png"));
                 response
             }
             None => (StatusCode::NOT_FOUND, "canvas export not found").into_response(),
@@ -961,9 +985,14 @@ struct PairBody {
 
 /// Exchange a one-time pairing token for a per-device bearer.
 async fn pair(State(st): State<Arc<ServerState>>, Json(body): Json<PairBody>) -> Response {
-    match st.auth.pair(&body.token, &body.device_name) {
-        Some(paired) => Json(paired).into_response(),
-        None => (StatusCode::UNAUTHORIZED, "invalid or expired pairing token").into_response(),
+    match st.auth.try_pair(&body.token, &body.device_name) {
+        Ok(Some(paired)) => Json(paired).into_response(),
+        Ok(None) => (StatusCode::UNAUTHORIZED, "invalid or expired pairing token").into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("could not persist the paired device: {error}"),
+        )
+            .into_response(),
     }
 }
 
@@ -1001,6 +1030,16 @@ async fn ws_handler(
     Query(q): Query<HashMap<String, String>>,
     State(st): State<Arc<ServerState>>,
 ) -> Response {
+    if let Some(ticket) = q.get("wsTicket") {
+        let Some(authorization) = st.auth.take_ws_ticket_profile(ticket) else {
+            return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response();
+        };
+        let t3 = st.t3.clone();
+        return ws.on_upgrade(move |socket| {
+            t3_compat::handle_socket(socket, t3, authorization.device_id, authorization.scopes)
+        });
+    }
+
     let Some(device_id) = q
         .get("ticket")
         .and_then(|ticket| st.auth.take_ws_ticket(ticket))
@@ -1010,11 +1049,73 @@ async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, st, device_id))
 }
 
+/// List live terminals so a reconnecting browser can reattach instead of respawning.
+async fn list_terminals(State(st): State<Arc<ServerState>>, headers: HeaderMap) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    Json(st.terminals.list()).into_response()
+}
+
+/// Kill a terminal outright (the WS `kill` op works too; this covers viewers that only hold the
+/// listing).
+async fn kill_terminal(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    if let Err(response) = require_device(&st, &headers) {
+        return response;
+    }
+    if st.terminals.kill(&id) {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "no such terminal").into_response()
+    }
+}
+
+/// Upgrade a terminal socket. Accepts the legacy single-use `ticket`, or a T3 `wsTicket` whose
+/// profile carries the `terminal:operate` scope.
+async fn terminal_ws_handler(
+    ws: WebSocketUpgrade,
+    Query(q): Query<HashMap<String, String>>,
+    State(st): State<Arc<ServerState>>,
+) -> Response {
+    let device_id = if let Some(ticket) = q.get("wsTicket") {
+        match st.auth.take_ws_ticket_profile(ticket) {
+            Some(authorization)
+                if authorization
+                    .scopes
+                    .iter()
+                    .any(|scope| scope == "terminal:operate") =>
+            {
+                authorization.device_id
+            }
+            Some(_) => {
+                return (StatusCode::FORBIDDEN, "missing terminal:operate scope").into_response()
+            }
+            None => return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response(),
+        }
+    } else {
+        match q
+            .get("ticket")
+            .and_then(|ticket| st.auth.take_ws_ticket(ticket))
+        {
+            Some(device_id) => device_id,
+            None => return (StatusCode::UNAUTHORIZED, "invalid or expired ticket").into_response(),
+        }
+    };
+    let registry = st.terminals.clone();
+    ws.on_upgrade(move |socket| terminal::handle_socket(socket, registry, device_id))
+}
+
 fn validate_canvas_op(st: &ServerState, _device_id: &str, op: &Op) -> Result<(), CanvasError> {
     let Op::Prompt { doc, .. } = op else {
         return Ok(());
     };
-    let has_canvas = doc.iter().any(|block| matches!(block, DocBlock::Canvas { .. }));
+    let has_canvas = doc
+        .iter()
+        .any(|block| matches!(block, DocBlock::Canvas { .. }));
     if !has_canvas {
         return Ok(());
     }
@@ -1205,6 +1306,24 @@ async fn index() -> Html<&'static str> {
 }
 
 include!(concat!(env!("OUT_DIR"), "/canvas_assets.rs"));
+include!(concat!(env!("OUT_DIR"), "/term_assets.rs"));
+
+/// Embedded xterm.js bundle for the remote terminal view. Same traversal rules as the Canvas
+/// island: only compile-time embedded names resolve, nothing touches the filesystem at runtime.
+async fn term_asset(Path(path): Path<String>) -> Response {
+    if path.is_empty() || path.contains('/') || path.contains('\\') || path.starts_with('.') {
+        return (StatusCode::NOT_FOUND, "terminal asset not found").into_response();
+    }
+    let Some((_, bytes)) = TERM_ASSETS.iter().find(|(name, _)| *name == path) else {
+        return (StatusCode::NOT_FOUND, "terminal asset not found").into_response();
+    };
+    let mut response = (*bytes).to_vec().into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(canvas_asset_mime(&path)),
+    );
+    response
+}
 
 /// Compile-time embedded Canvas island paths, exposed only for integration probes and packaged
 /// host diagnostics.  The returned names are generated from `assets/canvas`, so callers never
@@ -1269,11 +1388,122 @@ fn canvas_asset_response(path: &str) -> Response {
     response
 }
 
-/// Best-effort LAN IP (via the classic "connect a UDP socket" trick — no packets are sent).
+fn is_pairable_lan_address(interface: &str, ip: Ipv4Addr) -> bool {
+    let interface = interface.to_ascii_lowercase();
+    let physical_interface = [
+        "en", "eth", "em", "wlan", "wlp", "wlx", "bond", "team", "usb", "rndis",
+    ]
+    .iter()
+    .any(|prefix| interface.starts_with(prefix));
+    let octets = ip.octets();
+    physical_interface
+        && !ip.is_loopback()
+        && !ip.is_unspecified()
+        && !ip.is_multicast()
+        && !ip.is_link_local()
+        && ip != Ipv4Addr::BROADCAST
+        && !is_tailnet_address(ip)
+        // RFC 2544 benchmarking space is commonly used by packet-tunnel VPNs (including the
+        // 198.18.0.1 address seen on macOS utun devices), and is not a phone-reachable LAN URL.
+        && !(octets[0] == 198 && matches!(octets[1], 18 | 19))
+}
+
+/// Tailscale assigns stable node IPv4 addresses from RFC 6598's 100.64.0.0/10 range. The range is
+/// shared CGNAT space rather than proof of Tailscale, so the UI presents matches as candidates and
+/// never silently prefers them over a physical LAN address.
+fn is_tailnet_address(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    octets[0] == 100 && (64..=127).contains(&octets[1]) && ip != Ipv4Addr::new(100, 100, 100, 100)
+}
+
+#[derive(Clone)]
+struct LocalInterfaceAddress {
+    interface: String,
+    ip: Ipv4Addr,
+    point_to_point: bool,
+}
+
+#[cfg(unix)]
+fn local_interface_addresses() -> Vec<LocalInterfaceAddress> {
+    let mut head: *mut libc::ifaddrs = std::ptr::null_mut();
+    // SAFETY: `head` is initialized for getifaddrs, every pointer is checked before dereferencing,
+    // only AF_INET records are cast to sockaddr_in, and the list is freed exactly once.
+    if unsafe { libc::getifaddrs(&mut head) } != 0 {
+        return Vec::new();
+    }
+
+    let mut addresses = Vec::new();
+    let mut cursor = head;
+    while !cursor.is_null() {
+        // SAFETY: cursor belongs to the live getifaddrs list and is non-null for this iteration.
+        let entry = unsafe { &*cursor };
+        let flags = entry.ifa_flags as libc::c_int;
+        let active = flags & libc::IFF_UP != 0 && flags & libc::IFF_RUNNING != 0;
+        let point_to_point = flags & libc::IFF_POINTOPOINT != 0;
+        let loopback = flags & libc::IFF_LOOPBACK != 0;
+        if active && !loopback && !entry.ifa_addr.is_null() {
+            // SAFETY: ifa_name is a NUL-terminated name owned by the live getifaddrs list.
+            let interface = unsafe { std::ffi::CStr::from_ptr(entry.ifa_name) }
+                .to_string_lossy()
+                .into_owned();
+            // SAFETY: the family check makes the sockaddr_in cast valid for this record.
+            if unsafe { (*entry.ifa_addr).sa_family as libc::c_int } == libc::AF_INET {
+                let address = unsafe { &*(entry.ifa_addr as *const libc::sockaddr_in) };
+                let ip = Ipv4Addr::from(address.sin_addr.s_addr.to_ne_bytes());
+                if !addresses
+                    .iter()
+                    .any(|address: &LocalInterfaceAddress| address.ip == ip)
+                {
+                    addresses.push(LocalInterfaceAddress {
+                        interface,
+                        ip,
+                        point_to_point,
+                    });
+                }
+            }
+        }
+        cursor = entry.ifa_next;
+    }
+    // SAFETY: head is the unchanged pointer returned by a successful getifaddrs call.
+    unsafe { libc::freeifaddrs(head) };
+    addresses.sort_by(|left, right| {
+        left.interface
+            .cmp(&right.interface)
+            .then(left.ip.cmp(&right.ip))
+    });
+    addresses
+}
+
+#[cfg(not(unix))]
+fn local_interface_addresses() -> Vec<LocalInterfaceAddress> {
+    // A loopback-only result is safer than turning a VPN/default-route guess into a pairing QR.
+    Vec::new()
+}
+
+fn local_lan_addresses() -> Vec<(String, Ipv4Addr)> {
+    local_interface_addresses()
+        .into_iter()
+        .filter(|address| {
+            !address.point_to_point && is_pairable_lan_address(&address.interface, address.ip)
+        })
+        .map(|address| (address.interface, address.ip))
+        .collect()
+}
+
+fn local_tailnet_addresses() -> Vec<(String, Ipv4Addr)> {
+    local_interface_addresses()
+        .into_iter()
+        .filter(|address| is_tailnet_address(address.ip))
+        .map(|address| (address.interface, address.ip))
+        .collect()
+}
+
+/// Best-effort phone-reachable LAN IP from an active physical network interface.
 pub fn local_ip() -> Option<std::net::IpAddr> {
-    let sock = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
-    sock.connect("8.8.8.8:80").ok()?;
-    sock.local_addr().ok().map(|a| a.ip())
+    local_lan_addresses()
+        .into_iter()
+        .next()
+        .map(|(_, ip)| ip.into())
 }
 
 /// One address the desktop can advertise for remote pairing. IDs are stable across refreshes so
@@ -1288,18 +1518,48 @@ pub struct PairingEndpoint {
     pub qr_shareable: bool,
 }
 
-/// Addresses advertised by a server bound on all interfaces. LAN is preferred for pairing; the
-/// loopback address is always retained for same-machine use and as a safe fallback.
+/// Addresses advertised by a server bound on all interfaces. Physical LAN addresses are followed
+/// by 100.64/10 tailnet candidates; loopback remains available for same-machine use.
 pub fn pairing_endpoints(port: u16) -> Vec<PairingEndpoint> {
-    let mut endpoints = Vec::new();
-    if let Some(ip) = local_ip() {
-        endpoints.push(PairingEndpoint {
-            id: "lan".into(),
-            label: "LAN".into(),
+    pairing_endpoints_for_addresses(port, local_lan_addresses(), local_tailnet_addresses())
+}
+
+fn pairing_endpoints_for_addresses(
+    port: u16,
+    lan_addresses: Vec<(String, Ipv4Addr)>,
+    tailnet_addresses: Vec<(String, Ipv4Addr)>,
+) -> Vec<PairingEndpoint> {
+    let mut endpoints: Vec<_> = lan_addresses
+        .into_iter()
+        .map(|(interface, ip)| PairingEndpoint {
+            id: format!("lan-{interface}-{}", ip.to_string().replace('.', "-")),
+            label: format!("LAN ({interface}: {ip})"),
             url: format!("http://{ip}:{port}/"),
             qr_shareable: true,
-        });
+        })
+        .collect();
+    if endpoints.len() == 1 {
+        // Keep the familiar compact label when there is no address choice to disambiguate.
+        endpoints[0].label = "LAN".into();
     }
+    if endpoints.is_empty() {
+        tracing::warn!("remote: no active physical LAN address is available for phone pairing");
+    }
+    let single_tailnet = tailnet_addresses.len() == 1;
+    endpoints.extend(
+        tailnet_addresses
+            .into_iter()
+            .map(|(interface, ip)| PairingEndpoint {
+                id: format!("tailnet-{interface}-{}", ip.to_string().replace('.', "-")),
+                label: if single_tailnet {
+                    format!("Tailnet candidate ({ip})")
+                } else {
+                    format!("Tailnet candidate ({interface}: {ip})")
+                },
+                url: format!("http://{ip}:{port}/"),
+                qr_shareable: true,
+            }),
+    );
     endpoints.push(PairingEndpoint {
         id: "loopback".into(),
         label: "Loopback".into(),
@@ -1331,7 +1591,7 @@ pub fn select_pairing_endpoint<'a>(
 /// Attach the one-time token as a fragment, never as a query or request-path credential.
 pub fn pairing_url_for_endpoint(endpoint_url: &str, pairing_token: &str) -> String {
     format!(
-        "{}/#token={pairing_token}",
+        "{}/pair#token={pairing_token}",
         endpoint_url.trim_end_matches('/')
     )
 }
@@ -1391,6 +1651,7 @@ const INDEX_HTML: &str = include_str!("client.html");
 mod tests {
     use super::{Outbound, PairingEndpoint, TranscriptCursor, TranscriptEntry};
     use codetwo_core::{Part, Role};
+    use std::net::Ipv4Addr;
 
     fn endpoint(id: &str, qr_shareable: bool) -> PairingEndpoint {
         PairingEndpoint {
@@ -1404,14 +1665,14 @@ mod tests {
     #[test]
     fn pairing_url_puts_token_in_fragment() {
         let u = super::pairing_url(4599, "abc");
-        assert!(u.contains(":4599/#token=abc"), "got: {u}");
+        assert!(u.contains(":4599/pair#token=abc"), "got: {u}");
     }
 
     #[test]
     fn pairing_url_for_endpoint_normalizes_the_slash_before_the_fragment() {
         assert_eq!(
             super::pairing_url_for_endpoint("http://device.example///", "abc"),
-            "http://device.example/#token=abc"
+            "http://device.example/pair#token=abc"
         );
     }
 
@@ -1441,8 +1702,59 @@ mod tests {
     }
 
     #[test]
+    fn phone_pairing_only_advertises_physical_lan_addresses() {
+        assert!(super::is_pairable_lan_address(
+            "en0",
+            Ipv4Addr::new(192, 168, 31, 102)
+        ));
+        assert!(super::is_pairable_lan_address(
+            "wlan0",
+            Ipv4Addr::new(10, 0, 0, 8)
+        ));
+        assert!(!super::is_pairable_lan_address(
+            "utun4",
+            Ipv4Addr::new(198, 18, 0, 1)
+        ));
+        assert!(!super::is_pairable_lan_address(
+            "en0",
+            Ipv4Addr::new(198, 18, 0, 1)
+        ));
+        assert!(!super::is_pairable_lan_address(
+            "en0",
+            Ipv4Addr::new(127, 0, 0, 1)
+        ));
+        assert!(!super::is_pairable_lan_address(
+            "en0",
+            Ipv4Addr::new(100, 99, 10, 8)
+        ));
+    }
+
+    #[test]
+    fn tailscale_addresses_are_explicit_tailnet_endpoints() {
+        assert!(super::is_tailnet_address(Ipv4Addr::new(100, 64, 0, 1)));
+        assert!(super::is_tailnet_address(Ipv4Addr::new(100, 127, 255, 254)));
+        assert!(!super::is_tailnet_address(Ipv4Addr::new(100, 63, 255, 255)));
+        assert!(!super::is_tailnet_address(Ipv4Addr::new(100, 128, 0, 1)));
+        assert!(!super::is_tailnet_address(Ipv4Addr::new(
+            100, 100, 100, 100
+        )));
+
+        let endpoints = super::pairing_endpoints_for_addresses(
+            4599,
+            vec![("en0".into(), Ipv4Addr::new(192, 168, 31, 102))],
+            vec![("utun7".into(), Ipv4Addr::new(100, 99, 10, 8))],
+        );
+        assert_eq!(endpoints[0].id, "lan-en0-192-168-31-102");
+        assert_eq!(endpoints[1].id, "tailnet-utun7-100-99-10-8");
+        assert_eq!(endpoints[1].label, "Tailnet candidate (100.99.10.8)");
+        assert_eq!(endpoints[1].url, "http://100.99.10.8:4599/");
+        assert!(endpoints[1].qr_shareable);
+        assert_eq!(endpoints[2].id, "loopback");
+    }
+
+    #[test]
     fn qr_svg_renders() {
-        let svg = super::pairing_qr_svg("http://192.168.1.2:4599/#token=abc").unwrap();
+        let svg = super::pairing_qr_svg("http://192.168.1.2:4599/pair#token=abc").unwrap();
         assert!(
             svg.starts_with("<?xml") || svg.starts_with("<svg"),
             "got: {}",

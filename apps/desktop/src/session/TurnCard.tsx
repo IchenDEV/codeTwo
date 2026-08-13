@@ -11,6 +11,7 @@ import {
   FolderOpen,
   Loader2,
   ListTodo,
+  MoreHorizontal,
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -35,6 +36,12 @@ import {
 } from "../bridge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -153,6 +160,21 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
+/**
+ * Plan entries → checklist markdown (R4 plan-as-document). Transcript plan entries are plain
+ * strings — the engine keeps only the entry content — so an entry already carrying a checkbox
+ * marker keeps its state and everything else starts unchecked.
+ */
+export function planChecklistMarkdown(entries: readonly string[]): string {
+  return entries
+    .map((entry) => {
+      const marked = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/.exec(entry);
+      if (marked) return `- [${marked[1] === " " ? " " : "x"}] ${marked[2]}`;
+      return `- [ ] ${entry}`;
+    })
+    .join("\n");
+}
+
 function canvasKey(canvas: CanvasHistoryMarker): string {
   return `${canvas.id}:${canvas.revision}`;
 }
@@ -212,9 +234,21 @@ function Detail({
 export const TurnCard = memo(function TurnCard({
   turn,
   canvasSnapshotLoader = canvasGetSnapshot,
+  onOpenPlanAsDocument,
+  onPinPlanArtifact,
+  canPinPlan = false,
+  onSaveTemplate,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
+  /** Opens the plan in the composer document (R4). Absent → the affordance is hidden. */
+  onOpenPlanAsDocument?: (entries: string[]) => void;
+  /** Pins the plan as a scene artifact. Only offered while `canPinPlan` is set. */
+  onPinPlanArtifact?: (markdown: string) => void;
+  /** True when the active scene declares a `plan`-kind artifact. */
+  canPinPlan?: boolean;
+  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+  onSaveTemplate?: (promptText: string) => void;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -281,7 +315,27 @@ export const TurnCard = memo(function TurnCard({
     // conversation advancing rather than the list redrawing.
     <article aria-busy={running} className="animate-rise-in py-5">
       {/* prompt */}
-      <div className="flex justify-end">
+      <div className="group/prompt flex items-start justify-end gap-1">
+        {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
+            button so future turn actions slot in beside "Save as template…". */}
+        {onSaveTemplate && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<button
+                type="button"
+                aria-label={t("templateFrom.menu")}
+                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+              >
+                <MoreHorizontal className="size-3.5" aria-hidden />
+              </button>}
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
+                {t("templateFrom.saveAs")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
           <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
           {promptIsLong && (
@@ -467,6 +521,28 @@ export const TurnCard = memo(function TurnCard({
                 <li key={i}>{p}</li>
               ))}
             </ol>
+            {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {onOpenPlanAsDocument && (
+                  <button
+                    type="button"
+                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                    onClick={() => onOpenPlanAsDocument([...turn.plan])}
+                  >
+                    {t("planDoc.open")}
+                  </button>
+                )}
+                {canPinPlan && onPinPlanArtifact && (
+                  <button
+                    type="button"
+                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                    onClick={() => onPinPlanArtifact(planChecklistMarkdown(turn.plan))}
+                  >
+                    {t("planDoc.pin")}
+                  </button>
+                )}
+              </div>
+            )}
           </Detail>
 
           <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>

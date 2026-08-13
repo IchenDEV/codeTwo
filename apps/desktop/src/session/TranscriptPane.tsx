@@ -1,11 +1,16 @@
+import { useRef } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 
 import { TurnCard } from "./TurnCard";
+import { SelectionActions } from "./SelectionActions";
 import type { Turn } from "./turns";
 import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { useAppearanceSettings } from "../appearance";
+import { CodeTwoPet } from "../pet/CodeTwoPet";
+import type { CodeTwoPetAnimation } from "../pet/state";
 
 interface TranscriptPaneProps {
   variant: "main" | "side";
@@ -15,6 +20,17 @@ interface TranscriptPaneProps {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   scroll: TranscriptScrollController;
+  /** R4 plan-as-document affordances, threaded through to each turn's Plan detail. */
+  onOpenPlanAsDocument?: (entries: string[]) => void;
+  onPinPlanArtifact?: (markdown: string) => void;
+  canPinPlan?: boolean;
+  /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
+  onSaveTemplate?: (promptText: string) => void;
+  petAnimation: CodeTwoPetAnimation;
+  onVoiceText: (text: string) => void;
+  onAddSelection: (text: string) => void;
+  onExplainSelection: (text: string) => void;
+  onAskSelectionInSideChat: (text: string) => void;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -26,9 +42,20 @@ export function TranscriptPane({
   loadingEarlier,
   onLoadEarlier,
   scroll,
+  onOpenPlanAsDocument,
+  onPinPlanArtifact,
+  canPinPlan,
+  onSaveTemplate,
+  petAnimation,
+  onVoiceText,
+  onAddSelection,
+  onExplainSelection,
+  onAskSelectionInSideChat,
 }: TranscriptPaneProps) {
   const t = useT();
+  const appearance = useAppearanceSettings();
   const Root = variant === "side" ? "aside" : "section";
+  const selectionScopeRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <Root
@@ -42,6 +69,7 @@ export function TranscriptPane({
     >
       <div
         ref={(element) => {
+          selectionScopeRef.current = element;
           scroll.viewportRef.current = element;
         }}
         aria-busy={loading}
@@ -90,14 +118,30 @@ export function TranscriptPane({
                     key={turn.transcriptStartSeq ?? turn.id}
                     style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
                   >
-                    <TurnCard turn={turn} />
+                    <TurnCard
+                      turn={turn}
+                      onOpenPlanAsDocument={onOpenPlanAsDocument}
+                      onPinPlanArtifact={onPinPlanArtifact}
+                      canPinPlan={canPinPlan}
+                      onSaveTemplate={onSaveTemplate}
+                    />
                   </li>
                 ))}
               </ol>
+              {variant === "main" && appearance.petEnabled ? (
+                <CodeTwoPet animation={petAnimation} onVoiceText={onVoiceText} />
+              ) : null}
             </>
           )}
         </div>
       </div>
+
+      <SelectionActions
+        scopeRef={selectionScopeRef}
+        onAdd={onAddSelection}
+        onDetails={onExplainSelection}
+        onAskInSideChat={onAskSelectionInSideChat}
+      />
 
       {scroll.showJumpToLatest ? (
         <Button

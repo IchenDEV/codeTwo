@@ -21,6 +21,8 @@ import { exportCanvasPng } from "./canvas/export";
 import type { CanvasMediaInput, NormalizedCanvasMedia } from "./canvas/media";
 import { rehydrateEnvelope } from "./canvas/serialize";
 import { workspaceReferenceBlock } from "./editor/workspaceReference";
+import { SlotCardBlock, slotCardToDocBlocks, type SlotCardProps } from "./editor/slotCard";
+import { IssueRefBlock, issueRefToDocBlock, type IssueRefProps } from "./editor/issueBlock";
 
 /** Props kept on the interactive BlockNote node. Scene JSON is intentionally not emitted by
  * `docToBlocks`; it is only an in-memory editing cache so an inline Canvas can reconnect without
@@ -349,6 +351,28 @@ export const SessionMentionInline = createReactInlineContentSpec(
     render: (props) => (
       <span className="chat-chip" contentEditable={false}>
         @{props.inlineContent.props.title || props.inlineContent.props.sessionId.slice(0, 8)}
+      </span>
+    ),
+  },
+);
+
+// An inline mention of a stored scene-artifact version (R4). The document keeps only the record
+// id; docToBlocks emits the `{{artifact:<id>}}` interpolation token, which run_macro-style
+// interpolation (and core's `compile_full` for richer flows) resolves into the stored content.
+export const ArtifactInline = createReactInlineContentSpec(
+  {
+    type: "artifactMention",
+    propSchema: {
+      artifactId: { default: "" },
+      title: { default: "" },
+      kind: { default: "" },
+    },
+    content: "none",
+  } as const,
+  {
+    render: (props) => (
+      <span className="chat-chip" contentEditable={false}>
+        ⌘ {props.inlineContent.props.title || props.inlineContent.props.artifactId}
       </span>
     ),
   },
@@ -723,12 +747,15 @@ export const schema = BlockNoteSchema.create({
     ...defaultBlockSpecs,
     browserNote: BrowserNoteBlock,
     canvas: CanvasBlock,
+    slotCard: SlotCardBlock,
+    issueRef: IssueRefBlock,
   },
   inlineContentSpecs: {
     ...defaultInlineContentSpecs,
     skill: SkillInline,
     fileMention: FileInline,
     sessionMention: SessionMentionInline,
+    artifactMention: ArtifactInline,
   },
 });
 
@@ -752,6 +779,14 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
       if (text.trim()) out.push({ type: "text", text });
       continue;
     }
+    // An issue reference serializes into the core `DocBlock::Issue` (R12): snapshot fields plus
+    // the body portion of the embedded context, so compiling stays offline-safe and byte-stable.
+    if (block.type === "issueRef") {
+      flush();
+      const docBlock = issueRefToDocBlock(block.props as unknown as IssueRefProps);
+      if (docBlock) out.push(docBlock);
+      continue;
+    }
     if (block.type === "canvas") {
       flush();
       const props = block.props as unknown as CanvasBlockProps;
@@ -772,6 +807,14 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
       if (path) out.push({ type: "image", path });
       continue;
     }
+    // A slot card serializes from its JSON-encoded props: a macro card becomes one skill block
+    // with filled params; a brief card becomes the template's prose interleaved with values.
+    // Corrupt JSON degrades to empty slots/values rather than dropping the block.
+    if (block.type === "slotCard") {
+      flush();
+      out.push(...slotCardToDocBlocks(block.props as unknown as SlotCardProps));
+      continue;
+    }
     const content = block.content;
     if (Array.isArray(content)) {
       for (const inline of content as Array<Record<string, unknown>>) {
@@ -789,6 +832,10 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           flush();
           const props = inline.props as { sessionId: string };
           out.push({ type: "session", session_id: props.sessionId });
+        } else if (inline.type === "artifactMention") {
+          flush();
+          const props = inline.props as { artifactId: string };
+          out.push({ type: "text", text: "{{artifact:" + props.artifactId + "}}" });
         } else if (inline.type === "link") {
           const parts = (inline.content as Array<{ text?: string }> | undefined) ?? [];
           buf += parts.map((c) => c.text ?? "").join("");

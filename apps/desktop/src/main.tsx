@@ -10,6 +10,8 @@ import "./styles.css";
 
 const showDesignSystem =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");
+const showPetPreview =
+  import.meta.env.DEV && new URLSearchParams(window.location.search).has("pet-preview");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -17,19 +19,26 @@ const showDesignSystem =
 document.addEventListener("contextmenu", (e) => {
   const el = e.target as HTMLElement | null;
   const editable = el?.closest?.("input, textarea, [contenteditable='true']");
-  if (!editable) e.preventDefault();
+  // Base UI needs the un-cancelled event to position an app-owned context menu. Its trigger is a
+  // deliberate desktop interaction, not the webview's Reload / Inspect Element menu.
+  const appContextMenu = el?.closest?.('[data-slot="context-menu-trigger"]');
+  if (!editable && !appContextMenu) e.preventDefault();
 });
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
-  const Root = showDesignSystem ? (await import("./design/DesignSystemPreview")).DesignSystemPreview : App;
+  const Root = showPetPreview
+    ? (await import("./pet/PetPreview")).PetPreview
+    : showDesignSystem
+      ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
+      : App;
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ThemeProvider>
         <I18nProvider>
           <ErrorBoundary>
-            <TooltipProvider delayDuration={300}>
+            <TooltipProvider delay={300}>
               <ToastProvider>
                 <Root />
               </ToastProvider>

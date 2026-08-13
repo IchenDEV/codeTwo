@@ -178,6 +178,214 @@ impl McpServer {
     }
 }
 
+/// One typed fill-in slot — the shared vocabulary between Macro skills and scene `brief.slots`
+/// (Agent Scenes 1.0.0 slot object; see `crates/core/schemas/agent-scenes/1.0.0/scene.schema.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotDef {
+    pub id: String,
+    /// Empty → UI falls back to the id (legacy macros); scene validation requires non-empty.
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub kind: SlotKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SlotKind {
+    #[default]
+    Text,
+    Multiline,
+    Select,
+    File,
+    Artifact,
+}
+
+impl SlotDef {
+    /// A plain text slot with no label — what a legacy `slots: ["style"]` entry migrates to.
+    pub fn text(id: impl Into<String>) -> Self {
+        SlotDef {
+            id: id.into(),
+            label: String::new(),
+            kind: SlotKind::Text,
+            options: Vec::new(),
+            required: false,
+            default: None,
+        }
+    }
+}
+
+/// Legacy macro definitions saved `slots` as bare id strings; keep those constructions compiling.
+impl From<String> for SlotDef {
+    fn from(id: String) -> Self {
+        SlotDef::text(id)
+    }
+}
+
+impl From<&str> for SlotDef {
+    fn from(id: &str) -> Self {
+        SlotDef::text(id)
+    }
+}
+
+/// Backward-compatible `Macro.slots` deserializer: an on-disk entry may be a bare id string
+/// (legacy) or a full slot object (current). Serialization always writes the object shape.
+fn deserialize_slots<'de, D>(deserializer: D) -> Result<Vec<SlotDef>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum SlotDefOrName {
+        Def(SlotDef),
+        Name(String),
+    }
+
+    let raw = Vec::<SlotDefOrName>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .map(|entry| match entry {
+            SlotDefOrName::Def(def) => def,
+            SlotDefOrName::Name(id) => SlotDef::text(id),
+        })
+        .collect())
+}
+
+/// True for a whitespace-free token that looks like a workspace file path: contains a `/`, is not
+/// a URL, and its last segment carries a short alphanumeric extension (`src/main.rs`, `a/b.tsx`).
+fn path_like(value: &str) -> bool {
+    if value.contains("://") || value.contains(char::is_whitespace) || !value.contains('/') {
+        return false;
+    }
+    let name = value.rsplit('/').next().unwrap_or("");
+    match name.rsplit_once('.') {
+        Some((stem, ext)) => {
+            !stem.is_empty()
+                && (1..=8).contains(&ext.len())
+                && ext.chars().all(|c| c.is_ascii_alphanumeric())
+        }
+        None => false,
+    }
+}
+
+/// Sentence punctuation that should not ride along when a bare token becomes a slot value.
+fn is_trailing_punct(c: char) -> bool {
+    matches!(c, ',' | '.' | ';' | ':' | ')' | ']' | '}' | '!' | '?')
+}
+
+/// Whitespace-collapsed, length-capped label for a proposed slot.
+fn proposed_label(value: &str) -> String {
+    let collapsed = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut label: String = collapsed.chars().take(32).collect();
+    if collapsed.chars().count() > 32 {
+        label.push('…');
+    }
+    label
+}
+
+/// Heuristic "save as template" proposal (R2). Quoted strings, inline code spans, and
+/// path-looking tokens become `{{slot-N}}` slots (kind `file` for paths, `text` otherwise; the
+/// original value is kept as the slot default). Identical values dedupe to one slot; at most six
+/// distinct slots are proposed — later candidates are left verbatim. No model call: this is the
+/// v1 chokepoint the frontend degrades over identically when the command is missing.
+pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
+    const MAX_SLOTS: usize = 6;
+    const MAX_VALUE_LEN: usize = 120;
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut slots: Vec<SlotDef> = Vec::new();
+
+    // Existing slot for the value, or a fresh `slot-N` while under the cap. None → leave as-is.
+    let token_for = |value: &str, slots: &mut Vec<SlotDef>| -> Option<String> {
+        if let Some(existing) = slots.iter().find(|s| s.default.as_deref() == Some(value)) {
+            return Some(format!("{{{{{}}}}}", existing.id));
+        }
+        if slots.len() >= MAX_SLOTS {
+            return None;
+        }
+        let id = format!("slot-{}", slots.len() + 1);
+        let kind = if path_like(value) {
+            SlotKind::File
+        } else {
+            SlotKind::Text
+        };
+        slots.push(SlotDef {
+            id: id.clone(),
+            label: proposed_label(value),
+            kind,
+            options: Vec::new(),
+            required: false,
+            default: Some(value.to_string()),
+        });
+        Some(format!("{{{{{id}}}}}"))
+    };
+
+    // ASCII delimiters never occur inside multi-byte UTF-8 sequences, so byte scanning with
+    // slicing at delimiter positions stays on char boundaries.
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'`' || b == b'"' || b == b'\'' {
+            // A `'` only opens a quote at a word boundary — apostrophes stay prose.
+            let opens = b != b'\'' || i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
+            let close = if opens {
+                (i + 1..bytes.len()).take_while(|&j| bytes[j] != b'\n').find(|&j| bytes[j] == b)
+            } else {
+                None
+            };
+            if let Some(end) = close {
+                let inner = &text[i + 1..end];
+                let closes = b != b'\''
+                    || bytes.get(end + 1).is_none_or(|c| !c.is_ascii_alphanumeric());
+                if closes && !inner.trim().is_empty() && inner.len() <= MAX_VALUE_LEN {
+                    if let Some(token) = token_for(inner, &mut slots) {
+                        // Keep the delimiters: the template reads as the prompt did.
+                        out.push(b as char);
+                        out.push_str(&token);
+                        out.push(b as char);
+                        i = end + 1;
+                        continue;
+                    }
+                }
+            }
+            out.push(b as char);
+            i += 1;
+            continue;
+        }
+        if b.is_ascii_whitespace() {
+            out.push(b as char);
+            i += 1;
+            continue;
+        }
+        // Bare token; stop at quote/code delimiters so `path:"a/b.rs"` still finds its quote.
+        let start = i;
+        while i < bytes.len()
+            && !bytes[i].is_ascii_whitespace()
+            && !matches!(bytes[i], b'`' | b'"')
+        {
+            i += 1;
+        }
+        let token = &text[start..i];
+        let trimmed = token.trim_end_matches(is_trailing_punct);
+        if path_like(trimmed) && trimmed.len() <= MAX_VALUE_LEN {
+            if let Some(slot_token) = token_for(trimmed, &mut slots) {
+                out.push_str(&slot_token);
+                out.push_str(&token[trimmed.len()..]);
+                continue;
+            }
+        }
+        out.push_str(token);
+    }
+
+    (out, slots)
+}
+
 /// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
 /// registration, so Code2 also keeps a deterministic inline delegation fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,7 +419,8 @@ pub enum SkillPayload {
     },
     Macro {
         template: String,
-        slots: Vec<String>,
+        #[serde(default, deserialize_with = "deserialize_slots")]
+        slots: Vec<SlotDef>,
     },
 }
 
@@ -345,6 +554,24 @@ pub enum DocBlock {
     Session {
         session_id: String,
     },
+    /// A stored scene-artifact version; its content is inlined as labeled context at compile time.
+    Artifact {
+        record_id: i64,
+    },
+    /// A referenced issue-tracker item (delegation provenance). The snapshot is embedded at
+    /// insert time — the composer already fetched it — so compiling is offline-safe and an issue
+    /// mention never lands in `unresolved`.
+    Issue {
+        /// `github` | `linear`.
+        source: String,
+        id: String,
+        #[serde(default)]
+        title: String,
+        #[serde(default)]
+        url: String,
+        #[serde(default)]
+        body: String,
+    },
 }
 
 /// Plain, user-authored representation of a composed document.
@@ -368,6 +595,8 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
             DocBlock::Session { session_id } => {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
+            DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
+            DocBlock::Issue { source, id, .. } => format!("[issue:{source}#{id}]"),
         })
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -399,6 +628,9 @@ pub struct CompiledPrompt {
     pub sessions: Vec<String>,
     /// Skill ids (or `file:<path>`) that could not be resolved — surfaced to the user as warnings.
     pub unresolved: Vec<String>,
+    /// Scene-artifact record ids inlined via artifact mentions.
+    #[serde(default)]
+    pub artifacts: Vec<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -477,6 +709,20 @@ pub fn compile_with_sessions(
     cwd: Option<&std::path::Path>,
     resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
 ) -> CompiledPrompt {
+    compile_full(doc, library, cwd, resolve_session, None)
+}
+
+/// Like [`compile_with_sessions`], but also able to resolve scene-artifact mentions:
+/// `resolve_artifact` maps a record id to a `(label, content)` pair (`None` for an unknown id),
+/// which is inlined as a labeled context block. The compiler stays store-agnostic — callers with
+/// a [`crate::scene_artifact::SceneArtifactStore`] pass a closure over it.
+pub fn compile_full(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
+) -> CompiledPrompt {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
 
@@ -534,6 +780,34 @@ pub fn compile_with_sessions(
                     _ => out.unresolved.push(format!("session:{session_id}")),
                 }
             }
+            DocBlock::Artifact { record_id } => {
+                match resolve_artifact.and_then(|resolve| resolve(*record_id)) {
+                    Some((label, content)) => {
+                        out.artifacts.push(*record_id);
+                        parts.push(format!("**Artifact: {label}**\n\n{}", content.trim_end()));
+                    }
+                    None => out.unresolved.push(format!("artifact:{record_id}")),
+                }
+            }
+            DocBlock::Issue {
+                source,
+                id,
+                title,
+                url,
+                body,
+            } => {
+                // The snapshot was embedded at insert time, so this renders offline with the
+                // exact byte shape of `issues::Issue::to_context` — never `unresolved`.
+                let issue = crate::issues::Issue {
+                    id: id.clone(),
+                    title: title.clone(),
+                    state: "open".into(),
+                    url: url.clone(),
+                    body: body.clone(),
+                    source: source.clone(),
+                };
+                parts.push(issue.to_context());
+            }
             DocBlock::Text { text } => {
                 let t = text.trim_end();
                 if !t.is_empty() {
@@ -547,8 +821,19 @@ pub fn compile_with_sessions(
                 };
                 match &skill.payload {
                     SkillPayload::Fragment { text } => parts.push(text.trim().to_string()),
-                    SkillPayload::Macro { template, .. } => {
-                        parts.push(substitute(template, params).trim().to_string())
+                    SkillPayload::Macro { template, slots } => {
+                        // Effective params = slot defaults overlaid by what the user filled in.
+                        // A slot with neither keeps the leave-`{{slot}}`-as-is behavior.
+                        let mut effective: HashMap<String, String> = HashMap::new();
+                        for slot in slots {
+                            if let Some(default) = &slot.default {
+                                effective.insert(slot.id.clone(), default.clone());
+                            }
+                        }
+                        for (key, value) in params {
+                            effective.insert(key.clone(), value.clone());
+                        }
+                        parts.push(substitute(template, &effective).trim().to_string())
                     }
                     SkillPayload::AgentSkill {
                         skill_ref,
@@ -653,7 +938,24 @@ pub fn builtin_skills() -> Vec<Skill> {
             source: None,
             payload: SkillPayload::Macro {
                 template: "Write a {{style}} commit message for changes to {{scope}}.".into(),
-                slots: vec!["style".into(), "scope".into()],
+                slots: vec![
+                    SlotDef {
+                        id: "style".into(),
+                        label: "Style".into(),
+                        kind: SlotKind::Select,
+                        options: vec!["conventional".into(), "descriptive".into()],
+                        required: true,
+                        default: None,
+                    },
+                    SlotDef {
+                        id: "scope".into(),
+                        label: "Scope".into(),
+                        kind: SlotKind::Text,
+                        options: Vec::new(),
+                        required: false,
+                        default: None,
+                    },
+                ],
             },
         },
     ]
@@ -844,6 +1146,89 @@ mod tests {
     }
 
     #[test]
+    fn artifact_mention_inlines_resolved_content_as_labeled_block() {
+        let lib = sample_library();
+        let doc = vec![
+            DocBlock::Artifact { record_id: 7 },
+            DocBlock::Text {
+                text: "Execute this plan.".into(),
+            },
+        ];
+        let resolve = |id: i64| -> Option<(String, String)> {
+            (id == 7).then(|| ("Plan v2".to_string(), "- [ ] step one\n".to_string()))
+        };
+        let compiled = compile_full(&doc, &lib, None, None, Some(&resolve));
+        assert_eq!(compiled.artifacts, vec![7]);
+        assert!(compiled.prompt.contains("**Artifact: Plan v2**"));
+        assert!(compiled.prompt.contains("- [ ] step one"));
+        assert!(compiled.prompt.contains("Execute this plan."));
+        assert!(compiled.unresolved.is_empty());
+        assert_eq!(canonical_doc_text(&doc), "[artifact:7]\n\nExecute this plan.");
+    }
+
+    #[test]
+    fn artifact_mention_without_resolver_is_unresolved() {
+        let lib = sample_library();
+        let doc = vec![DocBlock::Artifact { record_id: 9 }];
+        // Existing entry points delegate with no artifact resolver.
+        let compiled = compile(&doc, &lib);
+        assert!(compiled.artifacts.is_empty());
+        assert_eq!(compiled.unresolved, vec!["artifact:9".to_string()]);
+
+        let resolve = |_: i64| -> Option<(String, String)> { None };
+        let compiled = compile_full(&doc, &lib, None, None, Some(&resolve));
+        assert_eq!(compiled.unresolved, vec!["artifact:9".to_string()]);
+    }
+
+    #[test]
+    fn issue_mention_canonical_text() {
+        let doc = vec![
+            DocBlock::Issue {
+                source: "github".into(),
+                id: "42".into(),
+                title: "Fix login".into(),
+                url: "https://github.com/o/r/issues/42".into(),
+                body: String::new(),
+            },
+            DocBlock::Text {
+                text: "Please handle this.".into(),
+            },
+        ];
+        assert_eq!(
+            canonical_doc_text(&doc),
+            "[issue:github#42]\n\nPlease handle this."
+        );
+    }
+
+    #[test]
+    fn issue_mention_compiles_title_url_body_and_stays_resolved() {
+        let lib = sample_library();
+        let doc = vec![DocBlock::Issue {
+            source: "linear".into(),
+            id: "ENG-9".into(),
+            title: "Speed up CI".into(),
+            url: "https://linear.app/t/ENG-9".into(),
+            body: "Cache the toolchain.".into(),
+        }];
+        // Plain `compile` (no resolvers, no cwd) is enough: the snapshot is embedded.
+        let compiled = compile(&doc, &lib);
+        assert!(compiled.prompt.contains("linear #ENG-9"));
+        assert!(compiled.prompt.contains("Speed up CI"));
+        assert!(compiled.prompt.contains("https://linear.app/t/ENG-9"));
+        assert!(compiled.prompt.contains("Cache the toolchain."));
+        assert!(compiled.unresolved.is_empty());
+    }
+
+    #[test]
+    fn compiled_prompt_without_artifacts_field_still_deserializes() {
+        let stored: CompiledPrompt = serde_json::from_str(
+            r#"{"prompt":"p","mcp_servers":[],"agent_skills":[],"files":[],"images":[],"unresolved":[]}"#,
+        )
+        .unwrap();
+        assert!(stored.artifacts.is_empty());
+    }
+
+    #[test]
     fn canonical_doc_keeps_user_text_but_not_expanded_context() {
         let doc = vec![
             DocBlock::Text {
@@ -1006,6 +1391,136 @@ mod tests {
     }
 
     #[test]
+    fn legacy_string_slots_deserialize_as_text_slots() {
+        let skill: Skill = serde_json::from_str(
+            r#"{"id":"commit","name":"Commit","payload":{"kind":"macro",
+                "template":"Write a {{style}} message for {{scope}}.",
+                "slots":["style","scope"]}}"#,
+        )
+        .unwrap();
+        let SkillPayload::Macro { slots, .. } = &skill.payload else {
+            panic!("expected macro payload");
+        };
+        assert_eq!(slots.len(), 2);
+        assert_eq!(slots[0], SlotDef::text("style"));
+        assert_eq!(slots[1].id, "scope");
+        assert_eq!(slots[1].kind, SlotKind::Text);
+        assert!(slots[1].label.is_empty());
+        assert!(!slots[1].required);
+    }
+
+    #[test]
+    fn typed_slots_round_trip_and_serialize_as_objects() {
+        let skill = Skill {
+            id: "commit".into(),
+            name: "Commit".into(),
+            description: String::new(),
+            icon: None,
+            source: None,
+            payload: SkillPayload::Macro {
+                template: "Write a {{style}} message.".into(),
+                slots: vec![SlotDef {
+                    id: "style".into(),
+                    label: "Style".into(),
+                    kind: SlotKind::Select,
+                    options: vec!["conventional".into(), "descriptive".into()],
+                    required: true,
+                    default: Some("conventional".into()),
+                }],
+            },
+        };
+        let json = serde_json::to_value(&skill).unwrap();
+        // Serialization always writes the object shape — never the legacy bare string.
+        assert!(json["payload"]["slots"][0].is_object());
+        assert_eq!(json["payload"]["slots"][0]["kind"], "select");
+        assert_eq!(json["payload"]["slots"][0]["options"][1], "descriptive");
+        let back: Skill = serde_json::from_value(json).unwrap();
+        assert_eq!(back.payload, skill.payload);
+    }
+
+    #[test]
+    fn mixed_slot_array_deserializes() {
+        let skill: Skill = serde_json::from_str(
+            r#"{"id":"m","name":"M","payload":{"kind":"macro","template":"{{a}} {{b}}",
+                "slots":["a",{"id":"b","label":"B","kind":"select","options":["x"],"required":true}]}}"#,
+        )
+        .unwrap();
+        let SkillPayload::Macro { slots, .. } = &skill.payload else {
+            panic!("expected macro payload");
+        };
+        assert_eq!(slots[0], SlotDef::text("a"));
+        assert_eq!(slots[1].kind, SlotKind::Select);
+        assert_eq!(slots[1].options, vec!["x".to_string()]);
+        assert!(slots[1].required);
+    }
+
+    #[test]
+    fn macro_compile_applies_slot_defaults_and_user_overrides() {
+        let lib = SkillLibrary::new([Skill {
+            id: "commit".into(),
+            name: "Commit".into(),
+            description: String::new(),
+            icon: None,
+            source: None,
+            payload: SkillPayload::Macro {
+                template: "Write a {{style}} message for {{scope}}.".into(),
+                slots: vec![
+                    SlotDef {
+                        default: Some("conventional".into()),
+                        ..SlotDef::text("style")
+                    },
+                    SlotDef::text("scope"),
+                ],
+            },
+        }]);
+
+        // No user params: the default fills its slot; a slot with no default keeps the
+        // placeholder (today's behavior).
+        let compiled = compile(
+            &[DocBlock::Skill {
+                skill_id: "commit".into(),
+                params: HashMap::new(),
+            }],
+            &lib,
+        );
+        assert_eq!(
+            compiled.prompt,
+            "Write a conventional message for {{scope}}."
+        );
+
+        // A user param overrides the default.
+        let compiled = compile(
+            &[DocBlock::Skill {
+                skill_id: "commit".into(),
+                params: HashMap::from([
+                    ("style".into(), "descriptive".into()),
+                    ("scope".into(), "auth".into()),
+                ]),
+            }],
+            &lib,
+        );
+        assert_eq!(compiled.prompt, "Write a descriptive message for auth.");
+    }
+
+    #[test]
+    fn builtin_commit_macro_has_typed_slots() {
+        let skills = builtin_skills();
+        let commit = skills.iter().find(|s| s.id == "commit-macro").unwrap();
+        let SkillPayload::Macro { slots, .. } = &commit.payload else {
+            panic!("expected macro payload");
+        };
+        let style = slots.iter().find(|s| s.id == "style").unwrap();
+        assert_eq!(style.kind, SlotKind::Select);
+        assert_eq!(
+            style.options,
+            vec!["conventional".to_string(), "descriptive".to_string()]
+        );
+        assert!(style.required);
+        let scope = slots.iter().find(|s| s.id == "scope").unwrap();
+        assert_eq!(scope.kind, SlotKind::Text);
+    }
+
+    #[test]
     fn mcp_to_acp_json_shape() {
         let server = McpServer {
             name: "fs".into(),
@@ -1059,5 +1574,39 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(legacy.transport, McpTransport::Http { .. }));
+    }
+
+    #[test]
+    fn propose_macro_slots_extracts_quotes_paths_and_code_spans() {
+        let (template, slots) = propose_macro_slots(
+            r#"Refactor `parse_input` in src/lib/parser.rs and rename "old name" to "new name"."#,
+        );
+        assert_eq!(
+            template,
+            "Refactor `{{slot-1}}` in {{slot-2}} and rename \"{{slot-3}}\" to \"{{slot-4}}\"."
+        );
+        assert_eq!(slots.len(), 4);
+        assert_eq!(slots[0].kind, SlotKind::Text);
+        assert_eq!(slots[0].default.as_deref(), Some("parse_input"));
+        assert_eq!(slots[1].kind, SlotKind::File);
+        assert_eq!(slots[1].default.as_deref(), Some("src/lib/parser.rs"));
+        assert_eq!(slots[1].label, "src/lib/parser.rs");
+        assert_eq!(slots[3].id, "slot-4");
+    }
+
+    #[test]
+    fn propose_macro_slots_dedupes_and_caps_at_six() {
+        let (template, slots) = propose_macro_slots(r#""a" "b" "c" "d" "e" "f" "g" "a""#);
+        assert_eq!(slots.len(), 6, "seventh distinct value stays verbatim");
+        assert!(template.ends_with(r#""g" "{{slot-1}}""#), "template was {template}");
+        assert_eq!(template.matches("{{slot-1}}").count(), 2);
+    }
+
+    #[test]
+    fn propose_macro_slots_leaves_prose_alone() {
+        let text = "Don't touch anything here; it's plain prose with a trailing URL https://a.b/c.html";
+        let (template, slots) = propose_macro_slots(text);
+        assert_eq!(template, text);
+        assert!(slots.is_empty(), "apostrophes and URLs are not slot candidates");
     }
 }

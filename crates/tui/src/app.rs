@@ -478,6 +478,14 @@ impl App {
                     self.status = format!("worktree discarded: {worktree_path}");
                 }
             }
+            // Scene hook/exit/cost projections (R8) are rendered by the desktop; the TUI keeps
+            // the match exhaustive and stays quiet until it grows a banner surface.
+            Event::TestSignal { .. }
+            | Event::ArtifactProduced { .. }
+            | Event::ExitCriteriaMet { .. }
+            | Event::HookSuggestion { .. }
+            | Event::HookTurnStarted { .. }
+            | Event::SessionCost { .. } => {}
             Event::Error {
                 session,
                 message,
@@ -1317,6 +1325,8 @@ fn summarize(doc: &[DocBlock]) -> String {
                 }
             ),
             DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
+            DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
+            DocBlock::Issue { source, id, .. } => format!("[issue:{source}#{id}]"),
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -1942,6 +1952,7 @@ mod tests {
             kind: PendingInputKind::Permission,
             title: format!("permission {id}"),
             options: vec![("allow".into(), "Allow".into())],
+            option_kinds: Default::default(),
             context: Default::default(),
             sequence,
         }

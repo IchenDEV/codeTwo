@@ -1,6 +1,6 @@
 import * as React from "react"
+import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
@@ -22,6 +22,8 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        compact: "h-(--ds-control-normal) gap-1.5 px-3 has-[>svg]:px-2.5",
+        field: "h-(--ds-control-field) gap-1.5 px-3 has-[>svg]:px-2.5",
         xs: "h-6 gap-1 rounded-md px-2 text-hint has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
@@ -38,22 +40,12 @@ const buttonVariants = cva(
   }
 )
 
-/**
- * Ref-forwarding is load-bearing here, not boilerplate: shadcn's current source targets React 19,
- * where a function component receives `ref` as a prop, and this app is on React 18. Without the
- * forwardRef, every `<TooltipTrigger asChild><Button/></TooltipTrigger>` and
- * `<PopoverTrigger asChild><Button/></PopoverTrigger>` hands Radix a null anchor — the content
- * mounts but is never positioned, so it sits off-screen at `translate(0, -200%)` and no tooltip or
- * popover ever appears. Drop this and the app loses every keyboard hint in silence.
- */
 const Button = React.forwardRef<
   HTMLButtonElement,
-  React.ComponentProps<"button"> & VariantProps<typeof buttonVariants> & { asChild?: boolean }
->(({ className, variant = "default", size = "default", asChild = false, ...props }, ref) => {
-  const Comp = asChild ? Slot.Root : "button"
-
+  ButtonPrimitive.Props & VariantProps<typeof buttonVariants>
+>(({ className, variant = "default", size = "default", ...props }, ref) => {
   return (
-    <Comp
+    <ButtonPrimitive
       ref={ref}
       data-slot="button"
       data-variant={variant}

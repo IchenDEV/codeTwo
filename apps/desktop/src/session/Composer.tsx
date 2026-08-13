@@ -1,10 +1,9 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
   FileText,
-  Gauge,
   GitBranch,
   ListChecks,
   Lock,
@@ -18,25 +17,27 @@ import {
   Square,
   Store,
   Ticket,
+  TriangleAlert,
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
+import type { SceneInfo } from "./scene";
+import { briefOfferVisible } from "../editor/slotCard";
+import { SceneChip } from "./SceneChip";
 import { SESSION_MODES, sessionMode } from "./mode";
 import { worktreeGatingReason } from "./sessionEvents";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
 import type { ConfigOptionInfo, ModelChoice } from "../bridge";
-import {
-  describeContextWindow,
-  formatExactContextTokens,
-  formatContextWindowPercentage,
-  type ContextWindow,
-} from "./contextWindow";
+import type { ContextWindow } from "./contextWindow";
+// Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
+import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuShortcut,
   DropdownMenuTrigger,
@@ -73,6 +74,8 @@ interface ComposerProps {
   currentModel: string | null;
   /** The current session's authoritative provider context usage/capacity, if reported. */
   contextWindow: ContextWindow | null;
+  /** Per-session cost/burn for the statusline; null until the core's usage command exists. */
+  usage?: StatuslineUsage | null;
   /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
   defaultModel: string | null;
   onModel: (id: string) => void;
@@ -93,16 +96,22 @@ interface ComposerProps {
   canvasEnabled: boolean;
   onInsertCanvas: () => void;
   onVoiceText: (text: string) => void;
+  /** R11: present only when the active scene has a brief — voice then structures into it. */
+  onVoiceTranscript?: (full: string) => Promise<void>;
   runHint: string;
   skillHint: string;
   filesHint: string;
+  /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
+  sessionId?: string | null;
+  /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
+  insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
 }
 
 /**
  * A status chip in the control row — reads as text, behaves as a button. Forwards its ref so it can
  * be a Radix popover trigger.
  */
-const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
+export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { tone?: "warning" }>(
   ({ children, tone, className, ...props }, ref) => (
     <button
       ref={ref}
@@ -136,7 +145,7 @@ function DefaultBadge() {
 }
 
 /** One selectable row of a picker menu: the current choice sits on a filled background. */
-function MenuRow({
+export function MenuRow({
   selected,
   isDefault,
   label,
@@ -144,6 +153,7 @@ function MenuRow({
   leading,
   onClick,
   disabled = false,
+  detailWrap = false,
 }: {
   selected: boolean;
   isDefault: boolean;
@@ -153,13 +163,16 @@ function MenuRow({
   leading?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** Scene summaries need enough room to explain the posture instead of ending in an ellipsis. */
+  detailWrap?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
+        "flex w-full gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
+        detailWrap ? "items-start" : "items-center",
         selected ? "bg-accent" : "hover:bg-accent/50",
         disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
       )}
@@ -167,7 +180,16 @@ function MenuRow({
       {leading}
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
-        {detail && <span className="block truncate text-fine text-muted-foreground">{detail}</span>}
+        {detail && (
+          <span
+            className={cn(
+              "block text-fine text-muted-foreground",
+              detailWrap ? "whitespace-normal leading-relaxed" : "truncate",
+            )}
+          >
+            {detail}
+          </span>
+        )}
       </span>
       {isDefault && <DefaultBadge />}
     </button>
@@ -191,7 +213,7 @@ interface PickerRow {
  * isolation toggles — a settings dashboard behind every chip in the row, so clicking "Auto-edit"
  * asked you about four other things first. Each control row chip now opens only its own list.
  */
-function ModePicker({ config }: { config: SessionConfig }) {
+export function ModePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active = sessionMode(config.mode, config.sandbox);
@@ -202,12 +224,13 @@ function ModePicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           tone={active === "full_access" ? "warning" : undefined}
           title={t("config.mode")}
           disabled={config.modeChangeDisabled}
           aria-busy={config.modeChangeDisabled}
+          aria-label={`${t("config.mode")}: ${t(`mode.${active}` as "mode.ask")}`}
           className={cn(config.modeChangeDisabled && "cursor-wait opacity-60 hover:bg-transparent")}
         >
           {active === "full_access" ? (
@@ -215,11 +238,10 @@ function ModePicker({ config }: { config: SessionConfig }) {
           ) : (
             <Lock className="size-3 shrink-0" />
           )}
-          {/* Narrow, the lock alone carries the meaning — the label is spelt out in the menu. */}
-          <span className="hidden @lg/composer:inline">{t(`mode.${active}` as "mode.ask")}</span>
+          <span>{t(`mode.${active}` as "mode.ask")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.mode")}</MenuSection>
         {SESSION_MODES.map((m) => (
@@ -248,7 +270,7 @@ const MEMORY_PRESETS = [
   { id: "learn_only", read: "deny", write: "allow" },
 ] as const;
 
-function MemoryPicker({ config }: { config: SessionConfig }) {
+export function MemoryPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const active =
@@ -258,18 +280,16 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           title={t("config.memory")}
           aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}` as "memory.preset.standard")}`}
         >
           <BrainCircuit className="size-3.5 shrink-0" />
-          <span className="hidden @xl/composer:inline">
-            {t(`memory.preset.${active.id}` as "memory.preset.standard")}
-          </span>
+          <span>{t(`memory.preset.${active.id}` as "memory.preset.standard")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-72 p-1.5">
         <MenuSection>{t("config.memory")}</MenuSection>
         {MEMORY_PRESETS.map((preset) => (
@@ -293,7 +313,7 @@ function MemoryPicker({ config }: { config: SessionConfig }) {
 const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
 /** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
-function WorktreePicker({ config }: { config: SessionConfig }) {
+export function WorktreePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // No git repository, no picker: every baseline is unavailable, so the trigger greys out with
@@ -331,10 +351,11 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Chip
+      <PopoverTrigger
+        render={<Chip
           tone={selectedUnavailable && gatingReason === null ? "warning" : undefined}
           title={gatingReason ?? t("config.worktreeHint")}
+          aria-label={`${t("config.worktree")}: ${compactLabel}`}
           aria-expanded={open}
           disabled={gatingReason !== null}
           className={cn(
@@ -343,10 +364,10 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
           )}
         >
           <GitBranch className="size-3.5 shrink-0" />
-          <span className="hidden max-w-36 truncate @lg/composer:inline">{compactLabel}</span>
+          <span className="max-w-36 truncate">{compactLabel}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="center" side="top" className="w-80 p-1.5">
         <MenuSection>{t("config.worktree")}</MenuSection>
         {config.hasSession ? (
@@ -418,7 +439,7 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
   );
 }
 
-function ProviderPicker({ config }: { config: SessionConfig }) {
+export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -435,12 +456,12 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        {/* The provider also reads in the sidebar footer; squeezed, this chip is the detail to
-            shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
-            already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
-            send" hint (worth more to a first run than a name the sidebar already shows). */}
-        <Chip ref={triggerRef} title={t("config.provider")} className="hidden @3xl/composer:flex">
+      <PopoverTrigger
+        render={<Chip
+          ref={triggerRef}
+          title={t("config.provider")}
+          aria-label={`${t("config.provider")}: ${active?.display_name ?? config.provider}`}
+        >
           {active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}
@@ -448,8 +469,8 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
             {active?.display_name ?? config.provider}
           </span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>
-      </PopoverTrigger>
+        </Chip>}
+      />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.provider")}</MenuSection>
         {config.providers.map((p) => (
@@ -484,46 +505,6 @@ function ProviderPicker({ config }: { config: SessionConfig }) {
   );
 }
 
-function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
-  const t = useT();
-  const display = describeContextWindow(value);
-  if (!value || !display) return null;
-  const exact = t("composer.contextWindowExact", {
-    used: formatExactContextTokens(value.usedTokens),
-    capacity: formatExactContextTokens(value.contextWindow),
-    percentage: formatContextWindowPercentage(value),
-  });
-  const warning = display.percentage !== null && display.percentage >= 80;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          role="meter"
-          aria-valuemin={0}
-          aria-valuemax={value.contextWindow}
-          aria-valuenow={Math.min(value.usedTokens, value.contextWindow)}
-          aria-valuetext={exact}
-          aria-label={exact}
-          title={exact}
-          className={cn(
-            "flex shrink-0 items-center gap-1 px-0 py-1 text-hint @lg/composer:px-1.5",
-            warning ? "text-warning" : "text-muted-foreground",
-          )}
-        >
-          <Gauge className="hidden size-3.5 shrink-0 @lg/composer:inline" aria-hidden="true" />
-          <span className="hidden @lg/composer:inline" aria-hidden="true">
-            {display.compact}
-          </span>
-          <span className="@lg/composer:hidden" aria-hidden="true">
-            {display.capacity}
-          </span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{exact}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 /**
  * The model this turn will run on: a model chip, and an effort chip when the model comes in
  * reasoning variants.
@@ -545,7 +526,7 @@ function ContextWindowStatus({ value }: { value: ContextWindow | null }) {
  * config decides. Everything is hidden until a session exists, because before that there's nothing
  * to ask.
  */
-function ModelPicker({
+export function ModelPicker({
   models,
   current,
   defaultModel,
@@ -636,15 +617,15 @@ function ModelPicker({
   return (
     <>
       <Popover open={modelOpen} onOpenChange={setModelOpen}>
-        <PopoverTrigger asChild>
-          <Chip title={t("composer.model")}>
+        <PopoverTrigger
+          render={<Chip title={t("composer.model")}>
             <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
             <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
               {modelLabel}
             </span>
             <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>
-        </PopoverTrigger>
+          </Chip>}
+        />
         <PopoverContent align="start" side="top" className="w-64 p-1.5">
           {modelRows.length === 0 ? (
             <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
@@ -676,12 +657,12 @@ function ModelPicker({
       {/* Only worth a chip when there's an actual choice to make. */}
       {effortRows.length > 1 && (
         <Popover open={effortOpen} onOpenChange={setEffortOpen}>
-          <PopoverTrigger asChild>
-            <Chip title={t("composer.reasoning")}>
+          <PopoverTrigger
+            render={<Chip title={t("composer.reasoning")}>
               <span>{effortLabel}</span>
               <ChevronDown className="size-3 shrink-0 opacity-50" />
-            </Chip>
-          </PopoverTrigger>
+            </Chip>}
+          />
           <PopoverContent align="start" side="top" className="w-44 p-1.5">
             <MenuSection>{t("composer.reasoning")}</MenuSection>
             {effortRows.map((r) => (
@@ -727,6 +708,7 @@ export function Composer({
   currentModel,
   defaultModel,
   contextWindow,
+  usage = null,
   onModel,
   configOptions,
   onConfigOption,
@@ -743,11 +725,48 @@ export function Composer({
   canvasEnabled,
   onInsertCanvas,
   onVoiceText,
+  onVoiceTranscript,
   runHint,
   skillHint,
   filesHint,
+  sessionId,
+  insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+
+  // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
+  // Dismissal is remembered per session for the Composer's lifetime — a dismissed offer must not
+  // come back on every keystroke-then-clear, but a new session gets a fresh offer.
+  const briefDismissedRef = useRef(new Set<string>());
+  const [, bumpBriefDismissals] = useState(0);
+  const sessionKey = sessionId ?? "draft";
+  const activeBrief = config.activeScene?.brief ?? null;
+  const insertBrief = () => {
+    const scene = config.activeScene;
+    if (scene?.brief) insertBriefRef?.current?.(scene);
+  };
+  const dismissBrief = () => {
+    briefDismissedRef.current.add(sessionKey);
+    bumpBriefDismissals((n) => n + 1);
+  };
+  const showBriefOffer = briefOfferVisible({
+    docMode,
+    docEmpty,
+    hasBrief: activeBrief !== null,
+    dismissed: briefDismissedRef.current.has(sessionKey),
+  });
+
+  // Required slot-card fields still empty — published by the editor on document change (same
+  // window-event seam as `codetwo-open-provider-picker`). A warning near Run, never a block.
+  const [unfilledRequired, setUnfilledRequired] = useState<string[]>([]);
+  useEffect(() => {
+    const onRequiredSlots = (event: Event) => {
+      const detail = (event as CustomEvent<string[]>).detail;
+      setUnfilledRequired(Array.isArray(detail) ? detail : []);
+    };
+    window.addEventListener("codetwo-required-slots", onRequiredSlots);
+    return () => window.removeEventListener("codetwo-required-slots", onRequiredSlots);
+  }, []);
   // Leave room for at least a few transcript lines, whatever the window size — including when a
   // height saved on a tall window is restored on a short one. Only the applied height is clamped;
   // the saved preference comes back in full once there's room again.
@@ -787,88 +806,78 @@ export function Composer({
   const controls = (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
             <Plus className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
+          </Button>}
+        />
         <DropdownMenuContent align="start" side="top" className="w-60">
-          <DropdownMenuItem onSelect={onAttachFile}>
-            <FileText />
-            {t("composer.mentionFile")}
-            {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onInsertSkill}>
-            <Sparkles />
-            {t("composer.insertSkill")}
-            {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
-          </DropdownMenuItem>
-          {canvasEnabled && (
-            <DropdownMenuItem onSelect={onInsertCanvas}>
-              <PenLine />
-              {t("composer.insertCanvas")}
+          <DropdownMenuGroup>
+            <DropdownMenuItem onClick={onAttachFile}>
+              <FileText />
+              {t("composer.mentionFile")}
+              {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onSelect={onInsertIssue}>
-            <Ticket />
-            {t("composer.pullIssue")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenMarket}>
-            <Store />
-            {t("composer.market")}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onNewSkill}>
-            <Sparkles />
-            {t("composer.newSkill")}
-          </DropdownMenuItem>
+            <DropdownMenuItem onClick={onInsertSkill}>
+              <Sparkles />
+              {t("composer.insertSkill")}
+              {skillHint && <DropdownMenuShortcut>{skillHint}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            {canvasEnabled && (
+              <DropdownMenuItem onClick={onInsertCanvas}>
+                <PenLine />
+                {t("composer.insertCanvas")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={onInsertIssue}>
+              <Ticket />
+              {t("composer.pullIssue")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onOpenMarket}>
+              <Store />
+              {t("composer.market")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onNewSkill}>
+              <Sparkles />
+              {t("composer.newSkill")}
+            </DropdownMenuItem>
+            {/* With content already in the document the floating offer stays away; the brief is
+                still one menu entry away while a scene with one is active. */}
+            {activeBrief && !docEmpty && (
+              <DropdownMenuItem onClick={insertBrief}>
+                <ListChecks />
+                {t("brief.menuInsert")}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
           <p className="px-2 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
             {t("composer.addHint")}
           </p>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Provider, model, effort, then access — cause before effect: the provider decides which
-          models exist, the model decides which efforts exist, and access frames the run. Each
-          chip opens only itself. */}
-      <ProviderPicker config={config} />
-
-      <ModelPicker
+      {/* One scene chip replaces the posture row (docs/scenes.md §UI contract): the scene sets
+          provider/model/permissions/memory/plan-first/worktree, and opening the chip still
+          exposes each picker unchanged for manual overrides. */}
+      <SceneChip
+        config={config}
         models={models}
-        current={currentModel}
+        currentModel={currentModel}
         defaultModel={defaultModel}
-        provider={config.provider}
         onModel={onModel}
         configOptions={configOptions}
         onConfigOption={onConfigOption}
-        hasSession={config.hasSession}
       />
 
-      <ContextWindowStatus value={contextWindow} />
-
-      <ModePicker config={config} />
-
-      <MemoryPicker config={config} />
-
-      {/* A boolean needs no view to choose from: the chip *is* the control. */}
-      <Chip
-        title={t("config.planFirstHint")}
-        aria-pressed={config.planMode}
-        className={cn(config.planMode && "text-primary hover:text-primary")}
-        onClick={() => config.onPlan(!config.planMode)}
-      >
-        <ListChecks className="size-3.5 shrink-0" />
-        <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
-      </Chip>
-
-      <WorktreePicker config={config} />
+      <Statusline contextWindow={contextWindow} usage={usage ?? null} />
 
       <div className="flex-1" />
 
       {/* Document mode is the app's own feature — it deserves a control you can see, not just a
           chord and a grip gesture. */}
       <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
+        <TooltipTrigger
+          render={<Button
             variant="ghost"
             size="icon"
             className="size-7 shrink-0 text-muted-foreground"
@@ -876,12 +885,29 @@ export function Composer({
             onClick={() => onDocMode(!docMode)}
           >
             {docMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-          </Button>
-        </TooltipTrigger>
+          </Button>}
+        />
         <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
       </Tooltip>
 
-      <VoiceButton onText={onVoiceText} />
+      <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
+
+      {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
+      {unfilledRequired.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger
+            render={<Chip tone="warning" aria-label={t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}>
+              <TriangleAlert className="size-3.5 shrink-0" />
+              <span className="hidden @lg/composer:inline">
+                {t("slotCard.requiredShort", { count: unfilledRequired.length })}
+              </span>
+            </Chip>}
+          />
+          <TooltipContent>
+            {t("slotCard.requiredWarning", { slots: unfilledRequired.join(", ") })}
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
@@ -893,8 +919,8 @@ export function Composer({
 
       {running ? (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
+          <TooltipTrigger
+            render={<Button
               variant="destructive"
               size="icon"
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
@@ -902,15 +928,16 @@ export function Composer({
               aria-label={t("composer.stop")}
             >
               <Square className="size-3.5 fill-current" />
-            </Button>
-          </TooltipTrigger>
+            </Button>}
+          />
           <TooltipContent>{t("composer.stop")}</TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
-                focuses the document and says what's missing. */}
+          {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
+              focuses the document and says what's missing. */}
+          <TooltipTrigger
+            render={
             <Button
               size="icon"
               variant={docEmpty ? "secondary" : "default"}
@@ -921,7 +948,8 @@ export function Composer({
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
             </Button>
-          </TooltipTrigger>
+            }
+          />
           <TooltipContent>
             {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
@@ -986,6 +1014,27 @@ export function Composer({
           >
             {children}
           </div>
+
+          {/* R5: an empty page in an active scene with a brief offers to start from it. A
+              positioned overlay inside the same tree (see the reconciliation note above) — it
+              never auto-inserts, and dismissing it keeps it away for this session. Only rendered
+              in doc mode, where the card is `relative`. */}
+          {showBriefOffer && config.activeScene && (
+            <div className="pointer-events-none absolute inset-x-0 top-8 z-20 px-6">
+              <div className="glass-raised canvas-ui-module pointer-events-auto mx-auto flex w-max max-w-full items-center gap-2 border px-3 py-2 shadow-raised">
+                <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate text-ui text-muted-foreground">
+                  {t("brief.offer", { scene: config.activeScene.title })}
+                </span>
+                <Button size="sm" className="shrink-0" onClick={insertBrief}>
+                  {t("brief.insert")}
+                </Button>
+                <Button size="sm" variant="ghost" className="shrink-0" onClick={dismissBrief}>
+                  {t("brief.dismiss")}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside

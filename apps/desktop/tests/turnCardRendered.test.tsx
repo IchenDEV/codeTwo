@@ -106,4 +106,23 @@ describe("TurnCard rendered activity", () => {
     expect(rendered.container.textContent).toContain("sites");
     rendered.unmount();
   });
+
+  test("shows the prompt-row turn menu only when onSaveTemplate is wired", () => {
+    activateDom();
+    disableCanvasDrawing();
+    // A leaked key-echo i18n mock can render the trigger label as its raw key; accept both.
+    const MENU_LABELS = ["Turn actions", "templateFrom.menu"];
+    const trigger = (rendered) =>
+      [...rendered.container.querySelectorAll("button")].find((el) =>
+        MENU_LABELS.includes(el.getAttribute("aria-label")),
+      );
+
+    const without = mount(<TurnCard turn={runningTurn()} />);
+    expect(trigger(without)).toBeUndefined();
+    without.unmount();
+
+    const withMenu = mount(<TurnCard turn={runningTurn()} onSaveTemplate={() => {}} />);
+    expect(trigger(withMenu)).toBeTruthy();
+    withMenu.unmount();
+  });
 });

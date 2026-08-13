@@ -8,7 +8,7 @@
 //! Both frontends use this identically: the Tauri bridge forwards `Op`s and streams `Event`s over a
 //! channel; the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -78,10 +78,13 @@ impl PermissionRouter {
         session: &str,
         title: String,
         options: Vec<(String, String)>,
+        option_kinds: BTreeMap<String, String>,
         context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
         match &self.tracker {
-            Some(tracker) => tracker.park_permission(session, title, options, context),
+            Some(tracker) => {
+                tracker.park_permission(session, title, options, option_kinds, context)
+            }
             None => {
                 let request_id = uuid::Uuid::new_v4().to_string();
                 let receiver = self.park(request_id.clone());
@@ -199,6 +202,11 @@ struct ToolContext {
     title: String,
     kind: Option<String>,
     source: ToolSource,
+    /// Set at the initial ToolCall when [`crate::testsignal::classify_test_command`] recognizes a
+    /// test run; carried through updates so the terminal status can emit [`Event::TestSignal`].
+    test_command: Option<String>,
+    /// One signal per tool call: set when the terminal outcome has been emitted.
+    test_signaled: bool,
 }
 
 fn bounded_string(value: Option<&Value>, key: &str) -> Option<String> {
@@ -250,6 +258,25 @@ fn is_mcp_elicitation(req: &RequestPermissionRequest) -> bool {
         .and_then(|meta| meta.get("is_mcp_tool_approval"))
         .and_then(Value::as_bool)
         .unwrap_or(false)
+}
+
+/// The app-owned Auto Scene selector is a brokered capability, not an arbitrary third-party MCP
+/// mutation. Let the initial tool invocation reach that broker without a redundant generic MCP
+/// prompt: the broker authenticates the per-session key, rejects calls unless Auto Scene is on,
+/// and emits a separate elicitation when the selected scene would loosen permissions.
+///
+/// A broker-generated escalation carries explanatory content, so it deliberately does not match
+/// this exemption even if the provider reuses the same MCP tool title.
+fn is_internal_scene_selection(
+    req: &RequestPermissionRequest,
+    tool: &ToolContext,
+    title: &str,
+) -> bool {
+    is_mcp_elicitation(req)
+        && tool.source.server.as_deref() == Some("codetwo_scenes")
+        && tool.source.tool.as_deref() == Some("scene_select")
+        && title.eq_ignore_ascii_case("mcp.codetwo_scenes.scene_select")
+        && elicitation_message(&req.tool_call).is_none()
 }
 
 fn elicitation_message(tool_call: &Value) -> Option<String> {
@@ -505,6 +532,71 @@ fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
     }
 }
 
+fn auto_scene_routing_instructions(
+    scenes: &crate::scene::SceneLibrary,
+    current: Option<&str>,
+) -> String {
+    let current = current
+        .and_then(|reference| scenes.resolve(reference))
+        .map(|entry| {
+            format!(
+                "`{}` ({})",
+                crate::scene::SceneLibrary::reference_for(entry),
+                entry.scene.title
+            )
+        })
+        .unwrap_or_else(|| "none".into());
+    let mut catalog = String::new();
+    for entry in scenes.scenes().iter().take(50) {
+        let description = entry
+            .scene
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let description: String = description.chars().take(240).collect();
+        catalog.push_str(&format!(
+            "- `{}` — {}: {}\n",
+            crate::scene::SceneLibrary::reference_for(entry),
+            entry.scene.title,
+            description
+        ));
+    }
+    format!(
+        "[CodeTwo Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
+    )
+}
+
+fn with_auto_scene_routing(prompt: String, instructions: Option<String>) -> String {
+    match instructions {
+        Some(instructions) => format!("{instructions}\n\n{prompt}"),
+        None => prompt,
+    }
+}
+
+/// Decode the adapter-owned idempotency key carried through the existing `NewSession` request id.
+/// JSON keeps arbitrary T3 thread/command identifiers unambiguous without widening the public Op.
+fn t3_session_create_receipt(request_id: Option<&str>) -> Option<(String, String)> {
+    let encoded = request_id?.strip_prefix("t3-create:")?;
+    let (command_id, public_thread_id): (String, String) = serde_json::from_str(encoded).ok()?;
+    if command_id.trim().is_empty() || public_thread_id.trim().is_empty() {
+        return None;
+    }
+    Some((command_id, public_thread_id))
+}
+
+fn t3_prompt_receipt(request_id: Option<&str>) -> Option<(String, Option<String>)> {
+    let encoded = request_id?.strip_prefix("t3-command:")?;
+    if let Ok((command_id, message_id)) = serde_json::from_str::<(String, String)>(encoded) {
+        if !command_id.trim().is_empty() && !message_id.trim().is_empty() {
+            return Some((command_id, Some(message_id)));
+        }
+        return None;
+    }
+    // Accept the pre-message-id encoding for in-flight migrations and non-T3 test callers.
+    (!encoded.trim().is_empty()).then(|| (encoded.to_string(), None))
+}
+
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
     options
         .iter()
@@ -757,12 +849,22 @@ mod usage_update_tests {
             })
             .await;
 
+        // The legacy rolling projection precedes the authoritative context-window figure.
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::Usage {
+                session,
+                input_tokens: 53_000,
+                output_tokens: 0,
+            }) if session == "session-1"
+        ));
         assert!(matches!(
             received.recv().await,
             Some(Event::ContextWindow {
                 session,
                 used_tokens: 53_000,
                 context_window: 200_000,
+                cost_usd: None,
             }) if session == "session-1"
         ));
 
@@ -828,11 +930,20 @@ impl ClientHandler for SessionHandler {
                 let title = tc.title.unwrap_or_default();
                 let status = tc.status.unwrap_or_else(|| "pending".into());
                 let source = tool_source(&title, tc.raw_input.as_ref());
+                // Classified against the raw ACP kind (only execute/None may signal), before the
+                // rich-kind projection rewrites it for the UI.
+                let test_command = crate::testsignal::classify_test_command(
+                    provider_kind.as_deref(),
+                    &title,
+                    tc.raw_input.as_ref(),
+                );
                 let tool_kind = rich_tool_kind(provider_kind, &source, &title);
                 let context = ToolContext {
                     title: title.clone(),
                     kind: tool_kind.clone(),
                     source,
+                    test_command,
+                    test_signaled: false,
                 };
                 self.remember_tool(&tc.tool_call_id, context.clone());
                 let normalized = self.normalizer.normalize(
@@ -884,6 +995,9 @@ impl ClientHandler for SessionHandler {
                         title: title.clone(),
                         kind: kind.clone(),
                         source: source.clone(),
+                        // The initial ToolCall owns classification; updates only carry it through.
+                        test_command: previous.test_command.clone(),
+                        test_signaled: previous.test_signaled,
                     },
                 );
                 let normalized = self.normalizer.normalize(
@@ -937,15 +1051,27 @@ impl ClientHandler for SessionHandler {
                 None,
                 Vec::new(),
             ),
-            SessionUpdate::UsageUpdate { used, size, .. } => (
-                Some(Event::ContextWindow {
-                    session,
-                    used_tokens: used,
-                    context_window: size,
-                }),
-                None,
-                Vec::new(),
-            ),
+            SessionUpdate::UsageUpdate { used, size, cost } => {
+                // The legacy rolling-usage projection for cost tracking. ACP reports one context
+                // figure, not an input/output split, so the whole count rides `input_tokens`.
+                self.emit(Event::Usage {
+                    session: session.clone(),
+                    input_tokens: used,
+                    output_tokens: 0,
+                });
+                (
+                    Some(Event::ContextWindow {
+                        session,
+                        used_tokens: used,
+                        context_window: size,
+                        // Only a plainly numeric cost is forwarded; structured provider cost
+                        // objects stay out of the context-window contract.
+                        cost_usd: cost.as_ref().and_then(Value::as_f64),
+                    }),
+                    None,
+                    Vec::new(),
+                )
+            }
             // Our own echoed input and any image/resource chunks aren't rendered/persisted here.
             _ => (None, None, Vec::new()),
         };
@@ -955,6 +1081,34 @@ impl ClientHandler for SessionHandler {
         let transcript_seq = part
             .as_ref()
             .and_then(|part| self.persist(Role::Agent, part));
+        // Terminal outcome of a classified test run — once per tool call, decided by the pure
+        // heuristic ([`crate::testsignal`]); never inferred from stderr or non-terminal states.
+        let test_signal = match &event {
+            Some(Event::ToolCall {
+                id,
+                status,
+                outputs,
+                ..
+            }) if status == "completed" || status == "failed" => {
+                let mut contexts = self.tool_contexts.lock().unwrap();
+                match contexts.get_mut(id) {
+                    Some(context) if context.test_command.is_some() && !context.test_signaled => {
+                        crate::testsignal::test_outcome(status, outputs).map(|outcome| {
+                            context.test_signaled = true;
+                            Event::TestSignal {
+                                session: self.session_id.clone(),
+                                tool_call_id: id.clone(),
+                                command: context.test_command.clone().unwrap_or_default(),
+                                passed: outcome.passed,
+                                exit_code: outcome.exit_code,
+                            }
+                        })
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
         if let Some(mut event) = event {
             match &mut event {
                 Event::AgentText {
@@ -976,6 +1130,9 @@ impl ClientHandler for SessionHandler {
                 _ => {}
             }
             self.emit(event);
+        }
+        if let Some(signal) = test_signal {
+            self.emit(signal);
         }
         for warning in warnings {
             self.emit(Event::Error {
@@ -1017,7 +1174,9 @@ impl ClientHandler for SessionHandler {
 
         let context = permission_context(&req, &tool, &title);
 
-        let action = if context.kind == PermissionContextKind::Acp {
+        let action = if is_internal_scene_selection(&req, &tool, &title) {
+            Action::Allow
+        } else if context.kind == PermissionContextKind::Acp {
             self.policy.lock().unwrap().decide(kind, &title)
         } else {
             // MCP elicitation, site access, sensitive browser actions, and Computer Use app
@@ -1034,10 +1193,16 @@ impl ClientHandler for SessionHandler {
                     .iter()
                     .map(|o| (o.option_id.clone(), o.name.clone()))
                     .collect::<Vec<_>>();
+                let option_kinds = req
+                    .options
+                    .iter()
+                    .map(|option| (option.option_id.clone(), option.kind.clone()))
+                    .collect::<BTreeMap<_, _>>();
                 let Some((request_id, rx)) = self.router.park_permission(
                     &self.session_id,
                     title.clone(),
                     options.clone(),
+                    option_kinds,
                     context.clone(),
                 ) else {
                     return RequestPermissionResponse {
@@ -1093,6 +1258,11 @@ struct EngineState {
     /// Shared + mutable so the library-management UI can add/remove skills that the picker and the
     /// prompt compiler see immediately.
     skills: Arc<Mutex<SkillLibrary>>,
+    /// Resolved scene library for prompt-preamble injection ([`Engine::set_scenes`], mirroring
+    /// skills). Empty until a frontend supplies one; every lookup degrades to "no scene".
+    scenes: Mutex<Arc<crate::scene::SceneLibrary>>,
+    /// Scene-artifact capture layer for the TurnEnded auto-capture glue; `None` without a store.
+    scene_artifacts: Mutex<Option<crate::scene_artifact::SceneArtifactStore>>,
     events: mpsc::UnboundedSender<Event>,
     sessions: Mutex<HashMap<SessionId, SessionRuntime>>,
     activity: ActivityTracker,
@@ -1113,13 +1283,13 @@ pub struct DesktopMcpConfig {
 }
 
 impl DesktopMcpConfig {
-    fn server_for_session(&self, session: &str) -> McpServer {
+    fn server_for_session(&self, session: &str, name: &str, surface: &str) -> McpServer {
         let session_key =
             blake3::hash(format!("codetwo-browser\0{}\0{session}", self.master_key).as_bytes())
                 .to_hex()
                 .to_string();
         McpServer {
-            name: "codetwo_browser".into(),
+            name: name.into(),
             cwd: None,
             transport: McpTransport::Stdio {
                 command: self.command.clone(),
@@ -1128,9 +1298,18 @@ impl DesktopMcpConfig {
                     ("CODETWO_BROWSER_SOCKET".into(), self.socket_path.clone()),
                     ("CODETWO_BROWSER_SESSION".into(), session.to_string()),
                     ("CODETWO_BROWSER_SESSION_KEY".into(), session_key),
+                    ("CODETWO_DESKTOP_MCP_SURFACE".into(), surface.into()),
                 ],
             },
         }
+    }
+
+    fn browser_server_for_session(&self, session: &str) -> McpServer {
+        self.server_for_session(session, "codetwo_browser", "browser")
+    }
+
+    fn scene_server_for_session(&self, session: &str) -> McpServer {
+        self.server_for_session(session, "codetwo_scenes", "scenes")
     }
 }
 
@@ -1212,6 +1391,8 @@ impl Engine {
         let state = Arc::new(EngineState {
             providers,
             skills: Arc::new(Mutex::new(skills)),
+            scenes: Mutex::new(Arc::new(crate::scene::SceneLibrary::default())),
+            scene_artifacts: Mutex::new(None),
             events,
             sessions: Mutex::new(HashMap::new()),
             activity,
@@ -1225,6 +1406,19 @@ impl Engine {
 
     pub fn router(&self) -> &PermissionRouter {
         &self.state.router
+    }
+
+    /// Atomically resolve one pending permission. Protocol adapters use the boolean result as the
+    /// business acknowledgement; a stale/duplicate answer must not be reported as accepted.
+    pub fn answer_permission(
+        &self,
+        session: &str,
+        request_id: &str,
+        option_id: Option<&str>,
+    ) -> bool {
+        self.state
+            .router
+            .answer_for_session(session, request_id, option_id)
     }
 
     /// The shared skill library (for the picker / management UI).
@@ -1242,6 +1436,17 @@ impl Engine {
     /// Replace the skill library (after add/remove on disk).
     pub fn set_skills(&self, library: SkillLibrary) {
         *self.state.skills.lock().unwrap() = library;
+    }
+
+    /// Replace the resolved scene library (mirroring [`Engine::set_skills`]; the desktop's
+    /// `reload_scenes` calls both). Prompts compiled afterwards see the new definitions.
+    pub fn set_scenes(&self, library: Arc<crate::scene::SceneLibrary>) {
+        *self.state.scenes.lock().unwrap() = library;
+    }
+
+    /// Attach the scene-artifact capture layer (desktop wiring; mirrors store wiring).
+    pub fn set_scene_artifacts(&self, artifacts: crate::scene_artifact::SceneArtifactStore) {
+        *self.state.scene_artifacts.lock().unwrap() = Some(artifacts);
     }
 
     fn session_for_checkout_validation(&self, id: &str) -> Result<Option<Session>, String> {
@@ -1998,6 +2203,65 @@ impl Engine {
                 request_id,
                 initial_policy,
             } => {
+                let creation_receipt = t3_session_create_receipt(request_id.as_deref());
+                if let (Some(store), Some((command_id, public_thread_id))) =
+                    (&self.state.store, creation_receipt.as_ref())
+                {
+                    match store.command_receipt("t3-create", command_id) {
+                        Ok(Some((session_id, subject_id, _)))
+                            if subject_id.as_deref() == Some(public_thread_id.as_str()) =>
+                        {
+                            match store.get_session(&session_id) {
+                                Ok(Some(existing)) => {
+                                    self.emit(Event::SessionCreated {
+                                        session: existing.id,
+                                        cwd: existing.cwd,
+                                        project_path: existing.project_path,
+                                        worktree_path: existing.worktree_path,
+                                        worktree_baseline: existing.worktree_baseline,
+                                        request_id,
+                                    });
+                                }
+                                Ok(None) => self.emit(Event::Error {
+                                    session: None,
+                                    message: "T3 session receipt points to a missing session".into(),
+                                    terminal: true,
+                                    request_id,
+                                }),
+                                Err(error) => self.emit(Event::Error {
+                                    session: None,
+                                    message: format!(
+                                        "couldn't load the session recorded for the T3 command: {error}"
+                                    ),
+                                    terminal: true,
+                                    request_id,
+                                }),
+                            }
+                            return Ok(());
+                        }
+                        Ok(Some(_)) => {
+                            self.emit(Event::Error {
+                                session: None,
+                                message: "T3 command id was already used for another thread".into(),
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            self.emit(Event::Error {
+                                session: None,
+                                message: format!(
+                                    "couldn't check the durable T3 session receipt: {error}"
+                                ),
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                    }
+                }
                 let Some(prov) = self
                     .state
                     .providers
@@ -2084,7 +2348,17 @@ impl Engine {
                 }
 
                 if let Some(store) = &self.state.store {
-                    if let Err(e) = store.upsert_session(&sess) {
+                    let persisted = match creation_receipt.as_ref() {
+                        Some((command_id, public_thread_id)) => store
+                            .upsert_session_with_command_receipt(
+                                "t3-create",
+                                command_id,
+                                public_thread_id,
+                                &sess,
+                            ),
+                        None => store.upsert_session(&sess),
+                    };
+                    if let Err(e) = persisted {
                         let mut message = format!("couldn't persist new session: {e}");
                         if let (Some((repo, worktree)), Some(baseline)) =
                             (prepared_worktree.as_ref(), sess.worktree_baseline.as_ref())
@@ -2263,14 +2537,31 @@ impl Engine {
 
                 // Acceptance is one transaction when persistence is configured: the canonical
                 // prompt and Running activity either both commit or neither does.
-                let transcript_seq = if let Some(store) = &self.state.store {
-                    match store.append_prompt_and_activity(
-                        &session,
-                        &prompt_part,
-                        expected_activity_revision,
-                        &running_activity,
-                    ) {
-                        Ok(seq) => Some(seq),
+                let (transcript_seq, replayed) = if let Some(store) = &self.state.store {
+                    let persisted = if let Some((command_id, message_id)) =
+                        t3_prompt_receipt(request_id.as_deref())
+                    {
+                        store.append_prompt_activity_and_receipt(
+                            "t3-prompt",
+                            &command_id,
+                            message_id.as_deref(),
+                            &session,
+                            &prompt_part,
+                            expected_activity_revision,
+                            &running_activity,
+                        )
+                    } else {
+                        store
+                            .append_prompt_and_activity(
+                                &session,
+                                &prompt_part,
+                                expected_activity_revision,
+                                &running_activity,
+                            )
+                            .map(|seq| (seq, false))
+                    };
+                    match persisted {
+                        Ok((seq, replayed)) => (Some(seq), replayed),
                         Err(error) => {
                             drop(turn_lease);
                             self.emit(Event::Error {
@@ -2283,8 +2574,15 @@ impl Engine {
                         }
                     }
                 } else {
-                    None
+                    (None, false)
                 };
+                if replayed {
+                    drop(turn_lease);
+                    // The original accepted turn may already be finished. Reusing TurnStarted for
+                    // a durable receipt replay would fabricate a running turn in every frontend;
+                    // the protocol adapter verifies the receipt directly after submit instead.
+                    return Ok(());
+                }
                 let activity_was_persisted = self.state.store.is_some();
                 if !turn_lease.commit_running(running_activity, activity_was_persisted) {
                     self.emit(Event::Error {
@@ -2349,6 +2647,60 @@ impl Engine {
                         )
                     }
                 };
+                // Scene preamble (R8): guardrails, inline fragments, artifact-capture and clarify
+                // instructions of the session's persisted active scene, injected AFTER project
+                // rules and BEFORE the user's document. An unresolvable reference degrades to no
+                // preamble — never an error.
+                let scene_preamble = self.state.store.as_ref().and_then(|store| {
+                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    let entry = scenes.resolve(&scene_ref)?;
+                    // R9: a stage-bound session compiles its stage's `carry` list against the
+                    // newest stored versions on every prompt — the artifact store, not session
+                    // memory, is the inter-stage contract. Unbound sessions carry nothing.
+                    let carried: Vec<crate::scene::CarriedArtifact> = store
+                        .session_pipeline(&session)
+                        .ok()
+                        .flatten()
+                        .and_then(|(instance_id, stage_id)| {
+                            let instance =
+                                store.get_pipeline_instance(&instance_id).ok().flatten()?;
+                            let pipeline = scenes.resolve_pipeline(&instance.pipeline_ref)?;
+                            let stage = pipeline
+                                .pipeline
+                                .stages
+                                .iter()
+                                .find(|stage| stage.id == stage_id)?;
+                            let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                            Some(artifacts.resolve_carry(&instance_id, stage))
+                        })
+                        .unwrap_or_default();
+                    let preamble = crate::scene::prompt_preamble(&entry.scene, &carried);
+                    (!preamble.trim().is_empty()).then_some(preamble)
+                });
+                if let Some(preamble) = scene_preamble {
+                    // The compiler emits `rules ⧺ "\n\n" ⧺ rest`; splice the preamble between the
+                    // two so project rules stay first, exactly as the normative order requires.
+                    let rules_context =
+                        crate::rules::to_context(&crate::rules::load(std::path::Path::new(&cwd)));
+                    if compiled.prompt.is_empty() {
+                        compiled.prompt = preamble;
+                    } else if !rules_context.is_empty()
+                        && compiled.prompt.starts_with(&rules_context)
+                    {
+                        let rest = compiled.prompt[rules_context.len()..].to_string();
+                        compiled.prompt = format!(
+                            "{rules_context}\n\n{preamble}{}",
+                            if rest.is_empty() {
+                                String::new()
+                            } else {
+                                format!("\n\n{}", rest.trim_start_matches('\n'))
+                            }
+                        );
+                    } else {
+                        compiled.prompt = format!("{preamble}\n\n{}", compiled.prompt);
+                    }
+                }
                 let is_codex = {
                     let sessions = self.state.sessions.lock().unwrap();
                     sessions
@@ -2356,9 +2708,17 @@ impl Engine {
                         .map(|runtime| runtime.session.provider == ProviderId::Codex)
                         .unwrap_or(false)
                 };
-                if is_codex {
-                    if let Some(config) = &self.state.desktop_mcp {
-                        let server = config.server_for_session(&session);
+                if let Some(config) = &self.state.desktop_mcp {
+                    let server = config.scene_server_for_session(&session);
+                    if !compiled
+                        .mcp_servers
+                        .iter()
+                        .any(|candidate| candidate.name == server.name)
+                    {
+                        compiled.mcp_servers.push(server);
+                    }
+                    if is_codex {
+                        let server = config.browser_server_for_session(&session);
                         if !compiled
                             .mcp_servers
                             .iter()
@@ -2395,6 +2755,21 @@ impl Engine {
                 } else {
                     format!("{}\n\n{}", memory_context.block, compiled.prompt)
                 };
+                let auto_scene_instructions = self.state.store.as_ref().and_then(|store| {
+                    store
+                        .session_auto_scene(&session)
+                        .ok()
+                        .filter(|enabled| *enabled)?;
+                    let current = store
+                        .session_scene(&session)
+                        .ok()
+                        .flatten()
+                        .map(|(reference, _)| reference);
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    Some(auto_scene_routing_instructions(&scenes, current.as_deref()))
+                });
+                let provider_prompt =
+                    with_auto_scene_routing(provider_prompt, auto_scene_instructions);
                 let provider_prompt = with_codetwo_browser_routing(
                     provider_prompt,
                     is_codex && self.state.desktop_mcp.is_some(),
@@ -2725,6 +3100,17 @@ impl Engine {
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
                 let memory_project = images_cwd.clone();
+                // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
+                // carries plain handles instead of engine references. Best-effort by design:
+                // no active scene, no declared artifacts, or no capture layer all mean "skip".
+                let scene_capture = self.state.store.as_ref().and_then(|store| {
+                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    let entry = scenes.resolve(&scene_ref)?;
+                    let specs = entry.scene.artifacts.clone();
+                    let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                    (!specs.is_empty()).then_some((scene_ref, specs, artifacts))
+                });
                 let mut canvas_image_blocks = Vec::new();
                 for canvas in &compiled.canvases {
                     match lower_canvas_prompt_payload(
@@ -2806,6 +3192,59 @@ impl Engine {
                                             }
                                         }
                                     }
+                                    // Scene artifact auto-capture (R8): scan the turn's agent
+                                    // text for declared `artifact:<id>` fenced blocks (the
+                                    // convention the preamble teaches), record each version, and
+                                    // announce it before TurnEnded so exit evaluation sees it.
+                                    if let (Some((scene_ref, specs, artifacts)), Some(seq)) =
+                                        (scene_capture, transcript_seq)
+                                    {
+                                        let agent_text: String = store
+                                            .transcript_with_seq(&sess_for_task)
+                                            .unwrap_or_default()
+                                            .into_iter()
+                                            .filter(|(part_seq, role, _)| {
+                                                *part_seq > seq && *role == Role::Agent
+                                            })
+                                            .filter_map(|(_, _, part)| match part {
+                                                Part::Text { text } => Some(text),
+                                                _ => None,
+                                            })
+                                            .collect();
+                                        for (id, content) in
+                                            crate::scene_artifact::extract_artifact_blocks(
+                                                &agent_text,
+                                                &specs,
+                                            )
+                                        {
+                                            let Some(spec) =
+                                                specs.iter().find(|spec| spec.id == id)
+                                            else {
+                                                continue;
+                                            };
+                                            match artifacts.record(
+                                                &scene_ref,
+                                                spec,
+                                                &sess_for_task,
+                                                None,
+                                                &content,
+                                            ) {
+                                                Ok(record) => {
+                                                    let _ = events.send(Event::ArtifactProduced {
+                                                        session: sess_for_task.clone(),
+                                                        scene_ref: scene_ref.clone(),
+                                                        artifact_key: record.artifact_key,
+                                                        kind: record.kind,
+                                                        version: record.version,
+                                                        record_id: record.id,
+                                                    });
+                                                }
+                                                Err(error) => tracing::warn!(
+                                                    "scene artifact capture failed: {error}"
+                                                ),
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             turn_lease.finish_success();
@@ -2843,9 +3282,7 @@ impl Engine {
                 request_id,
                 option_id,
             } => {
-                self.state
-                    .router
-                    .answer_for_session(&session, &request_id, option_id.as_deref());
+                self.answer_permission(&session, &request_id, option_id.as_deref());
             }
 
             Op::SetPermissionMode { session, mode } => {
@@ -2869,12 +3306,18 @@ impl Engine {
                 // Tell the agent, then record it. Storing it without the ACP call would leave the
                 // UI claiming a model the agent never switched to. Before the first prompt there's
                 // no ACP session to tell, so the choice is just recorded and `session/new` sends it.
-                let target = {
+                let live = {
                     let map = self.state.sessions.lock().unwrap();
-                    map.get(&session)
-                        .map(|r| (r.client.clone(), r.acp_session_id.clone()))
+                    map.get(&session).map(|runtime| {
+                        (
+                            runtime.client.clone(),
+                            runtime.acp_session_id.clone(),
+                            runtime.session.clone(),
+                            runtime.models.clone(),
+                        )
+                    })
                 };
-                if let Some((client, Some(acp_sid))) = target {
+                if let Some((client, Some(acp_sid), _, _)) = live.as_ref() {
                     if let Err(e) = client.set_model(&acp_sid, &model).await {
                         // t3code's `requiresNewThreadForModelChange` honesty: the agent can't
                         // change models mid-conversation, so say what *would* work instead of
@@ -2890,19 +3333,63 @@ impl Engine {
                         return Ok(());
                     }
                 }
-                let available = {
-                    let mut map = self.state.sessions.lock().unwrap();
-                    match map.get_mut(&session) {
-                        Some(rt) => {
-                            rt.session.model = Some(model.clone());
-                            if let Some(store) = &self.state.store {
-                                let _ = store.upsert_session(&rt.session);
+                let (mut updated, available, was_live) = match live {
+                    Some((_, _, stored_session, models)) => (stored_session, models, true),
+                    None => match &self.state.store {
+                        Some(store) => match store.get_session(&session) {
+                            Ok(Some(stored_session)) => {
+                                let models = builtin_models(&stored_session.provider);
+                                (stored_session, models, false)
                             }
-                            rt.models.clone()
+                            Ok(None) => {
+                                self.emit(Event::Error {
+                                    session: Some(session),
+                                    message: "couldn't change model: no such session".into(),
+                                    terminal: false,
+                                    request_id: None,
+                                });
+                                return Ok(());
+                            }
+                            Err(error) => {
+                                self.emit(Event::Error {
+                                    session: Some(session),
+                                    message: format!(
+                                        "couldn't load session to change model: {error}"
+                                    ),
+                                    terminal: false,
+                                    request_id: None,
+                                });
+                                return Ok(());
+                            }
+                        },
+                        None => {
+                            self.emit(Event::Error {
+                                session: Some(session),
+                                message: "couldn't change model: no such session".into(),
+                                terminal: false,
+                                request_id: None,
+                            });
+                            return Ok(());
                         }
-                        None => Vec::new(),
-                    }
+                    },
                 };
+                updated.model = Some(model.clone());
+                if let Some(store) = &self.state.store {
+                    if let Err(error) = store.upsert_session(&updated) {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!("couldn't persist model change: {error}"),
+                            terminal: false,
+                            request_id: None,
+                        });
+                        return Ok(());
+                    }
+                }
+                if was_live {
+                    if let Some(runtime) = self.state.sessions.lock().unwrap().get_mut(&session) {
+                        runtime.session.model = Some(model.clone());
+                    }
+                }
                 self.emit(Event::Models {
                     session,
                     available,
@@ -4555,8 +5042,9 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        elicitation_message, encode_mcp_servers, rich_tool_kind, sites_permission_kind,
-        with_codetwo_browser_routing, with_codex_sites_routing, DesktopMcpConfig,
+        auto_scene_routing_instructions, elicitation_message, encode_mcp_servers, rich_tool_kind,
+        sites_permission_kind, with_auto_scene_routing, with_codetwo_browser_routing,
+        with_codex_sites_routing, DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
     use crate::artifact::ToolSource;
@@ -4592,8 +5080,8 @@ mod mcp_tests {
             socket_path: "/tmp/codetwo-browser.sock".into(),
             master_key: "launch-secret".into(),
         };
-        let first = config.server_for_session("session-a");
-        let second = config.server_for_session("session-b");
+        let first = config.browser_server_for_session("session-a");
+        let second = config.browser_server_for_session("session-b");
         assert_eq!(first.name, "codetwo_browser");
         let env = |server: &McpServer| match &server.transport {
             McpTransport::Stdio { args, env, .. } => {
@@ -4608,6 +5096,19 @@ mod mcp_tests {
         };
         assert_ne!(env(&first), env(&second));
         assert!(!env(&first).contains("launch-secret"));
+    }
+
+    #[test]
+    fn auto_scene_routing_requires_a_first_selection_and_names_only_installed_scenes() {
+        let scenes = crate::scene::SceneLibrary::builtin();
+        let instructions = auto_scene_routing_instructions(&scenes, None);
+        assert!(instructions.contains("call `scene_select` before substantive work"));
+        assert!(instructions.contains("`builtin:research`"));
+        assert!(instructions.contains("`builtin:develop`"));
+        assert!(!instructions.contains("builtin:missing"));
+        let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
+        assert!(prompt.starts_with("[CodeTwo Auto Scene]"));
+        assert!(prompt.ends_with("fix the tests"));
     }
 
     #[test]
