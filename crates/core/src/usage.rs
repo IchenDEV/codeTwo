@@ -35,6 +35,10 @@ pub struct UsageRecord {
     pub output_tokens: u64,
     /// `codex` | `claude` | `codetwo` | …
     pub source: String,
+    /// Model that produced this usage, when the transcript records one (`claude-opus-4-5-…`,
+    /// `gpt-5-codex`, …). Drives the best-effort cost estimate; `None` means "can't price this".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     /// In-memory identity for cross-file de-duplication. Never leaves the local scanner.
     #[doc(hidden)]
     #[serde(skip)]
@@ -328,8 +332,19 @@ fn record(at_ms: i64, usage: LineUsage, source: &str) -> UsageRecord {
         cached_tokens: usage.cached,
         output_tokens: usage.output,
         source: source.into(),
+        model: None,
         dedupe_key: None,
     }
+}
+
+/// Best-effort model extraction: a string-valued `model` key anywhere near the top of the line
+/// (Claude puts it on `message.model`, Codex restates it in `turn_context` payloads).
+fn find_model(value: &serde_json::Value) -> Option<String> {
+    find_key(value, "model", 0)?
+        .as_str()
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn get_string(value: &serde_json::Value, key: &str) -> Option<String> {
@@ -493,6 +508,10 @@ fn scan_claude(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usag
                 usage,
                 source,
             );
+            usage_record.model = value
+                .get("message")
+                .and_then(|m| get_string(m, "model"))
+                .or_else(|| find_model(&value));
             usage_record.dedupe_key = dedupe_key;
             Some(usage_record)
         })
@@ -525,10 +544,16 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
     let mut deltas = Vec::new();
     let mut previous = None;
     let mut final_total = None;
+    // Codex states the model on session/turn-context lines, not on every usage line; carry the
+    // most recent sighting forward so each delta can be priced.
+    let mut model: Option<String> = None;
     for line in reader.lines().map_while(Result::ok) {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
         };
+        if let Some(seen) = find_model(&value) {
+            model = Some(seen);
+        }
         let at_ms = original_timestamp_ms(&value).unwrap_or(fallback_ms);
         if let Some(total) = find_key(&value, "total_token_usage", 0).and_then(raw_codex_usage) {
             final_total = Some((at_ms, total));
@@ -540,7 +565,9 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
             continue;
         }
         previous = Some(delta);
-        deltas.push(record(at_ms, delta, source));
+        let mut usage_record = record(at_ms, delta, source);
+        usage_record.model = model.clone();
+        deltas.push(usage_record);
     }
     let summed = deltas.iter().fold(
         LineUsage {
@@ -575,41 +602,57 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
             cumulative: false,
         };
         if residual.input > 0 || residual.cached > 0 || residual.output > 0 {
-            deltas.push(record(at_ms, residual, source));
+            let mut usage_record = record(at_ms, residual, source);
+            usage_record.model = model.clone();
+            deltas.push(usage_record);
         }
         return deltas;
     }
     // Duplicate or malformed deltas exceeded the authoritative total. Discard their timestamps
     // rather than over-counting, and retain one conservative compatibility record.
-    vec![record(at_ms, total, source)]
+    let mut usage_record = record(at_ms, total, source);
+    usage_record.model = model;
+    vec![usage_record]
 }
 
 fn scan_generic(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<UsageRecord> {
     let mut events = Vec::new();
-    let mut cumulative = None;
-    for usage in reader
-        .lines()
-        .map_while(Result::ok)
-        .filter_map(|line| parse_usage_line(&line))
-    {
+    let mut cumulative: Option<(LineUsage, Option<String>)> = None;
+    for line in reader.lines().map_while(Result::ok) {
+        let Some(usage) = parse_usage_line(&line) else {
+            continue;
+        };
+        let model = serde_json::from_str::<serde_json::Value>(&line)
+            .ok()
+            .as_ref()
+            .and_then(find_model);
         if usage.cumulative {
-            let previous: LineUsage = cumulative.unwrap_or(LineUsage {
-                input: 0,
-                cached: 0,
-                output: 0,
-                cumulative: true,
-            });
+            let previous = cumulative
+                .as_ref()
+                .map(|(previous, _)| *previous)
+                .unwrap_or(LineUsage {
+                    input: 0,
+                    cached: 0,
+                    output: 0,
+                    cumulative: true,
+                });
             if usage.input.saturating_add(usage.output)
                 > previous.input.saturating_add(previous.output)
             {
-                cumulative = Some(usage);
+                cumulative = Some((usage, model));
             }
         } else {
-            events.push(record(fallback_ms, usage, source));
+            let mut usage_record = record(fallback_ms, usage, source);
+            usage_record.model = model;
+            events.push(usage_record);
         }
     }
     cumulative
-        .map(|usage| vec![record(fallback_ms, usage, source)])
+        .map(|(usage, model)| {
+            let mut usage_record = record(fallback_ms, usage, source);
+            usage_record.model = model;
+            vec![usage_record]
+        })
         .unwrap_or(events)
 }
 
@@ -646,6 +689,7 @@ pub fn scan_jsonl_file(path: &Path, source: &str) -> Option<UsageRecord> {
         cached_tokens: records.iter().map(|record| record.cached_tokens).sum(),
         output_tokens: records.iter().map(|record| record.output_tokens).sum(),
         source: source.into(),
+        model: first.model.clone(),
         dedupe_key: None,
     })
 }
@@ -729,6 +773,153 @@ pub fn by_source(records: &[UsageRecord]) -> Vec<(String, u64)> {
     map.into_iter().collect()
 }
 
+// ---- cost estimation ---------------------------------------------------------------------------
+
+/// USD per **million** tokens: (model-id prefix, fresh input, cache read, output).
+///
+/// A static best-effort table for the mainstream models these transcripts actually contain
+/// (Anthropic per platform.claude.com, OpenAI per developers.openai.com, as of 2026-08).
+/// First matching prefix wins, so more specific prefixes must precede shorter ones. Records
+/// whose model matches nothing stay unpriced rather than guessing — the UI reports them as
+/// "cost unknown". Cache *writes* bill above the fresh-input rate and are not modeled, so
+/// estimates skew slightly low; every figure derived from this is labeled an estimate (≈).
+const MODEL_PRICES: &[(&str, f64, f64, f64)] = &[
+    // Anthropic
+    ("claude-fable-5", 10.0, 1.0, 50.0),
+    ("claude-mythos-5", 10.0, 1.0, 50.0),
+    ("claude-opus-4-1", 15.0, 1.5, 75.0),
+    ("claude-opus-4-2", 15.0, 1.5, 75.0), // claude-opus-4-20250514
+    ("claude-opus", 5.0, 0.5, 25.0),      // opus-5 and opus-4-5 … 4-8
+    ("claude-sonnet", 3.0, 0.3, 15.0),
+    ("claude-haiku-4", 1.0, 0.1, 5.0),
+    ("claude-3-5-haiku", 0.8, 0.08, 4.0),
+    ("claude-3-haiku", 0.25, 0.03, 1.25),
+    // OpenAI (Codex CLI)
+    ("gpt-5-mini", 0.25, 0.025, 2.0),
+    ("gpt-5-nano", 0.05, 0.005, 0.40),
+    ("gpt-5.2", 1.75, 0.175, 14.0),
+    ("gpt-5.3", 1.75, 0.175, 14.0),
+    ("gpt-5", 1.25, 0.125, 10.0), // gpt-5, gpt-5.1, gpt-5-codex, gpt-5.1-codex, …
+    ("o3-mini", 1.1, 0.55, 4.4),
+    ("o3", 2.0, 0.5, 8.0),
+    ("o4-mini", 1.1, 0.275, 4.4),
+];
+
+fn model_price(model: &str) -> Option<(f64, f64, f64)> {
+    let normalized = model.trim().to_ascii_lowercase();
+    MODEL_PRICES
+        .iter()
+        .find(|(prefix, ..)| normalized.starts_with(prefix))
+        .map(|&(_, input, cached, output)| (input, cached, output))
+}
+
+/// Estimated USD for one record, or `None` when its model is absent or unpriced.
+pub fn record_cost_usd(record: &UsageRecord) -> Option<f64> {
+    let (input, cached, output) = model_price(record.model.as_deref()?)?;
+    Some(
+        (record.input_tokens as f64 * input
+            + record.cached_tokens as f64 * cached
+            + record.output_tokens as f64 * output)
+            / 1_000_000.0,
+    )
+}
+
+// ---- time-bucketed history ----------------------------------------------------------------------
+
+/// One provider's token totals per time bucket, oldest bucket first. Values are
+/// [`UsageRecord::total`] (cache reads excluded), matching the headline numbers elsewhere.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageSeries {
+    pub source: String,
+    pub totals: Vec<u64>,
+}
+
+/// Time-bucketed usage for trend charts. Buckets align to `bucket_secs` boundaries; the last
+/// bucket is the (partial) one containing `now`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageHistory {
+    pub bucket_secs: i64,
+    pub bucket_count: usize,
+    /// Start of the first bucket (unix ms).
+    pub start_ms: i64,
+    pub series: Vec<UsageSeries>,
+}
+
+/// Bucket records into `bucket_count` fixed windows of `bucket_secs`, grouped by source.
+pub fn history(
+    records: &[UsageRecord],
+    now_ms: i64,
+    bucket_secs: i64,
+    bucket_count: usize,
+) -> UsageHistory {
+    let bucket_ms = bucket_secs.max(1) * 1000;
+    let end_ms = (now_ms.div_euclid(bucket_ms) + 1) * bucket_ms;
+    let start_ms = end_ms - bucket_ms * bucket_count as i64;
+    let mut by_source: BTreeMap<String, Vec<u64>> = BTreeMap::new();
+    for r in records {
+        if r.at_ms < start_ms || r.at_ms >= end_ms {
+            continue;
+        }
+        let index = ((r.at_ms - start_ms) / bucket_ms) as usize;
+        let totals = by_source
+            .entry(r.source.clone())
+            .or_insert_with(|| vec![0; bucket_count]);
+        totals[index] = totals[index].saturating_add(r.total());
+    }
+    UsageHistory {
+        bucket_secs,
+        bucket_count,
+        start_ms,
+        series: by_source
+            .into_iter()
+            .map(|(source, totals)| UsageSeries { source, totals })
+            .collect(),
+    }
+}
+
+/// Per-source totals plus a best-effort cost estimate, for the provider breakdown table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceUsage {
+    pub source: String,
+    pub input_tokens: u64,
+    pub cached_tokens: u64,
+    pub output_tokens: u64,
+    pub total_tokens: u64,
+    /// Estimated spend over records whose model has a known price; `None` when nothing in this
+    /// source was priceable.
+    pub estimated_cost_usd: Option<f64>,
+    /// Tokens from records with an unknown/unpriced model — excluded from the estimate and
+    /// surfaced so the UI can say how much of the total the estimate does not cover.
+    pub unpriced_tokens: u64,
+}
+
+/// Per-source totals over records at/after `cutoff_ms` (pass `i64::MIN` for everything).
+pub fn by_source_detailed(records: &[UsageRecord], cutoff_ms: i64) -> Vec<SourceUsage> {
+    let mut map: BTreeMap<String, SourceUsage> = BTreeMap::new();
+    for r in records.iter().filter(|r| r.at_ms >= cutoff_ms) {
+        let entry = map
+            .entry(r.source.clone())
+            .or_insert_with(|| SourceUsage {
+                source: r.source.clone(),
+                input_tokens: 0,
+                cached_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+                estimated_cost_usd: None,
+                unpriced_tokens: 0,
+            });
+        entry.input_tokens += r.input_tokens;
+        entry.cached_tokens += r.cached_tokens;
+        entry.output_tokens += r.output_tokens;
+        entry.total_tokens += r.total();
+        match record_cost_usd(r) {
+            Some(cost) => *entry.estimated_cost_usd.get_or_insert(0.0) += cost,
+            None => entry.unpriced_tokens += r.total(),
+        }
+    }
+    map.into_values().collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -740,6 +931,7 @@ mod tests {
             cached_tokens: 0,
             output_tokens: output,
             source: source.into(),
+            model: None,
             dedupe_key: None,
         }
     }
@@ -785,6 +977,7 @@ mod tests {
             cached_tokens: 900_000,
             output_tokens: 50,
             source: "claude".into(),
+            model: None,
             dedupe_key: None,
         }];
         let w = windows(&records, now, &Limits::default());
@@ -1028,6 +1221,100 @@ mod tests {
         assert_eq!(scan.records[0].at_ms, 1_785_639_845_006);
         assert_eq!(by_source(&scan.records), vec![("claude".to_string(), 16)]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn priced(at_ms: i64, input: u64, cached: u64, output: u64, source: &str, model: Option<&str>) -> UsageRecord {
+        UsageRecord {
+            at_ms,
+            input_tokens: input,
+            cached_tokens: cached,
+            output_tokens: output,
+            source: source.into(),
+            model: model.map(ToOwned::to_owned),
+            dedupe_key: None,
+        }
+    }
+
+    #[test]
+    fn prices_match_by_prefix_and_unknown_models_stay_unpriced() {
+        // Dated full IDs resolve through their family prefix.
+        let claude = priced(0, 1_000_000, 1_000_000, 1_000_000, "claude", Some("claude-opus-4-5-20251101"));
+        assert_eq!(record_cost_usd(&claude), Some(5.0 + 0.5 + 25.0));
+        // The legacy expensive Opus generation is matched by its more specific prefix.
+        let old_opus = priced(0, 1_000_000, 0, 0, "claude", Some("claude-opus-4-1-20250805"));
+        assert_eq!(record_cost_usd(&old_opus), Some(15.0));
+        let codex = priced(0, 2_000_000, 0, 100_000, "codex", Some("gpt-5.1-codex"));
+        assert_eq!(record_cost_usd(&codex), Some(2.0 * 1.25 + 0.1 * 10.0));
+        // Unknown or missing models never guess a price.
+        assert_eq!(record_cost_usd(&priced(0, 1, 0, 1, "x", Some("mystery-lm"))), None);
+        assert_eq!(record_cost_usd(&priced(0, 1, 0, 1, "x", None)), None);
+    }
+
+    #[test]
+    fn history_buckets_align_and_group_by_source() {
+        let hour = 3_600_000i64;
+        // now sits mid-bucket; the last bucket must still contain it.
+        let now = 100 * hour + 1_234_567;
+        let records = vec![
+            rec(now - 1000, 10, 1, "codex"),            // current (partial) bucket
+            rec(now - 2 * hour, 100, 10, "codex"),      // two buckets back
+            rec(now - 2 * hour, 200, 20, "claude"),     // same bucket, other source
+            rec(now - 500 * hour, 999, 99, "claude"),   // outside the window entirely
+        ];
+        let h = history(&records, now, 3600, 4);
+        assert_eq!(h.bucket_count, 4);
+        assert_eq!(h.start_ms % hour, 0, "buckets align to bucket boundaries");
+        assert!(h.start_ms <= now - 3 * hour && now < h.start_ms + 4 * hour);
+        assert_eq!(h.series.len(), 2);
+        let claude = h.series.iter().find(|s| s.source == "claude").unwrap();
+        let codex = h.series.iter().find(|s| s.source == "codex").unwrap();
+        assert_eq!(codex.totals.iter().sum::<u64>(), 11 + 110);
+        assert_eq!(codex.totals[3], 11, "newest record lands in the last bucket");
+        assert_eq!(claude.totals.iter().sum::<u64>(), 220, "out-of-window record dropped");
+        // Both series in one bucket keeps them separate.
+        let two_hours_back = codex.totals.iter().position(|&t| t == 110).unwrap();
+        assert_eq!(claude.totals[two_hours_back], 220);
+    }
+
+    #[test]
+    fn by_source_detailed_estimates_cost_and_tracks_unpriced_tokens() {
+        let records = vec![
+            priced(10, 1_000_000, 0, 0, "claude", Some("claude-sonnet-4-5")),
+            priced(10, 50, 0, 5, "claude", Some("private-finetune")),
+            priced(10, 30, 0, 3, "codex", None),
+        ];
+        let detailed = by_source_detailed(&records, i64::MIN);
+        let claude = detailed.iter().find(|s| s.source == "claude").unwrap();
+        assert_eq!(claude.total_tokens, 1_000_000 + 55);
+        assert_eq!(claude.estimated_cost_usd, Some(3.0), "only the priced record is estimated");
+        assert_eq!(claude.unpriced_tokens, 55);
+        let codex = detailed.iter().find(|s| s.source == "codex").unwrap();
+        assert_eq!(codex.estimated_cost_usd, None, "nothing priceable ⇒ no estimate");
+        assert_eq!(codex.unpriced_tokens, 33);
+        // The cutoff excludes older records.
+        assert!(by_source_detailed(&records, 11).is_empty());
+    }
+
+    #[test]
+    fn scanners_retain_the_model_for_pricing() {
+        // Claude: model rides on message.model.
+        let dir = std::env::temp_dir().join(format!("codetwo-usage-model-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("claude.jsonl"),
+            "{\"type\":\"assistant\",\"requestId\":\"r1\",\"message\":{\"id\":\"m1\",\"role\":\"assistant\",\"model\":\"claude-opus-4-5-20251101\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2}}}\n",
+        )
+        .unwrap();
+        let recs = scan_jsonl_dir(&dir, "claude");
+        assert_eq!(recs[0].model.as_deref(), Some("claude-opus-4-5-20251101"));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Codex: the model appears on context lines and carries forward to later usage deltas.
+        let lines = "{\"timestamp\":\"2026-08-01T00:00:00Z\",\"payload\":{\"turn_context\":{\"model\":\"gpt-5.1-codex\"}}}\n\
+                     {\"timestamp\":\"2026-08-01T00:00:01Z\",\"payload\":{\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"output_tokens\":10}}}}\n";
+        let recs = scan_codex(std::io::Cursor::new(lines), 0, "codex");
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].model.as_deref(), Some("gpt-5.1-codex"));
     }
 
     #[test]

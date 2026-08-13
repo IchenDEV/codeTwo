@@ -192,13 +192,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::ExecutionPolicyChanged { policy, .. } => {
                     println!("execution policy: {:?} / {:?}", policy.mode, policy.sandbox);
                 }
-                // Scene hook/exit/cost projections (R8) — not rendered by this demo.
+                // Scene hook/exit/cost projections (R8) and worktree lifecycle — not rendered
+                // by this demo.
                 Event::TestSignal { .. }
                 | Event::ArtifactProduced { .. }
                 | Event::ExitCriteriaMet { .. }
                 | Event::HookSuggestion { .. }
                 | Event::HookTurnStarted { .. }
-                | Event::SessionCost { .. } => {}
+                | Event::SessionCost { .. }
+                | Event::WorktreeDiscarded { .. } => {}
             }
         }
     };

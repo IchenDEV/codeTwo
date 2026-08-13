@@ -1,66 +1,240 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { usageReport, type UsageReport } from "../bridge";
-import { Badge } from "@/components/ui/badge";
+import {
+  usageHistory,
+  usageReport,
+  type SourceUsage,
+  type UsageHistoryReport,
+  type UsageReport,
+} from "../bridge";
+import { useLanguage } from "../i18n";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { fmtCost, fmtReset, fmtTokens, seriesColor, stackHistory } from "./usageMath";
 
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
+/** Backend window labels are stable wire values; map them onto i18n keys for display. */
+const WINDOW_LABEL_KEYS = {
+  "5h session": "usage.window5h",
+  week: "usage.windowWeek",
+  month: "usage.windowMonth",
+} as const;
+
+const CHART_W = 672;
+const CHART_H = 96;
+
+function TrendChart({ report, days }: { report: UsageHistoryReport; days: number }) {
+  const { t, locale } = useLanguage();
+  const [hover, setHover] = useState<number | null>(null);
+  const { buckets, max } = useMemo(() => stackHistory(report.history), [report]);
+
+  const timeFmt = useMemo(
+    () =>
+      new Intl.DateTimeFormat(
+        locale,
+        days <= 7
+          ? { month: "short", day: "numeric", hour: "2-digit" }
+          : { month: "short", day: "numeric" },
+      ),
+    [locale, days],
+  );
+  const dayFmt = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
+    [locale],
+  );
+
+  if (buckets.length === 0 || max === 0) {
+    return <p className="text-hint text-muted-foreground">{t("usage.trendEmpty")}</p>;
+  }
+
+  const slot = CHART_W / buckets.length;
+  const gap = days <= 7 ? 1 : 2;
+  const barW = Math.max(1, slot - gap);
+  const scale = (value: number) => (value / max) * (CHART_H - 2);
+  const hovered = hover != null ? buckets[hover] : null;
+
+  return (
+    <div className="relative" onMouseLeave={() => setHover(null)}>
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="font-mono text-fine text-muted-foreground">{fmtTokens(max)}</span>
+        {hovered && hovered.total > 0 && (
+          <span className="font-mono text-fine text-muted-foreground">
+            {timeFmt.format(hovered.startMs)} · {fmtTokens(hovered.total)}
+          </span>
+        )}
+      </div>
+      <svg
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+        className="block h-24 w-full"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={t("usage.trendTitle")}
+      >
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line
+            key={f}
+            x1={0}
+            x2={CHART_W}
+            y1={CHART_H * f}
+            y2={CHART_H * f}
+            stroke="var(--ds-color-fill-rest)"
+            strokeWidth={1}
+          />
+        ))}
+        {buckets.map((bucket, i) => {
+          let y = CHART_H;
+          return (
+            <g key={bucket.startMs} opacity={hover == null || hover === i ? 1 : 0.45}>
+              {bucket.parts.map((part) => {
+                const h = Math.max(1, scale(part.value) - 1);
+                y -= h + 1;
+                return (
+                  <rect
+                    key={part.source}
+                    x={i * slot}
+                    y={y + 1}
+                    width={barW}
+                    height={h}
+                    fill={seriesColor(part.source)}
+                  />
+                );
+              })}
+              <rect
+                x={i * slot}
+                y={0}
+                width={slot}
+                height={CHART_H}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+              />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex justify-between text-fine text-muted-foreground">
+        <span>{dayFmt.format(buckets[0].startMs)}</span>
+        <span>{dayFmt.format(buckets[buckets.length - 1].startMs)}</span>
+      </div>
+      {hovered && hovered.parts.length > 0 && (
+        <div
+          className="pointer-events-none absolute top-6 z-10 rounded-(--ds-radius-micro) bg-popover p-2 text-fine text-popover-foreground shadow-(--ds-elevation-raised) ring-1 ring-foreground/10"
+          style={{
+            left: `${Math.min(80, ((hover! + 0.5) / buckets.length) * 100)}%`,
+          }}
+        >
+          {hovered.parts.map((part) => (
+            <div key={part.source} className="flex items-center gap-1.5">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ background: seriesColor(part.source) }}
+              />
+              <span>{part.source}</span>
+              <span className="ml-auto pl-2 font-mono">{fmtTokens(part.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function fmtReset(secs: number): string {
-  if (secs <= 0) return "—";
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof useLanguage>["t"] }) {
+  const cost = fmtCost(usage.estimated_cost_usd);
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-ui">
+        <span className="size-2 shrink-0 rounded-full" style={{ background: seriesColor(usage.source) }} />
+        <span className="font-semibold">{usage.source}</span>
+        <span className="ml-auto font-mono text-hint text-muted-foreground">
+          {fmtTokens(usage.total_tokens)}
+        </span>
+        <span className={cn("w-20 text-right font-mono text-hint", cost ? "" : "text-muted-foreground")}>
+          {cost ?? t("usage.costUnknown")}
+        </span>
+      </div>
+      <div className="pl-4 font-mono text-fine text-muted-foreground">
+        {t("usage.tokensDetail", {
+          input: fmtTokens(usage.input_tokens),
+          output: fmtTokens(usage.output_tokens),
+          cached: fmtTokens(usage.cached_tokens),
+        })}
+        {cost != null && usage.unpriced_tokens > 0 && (
+          <> · {t("usage.unpricedNote", { tokens: fmtTokens(usage.unpriced_tokens) })}</>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**
- * Usage panel: rolling 5h / week / month windows scanned from local provider transcripts, with
- * percent-of-limit and a countdown to when each window frees up.
+ * Usage panel: rolling 5h / week / month windows scanned from local provider transcripts, a
+ * 7/30-day stacked trend by provider, and per-provider totals with a local cost estimate (≈).
  */
 export function UsageModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const [report, setReport] = useState<UsageReport | null>(null);
+  const [history, setHistory] = useState<UsageHistoryReport | null>(null);
+  const [days, setDays] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const load = (range: 7 | 30) => {
     setLoading(true);
-    usageReport()
-      .then((r) => {
+    Promise.all([usageReport(), usageHistory(range)])
+      .then(([r, h]) => {
         setReport(r);
-        setLoading(false);
+        setHistory(h);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setLoading(false));
   };
-  useEffect(load, []);
+  useEffect(() => load(days), [days]);
+
+  const bySource = history?.by_source ?? [];
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Usage
-            <Button variant="ghost" size="icon" className="size-6" onClick={load} title="Rescan">
+            {t("usage.title")}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={() => load(days)}
+              title={t("usage.rescan")}
+            >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
             </Button>
+            <span className="ml-auto flex gap-1">
+              {([7, 30] as const).map((range) => (
+                <Button
+                  key={range}
+                  variant={days === range ? "secondary" : "ghost"}
+                  size="compact"
+                  className="px-2 text-fine"
+                  onClick={() => setDays(range)}
+                >
+                  {t(range === 7 ? "usage.range7d" : "usage.range30d")}
+                </Button>
+              ))}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
-        {loading && !report && <p className="text-hint text-muted-foreground">Scanning local transcripts…</p>}
+        {loading && !report && (
+          <p className="text-hint text-muted-foreground">{t("usage.scanning")}</p>
+        )}
 
         {report && (
-          <>
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="space-y-3">
               {report.windows.map((w) => (
                 <div key={w.label}>
                   <div className="flex items-baseline justify-between text-ui">
-                    <span className="font-semibold">{w.label}</span>
+                    <span className="font-semibold">
+                      {t(WINDOW_LABEL_KEYS[w.label as keyof typeof WINDOW_LABEL_KEYS] ?? "usage.window5h")}
+                    </span>
                     <span className="font-mono text-hint text-muted-foreground">
                       {fmtTokens(w.total_tokens)}
                       {w.limit != null && ` / ${fmtTokens(w.limit)}`}
@@ -85,37 +259,58 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
                     />
                   </div>
                   <div className="font-mono text-fine text-muted-foreground">
-                    in {fmtTokens(w.input_tokens)} · out {fmtTokens(w.output_tokens)}
-                    {w.cached_tokens > 0 && <> · cache-read {fmtTokens(w.cached_tokens)} (not counted)</>} ·
-                    frees up in {fmtReset(w.resets_in_secs)}
+                    {t("usage.windowDetail", {
+                      input: fmtTokens(w.input_tokens),
+                      output: fmtTokens(w.output_tokens),
+                      reset: fmtReset(w.resets_in_secs),
+                    })}
+                    {w.cached_tokens > 0 && (
+                      <> · {t("usage.windowCache", { cached: fmtTokens(w.cached_tokens) })}</>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
-              {report.by_source.length === 0 ? (
-                <p className="text-hint text-muted-foreground">
-                  No local transcripts found (looked in ~/.codex/sessions and ~/.claude/projects).
-                </p>
-              ) : (
-                report.by_source.map(([src, total]) => (
-                  <Badge key={src} variant="secondary" className="font-mono text-fine">
-                    {src}: {fmtTokens(total)}
-                  </Badge>
-                ))
-              )}
-            </div>
-            <p className="text-hint text-muted-foreground">
-              Scanned {report.transcripts} transcript{report.transcripts === 1 ? "" : "s"}. Set
-              CODETWO_LIMIT_5H / _WEEK / _MONTH to show percentages.
+            {history && (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-ui font-semibold">{t("usage.trendTitle")}</span>
+                  <span className="flex items-center gap-3">
+                    {history.history.series.map((s) => (
+                      <span key={s.source} className="flex items-center gap-1 text-fine text-muted-foreground">
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ background: seriesColor(s.source) }}
+                        />
+                        {s.source}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                <TrendChart report={history} days={days} />
+              </div>
+            )}
+
+            {bySource.length === 0 ? (
+              <p className="text-hint text-muted-foreground">{t("usage.noTranscripts")}</p>
+            ) : (
+              <div className="space-y-2">
+                {bySource.map((usage) => (
+                  <ProviderRow key={usage.source} usage={usage} t={t} />
+                ))}
+              </div>
+            )}
+
+            <p className="text-fine text-muted-foreground">
+              {t("usage.scannedTranscripts", { count: report.transcripts })} {t("usage.estimateNote")}
             </p>
-          </>
+          </div>
         )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Done
+            {t("usage.done")}
           </Button>
         </DialogFooter>
       </DialogContent>

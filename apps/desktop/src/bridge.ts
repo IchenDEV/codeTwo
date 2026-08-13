@@ -2241,6 +2241,49 @@ export async function usageReport(): Promise<UsageReport> {
   return inTauri ? invoke<UsageReport>("usage_report") : EMPTY_USAGE;
 }
 
+/** One provider's token totals per time bucket, oldest bucket first (cache reads excluded). */
+export interface UsageSeries {
+  source: string;
+  totals: number[];
+}
+
+/** Time-bucketed usage for the trend chart; the last bucket is the partial one containing now. */
+export interface UsageHistory {
+  bucket_secs: number;
+  bucket_count: number;
+  /// Start of the first bucket (unix ms).
+  start_ms: number;
+  series: UsageSeries[];
+}
+
+/** Per-provider totals over the charted range, with a best-effort cost estimate. */
+export interface SourceUsage {
+  source: string;
+  input_tokens: number;
+  cached_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  /// Estimated spend over priceable records; null when nothing in this source was priceable.
+  estimated_cost_usd: number | null;
+  /// Tokens from records whose model is unknown/unpriced — not covered by the estimate.
+  unpriced_tokens: number;
+}
+
+export interface UsageHistoryReport {
+  history: UsageHistory;
+  by_source: SourceUsage[];
+}
+
+const EMPTY_USAGE_HISTORY: UsageHistoryReport = {
+  history: { bucket_secs: 86400, bucket_count: 0, start_ms: 0, series: [] },
+  by_source: [],
+};
+
+/** Bucketed usage history: `days <= 7` buckets hourly, otherwise daily. */
+export async function usageHistory(days: number): Promise<UsageHistoryReport> {
+  return inTauri ? invoke<UsageHistoryReport>("usage_history", { days }) : EMPTY_USAGE_HISTORY;
+}
+
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------
 
 const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];
