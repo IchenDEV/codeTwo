@@ -88,6 +88,32 @@ cleanup could move or delete a directory installed concurrently by another proce
 identity already changed, Code2 likewise leaves the replacement untouched and reports the failure
 instead of recursively deleting by pathname.
 
+## Discarding worktrees
+
+Automatic deletion never happens; permanent cleanup is an explicit, confirmed action. A session's
+**Discard worktree** removes its isolated checkout (including uncommitted changes), drops the Git
+registration, and deletes its `codetwo/<session-id>` branch. The session itself stays as readable
+history — its transcript remains, but it can no longer run prompts and reports that its worktree
+was discarded.
+
+Discard applies the same fail-closed receipts that gate running a provider in the checkout, and a
+few more:
+
+- It refuses while the session is running or awaiting input.
+- It refuses when the recorded directory identity no longer matches — a directory swapped onto the
+  same pathname is never removed.
+- It only ever deletes branches inside the `codetwo/` namespace, only at their observed SHA, and
+  only while no other checkout still uses them.
+- If the checkout was already deleted externally, discard still prunes the stale registration and
+  removes the leftover branch, so nothing accumulates.
+
+The project's worktree management list shows every checkout associated with the repository:
+session-owned checkouts (active or archived), **orphaned** registrations on `codetwo/` branches
+that no session claims (for example after a deleted database), and **stale** directories left in
+`.codetwo-worktrees/` that Git no longer registers. Orphans and stale directories can be cleaned up
+from there; a checkout that a session still records is refused and must be discarded from that
+session, so the two flows can never race each other.
+
 ::: warning Notes & limits
 - `revert` restores **tracked** files to the checkpoint; it doesn't delete files created after it.
 - `diff since checkpoint` shows tracked changes; brand-new untracked files won't appear in that diff
@@ -98,7 +124,7 @@ instead of recursively deleting by pathname.
 - Detecting `gh` checks executable availability, not authentication. Authentication and provider
   errors remain visible runtime failures, and do not disable the separate **Push** action.
 - Archiving or quitting does not delete a worktree: either action is reversible and the checkout may
-  contain uncommitted work. Permanent discard requires an explicit cleanup flow.
+  contain uncommitted work. Permanent removal only happens through the explicit discard flow above.
 - Baseline resolution uses local refs only. If a selected choice later becomes unavailable, Code2
   reports that state and refuses creation instead of silently substituting **Current checkout**.
 :::

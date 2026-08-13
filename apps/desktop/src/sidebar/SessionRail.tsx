@@ -11,6 +11,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  FolderX,
   Hash,
   LayoutGrid,
   PanelLeft,
@@ -88,6 +89,7 @@ export function SessionRail({
   onRename,
   onPin,
   onArchive,
+  onDiscardWorktree,
   displayProvider,
   model,
   provider,
@@ -129,6 +131,8 @@ export function SessionRail({
   onPin: (id: string, pinned: boolean) => void;
   /** Flips a session's archived state — true to archive, false to restore. */
   onArchive: (id: string, archived: boolean) => void;
+  /** Permanently removes a session's isolated checkout and branch, after confirmation. */
+  onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
   /** The model the next turn runs on — the agent's current pick, or the provider's name. */
@@ -547,6 +551,19 @@ export function SessionRail({
               {t("rail.copySessionId")}
             </ContextMenuItem>
           </ContextMenuGroup>
+          {/* Discarding deletes uncommitted work, so it sits apart from the reversible actions
+              and only appears while there is still a checkout to remove. */}
+          {s.worktree_path !== null && !s.worktree_discarded ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuGroup>
+                <ContextMenuItem variant="destructive" onClick={() => onDiscardWorktree(s)}>
+                  <FolderX />
+                  {t("worktree.discardAction")}
+                </ContextMenuItem>
+              </ContextMenuGroup>
+            </>
+          ) : null}
         </ContextMenuContent>
       </ContextMenu>
     );

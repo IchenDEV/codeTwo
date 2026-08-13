@@ -138,6 +138,8 @@ export interface SessionInfo {
   worktree_baseline?: ResolvedWorktreeBaseline | null;
   /** Opaque persisted filesystem identity. Its presence distinguishes strongly verified rows. */
   worktree_identity?: Record<string, unknown> | null;
+  /** True once the user discarded this session's isolated checkout. Old rows read as false. */
+  worktree_discarded?: boolean;
   permission_mode: PermissionMode;
   sandbox_policy: Sandbox;
   acp_session_id: string | null;
@@ -214,6 +216,28 @@ export interface WorktreeBaselineOption {
   kind: WorktreeBaselineKind;
   resolved: ResolvedWorktreeBaseline | null;
   unavailable_reason: string | null;
+}
+
+/** What a discard actually removed. A repeat discard is a no-op success with both fields empty. */
+export interface DiscardedWorktree {
+  removed_checkout: boolean;
+  deleted_branch?: string;
+}
+
+/// session = a checkout some session record still claims; orphan = git still registers a codetwo/
+/// branch checkout no session claims; stale = leftover directory git no longer registers at all.
+export type WorktreeEntryKind = "session" | "orphan" | "stale";
+
+export interface WorktreeStatusEntry {
+  path: string;
+  branch?: string;
+  kind: WorktreeEntryKind;
+  registered: boolean;
+  checkout_present: boolean;
+  session_id?: string;
+  session_title?: string;
+  session_archived: boolean;
+  worktree_discarded: boolean;
 }
 
 export type MemoryAccess = "inherit" | "allow" | "deny";
@@ -345,6 +369,13 @@ export type CoreEvent =
     }
   | { event: "memory_context"; session: string; receipt: MemoryReceipt }
   | { event: "session_title_changed"; session: string; title: string }
+  | {
+      event: "worktree_discarded";
+      session: string;
+      worktree_path: string;
+      removed_checkout: boolean;
+      deleted_branch?: string;
+    }
   | { event: "session_activity_changed"; session: string; activity: SessionActivity }
   | {
       event: "turn_started";
@@ -667,6 +698,28 @@ export async function newSession(
 /** Resolve selectable baselines from local refs only. This command never fetches. */
 export async function listWorktreeBaselines(cwd: string): Promise<WorktreeBaselineOption[]> {
   return inTauri ? invoke<WorktreeBaselineOption[]>("list_worktree_baselines", { cwd }) : [];
+}
+
+/** Remove a session's isolated checkout and its codetwo/ branch. Repeating is a no-op success. */
+export async function discardSessionWorktree(session: string): Promise<DiscardedWorktree> {
+  return inTauri
+    ? invoke<DiscardedWorktree>("discard_session_worktree", { session })
+    : { removed_checkout: false };
+}
+
+/** Every checkout under a project's worktree container — session-claimed, orphan, or stale. */
+export async function listProjectWorktrees(projectPath: string): Promise<WorktreeStatusEntry[]> {
+  return inTauri ? invoke<WorktreeStatusEntry[]>("list_project_worktrees", { projectPath }) : [];
+}
+
+/** Remove an unclaimed checkout by path. The core rejects paths a session still claims. */
+export async function discardOrphanWorktree(
+  projectPath: string,
+  worktreePath: string,
+): Promise<DiscardedWorktree> {
+  return inTauri
+    ? invoke<DiscardedWorktree>("discard_orphan_worktree", { projectPath, worktreePath })
+    : { removed_checkout: false };
 }
 
 export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {

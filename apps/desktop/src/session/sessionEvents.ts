@@ -149,6 +149,21 @@ export function sessionCreationBaseline(
   return current.worktree_baseline?.kind;
 }
 
+/**
+ * The reason the worktree picker must stay Off, or null when it can offer something. Every
+ * baseline resolving unavailable means the directory cannot host a worktree at all (usually: not
+ * a git repository), so a choice would only defer the same failure to session creation.
+ */
+export function worktreeGatingReason(
+  hasSession: boolean,
+  options: WorktreeBaselineOption[],
+  loading: boolean,
+): string | null {
+  if (hasSession || loading || options.length === 0) return null;
+  if (options.some((option) => option.unavailable_reason === null)) return null;
+  return options[0].unavailable_reason;
+}
+
 /** Pin creation to the exact commit shown by the current baseline preview. */
 export function sessionCreationBaselineSha(
   baseline: WorktreeBaselineKind | null,

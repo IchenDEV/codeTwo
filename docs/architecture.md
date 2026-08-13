@@ -132,7 +132,8 @@ state, not a crash).
 
 - **M0 (done):** workspace + tested core + Tauri/React/BlockNote scaffold + `/` skill menu.
 - **M1 (done):** engine (Op→Event) with permission parking, SQLite session store + transcript,
-  git-worktree manager, PTY, disk-backed skill library. All offline-tested.
+  git-worktree manager (creation and the explicit discard/cleanup flow), PTY, disk-backed skill
+  library. All offline-tested.
 - **M2 (done):** full GUI over the engine — session list, doc editor with inline skill nodes,
   live transcript, permission modal, embedded terminal, provider/mode pickers.
 - **M3 (done):** ratatui TUI on the same core (session list, transcript, composer + `/` skill

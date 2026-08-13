@@ -15,10 +15,16 @@ import {
 import {
   browserPermissions,
   browserRevokePermission,
+  confirmNative,
+  discardOrphanWorktree,
+  discardSessionWorktree,
+  listProjectWorktrees,
   type KeymapEntry,
   type Project,
   type ProjectWorktreeMode,
   type ProviderInfo,
+  type WorktreeEntryKind,
+  type WorktreeStatusEntry,
   getProjectScheduling,
   setProjectScheduling,
 } from "../bridge";
@@ -31,6 +37,12 @@ import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import {
+  worktreeBranchDisplay,
+  worktreeDiscardRoute,
+  worktreeStatusBadges,
+  type WorktreeStatusBadge,
+} from "./worktrees";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -57,6 +69,18 @@ const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label
   { id: "providers", icon: Package, labelKey: "settings.providers" },
   { id: "browser", icon: Globe, label: "Browser" },
 ];
+
+const WORKTREE_KIND_LABELS: Record<WorktreeEntryKind, StringKey> = {
+  session: "worktree.kindSession",
+  orphan: "worktree.kindOrphan",
+  stale: "worktree.kindStale",
+};
+
+const WORKTREE_BADGE_LABELS: Record<WorktreeStatusBadge, StringKey> = {
+  archived: "worktree.badgeArchived",
+  discarded: "worktree.badgeDiscarded",
+  checkoutMissing: "worktree.badgeCheckoutMissing",
+};
 
 const CAPABILITY_LABELS = {
   image_generation: "Image generation",
@@ -190,10 +214,56 @@ export function SettingsPage({
     void getProjectScheduling(project.path).then(setSchedulingEnabled);
   }, [project]);
   const [browserOrigins, setBrowserOrigins] = useState<string[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeStatusEntry[]>([]);
+  const [worktreesLoading, setWorktreesLoading] = useState(false);
+  // Already translated at the failure site — listing and discarding fail with different framing.
+  const [worktreesError, setWorktreesError] = useState<string | null>(null);
+  /** Path mid-discard; every Discard button is held while one runs. */
+  const [discardingWorktree, setDiscardingWorktree] = useState<string | null>(null);
 
   useEffect(() => {
     if (tab === "browser") void browserPermissions().then(setBrowserOrigins);
   }, [tab]);
+
+  const loadWorktrees = async (path: string) => {
+    setWorktreesLoading(true);
+    setWorktreesError(null);
+    try {
+      setWorktrees(await listProjectWorktrees(path));
+    } catch (error) {
+      setWorktrees([]);
+      setWorktreesError(t("worktree.manageFailed", { error: String(error) }));
+    } finally {
+      setWorktreesLoading(false);
+    }
+  };
+
+  const projectWorktreePath = project?.path ?? null;
+  useEffect(() => {
+    if (tab !== "project" || !projectWorktreePath) {
+      setWorktrees([]);
+      setWorktreesError(null);
+      return;
+    }
+    void loadWorktrees(projectWorktreePath);
+  }, [tab, projectWorktreePath]);
+
+  const discardWorktree = async (entry: WorktreeStatusEntry) => {
+    if (!projectWorktreePath) return;
+    if (!(await confirmNative(t("worktree.discardConfirm", { path: entry.path })))) return;
+    setDiscardingWorktree(entry.path);
+    setWorktreesError(null);
+    try {
+      const route = worktreeDiscardRoute(entry);
+      if (route.kind === "session") await discardSessionWorktree(route.session);
+      else await discardOrphanWorktree(projectWorktreePath, route.worktreePath);
+      await loadWorktrees(projectWorktreePath);
+    } catch (error) {
+      setWorktreesError(t("worktree.discardFailed", { error: String(error) }));
+    } finally {
+      setDiscardingWorktree(null);
+    }
+  };
 
   const saveProjectWorktreeMode = async (
     path: string,
@@ -451,6 +521,56 @@ export function SettingsPage({
                         {project.path}
                       </span>
                     </Row>
+
+                    <GroupHeading>{t("worktree.manage")}</GroupHeading>
+                    <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
+                      {t("worktree.manageHint")}
+                    </p>
+                    {worktreesError && (
+                      <p className="pt-2 text-hint leading-relaxed text-destructive">{worktreesError}</p>
+                    )}
+                    {worktreesLoading ? (
+                      <p className="py-5 text-ui text-muted-foreground">{t("worktree.manageLoading")}</p>
+                    ) : worktrees.length === 0 ? (
+                      !worktreesError && (
+                        <p className="py-5 text-ui text-muted-foreground">{t("worktree.manageEmpty")}</p>
+                      )
+                    ) : (
+                      worktrees.map((entry) => {
+                        const branch = worktreeBranchDisplay(entry.branch);
+                        return (
+                          <Row
+                            key={entry.path}
+                            compact
+                            label={entry.session_title ?? branch ?? entry.path}
+                            hint={
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline">{t(WORKTREE_KIND_LABELS[entry.kind])}</Badge>
+                                {worktreeStatusBadges(entry).map((badge) => (
+                                  <Badge key={badge} variant="outline">
+                                    {t(WORKTREE_BADGE_LABELS[badge])}
+                                  </Badge>
+                                ))}
+                                <span className="max-w-72 truncate font-mono" title={entry.path}>
+                                  {entry.path}
+                                </span>
+                                {branch && <span className="shrink-0 font-mono">{branch}</span>}
+                              </span>
+                            }
+                          >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              disabled={discardingWorktree !== null}
+                              onClick={() => void discardWorktree(entry)}
+                            >
+                              {t("worktree.discard")}
+                            </Button>
+                          </Row>
+                        );
+                      })
+                    )}
                   </>
                 ) : (
                   <p className="py-6 text-ui text-muted-foreground">{t("settings.projectNone")}</p>

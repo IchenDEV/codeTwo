@@ -23,6 +23,7 @@ import {
   sessionProjectPath,
   sessionShellWithReceipt,
   shouldRenderSessionEvent,
+  worktreeGatingReason,
 } from "../src/session/sessionEvents";
 import {
   applyEvent,
@@ -488,6 +489,39 @@ describe("session event isolation", () => {
     expect(sessionCreationBaselineSha("current", options, false)).toBe("0123456789abcdef");
     expect(sessionCreationBaselineSha("origin_default", options, false)).toBeUndefined();
     expect(sessionCreationBaselineSha("origin_default", [], false)).toBeUndefined();
+  });
+
+  test("gates the worktree picker only when every baseline is unavailable", () => {
+    const unavailable = (kind: "current" | "origin_default", reason: string) => ({
+      kind,
+      resolved: null,
+      unavailable_reason: reason,
+    });
+    const gated = [
+      unavailable("current", "not a git repository"),
+      unavailable("origin_default", "not a git repository"),
+    ];
+    const partial = [
+      {
+        kind: "current" as const,
+        resolved: {
+          kind: "current" as const,
+          ref: "HEAD",
+          sha: "0123456789abcdef",
+          display: "HEAD",
+        },
+        unavailable_reason: null,
+      },
+      unavailable("origin_default", "origin/HEAD is unavailable"),
+    ];
+
+    expect(worktreeGatingReason(false, gated, false)).toBe("not a git repository");
+    // One usable baseline keeps the picker open; loading and empty results decide nothing yet.
+    expect(worktreeGatingReason(false, partial, false)).toBeNull();
+    expect(worktreeGatingReason(false, gated, true)).toBeNull();
+    expect(worktreeGatingReason(false, [], false)).toBeNull();
+    // An existing session renders its recorded worktree state and is never gated.
+    expect(worktreeGatingReason(true, gated, false)).toBeNull();
   });
 });
 

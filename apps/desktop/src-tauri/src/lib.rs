@@ -3024,6 +3024,41 @@ fn list_archived_sessions(state: State<'_, AppState>) -> Result<Vec<Session>, St
         .map_err(|error| error.to_string())
 }
 
+/// Explicit, user-confirmed permanent discard of a session's isolated checkout and branch. The
+/// session stays as readable history; the core refuses while it is running and fails closed on
+/// any identity mismatch.
+#[tauri::command]
+async fn discard_session_worktree(
+    state: State<'_, AppState>,
+    session: String,
+) -> Result<codetwo_core::worktree::DiscardedWorktree, String> {
+    state.engine.discard_session_worktree(&session).await
+}
+
+/// Every session checkout, orphaned registration, and stale container directory for one project,
+/// for the worktree management UI.
+#[tauri::command]
+async fn list_project_worktrees(
+    state: State<'_, AppState>,
+    project_path: String,
+) -> Result<Vec<codetwo_core::engine::WorktreeStatusEntry>, String> {
+    state.engine.list_project_worktrees(&project_path).await
+}
+
+/// Explicit, user-confirmed removal of a checkout no session claims. Session-claimed paths are
+/// refused and must go through `discard_session_worktree`.
+#[tauri::command]
+async fn discard_orphan_worktree(
+    state: State<'_, AppState>,
+    project_path: String,
+    worktree_path: String,
+) -> Result<codetwo_core::worktree::DiscardedWorktree, String> {
+    state
+        .engine
+        .discard_orphan_worktree(&project_path, &worktree_path)
+        .await
+}
+
 // ---- PR + commit message (G6) ------------------------------------------------------------------
 
 #[tauri::command]
@@ -3786,6 +3821,9 @@ pub fn run() {
             archive_session,
             pin_session,
             list_archived_sessions,
+            discard_session_worktree,
+            list_project_worktrees,
+            discard_orphan_worktree,
             git_source_control_info,
             git_create_pr,
             git_suggest_commit,

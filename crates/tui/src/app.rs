@@ -469,6 +469,15 @@ impl App {
                     self.push("end", stop_reason);
                 }
             }
+            Event::WorktreeDiscarded {
+                session,
+                worktree_path,
+                ..
+            } => {
+                if self.active.as_deref() == Some(session.as_str()) {
+                    self.status = format!("worktree discarded: {worktree_path}");
+                }
+            }
             // Scene hook/exit/cost projections (R8) are rendered by the desktop; the TUI keeps
             // the match exhaustive and stays quiet until it grows a banner surface.
             Event::TestSignal { .. }
@@ -827,6 +836,15 @@ impl App {
                         return;
                     }
                 };
+                let worktree_base_sha = match self.resolved_worktree_base_sha(&cwd).await {
+                    Ok(sha) => sha,
+                    Err(message) => {
+                        self.remove_optimistic_user_echo(Some(user_echo_index), &doc);
+                        self.restore_doc(doc);
+                        self.status = message;
+                        return;
+                    }
+                };
                 self.cwd = cwd.clone();
                 let request_id = self.begin_creation(Some(doc), Some(user_echo_index));
                 let provider = self.providers[self.provider_idx].id.clone();
@@ -837,7 +855,7 @@ impl App {
                         cwd,
                         use_worktree: self.worktree_base.is_some(),
                         worktree_base: self.worktree_base,
-                        worktree_base_sha: None,
+                        worktree_base_sha,
                         request_id: Some(request_id.clone()),
                         initial_policy: Some(ExecutionPolicy {
                             mode: self.mode,
@@ -878,6 +896,13 @@ impl App {
                 return;
             }
         };
+        let worktree_base_sha = match self.resolved_worktree_base_sha(&cwd).await {
+            Ok(sha) => sha,
+            Err(message) => {
+                self.status = message;
+                return;
+            }
+        };
         self.active = None;
         self.cwd = cwd.clone();
         self.transcript.clear();
@@ -890,7 +915,7 @@ impl App {
                 cwd,
                 use_worktree: self.worktree_base.is_some(),
                 worktree_base: self.worktree_base,
-                worktree_base_sha: None,
+                worktree_base_sha,
                 request_id: Some(request_id.clone()),
                 initial_policy: Some(ExecutionPolicy {
                     mode: self.mode,
@@ -924,6 +949,19 @@ impl App {
         } else {
             self.mode = next_mode;
         }
+    }
+
+    /// Pin the chosen baseline to the exact local SHA immediately before creation, mirroring the
+    /// desktop picker's preview pin: the core re-resolves the ref and refuses to create the
+    /// worktree if it moved in between, instead of silently branching from a different commit.
+    async fn resolved_worktree_base_sha(&self, cwd: &str) -> Result<Option<String>, String> {
+        let Some(kind) = self.worktree_base else {
+            return Ok(None);
+        };
+        codetwo_core::worktree::resolve_baseline(std::path::Path::new(cwd), kind)
+            .await
+            .map(|resolved| Some(resolved.sha))
+            .map_err(|error| format!("worktree baseline is unavailable: {error}"))
     }
 
     fn cycle_worktree_base(&mut self) {
