@@ -398,6 +398,29 @@ impl App {
                     });
                 }
             }
+            // The TUI has no form renderer, so a structured question joins the same queue through
+            // the permission-shaped projection its form offers: a single-question ask is pickable
+            // here exactly as the agent wrote it, and anything richer offers Skip and waits for a
+            // frontend that can draw it.
+            Event::ElicitationRequest {
+                session,
+                request_id,
+                form,
+            } => {
+                let duplicate = self
+                    .permissions
+                    .iter()
+                    .any(|pending| pending.session == session && pending.request_id == request_id);
+                if !duplicate {
+                    self.permissions.push_back(PermReq {
+                        session,
+                        request_id,
+                        title: form.message.clone(),
+                        options: form.legacy_options(),
+                        sequence: u64::MAX,
+                    });
+                }
+            }
             Event::Usage { .. } => {}
             // Context-window data is rendered by the desktop Composer; the TUI keeps the event
             // exhaustive without conflating it with the legacy rolling usage projection.
@@ -1955,6 +1978,7 @@ mod tests {
             option_kinds: Default::default(),
             context: Default::default(),
             sequence,
+            form: None,
         }
     }
 

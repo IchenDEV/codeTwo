@@ -53,6 +53,17 @@ Prompt-turn loop: `initialize` → `session/new` → `session/prompt` → stream
 answer `session/request_permission` → read `StopReason`. Proven end-to-end offline by
 `crates/core/tests/acp_prompt_turn.rs` against a mock agent (no provider binary needed).
 
+We advertise one client capability at `initialize`: `elicitation.form`. That is what turns an
+agent's structured question into a question — Claude Code's `AskUserQuestion` reaches the client as
+`elicitation/create` only when the capability is present, and otherwise degrades into an
+allow/reject prompt naming the tool but showing none of its options. `core::elicitation` normalizes
+the request's JSON Schema into a render-ready `ElicitationForm`, which parks on the same pending-
+input queue as permissions (`PendingInputKind::Elicitation`) and is answered with
+`Op::AnswerElicitation`. Answers are sanitized against that form, so no client can send back a
+value the agent never offered; a single-question form also projects onto permission-shaped options
+so clients that only render approvals can still answer it. See
+`crates/core/tests/engine_elicitation.rs`.
+
 ## Context sync: whose memory is it?
 
 Two transcripts and one recall layer can participate in a turn. They are not the same thing:

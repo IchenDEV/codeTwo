@@ -3346,6 +3346,24 @@ async fn answer_permission(
 }
 
 #[tauri::command]
+async fn answer_elicitation(
+    state: State<'_, AppState>,
+    session: String,
+    request_id: String,
+    answer: codetwo_core::elicitation::ElicitationAnswer,
+) -> Result<(), String> {
+    state
+        .engine
+        .submit(Op::AnswerElicitation {
+            session,
+            request_id,
+            answer,
+        })
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn set_permission_mode(
     state: State<'_, AppState>,
     session: String,
@@ -3864,6 +3882,7 @@ pub fn run() {
             new_session,
             submit_prompt,
             answer_permission,
+            answer_elicitation,
             set_permission_mode,
             set_model,
             set_config_option,

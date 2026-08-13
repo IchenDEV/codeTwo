@@ -160,6 +160,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .await
                         .ok();
                 }
+                Event::ElicitationRequest {
+                    session,
+                    request_id,
+                    form,
+                } => {
+                    println!("  ❓ question: {}", form.message);
+                    println!("  → auto-answering: skip");
+                    engine
+                        .submit(Op::AnswerElicitation {
+                            session: session.clone(),
+                            request_id: request_id.clone(),
+                            answer: codetwo_core::elicitation::ElicitationAnswer::Decline,
+                        })
+                        .await
+                        .ok();
+                }
                 Event::Plan { entries, .. } => println!("  ☰ plan: {}", entries.join(", ")),
                 Event::TurnEnded { stop_reason, .. } => {
                     println!("\n■ turn ended: {stop_reason}");
