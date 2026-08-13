@@ -737,6 +737,56 @@ impl SceneLibrary {
         lib
     }
 
+    /// Validate and persist one editable scene under `dir/<name>.scene.json`.
+    ///
+    /// The filename is derived only from the schema-validated slug, so callers cannot escape the
+    /// selected user/project scene directory. A changed name removes the previous file only after
+    /// the replacement has been written successfully.
+    pub fn save_to_dir(
+        dir: &Path,
+        scene: &Scene,
+        previous_name: Option<&str>,
+    ) -> Result<PathBuf, String> {
+        validate_scene(scene)?;
+        if let Some(previous) = previous_name {
+            if !is_slug(previous) {
+                return Err(format!("invalid previous scene name `{previous}`"));
+            }
+        }
+
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        let target = dir.join(format!("{}.scene.json", scene.name));
+        let temp = dir.join(format!(".{}.scene.json.tmp", scene.name));
+        let json = serde_json::to_string_pretty(scene).map_err(|e| e.to_string())?;
+        std::fs::write(&temp, format!("{json}\n")).map_err(|e| e.to_string())?;
+        std::fs::rename(&temp, &target).map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            e.to_string()
+        })?;
+
+        if let Some(previous) = previous_name.filter(|previous| *previous != scene.name) {
+            let old = dir.join(format!("{previous}.scene.json"));
+            match std::fs::remove_file(old) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+        Ok(target)
+    }
+
+    /// Delete one editable scene. Missing files are already in the desired state.
+    pub fn delete_from_dir(dir: &Path, name: &str) -> Result<(), String> {
+        if !is_slug(name) {
+            return Err(format!("invalid scene name `{name}`"));
+        }
+        match std::fs::remove_file(dir.join(format!("{name}.scene.json"))) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
     fn load_dir(dir: &Path, source: SceneSource, out: &mut SceneLibrary) {
         let entries = match std::fs::read_dir(dir) {
             Ok(entries) => entries,
@@ -1776,5 +1826,27 @@ mod tests {
         });
         let md = export_skill_md(&scene);
         assert!(md.contains("````\n```sh\necho hi\n```\n````"));
+    }
+
+    #[test]
+    fn editable_scene_save_rename_and_delete_stay_inside_the_selected_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut scene = minimal_scene("my-scene");
+        let first = SceneLibrary::save_to_dir(dir.path(), &scene, None).unwrap();
+        assert_eq!(first, dir.path().join("my-scene.scene.json"));
+        assert_eq!(
+            serde_json::from_str::<Scene>(&std::fs::read_to_string(&first).unwrap()).unwrap(),
+            scene
+        );
+
+        scene.name = "renamed-scene".into();
+        let renamed = SceneLibrary::save_to_dir(dir.path(), &scene, Some("my-scene")).unwrap();
+        assert!(renamed.is_file());
+        assert!(!first.exists());
+
+        SceneLibrary::delete_from_dir(dir.path(), "renamed-scene").unwrap();
+        assert!(!renamed.exists());
+        SceneLibrary::delete_from_dir(dir.path(), "renamed-scene").unwrap();
+        assert!(SceneLibrary::delete_from_dir(dir.path(), "../escape").is_err());
     }
 }

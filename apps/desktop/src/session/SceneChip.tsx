@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, Download, ListChecks, RotateCcw } from "lucide-react";
+import { ChevronDown, Clapperboard, Copy, Download, ListChecks, Pencil, Plus, RotateCcw, Route, Settings2 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
@@ -67,7 +67,12 @@ export function SceneChip({
   const { locale } = useLanguage();
   const [open, setOpen] = useState(false);
   const active = config.activeScene;
-  const label = active ? sceneTitle(active, locale) : t("scene.none");
+  const sceneLabel = active ? sceneTitle(active, locale) : t("scene.none");
+  const label = config.autoScene
+    ? active
+      ? t("scene.autoActive", { scene: sceneLabel })
+      : t("scene.auto")
+    : sceneLabel;
   const partial = config.scenePendingFields.length > 0;
 
   return (
@@ -76,16 +81,10 @@ export function SceneChip({
         render={<Chip
           title={t("scene.chip")}
           aria-label={`${t("scene.chip")}: ${label}`}
-          className={cn(active && "text-foreground")}
+          className={cn((active || config.autoScene) && "text-foreground")}
         >
-          {active?.icon ? (
-            <span className="shrink-0 text-ui leading-none" aria-hidden>
-              {active.icon}
-            </span>
-          ) : (
-            <Clapperboard className="size-3.5 shrink-0" />
-          )}
-          <span className="hidden @lg/composer:inline">{label}</span>
+          <Clapperboard className="size-3.5 shrink-0" />
+          <span className="max-w-36 truncate">{label}</span>
           {config.sceneCustomized && (
             <span
               className="size-1.5 shrink-0 rounded-full bg-warning"
@@ -106,16 +105,16 @@ export function SceneChip({
       <PopoverContent
         align="start"
         side="top"
-        className="w-96 p-1.5"
+        size="wide"
+        className="p-2"
       >
-        {/* The pickers hide their labels via @container/composer queries; re-establish the
-            container inside the portal so they render exactly as they do in the row. */}
         <div className="@container/composer">
           <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
             <span className="min-w-0 flex-1 truncate text-hint text-muted-foreground">
               {t("scene.chip")}
             </span>
             {active && <SourceBadge source={active.source} />}
+            {config.autoScene && <Badge variant="secondary">{t("scene.auto")}</Badge>}
             {config.sceneCustomized && (
               <Badge variant="outline" className="shrink-0 text-cap text-warning">
                 {t("scene.customized")}
@@ -124,11 +123,25 @@ export function SceneChip({
           </div>
 
           <MenuRow
-            selected={active === null}
+            selected={config.autoScene}
+            isDefault={false}
+            label={t("scene.auto")}
+            detail={t("scene.autoHint")}
+            detailWrap
+            leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+            onClick={() => {
+              config.onAutoScene(true);
+              setOpen(false);
+            }}
+          />
+          <MenuRow
+            selected={active === null && !config.autoScene}
             isDefault={false}
             label={t("scene.none")}
             detail={t("scene.noneHint")}
+            detailWrap
             onClick={() => {
+              config.onAutoScene(false);
               config.onScene(null, "soft");
               setOpen(false);
             }}
@@ -136,22 +149,37 @@ export function SceneChip({
           {config.scenes.map((scene) => (
             <MenuRow
               key={scene.reference}
-              selected={active?.reference === scene.reference}
+              selected={!config.autoScene && active?.reference === scene.reference}
               isDefault={false}
-              label={`${scene.icon ? `${scene.icon} ` : ""}${sceneTitle(scene, locale)}`}
+              label={sceneTitle(scene, locale)}
               detail={scene.localizations[locale]?.description ?? scene.description}
+              detailWrap
               leading={<SourceBadge source={scene.source} />}
               onClick={() => {
+                config.onAutoScene(false);
                 config.onScene(scene.reference, "soft");
                 setOpen(false);
               }}
             />
           ))}
 
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-1 w-full justify-start text-muted-foreground"
+            onClick={() => {
+              setOpen(false);
+              config.onManageScenes();
+            }}
+          >
+            <Settings2 data-icon="inline-start" />
+            {t("sceneEditor.manage")}
+          </Button>
+
           <div className="mx-2 my-1.5 h-px bg-border" />
 
-          {/* The posture pickers, unchanged: the scene sets them; the user can still override. */}
-          <div className="flex flex-wrap items-center gap-1 px-1 pb-1">
+          {/* Every posture override keeps its current value visible, even when this row wraps. */}
+          <div className="flex flex-wrap items-center gap-1.5 px-1 pb-1">
             <ProviderPicker config={config} />
             <ModelPicker
               models={models}
@@ -168,11 +196,12 @@ export function SceneChip({
             <Chip
               title={t("config.planFirstHint")}
               aria-pressed={config.planMode}
+              aria-label={t(config.planMode ? "config.planFirstOn" : "config.planFirstOff")}
               className={cn(config.planMode && "text-primary hover:text-primary")}
               onClick={() => config.onPlan(!config.planMode)}
             >
               <ListChecks className="size-3.5 shrink-0" />
-              <span className="hidden @lg/composer:inline">{t("config.planFirst")}</span>
+              <span>{t(config.planMode ? "config.planFirstOn" : "config.planFirstOff")}</span>
             </Chip>
             <WorktreePicker config={config} />
           </div>
@@ -206,12 +235,22 @@ export function SceneChip({
 export function ScenePicker({
   scenes,
   active,
+  auto,
+  onAuto,
   onScene,
+  onCreate,
+  onEdit,
+  onDuplicate,
   onClose,
 }: {
   scenes: SceneInfo[];
   active: SceneInfo | null;
+  auto: boolean;
+  onAuto: (enabled: boolean) => void;
   onScene: (reference: string | null) => void;
+  onCreate: () => void;
+  onEdit: (scene: SceneInfo) => void;
+  onDuplicate: (scene: SceneInfo) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -232,18 +271,38 @@ export function ScenePicker({
   };
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{t("scene.pickerTitle")}</DialogTitle>
+          <div className="flex items-center justify-between gap-3 pr-8">
+            <DialogTitle>{t("scene.pickerTitle")}</DialogTitle>
+            <Button type="button" variant="outline" size="sm" onClick={onCreate}>
+              <Plus data-icon="inline-start" />
+              {t("sceneEditor.create")}
+            </Button>
+          </div>
           <DialogDescription>{t("scene.pickerHint")}</DialogDescription>
         </DialogHeader>
-        <div className="max-h-96 space-y-0.5 overflow-y-auto">
+        <div className="flex max-h-96 flex-col gap-0.5 overflow-y-auto">
           <MenuRow
-            selected={active === null}
+            selected={auto}
+            isDefault={false}
+            label={t("scene.auto")}
+            detail={t("scene.autoHint")}
+            detailWrap
+            leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+            onClick={() => {
+              onAuto(true);
+              onClose();
+            }}
+          />
+          <MenuRow
+            selected={active === null && !auto}
             isDefault={false}
             label={t("scene.none")}
             detail={t("scene.noneHint")}
+            detailWrap
             onClick={() => {
+              onAuto(false);
               onScene(null);
               onClose();
             }}
@@ -252,12 +311,14 @@ export function ScenePicker({
             <div key={scene.reference} className="flex items-center gap-1">
               <div className="min-w-0 flex-1">
                 <MenuRow
-                  selected={active?.reference === scene.reference}
+                  selected={!auto && active?.reference === scene.reference}
                   isDefault={false}
-                  label={`${scene.icon ? `${scene.icon} ` : ""}${sceneTitle(scene, locale)}`}
+                  label={sceneTitle(scene, locale)}
                   detail={scene.localizations[locale]?.description ?? scene.description}
+                  detailWrap
                   leading={<SourceBadge source={scene.source} />}
                   onClick={() => {
+                    onAuto(false);
                     onScene(scene.reference);
                     onClose();
                   }}
@@ -267,11 +328,33 @@ export function ScenePicker({
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0 text-muted-foreground"
+                title={t("sceneEditor.duplicate")}
+                aria-label={`${t("sceneEditor.duplicate")}: ${sceneTitle(scene, locale)}`}
+                onClick={() => onDuplicate(scene)}
+              >
+                <Copy />
+              </Button>
+              {(scene.source === "user" || scene.source === "project") && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-muted-foreground"
+                  title={t("sceneEditor.edit")}
+                  aria-label={`${t("sceneEditor.edit")}: ${sceneTitle(scene, locale)}`}
+                  onClick={() => onEdit(scene)}
+                >
+                  <Pencil />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground"
                 title={t("scene.exportSkill")}
                 aria-label={t("scene.exportSkill")}
                 onClick={() => void exportSkill(scene)}
               >
-                <Download className="size-3.5" />
+                <Download />
               </Button>
             </div>
           ))}

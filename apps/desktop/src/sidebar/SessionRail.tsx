@@ -7,8 +7,11 @@ import {
   CircleAlert,
   ChevronDown,
   ChevronRight,
+  Copy,
   Folder,
+  FolderOpen,
   FolderPlus,
+  Hash,
   LayoutGrid,
   PanelLeft,
   Pencil,
@@ -20,9 +23,17 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { providerLabel, type Project, type SessionInfo } from "../bridge";
+import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +49,7 @@ import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
+import { useToast } from "../ui/toast";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
 function shortAge(ts: number): string {
@@ -102,7 +114,7 @@ export function SessionRail({
   sessions: SessionInfo[];
   /** Archived sessions, shown as their own collapsible group below the live ones. */
   archivedSessions: SessionInfo[];
-  /** Newest text per session id — the row's description line. */
+  /** Newest text per session id — exposed as hover detail without changing the three-row layout. */
   previews: Record<string, string>;
   activeSession: string | null;
   /** Every session with a turn in flight, including background sessions. */
@@ -139,6 +151,7 @@ export function SessionRail({
   onOpenMissionControl: () => void;
 }) {
   const t = useT();
+  const toast = useToast();
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [renamingProject, setRenamingProject] = useState<string | null>(null);
 
@@ -203,6 +216,30 @@ export function SessionRail({
   // shouldn't compete with the live rows for attention. The fold survives a restart.
   const [archivedOpen, setArchivedOpen] = usePersistedBoolean("rail.archivedOpen", false);
 
+  const copyToClipboard = useCallback(
+    async (value: string, confirmation: string) => {
+      try {
+        if (!navigator.clipboard) throw new Error("Clipboard API unavailable");
+        await navigator.clipboard.writeText(value);
+        toast(confirmation, "success");
+      } catch {
+        toast(t("rail.copyFailed"), "error");
+      }
+    },
+    [t, toast],
+  );
+
+  const revealWorkingDirectory = useCallback(
+    async (path: string) => {
+      try {
+        if (!(await openNativePath(path))) throw new Error("Native path reveal unavailable");
+      } catch {
+        toast(t("rail.revealFailed"), "error");
+      }
+    },
+    [t, toast],
+  );
+
   /** Muted label over a group of rows — Active, Archived. */
   const groupLabel = (label: string) => (
     <p className="px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80">
@@ -210,132 +247,303 @@ export function SessionRail({
     </p>
   );
 
-  /**
-   * One thread, three lines: what it's called, the last thing said, and who's working it —
-   * with the live/finished state spelled out rather than implied.
-   */
+  /** One thread: title, agent, and status — three stable rows on one shared icon axis. */
   const sessionRow = (s: SessionInfo, isArchived: boolean) => {
     const activity = sessionActivity(s).state;
     const isAwaitingInput = activity.kind === "awaiting_input";
     const isFailed = activity.kind === "failed";
     const isRunning =
       runningSessions.has(s.id) || activity.kind === "running" || isAwaitingInput;
+    const statusLabel = isAwaitingInput
+      ? t("session.awaitingInput")
+      : isFailed
+        ? t("session.failed")
+        : isRunning
+          ? t("session.running")
+          : t("session.completed");
+    const preview = previews[s.id]?.trim();
+    // Structured empty documents can serialize to a bullet or another punctuation-only fragment.
+    // It carries no glanceable meaning and should not consume a whole rail line.
+    const hasUsefulPreview = Boolean(preview && /[\p{L}\p{N}]/u.test(preview));
+
+    const commitRename = () => {
+      if (renaming?.id !== s.id) return;
+      const title = renaming.title.trim();
+      if (title && title !== s.title) onRename(s.id, title);
+      setRenaming(null);
+    };
+
+    const onRowKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.target !== event.currentTarget) return;
+
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onSelect(s.id);
+        return;
+      }
+
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const rows = Array.from(
+          event.currentTarget
+            .closest("[data-session-list]")
+            ?.querySelectorAll<HTMLButtonElement>("[data-session-select]") ?? [],
+        );
+        const current = rows.indexOf(event.currentTarget);
+        const delta = event.key === "ArrowDown" ? 1 : -1;
+        const next = rows[Math.min(rows.length - 1, Math.max(0, current + delta))];
+        if (next && next !== event.currentTarget) {
+          event.preventDefault();
+          next.focus();
+        }
+        return;
+      }
+
+      if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") {
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        event.currentTarget.dispatchEvent(
+          new MouseEvent("contextmenu", {
+            bubbles: true,
+            cancelable: true,
+            button: 2,
+            clientX: rect.left + Math.min(24, rect.width / 2),
+            clientY: rect.top + Math.min(24, rect.height / 2),
+          }),
+        );
+      }
+    };
+
     return (
-      <div
-        key={s.id}
-        onClick={() => onSelect(s.id)}
-        className={cn(
-          "group cursor-pointer rounded-md px-2 py-1.5 transition-colors hover:bg-accent/50",
-          s.id === activeSession && "bg-accent",
-        )}
-      >
-        {/* 1 — title, with the age (or the actions, on hover) at its shoulder */}
-        <div className="flex items-center gap-2">
-          {renaming?.id === s.id ? (
-            <Input
-              autoFocus
-              className="h-6 flex-1 text-ui"
-              value={renaming.title}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
-              onBlur={() => setRenaming(null)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  onRename(s.id, renaming.title);
-                  setRenaming(null);
-                } else if (e.key === "Escape") setRenaming(null);
-              }}
-            />
-          ) : (
-            <>
-              {!isArchived && (
-                <button
-                  title={s.pinned ? t("rail.unpin") : t("rail.pin")}
-                  aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
-                  aria-pressed={s.pinned}
-                  className={cn(
-                    "shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    s.pinned && "text-primary",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onPin(s.id, !s.pinned);
-                  }}
-                >
-                  <Pin className="size-3" />
-                </button>
+      <ContextMenu key={s.id}>
+        <ContextMenuTrigger
+          render={
+            <div
+              data-session-id={s.id}
+              data-session-density="comfortable"
+              title={hasUsefulPreview ? preview : undefined}
+              onContextMenu={(event) =>
+                event.currentTarget
+                  .querySelector<HTMLButtonElement>("[data-session-select]")
+                  ?.focus({ preventScroll: true })
+              }
+              className={cn(
+                "group relative cursor-default rounded-md px-2 py-2 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
+                s.id === activeSession && "bg-accent",
               )}
-              <span className={cn("min-w-0 flex-1 truncate text-ui", s.id === activeSession && "font-medium")}>
-                {s.title}
-              </span>
-            </>
-          )}
-          <span className="shrink-0 text-fine text-muted-foreground group-hover:hidden">
-            {shortAge(s.created_at)}
-          </span>
-          <span className="hidden shrink-0 gap-0.5 group-hover:flex">
-            <button
-              title={t("rail.rename")}
-              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                setRenaming({ id: s.id, title: s.title });
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                data-session-select
+                aria-current={s.id === activeSession ? "page" : undefined}
+                aria-label={t("rail.sessionAccessibility", {
+                  title: s.title,
+                  provider: displayProvider(s.provider),
+                  status: statusLabel,
+                })}
+                onClick={() => onSelect(s.id)}
+                onKeyDown={onRowKeyDown}
+                className="absolute inset-0 z-0 h-auto rounded-(--ds-radius-control) p-0 hover:bg-transparent"
+              />
+              <div className="pointer-events-none relative z-10">
+                {/* 1 — title, with the age (or the actions, on hover) at its shoulder */}
+                <div data-session-line="title" className="flex h-6 items-center gap-1.5">
+                  <span
+                    data-session-icon-column
+                    className="flex size-6 shrink-0 items-center justify-center"
+                  >
+                    {!isArchived && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        title={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                        aria-label={s.pinned ? t("rail.unpin") : t("rail.pin")}
+                        aria-pressed={s.pinned}
+                        className={cn(
+                          "pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground",
+                          s.pinned && "text-primary",
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPin(s.id, !s.pinned);
+                        }}
+                      >
+                        <Pin />
+                      </Button>
+                    )}
+                  </span>
+                  {renaming?.id === s.id ? (
+                    <Input
+                      autoFocus
+                      size="compact"
+                      className="pointer-events-auto relative z-10 h-(--ds-control-mini) flex-1 text-ui leading-4"
+                      value={renaming.title}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setRenaming({ id: s.id, title: e.target.value })}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onBlur={commitRename}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitRename();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          setRenaming(null);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span
+                      title={s.title}
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-ui leading-4",
+                        s.id === activeSession && "font-medium",
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-fine leading-4 text-muted-foreground group-hover:hidden group-focus-within:hidden group-data-[popup-open]:hidden">
+                    {shortAge(s.created_at)}
+                  </span>
+                  <span className="hidden shrink-0 gap-0.5 group-hover:flex group-focus-within:flex group-data-[popup-open]:flex">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      title={t("rail.rename")}
+                      aria-label={t("rail.rename")}
+                      className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRenaming({ id: s.id, title: s.title });
+                      }}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      title={isArchived ? t("rail.unarchive") : t("rail.archive")}
+                      aria-label={isArchived ? t("rail.unarchive") : t("rail.archive")}
+                      className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onArchive(s.id, !isArchived);
+                      }}
+                    >
+                      {isArchived ? <ArchiveRestore /> : <Archive />}
+                    </Button>
+                  </span>
+                </div>
+
+                {/* 2 — assigned agent; the icon slot matches the title and status rows exactly. */}
+                <div
+                  data-session-line="provider"
+                  className="mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
+                >
+                  <span
+                    data-session-icon-column
+                    className="flex h-4 w-6 shrink-0 items-center justify-center"
+                  >
+                    <ProviderIcon
+                      provider={providerLabel(s.provider)}
+                      className="size-3 opacity-70"
+                    />
+                  </span>
+                  <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
+                </div>
+
+                {/* 3 — state gets its own row instead of competing with the provider label. */}
+                <div
+                  data-session-line="status"
+                  aria-label={statusLabel}
+                  title={isFailed ? activity.message : undefined}
+                  className={cn(
+                    "mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground",
+                    isAwaitingInput && "text-warning",
+                    isFailed && "text-destructive",
+                    isRunning && "text-primary",
+                  )}
+                >
+                  <span
+                    data-session-icon-column
+                    className="flex h-4 w-6 shrink-0 items-center justify-center"
+                  >
+                    {isAwaitingInput ? (
+                      <span className="size-1.5 animate-pulse rounded-full bg-warning" />
+                    ) : isFailed ? (
+                      <CircleAlert className="size-3" />
+                    ) : isRunning ? (
+                      <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                    ) : (
+                      <Check className="size-3" />
+                    )}
+                  </span>
+                  <span className="min-w-0 truncate">{statusLabel}</span>
+                </div>
+              </div>
+            </div>
+          }
+        />
+        <ContextMenuContent className="min-w-56">
+          <ContextMenuGroup>
+            {!isArchived ? (
+              <ContextMenuItem onClick={() => onPin(s.id, !s.pinned)}>
+                <Pin />
+                {s.pinned ? t("rail.unpin") : t("rail.pin")}
+              </ContextMenuItem>
+            ) : null}
+            <ContextMenuItem
+              onClick={() => {
+                // Let Base UI finish restoring focus from the closing menu before the auto-focus
+                // input mounts; otherwise that restoration immediately blurs and cancels rename.
+                setTimeout(() => setRenaming({ id: s.id, title: s.title }), 0);
               }}
             >
-              <Pencil className="size-3" />
-            </button>
-            <button
-              title={isArchived ? t("rail.unarchive") : t("rail.archive")}
-              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive(s.id, !isArchived);
-              }}
+              <Pencil />
+              {t("rail.rename")}
+            </ContextMenuItem>
+            <ContextMenuItem onClick={() => onArchive(s.id, !isArchived)}>
+              {isArchived ? (
+                <ArchiveRestore />
+              ) : (
+                <Archive />
+              )}
+              {isArchived ? t("rail.unarchive") : t("rail.archive")}
+            </ContextMenuItem>
+          </ContextMenuGroup>
+          <ContextMenuSeparator />
+          <ContextMenuGroup>
+            <ContextMenuItem
+              onClick={() => void revealWorkingDirectory(s.worktree_path ?? s.cwd)}
             >
-              {isArchived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
-            </button>
-          </span>
-        </div>
-
-        {/* 2 — the last thing said, so two "Untitled session" rows are tellable apart */}
-        <div className="truncate text-fine leading-snug text-muted-foreground/80">
-          {previews[s.id] ?? t("session.noMessages")}
-        </div>
-
-        {/* 3 — the assigned agent, and whether it's still at work */}
-        <div className="flex items-center gap-1.5 pt-0.5 text-fine text-muted-foreground">
-          <ProviderIcon provider={providerLabel(s.provider)} className="size-3 shrink-0 opacity-70" />
-          <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
-          <span className="min-w-0 flex-1" />
-          {isAwaitingInput ? (
-            <span
-              className="flex shrink-0 items-center gap-1 text-warning"
-              title={t("mission.awaiting")}
+              <FolderOpen />
+              {t("rail.revealWorkingDirectory")}
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() =>
+                void copyToClipboard(
+                  s.worktree_path ?? s.cwd,
+                  t("rail.workingDirectoryCopied"),
+                )
+              }
             >
-              <span className="size-1.5 animate-pulse rounded-full bg-warning" />
-              {t("session.awaitingInput")}
-            </span>
-          ) : isFailed ? (
-            <span
-              className="flex min-w-0 shrink items-center gap-1 text-destructive"
-              title={activity.message}
+              <Copy />
+              {t("rail.copyWorkingDirectory")}
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => void copyToClipboard(s.id, t("rail.sessionIdCopied"))}
             >
-              <CircleAlert className="size-3 shrink-0" />
-              <span className="truncate">{t("session.failed")}</span>
-            </span>
-          ) : isRunning ? (
-            <span className="flex shrink-0 items-center gap-1 text-primary">
-              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-              {t("session.running")}
-            </span>
-          ) : (
-            <span className="flex shrink-0 items-center gap-1">
-              <Check className="size-3" />
-              {t("session.completed")}
-            </span>
-          )}
-        </div>
-      </div>
+              <Hash />
+              {t("rail.copySessionId")}
+            </ContextMenuItem>
+          </ContextMenuGroup>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   };
 
@@ -355,9 +563,8 @@ export function SessionRail({
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* The configured traffic lights sit about 6px below the 40px web title row's midpoint.
-          Top padding moves the title and sidebar control onto that native optical center. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2 pt-3">
+      {/* Keep the wordmark and controls centred in the same 40px title row as the main header. */}
+      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2">
         <span data-tauri-drag-region className="min-w-0 truncate text-ui font-semibold">
           {t("app.name")}
         </span>
@@ -506,7 +713,7 @@ export function SessionRail({
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="px-3 pb-3">
+        <div data-session-list className="px-3 pb-3">
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
@@ -520,13 +727,13 @@ export function SessionRail({
               {pinned.length > 0 && (
                 <>
                   {groupLabel(t("rail.groupPinned"))}
-                  <div className="space-y-px">{pinned.map((s) => sessionRow(s, false))}</div>
+                  <div className="flex flex-col gap-2">{pinned.map((s) => sessionRow(s, false))}</div>
                 </>
               )}
               {active.length > 0 && (
                 <>
                   {groupLabel(t("rail.groupActive"))}
-                  <div className="space-y-px">{active.map((s) => sessionRow(s, false))}</div>
+                  <div className="flex flex-col gap-2">{active.map((s) => sessionRow(s, false))}</div>
                 </>
               )}
               {archived.length > 0 && (
@@ -546,7 +753,7 @@ export function SessionRail({
                     />
                   </button>
                   {archivedOpen && (
-                    <div className="space-y-px opacity-80">
+                    <div className="flex flex-col gap-2 opacity-80">
                       {archived.map((s) => sessionRow(s, true))}
                     </div>
                   )}

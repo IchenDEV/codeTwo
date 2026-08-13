@@ -19,7 +19,10 @@ const showPetPreview =
 document.addEventListener("contextmenu", (e) => {
   const el = e.target as HTMLElement | null;
   const editable = el?.closest?.("input, textarea, [contenteditable='true']");
-  if (!editable) e.preventDefault();
+  // Base UI needs the un-cancelled event to position an app-owned context menu. Its trigger is a
+  // deliberate desktop interaction, not the webview's Reload / Inspect Element menu.
+  const appContextMenu = el?.closest?.('[data-slot="context-menu-trigger"]');
+  if (!editable && !appContextMenu) e.preventDefault();
 });
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.

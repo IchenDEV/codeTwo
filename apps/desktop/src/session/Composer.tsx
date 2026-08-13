@@ -152,6 +152,7 @@ export function MenuRow({
   leading,
   onClick,
   disabled = false,
+  detailWrap = false,
 }: {
   selected: boolean;
   isDefault: boolean;
@@ -161,13 +162,16 @@ export function MenuRow({
   leading?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  /** Scene summaries need enough room to explain the posture instead of ending in an ellipsis. */
+  detailWrap?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
+        "flex w-full gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui transition-colors",
+        detailWrap ? "items-start" : "items-center",
         selected ? "bg-accent" : "hover:bg-accent/50",
         disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
       )}
@@ -175,7 +179,16 @@ export function MenuRow({
       {leading}
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
-        {detail && <span className="block truncate text-fine text-muted-foreground">{detail}</span>}
+        {detail && (
+          <span
+            className={cn(
+              "block text-fine text-muted-foreground",
+              detailWrap ? "whitespace-normal leading-relaxed" : "truncate",
+            )}
+          >
+            {detail}
+          </span>
+        )}
       </span>
       {isDefault && <DefaultBadge />}
     </button>
@@ -216,6 +229,7 @@ export function ModePicker({ config }: { config: SessionConfig }) {
           title={t("config.mode")}
           disabled={config.modeChangeDisabled}
           aria-busy={config.modeChangeDisabled}
+          aria-label={`${t("config.mode")}: ${t(`mode.${active}` as "mode.ask")}`}
           className={cn(config.modeChangeDisabled && "cursor-wait opacity-60 hover:bg-transparent")}
         >
           {active === "full_access" ? (
@@ -223,8 +237,7 @@ export function ModePicker({ config }: { config: SessionConfig }) {
           ) : (
             <Lock className="size-3 shrink-0" />
           )}
-          {/* Narrow, the lock alone carries the meaning — the label is spelt out in the menu. */}
-          <span className="hidden @lg/composer:inline">{t(`mode.${active}` as "mode.ask")}</span>
+          <span>{t(`mode.${active}` as "mode.ask")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>}
       />
@@ -272,9 +285,7 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
           aria-label={`${t("config.memory")}: ${t(`memory.preset.${active.id}` as "memory.preset.standard")}`}
         >
           <BrainCircuit className="size-3.5 shrink-0" />
-          <span className="hidden @xl/composer:inline">
-            {t(`memory.preset.${active.id}` as "memory.preset.standard")}
-          </span>
+          <span>{t(`memory.preset.${active.id}` as "memory.preset.standard")}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>}
       />
@@ -330,13 +341,14 @@ export function WorktreePicker({ config }: { config: SessionConfig }) {
         render={<Chip
           tone={selectedUnavailable ? "warning" : undefined}
           title={t("config.worktreeHint")}
+          aria-label={`${t("config.worktree")}: ${compactLabel}`}
           aria-expanded={open}
           className={cn(
             selectedKind != null && !selectedUnavailable && "text-primary hover:text-primary",
           )}
         >
           <GitBranch className="size-3.5 shrink-0" />
-          <span className="hidden max-w-36 truncate @lg/composer:inline">{compactLabel}</span>
+          <span className="max-w-36 truncate">{compactLabel}</span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>}
       />
@@ -428,12 +440,12 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      {/* The provider also reads in the sidebar footer; squeezed, this chip is the detail to
-          shed first. @3xl, not narrower: the full row runs ~730px, so anything under that must
-          already have let this go — including the 680px hero card, which keeps the "⌘⏎ to
-          send" hint (worth more to a first run than a name the sidebar already shows). */}
       <PopoverTrigger
-        render={<Chip ref={triggerRef} title={t("config.provider")} className="hidden @3xl/composer:flex">
+        render={<Chip
+          ref={triggerRef}
+          title={t("config.provider")}
+          aria-label={`${t("config.provider")}: ${active?.display_name ?? config.provider}`}
+        >
           {active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}

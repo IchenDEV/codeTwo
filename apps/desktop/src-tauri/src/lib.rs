@@ -55,7 +55,7 @@ use codetwo_core::{
     MemorySettings, MemoryStats, Op, Session, SessionSearchHit, Store, TranscriptCursor,
     TranscriptPage,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tokio::sync::broadcast;
 
@@ -570,6 +570,30 @@ struct SessionSceneState {
     resolved: bool,
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SceneSaveScope {
+    User,
+    Project,
+}
+
+fn editable_scene_dir(
+    state: &AppState,
+    scope: SceneSaveScope,
+    cwd: Option<&str>,
+) -> Result<PathBuf, String> {
+    match scope {
+        SceneSaveScope::User => dirs_home()
+            .map(|home| home.join(".config/codetwo/scenes"))
+            .ok_or_else(|| "home directory is unavailable".to_string()),
+        SceneSaveScope::Project => cwd
+            .map(PathBuf::from)
+            .or_else(|| state.skills_cwd.lock().unwrap().clone())
+            .map(|root| root.join(".codetwo/scenes"))
+            .ok_or_else(|| "a project is required for project scenes".to_string()),
+    }
+}
+
 fn pending_field_str(field: codetwo_core::PendingField) -> &'static str {
     match field {
         codetwo_core::PendingField::Providers => "providers",
@@ -601,6 +625,51 @@ fn get_scene(state: State<'_, AppState>, reference: String) -> Result<SceneDetai
         source: entry.source.source_label(),
         scene: entry.scene.clone(),
     })
+}
+
+/// Persist a user- or project-owned scene and immediately refresh every scene consumer.
+/// Builtin and plugin sources are intentionally absent from `SceneSaveScope`; callers duplicate
+/// those definitions into an editable source instead of mutating installed content.
+#[tauri::command]
+fn save_scene(
+    state: State<'_, AppState>,
+    scope: SceneSaveScope,
+    cwd: Option<String>,
+    previous_name: Option<String>,
+    scene: Scene,
+) -> Result<SceneInfo, String> {
+    if let Some(root) = cwd.as_deref() {
+        *state.skills_cwd.lock().unwrap() = Some(PathBuf::from(root));
+    }
+    let dir = editable_scene_dir(&state, scope, cwd.as_deref())?;
+    SceneLibrary::save_to_dir(&dir, &scene, previous_name.as_deref())?;
+    reload_scenes(&state);
+
+    let prefix = match scope {
+        SceneSaveScope::User => "user",
+        SceneSaveScope::Project => "project",
+    };
+    let reference = format!("{prefix}:{}", scene.name);
+    let lib = state.scenes.lock().unwrap().clone();
+    lib.resolve(&reference)
+        .map(SceneInfo::from_resolved)
+        .ok_or_else(|| format!("saved scene `{reference}` could not be reloaded"))
+}
+
+#[tauri::command]
+fn delete_scene(
+    state: State<'_, AppState>,
+    scope: SceneSaveScope,
+    cwd: Option<String>,
+    name: String,
+) -> Result<(), String> {
+    if let Some(root) = cwd.as_deref() {
+        *state.skills_cwd.lock().unwrap() = Some(PathBuf::from(root));
+    }
+    let dir = editable_scene_dir(&state, scope, cwd.as_deref())?;
+    SceneLibrary::delete_from_dir(&dir, &name)?;
+    reload_scenes(&state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -831,6 +900,26 @@ fn get_session_scene(
         reference,
         customized,
     }))
+}
+
+#[tauri::command]
+fn set_session_auto_scene(
+    state: State<'_, AppState>,
+    session: String,
+    enabled: bool,
+) -> Result<(), String> {
+    state
+        .store
+        .set_session_auto_scene(&session, enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_session_auto_scene(state: State<'_, AppState>, session: String) -> Result<bool, String> {
+    state
+        .store
+        .session_auto_scene(&session)
+        .map_err(|e| e.to_string())
 }
 
 // ---- scene artifacts (R4) -------------------------------------------------------------------
@@ -3749,12 +3838,16 @@ pub fn run() {
             lsp::lsp_send,
             list_scenes,
             get_scene,
+            save_scene,
+            delete_scene,
             list_pipelines,
             get_pipeline,
             apply_scene,
             scene_session_plan,
             set_session_scene,
             get_session_scene,
+            set_session_auto_scene,
+            get_session_auto_scene,
             session_diff_stat,
             list_scene_artifacts,
             scene_artifact_content,

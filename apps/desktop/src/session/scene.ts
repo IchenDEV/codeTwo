@@ -35,6 +35,17 @@ export interface SceneArtifactDef {
   description?: string;
 }
 
+export interface SceneLocalization {
+  title?: string | null;
+  description?: string | null;
+}
+
+export interface SceneAuthor {
+  name?: string;
+  email?: string;
+  url?: string;
+}
+
 export interface SceneExecution {
   providers?: string[];
   model?: string;
@@ -47,8 +58,84 @@ export interface SceneExecution {
 
 export interface SceneSkills {
   pinned?: string[];
-  inline?: { name: string; text: string; icon?: string }[];
+  inline?: SceneInlineFragment[];
   suppress_unpinned?: boolean;
+}
+
+export interface SceneInlineFragment {
+  name: string;
+  text: string;
+  icon?: string;
+}
+
+export type SceneExitCriterionKind =
+  | "required_artifacts"
+  | "checklist_complete"
+  | "tests_pass"
+  | "user_confirm"
+  | "custom";
+
+export interface SceneExitCriterion {
+  kind: SceneExitCriterionKind;
+  artifact?: string;
+  description?: string;
+}
+
+export interface SceneExit {
+  criteria?: SceneExitCriterion[];
+  next?: SceneNextSuggestion[];
+}
+
+export type SceneHookEvent =
+  | "enter"
+  | "turn_end"
+  | "artifact_produced"
+  | "exit_criteria_met"
+  | "tests_failed"
+  | "schedule";
+
+export type SceneHookActionKind = "suggest_scene" | "suggest_next" | "run_macro" | "notify";
+
+export interface SceneHook {
+  on: SceneHookEvent;
+  artifact?: string;
+  schedule?: string;
+  action: {
+    kind: SceneHookActionKind;
+    scene?: string;
+    macro?: string;
+    args?: Record<string, string>;
+    message?: string;
+  };
+}
+
+export interface SceneConstraints {
+  guardrails?: string[];
+  tools?: { allow?: string[]; deny?: string[] };
+}
+
+/** Lossless Agent Scenes 1.0 document used by the editor and Tauri bridge. */
+export interface SceneDocument {
+  $schema: string;
+  name: string;
+  version?: string;
+  title: string;
+  description?: string;
+  icon?: string;
+  author?: SceneAuthor;
+  homepage?: string;
+  repository?: string;
+  license?: string;
+  keywords?: string[];
+  localizations?: Record<string, SceneLocalization>;
+  execution?: SceneExecution;
+  skills?: SceneSkills;
+  brief?: SceneBrief;
+  artifacts?: SceneArtifactDef[];
+  exit?: SceneExit;
+  hooks?: SceneHook[];
+  constraints?: SceneConstraints;
+  extensions?: Record<string, Record<string, unknown>>;
 }
 
 /** One resolved scene as `list_scenes` reports it. */
@@ -62,16 +149,13 @@ export interface SceneInfo {
   plugin_id?: string | null;
   keywords: string[];
   has_brief: boolean;
-  localizations: Record<string, { title?: string | null; description?: string | null }>;
+  localizations: Record<string, SceneLocalization>;
   execution?: SceneExecution | null;
   brief?: SceneBrief | null;
   artifacts: SceneArtifactDef[];
   skills?: SceneSkills | null;
   /** Appended for R8's completion banner: exit criteria and next-scene suggestions. */
-  exit?: {
-    criteria?: { kind: string; artifact?: string | null; description?: string | null }[];
-    next?: SceneNextSuggestion[];
-  } | null;
+  exit?: SceneExit | null;
 }
 
 /** One `exit.next` entry — a suggested follow-up scene with its carry set. */

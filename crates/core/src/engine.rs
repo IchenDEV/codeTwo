@@ -259,6 +259,25 @@ fn is_mcp_elicitation(req: &RequestPermissionRequest) -> bool {
         .unwrap_or(false)
 }
 
+/// The app-owned Auto Scene selector is a brokered capability, not an arbitrary third-party MCP
+/// mutation. Let the initial tool invocation reach that broker without a redundant generic MCP
+/// prompt: the broker authenticates the per-session key, rejects calls unless Auto Scene is on,
+/// and emits a separate elicitation when the selected scene would loosen permissions.
+///
+/// A broker-generated escalation carries explanatory content, so it deliberately does not match
+/// this exemption even if the provider reuses the same MCP tool title.
+fn is_internal_scene_selection(
+    req: &RequestPermissionRequest,
+    tool: &ToolContext,
+    title: &str,
+) -> bool {
+    is_mcp_elicitation(req)
+        && tool.source.server.as_deref() == Some("codetwo_scenes")
+        && tool.source.tool.as_deref() == Some("scene_select")
+        && title.eq_ignore_ascii_case("mcp.codetwo_scenes.scene_select")
+        && elicitation_message(&req.tool_call).is_none()
+}
+
 fn elicitation_message(tool_call: &Value) -> Option<String> {
     tool_call
         .get("content")
@@ -509,6 +528,48 @@ fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
         format!("{CODEX_SITES_INSTRUCTIONS}\n\n{prompt}")
     } else {
         prompt
+    }
+}
+
+fn auto_scene_routing_instructions(
+    scenes: &crate::scene::SceneLibrary,
+    current: Option<&str>,
+) -> String {
+    let current = current
+        .and_then(|reference| scenes.resolve(reference))
+        .map(|entry| {
+            format!(
+                "`{}` ({})",
+                crate::scene::SceneLibrary::reference_for(entry),
+                entry.scene.title
+            )
+        })
+        .unwrap_or_else(|| "none".into());
+    let mut catalog = String::new();
+    for entry in scenes.scenes().iter().take(50) {
+        let description = entry
+            .scene
+            .description
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let description: String = description.chars().take(240).collect();
+        catalog.push_str(&format!(
+            "- `{}` — {}: {}\n",
+            crate::scene::SceneLibrary::reference_for(entry),
+            entry.scene.title,
+            description
+        ));
+    }
+    format!(
+        "[CodeTwo Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
+    )
+}
+
+fn with_auto_scene_routing(prompt: String, instructions: Option<String>) -> String {
+    match instructions {
+        Some(instructions) => format!("{instructions}\n\n{prompt}"),
+        None => prompt,
     }
 }
 
@@ -1112,7 +1173,9 @@ impl ClientHandler for SessionHandler {
 
         let context = permission_context(&req, &tool, &title);
 
-        let action = if context.kind == PermissionContextKind::Acp {
+        let action = if is_internal_scene_selection(&req, &tool, &title) {
+            Action::Allow
+        } else if context.kind == PermissionContextKind::Acp {
             self.policy.lock().unwrap().decide(kind, &title)
         } else {
             // MCP elicitation, site access, sensitive browser actions, and Computer Use app
@@ -1219,13 +1282,13 @@ pub struct DesktopMcpConfig {
 }
 
 impl DesktopMcpConfig {
-    fn server_for_session(&self, session: &str) -> McpServer {
+    fn server_for_session(&self, session: &str, name: &str, surface: &str) -> McpServer {
         let session_key =
             blake3::hash(format!("codetwo-browser\0{}\0{session}", self.master_key).as_bytes())
                 .to_hex()
                 .to_string();
         McpServer {
-            name: "codetwo_browser".into(),
+            name: name.into(),
             cwd: None,
             transport: McpTransport::Stdio {
                 command: self.command.clone(),
@@ -1234,9 +1297,18 @@ impl DesktopMcpConfig {
                     ("CODETWO_BROWSER_SOCKET".into(), self.socket_path.clone()),
                     ("CODETWO_BROWSER_SESSION".into(), session.to_string()),
                     ("CODETWO_BROWSER_SESSION_KEY".into(), session_key),
+                    ("CODETWO_DESKTOP_MCP_SURFACE".into(), surface.into()),
                 ],
             },
         }
+    }
+
+    fn browser_server_for_session(&self, session: &str) -> McpServer {
+        self.server_for_session(session, "codetwo_browser", "browser")
+    }
+
+    fn scene_server_for_session(&self, session: &str) -> McpServer {
+        self.server_for_session(session, "codetwo_scenes", "scenes")
     }
 }
 
@@ -2319,9 +2391,17 @@ impl Engine {
                         .map(|runtime| runtime.session.provider == ProviderId::Codex)
                         .unwrap_or(false)
                 };
-                if is_codex {
-                    if let Some(config) = &self.state.desktop_mcp {
-                        let server = config.server_for_session(&session);
+                if let Some(config) = &self.state.desktop_mcp {
+                    let server = config.scene_server_for_session(&session);
+                    if !compiled
+                        .mcp_servers
+                        .iter()
+                        .any(|candidate| candidate.name == server.name)
+                    {
+                        compiled.mcp_servers.push(server);
+                    }
+                    if is_codex {
+                        let server = config.browser_server_for_session(&session);
                         if !compiled
                             .mcp_servers
                             .iter()
@@ -2358,6 +2438,21 @@ impl Engine {
                 } else {
                     format!("{}\n\n{}", memory_context.block, compiled.prompt)
                 };
+                let auto_scene_instructions = self.state.store.as_ref().and_then(|store| {
+                    store
+                        .session_auto_scene(&session)
+                        .ok()
+                        .filter(|enabled| *enabled)?;
+                    let current = store
+                        .session_scene(&session)
+                        .ok()
+                        .flatten()
+                        .map(|(reference, _)| reference);
+                    let scenes = self.state.scenes.lock().unwrap().clone();
+                    Some(auto_scene_routing_instructions(&scenes, current.as_deref()))
+                });
+                let provider_prompt =
+                    with_auto_scene_routing(provider_prompt, auto_scene_instructions);
                 let provider_prompt = with_codetwo_browser_routing(
                     provider_prompt,
                     is_codex && self.state.desktop_mcp.is_some(),
@@ -4356,8 +4451,9 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        elicitation_message, encode_mcp_servers, rich_tool_kind, sites_permission_kind,
-        with_codetwo_browser_routing, with_codex_sites_routing, DesktopMcpConfig,
+        auto_scene_routing_instructions, elicitation_message, encode_mcp_servers, rich_tool_kind,
+        sites_permission_kind, with_auto_scene_routing, with_codetwo_browser_routing,
+        with_codex_sites_routing, DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
     use crate::artifact::ToolSource;
@@ -4393,8 +4489,8 @@ mod mcp_tests {
             socket_path: "/tmp/codetwo-browser.sock".into(),
             master_key: "launch-secret".into(),
         };
-        let first = config.server_for_session("session-a");
-        let second = config.server_for_session("session-b");
+        let first = config.browser_server_for_session("session-a");
+        let second = config.browser_server_for_session("session-b");
         assert_eq!(first.name, "codetwo_browser");
         let env = |server: &McpServer| match &server.transport {
             McpTransport::Stdio { args, env, .. } => {
@@ -4409,6 +4505,19 @@ mod mcp_tests {
         };
         assert_ne!(env(&first), env(&second));
         assert!(!env(&first).contains("launch-secret"));
+    }
+
+    #[test]
+    fn auto_scene_routing_requires_a_first_selection_and_names_only_installed_scenes() {
+        let scenes = crate::scene::SceneLibrary::builtin();
+        let instructions = auto_scene_routing_instructions(&scenes, None);
+        assert!(instructions.contains("call `scene_select` before substantive work"));
+        assert!(instructions.contains("`builtin:research`"));
+        assert!(instructions.contains("`builtin:develop`"));
+        assert!(!instructions.contains("builtin:missing"));
+        let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
+        assert!(prompt.starts_with("[CodeTwo Auto Scene]"));
+        assert!(prompt.ends_with("fix the tests"));
     }
 
     #[test]

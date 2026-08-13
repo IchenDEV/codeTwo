@@ -1,6 +1,8 @@
+import { useRef } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 
 import { TurnCard } from "./TurnCard";
+import { SelectionActions } from "./SelectionActions";
 import type { Turn } from "./turns";
 import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,9 @@ interface TranscriptPaneProps {
   onSaveTemplate?: (promptText: string) => void;
   petAnimation: CodeTwoPetAnimation;
   onVoiceText: (text: string) => void;
+  onAddSelection: (text: string) => void;
+  onExplainSelection: (text: string) => void;
+  onAskSelectionInSideChat: (text: string) => void;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -43,10 +48,14 @@ export function TranscriptPane({
   onSaveTemplate,
   petAnimation,
   onVoiceText,
+  onAddSelection,
+  onExplainSelection,
+  onAskSelectionInSideChat,
 }: TranscriptPaneProps) {
   const t = useT();
   const appearance = useAppearanceSettings();
   const Root = variant === "side" ? "aside" : "section";
+  const selectionScopeRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <Root
@@ -60,6 +69,7 @@ export function TranscriptPane({
     >
       <div
         ref={(element) => {
+          selectionScopeRef.current = element;
           scroll.viewportRef.current = element;
         }}
         aria-busy={loading}
@@ -125,6 +135,13 @@ export function TranscriptPane({
           )}
         </div>
       </div>
+
+      <SelectionActions
+        scopeRef={selectionScopeRef}
+        onAdd={onAddSelection}
+        onDetails={onExplainSelection}
+        onAskInSideChat={onAskSelectionInSideChat}
+      />
 
       {scroll.showJumpToLatest ? (
         <Button

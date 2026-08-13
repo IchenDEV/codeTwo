@@ -1046,6 +1046,14 @@ export async function openExternal(url: string): Promise<void> {
   }
 }
 
+/** Open a local path with the operating system (a directory opens in Finder on macOS). */
+export async function openNativePath(path: string): Promise<boolean> {
+  if (!inTauri) return false;
+  const { open } = await import("@tauri-apps/plugin-shell");
+  await open(path);
+  return true;
+}
+
 // ---- LSP bridge --------------------------------------------------------------------------------
 // The Rust side spawns real language servers (rust-analyzer, pyright, gopls, …) as children and
 // frames their stdio JSON-RPC; the frontend LSP client in src/lsp speaks the protocol. One server
@@ -2303,7 +2311,9 @@ export function providerLabel(p: string | { custom: string }): string {
 
 // ---- scenes (Agent Scenes 1.0.0; see docs/scenes.md) ---------------------------------------
 
-import type { SceneInfo } from "./session/scene";
+import type { SceneDocument, SceneInfo } from "./session/scene";
+
+export type SceneSaveScope = "user" | "project";
 
 export interface SceneEscalation {
   from: string;
@@ -2339,6 +2349,24 @@ export interface SessionSceneState {
   resolved: boolean;
 }
 
+export interface AutoSceneChanged {
+  session: string;
+  reference: string;
+  title: string;
+  reason: string;
+  pending: string[];
+  planFirst: boolean | null;
+  memoryRead: MemoryAccess;
+  memoryWrite: MemoryAccess;
+}
+
+export async function onAutoSceneChanged(
+  cb: (event: AutoSceneChanged) => void,
+): Promise<() => void> {
+  if (!inTauri) return () => {};
+  return listen<AutoSceneChanged>("auto-scene-changed", (event) => cb(event.payload));
+}
+
 /// Every scene call degrades on a missing backend command (feature-detect: catch → fallback),
 /// so a frontend running against an older core hides the affordance instead of breaking.
 /** Browser-preview stand-ins (same convention as FALLBACK_SKILLS): the five builtin scenes. */
@@ -2371,11 +2399,48 @@ export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
 
 export async function getScene(
   reference: string,
-): Promise<{ reference: string; source: string; scene: unknown } | null> {
+): Promise<{ reference: string; source: string; scene: SceneDocument } | null> {
   if (!inTauri) return null;
-  return invoke<{ reference: string; source: string; scene: unknown }>("get_scene", {
+  return invoke<{ reference: string; source: string; scene: SceneDocument }>("get_scene", {
     reference,
   }).catch(() => null);
+}
+
+export async function saveScene(
+  scope: SceneSaveScope,
+  cwd: string | null,
+  previousName: string | null,
+  scene: SceneDocument,
+): Promise<SceneInfo> {
+  if (!inTauri) {
+    return {
+      reference: `${scope}:${scene.name}`,
+      name: scene.name,
+      title: scene.title,
+      description: scene.description ?? "",
+      icon: scene.icon ?? null,
+      source: scope,
+      plugin_id: null,
+      keywords: scene.keywords ?? [],
+      has_brief: Boolean(scene.brief),
+      localizations: scene.localizations ?? {},
+      execution: scene.execution ?? null,
+      brief: scene.brief ?? null,
+      artifacts: scene.artifacts ?? [],
+      skills: scene.skills ?? null,
+      exit: scene.exit ?? null,
+    };
+  }
+  return invoke<SceneInfo>("save_scene", { scope, cwd, previousName, scene });
+}
+
+export async function deleteScene(
+  scope: SceneSaveScope,
+  cwd: string | null,
+  name: string,
+): Promise<void> {
+  if (!inTauri) return;
+  await invoke("delete_scene", { scope, cwd, name });
 }
 
 export async function applySceneToSession(
@@ -2414,6 +2479,16 @@ export async function setSessionScene(
 export async function getSessionScene(session: string): Promise<SessionSceneState | null> {
   if (!inTauri) return null;
   return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
+}
+
+export async function setSessionAutoScene(session: string, enabled: boolean): Promise<void> {
+  if (!inTauri) return;
+  await invoke("set_session_auto_scene", { session, enabled });
+}
+
+export async function getSessionAutoScene(session: string): Promise<boolean> {
+  if (!inTauri) return false;
+  return invoke<boolean>("get_session_auto_scene", { session }).catch(() => false);
 }
 
 /** Diff stat of a session's own checkout, shaped for display. Null when unknown or not a repo. */
