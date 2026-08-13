@@ -22,6 +22,7 @@ import {
 
 import type { SessionConfig } from "./config";
 import { SESSION_MODES, sessionMode } from "./mode";
+import { worktreeGatingReason } from "./sessionEvents";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
@@ -295,6 +296,19 @@ const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 function WorktreePicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  // No git repository, no picker: every baseline is unavailable, so the trigger greys out with
+  // the core's reason as its tooltip and the draft stays Off. Sessions are never gated — their
+  // recorded worktree state renders regardless of what the current directory looks like.
+  const gatingReason = worktreeGatingReason(
+    config.hasSession,
+    config.worktreeOptions,
+    config.worktreeOptionsLoading,
+  );
+  useEffect(() => {
+    // A project default (or a leftover draft choice) may still name a baseline; snap it back to
+    // Off so the disabled trigger and the state creation would use never disagree.
+    if (gatingReason !== null && config.worktreeBase !== null) config.onWorktreeBase(null);
+  }, [gatingReason, config.worktreeBase, config.onWorktreeBase]);
   const selectedKind = config.hasSession
     ? config.activeWorktreeBaseline?.kind ?? null
     : config.worktreeBase;
@@ -311,7 +325,7 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
     ? t("worktree.legacyUnknown")
     : config.hasSession && config.activeWorktreeBaseline
       ? config.activeWorktreeBaseline.display
-      : selectedKind == null
+      : selectedKind == null || gatingReason !== null
         ? t("worktree.off")
         : t(`worktree.${selectedKind}` as "worktree.current");
 
@@ -319,11 +333,13 @@ function WorktreePicker({ config }: { config: SessionConfig }) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Chip
-          tone={selectedUnavailable ? "warning" : undefined}
-          title={t("config.worktreeHint")}
+          tone={selectedUnavailable && gatingReason === null ? "warning" : undefined}
+          title={gatingReason ?? t("config.worktreeHint")}
           aria-expanded={open}
+          disabled={gatingReason !== null}
           className={cn(
             selectedKind != null && !selectedUnavailable && "text-primary hover:text-primary",
+            "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent",
           )}
         >
           <GitBranch className="size-3.5 shrink-0" />

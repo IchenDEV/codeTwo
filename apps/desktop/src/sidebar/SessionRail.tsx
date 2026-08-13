@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Folder,
   FolderPlus,
+  FolderX,
   PanelLeft,
   Pencil,
   Pin,
@@ -72,6 +73,7 @@ export function SessionRail({
   onRename,
   onPin,
   onArchive,
+  onDiscardWorktree,
   displayProvider,
   model,
   provider,
@@ -108,6 +110,8 @@ export function SessionRail({
   onPin: (id: string, pinned: boolean) => void;
   /** Flips a session's archived state — true to archive, false to restore. */
   onArchive: (id: string, archived: boolean) => void;
+  /** Discard the session's isolated checkout — offered only while one exists undiscarded. */
+  onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
   /** The model the next turn runs on — the agent's current pick, or the provider's name. */
@@ -284,6 +288,18 @@ export function SessionRail({
             >
               {isArchived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
             </button>
+            {s.worktree_path !== null && !s.worktree_discarded && (
+              <button
+                title={t("worktree.discardAction")}
+                className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDiscardWorktree(s);
+                }}
+              >
+                <FolderX className="size-3" />
+              </button>
+            )}
           </span>
         </div>
 

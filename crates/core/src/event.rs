@@ -219,6 +219,19 @@ pub enum Event {
         session: SessionId,
         stop_reason: String,
     },
+    /// Terminal receipt of the explicit worktree discard flow: the session's isolated checkout
+    /// and `codetwo/…` branch are permanently gone, while the session itself remains readable
+    /// history that can no longer run prompts.
+    WorktreeDiscarded {
+        session: SessionId,
+        worktree_path: String,
+        /// `false` when the checkout was already gone and only stale registration/branch state
+        /// needed cleanup.
+        #[serde(default)]
+        removed_checkout: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        deleted_branch: Option<String>,
+    },
     Error {
         session: Option<SessionId>,
         message: String,

@@ -90,6 +90,14 @@ async fn run_git_dir_output(common_dir: &Path, args: &[&OsStr]) -> io::Result<Ou
     git_dir_command(common_dir).args(args).output().await
 }
 
+async fn run_git_dir(common_dir: &Path, args: &[&OsStr]) -> io::Result<String> {
+    let out = run_git_dir_output(common_dir, args).await?;
+    if !out.status.success() {
+        return Err(git_failure(&out));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
 fn git_failure(out: &Output) -> io::Error {
     let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
     io::Error::other(format!("git failed: {stderr}"))
@@ -813,8 +821,184 @@ pub async fn add_for_session(repo: &Path, session_id: &str) -> io::Result<Worktr
     add_for_session_from_baseline(repo, session_id, &baseline).await
 }
 
-/// Test-only raw removal. Production cleanup must carry a live [`DirectoryClaim`] and quarantine
-/// the exact directory first; Git's force removal is not path-identity aware.
+/// The branch namespace reserved for session worktrees. Discard refuses to touch anything else.
+const SESSION_BRANCH_PREFIX: &str = "codetwo/";
+
+/// Receipt of an explicit worktree discard: what actually got removed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscardedWorktree {
+    /// The checkout directory existed and was removed. `false` means it was already gone and only
+    /// the stale registration/branch needed cleanup.
+    pub removed_checkout: bool,
+    /// The session branch that was deleted, when it existed and no other checkout still used it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_branch: Option<String>,
+}
+
+async fn branch_target_in_common_dir(
+    common_dir: &Path,
+    reference: &str,
+) -> io::Result<Option<String>> {
+    let out = run_git_dir_output(
+        common_dir,
+        &[
+            OsStr::new("show-ref"),
+            OsStr::new("--verify"),
+            OsStr::new("--hash"),
+            OsStr::new(reference),
+        ],
+    )
+    .await?;
+    if !out.status.success() {
+        return if out.status.code() == Some(1) {
+            Ok(None)
+        } else {
+            Err(git_failure(&out))
+        };
+    }
+    let sha = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    validate_resolved_sha(&sha)?;
+    Ok(Some(sha))
+}
+
+/// Explicit, user-confirmed permanent discard of one session worktree: remove the checkout (even
+/// when dirty), drop its Git registration, and delete its `codetwo/…` branch.
+///
+/// This is the "explicit cleanup flow" that automatic rollback deliberately lacks. It remains
+/// destructive-by-consent only:
+/// - the branch must be inside the `codetwo/` namespace owned by session worktrees;
+/// - when the caller holds a recorded [`DirectoryIdentity`], the directory at `root` must still be
+///   that exact filesystem object — a replacement directory fails closed;
+/// - the checkout must still be registered to `common_dir` under exactly that branch, so a path
+///   Git no longer recognizes as this repository's worktree is never force-removed;
+/// - the branch ref is deleted at its observed SHA, and only while no registration still uses it.
+///
+/// The identity check and the removal are necessarily two steps: no supported platform offers an
+/// atomic compare-identity-and-remove primitive. Automatic cleanup refuses on that ground; this
+/// function runs only from a user-confirmed discard action, which carries the same authority as
+/// the user running `git worktree remove --force` by hand.
+pub async fn discard_session_worktree(
+    common_dir: &Path,
+    root: &Path,
+    identity: Option<&DirectoryIdentity>,
+    branch: &str,
+) -> io::Result<DiscardedWorktree> {
+    let suffix = branch.strip_prefix(SESSION_BRANCH_PREFIX).unwrap_or("");
+    if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("refusing to discard branch {branch:?}: not a codetwo/ session branch"),
+        ));
+    }
+    let reference = branch_ref(branch);
+
+    let removed_checkout = match std::fs::symlink_metadata(root) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            // The checkout is already gone. Drop any stale registration so the branch below is no
+            // longer considered in use by a phantom checkout.
+            run_git_dir(common_dir, &[OsStr::new("worktree"), OsStr::new("prune")]).await?;
+            false
+        }
+        Err(error) => return Err(error),
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(io::Error::other(format!(
+                    "refusing to discard {}: not the recorded worktree directory",
+                    root.display()
+                )));
+            }
+            if let Some(identity) = identity {
+                if !identity.matches_path(root)? {
+                    return Err(io::Error::other(format!(
+                        "refusing to discard {}: directory identity changed since the worktree was created",
+                        root.display()
+                    )));
+                }
+            }
+            let canonical = std::fs::canonicalize(root)?;
+            let registered = registrations_from_common_dir(common_dir)
+                .await?
+                .into_iter()
+                .find(|registration| {
+                    std::fs::canonicalize(&registration.path)
+                        .map(|path| path == canonical)
+                        .unwrap_or(false)
+                });
+            let Some(registered) = registered else {
+                return Err(io::Error::other(format!(
+                    "refusing to discard {}: not registered as a worktree of this repository",
+                    root.display()
+                )));
+            };
+            if registered.branch.as_deref() != Some(reference.as_str()) {
+                return Err(io::Error::other(format!(
+                    "refusing to discard {}: expected branch {reference}, found {}",
+                    root.display(),
+                    registered.branch.as_deref().unwrap_or("a detached HEAD"),
+                )));
+            }
+            run_git_dir(
+                common_dir,
+                &[
+                    OsStr::new("worktree"),
+                    OsStr::new("remove"),
+                    OsStr::new("--force"),
+                    canonical.as_os_str(),
+                ],
+            )
+            .await?;
+            // Leave the shared container directory only when this was its last checkout.
+            if let Some(parent) = canonical.parent() {
+                if parent.file_name() == Some(OsStr::new(WORKTREE_DIR)) {
+                    let _ = std::fs::remove_dir(parent);
+                }
+            }
+            true
+        }
+    };
+
+    let branch_still_in_use = registrations_from_common_dir(common_dir)
+        .await?
+        .iter()
+        .any(|registration| registration.branch.as_deref() == Some(reference.as_str()));
+    if branch_still_in_use {
+        return Ok(DiscardedWorktree {
+            removed_checkout,
+            deleted_branch: None,
+        });
+    }
+    let deleted_branch = match branch_target_in_common_dir(common_dir, &reference).await? {
+        None => None,
+        Some(sha) => {
+            // Deleting at the observed SHA turns a concurrent ref move into a clean failure
+            // instead of silently deleting someone else's new commit.
+            run_git_dir(
+                common_dir,
+                &[
+                    OsStr::new("update-ref"),
+                    OsStr::new("-d"),
+                    OsStr::new(&reference),
+                    OsStr::new(&sha),
+                ],
+            )
+            .await?;
+            Some(branch.to_string())
+        }
+    };
+    Ok(DiscardedWorktree {
+        removed_checkout,
+        deleted_branch,
+    })
+}
+
+/// The shared container directory that holds every session checkout for `repo_root`.
+pub fn session_container_dir(repo_root: &Path) -> Option<PathBuf> {
+    repo_root.parent().map(|parent| parent.join(WORKTREE_DIR))
+}
+
+/// Test-only raw removal. Production cleanup goes through [`discard_session_worktree`], which
+/// re-verifies directory identity and registration first; Git's force removal alone is not
+/// path-identity aware.
 #[cfg(test)]
 pub(crate) async fn remove(repo: &Path, path: &Path) -> io::Result<()> {
     run_git(
@@ -949,7 +1133,9 @@ pub async fn list(repo: &Path) -> io::Result<Vec<PathBuf>> {
         .collect())
 }
 
-/// Is `path` inside a git work tree? Used to gate the "use worktree" toggle.
+/// Is `path` inside a git work tree? Frontends gate the "use worktree" picker on baseline
+/// availability (which carries the actual Git error); this remains for callers that only need the
+/// boolean.
 pub async fn is_git_repo(path: &Path) -> bool {
     run_git(
         path,
@@ -1470,6 +1656,146 @@ mod tests {
         );
 
         remove(&repo, &created.path).await.unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_removes_checkout_registration_and_branch() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let created = add_for_session_from_baseline(&repo, "discard-me", &baseline)
+            .await
+            .unwrap();
+        std::fs::write(created.path.join("dirty.txt"), "uncommitted\n").unwrap();
+        let common = common_dir(&repo).await.unwrap();
+        let container = created.path.parent().unwrap().to_path_buf();
+
+        let outcome = discard_session_worktree(
+            &common,
+            &created.path,
+            Some(created.directory_identity()),
+            &created.branch,
+        )
+        .await
+        .unwrap();
+
+        assert!(outcome.removed_checkout);
+        assert_eq!(outcome.deleted_branch.as_deref(), Some("codetwo/discard-me"));
+        assert!(!created.path.exists());
+        assert!(!container.exists(), "empty container should be removed");
+        assert_eq!(
+            branch_target(&repo, "refs/heads/codetwo/discard-me")
+                .await
+                .unwrap(),
+            None
+        );
+        assert_eq!(registrations(&repo).await.unwrap().len(), 1);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_refuses_branches_outside_the_session_namespace() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let common = common_dir(&repo).await.unwrap();
+        for branch in ["main", "codetwo/", "codetwo/../main", "feature/x"] {
+            let error = discard_session_worktree(&common, &repo, None, branch)
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{branch}");
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_refuses_a_replacement_directory() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let created = add_for_session_from_baseline(&repo, "swapped", &baseline)
+            .await
+            .unwrap();
+        let identity = created.directory_identity().clone();
+        let common = common_dir(&repo).await.unwrap();
+        let displaced = base.join("displaced");
+        std::fs::rename(&created.path, &displaced).unwrap();
+        std::fs::create_dir(&created.path).unwrap();
+
+        let error =
+            discard_session_worktree(&common, &created.path, Some(&identity), &created.branch)
+                .await
+                .unwrap_err();
+        assert!(error.to_string().contains("directory identity changed"));
+        assert!(created.path.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_refuses_a_checkout_registered_to_another_branch() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let head = git_stdout(&repo, &["rev-parse", "HEAD"]).await;
+        let other = base.join("other-branch-wt");
+        let created = add_from_sha(&repo, &other, "codetwo/other-session", &head)
+            .await
+            .unwrap();
+        let common = common_dir(&repo).await.unwrap();
+
+        let error = discard_session_worktree(
+            &common,
+            &other,
+            Some(created.directory_identity()),
+            "codetwo/not-this-one",
+        )
+        .await
+        .unwrap_err();
+        assert!(error.to_string().contains("expected branch"));
+        assert!(other.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_of_an_externally_deleted_checkout_prunes_and_deletes_the_branch() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let created = add_for_session_from_baseline(&repo, "gone-already", &baseline)
+            .await
+            .unwrap();
+        let common = common_dir(&repo).await.unwrap();
+        std::fs::remove_dir_all(&created.path).unwrap();
+
+        let outcome = discard_session_worktree(&common, &created.path, None, &created.branch)
+            .await
+            .unwrap();
+
+        assert!(!outcome.removed_checkout);
+        assert_eq!(
+            outcome.deleted_branch.as_deref(),
+            Some("codetwo/gone-already")
+        );
+        assert_eq!(
+            branch_target(&repo, "refs/heads/codetwo/gone-already")
+                .await
+                .unwrap(),
+            None
+        );
+
         let _ = std::fs::remove_dir_all(&base);
     }
 

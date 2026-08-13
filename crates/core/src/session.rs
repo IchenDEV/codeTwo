@@ -254,6 +254,10 @@ pub struct Session {
     /// Exact local ref and immutable commit used to create `worktree_path`.
     #[serde(default)]
     pub worktree_baseline: Option<ResolvedWorktreeBaseline>,
+    /// Set once the explicit discard flow permanently removed this session's isolated checkout
+    /// and branch. The session stays readable history; running a provider in it is refused.
+    #[serde(default)]
+    pub worktree_discarded: bool,
     pub permission_mode: PermissionMode,
     /// The sandbox axis is persisted independently from approval mode. Older sessions used the
     /// product default (`workspace_write`).
@@ -286,6 +290,7 @@ impl Session {
             worktree_common_dir: None,
             worktree_git_dir: None,
             worktree_baseline: None,
+            worktree_discarded: false,
             permission_mode: PermissionMode::Ask,
             sandbox_policy: SandboxPolicy::default(),
             acp_session_id: None,
@@ -369,6 +374,7 @@ mod tests {
         value.as_object_mut().unwrap().remove("worktree_identity");
         value.as_object_mut().unwrap().remove("worktree_common_dir");
         value.as_object_mut().unwrap().remove("worktree_git_dir");
+        value.as_object_mut().unwrap().remove("worktree_discarded");
         value.as_object_mut().unwrap().remove("sandbox_policy");
 
         let restored: Session = serde_json::from_value(value).unwrap();
@@ -380,6 +386,7 @@ mod tests {
         assert!(restored.worktree_identity.is_none());
         assert!(restored.worktree_common_dir.is_none());
         assert!(restored.worktree_git_dir.is_none());
+        assert!(!restored.worktree_discarded);
         assert_eq!(restored.sandbox_policy, SandboxPolicy::WorkspaceWrite);
     }
 

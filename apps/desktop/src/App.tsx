@@ -34,6 +34,7 @@ import {
   defaultCwd,
   deleteSkill,
   describeBlock,
+  discardSessionWorktree,
   getKeymap,
   getTranscriptPage,
   gitCheckpoint,
@@ -1104,6 +1105,19 @@ export default function App() {
             );
           setSessions(rename);
           setArchivedSessions(rename);
+          return;
+        }
+        if (ev.event === "worktree_discarded") {
+          // Mark the row immediately — the checkout is already gone — and let the list refresh
+          // reconcile whatever else the discard changed (a deleted branch, a dropped stale row).
+          const markDiscarded = (items: SessionInfo[]) =>
+            items.map((session) =>
+              session.id === ev.session ? { ...session, worktree_discarded: true } : session,
+            );
+          setSessions(markDiscarded);
+          setArchivedSessions(markDiscarded);
+          refreshSessions();
+          toast(t("toast.worktreeDiscarded"), "success");
           return;
         }
         if (ev.event === "session_activity_changed") {
@@ -2528,6 +2542,23 @@ export default function App() {
       .catch((err) => toast(`Could not reset shortcuts: ${err}`, "error"));
   }, [toast]);
 
+  // Discarding a worktree deletes uncommitted work, so it confirms natively first. Success
+  // feedback arrives through the broadcast `worktree_discarded` event, not from this call.
+  const discardWorktreeForSession = useCallback(
+    async (session: SessionInfo) => {
+      const path = session.worktree_path;
+      if (!path || session.worktree_discarded) return;
+      if (!(await confirmNative(t("worktree.discardConfirm", { path })))) return;
+      try {
+        await discardSessionWorktree(session.id);
+        refreshSessions();
+      } catch (error) {
+        toast(t("worktree.discardFailed", { error: String(error) }), "error");
+      }
+    },
+    [refreshSessions, t, toast],
+  );
+
   const sessionConfig: SessionConfig = {
     providers,
     provider,
@@ -2646,6 +2677,7 @@ export default function App() {
           onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
           onPin={(id, pinned) => void pinSession(id, pinned).then(refreshSessions)}
           onArchive={(id, archived) => void archiveSession(id, archived).then(refreshSessions)}
+          onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
           model={modelLabel}
           provider={provider}

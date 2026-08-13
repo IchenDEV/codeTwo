@@ -40,7 +40,8 @@ use crate::permission::{
 use crate::provider::{Provider, ProviderId};
 use crate::session::{
     initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
-    SessionId, SessionTitleOrigin, TranscriptCursor, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+    SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
+    DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_canvas, compile_with_sessions, CompiledPrompt, DocBlock,
@@ -1449,6 +1450,322 @@ impl Engine {
             None => Vec::new(),
         };
         Ok(self.overlay_activities(sessions))
+    }
+
+    /// Explicit, user-confirmed permanent discard of a session's isolated checkout and branch.
+    ///
+    /// The session itself is retained as readable history, marked `worktree_discarded`, and can no
+    /// longer run prompts. Fails closed while the session is running or awaiting input, and reuses
+    /// every durable checkout receipt check before anything destructive happens.
+    pub async fn discard_session_worktree(
+        &self,
+        id: &str,
+    ) -> Result<crate::worktree::DiscardedWorktree, String> {
+        let session = self
+            .session_for_checkout_validation(id)?
+            .ok_or_else(|| "no such session".to_string())?;
+        let Some(root) = session.worktree_path.clone() else {
+            return Err("session has no worktree to discard".into());
+        };
+        if session.worktree_discarded {
+            // A previous discard already ran; repeating it is a no-op rather than an error so a
+            // client that missed the receipt can converge.
+            return Ok(crate::worktree::DiscardedWorktree {
+                removed_checkout: false,
+                deleted_branch: None,
+            });
+        }
+        if let Some(activity) = self.session_activity(id) {
+            match activity.state {
+                SessionRunState::Idle | SessionRunState::Failed { .. } => {}
+                SessionRunState::Running { .. } | SessionRunState::AwaitingInput { .. } => {
+                    return Err(
+                        "session is still running; stop it before discarding its worktree".into(),
+                    );
+                }
+            }
+        }
+        let root_path = std::path::Path::new(&root);
+        let checkout_present = match std::fs::symlink_metadata(root_path) {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(format!("couldn't inspect session worktree at {root}: {error}"))
+            }
+        };
+        if checkout_present {
+            // The same fail-closed receipt checks that gate running a provider in this checkout
+            // also gate deleting it: identity, repository, registration, and branch must all match.
+            validate_session_checkout(&session).await?;
+        }
+        let common_dir = match session.worktree_common_dir.as_deref() {
+            Some(dir) => std::fs::canonicalize(dir)
+                .map_err(|error| format!("session repository identity is unavailable: {error}"))?,
+            None if checkout_present => crate::worktree::common_dir(root_path)
+                .await
+                .map_err(|error| format!("couldn't identify session repository: {error}"))?,
+            None => {
+                return Err(format!(
+                    "session worktree at {root} is already gone and no repository identity was recorded; clean up any leftover branch manually"
+                ));
+            }
+        };
+        let branch = crate::worktree::branch_for_session(&session.id)
+            .map_err(|error| format!("invalid session worktree identity: {error}"))?;
+        let outcome = crate::worktree::discard_session_worktree(
+            &common_dir,
+            root_path,
+            session.worktree_identity.as_ref(),
+            &branch,
+        )
+        .await
+        .map_err(|error| format!("couldn't discard session worktree: {error}"))?;
+
+        if let Some(store) = &self.state.store {
+            store.mark_worktree_discarded(id).map_err(|error| {
+                format!("worktree was discarded, but couldn't record it: {error}")
+            })?;
+        }
+        // Drop any live runtime: a provider process must never keep running against a removed
+        // checkout, and the durable discarded flag refuses future revivals with a clear error.
+        self.state.sessions.lock().unwrap().remove(id);
+        self.emit(Event::WorktreeDiscarded {
+            session: id.to_string(),
+            worktree_path: root,
+            removed_checkout: outcome.removed_checkout,
+            deleted_branch: outcome.deleted_branch.clone(),
+        });
+        Ok(outcome)
+    }
+
+    /// Every session checkout, orphaned registration, and stale directory associated with one
+    /// project's repository, for the management UI.
+    pub async fn list_project_worktrees(
+        &self,
+        project_path: &str,
+    ) -> Result<Vec<WorktreeStatusEntry>, String> {
+        let root = crate::worktree::repo_root(std::path::Path::new(project_path))
+            .await
+            .map_err(|error| format!("not a git repository: {error}"))?;
+        let common_dir = crate::worktree::common_dir(&root)
+            .await
+            .map_err(|error| format!("couldn't identify repository: {error}"))?;
+        let registrations = crate::worktree::registrations_from_common_dir(&common_dir)
+            .await
+            .map_err(|error| format!("couldn't list worktrees: {error}"))?;
+
+        let mut sessions: Vec<Session> = Vec::new();
+        if let Some(store) = &self.state.store {
+            sessions.extend(store.list_sessions().map_err(|e| e.to_string())?);
+            sessions.extend(store.list_archived_sessions().map_err(|e| e.to_string())?);
+        }
+        // `archived` isn't a Session field; derive it from which list a row came from.
+        let archived_ids: std::collections::HashSet<String> = match &self.state.store {
+            Some(store) => store
+                .list_archived_sessions()
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|session| session.id)
+                .collect(),
+            None => Default::default(),
+        };
+
+        let mut entries: Vec<WorktreeStatusEntry> = Vec::new();
+        let mut claimed_paths: std::collections::HashSet<std::path::PathBuf> = Default::default();
+        for session in &sessions {
+            let Some(worktree_path) = session.worktree_path.as_deref() else {
+                continue;
+            };
+            let session_common = session.worktree_common_dir.as_deref().map(|dir| {
+                std::fs::canonicalize(dir).unwrap_or_else(|_| std::path::PathBuf::from(dir))
+            });
+            if session_common.as_deref() != Some(common_dir.as_path()) {
+                continue;
+            }
+            let recorded = std::path::PathBuf::from(worktree_path);
+            let canonical = std::fs::canonicalize(&recorded).ok();
+            let checkout_present = canonical.is_some();
+            let lookup = canonical.clone().unwrap_or_else(|| recorded.clone());
+            let registration = registrations.iter().find(|registration| {
+                std::fs::canonicalize(&registration.path)
+                    .map(|path| Some(path.as_path()) == canonical.as_deref())
+                    .unwrap_or(registration.path == lookup)
+            });
+            let registered = registration.is_some();
+            let branch = registration.and_then(|registration| registration.branch.clone());
+            claimed_paths.insert(lookup);
+            // A fully discarded session leaves nothing actionable behind; only surface it while
+            // some leftover (directory or registration) still exists.
+            if session.worktree_discarded && !checkout_present && !registered {
+                continue;
+            }
+            entries.push(WorktreeStatusEntry {
+                path: worktree_path.to_string(),
+                branch,
+                kind: WorktreeEntryKind::Session,
+                registered,
+                checkout_present,
+                session_id: Some(session.id.clone()),
+                session_title: Some(session.title.clone()),
+                session_archived: archived_ids.contains(&session.id),
+                worktree_discarded: session.worktree_discarded,
+            });
+        }
+
+        // Registrations under our branch namespace with no session row: orphans from deleted
+        // stores or interrupted creations.
+        for registration in &registrations {
+            let is_session_branch = registration
+                .branch
+                .as_deref()
+                .is_some_and(|branch| branch.starts_with("refs/heads/codetwo/"));
+            if !is_session_branch {
+                continue;
+            }
+            let canonical = std::fs::canonicalize(&registration.path)
+                .unwrap_or_else(|_| registration.path.clone());
+            if claimed_paths.contains(&canonical) {
+                continue;
+            }
+            claimed_paths.insert(canonical.clone());
+            entries.push(WorktreeStatusEntry {
+                path: registration.path.to_string_lossy().into_owned(),
+                branch: registration.branch.clone(),
+                kind: WorktreeEntryKind::Orphan,
+                registered: true,
+                checkout_present: registration.path.exists(),
+                session_id: None,
+                session_title: None,
+                session_archived: false,
+                worktree_discarded: false,
+            });
+        }
+
+        // Directories in the shared container that Git no longer registers: leftovers from prunes,
+        // failed creations, or manual deletions inside the checkout.
+        if let Some(container) = crate::worktree::session_container_dir(&root) {
+            if let Ok(read_dir) = std::fs::read_dir(&container) {
+                for entry in read_dir.flatten() {
+                    let path = entry.path();
+                    let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                    if claimed_paths.contains(&canonical) {
+                        continue;
+                    }
+                    let repo_name = root
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("repo");
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    let ours = name.starts_with(&format!("{repo_name}-"))
+                        || name.starts_with(".codetwo-rollback-");
+                    if !ours {
+                        continue;
+                    }
+                    entries.push(WorktreeStatusEntry {
+                        path: path.to_string_lossy().into_owned(),
+                        branch: None,
+                        kind: WorktreeEntryKind::Stale,
+                        registered: false,
+                        checkout_present: true,
+                        session_id: None,
+                        session_title: None,
+                        session_archived: false,
+                        worktree_discarded: false,
+                    });
+                }
+            }
+        }
+        Ok(entries)
+    }
+
+    /// Explicit, user-confirmed removal of a checkout that no session claims: an orphaned
+    /// registration under the `codetwo/` namespace, or a stale unregistered directory inside the
+    /// shared `.codetwo-worktrees` container. Anything a session still records is refused and must
+    /// go through [`Engine::discard_session_worktree`].
+    pub async fn discard_orphan_worktree(
+        &self,
+        project_path: &str,
+        worktree_path: &str,
+    ) -> Result<crate::worktree::DiscardedWorktree, String> {
+        let root = crate::worktree::repo_root(std::path::Path::new(project_path))
+            .await
+            .map_err(|error| format!("not a git repository: {error}"))?;
+        let common_dir = crate::worktree::common_dir(&root)
+            .await
+            .map_err(|error| format!("couldn't identify repository: {error}"))?;
+        let container = crate::worktree::session_container_dir(&root)
+            .ok_or_else(|| "repository has no parent directory".to_string())?;
+        let container = std::fs::canonicalize(&container)
+            .map_err(|error| format!("worktree container is unavailable: {error}"))?;
+        let target_raw = std::path::PathBuf::from(worktree_path);
+        let target = std::fs::canonicalize(&target_raw).unwrap_or_else(|_| target_raw.clone());
+        if target.parent() != Some(container.as_path()) {
+            return Err(format!(
+                "refusing to discard {}: only checkouts directly inside {} can be cleaned up here",
+                target.display(),
+                container.display()
+            ));
+        }
+
+        let mut sessions: Vec<Session> = Vec::new();
+        if let Some(store) = &self.state.store {
+            sessions.extend(store.list_sessions().map_err(|e| e.to_string())?);
+            sessions.extend(store.list_archived_sessions().map_err(|e| e.to_string())?);
+        }
+        for session in &sessions {
+            let Some(recorded) = session.worktree_path.as_deref() else {
+                continue;
+            };
+            let recorded_path = std::path::PathBuf::from(recorded);
+            let recorded_canonical =
+                std::fs::canonicalize(&recorded_path).unwrap_or(recorded_path);
+            if recorded_canonical == target && !session.worktree_discarded {
+                return Err(format!(
+                    "refusing to discard {}: it belongs to session “{}”; discard it from that session instead",
+                    target.display(),
+                    session.title
+                ));
+            }
+        }
+
+        let registration = crate::worktree::registrations_from_common_dir(&common_dir)
+            .await
+            .map_err(|error| format!("couldn't list worktrees: {error}"))?
+            .into_iter()
+            .find(|registration| {
+                std::fs::canonicalize(&registration.path)
+                    .map(|path| path == target)
+                    .unwrap_or(registration.path == target_raw)
+            });
+        match registration {
+            Some(registration) => {
+                let branch = registration
+                    .branch
+                    .as_deref()
+                    .and_then(|branch| branch.strip_prefix("refs/heads/"))
+                    .ok_or_else(|| {
+                        format!(
+                            "refusing to discard {}: its checkout is not on a codetwo/ session branch",
+                            target.display()
+                        )
+                    })?;
+                crate::worktree::discard_session_worktree(&common_dir, &target, None, branch)
+                    .await
+                    .map_err(|error| format!("couldn't discard orphan worktree: {error}"))
+            }
+            None => {
+                // Git no longer knows this directory; it exists only inside our own container and
+                // no session claims it, so plain removal is the only cleanup left.
+                std::fs::remove_dir_all(&target)
+                    .map_err(|error| format!("couldn't remove stale worktree directory: {error}"))?;
+                let _ = std::fs::remove_dir(&container);
+                Ok(crate::worktree::DiscardedWorktree {
+                    removed_checkout: true,
+                    deleted_branch: None,
+                })
+            }
+        }
     }
 
     /// Sessions for the left-hand list. Reads the store when persistent, else live sessions.
@@ -2885,6 +3202,12 @@ async fn validate_prepared_worktree(
 }
 
 async fn validate_session_checkout(session: &Session) -> Result<(), String> {
+    if session.worktree_discarded {
+        return Err(
+            "session worktree was permanently discarded; start a new session from the source project"
+                .into(),
+        );
+    }
     let cwd = std::path::Path::new(&session.cwd);
     if !cwd.is_dir() {
         return Err(format!(
@@ -3028,6 +3351,42 @@ fn resolve_cwd(cwd: &str) -> Result<String, String> {
         .unwrap_or(abs)
         .to_string_lossy()
         .into_owned())
+}
+
+/// What one row in the worktree management list is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeEntryKind {
+    /// A checkout recorded by a durable session (active or archived).
+    Session,
+    /// A Git registration on a `codetwo/…` branch that no session claims — typically left by a
+    /// deleted store or an interrupted creation.
+    Orphan,
+    /// A directory inside the shared `.codetwo-worktrees` container that Git no longer registers.
+    Stale,
+}
+
+/// One row in the worktree management list.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WorktreeStatusEntry {
+    /// Checkout root as recorded (session rows) or as registered/found on disk.
+    pub path: String,
+    /// Full ref (`refs/heads/codetwo/…`) when Git still registers this checkout on a branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    pub kind: WorktreeEntryKind,
+    /// Whether `git worktree list` still knows this path.
+    pub registered: bool,
+    /// Whether the directory currently exists on disk.
+    pub checkout_present: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_title: Option<String>,
+    #[serde(default)]
+    pub session_archived: bool,
+    #[serde(default)]
+    pub worktree_discarded: bool,
 }
 
 /// Default permission mode for a fresh session.
@@ -3694,6 +4053,238 @@ for line in sys.stdin:
 
         drop(engine);
         drop(events);
+        drop(store);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn explicit_discard_removes_checkout_branch_and_blocks_future_prompts() {
+        let Some((base, repo)) = initialized_repo("explicit-discard") else {
+            return;
+        };
+        let db = base.join("codetwo.sqlite");
+        let store = Arc::new(Store::open(db.to_str().unwrap()).unwrap());
+        let provider = Provider {
+            id: ProviderId::Grok,
+            display_name: "Quiet mock".into(),
+            launch: LaunchSpec::new("python3", ["-c", QUIET_AGENT]),
+            needs_node: false,
+        };
+        let (engine, mut events) =
+            Engine::with_store(vec![provider], SkillLibrary::default(), store.clone());
+        engine
+            .submit(Op::NewSession {
+                provider: ProviderId::Grok,
+                cwd: repo.to_string_lossy().into_owned(),
+                use_worktree: true,
+                worktree_base: Some(WorktreeBaseline::Current),
+                worktree_base_sha: None,
+                request_id: Some("create-then-discard".into()),
+                initial_policy: None,
+            })
+            .await
+            .unwrap();
+        let (session_id, root) = loop {
+            if let Event::SessionCreated {
+                session,
+                worktree_path: Some(worktree_path),
+                ..
+            } = next_event(&mut events).await
+            {
+                break (session, std::path::PathBuf::from(worktree_path));
+            }
+        };
+        let expected_branch = crate::worktree::branch_for_session(&session_id).unwrap();
+
+        let outcome = engine.discard_session_worktree(&session_id).await.unwrap();
+
+        assert!(outcome.removed_checkout);
+        assert_eq!(outcome.deleted_branch.as_deref(), Some(expected_branch.as_str()));
+        assert!(!root.exists());
+        assert_eq!(crate::worktree::registrations(&repo).await.unwrap().len(), 1);
+        let branches = git(&repo, &["branch", "--list", &expected_branch]);
+        assert!(branches.is_empty(), "branch must be deleted: {branches}");
+        loop {
+            if let Event::WorktreeDiscarded {
+                session,
+                removed_checkout,
+                deleted_branch,
+                ..
+            } = next_event(&mut events).await
+            {
+                assert_eq!(session, session_id);
+                assert!(removed_checkout);
+                assert_eq!(deleted_branch.as_deref(), Some(expected_branch.as_str()));
+                break;
+            }
+        }
+        let stored = store.get_session(&session_id).unwrap().unwrap();
+        assert!(stored.worktree_discarded);
+        assert!(stored.worktree_path.is_some(), "history is retained");
+
+        // Prompting the discarded session is refused with a clear terminal error.
+        engine
+            .submit(Op::Prompt {
+                session: session_id.clone(),
+                doc: vec![DocBlock::Text {
+                    text: "must not run".into(),
+                }],
+                request_id: Some("prompt-after-discard".into()),
+            })
+            .await
+            .unwrap();
+        loop {
+            match next_event(&mut events).await {
+                Event::TurnStarted { .. } => panic!("discarded session must not accept a turn"),
+                Event::Error {
+                    message, terminal, ..
+                } if terminal => {
+                    assert!(message.contains("discarded"), "unexpected error: {message}");
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        // Repeating the discard converges as a no-op instead of failing.
+        let repeated = engine.discard_session_worktree(&session_id).await.unwrap();
+        assert!(!repeated.removed_checkout);
+        assert_eq!(repeated.deleted_branch, None);
+
+        drop(engine);
+        drop(events);
+        drop(store);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn discard_refuses_while_the_session_is_running() {
+        let Some((base, repo)) = initialized_repo("discard-running") else {
+            return;
+        };
+        let mut session = Session::new(ProviderId::Grok, repo.to_string_lossy().into_owned());
+        prepare_session_worktree(&repo, &mut session, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let db = base.join("codetwo.sqlite");
+        let store = Arc::new(Store::open(db.to_str().unwrap()).unwrap());
+        store.upsert_session(&session).unwrap();
+        let (engine, _events) =
+            Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
+        // A persisted Running row is normalized to interrupted on open; only live in-process
+        // activity means "running", so inject it through the tracker like a real turn does.
+        engine.state.activity.register(
+            &session.id,
+            crate::session::SessionActivity {
+                revision: 1,
+                state: crate::session::SessionRunState::Running {
+                    turn_id: "turn-1".into(),
+                    prompt_request_id: None,
+                },
+            },
+        );
+
+        let error = engine
+            .discard_session_worktree(&session.id)
+            .await
+            .unwrap_err();
+        assert!(error.contains("still running"), "unexpected error: {error}");
+        assert!(Path::new(session.worktree_path.as_deref().unwrap()).exists());
+
+        drop(engine);
+        drop(store);
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn list_and_orphan_discard_cover_sessions_orphans_and_stale_directories() {
+        let Some((base, repo)) = initialized_repo("worktree-inventory") else {
+            return;
+        };
+        let db = base.join("codetwo.sqlite");
+        let store = Arc::new(Store::open(db.to_str().unwrap()).unwrap());
+
+        // A session-claimed checkout.
+        let mut session = Session::new(ProviderId::Grok, repo.to_string_lossy().into_owned());
+        prepare_session_worktree(&repo, &mut session, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        store.upsert_session(&session).unwrap();
+        let session_root = session.worktree_path.clone().unwrap();
+
+        // An orphaned registration: a codetwo/ checkout no session row claims.
+        let baseline = crate::worktree::resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let orphan = crate::worktree::add_for_session_from_baseline(&repo, "orphan-1", &baseline)
+            .await
+            .unwrap();
+
+        // A stale directory inside the shared container that Git does not register.
+        let container = orphan.path.parent().unwrap().to_path_buf();
+        let repo_name = repo
+            .canonicalize()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let stale = container.join(format!("{repo_name}-stale-leftover"));
+        std::fs::create_dir(&stale).unwrap();
+
+        let (engine, _events) =
+            Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
+        let project = repo.to_string_lossy().into_owned();
+        let entries = engine.list_project_worktrees(&project).await.unwrap();
+
+        let find = |path: &str| {
+            entries
+                .iter()
+                .find(|entry| {
+                    std::fs::canonicalize(&entry.path)
+                        .map(|canonical| {
+                            Some(canonical)
+                                == std::fs::canonicalize(path).ok()
+                        })
+                        .unwrap_or(entry.path == path)
+                })
+                .unwrap_or_else(|| panic!("no entry for {path} in {entries:?}"))
+        };
+        let session_entry = find(&session_root);
+        assert_eq!(session_entry.kind, super::WorktreeEntryKind::Session);
+        assert_eq!(session_entry.session_id.as_deref(), Some(session.id.as_str()));
+        assert!(session_entry.registered);
+        let orphan_entry = find(&orphan.path.to_string_lossy());
+        assert_eq!(orphan_entry.kind, super::WorktreeEntryKind::Orphan);
+        assert!(orphan_entry.session_id.is_none());
+        let stale_entry = find(&stale.to_string_lossy());
+        assert_eq!(stale_entry.kind, super::WorktreeEntryKind::Stale);
+        assert!(!stale_entry.registered);
+
+        // A session-claimed checkout is refused by the orphan flow.
+        let refused = engine
+            .discard_orphan_worktree(&project, &session_root)
+            .await
+            .unwrap_err();
+        assert!(refused.contains("belongs to session"), "{refused}");
+        assert!(Path::new(&session_root).exists());
+
+        // The orphan registration and the stale directory are both removable.
+        let outcome = engine
+            .discard_orphan_worktree(&project, &orphan.path.to_string_lossy())
+            .await
+            .unwrap();
+        assert!(outcome.removed_checkout);
+        assert_eq!(outcome.deleted_branch.as_deref(), Some("codetwo/orphan-1"));
+        assert!(!orphan.path.exists());
+        let outcome = engine
+            .discard_orphan_worktree(&project, &stale.to_string_lossy())
+            .await
+            .unwrap();
+        assert!(outcome.removed_checkout);
+        assert!(!stale.exists());
+
+        drop(engine);
         drop(store);
         let _ = std::fs::remove_dir_all(&base);
     }

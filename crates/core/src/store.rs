@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   worktree_common_dir TEXT,
   worktree_git_dir TEXT,
   worktree_identity_json TEXT,
+  worktree_discarded INTEGER NOT NULL DEFAULT 0,
   permission_mode TEXT NOT NULL,
   sandbox_policy TEXT NOT NULL DEFAULT '\"workspace_write\"',
   acp_session_id  TEXT,
@@ -313,6 +314,12 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "sessions",
         "worktree_identity_json",
         "worktree_identity_json TEXT",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "worktree_discarded",
+        "worktree_discarded INTEGER NOT NULL DEFAULT 0",
     )?;
     ensure_column(
         &tx,
@@ -1463,7 +1470,7 @@ impl Store {
             "pinned DESC, created_at DESC"
         };
         let sql = format!(
-            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded
              FROM sessions WHERE archived=?1 ORDER BY {order}"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -1479,8 +1486,8 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO sessions
-               (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)
+               (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)
              ON CONFLICT(id) DO UPDATE SET
                provider=excluded.provider, model=excluded.model,
                cwd=excluded.cwd, project_path=excluded.project_path,
@@ -1489,6 +1496,7 @@ impl Store {
                worktree_common_dir=excluded.worktree_common_dir,
                worktree_git_dir=excluded.worktree_git_dir,
                worktree_identity_json=excluded.worktree_identity_json,
+               worktree_discarded=excluded.worktree_discarded,
                permission_mode=excluded.permission_mode,
                sandbox_policy=excluded.sandbox_policy,
                acp_session_id=excluded.acp_session_id",
@@ -1519,9 +1527,21 @@ impl Store {
                     .transpose()?,
                 s.memory_read.as_db(),
                 s.memory_write.as_db(),
+                if s.worktree_discarded { 1 } else { 0 },
             ],
         )?;
         Ok(())
+    }
+
+    /// Record that the explicit discard flow permanently removed this session's checkout and
+    /// branch. Deliberately one-way: the checkout no longer exists to un-discard.
+    pub fn mark_worktree_discarded(&self, id: &str) -> Result<bool, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE sessions SET worktree_discarded=1 WHERE id=?1 AND worktree_path IS NOT NULL",
+            rusqlite::params![id],
+        )?;
+        Ok(changed > 0)
     }
 
     /// Active (non-archived) sessions, pinned first and newest within each group.
@@ -1532,7 +1552,7 @@ impl Store {
     pub fn get_session(&self, id: &str) -> Result<Option<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded
              FROM sessions WHERE id=?1",
         )?;
         let mut rows = stmt.query_map([id], row_to_session_parts)?;
@@ -2140,6 +2160,7 @@ type SessionCols = (
     Option<String>,
     String,
     String,
+    i64,
 );
 
 fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols> {
@@ -2164,6 +2185,7 @@ fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols
         row.get(17)?,
         row.get(18)?,
         row.get(19)?,
+        row.get(20)?,
     ))
 }
 
@@ -2188,6 +2210,7 @@ fn build_session(c: SessionCols) -> Result<Session, StoreError> {
         worktree_git_dir: c.16,
         worktree_identity: c.17.as_deref().map(serde_json::from_str).transpose()?,
         worktree_baseline: c.14.as_deref().map(serde_json::from_str).transpose()?,
+        worktree_discarded: c.20 != 0,
         permission_mode: serde_json::from_str(&c.7)?,
         sandbox_policy: serde_json::from_str(&c.8)?,
         acp_session_id: c.9,
