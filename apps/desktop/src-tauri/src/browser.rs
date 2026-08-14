@@ -1386,7 +1386,7 @@ async fn dispatch_broker(
                     return Err("Auto Scene is not enabled for this session".into());
                 }
                 let (canonical, title, instructions) = {
-                    let scenes = app_state.scenes.lock().unwrap().clone();
+                    let scenes = app_state.scenes.library();
                     let entry = scenes
                         .resolve(&reference)
                         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -1401,7 +1401,7 @@ async fn dispatch_broker(
                     .session_scene(&request.session)
                     .map_err(|error| error.to_string())?
                     .and_then(|(reference, _)| {
-                        let scenes = app_state.scenes.lock().unwrap().clone();
+                        let scenes = app_state.scenes.library();
                         scenes
                             .resolve(&reference)
                             .map(codetwo_core::SceneLibrary::reference_for)

@@ -7,6 +7,13 @@ weave in reusable **skills** with a `/` picker, and run them against existing co
 Its **Plugin Hub** installs complete GitHub packages: standard Skills, Subagent definitions,
 stdio/HTTP/SSE MCP servers, and conflict-safe project scaffolds.
 
+Internally it is a **plugin graph** in the [cordis](https://github.com/cordiverse/cordis) sense:
+every subsystem — storage, the agent loop, git, memory, scenes — is a plugin that declares what it
+needs, publishes what it offers, and can be loaded, reconfigured, and unloaded while the app runs
+([`docs/plugins.md`](docs/plugins.md)). A plugin can also be a **process in any language**, over a
+small JSON-RPC [plugin protocol](docs/plugin-protocol.md) — its commands land in the same registry
+the built-ins use.
+
 Ships two frontends over one shared Rust core:
 
 - **Desktop** — Tauri v2 + React + BlockNote (the document editor).
@@ -19,6 +26,8 @@ The core spawns each provider as a child process and speaks ACP to it. See
 [`docs/architecture.md`](docs/architecture.md) and the plan for the full design.
 
 ```
+crates/kernel  the plugin runtime (cordis in Rust): contexts, reactive services, scoped effects,
+               hot-swappable plugins — everything below is one
 crates/core    the brain: ACP client, engine, providers, sessions, skills + market, permissions,
                project memory, worktrees, git (status/checkpoints/diff/commit), keymap, browser, pty
 crates/tui     ratatui frontend (links core)

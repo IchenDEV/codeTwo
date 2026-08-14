@@ -576,6 +576,92 @@ const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI
 /** False when the UI runs in a plain browser (`bun run dev`), where no native commands exist. */
 export const isDesktop = inTauri;
 
+// ---- the plugin graph -------------------------------------------------------------------------
+
+/**
+ * Call a command contributed by a core plugin — `call("git.status", { cwd })`.
+ *
+ * This is the extension surface. A plugin that registers `foo.bar` is callable from here the
+ * moment it loads, with no `#[tauri::command]`, no entry in `generate_handler!`, and no new
+ * function in this file. The named wrappers below predate it and are being migrated onto it.
+ */
+export async function call<T = unknown>(name: string, args?: unknown): Promise<T> {
+  if (!inTauri) throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  return (await invoke<T>("call", { name, args: args ?? null })) as T;
+}
+
+/** Lifecycle state of one plugin instance, as the kernel reports it. */
+export type PluginStatus = "pending" | "loading" | "active" | "failed" | "disposed";
+
+/** One plugin instance in the running graph. */
+export interface PluginScope {
+  id: number;
+  parent: number | null;
+  plugin: string;
+  status: PluginStatus;
+  error: string | null;
+  inject: { required: string[]; optional: string[] };
+  /** Injected services that are missing — why a `pending` plugin is pending. */
+  missing: string[];
+  services: string[];
+  commands: string[];
+  config: unknown;
+}
+
+export interface PluginCommand {
+  name: string;
+  plugin: string;
+  scope: number;
+  description: string | null;
+}
+
+/** Everything currently loaded, why it is in that state, and what it contributed. */
+export async function kernelScopes(): Promise<PluginScope[]> {
+  return inTauri ? await invoke<PluginScope[]>("kernel_scopes") : [];
+}
+
+/** Every command the running graph offers, with the plugin that owns it. */
+export async function kernelCommands(): Promise<PluginCommand[]> {
+  return inTauri ? await invoke<PluginCommand[]>("kernel_commands") : [];
+}
+
+/** One installable plugin: whether it runs, its config, and the schema to render a form from. */
+export interface PluginEntry {
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  running: boolean;
+  status: PluginStatus | null;
+  config: unknown;
+  schema: unknown;
+  /** Registered but absent from the config — installable, not installed. */
+  available: boolean;
+}
+
+export async function listCorePlugins(): Promise<PluginEntry[]> {
+  return inTauri ? await call<PluginEntry[]>("kernel.plugins") : [];
+}
+
+/** Load or unload one plugin, live. */
+export async function setCorePluginEnabled(name: string, value: boolean): Promise<void> {
+  await call("kernel.set_enabled", { name, value });
+}
+
+/** Replace one plugin's config; it reloads, nothing else does. */
+export async function configureCorePlugin(name: string, config: unknown): Promise<void> {
+  await call("kernel.configure", { name, config });
+}
+
+/**
+ * Installed bundles that ship a process (the plugin protocol): which are running, and which are
+ * installed but waiting for the user to trust them. Trust — not installation — is what starts a
+ * process, so `untrusted` is the actionable list.
+ */
+export async function listExtensions(): Promise<{ running: string[]; untrusted: string[] }> {
+  if (!inTauri) return { running: [], untrusted: [] };
+  return await call("extensions.list");
+}
+
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [], capabilities: [] },
   { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [], capabilities: [] },

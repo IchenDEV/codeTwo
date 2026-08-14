@@ -12,9 +12,28 @@ Protocol (ACP)** and presents them through a **document-first** UI. One Rust cor
   all-Rust with a `core` + a ratatui `tui` and an SQ/EQ event model. A Rust core lets the Tauri GUI
   and a ratatui TUI link the same code with no server/serialization boundary.
 
+## Shape: a plugin graph, not a program with hooks
+
+Everything below is a **plugin**. `crates/kernel` is a Rust port of
+[cordis](https://github.com/cordiverse/cordis): contexts, services published by name, declared
+injections, and scopes that undo everything a plugin did when it unloads. `crates/core/src/app`
+defines Code2's subsystems as plugins over it, and `CoreApp::boot(AppConfig)` assembles them from
+config rather than from a constructor.
+
+That is why the module list below reads as a menu rather than a build order: `store` and `engine`
+have no fixed sequence, the app runs without either, and reconfiguring one reloads exactly what was
+built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
+hand-wired.
+
+A plugin does not have to be ours, or Rust. A bundle can ship a **process** that Code2 speaks
+JSON-RPC to over stdio; the commands it declares land in the same registry a built-in's do and are
+callable from every frontend. Installing such a bundle still executes nothing — the process starts
+only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-protocol.md).
+
 ## Layers
 
 ```
+                     crates/kernel  (the plugin runtime — cordis in Rust)
                        crates/core  (Rust library — no UI)
    ┌──────────────────────────────────────────────────────────────────────┐
    │  acp        ACP client over stdio (JSON-RPC peer + wire types)         │

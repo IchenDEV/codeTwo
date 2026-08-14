@@ -1,9 +1,18 @@
 //! Code2 desktop bridge: a thin Tauri layer over `codetwo-core`.
 //!
-//! The core `Engine` is managed in Tauri state. Frontends push `Op`s through commands and receive
-//! `Event`s streamed over the `engine-event` channel. Terminals live in the core as real emulators
-//! (`codetwo_core::term`) keyed by a stable id; the frontend attaches to one and streams it over
-//! `pty-output`.
+//! The desktop no longer *builds* a Code2 — it boots one. `setup` starts the core plugin graph
+//! ([`codetwo_core::app`]) and takes storage, providers, the skill library, the event bus and the
+//! agent loop out of it; the only thing it constructs itself is the seam where the desktop
+//! genuinely differs (its authenticated browser MCP), contributed as a replacement `engine`
+//! plugin rather than as a fork of the boot sequence.
+//!
+//! Frontends push `Op`s through commands and receive `Event`s streamed over the `engine-event`
+//! channel. Terminals live in the core as real emulators (`codetwo_core::term`) keyed by a stable
+//! id; the frontend attaches to one and streams it over `pty-output`.
+//!
+//! New surface should be added as a **core plugin command** and reached through the generic
+//! [`call`] bridge, not as another `#[tauri::command]` — see `docs/plugins.md`. The wrappers below
+//! are the pre-plugin surface, kept working while they are migrated.
 
 mod automation;
 mod browser;
@@ -14,32 +23,30 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
+use codetwo_core::app::events::ScenesChanged;
+use codetwo_core::app::{
+    AppConfig, CoreApp, CostService, EngineService, EventBus, KeymapService, Paths, PluginHub,
+    ProviderService, ProviderSummary, SceneRuntimeService, SceneService, SkillService, StoreService,
+};
 use codetwo_core::browser::Annotation;
-use codetwo_core::codex_runtime::CodexRuntimeDiscovery;
-use codetwo_core::cost::{SessionCostSnapshot, SessionCostTracker};
-use codetwo_core::event::ModelChoice;
+use codetwo_core::cost::SessionCostSnapshot;
 use codetwo_core::git::{self, Checkpoint, DiffResult, DiffScope, DiffStat, GitStatus};
 use codetwo_core::github_skills;
 use codetwo_core::harness;
 use codetwo_core::issues::{self, Issue};
-use codetwo_core::keymap::{Action as KeyAction, Keymap};
-use codetwo_core::models::builtin_models;
+use codetwo_core::keymap::Action as KeyAction;
 use codetwo_core::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use codetwo_core::plugin::{self, InstalledPlugin, PluginCounts, PluginScaffold};
 use codetwo_core::plugin_marketplace::{self, MarketplacePluginSource, PluginMarketplace};
 use codetwo_core::project::{self, ProjectScript, ProjectWorktreeMode};
-use codetwo_core::provider::{
-    registry_with_codex_runtime, Provider, ProviderCapability, ProviderId,
-};
+use codetwo_core::provider::ProviderId;
 use codetwo_core::scene::{
     self, ApplyStrength, Pipeline, Scene, SceneArtifactKind, SceneArtifactSpec, SceneLibrary,
     SceneSource,
 };
 use codetwo_core::scene_artifact::{SceneArtifactRecord, SceneArtifactStore};
-use codetwo_core::scene_runtime::SceneRuntime;
-use codetwo_core::skill::{
-    builtin_skills, DocBlock, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef,
-};
+use codetwo_core::skill::{DocBlock, Skill, SkillKind, SkillLibrary, SkillPayload, SlotDef};
 use codetwo_core::source_control::{self, SourceControlInfo};
 use codetwo_core::store::Project;
 use codetwo_core::term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
@@ -90,29 +97,35 @@ struct RemoteHandle {
 }
 
 struct AppState {
+    /// The booted plugin graph. `engine`/`store`/`events` below are handles taken out of it, kept
+    /// as fields so the pre-plugin command wrappers keep working unchanged.
+    core: CoreApp,
     engine: Arc<Engine>,
     store: Arc<Store>,
-    providers: Vec<ProviderInfo>,
+    /// The live skill library, owned by the `skills` plugin.
+    skills: Arc<SkillService>,
+    providers: Vec<ProviderSummary>,
     canvas_gate: CanvasFeatureGate,
     canvas_owner: String,
     events: broadcast::Sender<Event>,
     skills_dir: PathBuf,
     plugins_dir: PathBuf,
-    /// Resolved scene/pipeline library (project > user > plugin > builtin). Reloaded alongside
-    /// skills whenever the workspace changes.
-    scenes: Mutex<Arc<SceneLibrary>>,
-    /// Versioned scene-artifact captures over the shared content-addressed blob layer (R4).
+    /// Resolved scene/pipeline library (project > user > plugin > builtin), owned by the `scenes`
+    /// plugin. Reloaded alongside skills whenever the workspace changes.
+    scenes: Arc<SceneService>,
+    /// Installed plugin bundles, owned by the `plugin-hub` plugin.
+    plugin_hub: Arc<PluginHub>,
+    /// Versioned scene-artifact captures (R4), from the `scenes` plugin.
     scene_artifacts: SceneArtifactStore,
-    /// Scene hook dispatcher (R8), fed by one broadcast-subscription task spawned in `setup`.
-    scene_runtime: Arc<SceneRuntime>,
-    /// Per-session cost tracker (R7), fed by the same broadcast-subscription task as the scene
-    /// runtime. In-memory only; totals reset on restart.
-    cost: Arc<SessionCostTracker>,
+    /// Scene hook dispatcher (R8), owned by the `scene-runtime` plugin.
+    scene_runtime: Arc<SceneRuntimeService>,
+    /// Per-session cost tracker (R7), owned by the `cost` plugin.
+    cost: Arc<CostService>,
     /// Last workspace the frontend listed skills for; harness skill discovery scans its
     /// project-level roots (`.claude/skills` …) so a save/delete reload keeps them.
     skills_cwd: Mutex<Option<PathBuf>>,
-    keymap: Mutex<Keymap>,
-    keymap_path: PathBuf,
+    /// Key bindings, owned by the `keymap` plugin.
+    keymap: Arc<KeymapService>,
     ptys: Mutex<HashMap<String, TerminalHandle>>,
     /// Request-scoped search cancellation handles. IDs come from the invoking webview, so one
     /// window never has to cancel another window's latest request implicitly.
@@ -126,65 +139,20 @@ struct AppState {
 /// Rebuild the live skill library: built-ins + `<data>/skills/*.json` + skills auto-discovered
 /// from the harness directories (~/.claude/skills, .codex/skills, …) of the current workspace.
 fn reload_skills(state: &AppState) {
-    let mut v = builtin_skills();
-    if let Ok(loaded) = SkillLibrary::load_dir(&state.skills_dir) {
-        v.extend(loaded.all().cloned());
-    }
-    if let Ok(plugins) = plugin::load_dir(&state.plugins_dir) {
-        v.extend(
-            plugins
-                .into_iter()
-                .filter(|plugin| plugin.enabled)
-                .flat_map(|plugin| plugin.components),
-        );
-    }
     let cwd = state.skills_cwd.lock().unwrap().clone();
-    v.extend(harness::discover(cwd.as_deref()));
-    state.engine.set_skills(SkillLibrary::new(v));
+    state.skills.reload(cwd.as_deref());
+    state.engine.set_skills(state.skills.library());
 }
 
 /// Rebuild the scene library: `<project>/.codetwo/scenes` + `~/.config/codetwo/scenes` +
 /// enabled plugins' `scenes/` dirs + builtins, in that precedence order.
 fn reload_scenes(state: &AppState) {
     let cwd = state.skills_cwd.lock().unwrap().clone();
-    let project_dir = cwd.map(|c| c.join(".codetwo/scenes"));
-    let user_dir = dirs_home().map(|h| h.join(".config/codetwo/scenes"));
-    let plugins: Vec<(String, PathBuf)> = plugin::load_dir(&state.plugins_dir)
-        .map(|plugins| {
-            plugins
-                .into_iter()
-                .filter(|plugin| plugin.enabled)
-                .map(|plugin| {
-                    // R14: installs preserve the verified bundle under `<id>/bundle/`, so scene
-                    // components are read back from `<id>/bundle/scenes` via the shared helper.
-                    let dir = plugin::plugin_scenes_dir(&state.plugins_dir, &plugin.id);
-                    (plugin.id, dir)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let lib = Arc::new(SceneLibrary::load(
-        project_dir.as_deref(),
-        user_dir.as_deref(),
-        &plugins,
-    ));
-    *state.scenes.lock().unwrap() = lib.clone();
-    // Keep the engine's preamble compiler and the hook runtime on the same resolved library.
-    state.engine.set_scenes(lib.clone());
-    state.scene_runtime.set_scenes(lib);
-}
-
-#[derive(Serialize, Clone)]
-struct ProviderInfo {
-    id: String,
-    display_name: String,
-    available: bool,
-    needs_node: bool,
-    /// The models we offer for this provider when it reports none of its own over ACP. Empty only
-    /// for providers we ship no list for.
-    models: Vec<ModelChoice>,
-    #[serde(default)]
-    capabilities: Vec<ProviderCapability>,
+    state.scenes.reload(cwd.as_deref(), Some(&state.plugin_hub));
+    // The engine's preamble compiler and the hook runtime listen for this; neither is updated by
+    // hand any more, and neither has to be remembered when a third consumer appears.
+    let ctx = state.core.ctx();
+    tauri::async_runtime::spawn(async move { ctx.emit(ScenesChanged).await });
 }
 
 #[derive(Serialize)]
@@ -350,8 +318,38 @@ fn kind_str(k: SkillKind) -> String {
 // ---- commands --------------------------------------------------------------------------------
 
 #[tauri::command]
-fn list_providers(state: State<'_, AppState>) -> Vec<ProviderInfo> {
+fn list_providers(state: State<'_, AppState>) -> Vec<ProviderSummary> {
     state.providers.clone()
+}
+
+/// The generic bridge into the plugin graph: `call("git.status", { cwd })`.
+///
+/// Every command a loaded plugin registers is reachable through this one entry point, so a new
+/// feature does not need a new `#[tauri::command]`, a new line in `generate_handler!`, and a new
+/// import in the frontend — it needs a plugin.
+#[tauri::command]
+async fn call(
+    state: State<'_, AppState>,
+    name: String,
+    args: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    state
+        .core
+        .call(&name, args.unwrap_or(serde_json::Value::Null))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// What the running graph looks like — for a plugin manager UI.
+#[tauri::command]
+fn kernel_scopes(state: State<'_, AppState>) -> Vec<codetwo_kernel::ScopeInfo> {
+    state.core.scopes()
+}
+
+/// Every command the graph currently offers, with the plugin that contributed it.
+#[tauri::command]
+fn kernel_commands(state: State<'_, AppState>) -> Vec<codetwo_kernel::CommandInfo> {
+    state.core.commands()
 }
 
 #[tauri::command]
@@ -610,13 +608,13 @@ fn list_scenes(state: State<'_, AppState>, cwd: Option<String>) -> Vec<SceneInfo
         *state.skills_cwd.lock().unwrap() = Some(PathBuf::from(c));
         reload_scenes(&state);
     }
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     lib.scenes().iter().map(SceneInfo::from_resolved).collect()
 }
 
 #[tauri::command]
 fn get_scene(state: State<'_, AppState>, reference: String) -> Result<SceneDetail, String> {
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     let entry = lib
         .resolve(&reference)
         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -650,7 +648,7 @@ fn save_scene(
         SceneSaveScope::Project => "project",
     };
     let reference = format!("{prefix}:{}", scene.name);
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     lib.resolve(&reference)
         .map(SceneInfo::from_resolved)
         .ok_or_else(|| format!("saved scene `{reference}` could not be reloaded"))
@@ -674,7 +672,7 @@ fn delete_scene(
 
 #[tauri::command]
 fn list_pipelines(state: State<'_, AppState>) -> Vec<PipelineInfo> {
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     lib.pipelines()
         .iter()
         .map(|entry| PipelineInfo {
@@ -691,7 +689,7 @@ fn list_pipelines(state: State<'_, AppState>) -> Vec<PipelineInfo> {
 
 #[tauri::command]
 fn get_pipeline(state: State<'_, AppState>, reference: String) -> Result<PipelineDetail, String> {
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     let entry = lib
         .resolve_pipeline(&reference)
         .ok_or_else(|| format!("unknown pipeline `{reference}`"))?;
@@ -723,7 +721,7 @@ async fn apply_scene_to(
     confirm_escalation: bool,
 ) -> Result<SceneApplyOutcome, String> {
     let (scene_ref, scene, plan) = {
-        let lib = state.scenes.lock().unwrap().clone();
+        let lib = state.scenes.library();
         let entry = lib
             .resolve(reference)
             .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -817,7 +815,7 @@ fn scene_session_plan_for(
     reference: &str,
     confirm_escalation: bool,
 ) -> Result<SceneSessionPlanOutcome, String> {
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     let entry = lib
         .resolve(reference)
         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -894,7 +892,7 @@ fn get_session_scene(
         .store
         .session_scene(&session)
         .map_err(|e| e.to_string())?;
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     Ok(stored.map(|(reference, customized)| SessionSceneState {
         resolved: lib.resolve(&reference).is_some(),
         reference,
@@ -960,7 +958,7 @@ fn record_scene_artifact(
         .map(|(reference, _)| reference)
         .unwrap_or_default();
     let spec = {
-        let lib = state.scenes.lock().unwrap().clone();
+        let lib = state.scenes.library();
         lib.resolve(&scene_ref)
             .and_then(|entry| {
                 entry
@@ -1097,7 +1095,7 @@ fn pipeline_detail(
         .scene_artifacts
         .list_for_instance(&instance.id)
         .unwrap_or_default();
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     let stages = lib
         .resolve_pipeline(&instance.pipeline_ref)
         .map(|entry| {
@@ -1174,7 +1172,7 @@ async fn start_pipeline(
     session: Option<String>,
 ) -> Result<PipelineStartOutcome, String> {
     let (pipeline_ref, entry_stage, entry_scene, entry_gate) = {
-        let lib = state.scenes.lock().unwrap().clone();
+        let lib = state.scenes.library();
         let entry = lib
             .resolve_pipeline(&reference)
             .ok_or_else(|| format!("unknown pipeline `{reference}`"))?;
@@ -1247,7 +1245,7 @@ async fn advance_pipeline(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("unknown pipeline instance `{instance_id}`"))?;
     let (stage, trigger, gate) = {
-        let lib = state.scenes.lock().unwrap().clone();
+        let lib = state.scenes.library();
         let resolved = lib
             .resolve_pipeline(&instance.pipeline_ref)
             .ok_or_else(|| format!("unknown pipeline `{}`", instance.pipeline_ref))?;
@@ -1360,7 +1358,7 @@ fn bind_pipeline_session(
         .ok()
         .flatten()
         .and_then(|instance| {
-            let lib = state.scenes.lock().unwrap().clone();
+            let lib = state.scenes.library();
             let resolved = lib.resolve_pipeline(&instance.pipeline_ref)?;
             resolved
                 .pipeline
@@ -1422,7 +1420,7 @@ fn session_pipeline(
 /// the returned text itself (Blob + anchor) — no dialog plumbing on this side.
 #[tauri::command]
 fn export_scene_skill_md(state: State<'_, AppState>, reference: String) -> Result<String, String> {
-    let lib = state.scenes.lock().unwrap().clone();
+    let lib = state.scenes.library();
     let entry = lib
         .resolve(&reference)
         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -1674,17 +1672,13 @@ async fn git_push(cwd: String) -> Result<String, String> {
 
 #[tauri::command]
 fn get_keymap(state: State<'_, AppState>) -> Vec<(String, String, String)> {
-    state.keymap.lock().unwrap().entries()
+    state.keymap.snapshot().entries()
 }
 
 #[tauri::command]
 fn set_keymap(state: State<'_, AppState>, action: String, key: String) -> Result<(), String> {
-    let mut km = state.keymap.lock().unwrap();
     match serde_json::from_value::<KeyAction>(serde_json::Value::String(action.clone())) {
-        Ok(a) => {
-            km.set(a, key);
-            km.save(&state.keymap_path).map_err(|e| e.to_string())
-        }
+        Ok(parsed) => state.keymap.set(parsed, key).map(|_| ()).map_err(|e| e.to_string()),
         Err(_) => Err(format!("unknown action: {action}")),
     }
 }
@@ -3485,57 +3479,6 @@ fn with_terminal<T>(
 /// Model discovery is two-pronged: the `Models` event carries the agent-reported current model
 /// id, and the store keeps the provider (plus any persisted model) for sessions whose agent never
 /// reports one. The `set_model` command additionally records the chosen model directly.
-fn feed_cost_tracker(
-    cost: &SessionCostTracker,
-    store: &Store,
-    events: &broadcast::Sender<Event>,
-    last_emit: &mut HashMap<String, std::time::Instant>,
-    event: &Event,
-) {
-    match event {
-        Event::Models {
-            session, current, ..
-        } if !current.is_empty() => {
-            if let Ok(Some(record)) = store.get_session(session) {
-                cost.set_session_model(session, record.provider.as_str(), current);
-            }
-        }
-        Event::Usage { session, .. } | Event::ContextWindow { session, .. }
-            if !cost.has_model(session) =>
-        {
-            if let Ok(Some(record)) = store.get_session(session) {
-                if let Some(model) = record.model.as_deref() {
-                    cost.set_session_model(session, record.provider.as_str(), model);
-                }
-            }
-        }
-        _ => {}
-    }
-    cost.observe(event);
-
-    let session = match event {
-        Event::Usage { session, .. } | Event::ContextWindow { session, .. } => session,
-        _ => return,
-    };
-    let due = last_emit
-        .get(session)
-        .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(1));
-    if !due {
-        return;
-    }
-    if let Some(snap) = cost.snapshot(session) {
-        last_emit.insert(session.clone(), std::time::Instant::now());
-        let _ = events.send(Event::SessionCost {
-            session: session.clone(),
-            input_tokens: snap.input_tokens,
-            output_tokens: snap.output_tokens,
-            cost_usd: snap.cost_usd,
-            burn_rate_usd_per_hour: snap.burn_rate_usd_per_hour,
-            priced: snap.priced,
-        });
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Launched from Finder we inherit a bare PATH, and every CLI we shell out to — the provider
@@ -3566,55 +3509,6 @@ pub fn run() {
                 }
             });
 
-            // One immutable startup snapshot. Updating ChatGPT/plugins/config requires a restart;
-            // CodeTwo never mutates or continuously scans the external host.
-            let codex_runtime = CodexRuntimeDiscovery::detect();
-            let registry = registry_with_codex_runtime(&codex_runtime);
-            let providers = registry
-                .iter()
-                .map(|provider: &Provider| ProviderInfo {
-                    id: provider.id.as_str().to_string(),
-                    display_name: provider.display_name.clone(),
-                    available: provider.is_available(),
-                    needs_node: provider.needs_node,
-                    models: builtin_models(&provider.id),
-                    capabilities: if provider.id == ProviderId::Codex {
-                        codex_runtime.capability_projection(true)
-                    } else {
-                        Vec::new()
-                    },
-                })
-                .collect::<Vec<_>>();
-
-            let db_path = data_dir.join("codetwo.db");
-            let store = Arc::new(Store::open(db_path.to_string_lossy().as_ref())?);
-            if let Err(error) = store.purge_expired_canvases(now_millis()) {
-                eprintln!("canvas tombstone cleanup failed: {error}");
-            }
-            let scene_artifacts = SceneArtifactStore::new(
-                store.clone(),
-                ArtifactStore::from_store(store.clone()).ok_or("artifact storage unavailable")?,
-            );
-
-            let skills_dir = data_dir.join("skills");
-            let plugins_dir = data_dir.join("plugins");
-            let mut skill_vec = builtin_skills();
-            if let Ok(loaded) = SkillLibrary::load_dir(&skills_dir) {
-                skill_vec.extend(loaded.all().cloned());
-            }
-            if let Ok(plugins) = plugin::load_dir(&plugins_dir) {
-                skill_vec.extend(
-                    plugins
-                        .into_iter()
-                        .filter(|plugin| plugin.enabled)
-                        .flat_map(|plugin| plugin.components),
-                );
-            }
-            // User-level harness skills only for now; project-level ones join on the first
-            // `list_skills` call that carries a workspace.
-            skill_vec.extend(harness::discover(None));
-            let skills = SkillLibrary::new(skill_vec);
-
             let canvas_gate = CanvasFeatureGate::disabled();
             let canvas_owner = format!("desktop:{}", data_dir.to_string_lossy());
             let desktop_mcp = DesktopMcpConfig {
@@ -3622,24 +3516,54 @@ pub fn run() {
                 socket_path: browser_socket_path.to_string_lossy().into_owned(),
                 master_key: browser_master_key,
             };
-            let (engine, mut rx) = Engine::with_store_canvas_and_desktop_mcp(
-                registry,
-                skills,
-                store.clone(),
-                canvas_gate,
-                desktop_mcp,
-            );
-            let engine = Arc::new(engine);
 
-            // Fan the engine's events into a broadcast so both the frontend and the remote server
-            // can subscribe (one shared engine, local + remote).
-            let (events, _) = broadcast::channel::<Event>(1024);
-            let ev_tx = events.clone();
-            tauri::async_runtime::spawn(async move {
-                while let Some(ev) = rx.recv().await {
-                    let _ = ev_tx.send(ev);
-                }
-            });
+            // The one place the desktop differs from every other host: its Codex sessions get the
+            // authenticated browser MCP. That is a replacement `engine` plugin, not a second boot
+            // sequence — everything else about the engine (its injections, its event pump, its
+            // session commands) stays shared.
+            let mut registry = codetwo_core::app::plugins::builtin_registry();
+            registry.register_arc(Box::new(move || {
+                let desktop_mcp = desktop_mcp.clone();
+                Arc::new(EnginePlugin::with_builder(Arc::new(
+                    move |inputs: EngineInputs| {
+                        Engine::with_store_canvas_and_desktop_mcp(
+                            inputs.providers,
+                            inputs.skills,
+                            inputs.store,
+                            canvas_gate,
+                            desktop_mcp.clone(),
+                        )
+                    },
+                )))
+            }));
+
+            let core = tauri::async_runtime::block_on(CoreApp::boot_with(
+                AppConfig::new(&data_dir),
+                registry,
+            ))
+            .map_err(|error| error.to_string())?;
+
+            let paths = core.service::<Paths>().ok_or("paths plugin did not load")?;
+            let store = core.service::<StoreService>().ok_or("store plugin did not load")?.0.clone();
+            let engine = core.service::<EngineService>().ok_or("engine plugin did not load")?.0.clone();
+            let events = core.service::<EventBus>().ok_or("bus plugin did not load")?.0.clone();
+            let skills = core.service::<SkillService>().ok_or("skills plugin did not load")?;
+            let scenes = core.service::<SceneService>().ok_or("scenes plugin did not load")?;
+            let plugin_hub = core.service::<PluginHub>().ok_or("plugin-hub did not load")?;
+            let scene_artifacts = scenes
+                .artifacts
+                .clone()
+                .ok_or("scene artifact storage unavailable")?;
+            let scene_runtime =
+                core.service::<SceneRuntimeService>().ok_or("scene-runtime did not load")?;
+            let cost = core.service::<CostService>().ok_or("cost plugin did not load")?;
+            let keymap = core.service::<KeymapService>().ok_or("keymap plugin did not load")?;
+            let providers = core
+                .service::<ProviderService>()
+                .ok_or("providers plugin did not load")?
+                .summaries();
+            let skills_dir = paths.skills();
+            let plugins_dir = paths.plugins();
 
             // Pump broadcast events to the frontend. A lag burst must not kill the pump — skip the
             // dropped events and keep going (the webview re-syncs from the store on next load).
@@ -3659,66 +3583,10 @@ pub fn run() {
                 }
             });
 
-            // Scene layer (R8): the engine compiles preambles and captures artifacts against the
-            // builtin library until the first workspace-scoped `reload_scenes` refines it, and the
-            // hook runtime consumes the same broadcast bus every other subscriber uses.
-            let initial_scenes = Arc::new(SceneLibrary::builtin());
-            engine.set_scenes(initial_scenes.clone());
-            engine.set_scene_artifacts(scene_artifacts.clone());
-            let submit_engine = engine.clone();
-            let scene_runtime = Arc::new(SceneRuntime::new(
-                initial_scenes.clone(),
-                engine.skills(),
-                store.clone(),
-                scene_artifacts.clone(),
-                Box::new(move |op| {
-                    let engine = submit_engine.clone();
-                    tauri::async_runtime::spawn(async move {
-                        if let Err(error) = engine.submit(op).await {
-                            eprintln!("hook prompt submission failed: {error}");
-                        }
-                    });
-                }),
-                events.clone(),
-            ));
-            // R7: the cost tracker rides the same subscription task as the scene runtime — one
-            // subscriber, two consumers — rather than opening a second `subscribe()`.
-            let cost = Arc::new(SessionCostTracker::new());
-            let hook_runtime = scene_runtime.clone();
-            let mut hook_sub = events.subscribe();
-            let cost_feed = cost.clone();
-            let cost_store = store.clone();
-            let cost_events = events.clone();
-            tauri::async_runtime::spawn(async move {
-                // Per-session throttle for `Event::SessionCost` emission (≥1 s apart).
-                let mut last_cost_emit: HashMap<String, std::time::Instant> = HashMap::new();
-                loop {
-                    match hook_sub.recv().await {
-                        Ok(ev) => {
-                            feed_cost_tracker(
-                                &cost_feed,
-                                &cost_store,
-                                &cost_events,
-                                &mut last_cost_emit,
-                                &ev,
-                            );
-                            hook_runtime.on_event(&ev);
-                        }
-                        Err(broadcast::error::RecvError::Lagged(n)) => {
-                            eprintln!("scene hook pump lagged; dropped {n} events");
-                        }
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
-                }
-            });
-            tauri::async_runtime::spawn(scene_runtime.clone().schedule_loop());
+            // The scene hook runtime, the cost tracker and their event pumps are core plugins now
+            // (`scene-runtime`, `cost`), loaded above with everything else.
 
-            // User automations use the same event bus and engine as interactive sessions. Any
-            // in-flight receipt from a previous process is terminal: providers cannot survive the
-            // desktop host, so showing it as still running would be dishonest.
-            if let Err(error) = store.interrupt_active_automation_runs(now_millis()) {
-                eprintln!("automation startup reconciliation failed: {error}");
-            }
+            // User automations use the same event bus and engine as interactive sessions.
             let automation_runtime = Arc::new(automation::AutomationRuntime::new(
                 engine.clone(),
                 store.clone(),
@@ -3729,25 +3597,24 @@ pub fn run() {
             tauri::async_runtime::spawn(automation_runtime.clone().event_loop());
             app.manage(automation::AutomationState(automation_runtime));
 
-            let keymap_path = data_dir.join("keymap.json");
-            let keymap = Keymap::load(&keymap_path);
-
             app.manage(AppState {
+                core,
                 engine,
                 store,
+                skills,
                 providers,
                 canvas_gate,
                 canvas_owner,
                 events,
                 skills_dir,
                 plugins_dir,
-                scenes: Mutex::new(initial_scenes),
+                scenes,
+                plugin_hub,
                 scene_artifacts,
                 scene_runtime,
                 cost,
                 skills_cwd: Mutex::new(None),
-                keymap: Mutex::new(keymap),
-                keymap_path,
+                keymap,
                 ptys: Mutex::new(HashMap::new()),
                 workspace_searches: Mutex::new(HashMap::new()),
                 remote: Mutex::new(None),
@@ -3758,6 +3625,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            call,
+            kernel_scopes,
+            kernel_commands,
             list_providers,
             list_sessions,
             list_worktree_baselines,

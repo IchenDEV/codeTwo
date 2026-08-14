@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Shared core for Code2: ACP client, provider registry, sessions, skills, permissions."
 
 [dependencies]
+codetwo-kernel.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
