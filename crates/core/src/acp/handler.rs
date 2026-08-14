@@ -20,6 +20,16 @@ pub trait ClientHandler: Send + Sync + 'static {
         RequestPermissionResponse { outcome: PermissionOutcome::Cancelled }
     }
 
+    /// The agent asks the user a structured question (`elicitation/create`, UNSTABLE). Default:
+    /// decline — the agent learns nothing was chosen and keeps going, which is the right answer
+    /// for a client that never advertised the capability but was asked anyway.
+    async fn create_elicitation(
+        &self,
+        _req: CreateElicitationRequest,
+    ) -> CreateElicitationResponse {
+        CreateElicitationResponse::Decline
+    }
+
     /// The agent asks the client to read a file (ACP delegates fs to the client). Default: unsupported.
     async fn read_text_file(&self, _req: ReadTextFileRequest) -> Result<ReadTextFileResponse, RpcError> {
         Err(RpcError::method_not_found("fs/read_text_file"))

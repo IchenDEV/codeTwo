@@ -3439,6 +3439,7 @@ mod tests {
                     option_kinds: Default::default(),
                     sequence: 1,
                     context: Default::default(),
+                    form: None,
                 }],
             },
         };
@@ -3621,6 +3622,7 @@ mod tests {
                     option_kinds: Default::default(),
                     sequence: 9,
                     context: Default::default(),
+                    form: None,
                 }],
             },
         };

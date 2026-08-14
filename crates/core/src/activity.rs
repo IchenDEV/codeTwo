@@ -9,7 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::acp::wire::PermissionOutcome;
+use crate::acp::wire::{CreateElicitationResponse, PermissionOutcome};
+use crate::elicitation::{ElicitationAnswer, ElicitationForm};
 use crate::event::Event;
 use crate::permission::PermissionContext;
 use crate::session::{
@@ -54,7 +55,42 @@ struct TrackedTurn {
 
 struct PendingRoute {
     input: PendingInput,
-    sender: oneshot::Sender<PermissionOutcome>,
+    reply: PendingReply,
+}
+
+/// The parked agent call one pending input answers. Two protocol shapes, one queue: a client
+/// listing `SessionActivity::pending` sees both, and neither can be resolved with the other's
+/// outcome type.
+enum PendingReply {
+    Permission(oneshot::Sender<PermissionOutcome>),
+    Elicitation(oneshot::Sender<CreateElicitationResponse>),
+}
+
+impl PendingReply {
+    /// Resolve the parked call the way an interruption should: nothing chosen, nothing allowed.
+    fn cancel(self) {
+        match self {
+            PendingReply::Permission(sender) => {
+                let _ = sender.send(PermissionOutcome::Cancelled);
+            }
+            PendingReply::Elicitation(sender) => {
+                let _ = sender.send(CreateElicitationResponse::Cancel);
+            }
+        }
+    }
+}
+
+fn elicitation_response(
+    answer: ElicitationAnswer,
+    form: &ElicitationForm,
+) -> CreateElicitationResponse {
+    match answer {
+        ElicitationAnswer::Accept { content } => CreateElicitationResponse::Accept {
+            content: Some(form.sanitize_content(&content)),
+        },
+        ElicitationAnswer::Decline => CreateElicitationResponse::Decline,
+        ElicitationAnswer::Cancel => CreateElicitationResponse::Cancel,
+    }
 }
 
 /// RAII ownership of one core turn. Dropping an accepted, unfinished lease is an interruption;
@@ -155,9 +191,58 @@ impl ActivityTracker {
         option_kinds: BTreeMap<String, String>,
         context: PermissionContext,
     ) -> Option<(String, oneshot::Receiver<PermissionOutcome>)> {
+        let (sender, receiver) = oneshot::channel();
+        let input_id = self.park(
+            session,
+            |input_id, sequence| PendingInput {
+                input_id,
+                kind: PendingInputKind::Permission,
+                title,
+                options,
+                option_kinds,
+                sequence,
+                context,
+                form: None,
+            },
+            PendingReply::Permission(sender),
+        )?;
+        Some((input_id, receiver))
+    }
+
+    /// Park a structured question (ACP `elicitation/create`) on the same queue permissions use, so
+    /// one turn's outstanding asks stay ordered and every client sees them in one place.
+    pub fn park_elicitation(
+        &self,
+        session: &str,
+        form: ElicitationForm,
+    ) -> Option<(String, oneshot::Receiver<CreateElicitationResponse>)> {
+        let (sender, receiver) = oneshot::channel();
+        let input_id = self.park(
+            session,
+            |input_id, sequence| PendingInput {
+                input_id,
+                kind: PendingInputKind::Elicitation,
+                title: form.message.clone(),
+                options: form.legacy_options(),
+                option_kinds: BTreeMap::new(),
+                sequence,
+                context: PermissionContext::default(),
+                form: Some(form),
+            },
+            PendingReply::Elicitation(sender),
+        )?;
+        Some((input_id, receiver))
+    }
+
+    /// Add one pending input to the live turn, publishing the revision that makes it visible.
+    fn park(
+        &self,
+        session: &str,
+        input: impl FnOnce(String, u64) -> PendingInput,
+        reply: PendingReply,
+    ) -> Option<String> {
         let _transition = self.inner.transitions.lock().unwrap();
         let input_id = uuid::Uuid::new_v4().to_string();
-        let (sender, receiver) = oneshot::channel();
         let (expected_revision, activity) = {
             let mut state = self.inner.state.lock().unwrap();
             state.next_sequence = state.next_sequence.saturating_add(1);
@@ -167,73 +252,115 @@ impl ActivityTracker {
             if !turn.accepted {
                 return None;
             }
-            let input = PendingInput {
-                input_id: input_id.clone(),
-                kind: PendingInputKind::Permission,
-                title,
-                options,
-                option_kinds,
+            turn.pending.insert(
                 sequence,
-                context,
-            };
-            turn.pending
-                .insert(sequence, PendingRoute { input, sender });
+                PendingRoute {
+                    input: input(input_id.clone(), sequence),
+                    reply,
+                },
+            );
             let expected_revision = tracked.activity.revision;
             let activity = activity_for_turn(expected_revision.saturating_add(1), turn);
             tracked.activity = activity.clone();
             (expected_revision, activity)
         };
         self.persist_and_emit(session, expected_revision, &activity);
-        Some((input_id, receiver))
+        Some(input_id)
     }
 
     /// Resolve exactly one permission. Wrong sessions, unknown/duplicate ids, and options the
     /// provider did not advertise are no-ops and never touch the parked sender.
+    ///
+    /// A pending *elicitation* is answerable this way too, through the permission-shaped options
+    /// its form projects ([`ElicitationForm::legacy_options`]): a client that only knows how to
+    /// pick an option can still answer a single-question form, and can always skip.
     pub fn answer_permission(
         &self,
         session: &str,
         input_id: &str,
         option_id: Option<&str>,
     ) -> bool {
+        let Some(route) = self.take_pending(session, input_id, |input| {
+            option_id.is_none_or(|option_id| input.options.iter().any(|(id, _)| id == option_id))
+        }) else {
+            return false;
+        };
+        match route.reply {
+            PendingReply::Permission(sender) => {
+                let outcome = match option_id {
+                    Some(option_id) => PermissionOutcome::Selected {
+                        option_id: option_id.to_string(),
+                    },
+                    None => PermissionOutcome::Cancelled,
+                };
+                let _ = sender.send(outcome);
+            }
+            PendingReply::Elicitation(sender) => {
+                // `form` is always present on an elicitation route; a missing one can only mean a
+                // shape we didn't build, so skip rather than guess an answer.
+                let response = match &route.input.form {
+                    Some(form) => {
+                        elicitation_response(form.answer_from_legacy_option(option_id), form)
+                    }
+                    None => CreateElicitationResponse::Decline,
+                };
+                let _ = sender.send(response);
+            }
+        }
+        true
+    }
+
+    /// Answer a parked elicitation with form content. Content is sanitized against the form the
+    /// agent sent, so no client can answer with a value that was never offered.
+    pub fn answer_elicitation(
+        &self,
+        session: &str,
+        input_id: &str,
+        answer: ElicitationAnswer,
+    ) -> bool {
+        let Some(route) = self.take_pending(session, input_id, |input| {
+            input.kind == PendingInputKind::Elicitation
+        }) else {
+            return false;
+        };
+        let PendingReply::Elicitation(sender) = route.reply else {
+            return false;
+        };
+        let response = match &route.input.form {
+            Some(form) => elicitation_response(answer, form),
+            None => CreateElicitationResponse::Decline,
+        };
+        let _ = sender.send(response);
+        true
+    }
+
+    /// Remove one pending input (publishing the revision that hides it) when `accept` agrees it is
+    /// answerable. Rejected answers leave the queue — and the parked sender — untouched.
+    fn take_pending(
+        &self,
+        session: &str,
+        input_id: &str,
+        accept: impl FnOnce(&PendingInput) -> bool,
+    ) -> Option<PendingRoute> {
         let _transition = self.inner.transitions.lock().unwrap();
-        let (route, outcome, expected_revision, activity) = {
+        let (route, expected_revision, activity) = {
             let mut state = self.inner.state.lock().unwrap();
-            let Some(tracked) = state.sessions.get_mut(session) else {
-                return false;
-            };
-            let Some(turn) = tracked.turn.as_mut().filter(|turn| turn.accepted) else {
-                return false;
-            };
-            let Some(sequence) = turn.pending.iter().find_map(|(sequence, route)| {
+            let tracked = state.sessions.get_mut(session)?;
+            let turn = tracked.turn.as_mut().filter(|turn| turn.accepted)?;
+            let sequence = turn.pending.iter().find_map(|(sequence, route)| {
                 (route.input.input_id == input_id).then_some(*sequence)
-            }) else {
-                return false;
-            };
-            if let Some(option_id) = option_id {
-                let valid = turn.pending[&sequence]
-                    .input
-                    .options
-                    .iter()
-                    .any(|(id, _)| id == option_id);
-                if !valid {
-                    return false;
-                }
+            })?;
+            if !accept(&turn.pending[&sequence].input) {
+                return None;
             }
             let route = turn.pending.remove(&sequence).expect("route found above");
-            let outcome = match option_id {
-                Some(option_id) => PermissionOutcome::Selected {
-                    option_id: option_id.to_string(),
-                },
-                None => PermissionOutcome::Cancelled,
-            };
             let expected_revision = tracked.activity.revision;
             let activity = activity_for_turn(expected_revision.saturating_add(1), turn);
             tracked.activity = activity.clone();
-            (route, outcome, expected_revision, activity)
+            (route, expected_revision, activity)
         };
         self.persist_and_emit(session, expected_revision, &activity);
-        let _ = route.sender.send(outcome);
-        true
+        Some(route)
     }
 
     /// Compatibility path for low-level tests and embedders that already hold the globally unique
@@ -287,7 +414,7 @@ impl ActivityTracker {
         };
         self.persist_and_emit(session, expected_revision, &activity);
         for route in routes {
-            let _ = route.sender.send(PermissionOutcome::Cancelled);
+            route.reply.cancel();
         }
         true
     }
@@ -363,7 +490,7 @@ impl ActivityTracker {
         };
         self.persist_and_emit(session, expected_revision, &activity);
         for route in routes {
-            let _ = route.sender.send(PermissionOutcome::Cancelled);
+            route.reply.cancel();
         }
         true
     }

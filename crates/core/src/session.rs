@@ -134,12 +134,20 @@ pub struct PendingInput {
     pub sequence: u64,
     #[serde(default)]
     pub context: crate::permission::PermissionContext,
+    /// The structured question behind an [`PendingInputKind::Elicitation`] input. Clients that
+    /// understand it render the form; the rest fall back to `options`, which projects the common
+    /// single-question shape onto the same allow/deny prompt they already draw.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub form: Option<crate::elicitation::ElicitationForm>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PendingInputKind {
     Permission,
+    /// A structured question from the agent (ACP `elicitation/create`), e.g. Claude Code's
+    /// built-in `AskUserQuestion` tool. Answered with form content, not a permission option.
+    Elicitation,
 }
 
 /// A rendered piece of a message. The transcript is a flat list of these per message.
@@ -410,6 +418,7 @@ mod tests {
                     option_kinds: BTreeMap::from([("allow".into(), "allow_once".into())]),
                     sequence: 7,
                     context: Default::default(),
+                    form: None,
                 }],
             },
         };

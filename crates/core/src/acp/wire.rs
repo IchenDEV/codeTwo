@@ -415,6 +415,50 @@ pub enum PermissionOutcome {
     Cancelled,
 }
 
+// ---- elicitation/create (agent → client request; ACP: UNSTABLE) ----------------------------
+
+/// The agent asks the client to collect structured input. `mode` is `form` (render
+/// `requestedSchema`) or `url` (send the user to `url`); we only advertise — and only answer —
+/// form mode, so every other field stays optional and unopinionated.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateElicitationRequest {
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(rename = "sessionId", default)]
+    pub session_id: Option<String>,
+    #[serde(rename = "toolCallId", default)]
+    pub tool_call_id: Option<String>,
+    pub message: String,
+    #[serde(rename = "requestedSchema", default)]
+    pub requested_schema: Option<Value>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(rename = "elicitationId", default)]
+    pub elicitation_id: Option<String>,
+    #[serde(default, rename = "_meta")]
+    pub meta: Option<Value>,
+}
+
+impl CreateElicitationRequest {
+    /// Form mode is the default when the agent omits `mode`, matching the ACP schema.
+    pub fn is_form(&self) -> bool {
+        self.mode.as_deref().unwrap_or("form") == "form"
+    }
+}
+
+/// `decline` means the user skipped (the agent carries on knowing nothing was chosen); `cancel`
+/// aborts what the agent was asking about.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum CreateElicitationResponse {
+    Accept {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        content: Option<serde_json::Map<String, Value>>,
+    },
+    Decline,
+    Cancel,
+}
+
 // ---- fs/* (agent → client requests) --------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

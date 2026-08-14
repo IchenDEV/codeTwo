@@ -23,7 +23,7 @@ use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use codetwo_core::event::ModelChoice;
 use codetwo_core::{
     builtin_models, default_registry, DocBlock, Engine, Event, ExecutionPolicy, Op, Part,
-    PermissionMode, ProviderId, Role, SandboxPolicy, Session, SessionRunState,
+    PendingInputKind, PermissionMode, ProviderId, Role, SandboxPolicy, Session, SessionRunState,
     MAX_TRANSCRIPT_TURNS,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -1350,6 +1350,19 @@ impl T3CompatState {
             .into_iter()
             .find(|pending| pending.input_id == request_id)
             .ok_or_else(|| "the approval request is no longer pending".to_string())?;
+        // A structured question is not an approval: T3's accept/decline vocabulary has nothing to
+        // say about which option the user meant. Decline maps to skipping the question — which is
+        // what unblocks the agent — and accepting is refused rather than answered on a guess.
+        if pending.kind == PendingInputKind::Elicitation {
+            return match decision {
+                "decline" => Ok(Some(codetwo_core::elicitation::SKIP_OPTION_ID.to_string())),
+                _ => Err(
+                    "this request is a question from the agent; answer it in a client that renders \
+                     questions, or decline to skip it"
+                        .into(),
+                ),
+            };
+        }
         select_permission_option(&pending.options, &pending.option_kinds, decision).map(Some)
     }
 }
