@@ -15,11 +15,15 @@
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use codetwo_core::browser::{Annotation, BrowserTab, StyleChange};
+use codetwo_kernel::{
+    async_trait, Context, Plugin, PluginError, PluginResult, Service, WeakContext,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::webview::{DownloadEvent, NewWindowResponse, WebviewBuilder};
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, State, Url, WebviewUrl,
@@ -27,6 +31,29 @@ use tauri::{
 };
 
 const BLANK_URL: &str = "about:blank";
+
+pub struct BrowserPlugin {
+    app: AppHandle,
+    socket_path: PathBuf,
+    master_key: String,
+}
+
+impl BrowserPlugin {
+    pub fn new(app: AppHandle, socket_path: PathBuf, master_key: String) -> Self {
+        Self {
+            app,
+            socket_path,
+            master_key,
+        }
+    }
+}
+
+/// Marker capability for plugins that require the authenticated native-browser broker.
+pub struct BrowserHostService;
+
+impl Service for BrowserHostService {
+    const NAME: &'static str = "browser";
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct StoredBrowserState {
@@ -418,7 +445,6 @@ fn emit_registry<R: Runtime>(app: &AppHandle<R>) {
 /// and only the first call builds anything. An existing view is placed and shown but never
 /// re-navigated — where the page *is* is the page's business (a link, a redirect, the back button),
 /// and re-asserting the URL we last saw here would undo it.
-#[tauri::command]
 pub fn browser_open<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, BrowserState>,
@@ -541,7 +567,6 @@ pub fn browser_open<R: Runtime>(
 }
 
 /// Follow the placeholder as the dock is resized or the window changes shape.
-#[tauri::command]
 pub fn browser_bounds<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -559,7 +584,6 @@ pub fn browser_bounds<R: Runtime>(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub fn browser_navigate<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, BrowserState>,
@@ -578,7 +602,6 @@ pub fn browser_navigate<R: Runtime>(
 /// Back, forward and hard reload. There is no native history API on `Webview`, but `eval` runs in
 /// the page's main frame whatever its origin, and `history` is the same object the page's own
 /// back button would use.
-#[tauri::command]
 pub fn browser_history<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -591,7 +614,6 @@ pub fn browser_history<R: Runtime>(
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub fn browser_reload<R: Runtime>(app: AppHandle<R>, label: String) -> Result<(), String> {
     let Some(view) = app.get_webview(&label) else {
         return Ok(());
@@ -602,7 +624,6 @@ pub fn browser_reload<R: Runtime>(app: AppHandle<R>, label: String) -> Result<()
 /// Hide rather than close: the panel does this whenever the DOM needs the space (a menu is open,
 /// another dock surface is showing), and the page has to survive it with its scroll position and
 /// its state intact.
-#[tauri::command]
 pub fn browser_visible<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -620,7 +641,6 @@ pub fn browser_visible<R: Runtime>(
 
 /// Page zoom, the real thing — a scale factor on the webview rather than a CSS transform on a box
 /// we don't own.
-#[tauri::command]
 pub fn browser_zoom<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -634,14 +654,12 @@ pub fn browser_zoom<R: Runtime>(
 
 /// Inspect the page in the browser panel — not the app's own UI, which is what the shared-webview
 /// inspector used to give you.
-#[tauri::command]
 pub fn browser_devtools<R: Runtime>(app: AppHandle<R>, label: String) {
     if let Some(view) = app.get_webview(&label) {
         view.open_devtools();
     }
 }
 
-#[tauri::command]
 pub fn browser_close<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, BrowserState>,
@@ -657,12 +675,10 @@ pub fn browser_close<R: Runtime>(
     view.close().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
 pub fn browser_registry_snapshot(state: State<'_, BrowserState>) -> Vec<BrowserTab> {
     state.snapshot()
 }
 
-#[tauri::command]
 pub fn browser_registry_create<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, BrowserState>,
@@ -673,7 +689,6 @@ pub fn browser_registry_create<R: Runtime>(
     tab
 }
 
-#[tauri::command]
 pub fn browser_take_control<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, BrowserState>,
@@ -685,12 +700,10 @@ pub fn browser_take_control<R: Runtime>(
     Ok(())
 }
 
-#[tauri::command]
 pub fn browser_permissions(state: State<'_, BrowserState>) -> Vec<String> {
     state.permissions()
 }
 
-#[tauri::command]
 pub fn browser_revoke_permission(
     state: State<'_, BrowserState>,
     origin: String,
@@ -718,7 +731,6 @@ struct PageNote {
 }
 
 /// Arm or disarm the in-page annotator: element picking, the note card, and the live style edits.
-#[tauri::command]
 pub fn browser_annotate<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -756,7 +768,6 @@ async fn ask<R: Runtime>(app: &AppHandle<R>, label: &str, js: &str) -> Result<St
 }
 
 /// Everything annotated on the current page, as prompt-ready [`Annotation`]s.
-#[tauri::command]
 pub async fn browser_annotations<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -782,7 +793,6 @@ pub async fn browser_annotations<R: Runtime>(
 }
 
 /// How many notes are pending, for the badge. Cheaper than pulling them all on a poll.
-#[tauri::command]
 pub async fn browser_annotation_count<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -797,7 +807,6 @@ pub async fn browser_annotation_count<R: Runtime>(
 }
 
 /// Drop the notes and put the page's styles back the way they were.
-#[tauri::command]
 pub fn browser_annotations_clear<R: Runtime>(
     app: AppHandle<R>,
     label: String,
@@ -811,12 +820,340 @@ pub fn browser_annotations_clear<R: Runtime>(
 
 /// Close every browser webview at once — the panel's unmount path, where the tab list is already
 /// gone and labels can no longer be enumerated from the frontend.
-#[tauri::command]
 pub fn browser_close_all<R: Runtime>(app: AppHandle<R>) {
     for (label, view) in app.webviews() {
         if label.starts_with("browser-") {
             let _ = view.close();
         }
+    }
+}
+
+fn take_args<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, PluginError> {
+    let value = if value.is_null() {
+        Value::Object(Default::default())
+    } else {
+        value
+    };
+    serde_json::from_value(value)
+        .map_err(|error| PluginError::new(format!("bad arguments: {error}")))
+}
+
+fn json<T: Serialize>(value: T) -> Result<Value, PluginError> {
+    serde_json::to_value(value).map_err(PluginError::new)
+}
+
+fn result<T: Serialize>(value: Result<T, String>) -> Result<Value, PluginError> {
+    json(value.map_err(PluginError::new)?)
+}
+
+#[async_trait]
+impl Plugin for BrowserPlugin {
+    fn name(&self) -> &str {
+        "browser"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Native browser webviews, tab state, permissions and annotations.")
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.provide(Arc::new(BrowserHostService))?;
+        let cleanup_app = self.app.clone();
+        let cleanup_socket = self.socket_path.clone();
+        ctx.effect(move || {
+            browser_close_all(cleanup_app);
+            let _ = std::fs::remove_file(cleanup_socket);
+        });
+        let broker_app = self.app.clone();
+        let broker_socket = self.socket_path.clone();
+        let broker_key = self.master_key.clone();
+        let broker_scope = ctx.weak();
+        ctx.spawn(async move {
+            if let Err(error) =
+                start_broker(broker_app, broker_socket, broker_key, broker_scope).await
+            {
+                eprintln!("CodeTwo Browser broker stopped: {error}");
+            }
+        });
+
+        #[derive(Deserialize)]
+        struct OpenArgs {
+            label: String,
+            url: String,
+            x: f64,
+            y: f64,
+            width: f64,
+            height: f64,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.open", move |args| {
+            let app = app.clone();
+            async move {
+                let args: OpenArgs = take_args(args)?;
+                let state = app.state::<BrowserState>();
+                result(browser_open(
+                    app.clone(),
+                    state,
+                    args.label,
+                    args.url,
+                    args.x,
+                    args.y,
+                    args.width,
+                    args.height,
+                ))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct BoundsArgs {
+            label: String,
+            x: f64,
+            y: f64,
+            width: f64,
+            height: f64,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.bounds", move |args| {
+            let app = app.clone();
+            async move {
+                let args: BoundsArgs = take_args(args)?;
+                result(browser_bounds(
+                    app,
+                    args.label,
+                    args.x,
+                    args.y,
+                    args.width,
+                    args.height,
+                ))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct NavigateArgs {
+            label: String,
+            url: String,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.navigate", move |args| {
+            let app = app.clone();
+            async move {
+                let args: NavigateArgs = take_args(args)?;
+                let state = app.state::<BrowserState>();
+                result(browser_navigate(app.clone(), state, args.label, args.url))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct HistoryArgs {
+            label: String,
+            delta: i32,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.history", move |args| {
+            let app = app.clone();
+            async move {
+                let args: HistoryArgs = take_args(args)?;
+                result(browser_history(app, args.label, args.delta))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct LabelArgs {
+            label: String,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.reload", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                result(browser_reload(app, args.label))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct VisibleArgs {
+            label: String,
+            visible: bool,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.visible", move |args| {
+            let app = app.clone();
+            async move {
+                let args: VisibleArgs = take_args(args)?;
+                result(browser_visible(app, args.label, args.visible))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ZoomArgs {
+            label: String,
+            factor: f64,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.zoom", move |args| {
+            let app = app.clone();
+            async move {
+                let args: ZoomArgs = take_args(args)?;
+                result(browser_zoom(app, args.label, args.factor))
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.devtools", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                browser_devtools(app, args.label);
+                Ok(Value::Null)
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.close", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                let state = app.state::<BrowserState>();
+                result(browser_close(app.clone(), state, args.label))
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.close_all", move |_| {
+            let app = app.clone();
+            async move {
+                browser_close_all(app);
+                Ok(Value::Null)
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.tabs", move |_| {
+            let app = app.clone();
+            async move { json(browser_registry_snapshot(app.state::<BrowserState>())) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct CreateArgs {
+            url: String,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.create_tab", move |args| {
+            let app = app.clone();
+            async move {
+                let args: CreateArgs = take_args(args)?;
+                let state = app.state::<BrowserState>();
+                json(browser_registry_create(app.clone(), state, args.url))
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.take_control", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                let state = app.state::<BrowserState>();
+                result(browser_take_control(app.clone(), state, args.label))
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.permissions", move |_| {
+            let app = app.clone();
+            async move { json(browser_permissions(app.state::<BrowserState>())) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct OriginArgs {
+            origin: String,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.revoke_permission", move |args| {
+            let app = app.clone();
+            async move {
+                let args: OriginArgs = take_args(args)?;
+                result(browser_revoke_permission(
+                    app.state::<BrowserState>(),
+                    args.origin,
+                ))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct AnnotateArgs {
+            label: String,
+            on: bool,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.annotate", move |args| {
+            let app = app.clone();
+            async move {
+                let args: AnnotateArgs = take_args(args)?;
+                result(browser_annotate(app, args.label, args.on))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct AnnotationsArgs {
+            label: String,
+            url: String,
+        }
+        let app = self.app.clone();
+        ctx.command("browser.annotations", move |args| {
+            let app = app.clone();
+            async move {
+                let args: AnnotationsArgs = take_args(args)?;
+                json(
+                    browser_annotations(app, args.label, args.url)
+                        .await
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.annotation_count", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                json(
+                    browser_annotation_count(app, args.label)
+                        .await
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("browser.clear_annotations", move |args| {
+            let app = app.clone();
+            async move {
+                let args: LabelArgs = take_args(args)?;
+                result(browser_annotations_clear(app, args.label))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ContextArgs {
+            annotation: Annotation,
+        }
+        ctx.command("browser.context", move |args| async move {
+            let args: ContextArgs = take_args(args)?;
+            json(args.annotation.to_context())
+        })?;
+
+        let app = self.app.clone();
+        ctx.command("desktop.open_devtools", move |_| {
+            let app = app.clone();
+            async move {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+                Ok(Value::Null)
+            }
+        })?;
+
+        Ok(())
     }
 }
 
@@ -1295,6 +1632,19 @@ struct AutoSceneChanged {
     memory_write: codetwo_core::MemoryAccess,
 }
 
+#[derive(Deserialize)]
+struct AutoSceneEscalation {
+    from: String,
+    to: String,
+}
+
+#[derive(Deserialize)]
+struct AutoSceneApplyOutcome {
+    pending: Vec<String>,
+    escalation: Option<AutoSceneEscalation>,
+    plan_first: Option<bool>,
+}
+
 impl BrokerResponse {
     fn result(value: impl Serialize) -> Self {
         Self {
@@ -1378,15 +1728,22 @@ async fn dispatch_broker(
                 }
                 let reason: String = reason.chars().take(240).collect();
                 let app_state = controller.app.state::<crate::AppState>();
-                if !app_state
-                    .store
+                let store = app_state
+                    .core
+                    .service::<codetwo_core::app::StoreService>()
+                    .ok_or_else(|| "store plugin is unavailable".to_string())?;
+                if !store
                     .session_auto_scene(&request.session)
                     .map_err(|error| error.to_string())?
                 {
                     return Err("Auto Scene is not enabled for this session".into());
                 }
                 let (canonical, title, instructions) = {
-                    let scenes = app_state.scenes.lock().unwrap().clone();
+                    let scenes = app_state
+                        .core
+                        .service::<codetwo_core::app::SceneService>()
+                        .ok_or_else(|| "scenes plugin is unavailable".to_string())?
+                        .library();
                     let entry = scenes
                         .resolve(&reference)
                         .ok_or_else(|| format!("unknown scene `{reference}`"))?;
@@ -1396,12 +1753,14 @@ async fn dispatch_broker(
                         codetwo_core::scene::prompt_preamble(&entry.scene, &[]),
                     )
                 };
-                let current = app_state
-                    .store
+                let current = store
                     .session_scene(&request.session)
                     .map_err(|error| error.to_string())?
                     .and_then(|(reference, _)| {
-                        let scenes = app_state.scenes.lock().unwrap().clone();
+                        let scenes = app_state
+                            .core
+                            .service::<codetwo_core::app::SceneService>()?
+                            .library();
                         scenes
                             .resolve(&reference)
                             .map(codetwo_core::SceneLibrary::reference_for)
@@ -1409,31 +1768,30 @@ async fn dispatch_broker(
                 let (changed, pending, plan_first) = if current.as_deref() == Some(&canonical) {
                     (false, Vec::new(), None)
                 } else {
-                    let outcome = crate::apply_scene_to(
-                        app_state.inner(),
-                        &request.session,
-                        &canonical,
-                        request.approved,
+                    let outcome: AutoSceneApplyOutcome = serde_json::from_value(
+                        app_state
+                            .core
+                            .call(
+                                "scenes.apply",
+                                serde_json::json!({
+                                    "session": request.session.clone(),
+                                    "reference": canonical.clone(),
+                                    "confirm_escalation": request.approved,
+                                }),
+                            )
+                            .await
+                            .map_err(|error| error.to_string())?,
                     )
-                    .await?;
+                    .map_err(|error| error.to_string())?;
                     if let Some(escalation) = outcome.escalation {
                         return Err(format!(
                             "approval:scene:{}:{}:{}",
                             escalation.from, escalation.to, title
                         ));
                     }
-                    (
-                        true,
-                        outcome
-                            .pending
-                            .iter()
-                            .map(|field| (*field).to_string())
-                            .collect(),
-                        outcome.plan_first,
-                    )
+                    (true, outcome.pending, outcome.plan_first)
                 };
-                let (memory_read, memory_write) = app_state
-                    .store
+                let (memory_read, memory_write) = store
                     .session_memory_policy(&request.session)
                     .map_err(|error| error.to_string())?;
                 if changed {
@@ -1659,6 +2017,7 @@ pub async fn start_broker(
     app: AppHandle,
     socket_path: PathBuf,
     master_key: String,
+    scope: WeakContext,
 ) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -1675,7 +2034,7 @@ pub async fn start_broker(
         let (stream, _) = listener.accept().await.map_err(|error| error.to_string())?;
         let controller = controller.clone();
         let master_key = master_key.clone();
-        tauri::async_runtime::spawn(async move {
+        let client = async move {
             let (reader, mut writer) = stream.into_split();
             let mut lines = BufReader::new(reader).lines();
             while let Ok(Some(line)) = lines.next_line().await {
@@ -1691,7 +2050,11 @@ pub async fn start_broker(
                     break;
                 }
             }
-        });
+        };
+        scope
+            .upgrade()
+            .ok_or_else(|| "browser plugin is unloading".to_string())?
+            .spawn(client);
     }
 }
 
@@ -1700,6 +2063,7 @@ pub async fn start_broker(
     _app: AppHandle,
     _socket_path: PathBuf,
     _master_key: String,
+    _scope: WeakContext,
 ) -> Result<(), String> {
     Err("CodeTwo Browser is not implemented on this platform".into())
 }

@@ -632,6 +632,92 @@ const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI
 /** False when the UI runs in a plain browser (`bun run dev`), where no native commands exist. */
 export const isDesktop = inTauri;
 
+// ---- the plugin graph -------------------------------------------------------------------------
+
+/**
+ * Call a command contributed by a core plugin — `call("git.status", { cwd })`.
+ *
+ * This is the extension surface. A plugin that registers `foo.bar` is callable from here the
+ * moment it loads, with no `#[tauri::command]`, no entry in `generate_handler!`, and no new
+ * function in this file. The named wrappers below predate it and are being migrated onto it.
+ */
+export async function call<T = unknown>(name: string, args?: unknown): Promise<T> {
+  if (!inTauri) throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  return (await invoke<T>("call", { name, args: args ?? null })) as T;
+}
+
+/** Lifecycle state of one plugin instance, as the kernel reports it. */
+export type PluginStatus = "pending" | "loading" | "active" | "failed" | "disposed";
+
+/** One plugin instance in the running graph. */
+export interface PluginScope {
+  id: number;
+  parent: number | null;
+  plugin: string;
+  status: PluginStatus;
+  error: string | null;
+  inject: { required: string[]; optional: string[] };
+  /** Injected services that are missing — why a `pending` plugin is pending. */
+  missing: string[];
+  services: string[];
+  commands: string[];
+  config: unknown;
+}
+
+export interface PluginCommand {
+  name: string;
+  plugin: string;
+  scope: number;
+  description: string | null;
+}
+
+/** Everything currently loaded, why it is in that state, and what it contributed. */
+export async function kernelScopes(): Promise<PluginScope[]> {
+  return inTauri ? await call<PluginScope[]>("kernel.scopes") : [];
+}
+
+/** Every command the running graph offers, with the plugin that owns it. */
+export async function kernelCommands(): Promise<PluginCommand[]> {
+  return inTauri ? await call<PluginCommand[]>("kernel.commands") : [];
+}
+
+/** One installable plugin: whether it runs, its config, and the schema to render a form from. */
+export interface PluginEntry {
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  running: boolean;
+  status: PluginStatus | null;
+  config: unknown;
+  schema: unknown;
+  /** Registered but absent from the config — installable, not installed. */
+  available: boolean;
+}
+
+export async function listCorePlugins(): Promise<PluginEntry[]> {
+  return inTauri ? await call<PluginEntry[]>("kernel.plugins") : [];
+}
+
+/** Load or unload one plugin, live. */
+export async function setCorePluginEnabled(name: string, value: boolean): Promise<void> {
+  await call("kernel.set_enabled", { name, value });
+}
+
+/** Replace one plugin's config; it reloads, nothing else does. */
+export async function configureCorePlugin(name: string, config: unknown): Promise<void> {
+  await call("kernel.configure", { name, config });
+}
+
+/**
+ * Installed bundles that ship a process (the plugin protocol): which are running, and which are
+ * installed but waiting for the user to trust them. Trust — not installation — is what starts a
+ * process, so `untrusted` is the actionable list.
+ */
+export async function listExtensions(): Promise<{ running: string[]; untrusted: string[] }> {
+  if (!inTauri) return { running: [], untrusted: [] };
+  return await call("extensions.list");
+}
+
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [], capabilities: [] },
   { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [], capabilities: [] },
@@ -662,7 +748,7 @@ const FALLBACK_SKILLS: SkillInfo[] = [
 
 export async function listProviders(): Promise<ProviderInfo[]> {
   const providers = inTauri
-    ? await invoke<ProviderInfoWire[]>("list_providers")
+    ? await call<ProviderInfoWire[]>("providers.list")
     : FALLBACK_PROVIDERS;
   return providers.map(normalizeProviderInfo);
 }
@@ -670,34 +756,36 @@ export async function listProviders(): Promise<ProviderInfo[]> {
 /// Passing a cwd makes the core rescan that workspace's harness skill directories
 /// (.claude/skills, .codex/skills, …) before answering.
 export async function listSkills(cwd?: string): Promise<SkillInfo[]> {
-  return inTauri ? invoke<SkillInfo[]>("list_skills", { cwd: cwd ?? null }) : FALLBACK_SKILLS;
+  return inTauri ? call<SkillInfo[]>("skills.list", { cwd: cwd ?? null }) : FALLBACK_SKILLS;
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
-  return inTauri ? invoke<SessionInfo[]>("list_sessions") : [];
+  return inTauri ? call<SessionInfo[]>("sessions.list") : [];
 }
 
 export async function getMemorySettings(): Promise<MemorySettings> {
   return inTauri
-    ? invoke<MemorySettings>("memory_settings")
+    ? call<MemorySettings>("memory.settings")
     : { enabled: true, capture: true, inject: true, include_external_context: true };
 }
 
 export async function saveMemorySettings(settings: MemorySettings): Promise<void> {
-  if (inTauri) await invoke("set_memory_settings", { settings });
+  if (inTauri) await call("memory.set_settings", { settings });
 }
 
 export async function listMemories(projectPath: string, limit = 100): Promise<MemoryRecord[]> {
-  return inTauri ? invoke<MemoryRecord[]>("list_memories", { projectPath, limit }) : [];
+  return inTauri ? call<MemoryRecord[]>("memory.list", { project_path: projectPath, limit }) : [];
 }
 
 export async function searchMemories(projectPath: string, query: string, limit = 50): Promise<MemoryRecord[]> {
-  return inTauri ? invoke<MemoryRecord[]>("search_memories", { projectPath, query, limit }) : [];
+  return inTauri
+    ? call<MemoryRecord[]>("memory.search", { project_path: projectPath, query, limit })
+    : [];
 }
 
 export async function getMemoryStats(projectPath: string): Promise<MemoryStats> {
   return inTauri
-    ? invoke<MemoryStats>("memory_stats", { projectPath })
+    ? call<MemoryStats>("memory.stats", { project_path: projectPath })
     : { l0: 0, l1: 0, l2: 0, l3: 0, pending: 0 };
 }
 
@@ -707,15 +795,20 @@ export async function addMemory(
   content: string,
   pinned = true,
 ): Promise<MemoryRecord> {
-  return invoke<MemoryRecord>("add_memory", { projectPath, category, content, pinned });
+  return call<MemoryRecord>("memory.add", {
+    project_path: projectPath,
+    category,
+    content,
+    pinned,
+  });
 }
 
 export async function setMemoryPinned(id: string, pinned: boolean): Promise<void> {
-  if (inTauri) await invoke("set_memory_pinned", { id, pinned });
+  if (inTauri) await call("memory.set_pinned", { id, value: pinned });
 }
 
 export async function setMemoryActive(id: string, active: boolean): Promise<void> {
-  if (inTauri) await invoke("set_memory_active", { id, active });
+  if (inTauri) await call("memory.set_active", { id, value: active });
 }
 
 export async function setSessionMemoryPolicy(
@@ -723,11 +816,11 @@ export async function setSessionMemoryPolicy(
   read: MemoryAccess,
   write: MemoryAccess,
 ): Promise<void> {
-  if (inTauri) await invoke("set_session_memory_policy", { session, read, write });
+  if (inTauri) await call("memory.set_session_policy", { session, read, write });
 }
 
 export async function listMemoryReceipts(session: string): Promise<MemoryReceipt[]> {
-  return inTauri ? invoke<MemoryReceipt[]>("list_memory_receipts", { session }) : [];
+  return inTauri ? call<MemoryReceipt[]>("memory.receipts", { session }) : [];
 }
 
 export async function newSession(
@@ -739,33 +832,33 @@ export async function newSession(
   initialPolicy?: ExecutionPolicy | null,
 ): Promise<void> {
   if (inTauri) {
-    await invoke("new_session", {
+    await call("engine.new_session", {
       provider,
       cwd,
-      useWorktree: worktreeBase !== null,
-      worktreeBase,
-      worktreeBaseSha: worktreeBaseSha ?? null,
-      requestId,
-      initialPolicy: initialPolicy ?? null,
+      use_worktree: worktreeBase !== null,
+      worktree_base: worktreeBase,
+      worktree_base_sha: worktreeBaseSha ?? null,
+      request_id: requestId,
+      initial_policy: initialPolicy ?? null,
     });
   }
 }
 
 /** Resolve selectable baselines from local refs only. This command never fetches. */
 export async function listWorktreeBaselines(cwd: string): Promise<WorktreeBaselineOption[]> {
-  return inTauri ? invoke<WorktreeBaselineOption[]>("list_worktree_baselines", { cwd }) : [];
+  return inTauri ? call<WorktreeBaselineOption[]>("worktrees.baselines", { cwd }) : [];
 }
 
 /** Remove a session's isolated checkout and its codetwo/ branch. Repeating is a no-op success. */
 export async function discardSessionWorktree(session: string): Promise<DiscardedWorktree> {
   return inTauri
-    ? invoke<DiscardedWorktree>("discard_session_worktree", { session })
+    ? call<DiscardedWorktree>("worktrees.discard_session", { session })
     : { removed_checkout: false };
 }
 
 /** Every checkout under a project's worktree container — session-claimed, orphan, or stale. */
 export async function listProjectWorktrees(projectPath: string): Promise<WorktreeStatusEntry[]> {
-  return inTauri ? invoke<WorktreeStatusEntry[]>("list_project_worktrees", { projectPath }) : [];
+  return inTauri ? call<WorktreeStatusEntry[]>("worktrees.list", { project_path: projectPath }) : [];
 }
 
 /** Remove an unclaimed checkout by path. The core rejects paths a session still claims. */
@@ -774,32 +867,35 @@ export async function discardOrphanWorktree(
   worktreePath: string,
 ): Promise<DiscardedWorktree> {
   return inTauri
-    ? invoke<DiscardedWorktree>("discard_orphan_worktree", { projectPath, worktreePath })
+    ? call<DiscardedWorktree>("worktrees.discard_orphan", {
+        project_path: projectPath,
+        worktree_path: worktreePath,
+      })
     : { removed_checkout: false };
 }
 
 export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {
-  if (inTauri) await invoke("submit_prompt", { session, doc, requestId });
+  if (inTauri) await call("engine.prompt", { session, doc, request_id: requestId });
 }
 
 export async function listAutomations(): Promise<Automation[]> {
-  return inTauri ? invoke<Automation[]>("list_automations") : [];
+  return inTauri ? call<Automation[]>("automation.list") : [];
 }
 
 export async function createAutomation(input: AutomationInput): Promise<Automation> {
-  return invoke<Automation>("create_automation", { input });
+  return call<Automation>("automation.create", { input });
 }
 
 export async function updateAutomation(id: string, input: AutomationInput): Promise<Automation> {
-  return invoke<Automation>("update_automation", { id, input });
+  return call<Automation>("automation.update", { id, input });
 }
 
 export async function setAutomationEnabled(id: string, enabled: boolean): Promise<Automation> {
-  return invoke<Automation>("set_automation_enabled", { id, enabled });
+  return call<Automation>("automation.set_enabled", { id, enabled });
 }
 
 export async function deleteAutomation(id: string): Promise<boolean> {
-  return invoke<boolean>("delete_automation", { id });
+  return call<boolean>("automation.delete", { id });
 }
 
 export async function listAutomationRuns(
@@ -807,15 +903,15 @@ export async function listAutomationRuns(
   limit = 50,
 ): Promise<AutomationRun[]> {
   return inTauri
-    ? invoke<AutomationRun[]>("list_automation_runs", {
-        automationId: automationId ?? null,
+    ? call<AutomationRun[]>("automation.runs", {
+        automation_id: automationId ?? null,
         limit,
       })
     : [];
 }
 
 export async function runAutomationNow(id: string): Promise<AutomationRun> {
-  return invoke<AutomationRun>("run_automation_now", { id });
+  return call<AutomationRun>("automation.run_now", { id });
 }
 
 export async function onAutomationChanged(
@@ -826,7 +922,13 @@ export async function onAutomationChanged(
 }
 
 export async function answerPermission(session: string, requestId: string, optionId: string | null): Promise<void> {
-  if (inTauri) await invoke("answer_permission", { session, requestId, optionId });
+  if (inTauri) {
+    await call("engine.answer_permission", {
+      session,
+      request_id: requestId,
+      option_id: optionId,
+    });
+  }
 }
 
 export async function answerElicitation(
@@ -834,11 +936,17 @@ export async function answerElicitation(
   requestId: string,
   answer: ElicitationAnswer,
 ): Promise<void> {
-  if (inTauri) await invoke("answer_elicitation", { session, requestId, answer });
+  if (inTauri) {
+    await call("engine.answer_elicitation", {
+      session,
+      request_id: requestId,
+      answer,
+    });
+  }
 }
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {
-  if (inTauri) await invoke("set_permission_mode", { session, mode });
+  if (inTauri) await call("engine.set_permission_mode", { session, mode });
 }
 
 export async function setExecutionPolicy(
@@ -847,7 +955,14 @@ export async function setExecutionPolicy(
   sandbox: Sandbox,
   requestId: string,
 ): Promise<void> {
-  if (inTauri) await invoke("set_execution_policy", { session, mode, sandbox, requestId });
+  if (inTauri) {
+    await call("engine.set_execution_policy", {
+      session,
+      mode,
+      sandbox,
+      request_id: requestId,
+    });
+  }
 }
 
 /// One entry in a directory listing, for the file tree in the side dock.
@@ -859,21 +974,21 @@ export interface DirEntry {
 
 /** One directory level. The tree expands lazily, so nothing is capped or silently truncated. */
 export async function listDir(cwd: string, path: string): Promise<DirEntry[]> {
-  return inTauri ? invoke<DirEntry[]>("list_dir", { cwd, path }) : [];
+  return inTauri ? call<DirEntry[]>("workspace.list_dir", { cwd, path }) : [];
 }
 
 /** Create an empty file. Rejects paths that already exist rather than overwriting. */
 export async function createFile(cwd: string, path: string): Promise<void> {
-  if (inTauri) await invoke("create_file", { cwd, path });
+  if (inTauri) await call("workspace.create_file", { cwd, path });
 }
 
 export async function createDir(cwd: string, path: string): Promise<void> {
-  if (inTauri) await invoke("create_dir", { cwd, path });
+  if (inTauri) await call("workspace.create_dir", { cwd, path });
 }
 
 /** Read a file for the viewer. Rejects binaries and oversized files rather than showing mojibake. */
 export async function readText(cwd: string, path: string): Promise<string> {
-  return inTauri ? invoke<string>("read_text", { cwd, path }) : "";
+  return inTauri ? call<string>("workspace.read_text", { cwd, path }) : "";
 }
 
 /**
@@ -882,13 +997,13 @@ export async function readText(cwd: string, path: string): Promise<string> {
  */
 export async function readBinary(cwd: string, path: string): Promise<Uint8Array> {
   if (!inTauri) return new Uint8Array();
-  const res = await invoke<ArrayBuffer | number[]>("read_binary", { cwd, path });
+  const res = await call<ArrayBuffer | number[]>("workspace.read_binary", { cwd, path });
   return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
 }
 
 export async function getArtifact(id: string): Promise<Uint8Array> {
   if (!inTauri) return new Uint8Array();
-  const res = await invoke<ArrayBuffer | number[]>("get_artifact", { id });
+  const res = await call<ArrayBuffer | number[]>("artifacts.get", { id });
   return res instanceof ArrayBuffer ? new Uint8Array(res) : new Uint8Array(res);
 }
 
@@ -897,16 +1012,16 @@ export async function saveArtifactAs(id: string, displayName: string): Promise<b
   const { save } = await import("@tauri-apps/plugin-dialog");
   const destination = await save({ defaultPath: displayName });
   if (!destination) return false;
-  await invoke("save_artifact_as", { id, destination });
+  await call("artifacts.save_as", { id, destination });
   return true;
 }
 
 export async function revealArtifact(id: string): Promise<void> {
-  if (inTauri) await invoke("reveal_artifact", { id });
+  if (inTauri) await call("artifacts.reveal", { id });
 }
 
 export async function writeText(cwd: string, path: string, content: string): Promise<void> {
-  if (inTauri) await invoke("write_text", { cwd, path, content });
+  if (inTauri) await call("workspace.write_text", { cwd, path, content });
 }
 
 function splitNativePath(path: string): { cwd: string; name: string } {
@@ -929,7 +1044,7 @@ export async function pickAppearanceThemeDocument(): Promise<string | null | und
   });
   if (typeof selected !== "string") return null;
   const { cwd, name } = splitNativePath(selected);
-  return invoke<string>("read_text", { cwd, path: name });
+  return call<string>("workspace.read_text", { cwd, path: name });
 }
 
 export type AppearanceThemeSaveResult = "saved" | "cancelled" | "unsupported";
@@ -949,30 +1064,30 @@ export async function saveAppearanceThemeDocument(
   if (typeof selected !== "string") return "cancelled";
   const { cwd, name } = splitNativePath(selected);
   try {
-    await invoke("create_file", { cwd, path: name });
+    await call("workspace.create_file", { cwd, path: name });
   } catch {
     // The save panel explicitly confirms replacement. An existing file is therefore expected.
   }
-  await invoke("write_text", { cwd, path: name, content });
+  await call("workspace.write_text", { cwd, path: name, content });
   return "saved";
 }
 
 /** Rename *and* move — a `to` with a different parent moves it. */
 export async function renamePath(cwd: string, from: string, to: string): Promise<void> {
-  if (inTauri) await invoke("rename_path", { cwd, from, to });
+  if (inTauri) await call("workspace.rename", { cwd, from, to });
 }
 
 export async function copyPath(cwd: string, from: string, to: string): Promise<void> {
-  if (inTauri) await invoke("copy_path", { cwd, from, to });
+  if (inTauri) await call("workspace.copy", { cwd, from, to });
 }
 
 export async function deletePath(cwd: string, path: string): Promise<void> {
-  if (inTauri) await invoke("delete_path", { cwd, path });
+  if (inTauri) await call("workspace.delete", { cwd, path });
 }
 
 /** Open the webview inspector on the app's own UI. */
 export async function openDevtools(): Promise<void> {
-  if (inTauri) await invoke("open_devtools");
+  if (inTauri) await call("desktop.open_devtools");
 }
 
 // ---- built-in browser --------------------------------------------------------------------------
@@ -990,45 +1105,45 @@ export interface Rect {
 
 /** Create the tab's webview if needed, place it, and load `url`. Safe to call repeatedly. */
 export async function browserOpen(label: string, url: string, r: Rect): Promise<void> {
-  if (inTauri) await invoke("browser_open", { label, url, ...r });
+  if (inTauri) await call("browser.open", { label, url, ...r });
 }
 
 export async function browserBounds(label: string, r: Rect): Promise<void> {
-  if (inTauri) await invoke("browser_bounds", { label, ...r });
+  if (inTauri) await call("browser.bounds", { label, ...r });
 }
 
 export async function browserNavigate(label: string, url: string): Promise<void> {
-  if (inTauri) await invoke("browser_navigate", { label, url });
+  if (inTauri) await call("browser.navigate", { label, url });
 }
 
 /** −1 is back, 1 is forward — the page's own history, not one we keep for it. */
 export async function browserHistory(label: string, delta: number): Promise<void> {
-  if (inTauri) await invoke("browser_history", { label, delta });
+  if (inTauri) await call("browser.history", { label, delta });
 }
 
 export async function browserReload(label: string): Promise<void> {
-  if (inTauri) await invoke("browser_reload", { label });
+  if (inTauri) await call("browser.reload", { label });
 }
 
 /** Hide, not close: the page keeps its state, which is the point of tabs. */
 export async function browserVisible(label: string, visible: boolean): Promise<void> {
-  if (inTauri) await invoke("browser_visible", { label, visible });
+  if (inTauri) await call("browser.visible", { label, visible });
 }
 
 export async function browserZoom(label: string, factor: number): Promise<void> {
-  if (inTauri) await invoke("browser_zoom", { label, factor });
+  if (inTauri) await call("browser.zoom", { label, factor });
 }
 
 export async function browserDevtools(label: string): Promise<void> {
-  if (inTauri) await invoke("browser_devtools", { label });
+  if (inTauri) await call("browser.devtools", { label });
 }
 
 export async function browserClose(label: string): Promise<void> {
-  if (inTauri) await invoke("browser_close", { label });
+  if (inTauri) await call("browser.close", { label });
 }
 
 export async function browserCloseAll(): Promise<void> {
-  if (inTauri) await invoke("browser_close_all");
+  if (inTauri) await call("browser.close_all");
 }
 
 export interface BrowserNav {
@@ -1047,26 +1162,26 @@ export interface BrowserTab {
 
 export async function browserRegistrySnapshot(): Promise<BrowserTab[]> {
   return inTauri
-    ? invoke<BrowserTab[]>("browser_registry_snapshot")
+    ? call<BrowserTab[]>("browser.tabs")
     : [{ id: "browser-1", url: "about:blank", title: "", active: true, agent_active: false }];
 }
 
 export async function browserRegistryCreate(url: string): Promise<BrowserTab> {
   return inTauri
-    ? invoke<BrowserTab>("browser_registry_create", { url })
+    ? call<BrowserTab>("browser.create_tab", { url })
     : { id: `browser-${Date.now()}`, url, title: "", active: true, agent_active: false };
 }
 
 export async function browserTakeControl(label: string): Promise<void> {
-  if (inTauri) await invoke("browser_take_control", { label });
+  if (inTauri) await call("browser.take_control", { label });
 }
 
 export async function browserPermissions(): Promise<string[]> {
-  return inTauri ? invoke<string[]>("browser_permissions") : [];
+  return inTauri ? call<string[]>("browser.permissions") : [];
 }
 
 export async function browserRevokePermission(origin: string): Promise<void> {
-  if (inTauri) await invoke("browser_revoke_permission", { origin });
+  if (inTauri) await call("browser.revoke_permission", { origin });
 }
 
 export async function onBrowserRegistry(cb: (tabs: BrowserTab[]) => void): Promise<() => void> {
@@ -1095,20 +1210,20 @@ export async function onBrowserDownloadBlocked(
 
 /** Arm or disarm element picking on the active page. */
 export async function browserAnnotate(label: string, on: boolean): Promise<void> {
-  if (inTauri) await invoke("browser_annotate", { label, on });
+  if (inTauri) await call("browser.annotate", { label, on });
 }
 
 export async function browserAnnotations(label: string, url: string): Promise<Annotation[]> {
-  return inTauri ? invoke<Annotation[]>("browser_annotations", { label, url }) : [];
+  return inTauri ? call<Annotation[]>("browser.annotations", { label, url }) : [];
 }
 
 export async function browserAnnotationCount(label: string): Promise<number> {
-  return inTauri ? invoke<number>("browser_annotation_count", { label }) : 0;
+  return inTauri ? call<number>("browser.annotation_count", { label }) : 0;
 }
 
 /** Drop the notes and undo the live style edits they described. */
 export async function browserAnnotationsClear(label: string): Promise<void> {
-  if (inTauri) await invoke("browser_annotations_clear", { label });
+  if (inTauri) await call("browser.clear_annotations", { label });
 }
 
 /** A document finished loading — the point at which a fresh annotator exists to re-arm. */
@@ -1178,12 +1293,12 @@ export async function openNativePath(path: string): Promise<boolean> {
 
 /** Spawn (or reuse) a language server for `lang` rooted at `cwd`. Null when none is installed. */
 export async function lspStart(cwd: string, lang: string): Promise<string | null> {
-  return inTauri ? invoke<string | null>("lsp_start", { cwd, lang }) : null;
+  return inTauri ? call<string | null>("lsp.start", { cwd, lang }) : null;
 }
 
 /** Send one raw JSON-RPC message (already serialized) to the server behind `key`. */
 export async function lspSend(key: string, payload: string): Promise<void> {
-  if (inTauri) await invoke("lsp_send", { key, payload });
+  if (inTauri) await call("lsp.send", { key, payload });
 }
 
 export interface LspMessage {
@@ -1205,7 +1320,7 @@ export async function onLspExit(cb: (key: string) => void): Promise<() => void> 
 /** Newest text per session id, for the rail's preview line. */
 export async function sessionPreviews(): Promise<Record<string, string>> {
   if (!inTauri) return {};
-  const rows = await invoke<[string, string][]>("session_previews");
+  const rows = await call<[string, string][]>("sessions.previews");
   return Object.fromEntries(rows);
 }
 
@@ -1221,13 +1336,13 @@ export interface SessionSearchHit {
 
 /** Bounded full-text search over canonical user prompts and agent output. */
 export async function searchSessions(query: string, limit = 12): Promise<SessionSearchHit[]> {
-  return inTauri ? invoke<SessionSearchHit[]>("search_sessions", { query, limit }) : [];
+  return inTauri ? call<SessionSearchHit[]>("sessions.search", { query, limit }) : [];
 }
 
 // ---- projects ----------------------------------------------------------------------------------
 
 export async function listProjects(): Promise<Project[]> {
-  return inTauri ? invoke<Project[]>("list_projects") : [];
+  return inTauri ? call<Project[]>("projects.list") : [];
 }
 
 /**
@@ -1243,44 +1358,44 @@ export async function pickDirectory(): Promise<string | null> {
 
 /** Returns the resolved absolute path, which is the project's identity. */
 export async function addProject(path: string, name?: string): Promise<string> {
-  return inTauri ? invoke<string>("add_project", { path, name: name ?? null }) : path;
+  return inTauri ? call<string>("projects.add", { path, name: name ?? null }) : path;
 }
 
 export async function openProject(path: string): Promise<void> {
-  if (inTauri) await invoke("open_project", { path });
+  if (inTauri) await call("projects.open", { path });
 }
 
 export async function renameProject(path: string, name: string): Promise<void> {
-  if (inTauri) await invoke("rename_project", { path, name });
+  if (inTauri) await call("projects.rename", { path, name });
 }
 
 export async function setProjectWorktreeMode(
   path: string,
   mode: ProjectWorktreeMode | null,
 ): Promise<void> {
-  if (inTauri) await invoke("set_project_worktree_mode", { path, mode });
+  if (inTauri) await call("projects.set_worktree_mode", { path, mode });
 }
 
 export async function removeProject(path: string): Promise<void> {
-  if (inTauri) await invoke("remove_project", { path });
+  if (inTauri) await call("projects.remove", { path });
 }
 
 /** Where a new session should start. Resolved by the core, never `"."` — see `default_cwd`. */
 export async function defaultCwd(): Promise<string> {
-  return inTauri ? invoke<string>("default_cwd") : ".";
+  return inTauri ? call<string>("workspace.default_cwd") : ".";
 }
 
 export async function setModel(session: string, model: string): Promise<void> {
-  if (inTauri) await invoke("set_model", { session, model });
+  if (inTauri) await call("engine.set_model", { session, model });
 }
 
 /** Set an agent-reported config option (model, reasoning effort, …) by its id. */
 export async function setConfigOption(session: string, configId: string, value: string): Promise<void> {
-  if (inTauri) await invoke("set_config_option", { session, configId, value });
+  if (inTauri) await call("engine.set_config_option", { session, config_id: configId, value });
 }
 
 export async function cancelTurn(session: string): Promise<void> {
-  if (inTauri) await invoke("cancel_turn", { session });
+  if (inTauri) await call("engine.cancel", { session });
 }
 
 /**
@@ -1296,36 +1411,36 @@ export async function ptySpawn(
   opts?: { tmuxSession?: string | null; scrollback?: number },
 ): Promise<PtyAttach> {
   if (!inTauri) return { created: true, restore: "" };
-  return invoke<PtyAttach>("pty_spawn", {
+  return call<PtyAttach>("terminal.spawn", {
     id,
     cwd,
     rows,
     cols,
     scrollback: opts?.scrollback ?? null,
-    tmuxSession: opts?.tmuxSession ?? null,
+    tmux_session: opts?.tmuxSession ?? null,
   });
 }
 
 export async function tmuxAvailable(): Promise<boolean> {
-  return inTauri ? invoke<boolean>("tmux_available") : false;
+  return inTauri ? call<boolean>("terminal.tmux_available") : false;
 }
 
 export async function ptyWrite(id: string, data: string): Promise<void> {
-  if (inTauri) await invoke("pty_write", { id, data });
+  if (inTauri) await call("terminal.write", { id, data });
 }
 
 export async function ptyResize(id: string, rows: number, cols: number): Promise<void> {
-  if (inTauri) await invoke("pty_resize", { id, rows, cols });
+  if (inTauri) await call("terminal.resize", { id, rows, cols });
 }
 
 /** Terminal contents as plain text — `all` includes scrollback, otherwise just the visible screen. */
 export async function ptyDump(id: string, all = true): Promise<string> {
-  return inTauri ? invoke<string>("pty_dump", { id, all }) : "";
+  return inTauri ? call<string>("terminal.dump", { id, all }) : "";
 }
 
 /** Close a terminal for good, killing its child process. Detaching a renderer does not do this. */
 export async function ptyKill(id: string): Promise<void> {
-  if (inTauri) await invoke("pty_kill", { id });
+  if (inTauri) await call("terminal.kill", { id });
 }
 
 export async function getTranscriptPage(
@@ -1334,7 +1449,7 @@ export async function getTranscriptPage(
   limit = 20,
 ): Promise<TranscriptPage> {
   return inTauri
-    ? invoke<TranscriptPage>("get_transcript_page", { session, before, limit })
+    ? call<TranscriptPage>("sessions.transcript", { session, before, limit })
     : { entries: [], next_before: null, snapshot_through: null };
 }
 
@@ -1377,12 +1492,12 @@ export interface SourceControlInfo {
 }
 
 export async function gitSourceControlInfo(cwd: string): Promise<SourceControlInfo | null> {
-  return inTauri ? invoke<SourceControlInfo | null>("git_source_control_info", { cwd }) : null;
+  return inTauri ? call<SourceControlInfo | null>("workspace.source_control", { cwd }) : null;
 }
 
 export async function gitStatus(cwd: string): Promise<GitStatus> {
   return inTauri
-    ? invoke<GitStatus>("git_status", { cwd })
+    ? call<GitStatus>("git.status", { cwd })
     : { is_repo: false, branch: "", ahead: 0, behind: 0, files: [] };
 }
 
@@ -1394,10 +1509,10 @@ export interface Checkpoint {
 }
 
 export async function gitCheckpoint(cwd: string, message: string): Promise<Checkpoint | null> {
-  return inTauri ? invoke<Checkpoint>("git_checkpoint", { cwd, message }) : null;
+  return inTauri ? call<Checkpoint>("git.checkpoint", { cwd, message }) : null;
 }
 export async function gitCheckpoints(cwd: string): Promise<Checkpoint[]> {
-  return inTauri ? invoke<Checkpoint[]>("git_checkpoints", { cwd }) : [];
+  return inTauri ? call<Checkpoint[]>("git.checkpoints", { cwd }) : [];
 }
 
 export type GitDiffScope = "all" | "staged" | "unstaged";
@@ -1431,32 +1546,32 @@ export async function gitDiff(
   path: string | null,
   scope: GitDiffScope = "all",
 ): Promise<GitDiffResult> {
-  return inTauri ? invoke<GitDiffResult>("git_diff", { cwd, path, scope }) : EMPTY_DIFF;
+  return inTauri ? call<GitDiffResult>("git.diff", { cwd, path, scope }) : EMPTY_DIFF;
 }
 export async function gitDiffSince(cwd: string, commit: string): Promise<GitDiffResult> {
   return inTauri
-    ? invoke<GitDiffResult>("git_diff_since", { cwd, commit })
+    ? call<GitDiffResult>("git.diff_since", { cwd, commit })
     : EMPTY_DIFF;
 }
 export async function gitDiffStat(cwd: string): Promise<GitDiffStat> {
   return inTauri
-    ? invoke<GitDiffStat>("git_diff_stat", { cwd })
+    ? call<GitDiffStat>("git.diff_stat", { cwd })
     : { added: 0, deleted: 0, files: 0, truncated: false, truncation_reason: null };
 }
 export async function gitStagePaths(cwd: string, paths: string[]): Promise<void> {
-  if (inTauri) await invoke("git_stage_paths", { cwd, paths });
+  if (inTauri) await call("git.stage", { cwd, paths });
 }
 export async function gitUnstagePaths(cwd: string, paths: string[]): Promise<void> {
-  if (inTauri) await invoke("git_unstage_paths", { cwd, paths });
+  if (inTauri) await call("git.unstage", { cwd, paths });
 }
 export async function gitRevert(cwd: string, commit: string): Promise<void> {
-  if (inTauri) await invoke("git_revert", { cwd, commit });
+  if (inTauri) await call("git.revert", { cwd, commit });
 }
 export async function gitCommit(cwd: string, message: string): Promise<string> {
-  return inTauri ? invoke<string>("git_commit", { cwd, message }) : "";
+  return inTauri ? call<string>("git.commit", { cwd, message }) : "";
 }
 export async function gitPush(cwd: string): Promise<string> {
-  return inTauri ? invoke<string>("git_push", { cwd }) : "";
+  return inTauri ? call<string>("git.push", { cwd }) : "";
 }
 
 // ---- keybindings (F2) ------------------------------------------------------------------------
@@ -1492,11 +1607,11 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
 ];
 
 export async function getKeymap(): Promise<KeymapEntry[]> {
-  return inTauri ? invoke<KeymapEntry[]>("get_keymap") : DEFAULT_KEYMAP;
+  return inTauri ? call<KeymapEntry[]>("keymap.get") : DEFAULT_KEYMAP;
 }
 
 export async function setKeymap(action: string, key: string): Promise<void> {
-  if (inTauri) await invoke("set_keymap", { action, key });
+  if (inTauri) await call("keymap.set", { action, key });
 }
 
 // ---- browser annotate (F3/F4) ----------------------------------------------------------------
@@ -1536,11 +1651,11 @@ const FALLBACK_MARKET: MarketItem[] = [
 ];
 
 export async function marketCatalog(): Promise<MarketItem[]> {
-  return inTauri ? invoke<MarketItem[]>("market_catalog") : FALLBACK_MARKET;
+  return inTauri ? call<MarketItem[]>("market.catalog") : FALLBACK_MARKET;
 }
 
 export async function marketInstall(id: string): Promise<void> {
-  if (inTauri) await invoke("market_install", { id });
+  if (inTauri) await call("market.install", { id });
 }
 
 export interface PluginCounts {
@@ -1713,7 +1828,7 @@ export interface ScaffoldInstallResult {
 
 export async function listPlugins(): Promise<PluginInfo[]> {
   return inTauri
-    ? invoke<PluginInfo[]>("list_plugins")
+    ? call<PluginInfo[]>("plugins.list")
     : [
         {
           id: "developer-toolkit-demo",
@@ -1772,7 +1887,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
 /** Install a complete plugin from a GitHub repository or a selected /tree/ path. */
 export async function githubImportPlugin(repository: string): Promise<GitHubImportResult> {
   if (!inTauri) throw new Error("Plugin installation requires the Code2 desktop app.");
-  return invoke<GitHubImportResult>("github_import_plugin", { repository });
+  return call<GitHubImportResult>("plugins.import_github", { repository });
 }
 
 export async function pickPluginMarketplace(): Promise<PluginMarketplace | null> {
@@ -1784,7 +1899,7 @@ export async function pickPluginMarketplace(): Promise<PluginMarketplace | null>
     filters: [{ name: "Plugin marketplace", extensions: ["json"] }],
   });
   if (typeof selected !== "string") return null;
-  return invoke<PluginMarketplace>("read_plugin_marketplace", {
+  return call<PluginMarketplace>("plugins.read_marketplace", {
     path: selected,
   });
 }
@@ -1794,24 +1909,24 @@ export async function installMarketplacePlugin(
   pluginName: string,
 ): Promise<GitHubImportResult> {
   if (!inTauri) throw new Error("Marketplace installation requires the Code2 desktop app.");
-  return invoke<GitHubImportResult>("install_marketplace_plugin", {
-    marketplacePath,
-    pluginName,
+  return call<GitHubImportResult>("plugins.install_marketplace", {
+    marketplace_path: marketplacePath,
+    plugin_name: pluginName,
   });
 }
 
 export async function uninstallPlugin(id: string, keepData = false): Promise<void> {
-  if (inTauri) await invoke("uninstall_plugin", { id, keepData });
+  if (inTauri) await call("plugins.uninstall", { id, keep_data: keepData });
 }
 
 export async function setPluginEnabled(id: string, enabled: boolean): Promise<PluginInfo> {
   if (!inTauri) throw new Error("Plugin state changes require the Code2 desktop app.");
-  return invoke<PluginInfo>("set_plugin_enabled", { id, enabled });
+  return call<PluginInfo>("plugins.set_enabled", { id, value: enabled });
 }
 
 export async function setPluginTrusted(id: string, trusted: boolean): Promise<PluginInfo> {
   if (!inTauri) throw new Error("Plugin trust changes require the Code2 desktop app.");
-  return invoke<PluginInfo>("set_plugin_trusted", { id, trusted });
+  return call<PluginInfo>("plugins.set_trusted", { id, value: trusted });
 }
 
 export async function applyPluginScaffold(
@@ -1820,7 +1935,11 @@ export async function applyPluginScaffold(
   cwd: string,
 ): Promise<ScaffoldInstallResult> {
   if (!inTauri) throw new Error("Scaffold installation requires the Code2 desktop app.");
-  return invoke<ScaffoldInstallResult>("apply_plugin_scaffold", { pluginId, scaffoldId, cwd });
+  return call<ScaffoldInstallResult>("plugins.apply_scaffold", {
+    plugin_id: pluginId,
+    scaffold_id: scaffoldId,
+    cwd,
+  });
 }
 
 // ---- remote control (F10) --------------------------------------------------------------------
@@ -1855,16 +1974,16 @@ export interface RemoteDevice {
 
 /** Turn on network access: serve the live engine on all interfaces (idempotent). */
 export async function startRemote(port?: number): Promise<RemoteStatus | null> {
-  return inTauri ? invoke<RemoteStatus>("start_remote", { port: port ?? null }) : null;
+  return inTauri ? call<RemoteStatus>("remote.start", { port: port ?? null }) : null;
 }
 
 /** Turn off network access. Paired devices persist and reconnect next time. */
 export async function stopRemote(): Promise<void> {
-  if (inTauri) await invoke("stop_remote");
+  if (inTauri) await call("remote.stop");
 }
 
 export async function remoteStatus(): Promise<RemoteStatus | null> {
-  return inTauri ? invoke<RemoteStatus | null>("remote_status") : null;
+  return inTauri ? call<RemoteStatus | null>("remote.status") : null;
 }
 
 /** The wire protocol expected by the client consuming a pairing link. */
@@ -1877,20 +1996,20 @@ export async function remotePairingLink(
   ttlSecs?: number,
 ): Promise<RemotePairingLink | null> {
   return inTauri
-    ? invoke<RemotePairingLink>("remote_pairing_link", {
-        endpointId: endpointId ?? null,
-        clientProtocol,
-        ttlSecs: ttlSecs ?? null,
+    ? call<RemotePairingLink>("remote.pairing_link", {
+        endpoint_id: endpointId ?? null,
+        client_protocol: clientProtocol,
+        ttl_secs: ttlSecs ?? null,
       })
     : null;
 }
 
 export async function remoteDevices(): Promise<RemoteDevice[]> {
-  return inTauri ? invoke<RemoteDevice[]>("remote_devices") : [];
+  return inTauri ? call<RemoteDevice[]>("remote.devices") : [];
 }
 
 export async function remoteRevokeDevice(id: string): Promise<boolean> {
-  return inTauri ? invoke<boolean>("remote_revoke_device", { id }) : false;
+  return inTauri ? call<boolean>("remote.revoke_device", { id }) : false;
 }
 
 // ---- issues (F14) ----------------------------------------------------------------------------
@@ -1905,16 +2024,16 @@ export interface Issue {
 }
 
 export async function ghAvailable(): Promise<boolean> {
-  return inTauri ? invoke<boolean>("gh_available") : false;
+  return inTauri ? call<boolean>("issues.github_available") : false;
 }
 export async function listGithubIssues(cwd: string, limit = 30): Promise<Issue[]> {
-  return inTauri ? invoke<Issue[]>("list_github_issues", { cwd, limit }) : [];
+  return inTauri ? call<Issue[]>("issues.list_github", { cwd, limit }) : [];
 }
 export async function listLinearIssues(token: string, limit = 30): Promise<Issue[]> {
-  return inTauri ? invoke<Issue[]>("list_linear_issues", { token, limit }) : [];
+  return inTauri ? call<Issue[]>("issues.list_linear", { token, limit }) : [];
 }
 export async function issueContext(issue: Issue): Promise<string> {
-  if (inTauri) return invoke<string>("issue_context", { issue });
+  if (inTauri) return call<string>("issues.context", { issue });
   return `**${issue.source} #${issue.id}** — ${issue.title} (${issue.state})\n${issue.url}`;
 }
 
@@ -2042,7 +2161,7 @@ export interface CanvasSnapshot {
 
 export function canvasFeatureState(): Promise<CanvasFeatureState> {
   return inTauri
-    ? invoke<CanvasFeatureState>("canvas_feature_state")
+    ? call<CanvasFeatureState>("canvas.feature_state")
     : Promise.resolve({
         feature: "CODETWO_CANVAS_INPUT_V1",
         enabled: false,
@@ -2123,11 +2242,11 @@ function canvasFreezeToCore(input: CanvasFreezeInput): Record<string, unknown> {
 }
 
 export async function canvasCreateDraft(title: string): Promise<CanvasDraft> {
-  return invoke<CanvasDraft>("canvas_create_draft", { title });
+  return call<CanvasDraft>("canvas.create_draft", { title });
 }
 
 export async function canvasGetDraft(id: string): Promise<CanvasDraft | null> {
-  return invoke<CanvasDraft | null>("canvas_get_draft", { id });
+  return call<CanvasDraft | null>("canvas.get_draft", { id });
 }
 
 export async function canvasUpdateDraft(
@@ -2135,9 +2254,9 @@ export async function canvasUpdateDraft(
   expectedRevision: number,
   update: CanvasDraftUpdate,
 ): Promise<CanvasDraft> {
-  return invoke<CanvasDraft>("canvas_update_draft", {
+  return call<CanvasDraft>("canvas.update_draft", {
     id,
-    expectedRevision,
+    expected_revision: expectedRevision,
     update: canvasUpdateToCore(update),
   });
 }
@@ -2146,9 +2265,9 @@ export async function canvasNormalizeMedia(
   bytes: Uint8Array | number[],
   declaredMime?: string | null,
 ): Promise<CanvasStaticAsset> {
-  return invoke<CanvasStaticAsset>("canvas_normalize_media", {
+  return call<CanvasStaticAsset>("canvas.normalize_media", {
     bytes: Array.from(bytes),
-    declaredMime: declaredMime ?? null,
+    declared_mime: declaredMime ?? null,
   });
 }
 
@@ -2157,15 +2276,15 @@ export async function canvasFreeze(
   expectedRevision: number,
   input: CanvasFreezeInput,
 ): Promise<CanvasSnapshot> {
-  return invoke<CanvasSnapshot>("canvas_freeze", {
+  return call<CanvasSnapshot>("canvas.freeze", {
     id,
-    expectedRevision,
+    expected_revision: expectedRevision,
     input: canvasFreezeToCore(input),
   });
 }
 
 export async function canvasGetSnapshot(id: string, revision: number): Promise<CanvasSnapshot | null> {
-  return invoke<CanvasSnapshot | null>("canvas_get_snapshot", { id, revision });
+  return call<CanvasSnapshot | null>("canvas.get_snapshot", { id, revision });
 }
 
 export async function canvasGetAsset(
@@ -2173,7 +2292,11 @@ export async function canvasGetAsset(
   revision: number,
   assetId: string,
 ): Promise<CanvasStaticAsset | null> {
-  return invoke<CanvasStaticAsset | null>("canvas_get_asset", { id, revision, assetId });
+  return call<CanvasStaticAsset | null>("canvas.get_asset", {
+    id,
+    revision,
+    asset_id: assetId,
+  });
 }
 
 export async function canvasGetExport(
@@ -2181,23 +2304,27 @@ export async function canvasGetExport(
   revision: number,
   exportId: string,
 ): Promise<CanvasExport | null> {
-  return invoke<CanvasExport | null>("canvas_get_export", { id, revision, exportId });
+  return call<CanvasExport | null>("canvas.get_export", {
+    id,
+    revision,
+    export_id: exportId,
+  });
 }
 
 export async function canvasDuplicate(id: string, revision: number): Promise<CanvasDraft> {
-  return invoke<CanvasDraft>("canvas_duplicate", { id, revision });
+  return call<CanvasDraft>("canvas.duplicate", { id, revision });
 }
 
 export async function canvasTombstone(id: string): Promise<void> {
-  return invoke("canvas_tombstone", { id });
+  return call("canvas.tombstone", { id });
 }
 
 export async function canvasRestore(id: string): Promise<void> {
-  return invoke("canvas_restore", { id });
+  return call("canvas.restore", { id });
 }
 
 export async function canvasPurge(id: string): Promise<boolean> {
-  return invoke<boolean>("canvas_purge", { id });
+  return call<boolean>("canvas.purge", { id });
 }
 
 export interface CompiledPreview {
@@ -2222,7 +2349,7 @@ export interface CompiledCanvasPreview {
 }
 
 export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<CompiledPreview> {
-  if (inTauri) return invoke<CompiledPreview>("compile_doc", { doc, cwd: cwd ?? null });
+  if (inTauri) return call<CompiledPreview>("document.compile", { doc, cwd: cwd ?? null });
   return {
     prompt: doc.map(describeBlock).join("\n\n"),
     mcp_servers: [],
@@ -2239,7 +2366,7 @@ export async function compileDoc(doc: DocBlock[], cwd?: string | null): Promise<
 // ---- sandbox + project scripts (G7/G8) ---------------------------------------------------------
 
 export async function setSandbox(session: string, sandbox: Sandbox): Promise<void> {
-  if (inTauri) await invoke("set_sandbox", { session, sandbox });
+  if (inTauri) await call("engine.set_sandbox", { session, sandbox });
 }
 
 export interface ProjectScript {
@@ -2250,11 +2377,11 @@ export interface ProjectScript {
 }
 
 export async function listProjectScripts(cwd: string): Promise<ProjectScript[]> {
-  return inTauri ? invoke<ProjectScript[]>("list_project_scripts", { cwd }) : [];
+  return inTauri ? call<ProjectScript[]>("workspace.scripts", { cwd }) : [];
 }
 
 export async function runProjectScript(cwd: string, id: string): Promise<string> {
-  return inTauri ? invoke<string>("run_project_script", { cwd, id }) : "";
+  return inTauri ? call<string>("workspace.run_script", { cwd, id }) : "";
 }
 
 // ---- voice input (G11) -------------------------------------------------------------------------
@@ -2262,12 +2389,12 @@ export async function runProjectScript(cwd: string, id: string): Promise<string>
 /// Whether the core has a local transcriber configured (CODETWO_TRANSCRIBE_CMD or an auto-detected
 /// whisper binary). The UI prefers the webview's own speech recognition when present.
 export async function voiceAvailable(): Promise<boolean> {
-  return inTauri ? invoke<boolean>("voice_available") : false;
+  return inTauri ? call<boolean>("voice.available") : false;
 }
 
 export async function transcribeAudio(bytes: Uint8Array, ext = "webm"): Promise<string> {
   if (!inTauri) return "";
-  return invoke<string>("transcribe_audio", { bytes: Array.from(bytes), ext });
+  return call<string>("voice.transcribe", { bytes: Array.from(bytes), ext });
 }
 
 // ---- usage tracking (G12) ----------------------------------------------------------------------
@@ -2302,7 +2429,7 @@ const EMPTY_USAGE: UsageReport = {
 };
 
 export async function usageReport(): Promise<UsageReport> {
-  return inTauri ? invoke<UsageReport>("usage_report") : EMPTY_USAGE;
+  return inTauri ? call<UsageReport>("usage.report") : EMPTY_USAGE;
 }
 
 /** One provider's token totals per time bucket, oldest bucket first (cache reads excluded). */
@@ -2345,7 +2472,7 @@ const EMPTY_USAGE_HISTORY: UsageHistoryReport = {
 
 /** Bucketed usage history: `days <= 7` buckets hourly, otherwise daily. */
 export async function usageHistory(days: number): Promise<UsageHistoryReport> {
-  return inTauri ? invoke<UsageHistoryReport>("usage_history", { days }) : EMPTY_USAGE_HISTORY;
+  return inTauri ? call<UsageHistoryReport>("usage.history", { days }) : EMPTY_USAGE_HISTORY;
 }
 
 // ---- workspace files & rules (G1/G2) ---------------------------------------------------------
@@ -2354,7 +2481,7 @@ const FALLBACK_FILES = ["src/main.rs", "src/lib.rs", "README.md"];
 
 export async function listFiles(cwd: string, query: string, limit = 50): Promise<string[]> {
   if (!inTauri) return FALLBACK_FILES.filter((f) => f.includes(query));
-  return invoke<string[]>("list_files", { cwd, query, limit });
+  return call<string[]>("workspace.list_files", { cwd, query, limit });
 }
 
 export interface WorkspaceSearchOptions {
@@ -2384,51 +2511,51 @@ export async function searchWorkspaceContents(
   limit = 200,
 ): Promise<WorkspaceSearchResult> {
   if (!inTauri) return { matches: [], truncated: false, truncation_reason: null };
-  return invoke<WorkspaceSearchResult>("search_workspace_contents", {
+  return call<WorkspaceSearchResult>("workspace.search", {
     cwd,
     query,
     options,
     limit,
-    requestId,
+    request_id: requestId,
   });
 }
 
 export async function cancelWorkspaceContentSearch(requestId: string): Promise<boolean> {
   return inTauri
-    ? invoke<boolean>("cancel_workspace_content_search", { requestId })
+    ? call<boolean>("workspace.cancel_search", { request_id: requestId })
     : false;
 }
 
 export async function listRules(cwd: string): Promise<string[]> {
-  return inTauri ? invoke<string[]>("list_rules", { cwd }) : [];
+  return inTauri ? call<string[]>("workspace.rules", { cwd }) : [];
 }
 
 // ---- session management (G5) -----------------------------------------------------------------
 
 export async function renameSession(session: string, title: string): Promise<void> {
-  if (inTauri) await invoke("rename_session", { session, title });
+  if (inTauri) await call("sessions.rename", { session, title });
 }
 export async function archiveSession(session: string, archived: boolean): Promise<void> {
-  if (inTauri) await invoke("archive_session", { session, archived });
+  if (inTauri) await call("sessions.set_archived", { session, value: archived });
 }
 export async function pinSession(session: string, pinned: boolean): Promise<void> {
-  if (inTauri) await invoke("pin_session", { session, pinned });
+  if (inTauri) await call("sessions.set_pinned", { session, value: pinned });
 }
 export async function listArchivedSessions(): Promise<SessionInfo[]> {
-  return inTauri ? invoke<SessionInfo[]>("list_archived_sessions") : [];
+  return inTauri ? call<SessionInfo[]>("sessions.archived") : [];
 }
 
 // ---- PR + commit message (G6) ------------------------------------------------------------------
 
 export async function gitCreatePr(cwd: string, title: string, body: string): Promise<string> {
-  return inTauri ? invoke<string>("git_create_pr", { cwd, title, body }) : "";
+  return inTauri ? call<string>("git.create_pr", { cwd, title, body }) : "";
 }
 export async function gitSuggestCommit(cwd: string): Promise<string> {
-  return inTauri ? invoke<string>("git_suggest_commit", { cwd }) : "chore: update";
+  return inTauri ? call<string>("git.suggest_message", { cwd }) : "chore: update";
 }
 
 export async function browserContext(annotation: Annotation): Promise<string> {
-  if (inTauri) return invoke<string>("browser_context", { annotation });
+  if (inTauri) return call<string>("browser.context", { annotation });
   // Local fallback mirrors core::browser::Annotation::to_context.
   let s = `**Browser context** — ${annotation.url}`;
   if (annotation.selected_text) s += `\n- selected: “${annotation.selected_text}”`;
@@ -2437,11 +2564,11 @@ export async function browserContext(annotation: Annotation): Promise<string> {
 }
 
 export async function saveSkill(skill: Skill): Promise<void> {
-  if (inTauri) await invoke("save_skill", { skill });
+  if (inTauri) await call("skills.save", { skill });
 }
 
 export async function deleteSkill(id: string): Promise<void> {
-  if (inTauri) await invoke("delete_skill", { id });
+  if (inTauri) await call("skills.delete", { id });
 }
 
 export async function onEngineEvent(cb: (ev: CoreEvent) => void): Promise<() => void> {
@@ -2554,14 +2681,14 @@ const FALLBACK_SCENES: SceneInfo[] = (
 
 export async function listScenes(cwd?: string): Promise<SceneInfo[]> {
   if (!inTauri) return FALLBACK_SCENES;
-  return invoke<SceneInfo[]>("list_scenes", { cwd: cwd ?? null }).catch(() => []);
+  return call<SceneInfo[]>("scenes.list", { cwd: cwd ?? null }).catch(() => []);
 }
 
 export async function getScene(
   reference: string,
 ): Promise<{ reference: string; source: string; scene: SceneDocument } | null> {
   if (!inTauri) return null;
-  return invoke<{ reference: string; source: string; scene: SceneDocument }>("get_scene", {
+  return call<{ reference: string; source: string; scene: SceneDocument }>("scenes.get", {
     reference,
   }).catch(() => null);
 }
@@ -2591,7 +2718,12 @@ export async function saveScene(
       exit: scene.exit ?? null,
     };
   }
-  return invoke<SceneInfo>("save_scene", { scope, cwd, previousName, scene });
+  return call<SceneInfo>("scenes.save", {
+    scope,
+    cwd,
+    previous_name: previousName,
+    scene,
+  });
 }
 
 export async function deleteScene(
@@ -2600,7 +2732,7 @@ export async function deleteScene(
   name: string,
 ): Promise<void> {
   if (!inTauri) return;
-  await invoke("delete_scene", { scope, cwd, name });
+  await call("scenes.delete", { scope, cwd, name });
 }
 
 export async function applySceneToSession(
@@ -2609,10 +2741,10 @@ export async function applySceneToSession(
   confirmEscalation: boolean,
 ): Promise<SceneApplyOutcome | null> {
   if (!inTauri) return null;
-  return invoke<SceneApplyOutcome>("apply_scene", {
+  return call<SceneApplyOutcome>("scenes.apply", {
     session,
     reference,
-    confirmEscalation,
+    confirm_escalation: confirmEscalation,
   }).catch(() => null);
 }
 
@@ -2621,9 +2753,9 @@ export async function sceneSessionPlan(
   confirmEscalation: boolean,
 ): Promise<SceneSessionPlanOutcome | null> {
   if (!inTauri) return null;
-  return invoke<SceneSessionPlanOutcome>("scene_session_plan", {
+  return call<SceneSessionPlanOutcome>("scenes.session_plan", {
     reference,
-    confirmEscalation,
+    confirm_escalation: confirmEscalation,
   }).catch(() => null);
 }
 
@@ -2633,22 +2765,22 @@ export async function setSessionScene(
   customized: boolean,
 ): Promise<void> {
   if (!inTauri) return;
-  await invoke("set_session_scene", { session, reference, customized }).catch(() => {});
+  await call("scenes.set_session", { session, reference, customized }).catch(() => {});
 }
 
 export async function getSessionScene(session: string): Promise<SessionSceneState | null> {
   if (!inTauri) return null;
-  return invoke<SessionSceneState | null>("get_session_scene", { session }).catch(() => null);
+  return call<SessionSceneState | null>("scenes.session", { session }).catch(() => null);
 }
 
 export async function setSessionAutoScene(session: string, enabled: boolean): Promise<void> {
   if (!inTauri) return;
-  await invoke("set_session_auto_scene", { session, enabled });
+  await call("scenes.set_auto", { session, enabled });
 }
 
 export async function getSessionAutoScene(session: string): Promise<boolean> {
   if (!inTauri) return false;
-  return invoke<boolean>("get_session_auto_scene", { session }).catch(() => false);
+  return call<boolean>("scenes.auto", { session }).catch(() => false);
 }
 
 /** Diff stat of a session's own checkout, shaped for display. Null when unknown or not a repo. */
@@ -2660,7 +2792,7 @@ export interface SessionDiffStat {
 
 export async function sessionDiffStat(session: string): Promise<SessionDiffStat | null> {
   if (!inTauri) return null;
-  return invoke<GitDiffStat | null>("session_diff_stat", { session })
+  return call<GitDiffStat | null>("sessions.diff_stat", { session })
     .then((stat) =>
       stat ? { files: stat.files, additions: stat.added, deletions: stat.deleted } : null,
     )
@@ -2679,7 +2811,7 @@ export interface SessionUsage {
 
 export async function usageBySession(session: string): Promise<SessionUsage | null> {
   if (!inTauri) return null;
-  return invoke<SessionUsage | null>("usage_by_session", { session }).catch(() => null);
+  return call<SessionUsage | null>("cost.session", { session }).catch(() => null);
 }
 
 // ---- scene artifacts (R4) -------------------------------------------------------------------
@@ -2704,12 +2836,12 @@ export interface SceneArtifactRecord {
 /// missing and every call quietly reports "no artifacts" instead of breaking the surface.
 export async function listSceneArtifacts(session: string): Promise<SceneArtifactRecord[]> {
   if (!inTauri) return [];
-  return invoke<SceneArtifactRecord[]>("list_scene_artifacts", { session }).catch(() => []);
+  return call<SceneArtifactRecord[]>("scene_artifacts.list", { session }).catch(() => []);
 }
 
 export async function sceneArtifactContent(recordId: number): Promise<string | null> {
   if (!inTauri) return null;
-  return invoke<string>("scene_artifact_content", { recordId }).catch(() => null);
+  return call<string>("scene_artifacts.content", { record_id: recordId }).catch(() => null);
 }
 
 export async function recordSceneArtifact(
@@ -2718,9 +2850,9 @@ export async function recordSceneArtifact(
   content: string,
 ): Promise<SceneArtifactRecord | null> {
   if (!inTauri) return null;
-  return invoke<SceneArtifactRecord>("record_scene_artifact", {
+  return call<SceneArtifactRecord>("scene_artifacts.record", {
     session,
-    artifactKey,
+    artifact_key: artifactKey,
     content,
   }).catch(() => null);
 }
@@ -2731,7 +2863,11 @@ export async function pinSceneArtifact(
   version: number | null,
 ): Promise<void> {
   if (!inTauri) return;
-  await invoke("pin_scene_artifact", { session, artifactKey, version }).catch(() => {});
+  await call("scene_artifacts.pin", {
+    session,
+    artifact_key: artifactKey,
+    version,
+  }).catch(() => {});
 }
 
 // ---- issue write path (R12) -----------------------------------------------------------------
@@ -2749,7 +2885,7 @@ export async function commentIssue(
   token?: string,
 ): Promise<string | null> {
   if (!inTauri) return null;
-  return invoke<string>("comment_issue", { cwd, source, id, body, token: token ?? null }).catch(
+  return call<string>("issues.comment", { cwd, source, id, body, token: token ?? null }).catch(
     () => null,
   );
 }
@@ -2768,7 +2904,9 @@ export async function structureBrief(
   slots: SceneSlotDef[],
 ): Promise<Record<string, string> | null> {
   if (!inTauri) return null;
-  return invoke<Record<string, string>>("structure_brief", { transcript, slots }).catch(() => null);
+  return call<Record<string, string>>("issues.structure_brief", { transcript, slots }).catch(
+    () => null,
+  );
 }
 
 // ---- template-from-history (R2) --------------------------------------------------------------
@@ -2785,7 +2923,7 @@ export interface ProposedMacro {
  */
 export async function proposeMacroSlots(text: string): Promise<ProposedMacro | null> {
   if (!inTauri) return null;
-  return invoke<ProposedMacro>("propose_macro_slots", { text }).catch(() => null);
+  return call<ProposedMacro>("skills.propose_macro", { text }).catch(() => null);
 }
 
 // ---- scene hooks (R8) -----------------------------------------------------------------------
@@ -2793,13 +2931,13 @@ export async function proposeMacroSlots(text: string): Promise<ProposedMacro | n
 /// Remember a completion-banner dismissal so the same exit state never re-fires this session.
 export async function dismissSceneBanner(session: string, stateKey: string): Promise<void> {
   if (!inTauri) return;
-  await invoke("dismiss_scene_banner", { session, stateKey }).catch(() => {});
+  await call("scenes.dismiss_banner", { session, state_key: stateKey }).catch(() => {});
 }
 
 /// Enable/disable scene `schedule` hooks for one project (off by default).
 export async function setProjectScheduling(path: string, enabled: boolean): Promise<void> {
   if (!inTauri) return;
-  await invoke("set_project_scheduling", { path, enabled }).catch(() => {});
+  await call("scenes.set_scheduling", { path, enabled }).catch(() => {});
 }
 
 // ---- pipeline instances (R9) ----------------------------------------------------------------
@@ -2872,7 +3010,7 @@ export interface PipelineAdvanceOutcome {
 /// reports "no pipelines" instead of breaking the surface.
 export async function listPipelines(): Promise<PipelineInfo[]> {
   if (!inTauri) return [];
-  return invoke<PipelineInfo[]>("list_pipelines", {}).catch(() => []);
+  return call<PipelineInfo[]>("pipelines.list", {}).catch(() => []);
 }
 
 export async function startPipeline(
@@ -2881,9 +3019,9 @@ export async function startPipeline(
   session: string | null,
 ): Promise<PipelineStartOutcome | null> {
   if (!inTauri) return null;
-  return invoke<PipelineStartOutcome>("start_pipeline", {
+  return call<PipelineStartOutcome>("pipelines.start", {
     reference,
-    projectPath,
+    project_path: projectPath,
     session,
   }).catch(() => null);
 }
@@ -2895,9 +3033,9 @@ export async function advancePipeline(
   confirm: boolean,
 ): Promise<PipelineAdvanceOutcome | null> {
   if (!inTauri) return null;
-  return invoke<PipelineAdvanceOutcome>("advance_pipeline", {
-    instanceId,
-    toStage,
+  return call<PipelineAdvanceOutcome>("pipelines.advance", {
+    instance_id: instanceId,
+    to_stage: toStage,
     session,
     confirm,
   }).catch(() => null);
@@ -2909,19 +3047,27 @@ export async function bindPipelineSession(
   session: string,
 ): Promise<void> {
   if (!inTauri) return;
-  await invoke("bind_pipeline_session", { instanceId, stageId, session }).catch(() => {});
+  await call("pipelines.bind_session", {
+    instance_id: instanceId,
+    stage_id: stageId,
+    session,
+  }).catch(() => {});
 }
 
 export async function getPipelineInstance(
   instanceId: string,
 ): Promise<PipelineInstanceDetail | null> {
   if (!inTauri) return null;
-  return invoke<PipelineInstanceDetail>("get_pipeline_instance", { instanceId }).catch(() => null);
+  return call<PipelineInstanceDetail>("pipelines.instance", {
+    instance_id: instanceId,
+  }).catch(() => null);
 }
 
 export async function listPipelineInstances(projectPath: string): Promise<PipelineInstance[]> {
   if (!inTauri) return [];
-  return invoke<PipelineInstance[]>("list_pipeline_instances", { projectPath }).catch(() => []);
+  return call<PipelineInstance[]>("pipelines.instances", {
+    project_path: projectPath,
+  }).catch(() => []);
 }
 
 /** The active session's pipeline binding — the stage track renders only when this is set. */
@@ -2929,7 +3075,7 @@ export async function sessionPipeline(
   session: string,
 ): Promise<{ instance_id: string; stage_id: string } | null> {
   if (!inTauri) return null;
-  return invoke<{ instance_id: string; stage_id: string } | null>("session_pipeline", {
+  return call<{ instance_id: string; stage_id: string } | null>("pipelines.session", {
     session,
   }).catch(() => null);
 }
@@ -2957,23 +3103,23 @@ export async function recordIssueDelegation(
   sceneTitle: string,
 ): Promise<number | null> {
   if (!inTauri) return null;
-  return invoke<number>("record_issue_delegation", {
+  return call<number>("issues.record_delegation", {
     source,
-    issueId,
-    issueTitle,
-    sceneRef,
-    sceneTitle,
+    issue_id: issueId,
+    issue_title: issueTitle,
+    scene_ref: sceneRef,
+    scene_title: sceneTitle,
   }).catch(() => null);
 }
 
 export async function setIssueDelegationSession(id: number, session: string): Promise<void> {
   if (!inTauri) return;
-  await invoke("set_issue_delegation_session", { id, session }).catch(() => {});
+  await call("issues.set_delegation_session", { id, session }).catch(() => {});
 }
 
 export async function setIssueDelegationComment(id: number, url: string): Promise<void> {
   if (!inTauri) return;
-  await invoke("set_issue_delegation_comment", { id, url }).catch(() => {});
+  await call("issues.set_delegation_comment", { id, url }).catch(() => {});
 }
 
 export async function listIssueDelegations(
@@ -2981,17 +3127,19 @@ export async function listIssueDelegations(
   issueId: string,
 ): Promise<IssueDelegation[]> {
   if (!inTauri) return [];
-  return invoke<IssueDelegation[]>("list_issue_delegations", { source, issueId }).catch(() => []);
+  return call<IssueDelegation[]>("issues.delegations", { source, issue_id: issueId }).catch(
+    () => [],
+  );
 }
 
 /** Whether scene `schedule` hooks are enabled for this project (off by default). */
 export async function getProjectScheduling(path: string): Promise<boolean> {
   if (!inTauri) return false;
-  return invoke<boolean>("get_project_scheduling", { path }).catch(() => false);
+  return call<boolean>("scenes.scheduling", { path }).catch(() => false);
 }
 
 /** Lossy SKILL.md export of a scene (docs/scenes.md §Interop); null when it cannot resolve. */
 export async function exportSceneSkillMd(reference: string): Promise<string | null> {
   if (!inTauri) return null;
-  return invoke<string>("export_scene_skill_md", { reference }).catch(() => null);
+  return call<string>("scenes.export_skill_md", { reference }).catch(() => null);
 }

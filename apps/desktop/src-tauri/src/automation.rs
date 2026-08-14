@@ -7,6 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use codetwo_core::app::{EngineService, EventBus, StoreService};
 use codetwo_core::permission::ExecutionPolicy;
 use codetwo_core::session::SessionRunState;
 use codetwo_core::skill::DocBlock;
@@ -14,19 +15,33 @@ use codetwo_core::worktree::WorktreeBaseline;
 use codetwo_core::{
     Automation, AutomationInput, AutomationRun, AutomationRunStatus, Engine, Event, Op, Store,
 };
-use tauri::{AppHandle, Emitter, State};
+use codetwo_kernel::{
+    async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+};
+use serde::Deserialize;
+use serde_json::Value;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast;
 
 const TICK_SECONDS: u64 = 30;
 const SESSION_CREATION_TIMEOUT_SECONDS: u64 = 120;
 
-pub struct AutomationState(pub Arc<AutomationRuntime>);
+pub struct AutomationPlugin {
+    app: AppHandle,
+}
+
+impl AutomationPlugin {
+    pub fn new(app: AppHandle) -> Self {
+        Self { app }
+    }
+}
 
 pub struct AutomationRuntime {
     engine: Arc<Engine>,
     store: Arc<Store>,
     events: broadcast::Sender<Event>,
     app: AppHandle,
+    scope: WeakContext,
 }
 
 impl AutomationRuntime {
@@ -35,12 +50,14 @@ impl AutomationRuntime {
         store: Arc<Store>,
         events: broadcast::Sender<Event>,
         app: AppHandle,
+        scope: WeakContext,
     ) -> Self {
         Self {
             engine,
             store,
             events,
             app,
+            scope,
         }
     }
 
@@ -181,9 +198,13 @@ impl AutomationRuntime {
 
     fn spawn(self: Arc<Self>, automation: Automation, run: AutomationRun) {
         self.notify(&automation.id);
-        tauri::async_runtime::spawn(async move {
-            self.execute(automation, run).await;
-        });
+        if let Some(ctx) = self.scope.upgrade() {
+            ctx.spawn(async move {
+                self.execute(automation, run).await;
+            });
+        } else {
+            self.fail(&automation.id, &run.id, "automation plugin is unloading");
+        }
     }
 
     async fn execute(&self, automation: Automation, run: AutomationRun) {
@@ -285,89 +306,175 @@ impl AutomationRuntime {
     }
 }
 
-#[tauri::command]
-pub fn list_automations(state: State<'_, AutomationState>) -> Result<Vec<Automation>, String> {
-    state
-        .0
-        .store
-        .list_automations()
-        .map_err(|error| error.to_string())
+fn take_args<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, PluginError> {
+    let value = if value.is_null() {
+        Value::Object(Default::default())
+    } else {
+        value
+    };
+    serde_json::from_value(value)
+        .map_err(|error| PluginError::new(format!("bad arguments: {error}")))
 }
 
-#[tauri::command]
-pub fn create_automation(
-    state: State<'_, AutomationState>,
-    input: AutomationInput,
-) -> Result<Automation, String> {
-    let automation = state
-        .0
-        .store
-        .create_automation(input, super::now_millis())
-        .map_err(|error| error.to_string())?;
-    state.0.notify(&automation.id);
-    Ok(automation)
+fn json<T: serde::Serialize>(value: T) -> Result<Value, PluginError> {
+    serde_json::to_value(value).map_err(PluginError::new)
 }
 
-#[tauri::command]
-pub fn update_automation(
-    state: State<'_, AutomationState>,
-    id: String,
-    input: AutomationInput,
-) -> Result<Automation, String> {
-    let automation = state
-        .0
-        .store
-        .update_automation(&id, input, super::now_millis())
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "automation not found".to_string())?;
-    state.0.notify(&automation.id);
-    Ok(automation)
-}
+#[async_trait]
+impl Plugin for AutomationPlugin {
+    fn name(&self) -> &str {
+        "automation"
+    }
 
-#[tauri::command]
-pub fn set_automation_enabled(
-    state: State<'_, AutomationState>,
-    id: String,
-    enabled: bool,
-) -> Result<Automation, String> {
-    let automation = state
-        .0
-        .store
-        .set_automation_enabled(&id, enabled, super::now_millis())
-        .map_err(|error| error.to_string())?
-        .ok_or_else(|| "automation not found".to_string())?;
-    state.0.notify(&automation.id);
-    Ok(automation)
-}
+    fn inject(&self) -> Injection {
+        Injection::required(["engine", "store", "bus"])
+    }
 
-#[tauri::command]
-pub fn delete_automation(state: State<'_, AutomationState>, id: String) -> Result<bool, String> {
-    let deleted = state
-        .0
-        .store
-        .delete_automation(&id)
-        .map_err(|error| error.to_string())?;
-    state.0.notify(&id);
-    Ok(deleted)
-}
+    fn description(&self) -> Option<&str> {
+        Some("Durable scheduled and on-demand agent runs.")
+    }
 
-#[tauri::command]
-pub fn list_automation_runs(
-    state: State<'_, AutomationState>,
-    automation_id: Option<String>,
-    limit: Option<usize>,
-) -> Result<Vec<AutomationRun>, String> {
-    state
-        .0
-        .store
-        .list_automation_runs(automation_id.as_deref(), limit.unwrap_or(50))
-        .map_err(|error| error.to_string())
-}
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        let engine = ctx
+            .get::<EngineService>()
+            .ok_or_else(|| PluginError::new("engine service is unavailable"))?
+            .0
+            .clone();
+        let store = ctx
+            .get::<StoreService>()
+            .ok_or_else(|| PluginError::new("store service is unavailable"))?
+            .0
+            .clone();
+        let events = ctx
+            .get::<EventBus>()
+            .ok_or_else(|| PluginError::new("event bus is unavailable"))?
+            .0
+            .clone();
+        let runtime = Arc::new(AutomationRuntime::new(
+            engine,
+            store,
+            events,
+            self.app.clone(),
+            ctx.weak(),
+        ));
 
-#[tauri::command]
-pub fn run_automation_now(
-    state: State<'_, AutomationState>,
-    id: String,
-) -> Result<AutomationRun, String> {
-    state.0.run_now(&id)
+        ctx.spawn(runtime.clone().schedule_loop());
+        ctx.spawn(runtime.clone().event_loop());
+
+        let service = runtime.clone();
+        ctx.command("automation.list", move |_| {
+            let service = service.clone();
+            async move { json(service.store.list_automations().map_err(PluginError::new)?) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct InputArgs {
+            input: AutomationInput,
+        }
+        let service = runtime.clone();
+        ctx.command("automation.create", move |args| {
+            let service = service.clone();
+            async move {
+                let args: InputArgs = take_args(args)?;
+                let automation = service
+                    .store
+                    .create_automation(args.input, super::now_millis())
+                    .map_err(PluginError::new)?;
+                service.notify(&automation.id);
+                json(automation)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct UpdateArgs {
+            id: String,
+            input: AutomationInput,
+        }
+        let service = runtime.clone();
+        ctx.command("automation.update", move |args| {
+            let service = service.clone();
+            async move {
+                let args: UpdateArgs = take_args(args)?;
+                let automation = service
+                    .store
+                    .update_automation(&args.id, args.input, super::now_millis())
+                    .map_err(PluginError::new)?
+                    .ok_or_else(|| PluginError::new("automation not found"))?;
+                service.notify(&automation.id);
+                json(automation)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct EnabledArgs {
+            id: String,
+            enabled: bool,
+        }
+        let service = runtime.clone();
+        ctx.command("automation.set_enabled", move |args| {
+            let service = service.clone();
+            async move {
+                let args: EnabledArgs = take_args(args)?;
+                let automation = service
+                    .store
+                    .set_automation_enabled(&args.id, args.enabled, super::now_millis())
+                    .map_err(PluginError::new)?
+                    .ok_or_else(|| PluginError::new("automation not found"))?;
+                service.notify(&automation.id);
+                json(automation)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct IdArgs {
+            id: String,
+        }
+        let service = runtime.clone();
+        ctx.command("automation.delete", move |args| {
+            let service = service.clone();
+            async move {
+                let args: IdArgs = take_args(args)?;
+                let deleted = service
+                    .store
+                    .delete_automation(&args.id)
+                    .map_err(PluginError::new)?;
+                service.notify(&args.id);
+                json(deleted)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ListRunsArgs {
+            #[serde(default)]
+            automation_id: Option<String>,
+            #[serde(default = "default_run_limit")]
+            limit: usize,
+        }
+        fn default_run_limit() -> usize {
+            50
+        }
+        let service = runtime.clone();
+        ctx.command("automation.runs", move |args| {
+            let service = service.clone();
+            async move {
+                let args: ListRunsArgs = take_args(args)?;
+                json(
+                    service
+                        .store
+                        .list_automation_runs(args.automation_id.as_deref(), args.limit)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let service = runtime;
+        ctx.command("automation.run_now", move |args| {
+            let service = service.clone();
+            async move {
+                let args: IdArgs = take_args(args)?;
+                json(service.run_now(&args.id).map_err(PluginError::new)?)
+            }
+        })?;
+        Ok(())
+    }
 }

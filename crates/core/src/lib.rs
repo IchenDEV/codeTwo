@@ -4,6 +4,8 @@
 //! ([`Op`] in, [`Event`] out) and render the [`Event`] stream however they like.
 //!
 //! Module map:
+//! - [`app`] — the plugin graph: every subsystem below, wired by declaration instead of by a
+//!   constructor. Start here; the modules it lists are its parts.
 //! - [`acp`] — Agent Client Protocol client (JSON-RPC over stdio) used to drive provider CLIs.
 //! - [`provider`] — registry of provider launch specs (Claude Code / Codex / Grok).
 //! - [`models`] — built-in model lists for providers that don't report their own over ACP.
@@ -15,6 +17,7 @@
 
 pub mod acp;
 pub mod activity;
+pub mod app;
 pub mod artifact;
 pub mod automation;
 pub mod brief;

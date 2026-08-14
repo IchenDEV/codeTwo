@@ -9,12 +9,25 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
+use codetwo_core::app::events::PluginsChanged;
+use codetwo_core::app::Paths;
+use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use serde::Deserialize;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use serde_json::Value;
+use tauri::{AppHandle, Emitter};
 
-use crate::AppState;
+pub struct LspPlugin {
+    app: AppHandle,
+}
+
+impl LspPlugin {
+    pub fn new(app: AppHandle) -> Self {
+        Self { app }
+    }
+}
 
 pub struct LspState(pub Mutex<HashMap<String, Server>>);
 
@@ -51,15 +64,16 @@ fn candidates(lang: &str) -> &'static [(&'static str, &'static [&'static str])] 
 
 /// Spawn (or reuse) a server for `lang` rooted at `cwd`. `None` means "nothing installed for this
 /// language" — an expected outcome, not an error.
-#[tauri::command]
-pub fn lsp_start(
-    app: AppHandle,
-    state: State<LspState>,
-    app_state: State<AppState>,
+fn lsp_start(
+    app: &AppHandle,
+    state: &LspState,
+    paths: &Paths,
     cwd: String,
     lang: String,
 ) -> Result<Option<String>, String> {
-    if let Ok(plugins) = codetwo_core::plugin::load_dir(&app_state.plugins_dir) {
+    let plugins_dir = paths.plugins();
+    if plugins_dir.is_dir() {
+        let plugins = codetwo_core::plugin::load_dir(&plugins_dir).unwrap_or_default();
         for plugin in plugins
             .into_iter()
             .filter(|plugin| plugin.enabled && plugin.trusted)
@@ -92,8 +106,8 @@ pub fn lsp_start(
                 env.push(("CODEX_PROJECT_DIR".into(), cwd.clone()));
                 env.push(("PLUGIN_PROJECT_DIR".into(), cwd.clone()));
                 if let Some(key) = start_server(
-                    &app,
-                    &state,
+                    app,
+                    state,
                     &cwd,
                     &format!("plugin:{}:{}", plugin.id, server.name),
                     &command,
@@ -110,7 +124,7 @@ pub fn lsp_start(
             .iter()
             .map(|arg| (*arg).to_string())
             .collect::<Vec<_>>();
-        if let Some(key) = start_server(&app, &state, &cwd, bin, bin, &args, &[])? {
+        if let Some(key) = start_server(app, state, &cwd, bin, bin, &args, &[])? {
             return Ok(Some(key));
         }
     }
@@ -119,7 +133,7 @@ pub fn lsp_start(
 
 fn start_server(
     app: &AppHandle,
-    state: &State<LspState>,
+    state: &LspState,
     cwd: &str,
     key_name: &str,
     command: &str,
@@ -169,8 +183,7 @@ fn expand_project_dir(value: &str, cwd: &str) -> String {
 }
 
 /// Forward one already-serialized JSON-RPC message to the server, framed.
-#[tauri::command]
-pub fn lsp_send(state: State<LspState>, key: String, payload: String) -> Result<(), String> {
+fn lsp_send(state: &LspState, key: String, payload: String) -> Result<(), String> {
     let mut servers = state.0.lock().unwrap();
     let server = servers.get_mut(&key).ok_or("no such language server")?;
     let framed = format!("Content-Length: {}\r\n\r\n{}", payload.len(), payload);
@@ -224,22 +237,6 @@ fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
 }
 
 impl LspState {
-    pub fn kill_plugin(&self, plugin_id: &str) {
-        let prefix = format!("plugin:{plugin_id}:");
-        let mut servers = self.0.lock().unwrap();
-        let keys = servers
-            .keys()
-            .filter(|key| key.starts_with(&prefix))
-            .cloned()
-            .collect::<Vec<_>>();
-        for key in keys {
-            if let Some(mut server) = servers.remove(&key) {
-                let _ = server.child.kill();
-                let _ = server.child.wait();
-            }
-        }
-    }
-
     /// Kill every child. Called on app exit — an orphaned rust-analyzer indexes forever.
     pub fn kill_all(&self) {
         let mut servers = self.0.lock().unwrap();
@@ -247,5 +244,76 @@ impl LspState {
             let _ = server.child.kill();
             let _ = server.child.wait();
         }
+    }
+}
+
+fn take_args<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, PluginError> {
+    serde_json::from_value(value)
+        .map_err(|error| PluginError::new(format!("bad arguments: {error}")))
+}
+
+#[async_trait]
+impl Plugin for LspPlugin {
+    fn name(&self) -> &str {
+        "lsp"
+    }
+
+    fn inject(&self) -> Injection {
+        Injection::required(["paths"]).with_optional(["plugin-hub"])
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Desktop language-server process transport.")
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        let paths = ctx
+            .get::<Paths>()
+            .ok_or_else(|| PluginError::new("paths service is unavailable"))?;
+        let state = Arc::new(LspState(Mutex::new(HashMap::new())));
+        let cleanup = state.clone();
+        ctx.effect(move || cleanup.kill_all());
+        let changed = state.clone();
+        ctx.on::<PluginsChanged, _>(move |_| {
+            changed.kill_all();
+            None
+        });
+
+        #[derive(Deserialize)]
+        struct StartArgs {
+            cwd: String,
+            lang: String,
+        }
+        let app = self.app.clone();
+        let service = state.clone();
+        let plugin_paths = paths.clone();
+        ctx.command("lsp.start", move |args| {
+            let app = app.clone();
+            let service = service.clone();
+            let plugin_paths = plugin_paths.clone();
+            async move {
+                let args: StartArgs = take_args(args)?;
+                serde_json::to_value(
+                    lsp_start(&app, &service, &plugin_paths, args.cwd, args.lang)
+                        .map_err(PluginError::new)?,
+                )
+                .map_err(PluginError::new)
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct SendArgs {
+            key: String,
+            payload: String,
+        }
+        ctx.command("lsp.send", move |args| {
+            let service = state.clone();
+            async move {
+                let args: SendArgs = take_args(args)?;
+                lsp_send(&service, args.key, args.payload).map_err(PluginError::new)?;
+                Ok(Value::Null)
+            }
+        })?;
+        Ok(())
     }
 }

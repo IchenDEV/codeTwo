@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "hello-runtime",
+  "version": "1.0.0",
+  "description": "A worked example of the Code2 plugin protocol: a Node process that contributes a command, calls one of the host's, and listens for host events.",
+  "author": { "name": "Code2" },
+  "license": "MIT",
+  "keywords": ["example", "plugin-protocol", "runtime"],
+  "runtime": {
+    "protocol": "1.0.0",
+    "command": "node",
+    "args": ["plugin.js"],
+    "inject": []
+  }
+}

@@ -61,6 +61,10 @@ pub struct PluginCounts {
     pub scenes: usize,
     #[serde(default)]
     pub pipelines: usize,
+    /// 1 when the bundle ships a `runtime` block — a process Code2 speaks the plugin protocol to.
+    /// Counted so a code-only plugin is a legitimate bundle rather than "no components".
+    #[serde(default)]
+    pub runtime: usize,
 }
 
 impl PluginCounts {
@@ -76,6 +80,7 @@ impl PluginCounts {
             + self.apps
             + self.scenes
             + self.pipelines
+            + self.runtime
     }
 }
 
@@ -155,6 +160,33 @@ pub struct PluginScaffold {
     pub files: usize,
 }
 
+/// A bundle that ships **code**: a process Code2 speaks the plugin protocol to
+/// (`docs/plugin-protocol.md`).
+///
+/// Installing one still executes nothing. The process starts only when the user has marked the
+/// plugin **trusted** *and* enabled — see [`crate::app::protocol`], which is the only place that
+/// spawns it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginRuntimeSpec {
+    /// Protocol version the plugin implements. Major must match the host's.
+    #[serde(default)]
+    pub protocol: String,
+    /// Executable to run, resolved against `PATH` or the bundle directory.
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// Extra environment for the child. Code2 passes nothing else of its own.
+    #[serde(default)]
+    pub env: std::collections::BTreeMap<String, String>,
+    /// Services that must exist before the process is started — the same reactive contract a Rust
+    /// plugin gets, declared in the manifest because the host needs it before `initialize`.
+    #[serde(default)]
+    pub inject: Vec<String>,
+    /// Services the plugin can use if present; their arrival or departure restarts it.
+    #[serde(default, rename = "optionalInject")]
+    pub optional_inject: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstalledPlugin {
     pub schema_version: u32,
@@ -190,6 +222,9 @@ pub struct InstalledPlugin {
     pub lsp_servers: Vec<PluginLspServer>,
     #[serde(default)]
     pub diagnostics: Vec<PluginDiagnostic>,
+    /// Present when the bundle ships a protocol plugin. Pre-existing records simply have `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<PluginRuntimeSpec>,
 }
 
 #[derive(Debug)]
@@ -287,6 +322,59 @@ struct RawManifest {
     user_config: Option<Value>,
     #[serde(default)]
     interface: Value,
+    /// Code2 extension: a process to speak the plugin protocol to. Parsed but never started here.
+    #[serde(default)]
+    runtime: Option<Value>,
+}
+
+/// Validate a manifest `runtime` block. A malformed one is a diagnostic, not an install failure:
+/// the rest of the bundle (skills, scenes, scaffolds) is still perfectly good content.
+fn parse_runtime(
+    raw: Option<&Value>,
+    diagnostics: &mut Vec<PluginDiagnostic>,
+) -> Option<PluginRuntimeSpec> {
+    let raw = raw?;
+    let spec: PluginRuntimeSpec = match serde_json::from_value(raw.clone()) {
+        Ok(spec) => spec,
+        Err(error) => {
+            diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Warning,
+                code: "runtime.invalid".into(),
+                message: format!("runtime block ignored: {error}"),
+                component: None,
+            });
+            return None;
+        }
+    };
+    let command = spec.command.trim();
+    if command.is_empty() {
+        diagnostics.push(PluginDiagnostic {
+            level: PluginDiagnosticLevel::Warning,
+            code: "runtime.invalid".into(),
+            message: "runtime block ignored: `command` is empty".into(),
+            component: None,
+        });
+        return None;
+    }
+    // The command is resolved against PATH or the bundle directory at launch; a path that climbs
+    // out of the bundle is refused here rather than at spawn time.
+    if command.contains("..") {
+        diagnostics.push(PluginDiagnostic {
+            level: PluginDiagnosticLevel::Error,
+            code: "runtime.unsafe_command".into(),
+            message: "runtime block ignored: `command` may not contain `..`".into(),
+            component: None,
+        });
+        return None;
+    }
+    diagnostics.push(PluginDiagnostic {
+        level: PluginDiagnosticLevel::Warning,
+        code: "runtime.requires_trust".into(),
+        message: "this plugin ships a process. It runs only after you mark the plugin trusted."
+            .into(),
+        component: None,
+    });
+    Some(spec)
 }
 
 #[derive(Debug, Default)]
@@ -429,6 +517,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
 
     let scaffolds = discover_scaffolds(&plugin_root)?;
     let (scene_count, pipeline_count) = count_scene_components(&plugin_root);
+    let runtime = parse_runtime(manifest.runtime.as_ref(), &mut manifest_set.diagnostics);
     let counts = PluginCounts {
         skills: components
             .iter()
@@ -472,6 +561,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             .count(),
         scenes: scene_count,
         pipelines: pipeline_count,
+        runtime: usize::from(runtime.is_some()),
     };
     if counts.total() == 0 {
         return Err(PluginError::NoComponents);
@@ -514,6 +604,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             extension_components: manifest_set.extension_components,
             lsp_servers: manifest_set.lsp_servers,
             diagnostics: manifest_set.diagnostics,
+            runtime,
         },
         files,
     })

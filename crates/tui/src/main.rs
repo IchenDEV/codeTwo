@@ -1,22 +1,26 @@
-//! Code2 TUI entrypoint. Same core [`Engine`] as the desktop app; ratatui renders it.
+//! Code2 TUI entrypoint. Same core as the desktop app; ratatui renders it.
+//!
+//! The TUI does not build a Code2 — it boots one. Storage, providers, the skill library and the
+//! agent loop all come out of the plugin graph ([`codetwo_core::app`]), which is also why this
+//! file no longer knows the order any of them have to be constructed in.
 //!
 //! Two event sources feed one loop: a background thread reads terminal key events into a channel,
-//! and the engine streams domain events. `tokio::select!` merges them; every iteration redraws.
+//! and the engine's event bus streams domain events. `tokio::select!` merges them; every iteration
+//! redraws.
 
 mod app;
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 
 use app::App;
+use codetwo_core::app::{AppConfig, CoreApp, EngineService, EventBus, SkillService};
 use codetwo_core::provider::default_registry;
-use codetwo_core::skill::{builtin_skills, SkillLibrary};
-use codetwo_core::{Engine, Op, Store};
+use codetwo_core::Op;
 
 use ratatui::crossterm::event::{self, Event as CtEvent};
 use ratatui::DefaultTerminal;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 fn data_dir() -> PathBuf {
     let home = std::env::var("HOME")
@@ -28,25 +32,26 @@ fn data_dir() -> PathBuf {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let dir = data_dir();
-    std::fs::create_dir_all(&dir).ok();
-    let store = Store::open(dir.join("codetwo.db").to_string_lossy().as_ref())
-        .ok()
-        .map(Arc::new);
-    // Built-ins plus whatever harness skill directories (~/.claude/skills, .codex/skills, …) exist
-    // here — the TUI runs inside the project, so its cwd is the workspace.
-    let mut skill_vec = builtin_skills();
-    if let Ok(plugins) = codetwo_core::plugin::load_dir(&dir.join("plugins")) {
-        skill_vec.extend(plugins.into_iter().flat_map(|plugin| plugin.components));
-    }
-    skill_vec.extend(codetwo_core::harness::discover(
-        std::env::current_dir().ok().as_deref(),
-    ));
-    let skills = SkillLibrary::new(skill_vec.clone());
+    // A terminal frontend has no use for scenes, key bindings or the market — so it does not load
+    // them. Trimming the app is a config edit, not a build flag.
+    let config = AppConfig::new(&dir)
+        .without("scenes")
+        .without("keymap")
+        .without("market");
+    let core = CoreApp::boot(config).await.map_err(std::io::Error::other)?;
 
-    let (engine, mut engine_rx) = match store {
-        Some(store) => Engine::with_store(default_registry(), skills, store),
-        None => Engine::new(default_registry(), skills),
-    };
+    let engine = core
+        .service::<EngineService>()
+        .ok_or_else(|| std::io::Error::other(boot_failure(&core)))?;
+    let engine = &*engine;
+    // The skill library resolves the workspace the TUI was started in.
+    let skills = core.service::<SkillService>().ok_or_else(|| std::io::Error::other("no skills"))?;
+    skills.reload(std::env::current_dir().ok().as_deref());
+    let skill_vec = skills.list();
+    let mut engine_rx = core
+        .service::<EventBus>()
+        .ok_or_else(|| std::io::Error::other("no event bus"))?
+        .subscribe();
 
     // Terminal key events on a blocking thread → channel.
     let (in_tx, mut in_rx) = mpsc::unbounded_channel::<CtEvent>();
@@ -69,17 +74,31 @@ async fn main() -> std::io::Result<()> {
     app.set_sessions(engine.list_sessions().map_err(std::io::Error::other)?);
     app.load_recent_session_history(&engine)
         .map_err(std::io::Error::other)?;
-    let result = run(&mut terminal, &mut app, &engine, &mut in_rx, &mut engine_rx).await;
+    let result = run(&mut terminal, &mut app, engine, &mut in_rx, &mut engine_rx).await;
     ratatui::restore();
     result
+}
+
+/// A boot that produced no engine has an explanation in the graph; print it rather than "failed".
+fn boot_failure(core: &CoreApp) -> String {
+    let blocked: Vec<String> = core
+        .scopes()
+        .into_iter()
+        .filter(|scope| scope.error.is_some() || !scope.missing.is_empty())
+        .map(|scope| match scope.error {
+            Some(error) => format!("{}: {error}", scope.plugin),
+            None => format!("{} is waiting for {}", scope.plugin, scope.missing.join(", ")),
+        })
+        .collect();
+    format!("the agent loop did not start — {}", blocked.join("; "))
 }
 
 async fn run(
     terminal: &mut DefaultTerminal,
     app: &mut App,
-    engine: &Engine,
+    engine: &codetwo_core::Engine,
     in_rx: &mut mpsc::UnboundedReceiver<CtEvent>,
-    engine_rx: &mut mpsc::UnboundedReceiver<codetwo_core::Event>,
+    engine_rx: &mut broadcast::Receiver<codetwo_core::Event>,
 ) -> std::io::Result<()> {
     loop {
         terminal.draw(|f| app.render(f))?;
@@ -89,7 +108,7 @@ async fn run(
                     app.handle_key(key, engine).await;
                 }
             }
-            Some(ev) = engine_rx.recv() => {
+            Ok(ev) = engine_rx.recv() => {
                 let refresh_sessions = matches!(&ev, codetwo_core::Event::SessionCreated { .. });
                 app.on_engine_event(ev);
                 if refresh_sessions {

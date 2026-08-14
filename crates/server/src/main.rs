@@ -9,12 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use codetwo_core::provider::default_registry;
-use codetwo_core::skill::{builtin_skills, SkillLibrary};
-use codetwo_core::{CanvasFeatureGate, Engine, Store};
-use codetwo_server::{
-    bind_and_serve_with_canvas, fanout, print_pairing, AuthState, DEFAULT_PAIRING_TTL,
-};
+use codetwo_core::app::{AppConfig, CanvasService, CoreApp, EngineService, EventBus, StoreService};
+use codetwo_server::{bind_and_serve_with_canvas, print_pairing, AuthState, DEFAULT_PAIRING_TTL};
 
 fn data_dir() -> PathBuf {
     let home = std::env::var("HOME")
@@ -38,39 +34,35 @@ async fn main() -> std::io::Result<()> {
 
     let dir = data_dir();
     std::fs::create_dir_all(&dir)?;
-    let store = Arc::new(
-        Store::open(dir.join("codetwo.db").to_string_lossy().as_ref())
-            .map_err(std::io::Error::other)?,
-    );
-    let now_millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0);
-    if let Err(error) = store.purge_expired_canvases(now_millis) {
-        eprintln!("canvas tombstone cleanup failed: {error}");
-    }
-    // Headless: sessions pick their cwd later, so only user-level harness skill dirs are scanned.
-    let mut skill_vec = builtin_skills();
-    skill_vec.extend(codetwo_core::harness::discover(None));
-    let skills = SkillLibrary::new(skill_vec);
-    let canvas_gate = CanvasFeatureGate::disabled();
-    let (engine, rx) =
-        Engine::with_store_and_canvas_gate(default_registry(), skills, store.clone(), canvas_gate);
+    let core = CoreApp::boot(AppConfig::new(&dir))
+        .await
+        .map_err(std::io::Error::other)?;
+    let engine = core
+        .service::<EngineService>()
+        .ok_or_else(|| std::io::Error::other("engine plugin did not load"))?
+        .0
+        .clone();
+    let store = core
+        .service::<StoreService>()
+        .ok_or_else(|| std::io::Error::other("store plugin did not load"))?
+        .0
+        .clone();
+    let events = core
+        .service::<EventBus>()
+        .ok_or_else(|| std::io::Error::other("bus plugin did not load"))?
+        .0
+        .clone();
+    let canvas_gate = core
+        .service::<CanvasService>()
+        .ok_or_else(|| std::io::Error::other("canvas plugin did not load"))?
+        .gate;
 
     let auth = Arc::new(AuthState::load(Some(dir.join("remote-devices.json"))));
     let pairing_token = auth.issue_pairing_token(pair_ttl);
 
-    let events = fanout(rx);
     let addr: SocketAddr = format!("{host}:{port}").parse().expect("valid host:port");
-    let (local, handle) = bind_and_serve_with_canvas(
-        Arc::new(engine),
-        events,
-        addr,
-        auth.clone(),
-        store,
-        canvas_gate,
-    )
-    .await?;
+    let (local, handle) =
+        bind_and_serve_with_canvas(engine, events, addr, auth.clone(), store, canvas_gate).await?;
 
     print_pairing(local.port(), &pairing_token);
     let paired = auth.list_devices().len();

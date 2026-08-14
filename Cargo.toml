@@ -6,6 +6,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/kernel",
     "crates/core",
     "crates/tui",
     "crates/server",
@@ -29,4 +30,5 @@ uuid = { version = "1", features = ["v4", "serde"] }
 tracing = "0.1"
 
 # Local crates
+codetwo-kernel = { path = "crates/kernel" }
 codetwo-core = { path = "crates/core" }
