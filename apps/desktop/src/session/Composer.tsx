@@ -971,7 +971,7 @@ export function Composer({
         "flex flex-col",
         // min-w-0: in document mode the composer sits in a row beside the transcript panel and
         // must be able to shrink, or the panel gets pushed off the module's edge.
-        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-4 pb-3.5 pt-1",
+        docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pb-6 pt-3",
       )}
     >
       <div
@@ -982,7 +982,7 @@ export function Composer({
           "@container/composer flex flex-col",
           docMode
             ? "min-h-0 flex-1"
-            : cn("mx-auto w-full", hero ? "max-w-[680px]" : "max-w-[860px]"),
+            : "mx-auto w-full max-w-3xl",
         )}
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
@@ -994,9 +994,9 @@ export function Composer({
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
                 "relative min-h-0 flex-1"
-              : // A plain white card on a plain page, T3-style: border + a soft shadow, and the
-                // ring only wakes up when the caret is inside.
-                "rounded-2xl border bg-card shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)] transition-[box-shadow,border-color] duration-200 focus-within:border-ring/40 focus-within:shadow-[0_1px_2px_rgb(0_0_0/0.05),0_8px_28px_rgb(0_0_0/0.07)]",
+              : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
+                // shared raised shadow carry the separation without drawing a heavy box.
+                "rounded-2xl bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -1009,7 +1009,10 @@ export function Composer({
           />
 
           <div
-            className={cn("min-h-0 overflow-y-auto", docMode ? "bn-doc-mode flex-1" : "py-1")}
+            className={cn(
+              "min-h-0 overflow-y-auto",
+              docMode ? "bn-doc-mode flex-1" : hero ? "min-h-28 py-3" : "py-2",
+            )}
             style={docMode ? undefined : { maxHeight: applied }}
           >
             {children}
@@ -1055,7 +1058,7 @@ export function Composer({
                     // control — worst case the card floats a little over whatever sits beside it,
                     // which its own z-plane makes safe.
                     "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-raised"
-                  : "px-2 pb-1.5 pt-1",
+                  : "px-3 pb-2.5 pt-1.5",
               )}
             >
               {controls}
@@ -1068,7 +1071,7 @@ export function Composer({
         {!docMode && checkout && (
           <button
             onClick={checkout.onOpen}
-            className="mt-2 flex h-8 items-center gap-1.5 rounded-lg border bg-muted/30 px-3 text-hint text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="mt-3 flex h-8 items-center gap-1.5 rounded-lg bg-muted/30 px-3 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07] transition-colors hover:bg-accent hover:text-foreground"
           >
             {/* Squeezed, the row keeps what identifies the checkout (project, dirty count) and
                 sheds the caption and branch name — both one click away. */}
