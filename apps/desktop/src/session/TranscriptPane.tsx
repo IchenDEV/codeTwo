@@ -81,7 +81,7 @@ export function TranscriptPane({
         <div
           className={cn(
             "mx-auto w-full",
-            variant === "side" ? "px-4 pb-4 pt-2" : "max-w-[860px] px-6 pb-2 pt-3",
+            variant === "side" ? "px-4 pb-6 pt-4" : "max-w-3xl px-8 pb-8 pt-6",
           )}
         >
           {loading ? (

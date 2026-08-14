@@ -313,7 +313,7 @@ export const TurnCard = memo(function TurnCard({
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article aria-busy={running} className="animate-rise-in py-5">
+    <article aria-busy={running} className="animate-rise-in py-7">
       {/* prompt */}
       <div className="group/prompt flex items-start justify-end gap-1">
         {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare

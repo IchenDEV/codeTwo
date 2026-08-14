@@ -5,6 +5,7 @@
 
 :root {
   --radius: 0.625rem;
+  --hairline-width: 0.5px;
 
   /* ---- motion (see docs/design.md) -------------------------------------------------------------
      One curve and four durations, so that a hover and a page mount are recognisably the same app.
@@ -214,6 +215,46 @@
   --text-display: 22px; /* the one heading of a full-page surface (settings) */
 }
 
+/* The desktop shell uses macOS-style hairlines. Keep the bare Tailwind border utilities on the
+   same half-pixel system; explicit widths such as border-2 remain intentional emphasis. */
+@utility border {
+  border-width: var(--hairline-width);
+}
+@utility border-x {
+  border-inline-width: var(--hairline-width);
+}
+@utility border-y {
+  border-block-width: var(--hairline-width);
+}
+@utility border-s {
+  border-inline-start-width: var(--hairline-width);
+}
+@utility border-e {
+  border-inline-end-width: var(--hairline-width);
+}
+@utility border-t {
+  border-top-width: var(--hairline-width);
+}
+@utility border-r {
+  border-right-width: var(--hairline-width);
+}
+@utility border-b {
+  border-bottom-width: var(--hairline-width);
+}
+@utility border-l {
+  border-left-width: var(--hairline-width);
+}
+@utility divide-x {
+  & > :not(:last-child) {
+    border-inline-end-width: var(--hairline-width);
+  }
+}
+@utility divide-y {
+  & > :not(:last-child) {
+    border-bottom-width: var(--hairline-width);
+  }
+}
+
 @layer base {
   * {
     border-color: var(--border);
@@ -274,7 +315,7 @@
    ------------------------------------------------------------------------ */
 @layer components {
   /* ---- flat shell --------------------------------------------------------------------------
-     T3-style layout: opaque panes separated by 1px borders, not floating modules on glass. The
+     T3-style layout: opaque panes separated by hairline borders, not floating modules on glass. The
      shell is solid; the radius still matches windowEffects.radius in tauri.conf.json so nothing
      paints square corners over the window's rounded ones. */
   .app-shell {
@@ -289,7 +330,7 @@
       var(--sidebar) var(--appearance-sidebar-opacity, 100%),
       transparent
     );
-    border-right: 1px solid var(--sidebar-border);
+    box-shadow: inset calc(-1 * var(--hairline-width)) 0 0 var(--sidebar-border);
   }
   /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
      page content, so the blur does what it looks like it does. */
@@ -491,7 +532,8 @@
     user-select: none;
     background: color-mix(in oklch, var(--primary) 14%, transparent);
     color: var(--primary);
-    border: 1px solid color-mix(in oklch, var(--primary) 35%, transparent);
+    box-shadow: inset 0 0 0 var(--hairline-width)
+      color-mix(in oklch, var(--primary) 35%, transparent);
   }
   .file-chip {
     display: inline-flex;
@@ -505,7 +547,8 @@
     user-select: none;
     background: color-mix(in oklch, var(--success) 14%, transparent);
     color: var(--success);
-    border: 1px solid color-mix(in oklch, var(--success) 30%, transparent);
+    box-shadow: inset 0 0 0 var(--hairline-width)
+      color-mix(in oklch, var(--success) 30%, transparent);
   }
   /* An `@`-mentioned past chat (see SessionMentionInline). Same anatomy as the file chip — it *is*
      a mention — in the warning hue so the three chip kinds stay tellable at a glance. */
@@ -521,7 +564,8 @@
     user-select: none;
     background: color-mix(in oklch, var(--warning) 14%, transparent);
     color: var(--warning);
-    border: 1px solid color-mix(in oklch, var(--warning) 30%, transparent);
+    box-shadow: inset 0 0 0 var(--hairline-width)
+      color-mix(in oklch, var(--warning) 30%, transparent);
   }
 
   /* ---- browser annotation cards (see BrowserNoteBlock in skillInline.tsx) ------------------
@@ -532,7 +576,8 @@
     margin: 2px 0;
     padding: 6px 10px 7px;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in oklch, var(--primary) 22%, transparent);
+    box-shadow: inset 0 0 0 var(--hairline-width)
+      color-mix(in oklch, var(--primary) 22%, transparent);
     border-left: 3px solid color-mix(in oklch, var(--primary) 55%, transparent);
     background: color-mix(in oklch, var(--primary) 6%, transparent);
     user-select: none;
@@ -613,7 +658,8 @@
     font-family: var(--font-mono);
     font-size: var(--text-cap);
     background: color-mix(in oklch, var(--primary) 10%, transparent);
-    border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+    box-shadow: inset 0 0 0 var(--hairline-width)
+      color-mix(in oklch, var(--primary) 20%, transparent);
   }
   .bn-annotation-change .prop {
     color: var(--muted-foreground);

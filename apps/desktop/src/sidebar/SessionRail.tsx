@@ -585,8 +585,11 @@ export function SessionRail({
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* Keep the wordmark and controls centred in the same 40px title row as the main header. */}
-      <div data-tauri-drag-region className="flex h-10 shrink-0 items-center gap-1 pl-[78px] pr-2">
+      {/* Keep the wordmark and controls centred in the same 48px title row as the main header. */}
+      <div
+        data-tauri-drag-region
+        className="flex shrink-0 items-center gap-1 py-2.5 pl-[78px] pr-3"
+      >
         <span data-tauri-drag-region className="min-w-0 truncate text-ui font-semibold">
           {t("app.name")}
         </span>
@@ -644,7 +647,7 @@ export function SessionRail({
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex items-center gap-1.5 px-3 pb-1 pt-2">
+      <div className="flex items-center gap-2 px-4 pb-2 pt-2">
         <button
           onClick={onOpenSearch}
           className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
@@ -678,7 +681,7 @@ export function SessionRail({
       {/* ---- 2 · recent chats --------------------------------------------------------------- */}
       {/* The section header carries the project switcher: which project's chats these are, and
           every project operation, behind one chip instead of a whole tree. */}
-      <div className="flex items-center gap-1 px-3 pb-0.5 pt-2">
+      <div className="flex items-center gap-1 px-4 pb-1 pt-3">
         <span className="shrink-0 px-2 text-fine font-medium uppercase tracking-wide text-muted-foreground">
           {t("rail.recent")}
         </span>
@@ -751,7 +754,7 @@ export function SessionRail({
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div data-session-list className="px-3 pb-3">
+        <div data-session-list className="px-4 pb-4">
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
@@ -803,7 +806,7 @@ export function SessionRail({
       </ScrollArea>
 
       {/* ---- 3 · session utilities ---------------------------------------------------------- */}
-      <div className="border-t border-sidebar-border px-3 pb-2.5 pt-2">
+      <div className="border-t border-sidebar-border px-4 pb-3 pt-3">
         <div className="flex items-center gap-2 px-1 pb-1.5">
           <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate text-ui font-medium" title={t("composer.model")}>

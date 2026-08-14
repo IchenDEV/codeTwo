@@ -3717,14 +3717,14 @@ export default function App() {
             <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* Symmetric block padding keeps the 28px controls optically centred on the 40px title
+          {/* Symmetric block padding keeps the 28px controls optically centred on the 48px title
               line, matching the rail and dock headers. With the rail collapsed, the inset clears
               the traffic lights and the expand button takes the wordmark's place. */}
           <header
             data-tauri-drag-region
             className={cn(
-              "flex shrink-0 items-center gap-1.5 border-b py-1.5 pr-3",
-              displayedRailCollapsed ? "pl-[78px]" : "pl-3",
+              "flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
+              displayedRailCollapsed ? "pl-[78px]" : "pl-4",
             )}
           >
             {displayedRailCollapsed && (
@@ -3843,13 +3843,13 @@ export default function App() {
                 docMode
                   ? "order-1 min-h-0 min-w-0 flex-1"
                   : turns.length === 0 && !sessionLoading
-                    ? "order-2 min-h-0 flex-1 flex-col justify-center pb-20"
+                    ? "order-2 min-h-0 flex-1 flex-col justify-center pb-16"
                     : "order-2 shrink-0 flex-col",
               )}
             >
               {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
               {!docMode && turns.length === 0 && !sessionLoading && (
-                <h1 className="animate-rise-in mb-7 px-6 text-center text-[26px] font-semibold tracking-[-0.01em]">
+                <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
                   {t("transcript.greetingIn")}{" "}
                   <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
                     {activeProjectName ?? t("rail.noProject")}
@@ -3861,8 +3861,8 @@ export default function App() {
                   until the session is restored. The composer stays mounted (hidden) — unmounting
                   BlockNote would take an in-progress draft with it. */}
               {activeArchived && (
-                <div className="shrink-0 px-4 pb-3.5 pt-1">
-                  <div className="mx-auto flex w-full max-w-[860px] items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
+                <div className="shrink-0 px-6 pb-6 pt-3">
+                  <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl border bg-card px-4 py-3 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_4px_16px_rgb(0_0_0/0.04)]">
                     <Archive className="size-4 shrink-0 text-muted-foreground" />
                     <p className="min-w-0 flex-1 text-ui text-muted-foreground">
                       {t("archived.notice")}
