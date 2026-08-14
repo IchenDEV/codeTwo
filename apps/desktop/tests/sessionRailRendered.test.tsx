@@ -79,19 +79,28 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
-  test("renders three aligned icon rows and keeps useful previews out of the layout", () => {
+  test("renders useful latest conversation summaries and omits empty ones", () => {
     activateDom();
     const view = renderRail();
     const punctuation = view.container.querySelector('[data-session-id="punctuation"]');
     const meaningful = view.container.querySelector('[data-session-id="meaningful"]');
 
+    expect(punctuation?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(punctuation?.querySelector('[data-session-line="preview"]')).toBeNull();
+    expect(punctuation?.getAttribute("title")).toBeNull();
+
+    expect(meaningful?.querySelectorAll("[data-session-line]")).toHaveLength(4);
+    expect(meaningful?.querySelectorAll("[data-session-icon-column]")).toHaveLength(4);
+    expect(meaningful?.querySelector('[data-session-line="preview"]')?.textContent).toBe(
+      "A useful preview",
+    );
+    expect(meaningful?.querySelector("[data-session-select]")?.getAttribute("aria-describedby"))
+      .toBe("session-preview-meaningful");
+    expect(meaningful?.getAttribute("title")).toBe("A useful preview");
+
     for (const row of [punctuation, meaningful]) {
-      expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
-      expect(row?.querySelectorAll("[data-session-icon-column]")).toHaveLength(3);
       expect(row?.querySelector('[data-session-line="status"]')?.textContent).toContain("Completed");
     }
-    expect(punctuation?.getAttribute("title")).toBeNull();
-    expect(meaningful?.getAttribute("title")).toBe("A useful preview");
 
     view.unmount();
   });

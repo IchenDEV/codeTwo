@@ -119,7 +119,7 @@ export function SessionRail({
   sessions: SessionInfo[];
   /** Archived sessions, shown as their own collapsible group below the live ones. */
   archivedSessions: SessionInfo[];
-  /** Newest text per session id — exposed as hover detail without changing the three-row layout. */
+  /** Newest text per session id — shown as a bounded conversation summary below the title. */
   previews: Record<string, string>;
   activeSession: string | null;
   /** Every session with a turn in flight, including background sessions. */
@@ -256,7 +256,7 @@ export function SessionRail({
     </p>
   );
 
-  /** One thread: title, agent, and status — three stable rows on one shared icon axis. */
+  /** One thread: title, optional latest-message summary, agent, and status on one icon axis. */
   const sessionRow = (s: SessionInfo, isArchived: boolean) => {
     const activity = sessionActivity(s).state;
     const isAwaitingInput = activity.kind === "awaiting_input";
@@ -345,6 +345,7 @@ export function SessionRail({
                 variant="ghost"
                 data-session-select
                 aria-current={s.id === activeSession ? "page" : undefined}
+                aria-describedby={hasUsefulPreview ? `session-preview-${s.id}` : undefined}
                 aria-label={t("rail.sessionAccessibility", {
                   title: s.title,
                   provider: displayProvider(s.provider),
@@ -449,7 +450,23 @@ export function SessionRail({
                   </span>
                 </div>
 
-                {/* 2 — assigned agent; the icon slot matches the title and status rows exactly. */}
+                {/* 2 — latest conversation text; bounded so one long response cannot take the rail. */}
+                {hasUsefulPreview && (
+                  <div
+                    id={`session-preview-${s.id}`}
+                    data-session-line="preview"
+                    className="mt-1 flex min-h-4 items-start gap-1.5 text-fine leading-4 text-muted-foreground"
+                  >
+                    <span
+                      data-session-icon-column
+                      aria-hidden="true"
+                      className="h-4 w-6 shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 line-clamp-2">{preview}</span>
+                  </div>
+                )}
+
+                {/* 3 — assigned agent; the icon slot matches the title and status rows exactly. */}
                 <div
                   data-session-line="provider"
                   className="mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
@@ -466,7 +483,7 @@ export function SessionRail({
                   <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
                 </div>
 
-                {/* 3 — state gets its own row instead of competing with the provider label. */}
+                {/* 4 — state gets its own row instead of competing with the provider label. */}
                 <div
                   data-session-line="status"
                   aria-label={statusLabel}
