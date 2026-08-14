@@ -16,7 +16,10 @@ use crate::app::service::{
 use crate::app::{json, take_args};
 use crate::engine::Engine;
 use crate::event::Op;
+use crate::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
+use crate::provider::ProviderId;
 use crate::session::TranscriptCursor;
+use crate::worktree::WorktreeBaseline;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
 use serde_json::Value;
@@ -32,14 +35,19 @@ pub struct EngineInputs {
 
 /// Replaces how the engine is constructed, without replacing what it is wired to.
 pub type EngineBuilder = Arc<
-    dyn Fn(EngineInputs) -> (Engine, tokio::sync::mpsc::UnboundedReceiver<crate::event::Event>)
-        + Send
+    dyn Fn(
+            EngineInputs,
+        ) -> (
+            Engine,
+            tokio::sync::mpsc::UnboundedReceiver<crate::event::Event>,
+        ) + Send
         + Sync,
 >;
 
 #[derive(Default)]
 pub struct EnginePlugin {
     builder: Option<EngineBuilder>,
+    extra_required: Vec<String>,
 }
 
 impl EnginePlugin {
@@ -51,7 +59,24 @@ impl EnginePlugin {
     /// subscription, the session commands — stays exactly as it is, which is the point: a host
     /// customizes one seam instead of forking the boot sequence.
     pub fn with_builder(builder: EngineBuilder) -> EnginePlugin {
-        EnginePlugin { builder: Some(builder) }
+        EnginePlugin {
+            builder: Some(builder),
+            extra_required: Vec::new(),
+        }
+    }
+
+    /// A host-specific engine can require a host service as part of the same reactive graph. The
+    /// desktop uses this for its browser MCP: disabling the browser takes the engine down instead
+    /// of leaving a tool configured against a dead socket.
+    pub fn with_builder_and_required<I, S>(builder: EngineBuilder, required: I) -> EnginePlugin
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        EnginePlugin {
+            builder: Some(builder),
+            extra_required: required.into_iter().map(Into::into).collect(),
+        }
     }
 }
 
@@ -66,7 +91,12 @@ impl Plugin for EnginePlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["store", "providers", "skills", "bus"]).with_optional(["scenes"])
+        let mut injection =
+            Injection::required(["store", "providers", "skills", "bus"]).with_optional(["scenes"]);
+        injection
+            .required
+            .extend(self.extra_required.iter().cloned());
+        injection
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
@@ -126,12 +156,16 @@ impl Plugin for EnginePlugin {
         }
 
         ctx.provide(Arc::new(EngineService(engine.clone())))?;
-        register_commands(&ctx, engine)?;
+        register_commands(&ctx, engine, store)?;
         Ok(())
     }
 }
 
-fn register_commands(ctx: &Context, engine: Arc<Engine>) -> Result<(), PluginError> {
+fn register_commands(
+    ctx: &Context,
+    engine: Arc<Engine>,
+    store: Arc<StoreService>,
+) -> Result<(), PluginError> {
     #[derive(Deserialize)]
     struct SubmitArgs {
         op: Op,
@@ -199,7 +233,8 @@ fn register_commands(ctx: &Context, engine: Arc<Engine>) -> Result<(), PluginErr
                     .transcript_page(
                         &args.session,
                         args.before,
-                        args.limit.unwrap_or(crate::session::DEFAULT_TRANSCRIPT_TURNS),
+                        args.limit
+                            .unwrap_or(crate::session::DEFAULT_TRANSCRIPT_TURNS),
                     )
                     .map_err(PluginError::new)?,
             )
@@ -236,13 +271,319 @@ fn register_commands(ctx: &Context, engine: Arc<Engine>) -> Result<(), PluginErr
         }
     })?;
 
+    let pinning = engine.clone();
     ctx.command("sessions.set_pinned", move |args| {
-        let engine = engine.clone();
+        let engine = pinning.clone();
         async move {
             let args: FlagArgs = take_args(args)?;
             engine.set_pinned(&args.session, args.value);
             Ok(Value::Bool(true))
         }
     })?;
+
+    let previews = store.clone();
+    ctx.command("sessions.previews", move |_| {
+        let store = previews.clone();
+        async move { json(store.last_texts().map_err(PluginError::new)?) }
+    })?;
+
+    #[derive(Deserialize)]
+    struct SessionArgs {
+        session: String,
+    }
+    let diff_store = store.clone();
+    ctx.command("sessions.diff_stat", move |args| {
+        let store = diff_store.clone();
+        async move {
+            let args: SessionArgs = take_args(args)?;
+            let Some(cwd) = store
+                .get_session(&args.session)
+                .map_err(PluginError::new)?
+                .map(|session| session.cwd)
+            else {
+                return Ok(Value::Null);
+            };
+            json(
+                crate::git::diff_stat(std::path::Path::new(&cwd))
+                    .await
+                    .map_err(PluginError::new)?,
+            )
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct NewSessionArgs {
+        provider: String,
+        cwd: String,
+        #[serde(default)]
+        use_worktree: bool,
+        #[serde(default)]
+        worktree_base: Option<WorktreeBaseline>,
+        #[serde(default)]
+        worktree_base_sha: Option<String>,
+        #[serde(default)]
+        request_id: Option<String>,
+        #[serde(default)]
+        initial_policy: Option<ExecutionPolicy>,
+    }
+    let new_session = engine.clone();
+    ctx.command("engine.new_session", move |args| {
+        let engine = new_session.clone();
+        async move {
+            let args: NewSessionArgs = take_args(args)?;
+            engine
+                .submit(Op::NewSession {
+                    provider: parse_provider(&args.provider),
+                    cwd: args.cwd,
+                    use_worktree: args.use_worktree,
+                    worktree_base: args.worktree_base,
+                    worktree_base_sha: args.worktree_base_sha,
+                    request_id: args.request_id,
+                    initial_policy: args.initial_policy,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct PromptArgs {
+        session: String,
+        doc: Vec<crate::skill::DocBlock>,
+        #[serde(default)]
+        request_id: Option<String>,
+    }
+    let prompt = engine.clone();
+    ctx.command("engine.prompt", move |args| {
+        let engine = prompt.clone();
+        async move {
+            let args: PromptArgs = take_args(args)?;
+            engine
+                .submit(Op::Prompt {
+                    session: args.session,
+                    doc: args.doc,
+                    request_id: args.request_id,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct PermissionArgs {
+        session: String,
+        request_id: String,
+        #[serde(default)]
+        option_id: Option<String>,
+    }
+    let permission = engine.clone();
+    ctx.command("engine.answer_permission", move |args| {
+        let engine = permission.clone();
+        async move {
+            let args: PermissionArgs = take_args(args)?;
+            engine
+                .submit(Op::AnswerPermission {
+                    session: args.session,
+                    request_id: args.request_id,
+                    option_id: args.option_id,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ModeArgs {
+        session: String,
+        mode: PermissionMode,
+    }
+    let mode = engine.clone();
+    ctx.command("engine.set_permission_mode", move |args| {
+        let engine = mode.clone();
+        async move {
+            let args: ModeArgs = take_args(args)?;
+            engine
+                .submit(Op::SetPermissionMode {
+                    session: args.session,
+                    mode: args.mode,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct SandboxArgs {
+        session: String,
+        sandbox: SandboxPolicy,
+    }
+    let sandbox = engine.clone();
+    ctx.command("engine.set_sandbox", move |args| {
+        let engine = sandbox.clone();
+        async move {
+            let args: SandboxArgs = take_args(args)?;
+            engine
+                .submit(Op::SetSandbox {
+                    session: args.session,
+                    sandbox: args.sandbox,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ExecutionArgs {
+        session: String,
+        mode: PermissionMode,
+        sandbox: SandboxPolicy,
+        #[serde(default)]
+        request_id: Option<String>,
+    }
+    let execution = engine.clone();
+    ctx.command("engine.set_execution_policy", move |args| {
+        let engine = execution.clone();
+        async move {
+            let args: ExecutionArgs = take_args(args)?;
+            engine
+                .submit(Op::SetExecutionPolicy {
+                    session: args.session,
+                    mode: args.mode,
+                    sandbox: args.sandbox,
+                    request_id: args.request_id,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ModelArgs {
+        session: String,
+        model: String,
+    }
+    let model = engine.clone();
+    ctx.command("engine.set_model", move |args| {
+        let engine = model.clone();
+        async move {
+            let args: ModelArgs = take_args(args)?;
+            engine
+                .submit(Op::SetModel {
+                    session: args.session,
+                    model: args.model,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ConfigArgs {
+        session: String,
+        config_id: String,
+        value: String,
+    }
+    let config = engine.clone();
+    ctx.command("engine.set_config_option", move |args| {
+        let engine = config.clone();
+        async move {
+            let args: ConfigArgs = take_args(args)?;
+            engine
+                .submit(Op::SetConfigOption {
+                    session: args.session,
+                    config_id: args.config_id,
+                    value: args.value,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    let cancelling = engine.clone();
+    ctx.command("engine.cancel", move |args| {
+        let engine = cancelling.clone();
+        async move {
+            let args: SessionArgs = take_args(args)?;
+            engine
+                .submit(Op::Cancel {
+                    session: args.session,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    let discard = engine.clone();
+    ctx.command("worktrees.discard_session", move |args| {
+        let engine = discard.clone();
+        async move {
+            let args: SessionArgs = take_args(args)?;
+            json(
+                engine
+                    .discard_session_worktree(&args.session)
+                    .await
+                    .map_err(PluginError::new)?,
+            )
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct ProjectArgs {
+        project_path: String,
+    }
+    let worktrees = engine.clone();
+    ctx.command("worktrees.list", move |args| {
+        let engine = worktrees.clone();
+        async move {
+            let args: ProjectArgs = take_args(args)?;
+            json(
+                engine
+                    .list_project_worktrees(&args.project_path)
+                    .await
+                    .map_err(PluginError::new)?,
+            )
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct OrphanArgs {
+        project_path: String,
+        worktree_path: String,
+    }
+    ctx.command("worktrees.discard_orphan", move |args| {
+        let engine = engine.clone();
+        async move {
+            let args: OrphanArgs = take_args(args)?;
+            json(
+                engine
+                    .discard_orphan_worktree(&args.project_path, &args.worktree_path)
+                    .await
+                    .map_err(PluginError::new)?,
+            )
+        }
+    })?;
     Ok(())
+}
+
+fn parse_provider(value: &str) -> ProviderId {
+    match value {
+        "claude_code" => ProviderId::ClaudeCode,
+        "codex" => ProviderId::Codex,
+        "grok" => ProviderId::Grok,
+        "cursor" => ProviderId::Cursor,
+        "opencode" => ProviderId::OpenCode,
+        "pi" => ProviderId::Pi,
+        "kimi" => ProviderId::Kimi,
+        "zcode" => ProviderId::ZCode,
+        other => ProviderId::Custom(other.to_string()),
+    }
 }

@@ -2,10 +2,10 @@
 //!
 //! # What changed
 //!
-//! Code2 used to *be* a program with extension points: a `setup()` that constructed twenty
-//! subsystems in a fixed order into one `AppState` struct, and 185 hand-written command wrappers
-//! that reached into it. Adding a feature meant editing the middle of the application. Removing
-//! one was not really possible.
+//! Code2 used to *be* a program with extension points: a `setup()` that constructed subsystems in
+//! a fixed order into one `AppState` struct, plus a large hand-written command-wrapper layer that
+//! reached into it. That wrapper layer has been removed: adding or removing a feature now changes
+//! the plugin graph instead of the middle of the application.
 //!
 //! Following [cordis](https://github.com/cordiverse/cordis), it is now a graph. Each subsystem is
 //! a [`Plugin`](codetwo_kernel::Plugin) that publishes a [`Service`](codetwo_kernel::Service) and
@@ -14,13 +14,16 @@
 //! config file:
 //!
 //! ```text
-//! paths ──┬─→ store ──┬─→ scenes ──┬─→ engine ──┬─→ scene-runtime
-//!         │           ├─→ memory   │            └─→ (event bus)
-//!         │           └────────────┴─→ cost
-//!         ├─→ plugin-hub ─┬─→ skills ┘
-//!         │               └─→ extensions ──→ (out-of-process plugins)
-//!         ├─→ keymap        providers ┘
-//!         └─→ (git, market: no dependencies at all)
+//! paths ──┬─→ store ──┬─→ scenes ──────┬─→ scene-commands
+//!         │           ├─→ engine ──────┤
+//!         │           ├─→ memory       ├─→ scene-runtime
+//!         │           ├─→ projects     └─→ cost
+//!         │           ├─→ canvas ────────→ document
+//!         │           └─→ (artifacts, workspace-search, issues)
+//!         ├─→ plugin-hub ─→ (skills, extensions)
+//!         └─→ keymap
+//! providers ─→ engine       skills ─→ (engine, market, document)
+//! (git, workspace, usage, voice, terminal: no dependencies)
 //! ```
 //!
 //! # What that buys
@@ -30,9 +33,9 @@
 //! - **Reloadability.** Reconfigure `store` and the engine — which was built against it — is torn
 //!   down and rebuilt automatically. Nothing holds a stale handle, because nothing is asked to
 //!   handle its dependencies changing.
-//! - **One extension surface.** A plugin's commands *are* the app's API. The Tauri bridge, the
-//!   TUI, and the remote server all dispatch through [`CoreApp::call`], so a new feature reaches
-//!   every frontend without any of them being edited.
+//! - **One extension surface.** A plugin's commands *are* the app's public API. The Tauri bridge
+//!   exposes only [`CoreApp::call`]; in-process hosts can additionally consume typed services for
+//!   streaming protocols without constructing a second copy of the subsystem.
 //! - **Plugins that are not ours.** [`protocol`] lets a plugin be a process in any language, whose
 //!   commands land in the same registry. "Plugin" stops meaning "how we organised our code".
 //!
@@ -53,8 +56,9 @@ pub mod protocol;
 mod service;
 
 pub use service::{
-    CostService, EngineService, EventBus, KeymapService, LoaderService, Paths, PluginHub,
-    ProviderService, ProviderSummary, SceneRuntimeService, SceneService, SkillService, StoreService,
+    CanvasService, CostService, EngineService, EventBus, KeymapService, LoaderService, Paths,
+    PluginHub, ProviderService, ProviderSummary, SceneRuntimeService, SceneService, SkillService,
+    StoreService, TerminalEvent, TerminalService,
 };
 
 use codetwo_kernel::{
@@ -70,7 +74,11 @@ use std::sync::{Arc, Mutex};
 /// Deserialize a command's arguments. A missing payload is an empty object, so commands that take
 /// only optional fields can be called with no arguments at all.
 pub(crate) fn take_args<T: DeserializeOwned>(value: Value) -> Result<T, PluginError> {
-    let value = if value.is_null() { Value::Object(Default::default()) } else { value };
+    let value = if value.is_null() {
+        Value::Object(Default::default())
+    } else {
+        value
+    };
     serde_json::from_value(value)
         .map_err(|error| PluginError::new(format!("bad arguments: {error}")))
 }
@@ -119,7 +127,9 @@ impl AppConfig {
     /// Start from nothing and pick. Useful for a headless host that wants `git` and `market` but
     /// no agent loop.
     pub fn bare() -> AppConfig {
-        AppConfig { plugins: LoaderConfig::default() }
+        AppConfig {
+            plugins: LoaderConfig::default(),
+        }
     }
 
     pub fn with(mut self, name: impl Into<String>, entry: PluginEntry) -> AppConfig {

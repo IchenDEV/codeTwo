@@ -5,12 +5,13 @@
 //! before this each one existed twice, as a core function and as a hand-written `#[tauri::command]`
 //! wrapper listed in a 185-entry table. Here the plugin *is* the registration.
 
-use crate::app::service::{KeymapService, Paths};
+use crate::app::events::SkillsChanged;
+use crate::app::service::{KeymapService, Paths, SkillService};
 use crate::app::{json, take_args};
 use crate::git;
 use crate::keymap::Action;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -174,14 +175,17 @@ impl Plugin for KeymapPlugin {
         }
         let config: Config = serde_json::from_value(config).unwrap_or_default();
         let paths = ctx.expect::<Paths>()?;
-        let path = config.path.map(PathBuf::from).unwrap_or_else(|| paths.keymap());
+        let path = config
+            .path
+            .map(PathBuf::from)
+            .unwrap_or_else(|| paths.keymap());
         let keymap = Arc::new(KeymapService::load(path));
         ctx.provide(keymap.clone())?;
 
         let read = keymap.clone();
         ctx.command("keymap.get", move |_| {
             let keymap = read.clone();
-            async move { json(keymap.snapshot()) }
+            async move { json(keymap.snapshot().entries()) }
         })?;
 
         #[derive(Deserialize)]
@@ -193,7 +197,7 @@ impl Plugin for KeymapPlugin {
             let keymap = keymap.clone();
             async move {
                 let args: SetArgs = take_args(args)?;
-                json(keymap.set(args.action, args.key)?)
+                json(keymap.set(args.action, args.key)?.entries())
             }
         })?;
         Ok(())
@@ -216,8 +220,76 @@ impl Plugin for MarketPlugin {
         Some("The built-in skill catalogue.")
     }
 
+    fn inject(&self) -> Injection {
+        Injection::required(["skills"])
+    }
+
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        ctx.command("market.catalog", |_| async move { json(crate::market::builtin_catalog()) })?;
+        #[derive(Serialize)]
+        struct MarketItem {
+            id: String,
+            name: String,
+            description: String,
+            author: String,
+            tags: Vec<String>,
+            icon: Option<String>,
+            kind: &'static str,
+            installed: bool,
+        }
+        let skills = ctx.expect::<SkillService>()?;
+        let catalog_skills = skills.clone();
+        ctx.command("market.catalog", move |_| {
+            let skills = catalog_skills.clone();
+            async move {
+                let library = skills.library();
+                json(
+                    crate::market::builtin_catalog()
+                        .into_iter()
+                        .map(|entry| MarketItem {
+                            installed: library.get(&entry.id).is_some(),
+                            kind: match entry.kind() {
+                                crate::skill::SkillKind::Fragment => "fragment",
+                                crate::skill::SkillKind::AgentSkill => "agent_skill",
+                                crate::skill::SkillKind::Subagent => "subagent",
+                                crate::skill::SkillKind::Mcp => "mcp",
+                                crate::skill::SkillKind::Macro => "macro",
+                            },
+                            id: entry.id,
+                            name: entry.name,
+                            description: entry.description,
+                            author: entry.author,
+                            tags: entry.tags,
+                            icon: entry.icon,
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct InstallArgs {
+            id: String,
+        }
+        let install_skills = skills.clone();
+        let weak = ctx.weak();
+        ctx.command("market.install", move |args| {
+            let skills = install_skills.clone();
+            let weak = weak.clone();
+            async move {
+                let args: InstallArgs = take_args(args)?;
+                let entry = crate::market::builtin_catalog()
+                    .into_iter()
+                    .find(|entry| entry.id == args.id)
+                    .ok_or_else(|| {
+                        PluginError::new(format!("unknown market skill: {}", args.id))
+                    })?;
+                skills.save(&entry.to_skill()).map_err(PluginError::new)?;
+                if let Some(ctx) = weak.upgrade() {
+                    ctx.emit(SkillsChanged).await;
+                }
+                Ok(Value::Bool(true))
+            }
+        })?;
 
         #[derive(Deserialize)]
         struct ParseArgs {

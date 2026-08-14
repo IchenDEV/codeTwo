@@ -5,6 +5,7 @@
 //! whoever held the struct. Now each is a [`Service`] published by the plugin that owns it, and
 //! reached by anything that declares it in `inject`. The wiring is no longer a place in the code.
 
+use crate::canvas::CanvasFeatureGate;
 use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::engine::Engine;
 use crate::event::Event;
@@ -17,6 +18,7 @@ use crate::skill::{builtin_skills, Skill, SkillLibrary};
 use crate::store::Store;
 use codetwo_kernel::Service;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -43,7 +45,9 @@ impl Service for Paths {
 
 impl Paths {
     pub fn new(data_dir: impl Into<PathBuf>) -> Paths {
-        Paths { data_dir: data_dir.into() }
+        Paths {
+            data_dir: data_dir.into(),
+        }
     }
 
     pub fn db(&self) -> PathBuf {
@@ -74,6 +78,18 @@ impl Service for StoreService {
     const NAME: &'static str = "store";
 }
 
+/// Canvas persistence policy and owner identity. The gate remains closed in production builds;
+/// publishing it as a service keeps every canvas command behind the same check.
+pub struct CanvasService {
+    pub gate: CanvasFeatureGate,
+    pub owner: String,
+    pub store: Arc<Store>,
+}
+
+impl Service for CanvasService {
+    const NAME: &'static str = "canvas";
+}
+
 impl std::ops::Deref for StoreService {
     type Target = Store;
     fn deref(&self) -> &Store {
@@ -87,6 +103,41 @@ pub struct EventBus(pub broadcast::Sender<Event>);
 
 impl Service for EventBus {
     const NAME: &'static str = "bus";
+}
+
+#[derive(Debug, Clone)]
+pub enum TerminalEvent {
+    Data { id: String, data: String },
+    Title { id: String, title: String },
+    Exit { id: String },
+}
+
+/// Live terminal emulators and their host-facing event stream.
+pub struct TerminalService {
+    pub(crate) terminals: Mutex<HashMap<String, crate::term::TerminalHandle>>,
+    events: broadcast::Sender<TerminalEvent>,
+}
+
+impl Service for TerminalService {
+    const NAME: &'static str = "terminal";
+}
+
+impl TerminalService {
+    pub fn new() -> Self {
+        let (events, _) = broadcast::channel(512);
+        Self {
+            terminals: Mutex::new(HashMap::new()),
+            events,
+        }
+    }
+
+    pub fn publish(&self, event: TerminalEvent) {
+        let _ = self.events.send(event);
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<TerminalEvent> {
+        self.events.subscribe()
+    }
 }
 
 impl EventBus {
@@ -159,8 +210,11 @@ impl Service for SkillService {
 
 impl SkillService {
     pub fn new(paths: Arc<Paths>) -> SkillService {
-        let service =
-            SkillService { paths, library: Mutex::new(SkillLibrary::default()), cwd: Mutex::new(None) };
+        let service = SkillService {
+            paths,
+            library: Mutex::new(SkillLibrary::default()),
+            cwd: Mutex::new(None),
+        };
         service.reload(None);
         service
     }
@@ -189,7 +243,10 @@ impl SkillService {
         }
         if let Ok(plugins) = crate::plugin::load_dir(&self.paths.plugins()) {
             skills.extend(
-                plugins.into_iter().filter(|plugin| plugin.enabled).flat_map(|p| p.components),
+                plugins
+                    .into_iter()
+                    .filter(|plugin| plugin.enabled)
+                    .flat_map(|p| p.components),
             );
         }
         skills.extend(crate::harness::discover(cwd.as_deref()));
@@ -212,6 +269,7 @@ impl SkillService {
 /// The resolved scene/pipeline library and the artifact captures that go with it.
 pub struct SceneService {
     library: Mutex<Arc<SceneLibrary>>,
+    cwd: Mutex<Option<PathBuf>>,
     /// `None` when the store has no blob root (an in-memory database). Scene *resolution* is pure
     /// data and works regardless; only capturing artifacts needs somewhere to put them, and losing
     /// captures is not a reason to take the whole scene layer down.
@@ -224,7 +282,11 @@ impl Service for SceneService {
 
 impl SceneService {
     pub fn new(artifacts: Option<SceneArtifactStore>) -> SceneService {
-        SceneService { library: Mutex::new(Arc::new(SceneLibrary::builtin())), artifacts }
+        SceneService {
+            library: Mutex::new(Arc::new(SceneLibrary::builtin())),
+            cwd: Mutex::new(None),
+            artifacts,
+        }
     }
 
     pub fn library(&self) -> Arc<SceneLibrary> {
@@ -235,15 +297,23 @@ impl SceneService {
         *self.library.lock().unwrap() = library;
     }
 
+    pub fn cwd(&self) -> Option<PathBuf> {
+        self.cwd.lock().unwrap().clone()
+    }
+
     /// Re-resolve from every source, in precedence order: the workspace, the user's config
     /// directory, enabled plugin bundles, then the built-ins.
     ///
     /// Callers announce the result with [`crate::app::events::ScenesChanged`]; the engine and the
     /// hook runtime follow that rather than being updated by hand.
     pub fn reload(&self, cwd: Option<&Path>, hub: Option<&PluginHub>) {
+        if let Some(cwd) = cwd {
+            *self.cwd.lock().unwrap() = Some(cwd.to_path_buf());
+        }
+        let cwd = self.cwd.lock().unwrap().clone();
         let project_dir = cwd.map(|cwd| cwd.join(".codetwo/scenes"));
-        let user_dir = std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(".config/codetwo/scenes"));
+        let user_dir =
+            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/codetwo/scenes"));
         let plugins = hub.map(PluginHub::scene_dirs).unwrap_or_default();
         self.set_library(Arc::new(SceneLibrary::load(
             project_dir.as_deref(),
@@ -308,7 +378,10 @@ impl Service for KeymapService {
 impl KeymapService {
     pub fn load(path: PathBuf) -> KeymapService {
         let keymap = Keymap::load(&path);
-        KeymapService { path, keymap: Mutex::new(keymap) }
+        KeymapService {
+            path,
+            keymap: Mutex::new(keymap),
+        }
     }
 
     pub fn snapshot(&self) -> Keymap {

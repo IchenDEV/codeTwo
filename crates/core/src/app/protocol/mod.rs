@@ -44,7 +44,9 @@ pub use wire::{
 };
 
 use crate::plugin::PluginRuntimeSpec;
-use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext};
+use codetwo_kernel::{
+    async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -82,7 +84,11 @@ impl ProcessTransport {
         ProcessTransport {
             command: spec.command.clone(),
             args: spec.args.clone(),
-            env: spec.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            env: spec
+                .env
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             cwd: Some(cwd),
             label,
         }
@@ -111,8 +117,14 @@ impl Transport for ProcessTransport {
         let mut child = command.spawn().map_err(|error| {
             PluginError::new(format!("couldn't start `{}`: {error}", self.command))
         })?;
-        let stdout = child.stdout.take().ok_or_else(|| PluginError::new("no stdout"))?;
-        let stdin = child.stdin.take().ok_or_else(|| PluginError::new("no stdin"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| PluginError::new("no stdout"))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| PluginError::new("no stdin"))?;
 
         // A plugin's stderr is its diagnostics channel; route it where every other diagnostic goes
         // rather than letting it vanish into a closed pipe.
@@ -136,7 +148,11 @@ impl Transport for ProcessTransport {
                 }
             }) as Box<dyn FnOnce() + Send>
         };
-        Ok(Channel { reader: Box::new(stdout), writer: Box::new(stdin), shutdown })
+        Ok(Channel {
+            reader: Box::new(stdout),
+            writer: Box::new(stdin),
+            shutdown,
+        })
     }
 }
 
@@ -184,8 +200,7 @@ impl ProtocolPlugin {
         bundle_dir: PathBuf,
         data_dir: PathBuf,
     ) -> ProtocolPlugin {
-        let transport =
-            ProcessTransport::from_spec(spec, bundle_dir, format!("plugin:{id}"));
+        let transport = ProcessTransport::from_spec(spec, bundle_dir, format!("plugin:{id}"));
         ProtocolPlugin {
             name: id.to_string(),
             description: None,
@@ -240,7 +255,10 @@ impl Plugin for ProtocolPlugin {
             std::fs::create_dir_all(dir)?;
         }
 
-        let host = Arc::new(KernelHost { ctx: ctx.weak(), plugin: self.name.clone() });
+        let host = Arc::new(KernelHost {
+            ctx: ctx.weak(),
+            plugin: self.name.clone(),
+        });
         let peer = Peer::new(channel.reader, channel.writer, host);
 
         let params = InitializeParams {
@@ -248,10 +266,18 @@ impl Plugin for ProtocolPlugin {
             host: HostInfo {
                 name: "code2".into(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
-                commands: ctx.runtime().commands().into_iter().map(|c| c.name).collect(),
+                commands: ctx
+                    .runtime()
+                    .commands()
+                    .into_iter()
+                    .map(|c| c.name)
+                    .collect(),
             },
             config,
-            data_dir: self.data_dir.as_ref().map(|dir| dir.to_string_lossy().into_owned()),
+            data_dir: self
+                .data_dir
+                .as_ref()
+                .map(|dir| dir.to_string_lossy().into_owned()),
         };
         let result: InitializeResult =
             tokio::time::timeout(self.handshake_timeout, peer.request("initialize", params))
@@ -283,7 +309,10 @@ impl Plugin for ProtocolPlugin {
                     async move {
                         peer.request::<_, Value>(
                             "command/invoke",
-                            InvokeParams { name: name.clone(), args },
+                            InvokeParams {
+                                name: name.clone(),
+                                args,
+                            },
                         )
                         .await
                         .map_err(|error| PluginError::new(error.to_string()))
@@ -301,7 +330,10 @@ impl Plugin for ProtocolPlugin {
                 async move {
                     peer.notify(
                         "event/emit",
-                        EventParams { name, payload: (*payload).clone() },
+                        EventParams {
+                            name,
+                            payload: (*payload).clone(),
+                        },
                     );
                     None
                 }
@@ -324,8 +356,12 @@ struct KernelHost {
 #[async_trait]
 impl HostHandler for KernelHost {
     async fn call(&self, name: &str, args: Value) -> Result<Value, String> {
-        let Some(ctx) = self.ctx.upgrade() else { return Err("the host is shutting down".into()) };
-        ctx.call(name, args).await.map_err(|error| error.to_string())
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err("the host is shutting down".into());
+        };
+        ctx.call(name, args)
+            .await
+            .map_err(|error| error.to_string())
     }
 
     async fn emit(&self, name: &str, payload: Value) {

@@ -98,8 +98,9 @@ impl Plugin for StorePlugin {
     async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
         let config: StoreConfig = serde_json::from_value(config).unwrap_or_default();
         let paths = ctx.expect::<Paths>()?;
-        let path =
-            config.path.unwrap_or_else(|| paths.db().to_string_lossy().into_owned());
+        let path = config
+            .path
+            .unwrap_or_else(|| paths.db().to_string_lossy().into_owned());
 
         let store = if path == ":memory:" {
             Store::open_in_memory()
@@ -155,7 +156,9 @@ fn default_capacity() -> usize {
 
 impl Default for BusConfig {
     fn default() -> Self {
-        BusConfig { capacity: default_capacity() }
+        BusConfig {
+            capacity: default_capacity(),
+        }
     }
 }
 

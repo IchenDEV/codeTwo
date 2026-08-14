@@ -10,9 +10,9 @@
 //! it is the app's public event surface, and it should be chosen rather than leaked.
 
 use crate::app::events::{EngineEvent, PluginsChanged, ScenesChanged, SkillsChanged};
+use crate::app::json;
 use crate::app::protocol::ProtocolPlugin;
 use crate::app::service::PluginHub;
-use crate::app::json;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginResult};
 use serde::Deserialize;
 use serde_json::{json as jval, Value};
@@ -27,7 +27,9 @@ struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { allow_untrusted: false }
+        Config {
+            allow_untrusted: false,
+        }
     }
 }
 
@@ -70,7 +72,9 @@ impl Plugin for ExtensionsPlugin {
         let mut started = Vec::new();
         let mut skipped = Vec::new();
         for installed in hub.installed() {
-            let Some(spec) = installed.runtime.clone() else { continue };
+            let Some(spec) = installed.runtime.clone() else {
+                continue;
+            };
             if !installed.enabled {
                 continue;
             }
@@ -104,9 +108,7 @@ impl Plugin for ExtensionsPlugin {
             move |_| {
                 let started = report_started.clone();
                 let skipped = report_skipped.clone();
-                async move {
-                    json(jval!({ "running": started, "untrusted": skipped }))
-                }
+                async move { json(jval!({ "running": started, "untrusted": skipped })) }
             },
         )?;
 
@@ -132,7 +134,9 @@ fn publish_host_events(ctx: &Context) {
     ctx.on_async::<EngineEvent, _, _>(move |event| {
         let weak = weak.clone();
         async move {
-            let Some(ctx) = weak.upgrade() else { return None };
+            let Some(ctx) = weak.upgrade() else {
+                return None;
+            };
             if let Ok(payload) = serde_json::to_value(&event.0) {
                 ctx.emit_json("engine/event", payload).await;
             }

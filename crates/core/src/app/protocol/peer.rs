@@ -68,7 +68,9 @@ impl Peer {
         let (tx, rx) = oneshot::channel();
         self.pending.lock().unwrap().insert(id, tx);
         let message = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        self.outbound.send(message.to_string()).map_err(|_| ProtocolError::Closed)?;
+        self.outbound
+            .send(message.to_string())
+            .map_err(|_| ProtocolError::Closed)?;
         match rx.await.map_err(|_| ProtocolError::Closed)? {
             Ok(value) => {
                 serde_json::from_value(value).map_err(|e| ProtocolError::Decode(e.to_string()))
@@ -148,7 +150,11 @@ async fn dispatch(peer: &Arc<Peer>, handler: &Arc<dyn HostHandler>, value: Value
         return;
     }
 
-    let method = value.get("method").and_then(Value::as_str).unwrap_or_default().to_string();
+    let method = value
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
     let params = value.get("params").cloned().unwrap_or(Value::Null);
 
     match value.get("id").cloned() {

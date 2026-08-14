@@ -125,7 +125,10 @@ mod tests {
     fn compatibility_is_by_major_version() {
         assert!(version_is_compatible("1.0.0"));
         assert!(version_is_compatible("1.4.2"), "a newer minor is still us");
-        assert!(version_is_compatible(""), "an unversioned plugin is tolerated");
+        assert!(
+            version_is_compatible(""),
+            "an unversioned plugin is tolerated"
+        );
         assert!(!version_is_compatible("2.0.0"));
         assert!(!version_is_compatible("0.9.0"));
     }

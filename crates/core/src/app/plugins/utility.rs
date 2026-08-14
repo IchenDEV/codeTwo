@@ -1,0 +1,107 @@
+//! Host-neutral utility plugins: local usage reports and voice transcription.
+
+use crate::app::{json, take_args};
+use codetwo_kernel::{async_trait, Context, Plugin, PluginError, PluginResult};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+pub struct UsagePlugin;
+
+#[derive(Serialize)]
+struct UsageReport {
+    windows: Vec<crate::usage::UsageWindow>,
+    by_source: Vec<(String, u64)>,
+    transcripts: usize,
+}
+
+#[derive(Serialize)]
+struct UsageHistoryReport {
+    history: crate::usage::UsageHistory,
+    by_source: Vec<crate::usage::SourceUsage>,
+}
+
+#[async_trait]
+impl Plugin for UsagePlugin {
+    fn name(&self) -> &str {
+        "usage"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Rolling local provider usage windows and history.")
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.command("usage.report", |_| async move {
+            let scan = tokio::task::spawn_blocking(crate::usage::scan_all_with_count)
+                .await
+                .unwrap_or_default();
+            let now = crate::session::now_millis();
+            let limits = crate::usage::Limits::from_env();
+            json(UsageReport {
+                windows: crate::usage::windows(&scan.records, now, &limits),
+                by_source: crate::usage::by_source(&scan.records),
+                transcripts: scan.transcripts,
+            })
+        })?;
+
+        #[derive(Deserialize)]
+        struct HistoryArgs {
+            days: u32,
+        }
+        ctx.command("usage.history", |args| async move {
+            let args: HistoryArgs = take_args(args)?;
+            let scan = tokio::task::spawn_blocking(crate::usage::scan_all_with_count)
+                .await
+                .unwrap_or_default();
+            let now = crate::session::now_millis();
+            let (bucket_secs, bucket_count) = if args.days <= 7 {
+                (3_600i64, 7 * 24)
+            } else {
+                (86_400i64, 30)
+            };
+            let cutoff = now - bucket_secs * 1000 * bucket_count as i64;
+            json(UsageHistoryReport {
+                history: crate::usage::history(&scan.records, now, bucket_secs, bucket_count),
+                by_source: crate::usage::by_source_detailed(&scan.records, cutoff),
+            })
+        })?;
+        Ok(())
+    }
+}
+
+pub struct VoicePlugin;
+
+#[async_trait]
+impl Plugin for VoicePlugin {
+    fn name(&self) -> &str {
+        "voice"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("Local speech transcription when a supported backend is available.")
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.command("voice.available", |_| async move {
+            Ok(Value::Bool(crate::voice::is_available()))
+        })?;
+
+        #[derive(Deserialize)]
+        struct TranscribeArgs {
+            bytes: Vec<u8>,
+            #[serde(default)]
+            ext: Option<String>,
+        }
+        ctx.command("voice.transcribe", |args| async move {
+            let args: TranscribeArgs = take_args(args)?;
+            let path = crate::voice::save_audio(&args.bytes, args.ext.as_deref().unwrap_or("webm"))
+                .map_err(PluginError::new)?;
+            let result = crate::voice::transcribe(&path)
+                .await
+                .map_err(PluginError::new);
+            let _ = std::fs::remove_file(&path);
+            json(result?)
+        })?;
+        Ok(())
+    }
+}

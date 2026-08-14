@@ -1,7 +1,7 @@
 # Plugins
 
-Code2 is a plugin graph. This document explains what that means, how to write a plugin, and what
-is left to migrate.
+Code2 is a plugin graph. This document explains what that means, how to write a plugin, and how
+the core and host-specific plugins fit together.
 
 The model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
 [`crates/kernel`](../crates/kernel). Cordis' claim is that an application is not a program with
@@ -36,13 +36,16 @@ subsystems in one fixed order into an `AppState` struct with twenty fields, and 
 ## The graph
 
 ```
-paths ──┬─→ store ──┬─→ scenes ──┬─→ engine ──┬─→ scene-runtime
-        │           ├─→ memory   │            └─→ bus
-        │           └────────────┴─→ cost
-        ├─→ plugin-hub ─┬─→ skills ┘
-        │               └─→ extensions ──→ out-of-process plugins
-        ├─→ keymap        providers ┘
-        └─→ (git, market: no dependencies at all)
+paths ──┬─→ store ──┬─→ scenes ──────┬─→ scene-commands
+        │           ├─→ engine ──────┤
+        │           ├─→ memory       ├─→ scene-runtime
+        │           ├─→ projects     └─→ cost
+        │           ├─→ canvas ────────→ document
+        │           └─→ (artifacts, workspace-search, issues)
+        ├─→ plugin-hub ─→ (skills, extensions)
+        └─→ keymap
+providers ─→ engine       skills ─→ (engine, market, document)
+(git, workspace, usage, voice, terminal: no dependencies)
 ```
 
 The arrows are `inject` declarations, not a sequence. `engine` listed first in the config loads
@@ -54,14 +57,25 @@ exactly as well as `engine` listed last.
 | `store` | `store` | `store.sessions`, `store.session` |
 | `bus` | `bus` | — |
 | `providers` | `providers` | `providers.list` |
-| `plugin-hub` | `plugin-hub` | `plugins.list`, `plugins.set_enabled`, `plugins.set_trusted`, `plugins.uninstall`, `plugins.scene_dirs` |
-| `skills` | `skills` | `skills.list`, `skills.save`, `skills.delete` |
-| `scenes` | `scenes` | `scenes.list`, `scenes.reload` |
-| `engine` | `engine` | `engine.submit`, `sessions.*` |
-| `git` | — | `git.status`, `git.diff`, `git.commit`, … (13) |
-| `memory` | — | `memory.list`, `memory.search`, `memory.add`, … (9) |
-| `market` | — | `market.catalog`, `market.parse` |
+| `plugin-hub` | `plugin-hub` | install, import, trust, enable, uninstall, scaffold, and discovery commands |
+| `skills` | `skills` | `skills.*` |
+| `scenes` | `scenes` | scene-library and pipeline-library commands |
+| `engine` | `engine` | `engine.*`, `sessions.*`, `worktrees.*` |
+| `git` | — | `git.*` |
+| `memory` | — | `memory.*` |
+| `market` | — | `market.*` |
+| `workspace` | — | filesystem, project rules, scripts, and worktree baselines |
+| `projects` | — | `projects.*` |
+| `artifacts` | — | `artifacts.*` |
+| `workspace-search` | — | `workspace.search`, `workspace.cancel_search` |
+| `usage` | — | `usage.*` |
+| `voice` | — | `voice.*` |
+| `issues` | — | issue and delegation commands |
+| `canvas` | `canvas` | `canvas.*` |
+| `document` | — | `document.compile` |
 | `scene-runtime` | `scene-runtime` | — (dispatches scene hooks and scheduled transitions) |
+| `scene-commands` | — | scene application, artifacts, scheduling, and pipeline execution |
+| `terminal` | `terminal` | `terminal.*` |
 | `cost` | `cost` | `cost.session` |
 | `keymap` | `keymap` | `keymap.get`, `keymap.set` |
 | `kernel` | — | `kernel.scopes`, `kernel.services`, `kernel.commands`, `kernel.plugins`, `kernel.set_enabled`, `kernel.configure` |
@@ -204,58 +218,48 @@ plugins. Both are themselves kernel plugins.
 
 ## Migration status
 
-**Migrated** — the fifteen plugins above, plus the boot path for all three hosts.
+The application migration is complete:
 
-- `codetwo-core` — `CoreApp::boot(AppConfig)`.
-- `codetwo-tui` — fully plugin-booted, and trims itself (`.without("scenes")`, `"keymap"`,
-  `"market"`) because a terminal frontend does not need them.
-- The **desktop** — `setup()` boots the graph and takes `store`, `engine`, `skills`, `scenes`,
-  `plugin-hub`, `providers`, `bus`, `keymap`, `scene-runtime`, `cost` and `paths` out of it. The
-  ~180 lines that constructed them, the scene-hook and cost pumps, and `feed_cost_tracker` are
-  gone. Its one genuine difference — the authenticated browser MCP on Codex sessions — is a
-  replacement `engine` plugin registered at boot (`EnginePlugin::with_builder`), not a forked boot
-  sequence. `reload_scenes` announces `ScenesChanged` and the engine and hook runtime follow;
-  nothing updates them by hand.
+- `codetwo-core` boots the built-in graph through `CoreApp::boot(AppConfig)`. Worktrees,
+  workspace I/O and search, projects, artifacts, canvas/document compilation, terminal/PTY/tmux,
+  usage, voice, issues/delegation, scene commands, pipelines, memory, Git, market, skills and the
+  engine all contribute commands from plugin scopes.
+- `codetwo-tui` boots that graph and consumes its typed event and engine services. It trims plugins
+  it does not need through `AppConfig` rather than constructing a separate application.
+- The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
+  event-bus and canvas services to its streaming protocol adapter.
+- The desktop registers five host plugins — `automation`, `browser`, `desktop-events`, `lsp` and
+  `remote` — beside the core registry. Its authenticated browser MCP remains a replacement
+  `engine` builder, the one host-specific construction seam. That engine also declares the browser
+  host service as a requirement, so disabling `browser` unloads the engine and its
+  automation/remote dependents instead of leaving a tool pointed at a dead socket.
+- The Tauri command table contains one entry, `call`. The TypeScript bridge has one native
+  `invoke`, which calls it. There are no compatibility business wrappers or duplicated
+  `AppState` service handles.
 
-The 185 `#[tauri::command]` wrappers still exist and still work; new surface should go through
-`call()` instead.
+The `desktop-events` plugin is deliberately host plumbing rather than a business API: it turns
+core broadcast events into Tauri window events and reloads with either source service. Browser
+persistence remains native host state because it backs Tauri webviews, while the authenticated
+broker task, socket cleanup, native webviews, and public command surface are all owned by the
+`browser` plugin scope.
 
-**Not yet migrated** — one plugin per row, each a mechanical move of an existing module plus its
-wrappers:
+### Adding another subsystem
 
-| subsystem | module | rough command surface | notes |
-|---|---|---|---|
-| worktrees | `worktree.rs` | 12 | core plugin |
-| canvas | `canvas.rs` | 14 | core plugin |
-| terminal / pty | `term.rs`, `pty.rs`, `tmux.rs` | 10 | core plugin |
-| usage | `usage.rs` | 6 | core plugin; `cost` is done |
-| workspace & search | `workspace.rs`, `workspace_search.rs` | 8 | core plugin |
-| issues & delegation | `issues.rs`, `delegate.rs` | 6 | core plugin |
-| voice | `voice/` | 3 | core plugin |
-| automation | desktop `automation.rs` | 7 | desktop plugin (needs `AppHandle`) |
-| browser | desktop `browser.rs` | 9 | desktop plugin (needs `AppHandle`) |
-| LSP | desktop `lsp.rs` | 4 | desktop plugin |
-| remote control | `crates/server` | 6 | desktop plugin |
+1. Add a `Plugin` implementation and declare every service it consumes in `inject`.
+2. Register all commands, tasks and cleanup on the supplied `Context`.
+3. Add it to the core registry, or to the relevant host registry when it requires host-native
+   types such as `AppHandle`.
+4. Call its `subsystem.verb` commands through `CoreApp::call`; do not add another bridge wrapper.
+5. Test that its commands exist while active and disappear when the plugin or a required
+   dependency is disabled.
 
-### The recipe
-
-1. Add `crates/core/src/app/plugins/<name>.rs` with a `Plugin` impl.
-2. Move the state into a `Service` in `app/service.rs`; declare what it needs in `inject`.
-3. Move each `#[tauri::command]` body into a `ctx.command("<name>.<verb>", …)`. Most are two lines.
-4. Register in `builtin_registry()` and add the name to `BUILTIN`.
-5. Point the frontend at `call("<name>.<verb>", …)` and delete the wrapper, the handler-table
-   entry, and the `AppState` field.
-6. Add a test to `crates/core/tests/app_graph.rs`: it loads, it contributes its commands, and
-   turning its dependency off takes it down cleanly.
-
-Desktop-only subsystems (browser, LSP, automation, remote control) become plugins registered by the
-desktop into the same graph, not core plugins — same recipe, different registry:
+Desktop-only registration follows the same loader contract:
 
 ```rust
 let mut registry = codetwo_core::app::plugins::builtin_registry();
-registry.register_arc(Box::new(move || Arc::new(BrowserPlugin::new(app_handle.clone()))));
-CoreApp::boot_with(AppConfig::new(&data_dir).with("browser", PluginEntry::default()), registry)
+registry.register(move || {
+    BrowserPlugin::new(app_handle.clone(), socket_path.clone(), master_key.clone())
+});
+let config = AppConfig::new(&data_dir).with("browser", PluginEntry::default());
+let app = CoreApp::boot_with(config, registry).await?;
 ```
-
-They can hold an `AppHandle` and still be ordinary members of the graph: their services are
-ordinary services, and their commands are reachable through `call()` like every other.

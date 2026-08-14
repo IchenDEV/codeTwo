@@ -57,6 +57,7 @@ impl Plugin for SceneRuntimePlugin {
         })?;
 
         let submit = engine.0.clone();
+        let submit_scope = ctx.weak();
         let runtime = Arc::new(SceneRuntime::new(
             scenes.library(),
             engine.skills(),
@@ -64,11 +65,13 @@ impl Plugin for SceneRuntimePlugin {
             artifacts,
             Box::new(move |op| {
                 let engine = submit.clone();
-                tokio::spawn(async move {
-                    if let Err(error) = engine.submit(op).await {
-                        tracing::warn!("hook prompt submission failed: {error}");
-                    }
-                });
+                if let Some(ctx) = submit_scope.upgrade() {
+                    ctx.spawn(async move {
+                        if let Err(error) = engine.submit(op).await {
+                            tracing::warn!("hook prompt submission failed: {error}");
+                        }
+                    });
+                }
             }),
             bus.0.clone(),
         ));
@@ -175,7 +178,9 @@ fn feed(
     event: &Event,
 ) {
     match event {
-        Event::Models { session, current, .. } if !current.is_empty() => {
+        Event::Models {
+            session, current, ..
+        } if !current.is_empty() => {
             if let Ok(Some(record)) = store.get_session(session) {
                 cost.set_session_model(session, record.provider.as_str(), current);
             }
@@ -197,7 +202,9 @@ fn feed(
         Event::Usage { session, .. } | Event::ContextWindow { session, .. } => session,
         _ => return,
     };
-    let due = last_emit.get(session).is_none_or(|at| at.elapsed() >= Duration::from_secs(1));
+    let due = last_emit
+        .get(session)
+        .is_none_or(|at| at.elapsed() >= Duration::from_secs(1));
     if !due {
         return;
     }

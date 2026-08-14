@@ -8,6 +8,7 @@
 use crate::app::service::StoreService;
 use crate::app::{json, take_args};
 use crate::memory::MemorySettings;
+use crate::session::MemoryAccess;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
 use serde_json::Value;
@@ -53,7 +54,9 @@ impl Plugin for MemoryPlugin {
             let store = write.clone();
             async move {
                 let args: SettingsArgs = take_args(args)?;
-                store.set_memory_settings(args.settings).map_err(PluginError::new)?;
+                store
+                    .set_memory_settings(args.settings)
+                    .map_err(PluginError::new)?;
                 Ok(Value::Bool(true))
             }
         })?;
@@ -100,7 +103,11 @@ impl Plugin for MemoryPlugin {
             let store = stats.clone();
             async move {
                 let args: ProjectArgs = take_args(args)?;
-                json(store.memory_stats(&args.project_path).map_err(PluginError::new)?)
+                json(
+                    store
+                        .memory_stats(&args.project_path)
+                        .map_err(PluginError::new)?,
+                )
             }
         })?;
 
@@ -119,7 +126,12 @@ impl Plugin for MemoryPlugin {
                 let args: AddArgs = take_args(args)?;
                 json(
                     store
-                        .add_memory(&args.project_path, &args.category, &args.content, args.pinned)
+                        .add_memory(
+                            &args.project_path,
+                            &args.category,
+                            &args.content,
+                            args.pinned,
+                        )
                         .map_err(PluginError::new)?,
                 )
             }
@@ -135,7 +147,9 @@ impl Plugin for MemoryPlugin {
             let store = pinned.clone();
             async move {
                 let args: FlagArgs = take_args(args)?;
-                store.set_memory_pinned(&args.id, args.value).map_err(PluginError::new)?;
+                store
+                    .set_memory_pinned(&args.id, args.value)
+                    .map_err(PluginError::new)?;
                 Ok(Value::Bool(true))
             }
         })?;
@@ -145,7 +159,27 @@ impl Plugin for MemoryPlugin {
             let store = active.clone();
             async move {
                 let args: FlagArgs = take_args(args)?;
-                store.set_memory_active(&args.id, args.value).map_err(PluginError::new)?;
+                store
+                    .set_memory_active(&args.id, args.value)
+                    .map_err(PluginError::new)?;
+                Ok(Value::Bool(true))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct PolicyArgs {
+            session: String,
+            read: MemoryAccess,
+            write: MemoryAccess,
+        }
+        let policy = store.clone();
+        ctx.command("memory.set_session_policy", move |args| {
+            let store = policy.clone();
+            async move {
+                let args: PolicyArgs = take_args(args)?;
+                store
+                    .set_session_memory_policy(&args.session, args.read, args.write)
+                    .map_err(PluginError::new)?;
                 Ok(Value::Bool(true))
             }
         })?;
@@ -158,7 +192,11 @@ impl Plugin for MemoryPlugin {
             let store = store.clone();
             async move {
                 let args: SessionArgs = take_args(args)?;
-                json(store.list_memory_receipts(&args.session).map_err(PluginError::new)?)
+                json(
+                    store
+                        .list_memory_receipts(&args.session)
+                        .map_err(PluginError::new)?,
+                )
             }
         })?;
         Ok(())
