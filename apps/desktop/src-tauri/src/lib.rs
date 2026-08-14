@@ -19,6 +19,7 @@ mod browser;
 mod browser_mcp;
 mod host_events;
 mod lsp;
+mod mcp_executable;
 mod remote;
 
 use std::sync::Arc;
@@ -77,8 +78,9 @@ pub fn run() {
             app.manage(browser::BrowserState::load(&data_dir));
 
             let canvas_gate = CanvasFeatureGate::disabled();
+            let mcp_command = mcp_executable::stage(&std::env::current_exe()?, &data_dir)?;
             let desktop_mcp = DesktopMcpConfig {
-                command: std::env::current_exe()?.to_string_lossy().into_owned(),
+                command: mcp_command.to_string_lossy().into_owned(),
                 socket_path: browser_socket_path.to_string_lossy().into_owned(),
                 master_key: browser_master_key.clone(),
             };
