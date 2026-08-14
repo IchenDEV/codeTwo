@@ -57,6 +57,13 @@ pub enum Op {
         request_id: String,
         option_id: Option<String>,
     },
+    /// Answer an outstanding structured question. `accept` carries form content keyed by field;
+    /// `decline` means the user skipped it, `cancel` aborts what the agent was asking about.
+    AnswerElicitation {
+        session: SessionId,
+        request_id: String,
+        answer: crate::elicitation::ElicitationAnswer,
+    },
     SetPermissionMode {
         session: SessionId,
         mode: crate::permission::PermissionMode,
@@ -177,6 +184,13 @@ pub enum Event {
         options: Vec<(String, String)>,
         #[serde(default)]
         context: crate::permission::PermissionContext,
+    },
+    /// The agent asked the user a structured question (ACP `elicitation/create`) — Claude Code's
+    /// `AskUserQuestion`, an MCP form elicitation. Answered with [`Op::AnswerElicitation`].
+    ElicitationRequest {
+        session: SessionId,
+        request_id: String,
+        form: crate::elicitation::ElicitationForm,
     },
     Usage {
         session: SessionId,
@@ -490,6 +504,7 @@ mod tests {
                         option_kinds: Default::default(),
                         sequence: 1,
                         context: Default::default(),
+                        form: None,
                     }],
                 },
             },

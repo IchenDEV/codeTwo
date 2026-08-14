@@ -68,6 +68,7 @@ async fn plugins_contribute_the_app_surface() {
         "artifacts.get",
         "canvas.feature_state",
         "document.compile",
+        "engine.answer_elicitation",
         "git.status",
         "issues.delegations",
         "market.catalog",

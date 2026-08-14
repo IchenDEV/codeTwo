@@ -150,7 +150,55 @@ export interface SessionInfo {
   activity?: SessionActivity;
 }
 
-export type PendingInputKind = "permission";
+export type PendingInputKind = "permission" | "elicitation";
+
+/** What a client renders for one elicitation field (core: `ElicitationFieldKind`). */
+export type ElicitationFieldKind =
+  | "text"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "select"
+  | "multi_select";
+
+export interface ElicitationOption {
+  /** What travels back to the agent. */
+  value: string;
+  label: string;
+  description?: string | null;
+  /** Longer content (mockups, snippets) shown while the option is focused. */
+  preview?: string | null;
+}
+
+export interface ElicitationField {
+  key: string;
+  kind: ElicitationFieldKind;
+  title?: string | null;
+  description?: string | null;
+  required: boolean;
+  options?: ElicitationOption[];
+  /** Set when this is the free-text "Other" box belonging to the named field. */
+  custom_answer_for?: string | null;
+}
+
+/**
+ * A structured question from the agent (ACP `elicitation/create`) — Claude Code's
+ * `AskUserQuestion`, or an MCP form elicitation. The core normalizes the JSON Schema so every
+ * frontend renders the same shape.
+ */
+export interface ElicitationForm {
+  message: string;
+  tool_call_id?: string | null;
+  fields: ElicitationField[];
+}
+
+/** Content values the core accepts back; anything else is dropped when the answer is sanitized. */
+export type ElicitationContent = Record<string, string | string[] | number | boolean>;
+
+export type ElicitationAnswer =
+  | { action: "accept"; content: ElicitationContent }
+  | { action: "decline" }
+  | { action: "cancel" };
 
 export type PermissionContextKind =
   | "acp"
@@ -177,6 +225,8 @@ export interface PendingInput {
   options: [string, string][];
   sequence: number;
   context?: PermissionContext;
+  /** Present on `elicitation` inputs: the question to render instead of an approval prompt. */
+  form?: ElicitationForm | null;
 }
 
 export type RunFailureReason = "provider_error" | "interrupted";
@@ -420,6 +470,12 @@ export type CoreEvent =
       title: string;
       options: [string, string][];
       context?: PermissionContext;
+    }
+  | {
+      event: "elicitation_request";
+      session: string;
+      request_id: string;
+      form: ElicitationForm;
     }
   | { event: "usage"; session: string; input_tokens: number; output_tokens: number }
   | {
@@ -871,6 +927,20 @@ export async function answerPermission(session: string, requestId: string, optio
       session,
       request_id: requestId,
       option_id: optionId,
+    });
+  }
+}
+
+export async function answerElicitation(
+  session: string,
+  requestId: string,
+  answer: ElicitationAnswer,
+): Promise<void> {
+  if (inTauri) {
+    await call("engine.answer_elicitation", {
+      session,
+      request_id: requestId,
+      answer,
     });
   }
 }

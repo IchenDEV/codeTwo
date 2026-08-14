@@ -17,8 +17,9 @@ use serde_json::{Map, Value};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::acp::wire::{
-    AgentCaps, ContentBlock, PermissionOption, PermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SessionNotification, SessionUpdate, StopReason,
+    AgentCaps, ContentBlock, CreateElicitationRequest, CreateElicitationResponse, PermissionOption,
+    PermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SessionNotification,
+    SessionUpdate, StopReason,
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::activity::{ActivityTracker, TurnLease};
@@ -91,6 +92,30 @@ impl PermissionRouter {
                 Some((request_id, receiver))
             }
         }
+    }
+
+    /// Park a structured question. Unlike permissions there is no tracker-less fallback: an
+    /// elicitation only exists inside an accepted turn, which is exactly what the tracker owns.
+    fn park_elicitation(
+        &self,
+        session: &str,
+        form: crate::elicitation::ElicitationForm,
+    ) -> Option<(String, oneshot::Receiver<CreateElicitationResponse>)> {
+        self.tracker
+            .as_ref()
+            .and_then(|tracker| tracker.park_elicitation(session, form))
+    }
+
+    fn answer_elicitation_for_session(
+        &self,
+        session: &str,
+        request_id: &str,
+        answer: crate::elicitation::ElicitationAnswer,
+    ) -> bool {
+        self.tracker
+            .as_ref()
+            .map(|tracker| tracker.answer_elicitation(session, request_id, answer))
+            .unwrap_or(false)
     }
 
     /// Resolve a parked request. Returns false if the id was unknown (already answered/expired).
@@ -250,6 +275,17 @@ fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Opt
     } else {
         kind
     }
+}
+
+/// What we tell the agent we can do at `initialize`.
+///
+/// Only form elicitation so far. It matters more than it looks: the Claude adapter routes its
+/// built-in `AskUserQuestion` tool through `elicitation/create` *only* when this is advertised,
+/// and otherwise degrades the whole question into an allow/reject permission prompt that shows the
+/// tool's name and none of its questions. URL elicitation stays unadvertised — we have nowhere
+/// honest to send the user — and `fs` remains unclaimed, so agents keep doing their own file I/O.
+fn client_capabilities() -> Value {
+    serde_json::json!({"elicitation": {"form": {}}})
 }
 
 fn is_mcp_elicitation(req: &RequestPermissionRequest) -> bool {
@@ -1221,6 +1257,34 @@ impl ClientHandler for SessionHandler {
         };
         RequestPermissionResponse { outcome }
     }
+
+    /// A structured question from the agent (Claude Code's `AskUserQuestion`, an MCP form
+    /// elicitation). Unlike a permission request this is never auto-answered: no policy can know
+    /// what the user would have picked, and the permission modes govern what the agent may *do*,
+    /// not what it may ask. Anything we can't render — URL mode, a schema with no answerable field
+    /// — is declined, which tells the agent "nothing was chosen" and lets the turn continue.
+    async fn create_elicitation(&self, req: CreateElicitationRequest) -> CreateElicitationResponse {
+        if !req.is_form() {
+            return CreateElicitationResponse::Decline;
+        }
+        let Some(form) = crate::elicitation::parse_form(
+            &req.message,
+            req.tool_call_id.as_deref(),
+            req.requested_schema.as_ref().unwrap_or(&Value::Null),
+        ) else {
+            return CreateElicitationResponse::Decline;
+        };
+        let Some((request_id, rx)) = self.router.park_elicitation(&self.session_id, form.clone())
+        else {
+            return CreateElicitationResponse::Decline;
+        };
+        self.emit(Event::ElicitationRequest {
+            session: self.session_id.clone(),
+            request_id,
+            form,
+        });
+        rx.await.unwrap_or(CreateElicitationResponse::Cancel)
+    }
 }
 
 struct SessionRuntime {
@@ -1419,6 +1483,19 @@ impl Engine {
         self.state
             .router
             .answer_for_session(session, request_id, option_id)
+    }
+
+    /// Answer a parked structured question. Returns false when the id is unknown or already
+    /// answered, or when it names a permission rather than an elicitation.
+    pub fn answer_elicitation(
+        &self,
+        session: &str,
+        request_id: &str,
+        answer: crate::elicitation::ElicitationAnswer,
+    ) -> bool {
+        self.state
+            .router
+            .answer_elicitation_for_session(session, request_id, answer)
     }
 
     /// The shared skill library (for the picker / management UI).
@@ -2067,7 +2144,7 @@ impl Engine {
             .await
             .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
         let init = client
-            .initialize(serde_json::json!({}))
+            .initialize(client_capabilities())
             .await
             .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
         let client = Arc::new(client);
@@ -2311,7 +2388,7 @@ impl Engine {
 
                 let replaying = handler.replay_flag();
                 let client = acp::spawn(&prov.launch, handler).await?;
-                let init = client.initialize(serde_json::json!({})).await?;
+                let init = client.initialize(client_capabilities()).await?;
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
@@ -3283,6 +3360,14 @@ impl Engine {
                 option_id,
             } => {
                 self.answer_permission(&session, &request_id, option_id.as_deref());
+            }
+
+            Op::AnswerElicitation {
+                session,
+                request_id,
+                answer,
+            } => {
+                self.answer_elicitation(&session, &request_id, answer);
             }
 
             Op::SetPermissionMode { session, mode } => {

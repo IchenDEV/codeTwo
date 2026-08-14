@@ -27,6 +27,7 @@ pub mod codex_runtime;
 pub mod context;
 pub mod cost;
 pub mod delegate;
+pub mod elicitation;
 pub mod engine;
 pub mod error;
 pub mod event;

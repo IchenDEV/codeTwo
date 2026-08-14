@@ -13,6 +13,7 @@ import {
   saveBrowserHistory,
 } from "./browser/history";
 import {
+  answerElicitation,
   answerPermission,
   applyPluginScaffold,
   archiveSession,
@@ -98,6 +99,7 @@ import {
   type ConfigOptionInfo,
   type CoreEvent,
   type DocBlock,
+  type ElicitationAnswer,
   type ExecutionPolicy,
   type Annotation,
   type GitStatus,
@@ -197,6 +199,7 @@ import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
+import { QuestionDialog } from "./session/QuestionDialog";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
 import { planChecklistMarkdown } from "./session/TurnCard";
@@ -1612,6 +1615,20 @@ export default function App() {
           setPermissionQueue((previous) => enqueuePermission(previous, request));
           return;
         }
+        if (ev.event === "elicitation_request") {
+          // A question joins the same queue as permissions: one agent, one blocked turn, one
+          // dialog at a time. `form` is what makes it render as a question instead of an approval.
+          setPermissionQueue((previous) =>
+            enqueuePermission(previous, {
+              session: ev.session,
+              requestId: ev.request_id,
+              title: ev.form.message,
+              options: [],
+              form: ev.form,
+            }),
+          );
+          return;
+        }
         if (ev.event === "turn_started") {
           markSessionStarted(ev.session, ev.request_id);
           const pendingRequest = pendingPromptRequestsRef.current.get(ev.session);
@@ -2051,18 +2068,30 @@ export default function App() {
     [createSession, setDocMode, t],
   );
 
+  const dequeuePermission = useCallback((session: string, requestId: string) => {
+    setPermissionQueue((previous) =>
+      previous.filter(
+        (request) => request.session !== session || request.requestId !== requestId,
+      ),
+    );
+  }, []);
+
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
       await answerPermission(permission.session, permission.requestId, optionId);
-      setPermissionQueue((previous) =>
-        previous.filter(
-          (request) =>
-            request.session !== permission.session || request.requestId !== permission.requestId,
-        ),
-      );
+      dequeuePermission(permission.session, permission.requestId);
     },
-    [permission],
+    [dequeuePermission, permission],
+  );
+
+  const answerQuestion = useCallback(
+    async (value: ElicitationAnswer) => {
+      if (!permission) return;
+      await answerElicitation(permission.session, permission.requestId, value);
+      dequeuePermission(permission.session, permission.requestId);
+    },
+    [dequeuePermission, permission],
   );
 
   /**
@@ -4356,7 +4385,15 @@ export default function App() {
         />
       )}
 
-      {permission && (
+      {permission?.form && (
+        <QuestionDialog
+          key={`${permission.session}:${permission.requestId}`}
+          form={permission.form}
+          onAnswer={(value) => void answerQuestion(value)}
+        />
+      )}
+
+      {permission && !permission.form && (
         <Dialog open onOpenChange={(o) => !o && void answer(null)}>
           <DialogContent>
             <DialogHeader>

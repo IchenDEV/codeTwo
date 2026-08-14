@@ -396,6 +396,29 @@ fn register_commands(
     })?;
 
     #[derive(Deserialize)]
+    struct ElicitationArgs {
+        session: String,
+        request_id: String,
+        answer: crate::elicitation::ElicitationAnswer,
+    }
+    let elicitation = engine.clone();
+    ctx.command("engine.answer_elicitation", move |args| {
+        let engine = elicitation.clone();
+        async move {
+            let args: ElicitationArgs = take_args(args)?;
+            engine
+                .submit(Op::AnswerElicitation {
+                    session: args.session,
+                    request_id: args.request_id,
+                    answer: args.answer,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
     struct ModeArgs {
         session: String,
         mode: PermissionMode,

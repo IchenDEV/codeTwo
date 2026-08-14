@@ -1,5 +1,6 @@
 import type {
   CoreEvent,
+  ElicitationForm,
   PermissionContext,
   ResolvedWorktreeBaseline,
   SessionActivity,
@@ -8,6 +9,11 @@ import type {
   WorktreeBaselineOption,
 } from "../bridge";
 
+/**
+ * One thing the agent is waiting on the user for. Permissions and structured questions (ACP
+ * elicitations) share the queue because they share the rule that matters: one turn, one blocked
+ * agent, answered oldest first. `form` is what tells them apart at render time.
+ */
 export interface PermissionQueueItem {
   session: string;
   requestId: string;
@@ -15,6 +21,8 @@ export interface PermissionQueueItem {
   options: [string, string][];
   sequence?: number;
   context?: PermissionContext;
+  /** Set when this is a question to answer rather than a permission to grant. */
+  form?: ElicitationForm | null;
 }
 
 export const IDLE_SESSION_ACTIVITY: SessionActivity = {
@@ -56,6 +64,7 @@ export function permissionsFromSessions(
         options: pending.options,
         sequence: pending.sequence,
         context: pending.context,
+        form: pending.form,
       }));
     })
     .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
@@ -80,7 +89,7 @@ export function shouldRenderSessionEvent(
   activeSession: string | null,
   awaitingCreationRequest: string | null = null,
 ): boolean {
-  if (event.event === "permission_request") return true;
+  if (event.event === "permission_request" || event.event === "elicitation_request") return true;
   if (
     event.event === "session_created" ||
     event.event === "session_title_changed" ||

@@ -173,6 +173,11 @@ async fn handle_request(
             let resp = handler.request_permission(req).await;
             serde_json::to_value(resp).map_err(RpcError::invalid_params)
         }
+        "elicitation/create" => {
+            let req = serde_json::from_value(params).map_err(RpcError::invalid_params)?;
+            let resp = handler.create_elicitation(req).await;
+            serde_json::to_value(resp).map_err(RpcError::invalid_params)
+        }
         "fs/read_text_file" => {
             let req = serde_json::from_value(params).map_err(RpcError::invalid_params)?;
             let resp = handler.read_text_file(req).await?;
