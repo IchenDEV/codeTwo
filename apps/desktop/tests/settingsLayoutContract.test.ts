@@ -16,6 +16,9 @@ describe("Settings page layout contract", () => {
 
   test("includes Usage as a first-class settings panel", () => {
     expect(source).toMatch(/\{ id: "usage", icon: ChartNoAxesColumn, labelKey: "usage\.title" \}/);
-    expect(source).toContain('{tab === "usage" && <UsagePanel />}');
+    expect(source).toContain('{tab === "usage" && (');
+    expect(source).toMatch(
+      /<UsagePanel[\s\S]*?provider=\{provider\}[\s\S]*?providerNames=\{providerNames\}[\s\S]*?\/>/,
+    );
   });
 });
