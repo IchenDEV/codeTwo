@@ -1,0 +1,3 @@
+.settings-titlebar {
+  height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
+}

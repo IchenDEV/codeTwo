@@ -182,6 +182,7 @@ export const en = {
 
   // usage panel
   "usage.title": "Usage",
+  "usage.description": "Review local model usage, rolling limits, and estimated cost.",
   "usage.rescan": "Rescan",
   "usage.scanning": "Scanning local transcripts…",
   "usage.window5h": "5h session",
@@ -1190,6 +1191,7 @@ export const zhCN: Record<StringKey, string> = {
   "environment.copyFailed": "无法复制项目路径。",
 
   "usage.title": "用量",
+  "usage.description": "查看本地模型用量、滚动限额与费用估算。",
   "usage.rescan": "重新扫描",
   "usage.scanning": "正在扫描本地会话记录…",
   "usage.window5h": "5 小时窗口",

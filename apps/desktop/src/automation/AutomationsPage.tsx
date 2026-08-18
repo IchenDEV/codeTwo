@@ -306,12 +306,12 @@ export function AutomationsPage({
 
   return (
     <div className="animate-page-in flex min-h-0 flex-1 flex-col bg-background">
-      <header data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-3 bg-card px-6 pt-2">
+      <header data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-3 bg-card pl-24 pr-6 pt-2">
         <Button variant="ghost" size="icon-sm" aria-label={t("automations.back")} onClick={onClose}>
           <ArrowLeft className="size-4" />
         </Button>
         <div data-tauri-drag-region className="min-w-0 flex-1">
-          <h1 className="text-title font-semibold">{t("automations.title")}</h1>
+          <h1 className="text-heading font-semibold">{t("automations.title")}</h1>
           <p className="truncate text-hint text-muted-foreground">{t("automations.subtitle")}</p>
         </div>
         <Button size="compact" onClick={() => setDraft(emptyDraft())} disabled={projects.length === 0}>
@@ -321,7 +321,10 @@ export function AutomationsPage({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <section className="flex min-w-80 basis-2/5 flex-col bg-sidebar/40">
+        <section
+          data-automation-list-pane
+          className="flex w-72 shrink-0 flex-col bg-sidebar/40 xl:w-80 2xl:w-96"
+        >
           <div className="flex items-center justify-between px-6 pb-2 pt-5">
             <h2 className="text-section font-semibold">{t("automations.tasks")}</h2>
             <span className="text-hint text-muted-foreground">{automations.length}</span>
@@ -374,11 +377,11 @@ export function AutomationsPage({
           </ScrollArea>
         </section>
 
-        <section className="min-w-0 flex-1">
+        <section data-automation-detail-pane className="@container/automation-detail min-w-0 flex-1">
           {selected ? (
             <ScrollArea className="h-full">
-              <div className="mx-auto max-w-3xl px-8 py-6">
-                <div className="flex items-start gap-4">
+              <div className="mx-auto w-full max-w-4xl px-6 py-6 @3xl/automation-detail:px-8">
+                <div className="flex flex-col gap-4 @3xl/automation-detail:flex-row @3xl/automation-detail:items-start">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h2 className="truncate text-display font-semibold tracking-tight">{selected.name}</h2>
@@ -392,19 +395,21 @@ export function AutomationsPage({
                         : t("automations.pausedHint")}
                     </p>
                   </div>
-                  <Button variant="secondary" size="compact" onClick={() => void runNow(selected)} disabled={activeRun !== null}>
-                    <Play />
-                    {activeRun ? t("automations.inProgress") : t("automations.runNow")}
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={t("automations.edit")} onClick={() => setDraft(editDraft(selected))}>
-                    <Pencil />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={selected.enabled ? t("automations.pause") : t("automations.resume")} onClick={() => void toggle(selected)}>
-                    {selected.enabled ? <Pause /> : <Play />}
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={t("automations.delete")} onClick={() => void remove(selected)}>
-                    <Trash2 className="text-destructive" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="secondary" size="compact" onClick={() => void runNow(selected)} disabled={activeRun !== null}>
+                      <Play />
+                      {activeRun ? t("automations.inProgress") : t("automations.runNow")}
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={t("automations.edit")} onClick={() => setDraft(editDraft(selected))}>
+                      <Pencil />
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={selected.enabled ? t("automations.pause") : t("automations.resume")} onClick={() => void toggle(selected)}>
+                      {selected.enabled ? <Pause /> : <Play />}
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={t("automations.delete")} onClick={() => void remove(selected)}>
+                      <Trash2 className="text-destructive" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="mt-6 rounded-(--ds-radius-module) bg-card p-4">
@@ -412,7 +417,7 @@ export function AutomationsPage({
                   <p className="mt-2 whitespace-pre-wrap text-ui leading-relaxed text-muted-foreground">{selected.prompt}</p>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="mt-4 grid grid-cols-1 gap-3 @2xl/automation-detail:grid-cols-2">
                   <div className="rounded-(--ds-radius-module) bg-card p-4">
                     <div className="flex items-center gap-2 text-hint text-muted-foreground">
                       <Folder className="size-3.5" />
