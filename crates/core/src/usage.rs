@@ -15,13 +15,290 @@ use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
+    process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
         Mutex, OnceLock,
     },
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader as AsyncBufReader},
+    process::Command,
+};
+
+use crate::provider::{which, ProviderId};
+
+/// Whether Code2 could obtain a provider-owned quota snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaStatus {
+    Available,
+    Unavailable,
+    Unsupported,
+}
+
+/// Stable reason codes let the frontend explain failures without exposing subprocess output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuotaReason {
+    CliNotFound,
+    QueryFailed,
+    UnsupportedProvider,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderQuotaWindow {
+    /// Percentage consumed, as reported by the provider. Clamped to 0–100 for rendering.
+    pub used_percent: f32,
+    /// Provider-defined rolling-window size. `None` means the provider omitted the duration.
+    pub window_minutes: Option<i64>,
+    /// Unix seconds at which the provider says this window resets.
+    pub resets_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderQuotaCredits {
+    pub has_credits: bool,
+    pub unlimited: bool,
+    /// Kept as text because providers may return fractional balances.
+    pub balance: Option<String>,
+}
+
+/// A provider-owned quota result. Unsupported and unavailable states are explicit data so the UI
+/// cannot silently substitute local transcript estimates for an official account limit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProviderQuotaReport {
+    pub provider: String,
+    pub status: QuotaStatus,
+    pub reason: Option<QuotaReason>,
+    pub source: Option<String>,
+    pub plan: Option<String>,
+    pub limit_name: Option<String>,
+    pub windows: Vec<ProviderQuotaWindow>,
+    pub credits: Option<ProviderQuotaCredits>,
+    pub fetched_at_ms: i64,
+}
+
+impl ProviderQuotaReport {
+    fn unavailable(provider: &ProviderId, reason: QuotaReason) -> Self {
+        Self {
+            provider: provider.as_str().to_string(),
+            status: QuotaStatus::Unavailable,
+            reason: Some(reason),
+            source: None,
+            plan: None,
+            limit_name: None,
+            windows: Vec::new(),
+            credits: None,
+            fetched_at_ms: crate::session::now_millis(),
+        }
+    }
+
+    fn unsupported(provider: &ProviderId) -> Self {
+        Self {
+            provider: provider.as_str().to_string(),
+            status: QuotaStatus::Unsupported,
+            reason: Some(QuotaReason::UnsupportedProvider),
+            source: None,
+            plan: None,
+            limit_name: None,
+            windows: Vec::new(),
+            credits: None,
+            fetched_at_ms: crate::session::now_millis(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexRateLimitsResponse {
+    rate_limits: CodexRateLimitSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexRateLimitSnapshot {
+    #[serde(default)]
+    limit_name: Option<String>,
+    #[serde(default)]
+    plan_type: Option<String>,
+    #[serde(default)]
+    primary: Option<CodexRateLimitWindow>,
+    #[serde(default)]
+    secondary: Option<CodexRateLimitWindow>,
+    #[serde(default)]
+    credits: Option<CodexCreditsSnapshot>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexRateLimitWindow {
+    used_percent: f32,
+    #[serde(default)]
+    window_duration_mins: Option<i64>,
+    #[serde(default)]
+    resets_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexCreditsSnapshot {
+    #[serde(default)]
+    has_credits: bool,
+    #[serde(default)]
+    unlimited: bool,
+    #[serde(default)]
+    balance: Option<String>,
+}
+
+/// Read the selected provider's current quota without guessing limits from local token activity.
+pub async fn provider_quota(provider: &ProviderId) -> ProviderQuotaReport {
+    match provider {
+        ProviderId::Codex => match codex_quota().await {
+            Ok(report) => report,
+            Err(CodexQuotaError::CliNotFound) => {
+                ProviderQuotaReport::unavailable(provider, QuotaReason::CliNotFound)
+            }
+            Err(CodexQuotaError::QueryFailed) => {
+                ProviderQuotaReport::unavailable(provider, QuotaReason::QueryFailed)
+            }
+        },
+        _ => ProviderQuotaReport::unsupported(provider),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodexQuotaError {
+    CliNotFound,
+    QueryFailed,
+}
+
+/// Ask the installed Codex CLI for its account rate limits over the official local app-server
+/// protocol. Authentication remains owned by Codex; Code2 neither reads nor stores credentials.
+async fn codex_quota() -> Result<ProviderQuotaReport, CodexQuotaError> {
+    let executable = which("codex").ok_or(CodexQuotaError::CliNotFound)?;
+    let mut child = Command::new(executable)
+        .args(["app-server", "--stdio"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| CodexQuotaError::QueryFailed)?;
+
+    let mut stdin = child.stdin.take().ok_or(CodexQuotaError::QueryFailed)?;
+    let stdout = child.stdout.take().ok_or(CodexQuotaError::QueryFailed)?;
+
+    write_rpc(
+        &mut stdin,
+        serde_json::json!({
+            "method": "initialize",
+            "id": 1,
+            "params": {
+                "clientInfo": { "name": "codetwo", "title": "Code2", "version": env!("CARGO_PKG_VERSION") },
+                "capabilities": null
+            }
+        }),
+    )
+    .await?;
+
+    let exchange = async {
+        let mut lines = AsyncBufReader::new(stdout).lines();
+        while let Some(line) = lines
+            .next_line()
+            .await
+            .map_err(|_| CodexQuotaError::QueryFailed)?
+        {
+            let message: serde_json::Value =
+                serde_json::from_str(&line).map_err(|_| CodexQuotaError::QueryFailed)?;
+            match message.get("id").and_then(serde_json::Value::as_i64) {
+                Some(1) if message.get("error").is_some() => {
+                    return Err(CodexQuotaError::QueryFailed);
+                }
+                Some(1) => {
+                    write_rpc(
+                        &mut stdin,
+                        serde_json::json!({ "method": "initialized", "params": {} }),
+                    )
+                    .await?;
+                    write_rpc(
+                        &mut stdin,
+                        serde_json::json!({ "method": "account/rateLimits/read", "id": 2, "params": null }),
+                    )
+                    .await?;
+                }
+                Some(2) if message.get("error").is_some() => {
+                    return Err(CodexQuotaError::QueryFailed);
+                }
+                Some(2) => {
+                    let result = message.get("result").ok_or(CodexQuotaError::QueryFailed)?;
+                    return parse_codex_quota(result);
+                }
+                _ => {}
+            }
+        }
+        Err(CodexQuotaError::QueryFailed)
+    };
+
+    let result = tokio::time::timeout(Duration::from_secs(8), exchange)
+        .await
+        .map_err(|_| CodexQuotaError::QueryFailed)?;
+    drop(stdin);
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    result
+}
+
+async fn write_rpc(
+    stdin: &mut tokio::process::ChildStdin,
+    message: serde_json::Value,
+) -> Result<(), CodexQuotaError> {
+    let mut bytes = serde_json::to_vec(&message).map_err(|_| CodexQuotaError::QueryFailed)?;
+    bytes.push(b'\n');
+    stdin
+        .write_all(&bytes)
+        .await
+        .map_err(|_| CodexQuotaError::QueryFailed)?;
+    stdin
+        .flush()
+        .await
+        .map_err(|_| CodexQuotaError::QueryFailed)
+}
+
+fn parse_codex_quota(result: &serde_json::Value) -> Result<ProviderQuotaReport, CodexQuotaError> {
+    let response: CodexRateLimitsResponse =
+        serde_json::from_value(result.clone()).map_err(|_| CodexQuotaError::QueryFailed)?;
+    let snapshot = response.rate_limits;
+    let windows = [snapshot.primary, snapshot.secondary]
+        .into_iter()
+        .flatten()
+        .map(|window| ProviderQuotaWindow {
+            used_percent: window.used_percent.clamp(0.0, 100.0),
+            window_minutes: window.window_duration_mins,
+            resets_at: window.resets_at,
+        })
+        .collect();
+    let credits = snapshot.credits.map(|credits| ProviderQuotaCredits {
+        has_credits: credits.has_credits,
+        unlimited: credits.unlimited,
+        balance: credits.balance,
+    });
+
+    Ok(ProviderQuotaReport {
+        provider: ProviderId::Codex.as_str().to_string(),
+        status: QuotaStatus::Available,
+        reason: None,
+        source: Some("codex_app_server".into()),
+        plan: snapshot.plan_type,
+        limit_name: snapshot.limit_name,
+        windows,
+        credits,
+        fetched_at_ms: crate::session::now_millis(),
+    })
+}
 
 /// One provider usage event, or one compatibility aggregate for legacy callers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -897,17 +1174,15 @@ pub struct SourceUsage {
 pub fn by_source_detailed(records: &[UsageRecord], cutoff_ms: i64) -> Vec<SourceUsage> {
     let mut map: BTreeMap<String, SourceUsage> = BTreeMap::new();
     for r in records.iter().filter(|r| r.at_ms >= cutoff_ms) {
-        let entry = map
-            .entry(r.source.clone())
-            .or_insert_with(|| SourceUsage {
-                source: r.source.clone(),
-                input_tokens: 0,
-                cached_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-                estimated_cost_usd: None,
-                unpriced_tokens: 0,
-            });
+        let entry = map.entry(r.source.clone()).or_insert_with(|| SourceUsage {
+            source: r.source.clone(),
+            input_tokens: 0,
+            cached_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            estimated_cost_usd: None,
+            unpriced_tokens: 0,
+        });
         entry.input_tokens += r.input_tokens;
         entry.cached_tokens += r.cached_tokens;
         entry.output_tokens += r.output_tokens;
@@ -934,6 +1209,61 @@ mod tests {
             model: None,
             dedupe_key: None,
         }
+    }
+
+    #[test]
+    fn parses_provider_owned_codex_quota() {
+        let result = serde_json::json!({
+            "rateLimits": {
+                "limitId": "codex",
+                "limitName": "Codex",
+                "planType": "pro",
+                "primary": {
+                    "usedPercent": 27,
+                    "windowDurationMins": 300,
+                    "resetsAt": 1_800_000_000
+                },
+                "secondary": {
+                    "usedPercent": 104,
+                    "windowDurationMins": 10080,
+                    "resetsAt": 1_800_500_000
+                },
+                "credits": {
+                    "hasCredits": true,
+                    "unlimited": false,
+                    "balance": "12.5"
+                }
+            }
+        });
+
+        let report = parse_codex_quota(&result).expect("valid app-server response");
+        assert_eq!(report.status, QuotaStatus::Available);
+        assert_eq!(report.provider, "codex");
+        assert_eq!(report.plan.as_deref(), Some("pro"));
+        assert_eq!(report.limit_name.as_deref(), Some("Codex"));
+        assert_eq!(report.windows.len(), 2);
+        assert_eq!(report.windows[0].used_percent, 27.0);
+        assert_eq!(report.windows[0].window_minutes, Some(300));
+        assert_eq!(
+            report.windows[1].used_percent, 100.0,
+            "rendered percentages are bounded"
+        );
+        assert_eq!(
+            report
+                .credits
+                .and_then(|credits| credits.balance)
+                .as_deref(),
+            Some("12.5")
+        );
+    }
+
+    #[tokio::test]
+    async fn unsupported_provider_quota_is_explicit() {
+        let report = provider_quota(&ProviderId::Grok).await;
+        assert_eq!(report.provider, "grok");
+        assert_eq!(report.status, QuotaStatus::Unsupported);
+        assert_eq!(report.reason, Some(QuotaReason::UnsupportedProvider));
+        assert!(report.windows.is_empty());
     }
 
     /// Real shape from `~/.claude/projects/**/*.jsonl`: the bulk of the input lives in the cache
@@ -1223,7 +1553,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    fn priced(at_ms: i64, input: u64, cached: u64, output: u64, source: &str, model: Option<&str>) -> UsageRecord {
+    fn priced(
+        at_ms: i64,
+        input: u64,
+        cached: u64,
+        output: u64,
+        source: &str,
+        model: Option<&str>,
+    ) -> UsageRecord {
         UsageRecord {
             at_ms,
             input_tokens: input,
@@ -1238,15 +1575,32 @@ mod tests {
     #[test]
     fn prices_match_by_prefix_and_unknown_models_stay_unpriced() {
         // Dated full IDs resolve through their family prefix.
-        let claude = priced(0, 1_000_000, 1_000_000, 1_000_000, "claude", Some("claude-opus-4-5-20251101"));
+        let claude = priced(
+            0,
+            1_000_000,
+            1_000_000,
+            1_000_000,
+            "claude",
+            Some("claude-opus-4-5-20251101"),
+        );
         assert_eq!(record_cost_usd(&claude), Some(5.0 + 0.5 + 25.0));
         // The legacy expensive Opus generation is matched by its more specific prefix.
-        let old_opus = priced(0, 1_000_000, 0, 0, "claude", Some("claude-opus-4-1-20250805"));
+        let old_opus = priced(
+            0,
+            1_000_000,
+            0,
+            0,
+            "claude",
+            Some("claude-opus-4-1-20250805"),
+        );
         assert_eq!(record_cost_usd(&old_opus), Some(15.0));
         let codex = priced(0, 2_000_000, 0, 100_000, "codex", Some("gpt-5.1-codex"));
         assert_eq!(record_cost_usd(&codex), Some(2.0 * 1.25 + 0.1 * 10.0));
         // Unknown or missing models never guess a price.
-        assert_eq!(record_cost_usd(&priced(0, 1, 0, 1, "x", Some("mystery-lm"))), None);
+        assert_eq!(
+            record_cost_usd(&priced(0, 1, 0, 1, "x", Some("mystery-lm"))),
+            None
+        );
         assert_eq!(record_cost_usd(&priced(0, 1, 0, 1, "x", None)), None);
     }
 
@@ -1256,10 +1610,10 @@ mod tests {
         // now sits mid-bucket; the last bucket must still contain it.
         let now = 100 * hour + 1_234_567;
         let records = vec![
-            rec(now - 1000, 10, 1, "codex"),            // current (partial) bucket
-            rec(now - 2 * hour, 100, 10, "codex"),      // two buckets back
-            rec(now - 2 * hour, 200, 20, "claude"),     // same bucket, other source
-            rec(now - 500 * hour, 999, 99, "claude"),   // outside the window entirely
+            rec(now - 1000, 10, 1, "codex"),          // current (partial) bucket
+            rec(now - 2 * hour, 100, 10, "codex"),    // two buckets back
+            rec(now - 2 * hour, 200, 20, "claude"),   // same bucket, other source
+            rec(now - 500 * hour, 999, 99, "claude"), // outside the window entirely
         ];
         let h = history(&records, now, 3600, 4);
         assert_eq!(h.bucket_count, 4);
@@ -1269,8 +1623,15 @@ mod tests {
         let claude = h.series.iter().find(|s| s.source == "claude").unwrap();
         let codex = h.series.iter().find(|s| s.source == "codex").unwrap();
         assert_eq!(codex.totals.iter().sum::<u64>(), 11 + 110);
-        assert_eq!(codex.totals[3], 11, "newest record lands in the last bucket");
-        assert_eq!(claude.totals.iter().sum::<u64>(), 220, "out-of-window record dropped");
+        assert_eq!(
+            codex.totals[3], 11,
+            "newest record lands in the last bucket"
+        );
+        assert_eq!(
+            claude.totals.iter().sum::<u64>(),
+            220,
+            "out-of-window record dropped"
+        );
         // Both series in one bucket keeps them separate.
         let two_hours_back = codex.totals.iter().position(|&t| t == 110).unwrap();
         assert_eq!(claude.totals[two_hours_back], 220);
@@ -1286,10 +1647,17 @@ mod tests {
         let detailed = by_source_detailed(&records, i64::MIN);
         let claude = detailed.iter().find(|s| s.source == "claude").unwrap();
         assert_eq!(claude.total_tokens, 1_000_000 + 55);
-        assert_eq!(claude.estimated_cost_usd, Some(3.0), "only the priced record is estimated");
+        assert_eq!(
+            claude.estimated_cost_usd,
+            Some(3.0),
+            "only the priced record is estimated"
+        );
         assert_eq!(claude.unpriced_tokens, 55);
         let codex = detailed.iter().find(|s| s.source == "codex").unwrap();
-        assert_eq!(codex.estimated_cost_usd, None, "nothing priceable ⇒ no estimate");
+        assert_eq!(
+            codex.estimated_cost_usd, None,
+            "nothing priceable ⇒ no estimate"
+        );
         assert_eq!(codex.unpriced_tokens, 33);
         // The cutoff excludes older records.
         assert!(by_source_detailed(&records, 11).is_empty());
@@ -1298,7 +1666,8 @@ mod tests {
     #[test]
     fn scanners_retain_the_model_for_pricing() {
         // Claude: model rides on message.model.
-        let dir = std::env::temp_dir().join(format!("codetwo-usage-model-{}", uuid::Uuid::new_v4()));
+        let dir =
+            std::env::temp_dir().join(format!("codetwo-usage-model-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("claude.jsonl"),

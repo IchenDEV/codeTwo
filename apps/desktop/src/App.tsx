@@ -1251,6 +1251,10 @@ export default function App() {
     if (m) return m.name;
     return currentModel ?? providers.find((p) => p.id === provider)?.display_name ?? provider;
   }, [configOptions, models, currentModel, providers, provider]);
+  const providerDisplayNames = useMemo(
+    () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
+    [providers],
+  );
 
   // Sessions store a provider id; show the registry's display name where we have one.
   const displayProvider = useCallback(
@@ -3575,6 +3579,7 @@ export default function App() {
           onReset={resetBinding}
           onResetAll={resetAllBindings}
           providers={providers}
+          provider={provider}
           projectPath={activeProject ?? cwd}
           project={projects.find((project) => project.path === activeProject) ?? null}
           onProjectWorktreeMode={updateProjectWorktreeMode}
@@ -4240,7 +4245,14 @@ export default function App() {
         />
       )}
       {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
-      {showUsage && <UsageModal onClose={() => setShowUsage(false)} />}
+      {showUsage && (
+        <UsageModal
+          provider={provider}
+          providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
+          providerNames={providerDisplayNames}
+          onClose={() => setShowUsage(false)}
+        />
+      )}
       {showMissionControl && (
         <MissionControlDialog
           sessions={sessions}

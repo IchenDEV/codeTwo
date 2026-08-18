@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CircleAlert, RefreshCw } from "lucide-react";
 import {
+  providerQuota,
   usageHistory,
   usageReport,
+  type ProviderQuotaReason,
+  type ProviderQuotaReport,
+  type ProviderQuotaWindow,
   type SourceUsage,
   type UsageHistoryReport,
   type UsageReport,
+  type UsageWindow,
 } from "../bridge";
-import { useLanguage } from "../i18n";
+import { useLanguage, type Translate } from "../i18n";
+import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -22,6 +28,163 @@ const WINDOW_LABEL_KEYS = {
 
 const CHART_W = 672;
 const CHART_H = 96;
+
+function quotaWindowLabel(minutes: number | null, t: Translate): string {
+  if (minutes === 300) return t("quota.window5h");
+  if (minutes === 10_080) return t("quota.windowWeekly");
+  if (minutes != null && minutes >= 43_000 && minutes <= 45_000) return t("quota.windowMonthly");
+  if (minutes == null) return t("quota.windowUnknown");
+  if (minutes % 1_440 === 0) return t("quota.windowDays", { count: minutes / 1_440 });
+  if (minutes % 60 === 0) return t("quota.windowHours", { count: minutes / 60 });
+  return t("quota.windowMinutes", { count: minutes });
+}
+
+function compactDuration(milliseconds: number): string {
+  const minutes = Math.max(1, Math.ceil(milliseconds / 60_000));
+  const days = Math.floor(minutes / 1_440);
+  const hours = Math.floor((minutes % 1_440) / 60);
+  const mins = minutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
+function quotaResetLabel(
+  resetsAt: number | null,
+  locale: string,
+  now: number,
+  t: Translate,
+): string {
+  if (resetsAt == null) return t("quota.resetUnknown");
+  const resetMs = resetsAt * 1_000;
+  if (resetMs <= now) return t("quota.resetting");
+  const absolute = new Intl.DateTimeFormat(locale, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(resetMs);
+  return t("quota.resetsIn", { duration: compactDuration(resetMs - now), time: absolute });
+}
+
+function quotaReasonLabel(
+  reason: ProviderQuotaReason | null,
+  providerName: string,
+  t: Translate,
+): string {
+  switch (reason) {
+    case "cli_not_found":
+      return t("quota.cliNotFound", { provider: providerName });
+    case "query_failed":
+      return t("quota.queryFailed", { provider: providerName });
+    default:
+      return t("quota.unsupported", { provider: providerName });
+  }
+}
+
+/** Provider-reported capacity. The filled segment is deliberately the amount remaining. */
+export function ProviderQuotaMeter({
+  window,
+  now,
+}: {
+  window: ProviderQuotaWindow;
+  now: number;
+}) {
+  const { t, locale } = useLanguage();
+  const used = Math.min(100, Math.max(0, window.used_percent));
+  const remaining = Math.max(0, 100 - used);
+  const label = quotaWindowLabel(window.window_minutes, t);
+
+  return (
+    <div className="py-3 first:pt-0 last:pb-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-ui font-semibold">{label}</span>
+        <span className="shrink-0 font-mono text-ui font-semibold tabular-nums">
+          {t("quota.remaining", { percent: Math.round(remaining) })}
+        </span>
+      </div>
+      <div
+        className="my-2 h-2 overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label={t("quota.remainingLabel", { window: label })}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(remaining)}
+      >
+        <div
+          className={cn(
+            "h-full rounded-full bg-success transition-[width]",
+            remaining <= 20 && "bg-warning",
+            remaining <= 5 && "bg-destructive",
+          )}
+          style={{ width: `${remaining}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-fine text-muted-foreground">
+        <span>{t("quota.used", { percent: Math.round(used) })}</span>
+        <span className="font-mono tabular-nums">
+          {quotaResetLabel(window.resets_at, locale, now, t)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LocalUsageWindow({ window }: { window: UsageWindow }) {
+  const { t } = useLanguage();
+  const label = t(
+    WINDOW_LABEL_KEYS[window.label as keyof typeof WINDOW_LABEL_KEYS] ?? "usage.window5h",
+  );
+  const hasLimit = window.limit != null && window.fraction != null;
+  const remainingPercent = hasLimit ? Math.max(0, 100 - window.fraction! * 100) : null;
+  const remainingTokens = hasLimit ? Math.max(0, window.limit! - window.total_tokens) : null;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-ui">
+        <span className="font-semibold">{label}</span>
+        <span className="text-right font-mono text-hint text-muted-foreground">
+          {hasLimit
+            ? t("usage.localRemaining", {
+                percent: Math.round(remainingPercent!),
+                tokens: fmtTokens(remainingTokens!),
+              })
+            : t("usage.localUsed", { tokens: fmtTokens(window.total_tokens) })}
+        </span>
+      </div>
+      {hasLimit ? (
+        <div
+          className="my-1.5 h-2 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-label={t("usage.localRemainingLabel", { window: label })}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(remainingPercent!)}
+        >
+          <div
+            className={cn(
+              "h-full rounded-full bg-success transition-[width]",
+              remainingPercent! <= 20 && "bg-warning",
+              remainingPercent! <= 5 && "bg-destructive",
+            )}
+            style={{ width: `${remainingPercent}%` }}
+          />
+        </div>
+      ) : (
+        <p className="my-1 text-fine text-muted-foreground">{t("usage.localLimitUnknown")}</p>
+      )}
+      <div className="font-mono text-fine text-muted-foreground">
+        {t("usage.windowDetail", {
+          input: fmtTokens(window.input_tokens),
+          output: fmtTokens(window.output_tokens),
+          reset: fmtReset(window.resets_in_secs),
+        })}
+        {window.cached_tokens > 0 && (
+          <> · {t("usage.windowCache", { cached: fmtTokens(window.cached_tokens) })}</>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function TrendChart({ report, days }: { report: UsageHistoryReport; days: number }) {
   const { t, locale } = useLanguage();
@@ -166,37 +329,188 @@ function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof us
   );
 }
 
+function ProviderQuotaSection({
+  provider,
+  providerName,
+  report,
+  loading,
+  requestFailed,
+}: {
+  provider: string;
+  providerName: string;
+  report: ProviderQuotaReport | null;
+  loading: boolean;
+  requestFailed: boolean;
+}) {
+  const { t, locale } = useLanguage();
+  const unavailable = requestFailed || (report != null && report.status !== "available");
+  const unavailableReason = requestFailed ? "query_failed" : report?.reason ?? null;
+  const credits = report?.credits;
+  const showCredits = credits != null && (credits.has_credits || credits.unlimited);
+
+  return (
+    <section aria-labelledby="provider-quota-heading" className="space-y-3">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <ProviderIcon provider={provider} className="size-5 shrink-0" />
+        <div className="min-w-0">
+          <h2 id="provider-quota-heading" className="truncate text-ui font-semibold">
+            {t("quota.title")}
+          </h2>
+          <p className="truncate text-fine text-muted-foreground">
+            {providerName}
+            {report?.plan && <> · {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}</>}
+          </p>
+        </div>
+        {report?.status === "available" && (
+          <span className="ml-auto shrink-0 text-fine text-muted-foreground">
+            {report.source === "codex_app_server" ? t("quota.sourceCodex") : report.source}
+          </span>
+        )}
+      </div>
+
+      {loading && report == null ? (
+        <p className="py-4 text-center text-hint text-muted-foreground">
+          {t("quota.checking", { provider: providerName })}
+        </p>
+      ) : unavailable ? (
+        <div className="flex gap-2 bg-fill-quiet/40 px-3 py-3">
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <div>
+            <p className="text-ui font-medium">
+              {report?.status === "unsupported"
+                ? t("quota.unsupportedTitle")
+                : t("quota.unavailableTitle")}
+            </p>
+            <p className="mt-1 text-hint leading-relaxed text-muted-foreground">
+              {quotaReasonLabel(unavailableReason, providerName, t)}
+            </p>
+          </div>
+        </div>
+      ) : report ? (
+        <div className="py-3">
+          {report.windows.length > 0 ? (
+            <div className="divide-y">
+              {report.windows.map((window, index) => (
+                <ProviderQuotaMeter
+                  key={`${window.window_minutes ?? "unknown"}-${index}`}
+                  window={window}
+                  now={Date.now()}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-hint text-muted-foreground">{t("quota.noWindows")}</p>
+          )}
+
+          {showCredits && credits && (
+            <div className="mt-3 flex items-center gap-3 pt-3">
+              <span className="text-ui font-medium">{t("quota.credits")}</span>
+              <span className="ml-auto font-mono text-ui tabular-nums">
+                {credits.unlimited
+                  ? t("quota.unlimited")
+                  : t("quota.creditBalance", { balance: credits.balance ?? "—" })}
+              </span>
+            </div>
+          )}
+
+          <p className="mt-3 pt-3 text-fine text-muted-foreground">
+            {t("quota.updated", {
+              time: new Intl.DateTimeFormat(locale, {
+                hour: "numeric",
+                minute: "2-digit",
+                second: "2-digit",
+              }).format(report.fetched_at_ms),
+            })}
+          </p>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+export function quotaProviderFor(currentProvider: string, report: UsageReport | null): string {
+  return report?.by_source.some(([source]) => source === "codex") ? "codex" : currentProvider;
+}
+
 /** Rolling windows, provider trend, and local cost estimates shared by the settings page and modal. */
-function UsageView({ variant }: { variant: "panel" | "dialog" }) {
+function UsageView({
+  variant,
+  provider,
+  providerName,
+  providerNames,
+}: {
+  variant: "panel" | "dialog";
+  provider: string;
+  providerName: string;
+  providerNames: Record<string, string>;
+}) {
   const { t } = useLanguage();
   const [report, setReport] = useState<UsageReport | null>(null);
   const [history, setHistory] = useState<UsageHistoryReport | null>(null);
   const [days, setDays] = useState<7 | 30>(7);
   const [loading, setLoading] = useState(true);
+  const [quota, setQuota] = useState<ProviderQuotaReport | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const [quotaFailed, setQuotaFailed] = useState(false);
+  const quotaRequestRef = useRef(0);
+  const quotaProvider = quotaProviderFor(provider, report);
+  const quotaProviderName = providerNames[quotaProvider]
+    ?? (quotaProvider === provider ? providerName : quotaProvider);
+  const localReady = report != null;
 
-  const load = (range: 7 | 30) => {
+  const loadLocal = useCallback((range: 7 | 30) => {
     setLoading(true);
-    Promise.all([usageReport(), usageHistory(range)])
+    void Promise.all([usageReport(), usageHistory(range)])
       .then(([r, h]) => {
         setReport(r);
         setHistory(h);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  };
-  useEffect(() => load(days), [days]);
+  }, []);
+
+  const loadQuota = useCallback(async () => {
+    const request = ++quotaRequestRef.current;
+    setQuotaLoading(true);
+    setQuotaFailed(false);
+    try {
+      const next = await providerQuota(quotaProvider);
+      if (request === quotaRequestRef.current) setQuota(next);
+    } catch {
+      if (request === quotaRequestRef.current) {
+        setQuota(null);
+        setQuotaFailed(true);
+      }
+    } finally {
+      if (request === quotaRequestRef.current) setQuotaLoading(false);
+    }
+  }, [quotaProvider]);
+
+  useEffect(() => loadLocal(days), [days, loadLocal]);
+  useEffect(() => {
+    if (!localReady) return;
+    setQuota(null);
+    void loadQuota();
+    return () => {
+      quotaRequestRef.current += 1;
+    };
+  }, [loadQuota, localReady]);
 
   const bySource = history?.by_source ?? [];
+  const refreshing = loading || quotaLoading;
   const controls = (
     <>
       <Button
         variant="ghost"
         size="icon"
         className="size-6"
-        onClick={() => load(days)}
+        onClick={() => {
+          loadLocal(days);
+          void loadQuota();
+        }}
         title={t("usage.rescan")}
       >
-        <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+        <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
       </Button>
       <span className="ml-auto flex gap-1">
         {([7, 30] as const).map((range) => (
@@ -235,53 +549,29 @@ function UsageView({ variant }: { variant: "panel" | "dialog" }) {
         </div>
       )}
 
+      <ProviderQuotaSection
+        provider={quotaProvider}
+        providerName={quotaProviderName}
+        report={quota}
+        loading={quotaLoading}
+        requestFailed={quotaFailed}
+      />
+
       {loading && !report && (
-        <p className="text-hint text-muted-foreground">{t("usage.scanning")}</p>
+        <p className="mt-5 text-hint text-muted-foreground">{t("usage.scanning")}</p>
       )}
 
       {report && (
-        <div className="space-y-4">
+        <section aria-labelledby="local-activity-heading" className="mt-5 space-y-4">
+          <div>
+            <h2 id="local-activity-heading" className="text-ui font-semibold">
+              {t("usage.localTitle")}
+            </h2>
+            <p className="mt-1 text-fine text-muted-foreground">{t("usage.localDescription")}</p>
+          </div>
           <div className="space-y-3">
             {report.windows.map((w) => (
-              <div key={w.label}>
-                <div className="flex items-baseline justify-between text-ui">
-                  <span className="font-semibold">
-                    {t(WINDOW_LABEL_KEYS[w.label as keyof typeof WINDOW_LABEL_KEYS] ?? "usage.window5h")}
-                  </span>
-                  <span className="font-mono text-hint text-muted-foreground">
-                    {fmtTokens(w.total_tokens)}
-                    {w.limit != null && ` / ${fmtTokens(w.limit)}`}
-                    {w.fraction != null && ` · ${Math.round(w.fraction * 100)}%`}
-                  </span>
-                </div>
-                <div className="my-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded-full bg-primary transition-all",
-                      w.fraction != null && w.fraction >= 0.8 && "bg-warning",
-                    )}
-                    style={{
-                      width:
-                        w.fraction != null
-                          ? `${Math.min(100, w.fraction * 100)}%`
-                          : w.total_tokens > 0
-                            ? "100%"
-                            : "0%",
-                      opacity: w.fraction != null ? 1 : 0.35,
-                    }}
-                  />
-                </div>
-                <div className="font-mono text-fine text-muted-foreground">
-                  {t("usage.windowDetail", {
-                    input: fmtTokens(w.input_tokens),
-                    output: fmtTokens(w.output_tokens),
-                    reset: fmtReset(w.resets_in_secs),
-                  })}
-                  {w.cached_tokens > 0 && (
-                    <> · {t("usage.windowCache", { cached: fmtTokens(w.cached_tokens) })}</>
-                  )}
-                </div>
-              </div>
+              <LocalUsageWindow key={w.label} window={w} />
             ))}
           </div>
 
@@ -318,24 +608,54 @@ function UsageView({ variant }: { variant: "panel" | "dialog" }) {
           <p className="text-fine text-muted-foreground">
             {t("usage.scannedTranscripts", { count: report.transcripts })} {t("usage.estimateNote")}
           </p>
-        </div>
+        </section>
       )}
     </>
   );
 }
 
 /** Usage as a first-class settings page. */
-export function UsagePanel() {
-  return <UsageView variant="panel" />;
+export function UsagePanel({
+  provider,
+  providerName,
+  providerNames = {},
+}: {
+  provider: string;
+  providerName: string;
+  providerNames?: Record<string, string>;
+}) {
+  return (
+    <UsageView
+      variant="panel"
+      provider={provider}
+      providerName={providerName}
+      providerNames={providerNames}
+    />
+  );
 }
 
 /** Usage as a quick-access modal from the environment menu and command palette. */
-export function UsageModal({ onClose }: { onClose: () => void }) {
+export function UsageModal({
+  provider,
+  providerName,
+  providerNames = {},
+  onClose,
+}: {
+  provider: string;
+  providerName: string;
+  providerNames?: Record<string, string>;
+  onClose: () => void;
+}) {
   const { t } = useLanguage();
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-2xl">
-        <UsageView variant="dialog" />
+        <UsageView
+          variant="dialog"
+          provider={provider}
+          providerName={providerName}
+          providerNames={providerNames}
+        />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {t("usage.done")}

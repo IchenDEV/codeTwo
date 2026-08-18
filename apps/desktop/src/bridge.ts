@@ -2399,6 +2399,49 @@ export async function transcribeAudio(bytes: Uint8Array, ext = "webm"): Promise<
 
 // ---- usage tracking (G12) ----------------------------------------------------------------------
 
+export type ProviderQuotaStatus = "available" | "unavailable" | "unsupported";
+export type ProviderQuotaReason = "cli_not_found" | "query_failed" | "unsupported_provider";
+
+export interface ProviderQuotaWindow {
+  used_percent: number;
+  window_minutes: number | null;
+  /** Unix seconds, as reported by the provider. */
+  resets_at: number | null;
+}
+
+export interface ProviderQuotaCredits {
+  has_credits: boolean;
+  unlimited: boolean;
+  balance: string | null;
+}
+
+export interface ProviderQuotaReport {
+  provider: string;
+  status: ProviderQuotaStatus;
+  reason: ProviderQuotaReason | null;
+  source: string | null;
+  plan: string | null;
+  limit_name: string | null;
+  windows: ProviderQuotaWindow[];
+  credits: ProviderQuotaCredits | null;
+  fetched_at_ms: number;
+}
+
+export async function providerQuota(provider: string): Promise<ProviderQuotaReport> {
+  if (inTauri) return call<ProviderQuotaReport>("usage.provider_quota", { provider });
+  return {
+    provider,
+    status: "unsupported",
+    reason: "unsupported_provider",
+    source: null,
+    plan: null,
+    limit_name: null,
+    windows: [],
+    credits: null,
+    fetched_at_ms: Date.now(),
+  };
+}
+
 export interface UsageWindow {
   label: string;
   window_secs: number;
