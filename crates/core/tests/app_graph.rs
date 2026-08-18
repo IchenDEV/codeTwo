@@ -158,7 +158,13 @@ async fn a_legacy_work_automation_database_keeps_store_commands_available() {
         .await
         .expect("boot with legacy automation schema");
 
-    for plugin in ["store", "memory", "engine"] {
+    app.call(
+        "projects.add",
+        json!({ "path": dir.path().to_string_lossy() }),
+    )
+    .await
+    .expect("projects.add");
+    for plugin in ["store", "memory", "engine", "projects"] {
         assert_eq!(
             status_of(&app, plugin),
             Status::Active,
