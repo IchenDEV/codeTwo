@@ -122,7 +122,7 @@ export function EnvironmentPopover({
 }) {
   const t = useT();
   const toast = useToast();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const isRepo = git?.is_repo === true;
 
@@ -174,12 +174,8 @@ export function EnvironmentPopover({
   return (
     <Popover
       open={!suppressed && open}
-      onOpenChange={(next, eventDetails) => {
+      onOpenChange={(next) => {
         if (suppressed) return;
-        if (!next && eventDetails.reason === "outside-press") {
-          eventDetails.cancel();
-          return;
-        }
         setOpen(next);
         if (next) onRefresh();
       }}
@@ -200,7 +196,7 @@ export function EnvironmentPopover({
         align="end"
         alignOffset={-36}
         sideOffset={16}
-        className="w-72 rounded-lg p-2"
+        className="max-h-(--available-height) w-72 overflow-y-auto rounded-lg p-2"
         initialFocus={false}
       >
         <div className="mb-1 flex h-8 items-center gap-2 px-2">

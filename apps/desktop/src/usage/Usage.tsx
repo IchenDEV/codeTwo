@@ -166,11 +166,8 @@ function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof us
   );
 }
 
-/**
- * Usage panel: rolling 5h / week / month windows scanned from local provider transcripts, a
- * 7/30-day stacked trend by provider, and per-provider totals with a local cost estimate (≈).
- */
-export function UsageModal({ onClose }: { onClose: () => void }) {
+/** Rolling windows, provider trend, and local cost estimates shared by the settings page and modal. */
+function UsageView({ variant }: { variant: "panel" | "dialog" }) {
   const { t } = useLanguage();
   const [report, setReport] = useState<UsageReport | null>(null);
   const [history, setHistory] = useState<UsageHistoryReport | null>(null);
@@ -190,124 +187,155 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   useEffect(() => load(days), [days]);
 
   const bySource = history?.by_source ?? [];
+  const controls = (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-6"
+        onClick={() => load(days)}
+        title={t("usage.rescan")}
+      >
+        <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+      </Button>
+      <span className="ml-auto flex gap-1">
+        {([7, 30] as const).map((range) => (
+          <Button
+            key={range}
+            variant={days === range ? "secondary" : "ghost"}
+            size="compact"
+            className="px-2 text-fine"
+            onClick={() => setDays(range)}
+          >
+            {t(range === 7 ? "usage.range7d" : "usage.range30d")}
+          </Button>
+        ))}
+      </span>
+    </>
+  );
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+    <>
+      {variant === "dialog" ? (
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {t("usage.title")}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              onClick={() => load(days)}
-              title={t("usage.rescan")}
-            >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-            </Button>
-            <span className="ml-auto flex gap-1">
-              {([7, 30] as const).map((range) => (
-                <Button
-                  key={range}
-                  variant={days === range ? "secondary" : "ghost"}
-                  size="compact"
-                  className="px-2 text-fine"
-                  onClick={() => setDays(range)}
-                >
-                  {t(range === 7 ? "usage.range7d" : "usage.range30d")}
-                </Button>
-              ))}
-            </span>
+            {controls}
           </DialogTitle>
         </DialogHeader>
+      ) : (
+        <div className="pb-3">
+          <div className="flex items-center gap-2">
+            <h1 className="text-display font-semibold tracking-tight">{t("usage.title")}</h1>
+            {controls}
+          </div>
+          <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
+            {t("usage.description")}
+          </p>
+        </div>
+      )}
 
-        {loading && !report && (
-          <p className="text-hint text-muted-foreground">{t("usage.scanning")}</p>
-        )}
+      {loading && !report && (
+        <p className="text-hint text-muted-foreground">{t("usage.scanning")}</p>
+      )}
 
-        {report && (
-          <div className="space-y-4">
-            <div className="space-y-3">
-              {report.windows.map((w) => (
-                <div key={w.label}>
-                  <div className="flex items-baseline justify-between text-ui">
-                    <span className="font-semibold">
-                      {t(WINDOW_LABEL_KEYS[w.label as keyof typeof WINDOW_LABEL_KEYS] ?? "usage.window5h")}
-                    </span>
-                    <span className="font-mono text-hint text-muted-foreground">
-                      {fmtTokens(w.total_tokens)}
-                      {w.limit != null && ` / ${fmtTokens(w.limit)}`}
-                      {w.fraction != null && ` · ${Math.round(w.fraction * 100)}%`}
-                    </span>
-                  </div>
-                  <div className="my-1.5 h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "h-full rounded-full bg-primary transition-all",
-                        w.fraction != null && w.fraction >= 0.8 && "bg-warning",
-                      )}
-                      style={{
-                        width:
-                          w.fraction != null
-                            ? `${Math.min(100, w.fraction * 100)}%`
-                            : w.total_tokens > 0
-                              ? "100%"
-                              : "0%",
-                        opacity: w.fraction != null ? 1 : 0.35,
-                      }}
-                    />
-                  </div>
-                  <div className="font-mono text-fine text-muted-foreground">
-                    {t("usage.windowDetail", {
-                      input: fmtTokens(w.input_tokens),
-                      output: fmtTokens(w.output_tokens),
-                      reset: fmtReset(w.resets_in_secs),
-                    })}
-                    {w.cached_tokens > 0 && (
-                      <> · {t("usage.windowCache", { cached: fmtTokens(w.cached_tokens) })}</>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {history && (
-              <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-ui font-semibold">{t("usage.trendTitle")}</span>
-                  <span className="flex items-center gap-3">
-                    {history.history.series.map((s) => (
-                      <span key={s.source} className="flex items-center gap-1 text-fine text-muted-foreground">
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ background: seriesColor(s.source) }}
-                        />
-                        {s.source}
-                      </span>
-                    ))}
+      {report && (
+        <div className="space-y-4">
+          <div className="space-y-3">
+            {report.windows.map((w) => (
+              <div key={w.label}>
+                <div className="flex items-baseline justify-between text-ui">
+                  <span className="font-semibold">
+                    {t(WINDOW_LABEL_KEYS[w.label as keyof typeof WINDOW_LABEL_KEYS] ?? "usage.window5h")}
+                  </span>
+                  <span className="font-mono text-hint text-muted-foreground">
+                    {fmtTokens(w.total_tokens)}
+                    {w.limit != null && ` / ${fmtTokens(w.limit)}`}
+                    {w.fraction != null && ` · ${Math.round(w.fraction * 100)}%`}
                   </span>
                 </div>
-                <TrendChart report={history} days={days} />
+                <div className="my-1.5 h-2 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full bg-primary transition-all",
+                      w.fraction != null && w.fraction >= 0.8 && "bg-warning",
+                    )}
+                    style={{
+                      width:
+                        w.fraction != null
+                          ? `${Math.min(100, w.fraction * 100)}%`
+                          : w.total_tokens > 0
+                            ? "100%"
+                            : "0%",
+                      opacity: w.fraction != null ? 1 : 0.35,
+                    }}
+                  />
+                </div>
+                <div className="font-mono text-fine text-muted-foreground">
+                  {t("usage.windowDetail", {
+                    input: fmtTokens(w.input_tokens),
+                    output: fmtTokens(w.output_tokens),
+                    reset: fmtReset(w.resets_in_secs),
+                  })}
+                  {w.cached_tokens > 0 && (
+                    <> · {t("usage.windowCache", { cached: fmtTokens(w.cached_tokens) })}</>
+                  )}
+                </div>
               </div>
-            )}
-
-            {bySource.length === 0 ? (
-              <p className="text-hint text-muted-foreground">{t("usage.noTranscripts")}</p>
-            ) : (
-              <div className="space-y-2">
-                {bySource.map((usage) => (
-                  <ProviderRow key={usage.source} usage={usage} t={t} />
-                ))}
-              </div>
-            )}
-
-            <p className="text-fine text-muted-foreground">
-              {t("usage.scannedTranscripts", { count: report.transcripts })} {t("usage.estimateNote")}
-            </p>
+            ))}
           </div>
-        )}
 
+          {history && (
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-ui font-semibold">{t("usage.trendTitle")}</span>
+                <span className="flex items-center gap-3">
+                  {history.history.series.map((s) => (
+                    <span key={s.source} className="flex items-center gap-1 text-fine text-muted-foreground">
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: seriesColor(s.source) }}
+                      />
+                      {s.source}
+                    </span>
+                  ))}
+                </span>
+              </div>
+              <TrendChart report={history} days={days} />
+            </div>
+          )}
+
+          {bySource.length === 0 ? (
+            <p className="text-hint text-muted-foreground">{t("usage.noTranscripts")}</p>
+          ) : (
+            <div className="space-y-2">
+              {bySource.map((usage) => (
+                <ProviderRow key={usage.source} usage={usage} t={t} />
+              ))}
+            </div>
+          )}
+
+          <p className="text-fine text-muted-foreground">
+            {t("usage.scannedTranscripts", { count: report.transcripts })} {t("usage.estimateNote")}
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Usage as a first-class settings page. */
+export function UsagePanel() {
+  return <UsageView variant="panel" />;
+}
+
+/** Usage as a quick-access modal from the environment menu and command palette. */
+export function UsageModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <UsageView variant="dialog" />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {t("usage.done")}

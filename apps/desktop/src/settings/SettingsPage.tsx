@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BrainCircuit,
+  ChartNoAxesColumn,
   Folder,
   Globe,
   Keyboard,
@@ -35,6 +36,7 @@ import { resetAppearanceSettings } from "../appearance";
 import { useTheme } from "../theme";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
+import { UsagePanel } from "../usage/Usage";
 import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import {
@@ -51,6 +53,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+import "./settings-page.css";
+
 type SettingsTab =
   | "general"
   | "appearance"
@@ -58,6 +62,7 @@ type SettingsTab =
   | "memory"
   | "keybindings"
   | "providers"
+  | "usage"
   | "browser";
 
 const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label?: string }[] = [
@@ -67,6 +72,7 @@ const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
+  { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
   { id: "browser", icon: Globe, label: "Browser" },
 ];
 
@@ -172,7 +178,7 @@ function Page({ title, description, children }: { title: string; description: st
 
 /**
  * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
- * Providers)
+ * Providers, Usage)
  * with a Back row at the bottom, and one scrolling column of rows per category. The window-wide
  * takeover is deliberate — a settings surface with its own sidebar reads as a *place* you went to,
  * which is what earns the explicit way back.
@@ -350,7 +356,7 @@ export function SettingsPage({
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
       <aside className="glass-rail flex w-56 shrink-0 flex-col">
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
-        <div data-tauri-drag-region className="h-10 shrink-0" />
+        <div data-tauri-drag-region className="settings-titlebar shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
           {NAV.map(({ id, icon: Icon, labelKey, label }) => (
             <button
@@ -381,7 +387,11 @@ export function SettingsPage({
       {/* ---- the page ---- */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
         {/* The same 40px bar as the main shell's header, border and all. */}
-        <header data-tauri-drag-region className="flex items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5">
+        <header
+          data-settings-titlebar
+          data-tauri-drag-region
+          className="settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
+        >
           <span data-tauri-drag-region className="text-ui font-medium text-muted-foreground">
             {t("settings.title")}
           </span>
@@ -579,6 +589,8 @@ export function SettingsPage({
             )}
 
             {tab === "memory" && <MemorySettingsPage projectPath={projectPath} />}
+
+            {tab === "usage" && <UsagePanel />}
 
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>
