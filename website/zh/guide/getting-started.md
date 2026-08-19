@@ -1,6 +1,6 @@
 # 安装与运行
 
-Code2 尚未发布预编译安装包，需要从源码运行。项目由 Cargo 工作区和 Bun 构建的前端组成。
+C2 尚未发布预编译安装包，需要从源码运行。项目由 Cargo 工作区和 Bun 构建的前端组成。
 
 ## 环境要求
 
@@ -26,7 +26,7 @@ brew link --force zig@0.15
 要运行真实任务，你需要让以下至少一个智能体 CLI 出现在 `PATH` 中：
 
 - **Grok** — `grok`，原生支持 ACP，最简单且不依赖 Node。
-- **Claude Code** — Node/npx；Code2 会运行 `npx @agentclientprotocol/claude-agent-acp`。
+- **Claude Code** — Node/npx；C2 会运行 `npx @agentclientprotocol/claude-agent-acp`。
 - **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.1.14`。
 - **Cursor** — `cursor-agent`。
 - **OpenCode** — `opencode`。
@@ -34,7 +34,7 @@ brew link --force zig@0.15
 - **Kimi** — `kimi`，原生支持 ACP。
 - **ZCode（GLM）** — Node/npx；运行 `npx -y glm-acp-agent`，并设置 `Z_AI_API_KEY`。
 
-Code2 会为每个 Provider 显示健康状态，方便确认当前启动命令是否可用。完整说明见 [Provider 与接入方式](/zh/guide/providers)。
+C2 会为每个 Provider 显示健康状态，方便确认当前启动命令是否可用。完整说明见 [Provider 与接入方式](/zh/guide/providers)。
 
 ## 克隆并测试核心
 

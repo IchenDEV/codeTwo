@@ -657,7 +657,7 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE automation_runs
-             SET status='interrupted',finished_at=?1,error='Code2 closed before this run finished'
+             SET status='interrupted',finished_at=?1,error='C2 closed before this run finished'
              WHERE status IN ('starting','running','needs_attention')",
             [now],
         )

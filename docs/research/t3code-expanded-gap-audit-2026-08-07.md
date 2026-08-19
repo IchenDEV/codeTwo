@@ -1,16 +1,16 @@
-# t3code 扩大版本范围后的 Code2 差距审计
+# t3code 扩大版本范围后的 C2 差距审计
 
 > 审计日期：2026-08-07（Asia/Singapore）
 >
 > 上游：[`pingdotgg/t3code`](https://github.com/pingdotgg/t3code)
 >
-> 对照范围：稳定版 `v0.0.20`–`v0.0.31`、`v0.0.32-nightly.20260806.1015`、审计时的 `main`，以及 Code2 当前工作树
+> 对照范围：稳定版 `v0.0.20`–`v0.0.31`、`v0.0.32-nightly.20260806.1015`、审计时的 `main`，以及 C2 当前工作树
 >
 > 证据口径：只采用上游 release、tag、已合并 commit/PR 与对应源码；开放 PR、issue 和二手介绍不算已交付功能
 
 ## 结论
 
-扩大范围后，旧报告里最重要的三个“下一步”已经不再是缺口：Code2 当前工作树已经有 durable
+扩大范围后，旧报告里最重要的三个“下一步”已经不再是缺口：C2 当前工作树已经有 durable
 `AwaitingInput`、显式且固定完整 SHA 的 `origin/HEAD` worktree 基线，以及按完整 user turn
 分页的 transcript。继续围绕它们立项会重复建设。
 
@@ -18,11 +18,11 @@
 而是继续声称“已吸纳 v0.0.21 权限能力”之前必须补齐的本地正确性硬门槛：
 
 1. **原子、持久、首轮生效的 execution policy**：本轮已完成 core/schema/协议与 Desktop/TUI/remote 闭环；更新携带 request-id，core 只在 durable + live 同时提交后广播权威策略，失败则相关联报错并保持旧值。
-2. **项目正文搜索**：nightly 已交付；本轮已按 Code2 的 local-first 边界重写为有界、可取消的 `rg --json` 搜索，并接入 Desktop 全局快捷键与 Monaco 行列跳转。
-3. **安全 Markdown transcript 与工作区文件跳转**：稳定版 v0.0.30 已交付；Code2 当前 agent answer 仍是纯文本。
-4. **新会话模型预选 + 搜索与收藏**：稳定版 v0.0.21 已交付搜索/收藏；Code2 还能列动态模型，但创建首轮前 picker 被隐藏。
+2. **项目正文搜索**：nightly 已交付；本轮已按 C2 的 local-first 边界重写为有界、可取消的 `rg --json` 搜索，并接入 Desktop 全局快捷键与 Monaco 行列跳转。
+3. **安全 Markdown transcript 与工作区文件跳转**：稳定版 v0.0.30 已交付；C2 当前 agent answer 仍是纯文本。
+4. **新会话模型预选 + 搜索与收藏**：稳定版 v0.0.21 已交付搜索/收藏；C2 还能列动态模型，但创建首轮前 picker 被隐藏。
 5. **完成 SourceControlProvider driver seam**：本轮已把 PR 路径从纯 Git 拆到 provider-aware core，并完成 Desktop 能力/不可用原因展示；仍缺显式 self-hosted 配置、认证预检与非 GitHub adapter。
-6. **可导出、先脱敏的 provider/process diagnostics**：v0.0.23–v0.0.31 连续演进；Code2 仅把 provider stderr 写到 tracing。
+6. **可导出、先脱敏的 provider/process diagnostics**：v0.0.23–v0.0.31 连续演进；C2 仅把 provider stderr 写到 tracing。
 
 本轮之后，下一顺序应是先做 3，再并行评估 4 与 6；5 只在出现真实 provider 需求时继续 auth/self-hosted/non-GitHub adapter。
 prompt stash 有价值，但相对上述六项降为 P2 backlog。
@@ -42,7 +42,7 @@ prompt stash 有价值，但相对上述六项降为 P2 backlog。
 [`v0.0.31...1015`](https://github.com/pingdotgg/t3code/compare/v0.0.31...v0.0.32-nightly.20260806.1015) ·
 [`1015...main`](https://github.com/pingdotgg/t3code/compare/v0.0.32-nightly.20260806.1015...main)。
 
-Code2 是共享、未提交工作树；本报告按最终校验后的工作树更新状态。`ExecutionPolicy`、`initial_policy`、durable
+C2 是共享、未提交工作树；本报告按最终校验后的工作树更新状态。`ExecutionPolicy`、`initial_policy`、durable
 `sandbox_policy`、项目正文搜索和 SourceControl capability surface 均已形成可验证闭环；没有把尚未实现的 Markdown、模型收藏、
 diagnostics、认证预检或非 GitHub adapter 一并算作成功。
 
@@ -51,10 +51,10 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 
 状态定义：
 
-- **已吸纳**：当前 Code2 工作树存在同等行为，并且核心不变量已有测试或清晰实现。
+- **已吸纳**：当前 C2 工作树存在同等行为，并且核心不变量已有测试或清晰实现。
 - **部分吸纳**：已有基础，但上游用户结果仍缺一段；不能写成“已完成”。
 - **未吸纳**：当前代码没有对应入口或协议。
-- **不适配**：依赖不同产品边界，或会削弱 Code2 的 provider-neutral / local-first / fail-closed 约束。
+- **不适配**：依赖不同产品边界，或会削弱 C2 的 provider-neutral / local-first / fail-closed 约束。
 
 ## 先纠正既有两份研究中的过时结论
 
@@ -81,7 +81,7 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 
 ## v0.0.20–v0.0.31 逐版本差距矩阵
 
-| 版本 | 一手功能证据 | 当前 Code2 判定 | 仍需处理 / 明确不适配 |
+| 版本 | 一手功能证据 | 当前 C2 判定 | 仍需处理 / 明确不适配 |
 | --- | --- | --- | --- |
 | [`v0.0.20`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.20) | client setting fallback [#2099](https://github.com/pingdotgg/t3code/pull/2099) 与 release finalize [#2100](https://github.com/pingdotgg/t3code/pull/2100) | 没有新的产品能力可吸纳 | release 工程 **不适配为功能** |
 | [`v0.0.21`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.21) | OpenCode [#1758](https://github.com/pingdotgg/t3code/pull/1758)、Cursor ACP [#1355](https://github.com/pingdotgg/t3code/pull/1355)、model search/favorites [#2153](https://github.com/pingdotgg/t3code/pull/2153)、dynamic permission [#2311](https://github.com/pingdotgg/t3code/pull/2311) | providers、arbitrary ACP option routing 与 execution policy 完整性 **已吸纳**；model/config capability **部分吸纳** | 新会话模型预选/search/favorites 仍列候选 4 |
@@ -94,13 +94,13 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 | [`v0.0.28`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.28) | browser/annotations/agent automation [#3053](https://github.com/pingdotgg/t3code/pull/3053)、workspace files [#3087](https://github.com/pingdotgg/t3code/pull/3087)、right panel [#3116](https://github.com/pingdotgg/t3code/pull/3116)、origin worktree [#3157](https://github.com/pingdotgg/t3code/pull/3157)、diff scope [#3169](https://github.com/pingdotgg/t3code/pull/3169)、timeline minimap [#3587](https://github.com/pingdotgg/t3code/pull/3587)、WSL picker [#2751](https://github.com/pingdotgg/t3code/pull/2751) | browser UI/annotations、files/right dock、origin baseline、diff scope **已吸纳**；可操作同一可见页面的 authenticated agent broker **未吸纳**，所以整项只算 **部分** | content search 仍缺（后来由 nightly #4855 补齐）；agent browser automation 需单独 threat model，当前 catalog 中的 MCP command 不是实现证据；timeline minimap **未吸纳、低优先**；native mobile/WSL picker **不直接移植** |
 | [`v0.0.29`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.29) | snooze [#4311](https://github.com/pingdotgg/t3code/pull/4311)、Auto approvals [#4272](https://github.com/pingdotgg/t3code/pull/4272)、`t3.json` [#4317](https://github.com/pingdotgg/t3code/pull/4317)、prompt stash [#4453](https://github.com/pingdotgg/t3code/pull/4453)、SCM settings [#4204](https://github.com/pingdotgg/t3code/pull/4204)、diff totals [#4674](https://github.com/pingdotgg/t3code/pull/4674)、MCP credential lifetime [#4659](https://github.com/pingdotgg/t3code/pull/4659)、mobile/PiP/remote service [#3579](https://github.com/pingdotgg/t3code/pull/3579) / [#4397](https://github.com/pingdotgg/t3code/pull/4397) / [#4286](https://github.com/pingdotgg/t3code/pull/4286) | `.codetwo.json`、diff totals、core-owned permission state 与 durable/atomic ACP tool-kind ceiling **已吸纳**；prompt stash **未吸纳** | stash 降为 P2 backlog；Auto 没有 provider-neutral 可审计 reviewer contract，**不适配**；mobile/PiP/managed service 后置；MCP credential lifetime 由 ACP provider ownership 决定，不伪造 app 层保活 |
 | [`v0.0.30`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.30) | inline-code file links [#4726](https://github.com/pingdotgg/t3code/pull/4726)、stash survives provider switch [#4787](https://github.com/pingdotgg/t3code/pull/4787)、Appearance [#4715](https://github.com/pingdotgg/t3code/pull/4715)、snapshot gzip [#4788](https://github.com/pingdotgg/t3code/pull/4788)、WS deflate [#4705](https://github.com/pingdotgg/t3code/pull/4705)、mobile thread/OTA [#4717](https://github.com/pingdotgg/t3code/pull/4717) / [#4686](https://github.com/pingdotgg/t3code/pull/4686) | theme + terminal typography **部分吸纳**；snapshot 内容投影已做，但 transport compression 没做 | Markdown/file links 列为候选 3；stash 为 P2 backlog；interface/prompt/code fonts **部分吸纳、P2**；gzip/deflate 需先量测，不为对齐而加；mobile OTA **不适配** |
-| [`v0.0.31`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.31) | file focus/highlighting [#3979](https://github.com/pingdotgg/t3code/pull/3979)、thread shell [#4830](https://github.com/pingdotgg/t3code/pull/4830)、resource diagnostics [#2679](https://github.com/pingdotgg/t3code/pull/2679)、markdown choice [#4853](https://github.com/pingdotgg/t3code/pull/4853)、no external diff [#4854](https://github.com/pingdotgg/t3code/pull/4854)、app size [#4824](https://github.com/pingdotgg/t3code/pull/4824) | editor/LSP、shell/detail 分层、`--no-ext-diff` **已吸纳**；diagnostics **部分**；rendered markdown **未吸纳** | candidates 3/6；不复述“减少约 300MB”为 Code2 收益，必须单独量测自己的 bundle |
+| [`v0.0.31`](https://github.com/pingdotgg/t3code/releases/tag/v0.0.31) | file focus/highlighting [#3979](https://github.com/pingdotgg/t3code/pull/3979)、thread shell [#4830](https://github.com/pingdotgg/t3code/pull/4830)、resource diagnostics [#2679](https://github.com/pingdotgg/t3code/pull/2679)、markdown choice [#4853](https://github.com/pingdotgg/t3code/pull/4853)、no external diff [#4854](https://github.com/pingdotgg/t3code/pull/4854)、app size [#4824](https://github.com/pingdotgg/t3code/pull/4824) | editor/LSP、shell/detail 分层、`--no-ext-diff` **已吸纳**；diagnostics **部分**；rendered markdown **未吸纳** | candidates 3/6；不复述“减少约 300MB”为 C2 收益，必须单独量测自己的 bundle |
 
 ## Nightly 1015 的增量审计
 
-127 个 commit 按 Code2 结果归为以下组：
+127 个 commit 按 C2 结果归为以下组：
 
-| 增量组 | 上游一手证据 | Code2 当前状态 |
+| 增量组 | 上游一手证据 | C2 当前状态 |
 | --- | --- | --- |
 | 项目文件 picker + repo content search | [#4855](https://github.com/pingdotgg/t3code/pull/4855) / [`abc409c2`](https://github.com/pingdotgg/t3code/commit/abc409c2d4a072c2de46c9015f5cffff00dcc46b) | 路径 picker 与有界、可取消的 **正文 search 已吸纳** |
 | thread content search、durable title、pin | [#4959](https://github.com/pingdotgg/t3code/pull/4959)、[#5357](https://github.com/pingdotgg/t3code/pull/5357)、[#5312](https://github.com/pingdotgg/t3code/pull/5312) | search/title/pin **已吸纳**；sidebar 手工 regenerate title [#4810](https://github.com/pingdotgg/t3code/pull/4810) 未吸纳、低优先 |
@@ -109,18 +109,18 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 | endpoint-aware pairing | [#5360](https://github.com/pingdotgg/t3code/pull/5360) / [`fff6a5b0`](https://github.com/pingdotgg/t3code/commit/fff6a5b028f85122ffef8d3636f390f95ade5172) | endpoint picker、loopback exclusion、signed fragment **已吸纳** |
 | bounded replay / renderer OOM containment | [#5147](https://github.com/pingdotgg/t3code/pull/5147)、[#5148](https://github.com/pingdotgg/t3code/pull/5148) | transcript page/high-water、history projection、`content-visibility` **已吸纳同等不变量**；不照搬 Electron crash recovery |
 | MCP/tool snapshot payload projection | [#5482](https://github.com/pingdotgg/t3code/pull/5482)、[#5483](https://github.com/pingdotgg/t3code/pull/5483) / [`b7d1981b`](https://github.com/pingdotgg/t3code/commit/b7d1981b57f1c30908808d1939fd4edbc781de12) | snapshot-only terminal projection **已吸纳**；live events 保持完整 |
-| Ghostty terminal、managed tunnel/self-update、mobile-only UX | [#4860](https://github.com/pingdotgg/t3code/pull/4860)、[#5470](https://github.com/pingdotgg/t3code/pull/5470)、[#5053](https://github.com/pingdotgg/t3code/pull/5053) | Code2 使用 xterm + direct local server；这些实现栈 **不直接适配** |
-| settings sidebar search 与 UI polish | [#4682](https://github.com/pingdotgg/t3code/pull/4682) 及 [1015 compare](https://github.com/pingdotgg/t3code/compare/v0.0.31...v0.0.32-nightly.20260806.1015) | settings 仅三页，search **未吸纳、低优先**；局部视觉修复只按 Code2 rendered QA 采纳 |
+| Ghostty terminal、managed tunnel/self-update、mobile-only UX | [#4860](https://github.com/pingdotgg/t3code/pull/4860)、[#5470](https://github.com/pingdotgg/t3code/pull/5470)、[#5053](https://github.com/pingdotgg/t3code/pull/5053) | C2 使用 xterm + direct local server；这些实现栈 **不直接适配** |
+| settings sidebar search 与 UI polish | [#4682](https://github.com/pingdotgg/t3code/pull/4682) 及 [1015 compare](https://github.com/pingdotgg/t3code/compare/v0.0.31...v0.0.32-nightly.20260806.1015) | settings 仅三页，search **未吸纳、低优先**；局部视觉修复只按 C2 rendered QA 采纳 |
 
 ## Nightly 之后 `main` 的 5 个 commit
 
-| Commit | 上游行为 | Code2 处理 |
+| Commit | 上游行为 | C2 处理 |
 | --- | --- | --- |
-| [`ab3b55e2`](https://github.com/pingdotgg/t3code/commit/ab3b55e29ac20a6212f09e38f1983b856fd77695) | 澄清 Auto permission fallback 文案 | Code2 没有 Auto reviewer；现有 Ask/AcceptEdits/Yolo + ACP tool-kind ceiling 双轴更明确，**不移植 Auto 文案** |
-| [`99d91dda`](https://github.com/pingdotgg/t3code/commit/99d91ddaa4996203b675cbd086d5acaa642d4827) | unknown ACP approval 仍可操作 | Code2 保留 provider 给出的任意 option、durable FIFO 和 request-id routing；双轴 execution policy 也已持久化并在首轮生效，**已吸纳** |
+| [`ab3b55e2`](https://github.com/pingdotgg/t3code/commit/ab3b55e29ac20a6212f09e38f1983b856fd77695) | 澄清 Auto permission fallback 文案 | C2 没有 Auto reviewer；现有 Ask/AcceptEdits/Yolo + ACP tool-kind ceiling 双轴更明确，**不移植 Auto 文案** |
+| [`99d91dda`](https://github.com/pingdotgg/t3code/commit/99d91ddaa4996203b675cbd086d5acaa642d4827) | unknown ACP approval 仍可操作 | C2 保留 provider 给出的任意 option、durable FIFO 和 request-id routing；双轴 execution policy 也已持久化并在首轮生效，**已吸纳** |
 | [`470d4eb9`](https://github.com/pingdotgg/t3code/commit/470d4eb993eccd7d33cc9ad6f282c684d6760ac8) | mobile pending card 不遮正文 | 原生 mobile surface 不存在，**不适配** |
-| [`aa16c180`](https://github.com/pingdotgg/t3code/commit/aa16c180e5850ab94c022d3e41e18350c2117deb) | composer inline chip 对齐 | Code2 使用 BlockNote 自有 inline nodes；只能在 rendered QA 中核对，不照搬 CSS |
-| [`4f5834ba`](https://github.com/pingdotgg/t3code/commit/4f5834ba72c5905a318c00456dd21271b2fa9d6f) | 显式 thread 操作清除 `woke` | Code2 没有 snooze/woke 状态，**不虚构迁移** |
+| [`aa16c180`](https://github.com/pingdotgg/t3code/commit/aa16c180e5850ab94c022d3e41e18350c2117deb) | composer inline chip 对齐 | C2 使用 BlockNote 自有 inline nodes；只能在 rendered QA 中核对，不照搬 CSS |
+| [`4f5834ba`](https://github.com/pingdotgg/t3code/commit/4f5834ba72c5905a318c00456dd21271b2fa9d6f) | 显式 thread 操作清除 `woke` | C2 没有 snooze/woke 状态，**不虚构迁移** |
 
 ## 下一批 6 个实现候选
 
@@ -130,7 +130,7 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 返回的选项作为用户可操作能力；审计时 `main` 的 [`99d91dda`](https://github.com/pingdotgg/t3code/commit/99d91ddaa4996203b675cbd086d5acaa642d4827)
 又修复 unknown approval 不能操作的问题。两者共同要求“用户选择的策略在实际 turn 上生效”，而不只是把控件画出来。
 
-**Code2 初始差距与本轮结果。** Code2 把 approval `mode` 与先行 veto 的 ACP tool-kind ceiling（兼容字段名仍是 `sandbox`）正交；
+**C2 初始差距与本轮结果。** C2 把 approval `mode` 与先行 veto 的 ACP tool-kind ceiling（兼容字段名仍是 `sandbox`）正交；
 这是 ACP permission mediation，不是 OS、容器或路径隔离。初始审计时，
 [`Session`](../../crates/core/src/session.rs) 和 SQLite [`sessions`](../../crates/core/src/store.rs) 只存 `permission_mode`；
 [`revive_session`](../../crates/core/src/engine.rs) 把 sandbox 恢复为默认 `workspace_write`，`SetSandbox` 只改 live runtime；
@@ -138,13 +138,13 @@ note 或这 127 个 commit 中形成用户能力、兼容边界或安全/规模�
 最终实现加入 `ExecutionPolicy`、durable `sandbox_policy` migration、`initial_policy`、原子 op 与相关联权威回执；engine/store、
 [`SessionInfo`](../../apps/desktop/src/bridge.ts)、Desktop/TUI/remote 的创建、切换与 revive 全链已完成。最终 `cargo test --workspace`
 共 337/337 通过（core 270 个 unit + 28 个 integration、Tauri 4、Server 10 + WebSocket 2、TUI 23）；Desktop Bun 60/60
-测试、176 个 assertions 通过。明确边界是 tool-kind ceiling 只约束 provider 发给 Code2 的 ACP permission request；不能拦截
+测试、176 个 assertions 通过。明确边界是 tool-kind ceiling 只约束 provider 发给 C2 的 ACP permission request；不能拦截
 provider 未上报的 syscall、验证任意 request 内路径，或代替真实进程/文件系统隔离。UI 与文档均已按这个边界更正。
 
 **用户价值。** 用户选择 Read-only/Full access 的 ACP 权限策略后，第一轮、重启后和切回会话时都得到同一 pair；失败时相关联恢复
 core 的权威值，而不是 UI 显示一种策略、core 实际执行另一种策略。这是一致性不变量，不应排在视觉功能之后。
 
-**Code2 落点。** 给 `Session`/SQLite 加 versioned `sandbox_policy`（旧行迁移为当前兼容默认）；新增单一
+**C2 落点。** 给 `Session`/SQLite 加 versioned `sandbox_policy`（旧行迁移为当前兼容默认）；新增单一
 `SetExecutionPolicy { mode, sandbox, request_id? }` 与 store transaction，成功持久化后发布 `execution_policy_changed`；失败发相关联
 非终止 error 且不发布假成功；`NewSession` 接收可选初始双轴策略并在
 runtime、durable row、首个 `session/new` 之前一次建立。`SessionInfo` 暴露两轴；Desktop 在创建回执前冻结已捕获 pair，后续
@@ -171,7 +171,7 @@ fail-closed；事件/request id 要让 frontend 能确认是哪次更新；切�
 **用户价值。** 当前 `⌘P/@` 能找到文件名，却不能回答“这个函数/错误文本在哪里”；正文搜索补上工作区最基本的
 发现路径，并能直接打开文件到行。
 
-**Code2 落点。** [`workspace_search.rs`](../../crates/core/src/workspace_search.rs) 已增加 `WorkspaceContentMatch` 与异步
+**C2 落点。** [`workspace_search.rs`](../../crates/core/src/workspace_search.rs) 已增加 `WorkspaceContentMatch` 与异步
 `search_contents_with_cancellation(cwd, query, options, limit, cancellation)`；Tauri/bridge 增加只读 command；
 `crates/core/src/keymap.rs` 增加 `search_workspace`；Desktop 新增对话框并复用
 `App.tsx::openFileTab`/Monaco line reveal。Tauri 按 `(window, request_id)` 保存取消 token，并只接受已登记 project/session/worktree
@@ -200,10 +200,10 @@ child/sibling 拒绝、登记根 symlink 替换拒绝、linked worktree 与未�
 使用 sanitize schema、有限协议与 bounded highlight cache。v0.0.31 又让 rendered-markdown 选择跨 thread 保留
 [#4853](https://github.com/pingdotgg/t3code/pull/4853)。
 
-**用户价值。** Code2 当前 answer 中的标题、列表、表格、代码块都只是纯文本；用户也不能从 `` `src/foo.rs:42` ``
+**用户价值。** C2 当前 answer 中的标题、列表、表格、代码块都只是纯文本；用户也不能从 `` `src/foo.rs:42` ``
 跳到已有 Monaco/file pane。这是可读性和“回答 → 代码”闭环的共同缺口。
 
-**Code2 落点。** 新建 `apps/desktop/src/session/Markdown.tsx`，让 `TurnCard` 传 `cwd` 和受控
+**C2 落点。** 新建 `apps/desktop/src/session/Markdown.tsx`，让 `TurnCard` 传 `cwd` 和受控
 `onOpenFile(path,line,column)`；`App.tsx` 只通过现有 file pane 打开 workspace-relative file。依赖可选
 `react-markdown + remark-gfm + rehype-sanitize`；syntax highlight 复用现有 Shiki/Monaco 语言映射并设置 LRU byte/entry cap。
 
@@ -222,10 +222,10 @@ child/sibling 拒绝、登记根 symlink 替换拒绝、linked worktree 与未�
 [`settings.ts@66c326b8`](https://github.com/pingdotgg/t3code/blob/66c326b8c424ca1e3702232a4fe5a06f6ba2a525/packages/contracts/src/settings.ts)
 把 favorite 保存为 `(provider, model)`，没有把同名模型跨 provider 合并。
 
-**用户价值。** ACP provider 尤其 OpenCode 可能返回大量模型；Code2 已能动态展示它们，却会形成没有检索能力的长菜单。
+**用户价值。** ACP provider 尤其 OpenCode 可能返回大量模型；C2 已能动态展示它们，却会形成没有检索能力的长菜单。
 更基础的问题是新建草稿把 picker 隐藏到 durable session 创建之后，所以用户不能决定第一轮模型。
 
-**Code2 落点。** 先让 draft 使用 provider manifest 中现有 builtin choices；`NewSession` 增加可选初始 model，并在首个
+**C2 落点。** 先让 draft 使用 provider manifest 中现有 builtin choices；`NewSession` 增加可选初始 model，并在首个
 ACP `session/new` 发送。custom 或只能在 session initialize 后动态报告的 provider，草稿阶段明确显示“provider default”，不得伪造列表；
 若需求证明值得，再参考 v0.0.25 的 Cursor model probe [#2428](https://github.com/pingdotgg/t3code/pull/2428) 设计有界 preflight。
 随后在 `Composer.tsx::ModelPicker` 增加本地 query 和 star action；在 `models.ts` 先按 adapter authoritative id 建 stable key，
@@ -263,7 +263,7 @@ Desktop 现在显示 sanitized provider/remote/host/repository URL、provider-na
 尚缺显式 self-hosted allowlist/config、认证预检，以及
 真正的非 GitHub adapter。
 
-**剩余 Code2 落点。** 保持 `crates/core/src/git.rs` 只做 local Git；下一片把 auth probe 做成显式、可失败状态，并允许用户明确配置
+**剩余 C2 落点。** 保持 `crates/core/src/git.rs` 只做 local Git；下一片把 auth probe 做成显式、可失败状态，并允许用户明确配置
 self-hosted provider host。第二个真实需求出现后再加 GitLabCli，不因 enum 已能识别四家就声称四家都能创建。
 
 **依赖。** 继续使用明确 argv 的 `gh`；GitLab adapter 才按需依赖 `glab`。不要嵌入 vendor token SDK。
@@ -288,7 +288,7 @@ push failure、恶意 title/body，以及 driver contract tests。
 **用户价值。** “GUI 能开但 provider/ACP/PTY 不工作”目前只能让用户翻控制台；导出一份有限、可读的诊断包能显著缩短定位，
 也能量测资源问题而不是复述上游百分比。
 
-**Code2 落点。** 新增 core diagnostics ring：provider spawn/exit、ACP initialize capabilities、最后 N 行已脱敏 stderr、
+**C2 落点。** 新增 core diagnostics ring：provider spawn/exit、ACP initialize capabilities、最后 N 行已脱敏 stderr、
 pending input/activity revision、PTY/remote 状态；Settings 增加 Preview + Export JSON。资源 sample 作为用户打开 Diagnostics 后才启动的可选层，
 不要默认常驻。Tauri 用 save dialog 写用户选定路径。
 
@@ -311,7 +311,7 @@ Windows/macOS/Linux capability absence，以及开启/关闭 diagnostics 时的 
 
 **用户价值。** 用户可把一段未准备发送的复杂 prompt 暂存，先处理另一会话，再准确恢复，不必复制到外部便签。
 
-**Code2 落点。** 给 `DocEditor` 增加 `replaceBlocksRef`/serialize ref；新建 versioned local store，scope 至少包含
+**C2 落点。** 给 `DocEditor` 增加 `replaceBlocksRef`/serialize ref；新建 versioned local store，scope 至少包含
 canonical project/worktree identity + provider id（比上游仅 provider 更严，避免跨 repo 泄露）；Composer 增加 Save/Restore badge，
 Command Palette/keymap 增加 stash action。首版只保存 `DocBlock` 与创建时间，不保存文件正文或截图 bytes。
 
@@ -351,8 +351,8 @@ FIFO/eviction、restore-vs-newer-draft 冲突、Unicode/大 prompt，以及 relo
 - 无 provider-neutral、可审计 reviewer contract 的 AI `Auto` approvals。
 - t3code 的 Effect service/error 大重构、Electron lifecycle、Ghostty vendor、native resource-monitor 整套架构。
 - 后台自动 fetch、根据猜测默认分支、未知 host 自动当 GitHub、未经明确动作的 push/publish。
-- 上游具体模型版本、性能百分比、包体减少数字；只作为量测假设，不写成 Code2 已获收益。
-- snooze/woke 的状态机，直到 Code2 真正决定需要时间调度语义；不能为了跟随最新 main 先造字段。
+- 上游具体模型版本、性能百分比、包体减少数字；只作为量测假设，不写成 C2 已获收益。
+- snooze/woke 的状态机，直到 C2 真正决定需要时间调度语义；不能为了跟随最新 main 先造字段。
 
 ## 推荐实施顺序与完成证据
 
@@ -390,5 +390,5 @@ Desktop 与窄 viewport 的真实渲染和交互。原生 Tauri file open/save�
 ## 许可证与吸纳方式
 
 t3code 当前仓库的 [`LICENSE`](https://github.com/pingdotgg/t3code/blob/4f5834ba72c5905a318c00456dd21271b2fa9d6f/LICENSE)
-是 MIT。本文仍建议吸收产品行为和经过验证的不变量，按 Code2 的 Rust core + ACP + Tauri 边界重写；如果后续直接复制
+是 MIT。本文仍建议吸收产品行为和经过验证的不变量，按 C2 的 Rust core + ACP + Tauri 边界重写；如果后续直接复制
 上游的 substantial source，则必须保留相应版权与许可声明，并重新核对当时目标 commit 的许可证。

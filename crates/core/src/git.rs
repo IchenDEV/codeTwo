@@ -1,4 +1,4 @@
-//! Git state and review primitives shared by every Code2 client.
+//! Git state and review primitives shared by every C2 client.
 //!
 //! Paths are always passed to git as literal arguments after `--`; status and name lists use
 //! NUL-delimited porcelain output so whitespace and newlines in filenames are not ambiguous.
@@ -1445,7 +1445,7 @@ mod tests {
             let repo = Self { path };
             repo.git(&["init", "-q"]);
             repo.git(&["config", "user.email", "t@t.dev"]);
-            repo.git(&["config", "user.name", "CodeTwo Test"]);
+            repo.git(&["config", "user.name", "C2 Test"]);
             repo
         }
 
@@ -1467,7 +1467,7 @@ mod tests {
             }
             let repo = Self { path };
             repo.git(&["config", "user.email", "t@t.dev"]);
-            repo.git(&["config", "user.name", "CodeTwo Test"]);
+            repo.git(&["config", "user.name", "C2 Test"]);
             Some(repo)
         }
 

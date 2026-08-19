@@ -1,6 +1,6 @@
 //! The command registry — plugin-contributed app surface.
 //!
-//! This is the piece cordis does not need and we do. A Code2 frontend does not call Rust
+//! This is the piece cordis does not need and we do. A C2 frontend does not call Rust
 //! functions; it calls *names* (`git.status`, `memory.list`) across a Tauri IPC boundary, a
 //! WebSocket, or a TUI keybinding. If those names live in a hand-maintained dispatch table, then
 //! adding a feature means editing the middle of the app — which is precisely the coupling the

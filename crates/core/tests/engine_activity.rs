@@ -680,7 +680,7 @@ fn engine_startup_normalizes_an_unrecoverable_running_snapshot() {
             reason: RunFailureReason::Interrupted,
             ref message,
         } if turn_id == "orphaned-turn"
-            && message == "Code2 stopped before the turn finished"
+            && message == "C2 stopped before the turn finished"
     ));
     assert_eq!(
         store.get_session(&session.id).unwrap().unwrap().activity,

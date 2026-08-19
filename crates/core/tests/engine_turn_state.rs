@@ -235,7 +235,7 @@ async fn new_session_persistence_failure_emits_no_phantom_and_retains_manual_cle
     };
     git(&["init", "-q"]);
     git(&["config", "user.email", "test@codetwo.dev"]);
-    git(&["config", "user.name", "CodeTwo Test"]);
+    git(&["config", "user.name", "C2 Test"]);
     git(&["commit", "--allow-empty", "-qm", "init"]);
 
     let db_path = base.join("store.sqlite");

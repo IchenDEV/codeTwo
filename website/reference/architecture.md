@@ -1,6 +1,6 @@
 # Architecture
 
-Code2 is one Rust core with three frontends. Nothing in the core knows about a UI; frontends drive
+C2 is one Rust core with three frontends. Nothing in the core knows about a UI; frontends drive
 it through a small submission/event interface.
 
 ## Layers
@@ -51,7 +51,7 @@ at `session/new`) and auto-checkpoints the workspace before each turn.
 ## The ACP client
 
 A minimal, self-contained JSON-RPC 2.0 peer over async byte streams — child stdio in production, an
-in-memory duplex in tests. Hand-written wire types keep Code2 independent of any single adapter's
+in-memory duplex in tests. Hand-written wire types keep C2 independent of any single adapter's
 version churn; unknown update variants are logged and dropped rather than fatal.
 
 ## Persistence

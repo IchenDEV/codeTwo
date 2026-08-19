@@ -39,6 +39,6 @@ describe("desktop UI stack", () => {
     const designLaw = read("../../docs/design.md");
 
     expect(designLaw).toContain("selected AI Elements");
-    expect(designLaw).toContain("Code2 tokens and ACP data");
+    expect(designLaw).toContain("C2 tokens and ACP data");
   });
 });

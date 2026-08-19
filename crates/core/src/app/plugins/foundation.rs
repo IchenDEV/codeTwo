@@ -39,7 +39,7 @@ impl Plugin for PathsPlugin {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Where Code2 keeps its data on disk.")
+        Some("Where C2 keeps its data on disk.")
     }
 
     fn schema(&self) -> Option<Value> {

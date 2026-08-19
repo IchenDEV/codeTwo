@@ -1,6 +1,6 @@
 //! Read-only discovery of ChatGPT's signed local Codex runtime.
 //!
-//! CodeTwo never copies or modifies the host bundle or `config.toml`. A valid signed host may be
+//! C2 never copies or modifies the host bundle or `config.toml`. A valid signed host may be
 //! selected through `CODEX_PATH`; otherwise the pinned ACP adapter uses its own Codex dependency.
 
 use std::fs;
@@ -47,7 +47,7 @@ impl CodexRuntimeDiscovery {
             if codetwo_browser_ready {
                 capability.state = CapabilityState::Ready;
                 capability.reason = Some(
-                    "CodeTwo's authenticated local Browser controller is ready; it is the default browser backend."
+                    "C2's authenticated local Browser controller is ready; it is the default browser backend."
                         .into(),
                 );
                 capability.fix = None;
@@ -114,28 +114,28 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             None,
             "A verified ChatGPT host and Computer Use service were not found.",
-            Some("Install or repair ChatGPT and its Computer Use plugin, then restart CodeTwo."),
+            Some("Install or repair ChatGPT and its Computer Use plugin, then restart C2."),
         ),
         make_capability(
             ProviderCapabilityId::ChromeBrowser,
             CapabilityState::Unavailable,
             None,
             "A verified ChatGPT host and Chrome plugin were not found.",
-            Some("Install the OpenAI Chrome plugin and extension, then restart CodeTwo."),
+            Some("Install the OpenAI Chrome plugin and extension, then restart C2."),
         ),
         make_capability(
             ProviderCapabilityId::CodetwoBrowser,
             CapabilityState::Unavailable,
             None,
-            "CodeTwo Browser is available only in the macOS desktop runtime.",
-            Some("Open this provider in CodeTwo Desktop."),
+            "C2 Browser is available only in the macOS desktop runtime.",
+            Some("Open this provider in C2 Desktop."),
         ),
         make_capability(
             ProviderCapabilityId::Sites,
             CapabilityState::Unavailable,
             None,
             "The official OpenAI Sites plugin was not found in a verified ChatGPT host.",
-            Some("Install or enable the Sites plugin in ChatGPT, then restart CodeTwo."),
+            Some("Install or enable the Sites plugin in ChatGPT, then restart C2."),
         ),
     ];
 
@@ -146,7 +146,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unverified,
             config.sites_version.clone(),
             "The official OpenAI Sites plugin is enabled; account, workspace, and connector availability are verified on the first real call.",
-            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart CodeTwo."),
+            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart C2."),
         ),
         Err(error) => update_capability(
             &mut capabilities,
@@ -154,7 +154,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             None,
             &format!("Codex config could not be parsed: {error}"),
-            Some("Repair $CODEX_HOME/config.toml and restart CodeTwo; CodeTwo will not modify it."),
+            Some("Repair $CODEX_HOME/config.toml and restart C2; C2 will not modify it."),
         ),
         Ok(_) => {}
     }
@@ -177,7 +177,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             evidence.host_version.clone(),
             reason,
-            Some("Reinstall ChatGPT from OpenAI, then restart CodeTwo."),
+            Some("Reinstall ChatGPT from OpenAI, then restart C2."),
         );
         update_capability(
             &mut capabilities,
@@ -185,7 +185,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             evidence.host_version.clone(),
             reason,
-            Some("Reinstall ChatGPT from OpenAI, then restart CodeTwo."),
+            Some("Reinstall ChatGPT from OpenAI, then restart C2."),
         );
         return CodexRuntimeDiscovery {
             host_path: Some(host_path),
@@ -218,7 +218,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
                     CapabilityState::Unavailable,
                     evidence.host_version.clone(),
                     &format!("Codex config could not be parsed: {error}"),
-                    Some("Repair $CODEX_HOME/config.toml and restart CodeTwo; CodeTwo will not modify it."),
+                    Some("Repair $CODEX_HOME/config.toml and restart C2; C2 will not modify it."),
                 );
             }
             return CodexRuntimeDiscovery {
@@ -246,10 +246,10 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             if version_state == CapabilityState::Ready {
                 "The signed OpenAI Computer Use service and node_repl runtime are configured."
             } else {
-                "The signed Computer Use service is present, but this ChatGPT host version is outside CodeTwo's verified range."
+                "The signed Computer Use service is present, but this ChatGPT host version is outside C2's verified range."
             },
             (version_state == CapabilityState::Unverified)
-                .then_some("Update CodeTwo or use the verified ChatGPT build for stable support."),
+                .then_some("Update C2 or use the verified ChatGPT build for stable support."),
         );
     } else {
         update_capability(
@@ -258,7 +258,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             evidence.host_version.clone(),
             "Computer Use is disabled or its signed service/node_repl path is missing or invalid.",
-            Some("Enable the Computer Use plugin in ChatGPT, repair its local runtime, then restart CodeTwo."),
+            Some("Enable the Computer Use plugin in ChatGPT, repair its local runtime, then restart C2."),
         );
     }
 
@@ -285,7 +285,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             evidence.host_version.clone(),
             "The Browser/Chrome plugins, chrome backend, or node_repl runtime are missing.",
-            Some("Enable the Browser and Chrome plugins, install the extension, then restart CodeTwo."),
+            Some("Enable the Browser and Chrome plugins, install the extension, then restart C2."),
         );
     }
 
@@ -298,9 +298,9 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             if version_state == CapabilityState::Ready {
                 "The official OpenAI Sites plugin is enabled; account, workspace, and connector availability are verified on the first real call."
             } else {
-                "The official OpenAI Sites plugin is enabled, but this ChatGPT host version is outside CodeTwo's verified range."
+                "The official OpenAI Sites plugin is enabled, but this ChatGPT host version is outside C2's verified range."
             },
-            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart CodeTwo."),
+            Some("If the first call fails, verify that Sites is available for this account and workspace, then restart C2."),
         );
     } else {
         update_capability(
@@ -309,7 +309,7 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             CapabilityState::Unavailable,
             config.sites_version.clone(),
             "The official OpenAI Sites plugin is not enabled in the selected Codex configuration.",
-            Some("Enable the Sites plugin in ChatGPT, then restart CodeTwo."),
+            Some("Enable the Sites plugin in ChatGPT, then restart C2."),
         );
     }
 

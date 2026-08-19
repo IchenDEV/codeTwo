@@ -1,7 +1,7 @@
 # Project memory
 
-Code2 can remember stable project facts and earlier outcomes across sessions — even when the next
-session uses a different agent provider. The memory stays local in Code2's SQLite store and is
+C2 can remember stable project facts and earlier outcomes across sessions — even when the next
+session uses a different agent provider. The memory stays local in C2's SQLite store and is
 scoped to the exact project path.
 
 Open **Settings → Memory** to control or inspect it.
@@ -10,7 +10,7 @@ Open **Settings → Memory** to control or inspect it.
 
 | Layer | Meaning |
 | --- | --- |
-| **L0 · Raw transcript** | Your existing Code2 conversation history. It is searched, not duplicated. |
+| **L0 · Raw transcript** | Your existing C2 conversation history. It is searched, not duplicated. |
 | **L1 · Stable notes** | Constraints, preferences, facts, decisions, and notes you add yourself. |
 | **L2 · Work episodes** | A compact request/outcome record from a completed turn. |
 | **L3 · Project profile** | A conservative roll-up made after the project has at least three stable notes. |
@@ -46,7 +46,7 @@ The composer also controls each session independently:
 
 ## What reaches the model
 
-Code2 sends at most 12 L1 notes, 3 earlier L2 episodes, 1 L3 profile, and — only when you explicitly
+C2 sends at most 12 L1 notes, 3 earlier L2 episodes, 1 L3 profile, and — only when you explicitly
 ask about earlier work — 3 raw L0 excerpts. Current-session episodes are excluded.
 
 Recalled material is labeled as untrusted reference data. Your current request and repository

@@ -1,6 +1,6 @@
 # Introduction
 
-**Code2** is a coding-agent app with a different premise: instead of a chat box, you compose your
+**C2** is a coding-agent app with a different premise: instead of a chat box, you compose your
 prompt as a **structured document** and weave in reusable **skills** with a `/` picker. It drives
 existing coding CLIs — you keep your models, tools, and auth — behind one consistent interface.
 
@@ -59,7 +59,7 @@ Read more in the [Architecture](/reference/architecture) reference.
 
 ## Status
 
-Code2 is early but functional and heavily tested (offline test suite across the core, TUI, and
-server). Code2 does not ship its own native mobile binary; the remote listener works with T3 Code
+C2 is early but functional and heavily tested (offline test suite across the core, TUI, and
+server). C2 does not ship its own native mobile binary; the remote listener works with T3 Code
 mobile over a local LAN or Tailscale tailnet instead. Hosted relay access and a visual browser
 element-picker remain out of scope. See the [FAQ](/reference/faq).

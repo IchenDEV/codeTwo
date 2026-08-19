@@ -13,7 +13,7 @@ export const CANVAS_SCHEMA_VERSION = 1 as const;
 export type CanvasTheme = ExcalidrawTheme;
 export type CanvasMode = "edit" | "readonly" | "historical";
 
-/** The only scene element types that CodeTwo allows to cross a persistence boundary. */
+/** The only scene element types that C2 allows to cross a persistence boundary. */
 export const ALLOWED_ELEMENT_TYPES = [
   "rectangle",
   "ellipse",

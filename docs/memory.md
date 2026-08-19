@@ -1,10 +1,10 @@
 # Memory design and research
 
-Code2 has two kinds of continuity that solve different problems:
+C2 has two kinds of continuity that solve different problems:
 
 1. **Provider-native context** continues one ACP session inside Claude Code, Codex, Grok, or
    another provider. The provider owns that context.
-2. **Code2 project memory** is a local, provider-neutral recall layer. It can carry stable project
+2. **C2 project memory** is a local, provider-neutral recall layer. It can carry stable project
    knowledge and earlier outcomes across sessions and providers without pretending to be the
    provider's conversation state.
 
@@ -70,7 +70,7 @@ The composer has four session presets: **Memory on**, **Recall only**, **Private
 the session. The global master, capture, and recall switches still win; a session may narrow global
 behavior but cannot silently re-enable a disabled feature.
 
-When recall is used, Code2 emits and stores a turn receipt containing the exact memory ids, layers,
+When recall is used, C2 emits and stores a turn receipt containing the exact memory ids, layers,
 categories, evidence pointer, retrieval score, text sent, and estimated prompt tokens. The Turn UI
 shows it under **Memory used**. Receipts are metadata beside the transcript; the injected memory
 block is never persisted as a user-authored message.
@@ -78,7 +78,7 @@ block is never persisted as a user-authored message.
 ## What came from ec-mono's mem-lab
 
 `mem-lab` is the explanatory surface; the production design is under
-`packages/agent/src/memory` on ec-mono's `origin/main`. Code2 adopts its useful core ideas:
+`packages/agent/src/memory` on ec-mono's `origin/main`. C2 adopts its useful core ideas:
 
 - distinguish raw records, stable atomic memories, scenario episodes, and a slow-changing profile;
 - retain evidence instead of presenting model-derived text as canonical fact;
@@ -86,7 +86,7 @@ block is never persisted as a user-authored message.
 - treat automatic injection and explicit memory search as different operations;
 - keep memory separate from context-window compression.
 
-Code2 does not copy ec-mono's model-extraction pipeline. Its first release uses deterministic L1
+C2 does not copy ec-mono's model-extraction pipeline. Its first release uses deterministic L1
 capture and a structured L3 assembly so there is no surprise token cost or provider dependency.
 
 ## How Codex memory works
@@ -100,9 +100,9 @@ See [OpenAI's Codex memories documentation](https://learn.chatgpt.com/docs/custo
 
 A local installation currently materializes compact summaries, consolidated durable entries,
 rollout summaries, and evidence artifacts in that directory. That file layout is an observed
-implementation detail, not a compatibility API for Code2.
+implementation detail, not a compatibility API for C2.
 
-| Concern | ec-mono | Codex local memory | Code2 |
+| Concern | ec-mono | Codex local memory | C2 |
 | --- | --- | --- | --- |
 | Scope | user/session domain | local Codex tasks | project path |
 | Capture | model-assisted staged pipeline | background extraction and consolidation | immediate L2 plus delayed deterministic L1/L3 consolidation |

@@ -1,6 +1,6 @@
 # Install & run
 
-Code2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus a
+C2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus a
 Bun-built frontend.
 
 ## Prerequisites
@@ -28,7 +28,7 @@ brew link --force zig@0.15
 To run a real turn you need one agent CLI on your `PATH`:
 
 - **Grok** — `grok` (speaks ACP natively; simplest, no Node needed).
-- **Claude Code** — Node/npx (Code2 launches `npx @agentclientprotocol/claude-agent-acp`).
+- **Claude Code** — Node/npx (C2 launches `npx @agentclientprotocol/claude-agent-acp`).
 - **Codex** — Node/npx (`npx -y @agentclientprotocol/codex-acp@1.1.14`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode** — `opencode`.
@@ -36,7 +36,7 @@ To run a real turn you need one agent CLI on your `PATH`:
 - **Kimi** — `kimi` (speaks ACP natively).
 - **ZCode (GLM)** — Node/npx (`npx -y glm-acp-agent`) plus a `Z_AI_API_KEY`.
 
-Code2 shows a health dot per provider so you can tell what's available. See
+C2 shows a health dot per provider so you can tell what's available. See
 [Providers](/guide/providers).
 
 ## Clone & test the core

@@ -1039,8 +1039,8 @@ export async function pickAppearanceThemeDocument(): Promise<string | null | und
   const selected = await open({
     multiple: false,
     directory: false,
-    title: "Import Code2 theme",
-    filters: [{ name: "Code2 theme", extensions: ["json"] }],
+    title: "Import C2 theme",
+    filters: [{ name: "C2 theme", extensions: ["json"] }],
   });
   if (typeof selected !== "string") return null;
   const { cwd, name } = splitNativePath(selected);
@@ -1057,9 +1057,9 @@ export async function saveAppearanceThemeDocument(
   if (!inTauri) return "unsupported";
   const { save } = await import("@tauri-apps/plugin-dialog");
   const selected = await save({
-    title: "Export Code2 theme",
+    title: "Export C2 theme",
     defaultPath: suggestedName,
-    filters: [{ name: "Code2 theme", extensions: ["json"] }],
+    filters: [{ name: "C2 theme", extensions: ["json"] }],
   });
   if (typeof selected !== "string") return "cancelled";
   const { cwd, name } = splitNativePath(selected);
@@ -1778,7 +1778,7 @@ export interface PluginMarketplace {
 
 const BROWSER_PLUGIN_MARKETPLACE: PluginMarketplace = {
   name: "code2-demo-marketplace",
-  display_name: "Code2 compatibility preview",
+  display_name: "C2 compatibility preview",
   description: "A browser-only preview of marketplace source support and compatibility diagnostics.",
   manifest_path: "/demo/.claude-plugin/marketplace.json",
   root: "/demo",
@@ -1835,7 +1835,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           name: "Developer Toolkit",
           version: "1.4.0",
           description: "A complete development workflow with review, research, tools, and starter projects.",
-          author: "Code2 Community",
+          author: "C2 Community",
           source: "GitHub · example/developer-toolkit",
           repository: "https://github.com/example/developer-toolkit",
           spec_version: "1.0.0",
@@ -1886,7 +1886,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
 
 /** Install a complete plugin from a GitHub repository or a selected /tree/ path. */
 export async function githubImportPlugin(repository: string): Promise<GitHubImportResult> {
-  if (!inTauri) throw new Error("Plugin installation requires the Code2 desktop app.");
+  if (!inTauri) throw new Error("Plugin installation requires the C2 desktop app.");
   return call<GitHubImportResult>("plugins.import_github", { repository });
 }
 
@@ -1908,7 +1908,7 @@ export async function installMarketplacePlugin(
   marketplacePath: string,
   pluginName: string,
 ): Promise<GitHubImportResult> {
-  if (!inTauri) throw new Error("Marketplace installation requires the Code2 desktop app.");
+  if (!inTauri) throw new Error("Marketplace installation requires the C2 desktop app.");
   return call<GitHubImportResult>("plugins.install_marketplace", {
     marketplace_path: marketplacePath,
     plugin_name: pluginName,
@@ -1920,12 +1920,12 @@ export async function uninstallPlugin(id: string, keepData = false): Promise<voi
 }
 
 export async function setPluginEnabled(id: string, enabled: boolean): Promise<PluginInfo> {
-  if (!inTauri) throw new Error("Plugin state changes require the Code2 desktop app.");
+  if (!inTauri) throw new Error("Plugin state changes require the C2 desktop app.");
   return call<PluginInfo>("plugins.set_enabled", { id, value: enabled });
 }
 
 export async function setPluginTrusted(id: string, trusted: boolean): Promise<PluginInfo> {
-  if (!inTauri) throw new Error("Plugin trust changes require the Code2 desktop app.");
+  if (!inTauri) throw new Error("Plugin trust changes require the C2 desktop app.");
   return call<PluginInfo>("plugins.set_trusted", { id, value: trusted });
 }
 
@@ -1934,7 +1934,7 @@ export async function applyPluginScaffold(
   scaffoldId: string,
   cwd: string,
 ): Promise<ScaffoldInstallResult> {
-  if (!inTauri) throw new Error("Scaffold installation requires the Code2 desktop app.");
+  if (!inTauri) throw new Error("Scaffold installation requires the C2 desktop app.");
   return call<ScaffoldInstallResult>("plugins.apply_scaffold", {
     plugin_id: pluginId,
     scaffold_id: scaffoldId,

@@ -294,7 +294,7 @@ pub fn delegation_comment(
     session_title: &str,
     artifacts: &[(String, String)],
 ) -> String {
-    let mut s = format!("Delegated to Code2 scene `{scene_ref}`\n\nSession: {session_title}");
+    let mut s = format!("Delegated to C2 scene `{scene_ref}`\n\nSession: {session_title}");
     if !artifacts.is_empty() {
         s.push_str("\n\nArtifacts:");
         for (title, link) in artifacts {
@@ -418,7 +418,7 @@ mod tests {
             ("Diff summary".to_string(), "3 files changed".to_string()),
         ];
         let c = delegation_comment("review-loop", "Fix login flakiness", &artifacts);
-        assert!(c.starts_with("Delegated to Code2 scene `review-loop`"));
+        assert!(c.starts_with("Delegated to C2 scene `review-loop`"));
         assert!(c.contains("Session: Fix login flakiness"));
         assert!(c.contains("\n- Plan v2 — https://x/plan"));
         assert!(c.contains("\n- Diff summary — 3 files changed"));
@@ -427,7 +427,7 @@ mod tests {
     #[test]
     fn delegation_comment_without_artifacts_skips_list() {
         let c = delegation_comment("review-loop", "Fix login flakiness", &[]);
-        assert!(c.contains("Delegated to Code2 scene `review-loop`"));
+        assert!(c.contains("Delegated to C2 scene `review-loop`"));
         assert!(c.contains("Session: Fix login flakiness"));
         assert!(!c.contains("Artifacts"));
         assert!(!c.contains("\n- "));

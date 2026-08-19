@@ -1,0 +1,91 @@
+name: Nightly macOS package
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 * * *"
+      timezone: "Asia/Singapore"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-macos
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package Apple Silicon DMG
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Verify runner architecture
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Build ad-hoc signed DMG
+        working-directory: apps/desktop
+        run: >-
+          bun run tauri build --bundles dmg
+          --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+
+      - name: Verify and stage nightly package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dmg_path="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$dmg_path"
+          hdiutil verify "$dmg_path"
+
+          mount_dir="$(mktemp -d)"
+          device=""
+          cleanup() {
+            if [[ -n "$device" ]]; then
+              hdiutil detach "$device" >/dev/null
+            fi
+            rmdir "$mount_dir" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          device="$(hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_dir" \
+            | awk '/Apple_HFS|Apple_APFS/ { print $1; exit }')"
+          test -n "$device"
+
+          app="$mount_dir/C2.app"
+          executable="$app/Contents/MacOS/codetwo-desktop"
+          test -d "$app"
+          test -L "$mount_dir/Applications"
+          test "$(plutil -extract CFBundleName raw -- "$app/Contents/Info.plist")" = "C2"
+          test "$(plutil -extract CFBundleDisplayName raw -- "$app/Contents/Info.plist")" = "C2"
+          test "$(plutil -extract CFBundleIdentifier raw -- "$app/Contents/Info.plist")" = "dev.codetwo.app"
+          codesign --verify --deep --strict "$app"
+          test "$(lipo -archs "$executable")" = "arm64"
+
+          mkdir -p nightly
+          cp "$dmg_path" nightly/C2-nightly-macos-arm64.dmg
+          shasum -a 256 nightly/C2-nightly-macos-arm64.dmg \
+            > nightly/C2-nightly-macos-arm64.dmg.sha256
+          printf '%s\n' "$GITHUB_SHA" > nightly/commit.txt
+
+      - name: Upload nightly artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: C2-nightly-macos-arm64-${{ github.sha }}
+          path: nightly/
+          if-no-files-found: error
+          retention-days: 14

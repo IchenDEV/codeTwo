@@ -15,7 +15,7 @@ export function projectWorktreeBaseline(
   return mode;
 }
 
-/** Switching projects opens a fresh draft, so automatic mode starts at Code2's local default. */
+/** Switching projects opens a fresh draft, so automatic mode starts at C2's local default. */
 export function projectSwitchWorktreeBaseline(
   mode: ProjectWorktreeMode | null,
 ): WorktreeBaselineKind | null {

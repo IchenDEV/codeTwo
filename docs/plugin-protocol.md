@@ -1,8 +1,8 @@
-# The Code2 Plugin Protocol
+# The C2 Plugin Protocol
 
 Version **1.0.0**.
 
-A plugin is a process. Code2 speaks JSON-RPC 2.0 to it over stdio, and what the plugin declares —
+A plugin is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the plugin declares —
 commands, event subscriptions — is registered in the same kernel registries a built-in Rust plugin
 uses. Its commands appear in `kernel.commands`, are callable from any frontend through
 `call("name", args)`, and disappear the instant it unloads.
@@ -11,7 +11,7 @@ Write one in any language that can read stdin and write stdout.
 
 ## Why a protocol at all
 
-[`docs/plugins.md`](plugins.md) made Code2 a plugin graph, but a Rust host can only load Rust
+[`docs/plugins.md`](plugins.md) made C2 a plugin graph, but a Rust host can only load Rust
 plugins it was compiled with. That ceiling means "plugin" describes how *we* organise our code, not
 something a user can add. This removes it, using the transport the app already speaks twice over
 (ACP to provider CLIs, MCP to tool servers) rather than inventing a third.
@@ -21,7 +21,7 @@ something a user can add. This removes it, using the transport the app already s
 - **Framing** — one JSON object per line, UTF-8, `\n`-terminated. No `Content-Length` header.
 - **stdout** is the protocol channel. Anything on it that is not JSON is dropped with a warning, so
   a stray `print()` degrades to noise rather than a crash.
-- **stderr** is your log channel. Code2 routes it into its own tracing output.
+- **stderr** is your log channel. C2 routes it into its own tracing output.
 - The process is killed when the plugin unloads, and it never outlives the app.
 
 ## Handshake
@@ -200,4 +200,4 @@ rl.on("line", async (line) => {
   the graph. The handshake is the only bounded wait.
 - **One process per bundle.** Fan-out inside your plugin if you need more.
 - **Rust plugins are still compile-time.** This protocol is how a plugin gets added without
-  rebuilding Code2; it is not dynamic loading of native code, and deliberately so.
+  rebuilding C2; it is not dynamic loading of native code, and deliberately so.

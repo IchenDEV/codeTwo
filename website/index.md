@@ -1,12 +1,12 @@
 ---
 layout: false
-title: Code2 — The document-first coding agent
+title: C2 — The document-first coding agent
 description: Compose structured prompts, weave in reusable skills, and run your coding CLIs through one local interface.
 ---
 
 <div class="codetwo-home">
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="window-bar" aria-label="Code2 window">
+  <div class="window-bar" aria-label="C2 window">
     <span class="traffic-lights" aria-hidden="true">
       <i></i><i></i><i></i>
     </span>
@@ -14,9 +14,9 @@ description: Compose structured prompts, weave in reusable skills, and run your 
   </div>
   <header class="site-header">
     <div class="shell header-inner">
-      <a class="brand" href="./" aria-label="Code2 home">
+      <a class="brand" href="./" aria-label="C2 home">
         <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
-        <strong>Code2</strong>
+        <strong>C2</strong>
       </a>
       <nav class="desktop-nav" aria-label="Primary navigation">
         <a href="#product">Product</a>
@@ -71,7 +71,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
           src="/screenshots/app-main.png"
           width="1440"
           height="900"
-          alt="Code2 desktop app with a session rail, document composer, and environment dock"
+          alt="C2 desktop app with a session rail, document composer, and environment dock"
         />
       </figure>
       <ul class="shell hero-capabilities" aria-label="Key capabilities">
@@ -90,7 +90,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             Choose the agent<span class="terminal-period">.</span>
           </h2>
           <p>
-            Code2 turns a prompt into a structured document you can edit,
+            C2 turns a prompt into a structured document you can edit,
             reuse, and inspect before it runs.
           </p>
         </div>
@@ -130,7 +130,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
               width="1440"
               height="900"
               loading="lazy"
-              alt="Code2 document editor with the slash picker open for skills and blocks"
+              alt="C2 document editor with the slash picker open for skills and blocks"
             />
           </figure>
         </div>
@@ -145,7 +145,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             you already use<span class="terminal-period">.</span>
           </h2>
           <p>
-            Code2 starts the CLI or ACP adapter on your machine. Your provider
+            C2 starts the CLI or ACP adapter on your machine. Your provider
             account, subscription, quota, and billing stay with the provider.
           </p>
         </div>
@@ -275,7 +275,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
         </h2>
         <div class="open-source-copy">
           <p>
-            Code2 is licensed under Apache 2.0 and built in the open for people
+            C2 is licensed under Apache 2.0 and built in the open for people
             who want control over their coding-agent workflow.
           </p>
           <div class="actions">
@@ -300,7 +300,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
       <footer class="shell site-footer">
         <a class="footer-brand" href="./">
           <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
-          Code2
+          C2
         </a>
         <nav aria-label="Footer navigation">
           <a href="./guide/getting-started">Docs</a>

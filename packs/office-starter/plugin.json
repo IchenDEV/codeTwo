@@ -3,7 +3,7 @@
   "name": "office-starter",
   "version": "1.0.0",
   "description": "Office workflow starter pack: incident retrospective, release notes, and tech design review scenes, plus an office delivery pipeline that chains design review through the builtin develop/test stages into release notes.",
-  "author": { "name": "Code2" },
+  "author": { "name": "C2" },
   "license": "MIT",
   "keywords": ["office", "scenes", "pipeline", "incident-retro", "release-notes", "design-review"]
 }

@@ -1,11 +1,11 @@
 # Terminal
 
-Code2 has an embedded terminal so you can run commands next to the agent. It lives in the **side
+C2 has an embedded terminal so you can run commands next to the agent. It lives in the **side
 dock** — open it with `Mod+J`, or the panel button in the header and pick the **Terminal** tab. The
 dock sits beside the document rather than under it, so opening a terminal doesn't shrink the prompt
 you're writing.
 
-It's a real PTY: Code2 spawns your login shell (`$SHELL`) through a pseudo-terminal and streams its
+It's a real PTY: C2 spawns your login shell (`$SHELL`) through a pseudo-terminal and streams its
 output to an xterm.js view. Keystrokes go back to the shell, and the terminal resizes with the panel.
 
 The terminal opens in the session's working directory, so it's already where the agent is working —
@@ -18,7 +18,7 @@ switching away doesn't kill a running shell.
 
 ## tmux — persistent, attachable terminals
 
-Tick **tmux** in the terminal header and Code2 runs each terminal inside a named tmux session
+Tick **tmux** in the terminal header and C2 runs each terminal inside a named tmux session
 (`codetwo-<session>-<n>`) using attach-or-create. That buys you two things:
 
 - The shell **survives app restarts** — reopen the terminal and you're back where you were.

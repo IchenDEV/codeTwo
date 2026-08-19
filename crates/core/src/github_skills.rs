@@ -1,4 +1,4 @@
-//! Import standard `SKILL.md` files from a GitHub repository into Code2's local skill library.
+//! Import standard `SKILL.md` files from a GitHub repository into C2's local skill library.
 //!
 //! Repository access is deliberately narrow: HTTPS GitHub URLs (or `owner/repo` shorthand), a
 //! shallow non-interactive clone, bounded traversal, and small text-only skill manifests. Imported

@@ -1,5 +1,5 @@
 /**
- * Code2's in-page annotator: point at something on the page, say what should change, and nudge
+ * C2's in-page annotator: point at something on the page, say what should change, and nudge
  * the live styles until it looks right. What you end up with is a list of notes the agent can act
  * on — "this element, these properties, from this to that" — instead of a paragraph describing a
  * screenshot.

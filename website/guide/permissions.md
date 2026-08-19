@@ -1,6 +1,6 @@
 # Permissions & YOLO
 
-When an ACP agent sends a permission request for a command or file operation, Code2 decides how to
+When an ACP agent sends a permission request for a command or file operation, C2 decides how to
 respond from the session's **permission mode**, tool scope, and any rules. This is permission
 mediation, not an operating-system sandbox: a provider process that performs work without sending an
 ACP permission request is outside this guard. Use a disposable checkout, container, VM, or provider
@@ -19,8 +19,8 @@ Set the mode in the config popover — the provider chip at the bottom of the co
 
 ## Tool scope — a second, independent axis
 
-The permission mode decides *when Code2 asks*; the **tool scope** is a fail-closed ceiling over the
-ACP tool kinds Code2 is willing to approve. The wire field remains named `sandbox` for compatibility.
+The permission mode decides *when C2 asks*; the **tool scope** is a fail-closed ceiling over the
+ACP tool kinds C2 is willing to approve. The wire field remains named `sandbox` for compatibility.
 Pick it in the config popover; the composer's chip turns amber on **Danger full access**:
 
 | Tool scope | Effect on ACP permission requests |
@@ -33,9 +33,9 @@ The scope is checked **first and wins**: Read-only rejects a reported edit even 
 Workspace write never lets an unclassified request become an automatic approval. It does not prove
 that a reported path is inside the workspace, intercept provider syscalls, or contain shell commands.
 
-That distinction is why Code2 does not describe this control as physical containment.
+That distinction is why C2 does not describe this control as physical containment.
 
-Code2 persists the two choices as one execution policy. A new session sends the complete policy with
+C2 persists the two choices as one execution policy. A new session sends the complete policy with
 its creation request, so the first turn uses that pair. Later changes carry a request id; the core
 publishes an authoritative policy event only after the durable row and live permission handler both
 advance. Persistence failure emits a correlated error and leaves the old pair active. Reopening,
@@ -46,7 +46,7 @@ inventing full access.
 ## The permission prompt
 
 In Ask mode, a modal appears with the tool's summary and the agent's offered options (e.g. *Allow* /
-*Reject*). The turn stays paused until you answer — Code2 parks the request and resumes the moment
+*Reject*). The turn stays paused until you answer — C2 parks the request and resumes the moment
 you decide.
 
 ## How decisions are made

@@ -4,7 +4,7 @@
 //! `5a84614809b6e853b872f9e57ff4b97e9df5df02` (contracts 0.0.33, Effect
 //! 4.0.0-beta.103). T3's client protocol is Effect RPC over WebSocket; it is not ACP and it is not
 //! JSON-RPC 2.0. This adapter keeps those transport types at the server edge and translates the
-//! useful mobile chat operations to Code2's existing `Op`/`Event` domain contract.
+//! useful mobile chat operations to C2's existing `Op`/`Event` domain contract.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
@@ -131,7 +131,7 @@ fn validate_compatibility(metadata: &CompatibilityMetadata) -> Result<(), String
     }
     let unique_core_ids: HashSet<&str> = metadata.aliases.values().map(String::as_str).collect();
     if unique_core_ids.len() != metadata.aliases.len() {
-        return Err("multiple public thread ids map to the same Code2 session".into());
+        return Err("multiple public thread ids map to the same C2 session".into());
     }
     if metadata.interaction_modes.iter().any(|(thread_id, mode)| {
         thread_id.trim().is_empty() || !matches!(mode.as_str(), "default" | "plan")
@@ -211,7 +211,7 @@ fn load_or_create_environment_id(path: Option<&Path>) -> Result<String, String> 
     }
 }
 
-/// Shared adapter state. One instance is created per running Code2 remote listener.
+/// Shared adapter state. One instance is created per running C2 remote listener.
 pub struct T3CompatState {
     engine: Arc<Engine>,
     events: broadcast::Sender<Event>,
@@ -429,13 +429,13 @@ impl T3CompatState {
                     }
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => {
-                        break Err("Code2 event stream closed before accepting the prompt".into())
+                        break Err("C2 event stream closed before accepting the prompt".into())
                     }
                 }
             }
         })
         .await
-        .map_err(|_| "Code2 timed out while accepting the mobile prompt".to_string())?
+        .map_err(|_| "C2 timed out while accepting the mobile prompt".to_string())?
     }
 
     async fn set_execution_policy_and_wait(
@@ -476,14 +476,14 @@ impl T3CompatState {
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => {
                         break Err(
-                            "Code2 event stream closed before changing execution policy".into()
+                            "C2 event stream closed before changing execution policy".into()
                         )
                     }
                 }
             }
         })
         .await
-        .map_err(|_| "Code2 timed out while changing execution policy".to_string())?
+        .map_err(|_| "C2 timed out while changing execution policy".to_string())?
     }
 
     async fn set_model_and_verify(&self, session: String, model: String) -> Result<(), String> {
@@ -515,7 +515,7 @@ impl T3CompatState {
         if applied {
             Ok(())
         } else {
-            Err(format!("Code2 did not apply model {model}"))
+            Err(format!("C2 did not apply model {model}"))
         }
     }
 
@@ -726,7 +726,7 @@ impl T3CompatState {
                     known_public != public_id && known_core == core_id
                 })
             {
-                return Err("Code2 session is already mapped to another T3 thread".into());
+                return Err("C2 session is already mapped to another T3 thread".into());
             }
             let previous_alias = compatibility
                 .aliases
@@ -874,7 +874,7 @@ impl T3CompatState {
             match entry.part {
                 Part::Prompt { text, .. } => {
                     flush_assistant_message(&mut messages, &session.id, &mut assistant_message);
-                    // Code2's display projection is intentionally capped at 400 characters. T3
+                    // C2's display projection is intentionally capped at 400 characters. T3
                     // mobile expects the complete authored message, and the adapter-owned planning
                     // skill must stay hidden from that user-visible text.
                     let text = t3_user_prompt(&text);
@@ -971,7 +971,7 @@ impl T3CompatState {
     }
 
     /// T3's `threadSnapshotPagination: false` contract means every thread snapshot must contain
-    /// its complete history. Code2 stores turn-aligned bounded pages, so walk them newest to oldest
+    /// its complete history. C2 stores turn-aligned bounded pages, so walk them newest to oldest
     /// and then restore chronological order before projecting the snapshot.
     fn full_transcript(&self, core_id: &str) -> Result<Vec<codetwo_core::TranscriptEntry>, String> {
         let mut before = None;
@@ -1005,7 +1005,7 @@ impl T3CompatState {
         }
         // A mobile reconnect can retry the same create command while the first socket is still
         // active. Serialize commands and recheck the receipt after acquiring the gate so one public
-        // thread id can never race into two Code2 sessions.
+        // thread id can never race into two C2 sessions.
         let _dispatch_guard = self.dispatch_lock.lock().await;
         if let Some(receipt) = self
             .command_receipts
@@ -1054,7 +1054,7 @@ impl T3CompatState {
                     .map(Vec::len)
                     .unwrap_or(0);
                 if attachments != 0 {
-                    return Err("Code2's T3 adapter does not yet support mobile attachments".into());
+                    return Err("C2's T3 adapter does not yet support mobile attachments".into());
                 }
 
                 let known = self
@@ -1140,7 +1140,7 @@ impl T3CompatState {
                     .filter(|model| !model.trim().is_empty())
                 else {
                     return Err(
-                        "Code2 currently supports model changes, not T3 title/branch edits".into(),
+                        "C2 currently supports model changes, not T3 title/branch edits".into(),
                     );
                 };
                 self.set_model_and_verify(thread_id, model.to_string())
@@ -1188,7 +1188,7 @@ impl T3CompatState {
             || create.get("branch").is_some_and(|value| !value.is_null())
         {
             return Err(
-                "Code2's T3 adapter does not yet support mobile Git/worktree bootstrap options"
+                "C2's T3 adapter does not yet support mobile Git/worktree bootstrap options"
                     .into(),
             );
         }
@@ -1289,13 +1289,13 @@ impl T3CompatState {
                     }) if id == request_id => break Err(message),
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => {
-                        break Err("Code2 session event stream closed during creation".into())
+                        break Err("C2 session event stream closed during creation".into())
                     }
                 }
             }
         })
         .await
-        .map_err(|_| "Code2 timed out waiting for the new session id".to_string())??;
+        .map_err(|_| "C2 timed out waiting for the new session id".to_string())??;
         if let Some(model) = model {
             // Engine operations are serialized. Enqueue this before returning so the caller's
             // first Prompt observes the model chosen in T3's create-thread bootstrap payload.
@@ -1393,7 +1393,7 @@ fn select_permission_option(
 }
 
 /// T3 HTTP routes. `/ws` is intentionally owned by the parent server so it can select either the
-/// existing Code2 protocol (`ticket`) or this protocol (`wsTicket`) without breaking old clients.
+/// existing C2 protocol (`ticket`) or this protocol (`wsTicket`) without breaking old clients.
 pub fn router(state: Arc<T3CompatState>) -> Router {
     Router::new()
         .route("/.well-known/t3/environment", get(environment_descriptor))
@@ -1782,7 +1782,7 @@ where
             .is_ok(),
         "server.probe" => send_success(sender, &request_id, json!({})).await.is_ok(),
         // The native mobile client reports foreground/background activity on connect and at a
-        // cadence. Code2 has no matching host power policy, but acknowledging the void RPC keeps
+        // cadence. C2 has no matching host power policy, but acknowledging the void RPC keeps
         // the official client from producing a stream of expected-but-unsupported failures.
         "server.reportClientActivity" => {
             send_success(sender, &request_id, Value::Null).await.is_ok()
@@ -1806,7 +1806,7 @@ where
                 .file_name()
                 .and_then(|name| name.to_str())
                 .filter(|name| !name.trim().is_empty())
-                .unwrap_or("Code2");
+                .unwrap_or("C2");
             let now = state.now();
             let values = vec![
                 json!({
@@ -2111,7 +2111,7 @@ fn project_shell(path: &str, sessions: &[Session], updated_at: &str) -> Value {
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or("Code2");
+        .unwrap_or("C2");
     json!({
         "id": project_id(path),
         "title": title,
@@ -2384,8 +2384,8 @@ fn host_label() -> String {
     std::env::var("HOSTNAME")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .map(|host| format!("Code2 on {host}"))
-        .unwrap_or_else(|| "Code2".into())
+        .map(|host| format!("C2 on {host}"))
+        .unwrap_or_else(|| "C2".into())
 }
 
 fn platform_os() -> &'static str {

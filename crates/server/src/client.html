@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    <title>Code2 remote</title>
+    <title>C2 remote</title>
     <style>
       :root { color-scheme: light dark; font-family: -apple-system, system-ui, sans-serif; }
       * { box-sizing: border-box; }
@@ -73,7 +73,7 @@
   </head>
   <body>
     <header>
-      <span class="dot" id="status"></span> Code2 remote
+      <span class="dot" id="status"></span> C2 remote
       <nav id="views">
         <button id="view-chat" type="button" class="active">Chat</button>
         <button id="view-term" type="button">Terminal</button>
@@ -120,7 +120,7 @@
     <div id="pairing">
       <h2>Not paired</h2>
       <p id="pairing-msg">
-        This device isn't paired with the Code2 server. Open the one-time pairing link (or scan
+        This device isn't paired with the C2 server. Open the one-time pairing link (or scan
         the QR code) shown in the desktop app under <b>Remote control</b>, or by <code>codetwo-server</code>
         in the terminal.
       </p>
@@ -821,7 +821,7 @@
             card.appendChild(heading);
             const warning = document.createElement("div");
             warning.className = "msg sys";
-            warning.textContent = "Sensitive visual upload: images are sent to the paired CodeTwo server.";
+            warning.textContent = "Sensitive visual upload: images are sent to the paired C2 server.";
             card.appendChild(warning);
             const mount = document.createElement("div");
             mount.className = "canvas-mount";

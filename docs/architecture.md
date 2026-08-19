@@ -1,6 +1,6 @@
 # Architecture
 
-Code2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
+C2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
 Protocol (ACP)** and presents them through a **document-first** UI. One Rust core; two frontends.
 
 ## Why this shape
@@ -17,7 +17,7 @@ Protocol (ACP)** and presents them through a **document-first** UI. One Rust cor
 Everything below is a **plugin**. `crates/kernel` is a Rust port of
 [cordis](https://github.com/cordiverse/cordis): contexts, services published by name, declared
 injections, and scopes that undo everything a plugin did when it unloads. `crates/core/src/app`
-defines Code2's subsystems as plugins over it, and `CoreApp::boot(AppConfig)` assembles them from
+defines C2's subsystems as plugins over it, and `CoreApp::boot(AppConfig)` assembles them from
 config rather than from a constructor.
 
 That is why the module list below reads as a menu rather than a build order: `store` and `engine`
@@ -25,7 +25,7 @@ have no fixed sequence, the app runs without either, and reconfiguring one reloa
 built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
 hand-wired.
 
-A plugin does not have to be ours, or Rust. A bundle can ship a **process** that Code2 speaks
+A plugin does not have to be ours, or Rust. A bundle can ship a **process** that C2 speaks
 JSON-RPC to over stdio; the commands it declares land in the same registry a built-in's do and are
 callable from every frontend. Installing such a bundle still executes nothing — the process starts
 only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-protocol.md).
@@ -93,7 +93,7 @@ Two transcripts and one recall layer can participate in a turn. They are not the
   files, Codex's rollouts, …). Canonical for continuity *inside that provider session*: we never
   reconstruct or replay it ourselves; we only hold a cursor to it — the ACP session id, persisted
   per session.
-- **Code2 project memory** — provider-neutral L0–L3 recall in SQLite. It reuses raw transcript
+- **C2 project memory** — provider-neutral L0–L3 recall in SQLite. It reuses raw transcript
   evidence and derives stable notes, earlier work episodes, and a project profile. It is canonical
   for none of the facts it contains: every derived row keeps evidence and is injected as untrusted,
   potentially stale reference data. L1/L3 consolidation is delayed, session read/write policy can

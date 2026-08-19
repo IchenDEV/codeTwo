@@ -1,6 +1,6 @@
 //! Every built-in plugin, and the registry that makes them loadable by name.
 //!
-//! Adding a subsystem to Code2 means writing one file here and one line in the config. Nothing
+//! Adding a subsystem to C2 means writing one file here and one line in the config. Nothing
 //! else in the codebase has to learn about it — not a state struct, not a constructor, not a
 //! dispatch table.
 
@@ -70,7 +70,7 @@ pub const BUILTIN: &[&str] = &[
     "extensions",
 ];
 
-/// Everything Code2 ships, ready to be loaded by name from a config file.
+/// Everything C2 ships, ready to be loaded by name from a config file.
 pub fn builtin_registry() -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     registry.register(|| PathsPlugin);

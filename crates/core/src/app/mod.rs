@@ -1,8 +1,8 @@
-//! Code2 as a plugin graph.
+//! C2 as a plugin graph.
 //!
 //! # What changed
 //!
-//! Code2 used to *be* a program with extension points: a `setup()` that constructed subsystems in
+//! C2 used to *be* a program with extension points: a `setup()` that constructed subsystems in
 //! a fixed order into one `AppState` struct, plus a large hand-written command-wrapper layer that
 //! reached into it. That wrapper layer has been removed: adding or removing a feature now changes
 //! the plugin graph instead of the middle of the application.
@@ -144,7 +144,7 @@ impl AppConfig {
     }
 }
 
-/// A booted Code2: the kernel, the loader, and the root context.
+/// A booted C2: the kernel, the loader, and the root context.
 ///
 /// Frontends hold one of these instead of an `AppState`. What they can do is whatever the loaded
 /// plugins registered — discoverable at runtime through [`CoreApp::commands`].

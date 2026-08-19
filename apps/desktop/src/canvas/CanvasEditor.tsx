@@ -410,14 +410,14 @@ export const CanvasEditor = forwardRef<CanvasEditorHandle, CanvasEditorProps>(fu
       collapse();
       return;
     }
-    // Excalidraw's single-key shortcuts include tools that CodeTwo rejects.
+    // Excalidraw's single-key shortcuts include tools that C2 rejects.
     // Stop them before the renderer's keyboard handler sees the event.
     const target = event.target as HTMLElement | null;
     const isTextEntry = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
     const key = event.key.toLowerCase();
     // Numeric shortcuts are captured too: Excalidraw's 3 selects the unsupported diamond,
     // while 9 activates its raw image tool and would bypass the required media normalizer.
-    // Images remain available through the CodeTwo-owned Image button, which always normalizes
+    // Images remain available through the C2-owned Image button, which always normalizes
     // to a trusted static asset before insertion.
     const blockedShortcutKeys = new Set(["3", "9", "d", "f", "i", "k", "m"]);
     const blockedModifiedShortcut = (event.metaKey || event.ctrlKey) && (

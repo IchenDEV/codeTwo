@@ -6,8 +6,8 @@
 <plist version="1.0">
   <dict>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Code2 uses the microphone to dictate into the prompt document. Audio is transcribed on this Mac and never leaves it.</string>
+    <string>C2 uses the microphone to dictate into the prompt document. Audio is transcribed on this Mac and never leaves it.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Code2 turns your dictation into text using macOS's on-device speech recognition. Audio is never sent to a server.</string>
+    <string>C2 turns your dictation into text using macOS's on-device speech recognition. Audio is never sent to a server.</string>
   </dict>
 </plist>

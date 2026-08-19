@@ -131,7 +131,7 @@ fn authorize() -> io::Result<()> {
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "speech recognition is off for Code2 — turn it back on in System Settings → \
+                "speech recognition is off for C2 — turn it back on in System Settings → \
                  Privacy & Security → Speech Recognition",
             ))
         }
@@ -162,7 +162,7 @@ fn transcribe_blocking(audio: &Path) -> io::Result<String> {
     if !running_from_app_bundle() {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "system speech recognition requires Code2 to run from its macOS app bundle",
+            "system speech recognition requires C2 to run from its macOS app bundle",
         ));
     }
     let rec = recognizer().ok_or_else(|| {
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn privacy_frameworks_are_only_used_from_an_app_bundle() {
         assert!(is_app_bundle_executable(Path::new(
-            "/Applications/Code2.app/Contents/MacOS/codetwo-desktop"
+            "/Applications/C2.app/Contents/MacOS/codetwo-desktop"
         )));
         assert!(!is_app_bundle_executable(Path::new(
             "/tmp/target/debug/codetwo-desktop"

@@ -8,8 +8,8 @@ use std::io::{BufRead, BufReader, Write};
 
 use serde_json::{json, Value};
 
-const BROWSER_INSTRUCTIONS: &str = "For ordinary browser requests use CodeTwo Browser by default. Use Chrome only when the user explicitly asks for Chrome, an existing tab, or an existing login state. Never claim an action completed until the tool result confirms it. Website access and sensitive actions may require user approval; file uploads require user takeover.";
-const SCENE_INSTRUCTIONS: &str = "Use scene_select only when CodeTwo Auto Scene is enabled in the prompt. Select an exact installed reference. Follow the returned current-turn scene instructions. A permission-loosening switch requires user approval and is not applied until confirmed.";
+const BROWSER_INSTRUCTIONS: &str = "For ordinary browser requests use C2 Browser by default. Use Chrome only when the user explicitly asks for Chrome, an existing tab, or an existing login state. Never claim an action completed until the tool result confirms it. Website access and sensitive actions may require user approval; file uploads require user takeover.";
+const SCENE_INSTRUCTIONS: &str = "Use scene_select only when C2 Auto Scene is enabled in the prompt. Select an exact installed reference. Follow the returned current-turn scene instructions. A permission-loosening switch requires user approval and is not applied until confirmed.";
 
 #[derive(Clone, Copy)]
 enum McpSurface {
@@ -76,7 +76,7 @@ impl Sidecar {
             }
             connected.ok_or_else(|| {
                 format!(
-                    "CodeTwo Browser broker is unavailable: {}",
+                    "C2 Browser broker is unavailable: {}",
                     last_error
                         .map(|error| error.to_string())
                         .unwrap_or_else(|| "connection failed".into())
@@ -256,7 +256,7 @@ fn broker_result(response: Value) -> Result<Value, String> {
         Err(response
             .get("error")
             .and_then(Value::as_str)
-            .unwrap_or("CodeTwo Browser request failed")
+            .unwrap_or("C2 Browser request failed")
             .to_string())
     }
 }
@@ -265,7 +265,7 @@ fn tools(surface: McpSurface) -> Value {
     let all = json!([
         {
             "name": "browser_tabs",
-            "description": "List, create, select, or close CodeTwo Browser tabs.",
+            "description": "List, create, select, or close C2 Browser tabs.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -279,7 +279,7 @@ fn tools(surface: McpSurface) -> Value {
         },
         {
             "name": "browser_navigate",
-            "description": "Navigate a CodeTwo Browser tab. A new website origin requires approval.",
+            "description": "Navigate a C2 Browser tab. A new website origin requires approval.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "tabId": { "type": "string" }, "url": { "type": "string" } },
@@ -340,7 +340,7 @@ fn tools(surface: McpSurface) -> Value {
         },
         {
             "name": "scene_select",
-            "description": "Select an installed CodeTwo scene for this Auto Scene session. Returns the scene instructions for the current turn. Permission increases require user approval.",
+            "description": "Select an installed C2 scene for this Auto Scene session. Returns the scene instructions for the current turn. Permission increases require user approval.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -466,7 +466,7 @@ pub fn run() -> Result<(), String> {
 
 #[cfg(not(unix))]
 pub fn run() -> Result<(), String> {
-    Err("CodeTwo Browser MCP is not implemented on this platform".into())
+    Err("C2 Browser MCP is not implemented on this platform".into())
 }
 
 #[cfg(test)]

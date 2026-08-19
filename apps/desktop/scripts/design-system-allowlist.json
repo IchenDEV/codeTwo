@@ -13,7 +13,7 @@
     {
       "path": "src/editor/Editor.tsx",
       "rules": ["hardcoded-type-metric"],
-      "reason": "BlockNote owns document content typography while Code2 owns its surrounding chrome."
+      "reason": "BlockNote owns document content typography while C2 owns its surrounding chrome."
     }
   ]
 }

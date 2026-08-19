@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Code2 desktop app (Tauri v2) — thin bridge over codetwo-core."
+description = "C2 desktop app (Tauri v2) — thin bridge over codetwo-core."
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

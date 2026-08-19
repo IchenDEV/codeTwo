@@ -6,7 +6,7 @@ APP_PROCESS="codetwo-desktop"
 BUNDLE_ID="dev.codetwo.app"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DESKTOP_DIR="$ROOT_DIR/apps/desktop"
-APP_BUNDLE="$ROOT_DIR/target/debug/bundle/macos/Code2.app"
+APP_BUNDLE="$ROOT_DIR/target/debug/bundle/macos/C2.app"
 STATE_DIR="$ROOT_DIR/.codex/run"
 PID_FILE="$STATE_DIR/codetwo-dev.pid"
 APP_RUNNER_PID=""
@@ -31,7 +31,7 @@ require_command cargo
 require_command zig
 
 if [[ "$(zig version)" != "0.15.2" ]]; then
-  echo "Code2 requires Zig 0.15.2; found $(zig version)." >&2
+  echo "C2 requires Zig 0.15.2; found $(zig version)." >&2
   exit 1
 fi
 
@@ -77,7 +77,7 @@ build_app() {
   for privacy_key in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription; do
     privacy_value="$(/usr/bin/plutil -extract "$privacy_key" raw -- "$APP_BUNDLE/Contents/Info.plist")"
     if [[ -z "$privacy_value" ]]; then
-      echo "Code2.app has an empty $privacy_key value." >&2
+      echo "C2.app has an empty $privacy_key value." >&2
       exit 1
     fi
   done
@@ -103,7 +103,7 @@ start_app() {
 wait_for_app() {
   for _ in {1..240}; do
     if pgrep -x "$APP_PROCESS" >/dev/null 2>&1; then
-      echo "Code2 launched successfully (process: $APP_PROCESS)."
+      echo "C2 launched successfully (process: $APP_PROCESS)."
       return 0
     fi
 
@@ -115,7 +115,7 @@ wait_for_app() {
     sleep 0.5
   done
 
-  echo "Code2 did not launch within 120 seconds." >&2
+  echo "C2 did not launch within 120 seconds." >&2
   return 1
 }
 

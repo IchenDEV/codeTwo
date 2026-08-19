@@ -1,4 +1,4 @@
-//! The Code2 plugin kernel — a Rust reading of [cordis](https://github.com/cordiverse/cordis).
+//! The C2 plugin kernel — a Rust reading of [cordis](https://github.com/cordiverse/cordis).
 //!
 //! Cordis' bet is that an application is not a program that happens to have extension points; it
 //! is a *graph of plugins* that happens to boot. Everything the app can do is contributed by a

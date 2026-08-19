@@ -1,13 +1,13 @@
 # Plugin compatibility matrix — 2026-08-09
 
-This matrix is the implementation ledger for Code2's Plugin Hub. It is based on the public
+This matrix is the implementation ledger for C2's Plugin Hub. It is based on the public
 [Agent Plugins 1.0.0 specification](https://agent-plugins.org/specification), the current
 [Codex plugin documentation](https://developers.openai.com/plugins/build/plugins), and the current
 [Claude Code plugin reference](https://code.claude.com/docs/en/plugins-reference), checked on
 2026-08-09. A checked row requires both implementation and automated or runtime evidence; file
 detection alone is not conformance.
 
-| Surface | Agent Plugins | Codex | Claude Code | Code2 baseline at start | Target evidence |
+| Surface | Agent Plugins | Codex | Claude Code | C2 baseline at start | Target evidence |
 | --- | --- | --- | --- | --- | --- |
 | Package manifest | root `plugin.json`, required `$schema` + `name`, closed schema | `.codex-plugin/plugin.json` | optional `.claude-plugin/plugin.json` | Codex/Claude files parsed through one permissive struct | Protocol-specific adapters and fixtures |
 | Version selection | canonical local 1.0.0 schema; no network load | native manifest/version precedence | native manifest/marketplace version precedence | no schema selection | deterministic local validation |

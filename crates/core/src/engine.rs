@@ -579,8 +579,8 @@ fn encode_mcp_servers(
         .collect()
 }
 
-const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[CodeTwo desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
-const CODEX_SITES_INSTRUCTIONS: &str = "[CodeTwo Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
+const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[C2 desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
+const CODEX_SITES_INSTRUCTIONS: &str = "[C2 Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
 
 fn with_codetwo_browser_routing(prompt: String, enabled: bool) -> String {
     if enabled {
@@ -629,7 +629,7 @@ fn auto_scene_routing_instructions(
         ));
     }
     format!(
-        "[CodeTwo Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
+        "[C2 Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
     )
 }
 
@@ -1366,7 +1366,7 @@ struct EngineState {
     desktop_mcp: Option<DesktopMcpConfig>,
 }
 
-/// Desktop-only bootstrap material for CodeTwo's authenticated browser MCP sidecar. The master
+/// Desktop-only bootstrap material for C2's authenticated browser MCP sidecar. The master
 /// key never leaves the process: each session receives a distinct derived key in its child
 /// environment, and the broker validates it before dispatching a request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1448,7 +1448,7 @@ impl Engine {
         Self::build(providers, skills, Some(store), canvas_gate, None)
     }
 
-    /// Desktop construction path that attaches CodeTwo's internal browser MCP to every Codex
+    /// Desktop construction path that attaches C2's internal browser MCP to every Codex
     /// session. Other providers and non-desktop frontends remain unchanged.
     #[doc(hidden)]
     pub fn with_store_canvas_and_desktop_mcp(
@@ -4142,7 +4142,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         git(&repo, &["commit", "--allow-empty", "-qm", "init"]);
         Some((base, repo))
     }
@@ -4177,7 +4177,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         std::fs::write(
             repo.join(".codetwo.json"),
             r#"{"scripts":[{"id":"setup","command":"printf ready > hook-ran","run_on_worktree_create":true}]}"#,
@@ -4246,7 +4246,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         git(
             &repo,
             &["commit", "--allow-empty", "-qm", "origin baseline"],
@@ -4324,7 +4324,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&selected).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         std::fs::write(
             selected.join(".codetwo.json"),
             r#"{"scripts":[{"id":"setup","command":"pwd > hook-cwd","run_on_worktree_create":true}]}"#,
@@ -4375,7 +4375,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         git(&repo, &["commit", "--allow-empty", "-qm", "init"]);
 
         // This directory exists in the source checkout but not in HEAD, so the sibling checkout
@@ -4454,7 +4454,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&repo).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         git(&repo, &["commit", "--allow-empty", "-qm", "init"]);
 
         let source = repo.canonicalize().unwrap().to_string_lossy().into_owned();
@@ -4470,7 +4470,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&old_path).unwrap();
         git(&old_path, &["init", "-q"]);
         git(&old_path, &["config", "user.email", "test@codetwo.dev"]);
-        git(&old_path, &["config", "user.name", "CodeTwo Test"]);
+        git(&old_path, &["config", "user.name", "C2 Test"]);
         git(&old_path, &["commit", "--allow-empty", "-qm", "impostor"]);
         session.cwd = old_path.to_string_lossy().into_owned();
 
@@ -4498,7 +4498,7 @@ for line in sys.stdin:
         std::fs::create_dir_all(&source_subdir).unwrap();
         git(&repo, &["init", "-q"]);
         git(&repo, &["config", "user.email", "test@codetwo.dev"]);
-        git(&repo, &["config", "user.name", "CodeTwo Test"]);
+        git(&repo, &["config", "user.name", "C2 Test"]);
         std::fs::write(source_subdir.join("tracked.txt"), "tracked").unwrap();
         git(&repo, &["add", "."]);
         git(&repo, &["commit", "-qm", "init"]);
@@ -5241,7 +5241,7 @@ mod mcp_tests {
     #[test]
     fn desktop_browser_mcp_uses_a_distinct_session_key() {
         let config = DesktopMcpConfig {
-            command: "/Applications/CodeTwo.app/Contents/MacOS/CodeTwo".into(),
+            command: "/Applications/C2.app/Contents/MacOS/C2".into(),
             socket_path: "/tmp/codetwo-browser.sock".into(),
             master_key: "launch-secret".into(),
         };
@@ -5272,7 +5272,7 @@ mod mcp_tests {
         assert!(instructions.contains("`builtin:develop`"));
         assert!(!instructions.contains("builtin:missing"));
         let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
-        assert!(prompt.starts_with("[CodeTwo Auto Scene]"));
+        assert!(prompt.starts_with("[C2 Auto Scene]"));
         assert!(prompt.ends_with("fix the tests"));
     }
 

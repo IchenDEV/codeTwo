@@ -231,7 +231,7 @@ pub struct Session {
     pub title_origin: SessionTitleOrigin,
     /// Pinned sessions stay above the recency-sorted active session list.
     ///
-    /// Defaulting keeps sessions serialized by older Code2 versions readable.
+    /// Defaulting keeps sessions serialized by older C2 versions readable.
     #[serde(default)]
     pub pinned: bool,
     /// Durable core lifecycle projection. Older serialized sessions deserialize as idle revision 0.

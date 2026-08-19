@@ -1,7 +1,7 @@
-//! Installable plugin bundles: canonical Codex/Claude manifests plus Code2 conventions for
+//! Installable plugin bundles: canonical Codex/Claude manifests plus C2 conventions for
 //! skills, subagents, MCP servers, and project scaffolds.
 //!
-//! Installation is data-only. Code2 validates and stores plugin files but never runs repository
+//! Installation is data-only. C2 validates and stores plugin files but never runs repository
 //! scripts during install. MCP processes start only when the user composes that MCP component into
 //! a session; scaffolds are applied explicitly to a selected workspace without overwriting files.
 
@@ -61,7 +61,7 @@ pub struct PluginCounts {
     pub scenes: usize,
     #[serde(default)]
     pub pipelines: usize,
-    /// 1 when the bundle ships a `runtime` block — a process Code2 speaks the plugin protocol to.
+    /// 1 when the bundle ships a `runtime` block — a process C2 speaks the plugin protocol to.
     /// Counted so a code-only plugin is a legitimate bundle rather than "no components".
     #[serde(default)]
     pub runtime: usize,
@@ -160,7 +160,7 @@ pub struct PluginScaffold {
     pub files: usize,
 }
 
-/// A bundle that ships **code**: a process Code2 speaks the plugin protocol to
+/// A bundle that ships **code**: a process C2 speaks the plugin protocol to
 /// (`docs/plugin-protocol.md`).
 ///
 /// Installing one still executes nothing. The process starts only when the user has marked the
@@ -175,7 +175,7 @@ pub struct PluginRuntimeSpec {
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
-    /// Extra environment for the child. Code2 passes nothing else of its own.
+    /// Extra environment for the child. C2 passes nothing else of its own.
     #[serde(default)]
     pub env: std::collections::BTreeMap<String, String>,
     /// Services that must exist before the process is started — the same reactive contract a Rust
@@ -322,7 +322,7 @@ struct RawManifest {
     user_config: Option<Value>,
     #[serde(default)]
     interface: Value,
-    /// Code2 extension: a process to speak the plugin protocol to. Parsed but never started here.
+    /// C2 extension: a process to speak the plugin protocol to. Parsed but never started here.
     #[serde(default)]
     runtime: Option<Value>,
 }
@@ -1531,7 +1531,7 @@ fn discover_extension_components(
                 level: PluginDiagnosticLevel::Warning,
                 code: "native_component_unsupported".into(),
                 message: format!(
-                    "{} is preserved but has no Code2 runtime adapter yet",
+                    "{} is preserved but has no C2 runtime adapter yet",
                     component.kind
                 ),
                 component: Some(component.path.clone()),

@@ -1,4 +1,4 @@
-//! Code2 remote-control server.
+//! C2 remote-control server.
 //!
 //! Exposes the shared [`Engine`] over WebSocket so another device can drive it: clients send `Op`
 //! JSON, and the server streams `Event` JSON back. The same engine can be shared with the desktop
@@ -6,7 +6,7 @@
 //!
 //! Access is gated by protocol-bound credentials (see [`auth`]): one-time pairing tokens are
 //! exchanged for per-device bearers, which buy short-lived single-use WebSocket tickets. Legacy
-//! Code2 browser clients use `/api/pair`, `/api/ws-ticket`, and `/ws?ticket=…`; T3 Code clients use
+//! C2 browser clients use `/api/pair`, `/api/ws-ticket`, and `/ws?ticket=…`; T3 Code clients use
 //! `/oauth/token`, `/api/auth/websocket-ticket`, and `/ws?wsTicket=…`. Only those single-use tickets
 //! ever appear in a query string.
 //!
@@ -1611,7 +1611,7 @@ pub fn print_pairing(port: u16, pairing_token: &str) {
     let endpoint = select_pairing_endpoint(&endpoints, None)
         .expect("pairing_endpoints always includes the loopback fallback");
     let url = pairing_url_for_endpoint(&endpoint.url, pairing_token);
-    println!("\n  Code2 remote is live.\n");
+    println!("\n  C2 remote is live.\n");
     if endpoint.qr_shareable {
         println!("  Open on another device (link is one-time, expires in 15 minutes):");
     } else {

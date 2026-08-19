@@ -154,7 +154,7 @@ export function changeRequestPresentation(
       ...base,
       canCreate: false,
       status:
-        "No Git remote is configured, so Code2 cannot create a change request. Push remains available.",
+        "No Git remote is configured, so C2 cannot create a change request. Push remains available.",
       statusKind: "unavailable",
     };
   }

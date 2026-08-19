@@ -1,7 +1,7 @@
 # Project rules
 
 Repos increasingly ship instructions for coding agents — but each tool reads a different file.
-Code2 loads **all of them** and prepends them to every compiled prompt, so your conventions travel
+C2 loads **all of them** and prepends them to every compiled prompt, so your conventions travel
 with the session no matter which provider runs it.
 
 ## Files it looks for
@@ -14,7 +14,7 @@ Searched in the session's working directory, in this order:
 | `CLAUDE.md` | Claude Code |
 | `.cursorrules` | Cursor (classic) |
 | `.github/copilot-instructions.md` | GitHub Copilot |
-| `.codetwo/rules.md` | Code2 |
+| `.codetwo/rules.md` | C2 |
 | `.cursor/rules/*.md` / `*.mdc` | Cursor (current) |
 
 Every file that exists is included. Empty files are skipped, and each is capped so an enormous rules

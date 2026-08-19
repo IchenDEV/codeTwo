@@ -14,10 +14,10 @@ The worktree chip is an explicit three-way choice:
 - **Local origin default** creates it from the commit targeted by the local symbolic
   `refs/remotes/origin/HEAD`.
 
-Each available baseline shows the ref and short SHA that will be used. Code2 never fetches, guesses
+Each available baseline shows the ref and short SHA that will be used. C2 never fetches, guesses
 `main` / `master`, or silently falls back to another choice; a missing, dangling, or locally stale
 origin ref is shown as that local fact. The created session remembers the actual ref and full SHA.
-When you press Run, Code2 pins creation to the full SHA from the settled preview and fails closed if
+When you press Run, C2 pins creation to the full SHA from the settled preview and fails closed if
 that local ref moved meanwhile. A newly opened draft therefore does not create a branch or checkout
 until its first Run succeeds.
 See [Git](/guide/git).
@@ -53,7 +53,7 @@ cancels and reaps the previous `rg` process.
 
 ## 3. Run
 
-Press the **send** button (or `Mod+Enter`). Code2:
+Press the **send** button (or `Mod+Enter`). C2:
 
 1. Auto-checkpoints your workspace (a hidden git ref) so you can revert later.
 2. Compiles the document — text + skill fragments + macro substitutions — into the prompt, and
@@ -77,12 +77,12 @@ In the session rail, pin an active chat to keep it above the recency-sorted list
 also removes its pin; restoring it returns it to the ordinary active list until you pin it again.
 The rail also reflects the core-owned **Running**, **Awaiting Input**, and **Failed** states. Their
 revisioned snapshot survives a renderer reload and stays consistent across Desktop, TUI, and remote
-clients. If Code2 itself restarts during a running or waiting turn, the unrecoverable task becomes
+clients. If C2 itself restarts during a running or waiting turn, the unrecoverable task becomes
 **Failed (interrupted)** instead of leaving a stale permission control behind.
 
 ## 4. Answer permission prompts
 
-By default Code2 is in **Ask** mode: when the agent wants to run a command or edit files, a
+By default C2 is in **Ask** mode: when the agent wants to run a command or edit files, a
 permission dialog appears. Allow or reject it. Switch to **Accept edits** or **YOLO** in the config
 popover to reduce prompts — see [Permissions & YOLO](/guide/permissions).
 

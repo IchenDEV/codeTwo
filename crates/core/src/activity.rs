@@ -18,7 +18,7 @@ use crate::session::{
 };
 use crate::store::Store;
 
-const INTERRUPTED_MESSAGE: &str = "Code2 stopped before the turn finished";
+const INTERRUPTED_MESSAGE: &str = "C2 stopped before the turn finished";
 
 #[derive(Clone)]
 pub struct ActivityTracker {

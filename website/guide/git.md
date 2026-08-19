@@ -1,6 +1,6 @@
 # Git, checkpoints & worktrees
 
-Code2 treats git as a first-class safety net and review surface. It shells out to the `git` CLI.
+C2 treats git as a first-class safety net and review surface. It shells out to the `git` CLI.
 
 ## Quick-view status
 
@@ -14,7 +14,7 @@ see you have uncommitted work without opening anything.
 
 ## Checkpoints (per-turn snapshots)
 
-Before **every** prompt turn, Code2 auto-checkpoints your entire working tree — including untracked
+Before **every** prompt turn, C2 auto-checkpoints your entire working tree — including untracked
 files — into a hidden git ref (`refs/codetwo/checkpoints/…`). It does this without disturbing your
 index (it uses a throwaway `GIT_INDEX_FILE`), so your staged changes are untouched.
 
@@ -55,14 +55,14 @@ When creating a session, the worktree picker makes both isolation and its exact 
 - **Local origin default** — read the local symbolic `refs/remotes/origin/HEAD`, resolve its target
   to a commit already present on this machine, and show that target ref plus the short SHA.
 
-Code2 never runs `fetch` while listing or creating these choices. It never guesses `main` or
+C2 never runs `fetch` while listing or creating these choices. It never guesses `main` or
 `master`, and it never falls back from the requested baseline to another commit. A missing
 `refs/remotes/origin/HEAD`, a dangling symbolic target, or a target that is not a commit makes
 **Local origin default** unavailable with the Git error visible. A valid-but-stale local
-origin-tracking ref remains visibly local and resolves to its existing SHA; Code2 does not imply
+origin-tracking ref remains visibly local and resolves to its existing SHA; C2 does not imply
 that it matches the network remote.
 
-For either enabled baseline, Code2 runs the session in an isolated `git worktree` (a separate
+For either enabled baseline, C2 runs the session in an isolated `git worktree` (a separate
 checkout + branch sharing the repo's `.git`), so parallel sessions don't step on each other. It
 creates `codetwo/<session-id>` from the resolved immutable SHA and persists the baseline kind,
 actual ref, full SHA, and display label with the session. Later UI therefore reports what created
@@ -70,22 +70,22 @@ the checkout instead of re-resolving a moving ref. New clients send that preview
 Run; if the chosen ref moved between preview and submission, creation stops before mutating Git.
 
 The checkout root is a persistent sibling under `.codetwo-worktrees/`. If the selected project is
-a repository subdirectory, Code2 preserves that relative path in the isolated checkout, keeps the
+a repository subdirectory, C2 preserves that relative path in the isolated checkout, keeps the
 session grouped under the original project, and runs project hooks marked
 `run_on_worktree_create` from that corresponding subdirectory before announcing the session.
 
-Code2 also records the repository's common Git directory and the exact per-worktree Git directory.
+C2 also records the repository's common Git directory and the exact per-worktree Git directory.
 Resume validates those identities, the registry path, branch, baseline commit, and selected
 subdirectory before starting a provider. This prevents a different checkout copied or swapped into
 the same pathname from being accepted as the original worktree. Sessions created before these
 identity fields existed remain visible as **Legacy**, use a narrower path/registry check, and do not
 claim a baseline identity that was never recorded.
 
-If creation fails after Git has made the checkout, Code2 deliberately retains the checkout path,
+If creation fails after Git has made the checkout, C2 deliberately retains the checkout path,
 Git worktree registration, and branch and reports them for manual cleanup. Supported filesystems
 and Git provide no atomic compare-identity-and-rename/remove primitive, so an automatic path-based
 cleanup could move or delete a directory installed concurrently by another process. If the directory
-identity already changed, Code2 likewise leaves the replacement untouched and reports the failure
+identity already changed, C2 likewise leaves the replacement untouched and reports the failure
 instead of recursively deleting by pathname.
 
 ## Discarding worktrees
@@ -125,6 +125,6 @@ session, so the two flows can never race each other.
   errors remain visible runtime failures, and do not disable the separate **Push** action.
 - Archiving or quitting does not delete a worktree: either action is reversible and the checkout may
   contain uncommitted work. Permanent removal only happens through the explicit discard flow above.
-- Baseline resolution uses local refs only. If a selected choice later becomes unavailable, Code2
+- Baseline resolution uses local refs only. If a selected choice later becomes unavailable, C2
   reports that state and refuses creation instead of silently substituting **Current checkout**.
 :::

@@ -60,7 +60,7 @@ const chineseThemeConfig: DefaultTheme.Config = {
   },
   footer: {
     message: "基于 Apache-2.0 许可证开源。",
-    copyright: "Code2 贡献者",
+    copyright: "C2 贡献者",
   },
   docFooter: {
     prev: "上一页",
@@ -85,7 +85,7 @@ const chineseThemeConfig: DefaultTheme.Config = {
 // Project page served at https://IchenDEV.github.io/codeTwo/
 export default defineConfig({
   lang: "en-US",
-  title: "Code2",
+  title: "C2",
   description:
     "The document-first coding agent. Compose structured prompts, weave in reusable skills, and run your coding CLIs through one local interface.",
   locales: {
@@ -98,7 +98,7 @@ export default defineConfig({
       label: "简体中文",
       lang: "zh-CN",
       link: "/zh/",
-      title: "Code2",
+      title: "C2",
       description:
         "以文档为中心的编程智能体。在一个本地界面中编写结构化提示词、组合可复用技能，并运行不同的编程 CLI。",
       themeConfig: chineseThemeConfig,
@@ -117,13 +117,13 @@ export default defineConfig({
     ],
     ["link", { rel: "apple-touch-icon", href: "/codeTwo/apple-touch-icon.png" }],
     ["meta", { name: "theme-color", content: "#030504" }],
-    ["meta", { property: "og:site_name", content: "Code2" }],
+    ["meta", { property: "og:site_name", content: "C2" }],
     ["meta", { property: "og:type", content: "website" }],
     [
       "meta",
       {
         property: "og:title",
-        content: "Code2 — The document-first coding agent",
+        content: "C2 — The document-first coding agent",
       },
     ],
     [
@@ -197,7 +197,7 @@ export default defineConfig({
     },
     footer: {
       message: "Apache-2.0 licensed.",
-      copyright: "Code2 contributors",
+      copyright: "C2 contributors",
     },
   },
 });

@@ -12,7 +12,7 @@ const idle = {
   completed: false,
 };
 
-describe("CodeTwo pet session state", () => {
+describe("C2 pet session state", () => {
   test("uses the matching Codex Pet v2 rows", () => {
     expect(petAnimationForActivity(idle)).toBe("idle");
     expect(petAnimationForActivity({ ...idle, running: true })).toBe("running");
