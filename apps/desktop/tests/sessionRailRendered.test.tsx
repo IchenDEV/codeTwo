@@ -68,9 +68,6 @@ function renderRail(overrides = {}) {
           onToggleCollapse={() => {}}
           width={320}
           onWidth={() => {}}
-          needsMeCount={0}
-          onOpenMissionControl={() => {}}
-          missionControlOpen={false}
           taskBoardOpen={false}
           onOpenTaskBoard={() => {}}
           pluginHubOpen={false}
@@ -88,7 +85,6 @@ describe("SessionRail row layout", () => {
     const view = renderRail({
       taskBoardOpen: true,
       onNew: () => opened.push("new"),
-      onOpenMissionControl: () => opened.push("mission"),
       onOpenTaskBoard: () => opened.push("tasks"),
       onOpenAutomations: () => opened.push("scheduled"),
       onOpenMarket: () => opened.push("plugins"),
@@ -99,7 +95,6 @@ describe("SessionRail row layout", () => {
 
     expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
       "New session",
-      "Mission control",
       "Task board",
       "Scheduled tasks",
       "Plugins",
@@ -109,7 +104,8 @@ describe("SessionRail row layout", () => {
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of rows) click(row);
-    expect(opened).toEqual(["new", "mission", "tasks", "scheduled", "plugins", "settings"]);
+    expect(opened).toEqual(["new", "tasks", "scheduled", "plugins", "settings"]);
+    expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
 
     view.unmount();
   });

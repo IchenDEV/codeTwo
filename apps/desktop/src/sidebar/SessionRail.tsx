@@ -14,7 +14,6 @@ import {
   FolderPlus,
   FolderX,
   Hash,
-  LayoutGrid,
   PanelLeft,
   Pencil,
   Pin,
@@ -103,9 +102,6 @@ export function SessionRail({
   onToggleCollapse,
   width,
   onWidth,
-  needsMeCount,
-  onOpenMissionControl,
-  missionControlOpen,
   taskBoardOpen,
   onOpenTaskBoard,
   pluginHubOpen,
@@ -151,10 +147,6 @@ export function SessionRail({
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
-  /** Sessions waiting on input or failed — the mission-control button's attention badge. */
-  needsMeCount: number;
-  onOpenMissionControl: () => void;
-  missionControlOpen: boolean;
   taskBoardOpen: boolean;
   onOpenTaskBoard: () => void;
   pluginHubOpen: boolean;
@@ -658,24 +650,6 @@ export function SessionRail({
           <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
             <Plus className="size-2.5" aria-hidden />
           </span>
-        </button>
-        <button
-          data-rail-feature="mission-control"
-          aria-current={missionControlOpen ? "page" : undefined}
-          aria-haspopup="dialog"
-          className={cn(featureRowClass, missionControlOpen && "bg-accent font-medium text-foreground")}
-          onClick={onOpenMissionControl}
-        >
-          <LayoutGrid className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("mission.title")}</span>
-          {needsMeCount > 0 && (
-            <span
-              aria-label={t("mission.awaiting")}
-              className="flex min-w-4 shrink-0 items-center justify-center rounded-full bg-warning px-1 text-cap font-semibold leading-4 text-background"
-            >
-              {needsMeCount}
-            </span>
-          )}
         </button>
         <button
           data-rail-feature="task-board"

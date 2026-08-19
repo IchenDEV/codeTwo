@@ -255,7 +255,6 @@ import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
-import { needsMeCount } from "./sidebar/missionControl.ts";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
@@ -3690,12 +3689,6 @@ export default function App() {
           collapsed={displayedRailCollapsed}
           overlay={narrowLayout}
           onToggleCollapse={toggleDisplayedRail}
-          needsMeCount={needsMeCount(sessions)}
-          onOpenMissionControl={() => {
-            setShowTaskBoard(false);
-            setShowMissionControl(true);
-          }}
-          missionControlOpen={showMissionControl}
           taskBoardOpen={showTaskBoard}
           onOpenTaskBoard={() => {
             if (showTaskBoard) setShowTaskBoard(false);
