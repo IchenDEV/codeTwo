@@ -39,6 +39,8 @@ jobs:
 
       - name: Build ad-hoc signed DMG
         working-directory: apps/desktop
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: >-
           bun run tauri build --bundles dmg
           --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
