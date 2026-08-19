@@ -1241,16 +1241,6 @@ export default function App() {
     [archivedSessions, sessions],
   );
 
-  // The rail's status card names the model the next turn runs on. Same two sources as the
-  // composer's picker, flattened to a label: config options first, then the flat model list,
-  // then the provider's display name when nothing has been reported yet.
-  const modelLabel = useMemo(() => {
-    const opt = configOptions.find((o) => o.category === "model" || o.id === "model");
-    if (opt) return opt.choices.find((c) => c.id === opt.current)?.name || opt.current;
-    const m = models.find((x) => x.id === currentModel);
-    if (m) return m.name;
-    return currentModel ?? providers.find((p) => p.id === provider)?.display_name ?? provider;
-  }, [configOptions, models, currentModel, providers, provider]);
   const providerDisplayNames = useMemo(
     () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
     [providers],
@@ -3680,8 +3670,6 @@ export default function App() {
           onArchive={(id, archived) => void archiveSession(id, archived).then(refreshSessions)}
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
-          model={modelLabel}
-          provider={provider}
           onOpenMarket={() => {
             setShowTaskBoard(false);
             openPluginHub();

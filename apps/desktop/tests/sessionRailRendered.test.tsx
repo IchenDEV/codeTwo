@@ -57,8 +57,6 @@ function renderRail(overrides = {}) {
           onPin={() => {}}
           onArchive={() => {}}
           displayProvider={() => "OpenAI Codex"}
-          model="gpt-5.6-sol"
-          provider="codex"
           onOpenMarket={() => {}}
           onOpenAutomations={() => {}}
           newHint="⌘N"
@@ -109,6 +107,7 @@ describe("SessionRail row layout", () => {
     ]);
     expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
       .toBe("page");
+    expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of rows) click(row);
     expect(opened).toEqual(["new", "mission", "tasks", "scheduled", "plugins", "settings"]);
 

@@ -71,8 +71,7 @@ function shortAge(ts: number): string {
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
  * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
- * 4. Agent — the model this session runs on. Project Git status lives in the header's environment
- *    popover, beside the related right-panel shortcuts.
+ * The active model remains available in the composer, where it can also be changed.
  */
 export function SessionRail({
   projects,
@@ -93,8 +92,6 @@ export function SessionRail({
   onArchive,
   onDiscardWorktree,
   displayProvider,
-  model,
-  provider,
   onOpenMarket,
   onOpenAutomations,
   newHint,
@@ -139,9 +136,6 @@ export function SessionRail({
   onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
-  /** The model the next turn runs on — the agent's current pick, or the provider's name. */
-  model: string;
-  provider: string;
   onOpenMarket: () => void;
   onOpenAutomations: () => void;
   newHint: string;
@@ -847,15 +841,6 @@ export function SessionRail({
         </div>
       </ScrollArea>
 
-      {/* ---- 4 · active agent --------------------------------------------------------------- */}
-      <div className="border-t border-sidebar-border px-4 pb-3 pt-3">
-        <div className="flex items-center gap-2 px-1 pb-1.5">
-          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-ui font-medium" title={t("composer.model")}>
-            {model}
-          </span>
-        </div>
-      </div>
       </div>
     </aside>
   );
