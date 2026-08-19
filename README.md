@@ -90,6 +90,13 @@ bun run tauri dev
 C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
 are documented in [Providers](website/guide/providers.md).
 
+### Nightly package
+
+Every push to `main`, plus the daily 02:17 Asia/Singapore schedule, builds and verifies an Apple
+Silicon DMG in the [Nightly macOS package](.github/workflows/nightly-macos.yml) workflow. Download
+`C2-nightly-macos-arm64-<commit>` from that run's artifacts. Nightly packages are ad-hoc signed but
+not Apple-notarized, so they are for testing rather than general distribution.
+
 ### Other surfaces
 
 From the repository root:
