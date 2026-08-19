@@ -97,6 +97,17 @@ Silicon DMG in the [Nightly macOS package](.github/workflows/nightly-macos.yml) 
 `C2-nightly-macos-arm64-<commit>` from that run's artifacts. Nightly packages are ad-hoc signed but
 not Apple-notarized, so they are for testing rather than general distribution.
 
+### Versioned release
+
+Run the [Release macOS](.github/workflows/release-macos.yml) workflow, enter a semantic version such
+as `0.1.0`, and choose whether it is a prerelease. The workflow builds and verifies the versioned
+Apple Silicon DMG before it creates the matching `v<version>` tag and publishes a GitHub Release
+with the DMG and SHA-256 checksum. Existing tags are never overwritten.
+
+Release packages are currently ad-hoc signed and not Apple-notarized. They are suitable for testing
+through GitHub Releases, but a public production distribution still requires Developer ID signing
+and notarization.
+
 ### Other surfaces
 
 From the repository root:
