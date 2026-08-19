@@ -65,6 +65,26 @@ impl Plugin for UsagePlugin {
                 by_source: crate::usage::by_source_detailed(&scan.records, cutoff),
             })
         })?;
+
+        #[derive(Deserialize)]
+        struct ProviderQuotaArgs {
+            provider: String,
+        }
+        ctx.command("usage.provider_quota", |args| async move {
+            let args: ProviderQuotaArgs = take_args(args)?;
+            let provider = match args.provider.as_str() {
+                "claude_code" => crate::provider::ProviderId::ClaudeCode,
+                "codex" => crate::provider::ProviderId::Codex,
+                "grok" => crate::provider::ProviderId::Grok,
+                "cursor" => crate::provider::ProviderId::Cursor,
+                "opencode" => crate::provider::ProviderId::OpenCode,
+                "pi" => crate::provider::ProviderId::Pi,
+                "kimi" => crate::provider::ProviderId::Kimi,
+                "zcode" => crate::provider::ProviderId::ZCode,
+                other => crate::provider::ProviderId::Custom(other.to_string()),
+            };
+            json(crate::usage::provider_quota(&provider).await)
+        })?;
         Ok(())
     }
 }

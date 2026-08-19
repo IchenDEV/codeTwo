@@ -10,7 +10,7 @@ use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::engine::Engine;
 use crate::event::Event;
 use crate::keymap::Keymap;
-use crate::models::builtin_models;
+use crate::models::available_models;
 use crate::provider::{Provider, ProviderCapability};
 use crate::scene::SceneLibrary;
 use crate::scene_artifact::SceneArtifactStore;
@@ -177,22 +177,23 @@ impl Service for ProviderService {
 }
 
 impl ProviderService {
-    pub fn summaries(&self) -> Vec<ProviderSummary> {
-        self.providers
-            .iter()
-            .map(|provider| ProviderSummary {
+    pub async fn summaries(&self) -> Vec<ProviderSummary> {
+        let mut summaries = Vec::with_capacity(self.providers.len());
+        for provider in &self.providers {
+            summaries.push(ProviderSummary {
                 id: provider.id.as_str().to_string(),
                 display_name: provider.display_name.clone(),
                 available: provider.is_available(),
                 needs_node: provider.needs_node,
-                models: builtin_models(&provider.id),
+                models: available_models(provider).await,
                 capabilities: if provider.id == crate::provider::ProviderId::Codex {
                     self.codex.capability_projection(true)
                 } else {
                     Vec::new()
                 },
-            })
-            .collect()
+            });
+        }
+        summaries
     }
 }
 

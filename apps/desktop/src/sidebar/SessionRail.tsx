@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
+  Blocks,
   CalendarClock,
+  ChartNoAxesColumn,
   Check,
   CircleAlert,
   ChevronDown,
@@ -13,15 +15,14 @@ import {
   FolderPlus,
   FolderX,
   Hash,
-  LayoutGrid,
   PanelLeft,
   Pencil,
   Pin,
+  Plus,
   Search,
   Settings,
   SquareKanban,
   SquarePen,
-  Store,
   Trash2,
 } from "lucide-react";
 
@@ -51,6 +52,7 @@ import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
+import type { QuickQuotaSummary } from "../usage/quickQuota";
 import { useToast } from "../ui/toast";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
@@ -64,13 +66,13 @@ function shortAge(ts: number): string {
 }
 
 /**
- * The rail, three zones top to bottom:
+ * The rail, four zones top to bottom:
  *
- * 1. Title — wordmark on the traffic-light line, search + compose under it.
- * 2. Recent chats — the active project's sessions, newest first, with the project itself as a
+ * 1. Title — wordmark on the traffic-light line, with search directly below it.
+ * 2. Features — the app's primary destinations as compact, labeled source-list rows.
+ * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
- * 3. Utilities — the model this session runs on, plus market and settings shortcuts. Project Git
- *    status lives in the header's environment popover, beside the related right-panel shortcuts.
+ * The active model remains available in the composer, where it can also be changed.
  */
 export function SessionRail({
   projects,
@@ -91,8 +93,6 @@ export function SessionRail({
   onArchive,
   onDiscardWorktree,
   displayProvider,
-  model,
-  provider,
   onOpenMarket,
   onOpenAutomations,
   newHint,
@@ -104,10 +104,14 @@ export function SessionRail({
   onToggleCollapse,
   width,
   onWidth,
-  needsMeCount,
-  onOpenMissionControl,
   taskBoardOpen,
   onOpenTaskBoard,
+  automationsOpen,
+  pluginHubOpen,
+  quickQuota,
+  quickQuotaLoading,
+  quickQuotaProviderName,
+  onOpenUsage,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -135,9 +139,6 @@ export function SessionRail({
   onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
   displayProvider: (p: SessionInfo["provider"]) => string;
-  /** The model the next turn runs on — the agent's current pick, or the provider's name. */
-  model: string;
-  provider: string;
   onOpenMarket: () => void;
   onOpenAutomations: () => void;
   newHint: string;
@@ -153,11 +154,15 @@ export function SessionRail({
   /** Rail width in px — dragged by the right-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
-  /** Sessions waiting on input or failed — the mission-control button's attention badge. */
-  needsMeCount: number;
-  onOpenMissionControl: () => void;
   taskBoardOpen: boolean;
   onOpenTaskBoard: () => void;
+  automationsOpen: boolean;
+  pluginHubOpen: boolean;
+  /** Most constrained provider-owned quota window, for the glanceable rail meter. */
+  quickQuota: QuickQuotaSummary | null;
+  quickQuotaLoading: boolean;
+  quickQuotaProviderName: string;
+  onOpenUsage: () => void;
 }) {
   const t = useT();
   const toast = useToast();
@@ -167,6 +172,18 @@ export function SessionRail({
   // Clamped on every render, not just while dragging, so a width saved on one display comes back
   // usable on another.
   const applied = Math.min(420, Math.max(220, width));
+  const featureRowClass =
+    "flex h-(--ds-control-field) w-full items-center gap-2.5 rounded-(--ds-radius-control) px-2.5 text-left text-ui text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+  const quickQuotaWindow = quickQuota?.windowMinutes === 300
+    ? t("quota.window5h")
+    : quickQuota?.windowMinutes === 10_080
+      ? t("quota.windowWeekly")
+      : quickQuota?.windowMinutes != null && quickQuota.windowMinutes >= 43_000
+        ? t("quota.windowMonthly")
+        : t("quota.windowUnknown");
+  const quickQuotaTitle = quickQuota
+    ? `${quickQuotaProviderName} · ${quickQuotaWindow} · ${t("quota.remaining", { percent: quickQuota.remainingPercent })} · ${t("quota.quickOpen")}`
+    : `${quickQuotaProviderName} · ${t(quickQuotaLoading ? "quota.checkingShort" : "quota.quickUnavailable")} · ${t("quota.quickOpen")}`;
 
   // A grip drag must track the pointer 1:1 — the collapse transition below would ease every
   // intermediate width instead, so it's dropped for the duration of the drag (the dock does the
@@ -617,43 +634,6 @@ export function SessionRail({
             render={<Button
               variant="ghost"
               size="icon"
-              className="relative size-7 shrink-0 text-muted-foreground"
-              aria-label={t("mission.open")}
-              onClick={onOpenMissionControl}
-            >
-              <LayoutGrid className="size-4" />
-              {needsMeCount > 0 && (
-                <span
-                  aria-label={t("mission.awaiting")}
-                  className="absolute right-0 top-0 flex size-3.5 items-center justify-center rounded-full bg-warning text-cap font-semibold leading-none text-background"
-                >
-                  {needsMeCount}
-                </span>
-              )}
-            </Button>}
-          />
-          <TooltipContent side="right">{t("mission.open")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant={taskBoardOpen ? "secondary" : "ghost"}
-              size="icon"
-              className="size-7 shrink-0 text-muted-foreground"
-              aria-label={t("taskboard.title")}
-              aria-pressed={taskBoardOpen}
-              onClick={onOpenTaskBoard}
-            >
-              <SquareKanban data-icon="inline-start" aria-hidden />
-            </Button>}
-          />
-          <TooltipContent side="right">{t("taskboard.title")}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
               className="size-7 shrink-0 text-muted-foreground"
               aria-label={t("rail.collapse")}
               onClick={onToggleCollapse}
@@ -665,10 +645,10 @@ export function SessionRail({
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="flex items-center gap-2 px-4 pb-2 pt-2">
+      <div className="px-3 pb-2 pt-2">
         <button
           onClick={onOpenSearch}
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
+          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
         >
           <Search className="size-3.5 shrink-0" />
           <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
@@ -678,25 +658,101 @@ export function SessionRail({
             </kbd>
           )}
         </button>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
-              className="size-8 shrink-0"
-              aria-label={t("rail.newSession")}
-              onClick={onNew}
-            >
-              <SquarePen className="size-4" />
-            </Button>}
-          />
-          <TooltipContent side="right">
-            {t("rail.newSession")} <span className="ml-1 opacity-60">{newHint}</span>
-          </TooltipContent>
-        </Tooltip>
       </div>
 
-      {/* ---- 2 · recent chats --------------------------------------------------------------- */}
+      {/* ---- 2 · features ------------------------------------------------------------------- */}
+      <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-3 pb-2">
+        <button
+          data-rail-feature="new-session"
+          className={featureRowClass}
+          title={`${t("rail.newSession")} ${newHint}`}
+          onClick={onNew}
+        >
+          <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("rail.newSession")}</span>
+          <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
+            <Plus className="size-2.5" aria-hidden />
+          </span>
+        </button>
+        <button
+          data-rail-feature="task-board"
+          aria-current={taskBoardOpen ? "page" : undefined}
+          className={cn(featureRowClass, taskBoardOpen && "bg-accent font-medium text-foreground")}
+          onClick={onOpenTaskBoard}
+        >
+          <SquareKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("taskboard.title")}</span>
+        </button>
+        <button
+          data-rail-feature="scheduled-tasks"
+          aria-current={automationsOpen ? "page" : undefined}
+          className={cn(featureRowClass, automationsOpen && "bg-accent font-medium text-foreground")}
+          onClick={onOpenAutomations}
+        >
+          <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("automations.tasks")}</span>
+        </button>
+        <button
+          data-rail-feature="plugins"
+          aria-current={pluginHubOpen ? "page" : undefined}
+          className={cn(featureRowClass, pluginHubOpen && "bg-accent font-medium text-foreground")}
+          onClick={onOpenMarket}
+        >
+          <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
+        </button>
+        <button
+          data-rail-feature="usage"
+          aria-busy={quickQuotaLoading || undefined}
+          className={featureRowClass}
+          title={quickQuotaTitle}
+          onClick={onOpenUsage}
+        >
+          <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
+          {quickQuota ? (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span
+                role="progressbar"
+                aria-label={t("quota.remainingLabel", { window: quickQuotaWindow })}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={quickQuota.remainingPercent}
+                className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10"
+              >
+                <span
+                  className={cn(
+                    "block h-full rounded-full",
+                    quickQuota.remainingPercent <= 5
+                      ? "bg-destructive"
+                      : quickQuota.remainingPercent <= 20
+                        ? "bg-warning"
+                        : "bg-primary",
+                  )}
+                  style={{ width: `${quickQuota.remainingPercent}%` }}
+                />
+              </span>
+              <span className="w-7 text-right text-fine font-medium tabular-nums">
+                {quickQuota.remainingPercent}%
+              </span>
+            </span>
+          ) : (
+            <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
+              {quickQuotaLoading ? "…" : "—"}
+            </span>
+          )}
+        </button>
+        <button
+          data-rail-feature="settings"
+          className={featureRowClass}
+          onClick={onOpenSettings}
+        >
+          <Settings className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("header.settings")}</span>
+        </button>
+      </nav>
+
+      {/* ---- 3 · recent chats --------------------------------------------------------------- */}
       {/* The section header carries the project switcher: which project's chats these are, and
           every project operation, behind one chip instead of a whole tree. */}
       <div className="flex items-center gap-1 px-4 pb-1 pt-3">
@@ -823,55 +879,6 @@ export function SessionRail({
         </div>
       </ScrollArea>
 
-      {/* ---- 3 · session utilities ---------------------------------------------------------- */}
-      <div className="border-t border-sidebar-border px-4 pb-3 pt-3">
-        <div className="flex items-center gap-2 px-1 pb-1.5">
-          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-          <span className="min-w-0 flex-1 truncate text-ui font-medium" title={t("composer.model")}>
-            {model}
-          </span>
-          <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0 text-muted-foreground"
-                aria-label={t("automations.title")}
-                onClick={onOpenAutomations}
-              >
-                <CalendarClock className="size-3.5" />
-              </Button>}
-            />
-            <TooltipContent>{t("automations.title")}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0 text-muted-foreground"
-                onClick={onOpenMarket}
-              >
-                <Store className="size-3.5" />
-              </Button>}
-            />
-            <TooltipContent>{t("composer.market")}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="ghost"
-                size="icon"
-                className="size-7 shrink-0 text-muted-foreground"
-                onClick={onOpenSettings}
-              >
-                <Settings className="size-3.5" />
-              </Button>}
-            />
-            <TooltipContent>{t("header.settings")}</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
       </div>
     </aside>
   );

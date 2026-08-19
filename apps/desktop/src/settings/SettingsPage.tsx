@@ -55,7 +55,7 @@ import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
 
-type SettingsTab =
+export type SettingsTab =
   | "general"
   | "appearance"
   | "project"
@@ -190,9 +190,11 @@ export function SettingsPage({
   onReset,
   onResetAll,
   providers,
+  provider,
   projectPath,
   project,
   onProjectWorktreeMode,
+  initialTab = "general",
   onClose,
 }: {
   bindings: KeymapEntry[];
@@ -202,16 +204,23 @@ export function SettingsPage({
   /** Restore every shortcut to the shipped default — the header's "Restore defaults" on that tab. */
   onResetAll?: () => void;
   providers: ProviderInfo[];
+  provider: string;
   projectPath: string;
   project: Project | null;
   onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
+  initialTab?: SettingsTab;
   onClose: () => void;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
   const { preference: language, setPreference: setLanguage } = useLanguage();
   const term = useTerminalSettings();
-  const [tab, setTab] = useState<SettingsTab>("general");
+  const providerNames = useMemo(
+    () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
+    [providers],
+  );
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -590,7 +599,13 @@ export function SettingsPage({
 
             {tab === "memory" && <MemorySettingsPage projectPath={projectPath} />}
 
-            {tab === "usage" && <UsagePanel />}
+            {tab === "usage" && (
+              <UsagePanel
+                provider={provider}
+                providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
+                providerNames={providerNames}
+              />
+            )}
 
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>

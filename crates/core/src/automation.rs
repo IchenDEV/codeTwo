@@ -55,7 +55,45 @@ CREATE INDEX IF NOT EXISTS automation_runs_session
   ON automation_runs(session_id);
 ";
 
+fn table_has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut statement = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+    for existing in columns {
+        if existing? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The removed Work automation prototype used these table names for a different schema. Preserve
+/// its rows under explicit legacy names before installing the scheduled-task implementation.
+fn archive_legacy_work_schema(conn: &Connection) -> rusqlite::Result<()> {
+    let legacy_automations = table_has_column(conn, "automations", "task_id")?
+        && table_has_column(conn, "automations", "configuration_json")?
+        && !table_has_column(conn, "automations", "next_run_at")?;
+    if !legacy_automations {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    if table_has_column(&tx, "automation_runs", "scheduled_at")?
+        && !table_has_column(&tx, "automation_runs", "scheduled_for")?
+    {
+        tx.execute(
+            "ALTER TABLE automation_runs RENAME TO legacy_work_automation_runs",
+            [],
+        )?;
+    }
+    tx.execute(
+        "ALTER TABLE automations RENAME TO legacy_work_automations",
+        [],
+    )?;
+    tx.commit()
+}
+
 pub(crate) fn install(conn: &Connection) -> rusqlite::Result<()> {
+    archive_legacy_work_schema(conn)?;
     conn.execute_batch(SCHEMA)
 }
 
@@ -670,6 +708,68 @@ fn insert_run(conn: &Connection, run: &AutomationRun) -> Result<(), StoreError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn install_preserves_and_moves_aside_the_legacy_work_automation_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE automations (
+               id TEXT PRIMARY KEY,
+               task_id TEXT NOT NULL,
+               trigger TEXT NOT NULL,
+               configuration_json TEXT NOT NULL,
+               enabled INTEGER NOT NULL DEFAULT 1,
+               non_overlapping INTEGER NOT NULL DEFAULT 1,
+               created_at INTEGER NOT NULL,
+               updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE automation_runs (
+               id TEXT PRIMARY KEY,
+               automation_id TEXT NOT NULL REFERENCES automations(id),
+               status TEXT NOT NULL,
+               scheduled_at INTEGER NOT NULL,
+               metadata_json TEXT NOT NULL
+             );
+             INSERT INTO automations
+               (id, task_id, trigger, configuration_json, created_at, updated_at)
+             VALUES ('legacy-automation', 'task-1', 'cron', '{}', 1, 1);
+             INSERT INTO automation_runs
+               (id, automation_id, status, scheduled_at, metadata_json)
+             VALUES ('legacy-run', 'legacy-automation', 'completed', 1, '{}');",
+        )
+        .unwrap();
+
+        install(&conn).unwrap();
+        install(&conn).unwrap();
+
+        let new_columns: Vec<String> = conn
+            .prepare("PRAGMA table_info(automations)")
+            .unwrap()
+            .query_map([], |row| row.get(1))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert!(new_columns.contains(&"next_run_at".to_string()));
+        assert!(!new_columns.contains(&"task_id".to_string()));
+        assert_eq!(
+            conn.query_row(
+                "SELECT task_id FROM legacy_work_automations WHERE id='legacy-automation'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+            "task-1"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT automation_id FROM legacy_work_automation_runs WHERE id='legacy-run'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+            "legacy-automation"
+        );
+    }
 
     fn input() -> AutomationInput {
         AutomationInput {

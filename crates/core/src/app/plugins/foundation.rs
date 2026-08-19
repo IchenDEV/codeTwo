@@ -215,7 +215,7 @@ impl Plugin for ProvidersPlugin {
         let listed = service.clone();
         ctx.command("providers.list", move |_| {
             let service = listed.clone();
-            async move { json(service.summaries()) }
+            async move { json(service.summaries().await) }
         })?;
 
         ctx.provide(service)?;

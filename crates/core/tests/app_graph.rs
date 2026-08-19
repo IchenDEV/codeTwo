@@ -128,6 +128,61 @@ async fn plugins_contribute_the_app_surface() {
 }
 
 #[tokio::test]
+async fn a_legacy_work_automation_database_keeps_store_commands_available() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    {
+        let conn = rusqlite::Connection::open(dir.path().join("codetwo.db")).expect("database");
+        conn.execute_batch(
+            "CREATE TABLE automations (
+               id TEXT PRIMARY KEY,
+               task_id TEXT NOT NULL,
+               trigger TEXT NOT NULL,
+               configuration_json TEXT NOT NULL,
+               enabled INTEGER NOT NULL DEFAULT 1,
+               non_overlapping INTEGER NOT NULL DEFAULT 1,
+               created_at INTEGER NOT NULL,
+               updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE automation_runs (
+               id TEXT PRIMARY KEY,
+               automation_id TEXT NOT NULL REFERENCES automations(id),
+               status TEXT NOT NULL,
+               scheduled_at INTEGER NOT NULL,
+               metadata_json TEXT NOT NULL
+             );",
+        )
+        .expect("legacy schema");
+    }
+
+    let app = CoreApp::boot(AppConfig::new(dir.path()))
+        .await
+        .expect("boot with legacy automation schema");
+
+    app.call(
+        "projects.add",
+        json!({ "path": dir.path().to_string_lossy() }),
+    )
+    .await
+    .expect("projects.add");
+    for plugin in ["store", "memory", "engine", "projects"] {
+        assert_eq!(
+            status_of(&app, plugin),
+            Status::Active,
+            "{plugin} should remain active"
+        );
+    }
+    app.call("memory.settings", Value::Null)
+        .await
+        .expect("memory.settings");
+    app.call("memory.list", json!({ "project_path": "/tmp/demo" }))
+        .await
+        .expect("memory.list");
+    app.call("sessions.list", Value::Null)
+        .await
+        .expect("sessions.list");
+}
+
+#[tokio::test]
 async fn an_unknown_command_is_an_error_not_a_panic() {
     let (app, _dir) = boot().await;
     let error = app.call("nope.missing", Value::Null).await.unwrap_err();
