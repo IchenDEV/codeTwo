@@ -1,82 +1,173 @@
-# Code2
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="104" alt="Code2 app icon" />
+</p>
 
-A document-first coding-agent app. Compose prompts as a **structured document** (not a chat box),
-weave in reusable **skills** with a `/` picker, and run them against existing coding CLIs —
-**Claude Code**, **OpenAI Codex**, and **Grok** — behind one interface.
+<h1 align="center">Code2</h1>
 
-Its **Plugin Hub** installs complete GitHub packages: standard Skills, Subagent definitions,
-stdio/HTTP/SSE MCP servers, and conflict-safe project scaffolds.
+<p align="center">
+  <strong>The document-first coding agent.</strong><br />
+  Compose structured prompts, weave in reusable skills, and run your coding CLIs through one local interface.
+</p>
 
-Internally it is a **plugin graph** in the [cordis](https://github.com/cordiverse/cordis) sense:
-every subsystem — storage, the agent loop, git, memory, scenes — is a plugin that declares what it
-needs, publishes what it offers, and can be loaded, reconfigured, and unloaded while the app runs
-([`docs/plugins.md`](docs/plugins.md)). A plugin can also be a **process in any language**, over a
-small JSON-RPC [plugin protocol](docs/plugin-protocol.md) — its commands land in the same registry
-the built-ins use.
+<p align="center">
+  <a href="https://ichendev.github.io/codeTwo/">Website</a> ·
+  <a href="website/guide/getting-started.md">Get started</a> ·
+  <a href="docs/architecture.md">Architecture</a> ·
+  <a href="docs/plugin-protocol.md">Plugin protocol</a>
+</p>
 
-Ships two frontends over one shared Rust core:
+![Code2 document editor with the skill picker open](docs/screenshots/slash-menu.png)
 
-- **Desktop** — Tauri v2 + React + BlockNote (the document editor).
-- **TUI** — ratatui.
+> [!IMPORTANT]
+> Code2 is pre-release software. The core product works, but there are no signed binary releases
+> yet. Build it from source and expect APIs, storage, and packaging details to change before 1.0.
 
-## How it works
+## Why Code2
 
-Every provider CLI is driven over the **Agent Client Protocol (ACP)** — JSON-RPC over stdio.
-The core spawns each provider as a child process and speaks ACP to it. See
-[`docs/architecture.md`](docs/architecture.md) and the plan for the full design.
+Most coding-agent clients begin with a chat box. Code2 begins with a document. You can shape a
+long brief with headings and lists, insert skills and files exactly where they belong, inspect the
+whole turn, and only then send it to the agent you choose.
 
+- **Document-first prompts.** Compose in a BlockNote editor instead of squeezing a specification
+  into a single-line input.
+- **Eight coding CLIs, one protocol.** Drive Claude Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi,
+  and ZCode/GLM through the [Agent Client Protocol](https://agentclientprotocol.com/).
+- **Skills and complete plugins.** Insert reusable skills inline, or install GitHub packages that
+  can include skills, subagents, MCP servers, and project scaffolds.
+- **Local, inspectable continuity.** Sessions and project memory live in the shared Rust core;
+  derived memories retain their sources and can be pinned or forgotten.
+- **Git-aware execution.** Use per-session worktrees, automatic checkpoints, diffs, revert, and
+  explicit commit/push flows.
+- **Three surfaces.** The same core powers a Tauri desktop app, a ratatui TUI, and a paired remote
+  web client.
+
+## How it fits together
+
+```text
+Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM
+                              │
+                         ACP over stdio
+                              │
+                 Rust core + plugin kernel
+                    ┌─────────┼─────────┐
+                    │         │         │
+                Desktop      TUI      Remote
+             Tauri + React  ratatui  Axum + WebSocket
 ```
-crates/kernel  the plugin runtime (cordis in Rust): contexts, reactive services, scoped effects,
-               hot-swappable plugins — everything below is one
-crates/core    the brain: ACP client, engine, providers, sessions, skills + market, permissions,
-               project memory, worktrees, git (status/checkpoints/diff/commit), keymap, browser, pty
-crates/tui     ratatui frontend (links core)
-crates/server  headless remote-control server (WebSocket + pairing token + QR; links core)
-apps/desktop   Tauri desktop app + React/BlockNote UI (links core + server)
-```
 
-## Status
+Code2's internals form a plugin graph inspired by
+[cordis](https://github.com/cordiverse/cordis): storage, agent execution, git, memory, scenes, and
+other subsystems declare what they require and provide. Out-of-process plugins use the same small
+JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands.
 
-Milestones M0–M4 implemented and tested (packaging aside). One Rust core drives both a Tauri
-desktop app and a ratatui TUI over ACP. See `docs/architecture.md`.
+## Build from source
 
-## Develop
+### Prerequisites
 
-**Prerequisite: Zig 0.15.2.** The core embeds Ghostty's terminal engine (`libghostty-vt`), which is
-built from source with Zig — and Ghostty pins that version exactly, so a newer Zig will not do:
+- Rust 1.82 or newer
+- Zig **0.15.2** exactly, required by the embedded Ghostty terminal engine
+- Bun
+- Git
+- The [Tauri system prerequisites](https://tauri.app/start/prerequisites/) for your platform
+- At least one supported provider CLI if you want to run a real agent turn
+
+On macOS, install the pinned Zig version with Homebrew:
 
 ```sh
-brew install zig@0.15 && brew link --force zig@0.15   # macOS
+brew install zig@0.15
+brew link --force zig@0.15
 ```
 
-```sh
-# Rust core + TUI: build + test (offline; tests use a mock ACP agent, real git, real pty)
-cargo test -p codetwo-core -p codetwo-tui
+Then clone the repository and run the desktop app:
 
-# Run the TUI (opens against your ~/.codetwo store)
+```sh
+git clone https://github.com/IchenDEV/codeTwo.git
+cd codeTwo/apps/desktop
+bun install --frozen-lockfile
+bun run tauri dev
+```
+
+Code2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
+are documented in [Providers](website/guide/providers.md).
+
+### Other surfaces
+
+From the repository root:
+
+```sh
+# Terminal interface
 cargo run -p codetwo-tui
 
-# Remote control: run the headless server, then open the printed URL/QR on another device
-cargo run -p codetwo-server            # prints a one-time pairing URL + token + QR
-#   env: CODETWO_HOST (0.0.0.0), CODETWO_PORT (4599), CODETWO_PAIR_TTL (900)
+# Paired remote web client
+cargo run -p codetwo-server
 
-# Desktop app (needs a display; builds a real .app so macOS privacy prompts work)
-./script/build_and_run.sh
+# Self-contained turn demo using a stub ACP agent (requires Node)
+cargo run -p codetwo-core --example live_demo
 ```
 
-## Remote control
+The remote server prints a one-time pairing URL and token. Keep it on a trusted LAN or Tailscale
+tailnet; Code2 does not provide a hosted relay.
 
-`codetwo-server` exposes the engine over WebSocket (`Op` in / `Event` out) behind a one-time pairing
-flow and serves a small mobile web client at `/`. The client's **Terminal** view (also reachable
-directly at `/terminal`) opens a real shell on the machine, t3code-style: the server hosts the
-emulator (`core::term`, Ghostty VT + PTY) and the browser renders it with an embedded xterm.js, so
-a terminal survives reloads and can be shared by several paired devices attaching to the same id
-(`/ws/terminal`, ticket-gated like `/ws`). From the desktop you can also start the listener
-in-process (Command palette → "Remote control" → turn on network access), where it exposes the
-native T3 Code discovery, OAuth token-exchange, ticket and Effect RPC protocols as well. Scan its
-`/pair#token=…` QR in T3 Code mobile to connect to the same live sessions over a local LAN or a
-Tailscale tailnet. Devices persist and can be revoked.
+## Repository map
 
-To actually drive an agent, one provider must be on PATH: `grok` (native ACP), or Node for
-`npx @agentclientprotocol/claude-agent-acp` (Claude Code) /
-`npx @agentclientprotocol/codex-acp` (Codex).
+| Path                             | Purpose                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| [`crates/kernel`](crates/kernel) | Reactive plugin runtime and command registry                                |
+| [`crates/core`](crates/core)     | ACP engine, sessions, providers, memory, git, terminal, browser, and skills |
+| [`crates/tui`](crates/tui)       | ratatui frontend                                                            |
+| [`crates/server`](crates/server) | Headless server, pairing, WebSocket protocol, and remote client             |
+| [`apps/desktop`](apps/desktop)   | Tauri v2 + React + BlockNote desktop app                                    |
+| [`website`](website)             | VitePress documentation and GitHub Pages site                               |
+| [`docs`](docs)                   | Architecture, design laws, roadmap, and protocol notes                      |
+
+## Development
+
+Run Rust checks from the repository root:
+
+```sh
+cargo check --workspace --all-targets
+cargo test --workspace
+```
+
+Run desktop checks from `apps/desktop`:
+
+```sh
+bun install --frozen-lockfile
+bun run check:design
+bun test
+bun run build
+```
+
+Build the documentation site from `website`:
+
+```sh
+bun install --frozen-lockfile
+bun run docs:build
+```
+
+The desktop UI follows the repository's [design system](docs/design.md). Product surfaces use the
+shared components under `apps/desktop/src/components/ui`; avoid introducing one-off interaction
+primitives or visual tokens.
+
+## Contributing
+
+Bug reports, documentation fixes, and focused pull requests are welcome. For a large change, open
+an issue first so the product boundary and protocol impact can be discussed before implementation.
+
+Please keep changes scoped, add tests for behavior changes, and run the relevant checks above. A
+pull request that changes user-visible desktop UI should include light, dark, and narrow viewport
+evidence where applicable.
+
+## Security and privacy
+
+Code2 runs provider CLIs as local child processes and communicates with them over stdio. Code2
+does not change the provider's own network, authentication, data-retention, or tool policies;
+review those separately before giving a provider access to sensitive code.
+
+Remote access is bearer-token based and intended for a trusted LAN or Tailscale network. Do not
+expose `codetwo-server` directly to the public internet. Please report a suspected vulnerability
+privately to the repository owner rather than opening a public exploit report.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

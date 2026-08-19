@@ -5,15 +5,23 @@ Bun-built frontend.
 
 ## Prerequisites
 
-| Tool | Why | Notes |
-| --- | --- | --- |
-| **Rust** (1.82+) | builds the core, TUI, server, and Tauri app | [rustup.rs](https://rustup.rs) |
-| **Bun** | builds the desktop frontend | [bun.sh](https://bun.sh) |
-| **git** | worktrees, checkpoints, source control | usually already installed |
-| A **provider CLI** | to actually drive an agent | at least one of the five (below) |
+| Tool                     | Why                                         | Notes                                         |
+| ------------------------ | ------------------------------------------- | --------------------------------------------- |
+| **Rust** (1.82+)         | builds the core, TUI, server, and Tauri app | [rustup.rs](https://rustup.rs)                |
+| **Zig** (0.15.2 exactly) | builds the embedded Ghostty terminal engine | [ziglang.org](https://ziglang.org/download/)  |
+| **Bun**                  | builds the desktop frontend                 | [bun.sh](https://bun.sh)                      |
+| **git**                  | worktrees, checkpoints, source control      | usually already installed                     |
+| A **provider CLI**       | to actually drive an agent                  | at least one of the supported providers below |
 
 You also need the OS toolchain Tauri requires (Xcode CLT on macOS; `webkit2gtk` + build essentials on
 Linux). See [tauri.app prerequisites](https://tauri.app/start/prerequisites/).
+
+On macOS, install the pinned Zig version with Homebrew:
+
+```sh
+brew install zig@0.15
+brew link --force zig@0.15
+```
 
 ### At least one provider
 
@@ -21,7 +29,7 @@ To run a real turn you need one agent CLI on your `PATH`:
 
 - **Grok** — `grok` (speaks ACP natively; simplest, no Node needed).
 - **Claude Code** — Node/npx (Code2 launches `npx @agentclientprotocol/claude-agent-acp`).
-- **Codex** — Node/npx (`npx @agentclientprotocol/codex-acp`).
+- **Codex** — Node/npx (`npx -y @agentclientprotocol/codex-acp@1.1.14`).
 - **Cursor** — `cursor-agent`.
 - **OpenCode** — `opencode`.
 - **Pi** — Node/npx (`npx -y pi-acp`, with `pi` on your `PATH` for its own config).
@@ -45,7 +53,7 @@ cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
 
 ```sh
 cd apps/desktop
-bun install
+bun install --frozen-lockfile
 bun run tauri dev        # opens the desktop window
 ```
 

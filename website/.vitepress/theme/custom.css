@@ -1,0 +1,1233 @@
+:root {
+  --vp-c-brand-1: #3bd454;
+  --vp-c-brand-2: #2ab541;
+  --vp-c-brand-3: #209735;
+  --vp-c-brand-soft: rgb(59 212 84 / 13%);
+}
+
+.VPNavBarTitle .title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+body:has(.codetwo-home) {
+  background: #dfe2dd;
+}
+
+body:has(.codetwo-home) #app {
+  min-height: 100vh;
+  padding: 12px;
+  background: #dfe2dd;
+}
+
+.codetwo-home {
+  --home-bg: #030504;
+  --home-surface: #060907;
+  --home-surface-raised: #09100b;
+  --home-ink: #f1f3ef;
+  --home-muted: #a9afa9;
+  --home-green: #59ef69;
+  --home-green-dim: #2ea840;
+  --home-line: rgb(89 239 105 / 28%);
+  min-width: 320px;
+  overflow: hidden;
+  border: 1px solid #536258;
+  border-radius: 17px;
+  color: var(--home-ink);
+  background: var(--home-bg);
+  box-shadow: 0 18px 48px rgb(10 18 12 / 18%);
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.codetwo-home *,
+.codetwo-home *::before,
+.codetwo-home *::after {
+  box-sizing: border-box;
+}
+
+.codetwo-home ::selection {
+  color: #071008;
+  background: var(--home-green);
+}
+
+.codetwo-home a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.codetwo-home figure {
+  margin: 0;
+}
+
+.codetwo-home .shell {
+  width: min(1400px, calc(100% - 80px));
+  margin-inline: auto;
+}
+
+.codetwo-home .window-bar {
+  position: relative;
+  display: grid;
+  height: 44px;
+  color: #b8beb8;
+  background: #080b09;
+  border-bottom: 1px solid #263229;
+  place-items: center;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.025em;
+}
+
+.codetwo-home .traffic-lights {
+  position: absolute;
+  left: 18px;
+  display: flex;
+  gap: 7px;
+}
+
+.codetwo-home .traffic-lights i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.codetwo-home .traffic-lights i:nth-child(2) {
+  background: #febc2e;
+}
+
+.codetwo-home .traffic-lights i:nth-child(3) {
+  background: #28c840;
+}
+
+.codetwo-home .skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 12px;
+  left: 12px;
+  padding: 10px 14px;
+  color: var(--home-bg);
+  background: var(--home-green);
+  transform: translateY(-180%);
+}
+
+.codetwo-home .skip-link:focus {
+  transform: translateY(0);
+}
+
+.codetwo-home .site-header {
+  height: 76px;
+  border-bottom: 1px solid var(--home-line);
+  background: #050806;
+}
+
+.codetwo-home .header-inner {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.codetwo-home .brand,
+.codetwo-home .footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 760;
+  letter-spacing: -0.035em;
+}
+
+.codetwo-home .brand-mark {
+  display: block;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
+.codetwo-home .desktop-nav {
+  display: flex;
+  align-items: center;
+  gap: 54px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 16px;
+}
+
+.codetwo-home .desktop-nav a,
+.codetwo-home .mobile-nav a,
+.codetwo-home .site-footer a,
+.codetwo-home .quiet-link {
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.codetwo-home .desktop-nav a:hover,
+.codetwo-home .mobile-nav a:hover,
+.codetwo-home .site-footer a:hover,
+.codetwo-home .quiet-link:hover {
+  color: var(--home-green);
+}
+
+.codetwo-home .desktop-nav .locale-link,
+.codetwo-home .mobile-nav .locale-link {
+  color: var(--home-green);
+}
+
+.codetwo-home .desktop-nav .nav-cta {
+  min-height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--home-green-dim);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.codetwo-home .desktop-nav .nav-cta:hover {
+  border-color: var(--home-green);
+  background: #0d160f;
+}
+
+.codetwo-home .mobile-nav {
+  position: relative;
+  display: none;
+}
+
+.codetwo-home .mobile-nav summary {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+  list-style: none;
+  place-items: center;
+  border: 1px solid var(--home-line);
+  background: var(--home-surface);
+}
+
+.codetwo-home .mobile-nav summary::-webkit-details-marker {
+  display: none;
+}
+
+.codetwo-home .mobile-nav summary svg {
+  width: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.codetwo-home .mobile-nav nav {
+  position: absolute;
+  z-index: 20;
+  top: 50px;
+  right: 0;
+  display: grid;
+  width: 184px;
+  padding: 8px;
+  border: 1px solid var(--home-line);
+  background: #071009;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.codetwo-home .mobile-nav nav a {
+  padding: 11px 12px;
+}
+
+.codetwo-home .hero {
+  position: relative;
+  min-height: 0;
+  padding: 58px 0 92px;
+  isolation: isolate;
+}
+
+.codetwo-home .section-command {
+  margin-bottom: 22px;
+  color: var(--home-green);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.codetwo-home .hero::before {
+  position: absolute;
+  z-index: -1;
+  inset: 36% 0 4%;
+  content: "";
+  opacity: 0.36;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 7px,
+    rgb(89 239 105 / 9%) 8px
+  );
+  background-size: 100% 8px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 22%,
+    #000 68%,
+    transparent 100%
+  );
+  animation: codetwo-scan 18s linear infinite;
+  pointer-events: none;
+}
+
+.codetwo-home .hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.codetwo-home .hero h1,
+.codetwo-home .workflow h2,
+.codetwo-home .providers h2,
+.codetwo-home .architecture h2,
+.codetwo-home .open-source h2 {
+  margin: 0;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "PingFang SC", monospace;
+  font-weight: 780;
+  letter-spacing: -0.055em;
+}
+
+.codetwo-home .hero h1 {
+  max-width: 1080px;
+  font-size: clamp(62px, 5.15vw, 79px);
+  line-height: 0.98;
+}
+
+.codetwo-home .terminal-period {
+  color: var(--home-green);
+}
+
+.codetwo-home .hero-copy > p:not(.hero-meta) {
+  max-width: 720px;
+  margin: 30px 0 0;
+  color: var(--home-muted);
+  font-size: 20px;
+  letter-spacing: -0.012em;
+  line-height: 1.55;
+}
+
+.codetwo-home .hero-copy > .hero-meta {
+  margin: 20px 0 0;
+  color: #737c74;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.035em;
+}
+
+.codetwo-home .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin-top: 30px;
+  align-items: center;
+}
+
+.codetwo-home .button {
+  display: inline-flex;
+  min-height: 52px;
+  padding: 0 22px;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  border: 1px solid var(--home-green-dim);
+  border-radius: 4px;
+  color: var(--home-green);
+  background: var(--home-surface-raised);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.codetwo-home .button-secondary {
+  border-color: rgb(241 243 239 / 40%);
+  color: var(--home-ink);
+  background: transparent;
+}
+
+.codetwo-home .button-secondary:hover {
+  border-color: var(--home-ink);
+}
+
+.codetwo-home .button:hover {
+  border-color: var(--home-green);
+  color: var(--home-ink);
+  background: #102014;
+}
+
+.codetwo-home .button > span {
+  color: var(--home-green);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.codetwo-home .button:focus-visible,
+.codetwo-home .brand:focus-visible,
+.codetwo-home .desktop-nav a:focus-visible,
+.codetwo-home .mobile-nav summary:focus-visible,
+.codetwo-home .mobile-nav a:focus-visible,
+.codetwo-home .quiet-link:focus-visible,
+.codetwo-home .provider-doc-link:focus-visible,
+.codetwo-home .nav-cta:focus-visible,
+.codetwo-home .site-footer a:focus-visible {
+  outline: 2px solid var(--home-green);
+  outline-offset: 4px;
+}
+
+.codetwo-home .screenshot-frame {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--home-green-dim);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 28%);
+}
+
+.codetwo-home .screenshot-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+}
+
+.codetwo-home .hero-window {
+  z-index: 1;
+  height: 440px;
+  margin-top: 48px;
+}
+
+.codetwo-home .hero-window img {
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.codetwo-home .hero-capabilities {
+  display: grid;
+  margin-top: 18px;
+  padding: 1px;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  background: var(--home-line);
+}
+
+.codetwo-home .hero-capabilities li {
+  min-width: 0;
+  padding: 16px 18px;
+  color: #c5cbc5;
+  background: var(--home-bg);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+.codetwo-home .hero-capabilities span {
+  margin-right: 9px;
+  color: var(--home-green);
+}
+
+.codetwo-home .workflow {
+  padding: 138px 0 100px;
+  border-top: 1px dashed var(--home-line);
+  background: var(--home-surface);
+}
+
+.codetwo-home .workflow-head {
+  display: grid;
+  align-items: end;
+  gap: 72px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.codetwo-home .workflow > .shell > .section-command,
+.codetwo-home .providers > .shell > .section-command,
+.codetwo-home .architecture > .shell > .section-command {
+  margin-bottom: 28px;
+}
+
+.codetwo-home .workflow h2,
+.codetwo-home .providers h2,
+.codetwo-home .architecture h2,
+.codetwo-home .open-source h2 {
+  font-size: clamp(56px, 5.2vw, 78px);
+  line-height: 0.98;
+}
+
+.codetwo-home .workflow-head > p {
+  max-width: 580px;
+  margin: 0 0 4px;
+  color: var(--home-muted);
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+.codetwo-home .workflow-stage {
+  display: grid;
+  margin-top: 76px;
+  align-items: center;
+  gap: 54px;
+  grid-template-columns: minmax(300px, 0.68fr) minmax(600px, 1.55fr);
+}
+
+.codetwo-home .steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.codetwo-home .steps li {
+  position: relative;
+  display: grid;
+  min-height: 142px;
+  padding: 28px 0;
+  align-content: start;
+  gap: 15px;
+  grid-template-columns: 22px 1fr;
+  border-top: 1px dashed var(--home-line);
+}
+
+.codetwo-home .steps li:last-child {
+  border-bottom: 1px dashed var(--home-line);
+}
+
+.codetwo-home .steps li::after {
+  position: absolute;
+  top: 38px;
+  right: -54px;
+  width: 44px;
+  content: "";
+  border-top: 1px dashed var(--home-green-dim);
+}
+
+.codetwo-home .terminal-mark {
+  color: var(--home-green);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.codetwo-home .steps h3 {
+  margin: 0;
+  color: var(--home-green);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.codetwo-home .steps p {
+  max-width: 390px;
+  margin: 8px 0 0;
+  color: var(--home-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.codetwo-home .providers {
+  padding: 138px 0 128px;
+  background: var(--home-bg);
+}
+
+.codetwo-home .providers-head {
+  display: grid;
+  align-items: end;
+  gap: 72px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+}
+
+.codetwo-home .providers-head > p {
+  max-width: 610px;
+  margin: 0 0 4px;
+  color: var(--home-muted);
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+.codetwo-home .provider-matrix {
+  display: grid;
+  margin-top: 74px;
+  border: 1px solid var(--home-line);
+  background: var(--home-surface);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.codetwo-home .provider-entry {
+  display: grid;
+  min-height: 158px;
+  padding: 24px 22px;
+  gap: 14px;
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.codetwo-home .provider-entry:not(:nth-child(4n)) {
+  border-right: 1px solid var(--home-line);
+}
+
+.codetwo-home .provider-entry:nth-child(-n + 4) {
+  border-bottom: 1px solid var(--home-line);
+}
+
+.codetwo-home .provider-index {
+  padding-top: 3px;
+  color: #5f7562;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.codetwo-home .provider-entry h3 {
+  margin: 0;
+  color: var(--home-ink);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.codetwo-home .provider-entry p {
+  min-height: 38px;
+  margin: 8px 0 12px;
+  color: var(--home-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.codetwo-home .provider-entry code {
+  color: var(--home-green);
+  background: transparent;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.codetwo-home .provider-facts {
+  display: grid;
+  border-bottom: 1px dashed var(--home-line);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.codetwo-home .provider-facts p {
+  margin: 0;
+  padding: 22px 22px 24px;
+  color: var(--home-muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.codetwo-home .provider-facts p + p {
+  border-left: 1px dashed var(--home-line);
+}
+
+.codetwo-home .provider-facts span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--home-green);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.codetwo-home .provider-doc-link {
+  display: inline-flex;
+  margin-top: 30px;
+  align-items: center;
+  gap: 10px;
+  color: var(--home-ink);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 15px;
+}
+
+.codetwo-home .provider-doc-link span {
+  color: var(--home-green);
+  font-size: 19px;
+}
+
+.codetwo-home .provider-doc-link:hover {
+  color: var(--home-green);
+}
+
+.codetwo-home .architecture {
+  padding: 146px 0 138px;
+  border-top: 1px dashed var(--home-line);
+  background: var(--home-bg);
+}
+
+.codetwo-home .architecture h2 {
+  max-width: 900px;
+}
+
+.codetwo-home .architecture-flow {
+  display: flex;
+  min-height: 330px;
+  margin-top: 82px;
+  align-items: center;
+  justify-content: center;
+}
+
+.codetwo-home .architecture-node,
+.codetwo-home .output-node {
+  position: relative;
+  display: grid;
+  flex: none;
+  clip-path: polygon(
+    14px 0,
+    calc(100% - 14px) 0,
+    100% 14px,
+    100% calc(100% - 14px),
+    calc(100% - 14px) 100%,
+    14px 100%,
+    0 calc(100% - 14px),
+    0 14px
+  );
+  background: var(--home-green-dim);
+  place-items: center;
+}
+
+.codetwo-home .architecture-node::before,
+.codetwo-home .output-node::before {
+  position: absolute;
+  inset: 1px;
+  content: "";
+  clip-path: inherit;
+  background: #050806;
+}
+
+.codetwo-home .architecture-node > span,
+.codetwo-home .output-node > span {
+  position: relative;
+  z-index: 1;
+  color: var(--home-green);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.codetwo-home .architecture-node {
+  width: 190px;
+  height: 176px;
+}
+
+.codetwo-home .architecture-node-small {
+  width: 142px;
+  height: 140px;
+}
+
+.codetwo-home .architecture-node-core {
+  width: 238px;
+  height: 216px;
+  background: var(--home-green);
+}
+
+.codetwo-home .architecture-node-core > span {
+  font-size: 21px;
+}
+
+.codetwo-home .flow-arrow {
+  width: 92px;
+  min-width: 62px;
+  margin-inline: clamp(10px, 1.8vw, 26px);
+  fill: none;
+  stroke: var(--home-green-dim);
+  stroke-dasharray: 5 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.codetwo-home .architecture-branches {
+  position: relative;
+  width: 350px;
+  height: 270px;
+  margin-left: 10px;
+}
+
+.codetwo-home .branch-lines {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 210px;
+  height: 270px;
+  fill: none;
+  stroke: var(--home-green-dim);
+  stroke-dasharray: 5 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.codetwo-home .architecture-outputs {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  height: 270px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.codetwo-home .output-node {
+  width: 166px;
+  height: 72px;
+}
+
+.codetwo-home .open-source {
+  padding-top: 118px;
+  border-top: 1px dashed var(--home-line);
+  background: var(--home-surface);
+}
+
+.codetwo-home .section-command-row {
+  margin-bottom: 24px;
+}
+
+.codetwo-home .open-source-grid {
+  display: grid;
+  padding-bottom: 110px;
+  align-items: end;
+  gap: 94px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+}
+
+.codetwo-home .open-source-copy > p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--home-muted);
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+.codetwo-home .button-github svg {
+  width: 19px;
+  height: 19px;
+}
+
+.codetwo-home .quiet-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  color: var(--home-ink);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 15px;
+}
+
+.codetwo-home .quiet-link span {
+  color: var(--home-green);
+  font-size: 20px;
+}
+
+.codetwo-home .site-footer {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed var(--home-line);
+}
+
+.codetwo-home .footer-brand {
+  font-size: 22px;
+}
+
+.codetwo-home .site-footer nav {
+  display: flex;
+  gap: 44px;
+  color: #c7ccc7;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+@keyframes codetwo-scan {
+  from {
+    background-position-y: 0;
+  }
+
+  to {
+    background-position-y: 160px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .codetwo-home .workflow-stage {
+    grid-template-columns: minmax(260px, 0.62fr) minmax(520px, 1.38fr);
+  }
+
+  .codetwo-home .architecture-flow {
+    flex-wrap: wrap;
+    row-gap: 50px;
+  }
+
+  .codetwo-home .architecture-branches {
+    width: 320px;
+  }
+
+  .codetwo-home .output-node {
+    width: 148px;
+  }
+
+  .codetwo-home .provider-matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .codetwo-home .provider-entry:not(:nth-child(4n)) {
+    border-right: 0;
+  }
+
+  .codetwo-home .provider-entry:nth-child(-n + 4) {
+    border-bottom: 0;
+  }
+
+  .codetwo-home .provider-entry:not(:nth-child(2n)) {
+    border-right: 1px solid var(--home-line);
+  }
+
+  .codetwo-home .provider-entry:nth-child(-n + 6) {
+    border-bottom: 1px solid var(--home-line);
+  }
+}
+
+@media (max-width: 900px) {
+  body:has(.codetwo-home) #app {
+    padding: 7px;
+  }
+
+  .codetwo-home {
+    border-radius: 11px;
+  }
+
+  .codetwo-home .shell {
+    width: min(100% - 40px, 760px);
+  }
+
+  .codetwo-home .desktop-nav {
+    display: none;
+  }
+
+  .codetwo-home .mobile-nav {
+    display: block;
+  }
+
+  .codetwo-home .hero {
+    min-height: 0;
+    padding: 70px 0 110px;
+  }
+
+  .codetwo-home .hero h1 {
+    font-size: clamp(56px, 10vw, 74px);
+  }
+
+  .codetwo-home .hero-window {
+    height: auto;
+    margin-top: 54px;
+  }
+
+  .codetwo-home .hero-window img {
+    height: auto;
+    object-fit: initial;
+  }
+
+  .codetwo-home .hero-capabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .codetwo-home .workflow-head {
+    gap: 34px;
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .providers-head {
+    gap: 34px;
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .workflow-stage {
+    gap: 54px;
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .steps li::after {
+    display: none;
+  }
+
+  .codetwo-home .steps p {
+    max-width: 560px;
+  }
+
+  .codetwo-home .architecture-flow {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 18px;
+  }
+
+  .codetwo-home .architecture-node,
+  .codetwo-home .architecture-node-small {
+    width: min(300px, 100%);
+    height: 100px;
+  }
+
+  .codetwo-home .architecture-node-core {
+    width: min(320px, 100%);
+    height: 132px;
+  }
+
+  .codetwo-home .flow-arrow {
+    width: 56px;
+    height: 30px;
+    margin: 0;
+    transform: rotate(90deg);
+  }
+
+  .codetwo-home .architecture-branches {
+    width: min(420px, 100%);
+    height: auto;
+    margin: 0;
+  }
+
+  .codetwo-home .branch-lines {
+    display: none;
+  }
+
+  .codetwo-home .architecture-outputs {
+    position: static;
+    display: grid;
+    height: auto;
+    gap: 10px;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .codetwo-home .output-node {
+    width: auto;
+    height: 84px;
+  }
+
+  .codetwo-home .open-source-grid {
+    gap: 42px;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  body:has(.codetwo-home) #app {
+    padding: 5px;
+  }
+
+  .codetwo-home .window-bar {
+    height: 44px;
+    font-size: 10px;
+  }
+
+  .codetwo-home .traffic-lights {
+    left: 14px;
+    gap: 5px;
+  }
+
+  .codetwo-home .traffic-lights i {
+    width: 9px;
+    height: 9px;
+  }
+
+  .codetwo-home .shell {
+    width: calc(100% - 32px);
+  }
+
+  .codetwo-home .site-header {
+    height: 68px;
+  }
+
+  .codetwo-home .brand {
+    gap: 8px;
+    font-size: 21px;
+  }
+
+  .codetwo-home .hero {
+    padding: 56px 0 88px;
+  }
+
+  .codetwo-home .hero::before {
+    inset: 46% 0 0;
+  }
+
+  .codetwo-home .hero h1,
+  .codetwo-home .workflow h2,
+  .codetwo-home .providers h2,
+  .codetwo-home .architecture h2,
+  .codetwo-home .open-source h2 {
+    font-size: 39px;
+    letter-spacing: -0.05em;
+    line-height: 1.02;
+  }
+
+  .codetwo-home .hero h1 br {
+    display: none;
+  }
+
+  .codetwo-home[lang="zh-CN"] .hero h1 br {
+    display: block;
+  }
+
+  .codetwo-home .hero-copy > p:not(.hero-meta),
+  .codetwo-home .workflow-head > p,
+  .codetwo-home .providers-head > p,
+  .codetwo-home .open-source-copy > p {
+    font-size: 17px;
+  }
+
+  .codetwo-home .hero-copy > p:not(.hero-meta) {
+    margin-top: 24px;
+  }
+
+  .codetwo-home .hero-copy > .hero-meta {
+    margin-top: 17px;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .codetwo-home .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codetwo-home .button {
+    width: 100%;
+  }
+
+  .codetwo-home .screenshot-frame {
+    border-radius: 2px;
+    clip-path: none;
+  }
+
+  .codetwo-home .screenshot-frame img {
+    clip-path: none;
+  }
+
+  .codetwo-home .hero-window,
+  .codetwo-home .workflow-window {
+    overflow: hidden;
+  }
+
+  .codetwo-home .hero-window {
+    height: 330px;
+  }
+
+  .codetwo-home .hero-window img {
+    height: 100%;
+    width: 220%;
+    max-width: none;
+    object-fit: cover;
+    transform: translateX(-54%);
+  }
+
+  .codetwo-home .hero-capabilities {
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .workflow {
+    padding: 92px 0 76px;
+  }
+
+  .codetwo-home .workflow-stage {
+    margin-top: 52px;
+  }
+
+  .codetwo-home .steps li {
+    min-height: 0;
+    padding: 25px 0;
+  }
+
+  .codetwo-home .workflow-window img {
+    width: 160%;
+    max-width: none;
+    transform: translateX(-10%);
+  }
+
+  .codetwo-home .providers {
+    padding: 92px 0 84px;
+  }
+
+  .codetwo-home .provider-matrix {
+    margin-top: 52px;
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .provider-entry {
+    min-height: 0;
+    padding: 22px 18px;
+  }
+
+  .codetwo-home .provider-entry:not(:nth-child(2n)) {
+    border-right: 0;
+  }
+
+  .codetwo-home .provider-entry:nth-child(-n + 7) {
+    border-bottom: 1px solid var(--home-line);
+  }
+
+  .codetwo-home .provider-entry:nth-child(8) {
+    border-bottom: 0;
+  }
+
+  .codetwo-home .provider-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .provider-facts p {
+    padding-inline: 18px;
+  }
+
+  .codetwo-home .provider-facts p + p {
+    border-top: 1px dashed var(--home-line);
+    border-left: 0;
+  }
+
+  .codetwo-home .architecture {
+    padding: 92px 0 88px;
+  }
+
+  .codetwo-home .architecture-flow {
+    margin-top: 58px;
+  }
+
+  .codetwo-home .architecture-outputs {
+    grid-template-columns: 1fr;
+  }
+
+  .codetwo-home .output-node {
+    height: 66px;
+  }
+
+  .codetwo-home .open-source {
+    padding-top: 88px;
+  }
+
+  .codetwo-home .open-source-grid {
+    padding-bottom: 76px;
+  }
+
+  .codetwo-home .site-footer {
+    padding: 28px 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .codetwo-home .site-footer nav {
+    width: 100%;
+    justify-content: space-between;
+    gap: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codetwo-home *,
+  .codetwo-home *::before,
+  .codetwo-home *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

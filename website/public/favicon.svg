@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0.18" y1="0.08" x2="0.82" y2="0.94">
+      <stop offset="0" stop-color="#101712"/>
+      <stop offset="0.58" stop-color="#070B08"/>
+      <stop offset="1" stop-color="#020403"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <path d="M512 100C684 100 790 100 856 168C924 234 924 340 924 512C924 684 924 790 856 856C790 924 684 924 512 924C340 924 234 924 168 856C100 790 100 684 100 512C100 340 100 234 168 168C234 100 340 100 512 100Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#background)"/>
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M590 306H438C342 306 286 365 286 464V560C286 659 342 718 438 718H590" stroke="#F4F7F1" stroke-width="92"/>
+      <path d="M568 397C587 341 642 309 704 316C773 324 818 380 813 447C810 488 787 519 751 551L584 706H813" stroke="#59EF69" stroke-width="78"/>
+    </g>
+  </g>
+</svg>
