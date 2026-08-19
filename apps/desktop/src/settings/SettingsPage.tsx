@@ -55,7 +55,7 @@ import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
 
-type SettingsTab =
+export type SettingsTab =
   | "general"
   | "appearance"
   | "project"
@@ -194,6 +194,7 @@ export function SettingsPage({
   projectPath,
   project,
   onProjectWorktreeMode,
+  initialTab = "general",
   onClose,
 }: {
   bindings: KeymapEntry[];
@@ -207,6 +208,7 @@ export function SettingsPage({
   projectPath: string;
   project: Project | null;
   onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
+  initialTab?: SettingsTab;
   onClose: () => void;
 }) {
   const t = useT();
@@ -217,7 +219,8 @@ export function SettingsPage({
     () => Object.fromEntries(providers.map((candidate) => [candidate.id, candidate.display_name])),
     [providers],
   );
-  const [tab, setTab] = useState<SettingsTab>("general");
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
+  useEffect(() => setTab(initialTab), [initialTab]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);

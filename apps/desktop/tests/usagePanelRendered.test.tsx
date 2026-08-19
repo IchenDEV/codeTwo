@@ -5,6 +5,7 @@ import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { ProviderQuotaMeter, UsagePanel, quotaProviderFor } = await import("../src/usage/Usage");
+const { quickQuotaProviderFor, quickQuotaSummary } = await import("../src/usage/quickQuota");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -12,6 +13,35 @@ afterEach(() => {
 });
 
 describe("UsagePanel", () => {
+  test("uses the active provider, then falls back to recent Codex activity", () => {
+    expect(quickQuotaProviderFor("grok", "claude", ["codex"])).toBe("claude");
+    expect(quickQuotaProviderFor("grok", null, ["codex"])).toBe("codex");
+    expect(quickQuotaProviderFor("grok", null, [])).toBe("grok");
+  });
+
+  test("uses the most constrained provider window for the rail shortcut", () => {
+    const summary = quickQuotaSummary({
+      provider: "codex",
+      status: "available",
+      reason: null,
+      source: "codex_app_server",
+      plan: "pro",
+      limit_name: "codex",
+      windows: [
+        { used_percent: 18.4, window_minutes: 300, resets_at: 100 },
+        { used_percent: 63.7, window_minutes: 10_080, resets_at: 200 },
+      ],
+      credits: null,
+      fetched_at_ms: Date.now(),
+    });
+
+    expect(summary).toEqual({
+      remainingPercent: 36,
+      windowMinutes: 10_080,
+      resetsAt: 200,
+    });
+  });
+
   test("prefers Codex quota when local activity belongs to Codex", () => {
     expect(
       quotaProviderFor("grok", {

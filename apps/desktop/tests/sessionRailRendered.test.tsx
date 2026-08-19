@@ -71,6 +71,10 @@ function renderRail(overrides = {}) {
           taskBoardOpen={false}
           onOpenTaskBoard={() => {}}
           pluginHubOpen={false}
+          quickQuota={{ remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
+          quickQuotaLoading={false}
+          quickQuotaProviderName="OpenAI Codex"
+          onOpenUsage={() => {}}
           {...overrides}
         />
       </ToastProvider>
@@ -88,6 +92,7 @@ describe("SessionRail row layout", () => {
       onOpenTaskBoard: () => opened.push("tasks"),
       onOpenAutomations: () => opened.push("scheduled"),
       onOpenMarket: () => opened.push("plugins"),
+      onOpenUsage: () => opened.push("usage"),
       onOpenSettings: () => opened.push("settings"),
     });
     const features = view.container.querySelector("[data-rail-features]");
@@ -98,14 +103,17 @@ describe("SessionRail row layout", () => {
       "Task board",
       "Scheduled tasks",
       "Plugins",
+      "Quota left42%",
       "Settings",
     ]);
     expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of rows) click(row);
-    expect(opened).toEqual(["new", "tasks", "scheduled", "plugins", "settings"]);
+    expect(opened).toEqual(["new", "tasks", "scheduled", "plugins", "usage", "settings"]);
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
+    expect(features?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
+      .toBe("42");
 
     view.unmount();
   });

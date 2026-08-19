@@ -211,6 +211,10 @@ export const en = {
 
   // provider quota
   "quota.title": "Provider quota",
+  "quota.quick": "Quota left",
+  "quota.quickOpen": "Open Usage settings",
+  "quota.checkingShort": "Checking quota",
+  "quota.quickUnavailable": "Quota unavailable",
   "quota.checking": "Checking {provider} quota…",
   "quota.remaining": "{percent}% left",
   "quota.used": "{percent}% used",
@@ -1254,6 +1258,10 @@ export const zhCN: Record<StringKey, string> = {
   "usage.done": "完成",
 
   "quota.title": "Provider 额度",
+  "quota.quick": "剩余额度",
+  "quota.quickOpen": "打开用量设置",
+  "quota.checkingShort": "正在查询额度",
+  "quota.quickUnavailable": "额度不可用",
   "quota.checking": "正在查询 {provider} 额度…",
   "quota.remaining": "剩余 {percent}%",
   "quota.used": "已使用 {percent}%",

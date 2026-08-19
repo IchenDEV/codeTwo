@@ -4,6 +4,7 @@ import {
   ArchiveRestore,
   Blocks,
   CalendarClock,
+  ChartNoAxesColumn,
   Check,
   CircleAlert,
   ChevronDown,
@@ -51,6 +52,7 @@ import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
+import type { QuickQuotaSummary } from "../usage/quickQuota";
 import { useToast } from "../ui/toast";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
@@ -105,6 +107,10 @@ export function SessionRail({
   taskBoardOpen,
   onOpenTaskBoard,
   pluginHubOpen,
+  quickQuota,
+  quickQuotaLoading,
+  quickQuotaProviderName,
+  onOpenUsage,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -150,6 +156,11 @@ export function SessionRail({
   taskBoardOpen: boolean;
   onOpenTaskBoard: () => void;
   pluginHubOpen: boolean;
+  /** Most constrained provider-owned quota window, for the glanceable rail meter. */
+  quickQuota: QuickQuotaSummary | null;
+  quickQuotaLoading: boolean;
+  quickQuotaProviderName: string;
+  onOpenUsage: () => void;
 }) {
   const t = useT();
   const toast = useToast();
@@ -161,6 +172,16 @@ export function SessionRail({
   const applied = Math.min(420, Math.max(220, width));
   const featureRowClass =
     "flex h-(--ds-control-field) w-full items-center gap-2.5 rounded-(--ds-radius-control) px-2.5 text-left text-ui text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+  const quickQuotaWindow = quickQuota?.windowMinutes === 300
+    ? t("quota.window5h")
+    : quickQuota?.windowMinutes === 10_080
+      ? t("quota.windowWeekly")
+      : quickQuota?.windowMinutes != null && quickQuota.windowMinutes >= 43_000
+        ? t("quota.windowMonthly")
+        : t("quota.windowUnknown");
+  const quickQuotaTitle = quickQuota
+    ? `${quickQuotaProviderName} · ${quickQuotaWindow} · ${t("quota.remaining", { percent: quickQuota.remainingPercent })} · ${t("quota.quickOpen")}`
+    : `${quickQuotaProviderName} · ${t(quickQuotaLoading ? "quota.checkingShort" : "quota.quickUnavailable")} · ${t("quota.quickOpen")}`;
 
   // A grip drag must track the pointer 1:1 — the collapse transition below would ease every
   // intermediate width instead, so it's dropped for the duration of the drag (the dock does the
@@ -677,6 +698,47 @@ export function SessionRail({
         >
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
+        </button>
+        <button
+          data-rail-feature="usage"
+          aria-busy={quickQuotaLoading || undefined}
+          className={featureRowClass}
+          title={quickQuotaTitle}
+          onClick={onOpenUsage}
+        >
+          <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
+          {quickQuota ? (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span
+                role="progressbar"
+                aria-label={t("quota.remainingLabel", { window: quickQuotaWindow })}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={quickQuota.remainingPercent}
+                className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10"
+              >
+                <span
+                  className={cn(
+                    "block h-full rounded-full",
+                    quickQuota.remainingPercent <= 5
+                      ? "bg-destructive"
+                      : quickQuota.remainingPercent <= 20
+                        ? "bg-warning"
+                        : "bg-primary",
+                  )}
+                  style={{ width: `${quickQuota.remainingPercent}%` }}
+                />
+              </span>
+              <span className="w-7 text-right text-fine font-medium tabular-nums">
+                {quickQuota.remainingPercent}%
+              </span>
+            </span>
+          ) : (
+            <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
+              {quickQuotaLoading ? "…" : "—"}
+            </span>
+          )}
         </button>
         <button
           data-rail-feature="settings"
