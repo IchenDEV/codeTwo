@@ -679,6 +679,8 @@ export default function App() {
     else toggleRail();
   }, [narrowLayout, toggleRail]);
   const openTaskBoard = useCallback(() => {
+    setShowAutomations(false);
+    setShowPluginHub(false);
     setShowTaskBoard(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -2567,8 +2569,18 @@ export default function App() {
     marketCatalog().then(setMarket).catch(() => {});
     listPlugins().then(setPlugins).catch(() => {});
     refreshSkills();
+    setShowAutomations(false);
+    setShowTaskBoard(false);
     setShowPluginHub(true);
   }, [refreshSkills]);
+
+  const openAutomations = useCallback(() => {
+    setShowTaskBoard(false);
+    setShowPluginHub(false);
+    setShowAutomations(true);
+    if (narrowLayout) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
 
   const openSourceControl = useCallback(() => {
     setShowSourceControl(true);
@@ -3174,6 +3186,9 @@ export default function App() {
           void run();
           break;
         case "new_session":
+          setShowTaskBoard(false);
+          setShowPluginHub(false);
+          setShowAutomations(false);
           void createSession();
           break;
         case "cancel":
@@ -3202,6 +3217,9 @@ export default function App() {
           toggleDocMode(!docMode);
           break;
         case "open_settings":
+          setShowTaskBoard(false);
+          setShowPluginHub(false);
+          setShowAutomations(false);
           setSettingsInitialTab("general");
           setShowSettings(true);
           break;
@@ -3215,6 +3233,9 @@ export default function App() {
           openPluginHub();
           break;
         case "open_usage":
+          setShowTaskBoard(false);
+          setShowPluginHub(false);
+          setShowAutomations(false);
           setSettingsInitialTab("usage");
           setShowSettings(true);
           break;
@@ -3288,11 +3309,16 @@ export default function App() {
 
   const paletteCommands: Command[] = [
     { id: "run", label: "Run prompt", hint: hint("run"), run: () => void run() },
-    { id: "new", label: "New session", hint: hint("new_session"), run: () => void createSession() },
+    { id: "new", label: "New session", hint: hint("new_session"), run: () => {
+      setShowTaskBoard(false);
+      setShowPluginHub(false);
+      setShowAutomations(false);
+      void createSession();
+    } },
     { id: "sc", label: "Source control", hint: hint("open_source_control"), run: openSourceControl },
     { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
     { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
-    { id: "automations", label: t("automations.title"), run: () => setShowAutomations(true) },
+    { id: "automations", label: t("automations.title"), run: openAutomations },
     { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
@@ -3302,6 +3328,9 @@ export default function App() {
       label: "Usage (5h / week / month)",
       hint: hint("open_usage"),
       run: () => {
+        setShowTaskBoard(false);
+        setShowPluginHub(false);
+        setShowAutomations(false);
         setSettingsInitialTab("usage");
         setShowSettings(true);
       },
@@ -3635,18 +3664,6 @@ export default function App() {
             setCapturing(null);
           }}
         />
-      ) : showAutomations ? (
-        <AutomationsPage
-          projects={projects}
-          providers={providers}
-          defaultProject={(activeProject ?? cwd) || "."}
-          defaultProvider={provider}
-          onClose={() => setShowAutomations(false)}
-          onOpenSession={(session) => {
-            setShowAutomations(false);
-            void selectSession(session);
-          }}
-        />
       ) : showSceneStudio ? (
         <SceneStudio
           scenes={scenes}
@@ -3681,6 +3698,8 @@ export default function App() {
           projects={projects}
           activeProject={activeProject}
           onSelectProject={(path) => {
+            setShowAutomations(false);
+            setShowPluginHub(false);
             selectProject(path);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -3714,11 +3733,15 @@ export default function App() {
           runningSessions={runningSessions}
           onSelect={(id) => {
             setShowTaskBoard(false);
+            setShowPluginHub(false);
+            setShowAutomations(false);
             void selectSession(id);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNew={() => {
             setShowTaskBoard(false);
+            setShowPluginHub(false);
+            setShowAutomations(false);
             void createSession();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -3731,10 +3754,7 @@ export default function App() {
             setShowTaskBoard(false);
             openPluginHub();
           }}
-          onOpenAutomations={() => {
-            setShowTaskBoard(false);
-            setShowAutomations(true);
-          }}
+          onOpenAutomations={openAutomations}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}
@@ -3742,6 +3762,8 @@ export default function App() {
           onOpenSearch={() => setShowPalette(true)}
           onOpenSettings={() => {
             setShowTaskBoard(false);
+            setShowPluginHub(false);
+            setShowAutomations(false);
             setSettingsInitialTab("general");
             setShowSettings(true);
           }}
@@ -3753,20 +3775,35 @@ export default function App() {
             if (showTaskBoard) setShowTaskBoard(false);
             else openTaskBoard();
           }}
+          automationsOpen={showAutomations}
           pluginHubOpen={showPluginHub}
           quickQuota={railQuickQuota}
           quickQuotaLoading={quickQuotaLoading}
           quickQuotaProviderName={quickQuotaProviderName}
           onOpenUsage={() => {
             setShowTaskBoard(false);
+            setShowPluginHub(false);
+            setShowAutomations(false);
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
         />
 
+        {showAutomations && (
+          <AutomationsPage
+            projects={projects}
+            providers={providers}
+            defaultProject={(activeProject ?? cwd) || "."}
+            defaultProvider={provider}
+            onOpenSession={(session) => {
+              setShowAutomations(false);
+              void selectSession(session);
+            }}
+          />
+        )}
+
         {showTaskBoard && (
           <TaskBoardPage
-            onClose={() => setShowTaskBoard(false)}
             sessions={taskBoardSessions}
             onOpenSession={(id) => {
               setShowTaskBoard(false);
@@ -3775,10 +3812,109 @@ export default function App() {
           />
         )}
 
+        {showPluginHub && (
+          <PluginHub
+            plugins={plugins}
+            skills={skills}
+            items={market}
+            cwd={cwd || "."}
+            onUse={(skill) => {
+              setShowPluginHub(false);
+              setTimeout(() => insertSkillRef.current?.(skill), 0);
+            }}
+            onInstallMarket={async (id) => {
+              try {
+                await marketInstall(id);
+                setMarket(await marketCatalog());
+                await refreshSkills();
+                toast(t("pluginHub.componentInstalledToast"), "success");
+              } catch (error) {
+                toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onUninstallSkill={async (id) => {
+              try {
+                await deleteSkill(id);
+                setMarket(await marketCatalog());
+                await refreshSkills();
+                toast(t("pluginHub.componentUninstalledToast"), "success");
+              } catch (error) {
+                toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onImportGithub={async (repository) => {
+              const result = await githubImportPlugin(repository);
+              setPlugins(await listPlugins());
+              await refreshSkills();
+              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+              return result;
+            }}
+            onOpenMarketplace={pickPluginMarketplace}
+            onInstallMarketplacePlugin={async (marketplacePath, pluginName) => {
+              try {
+                const result = await installMarketplacePlugin(marketplacePath, pluginName);
+                setPlugins(await listPlugins());
+                await refreshSkills();
+                toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+                return result;
+              } catch (error) {
+                toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onUninstallPlugin={async (id, keepData = false) => {
+              try {
+                await uninstallPlugin(id, keepData);
+                setPlugins(await listPlugins());
+                await refreshSkills();
+                toast(t("pluginHub.pluginUninstalledToast"), "success");
+              } catch (error) {
+                toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onSetPluginEnabled={async (id, enabled) => {
+              try {
+                await setPluginEnabled(id, enabled);
+                setPlugins(await listPlugins());
+                await refreshSkills();
+                toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
+              } catch (error) {
+                toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onSetPluginTrusted={async (id, trusted) => {
+              try {
+                await setPluginTrusted(id, trusted);
+                setPlugins(await listPlugins());
+                toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
+              } catch (error) {
+                toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onApplyScaffold={async (pluginId, scaffoldId) => {
+              try {
+                const result = await applyPluginScaffold(pluginId, scaffoldId, cwd || ".");
+                toast(t("pluginHub.scaffoldInstalledToast", { count: result.files }), "success");
+                return result;
+              } catch (error) {
+                toast(t("pluginHub.scaffoldFailed", { error: String(error) }), "error");
+                throw error;
+              }
+            }}
+            onNew={() => setSkillDraft({ name: "", text: "" })}
+            onClose={() => setShowPluginHub(false)}
+          />
+        )}
+
         <div
           ref={sessionWorkspaceRef}
-          aria-hidden={showTaskBoard || undefined}
-          className={showTaskBoard ? "hidden" : "contents"}
+          aria-hidden={showTaskBoard || showPluginHub || showAutomations || undefined}
+          className={showTaskBoard || showPluginHub || showAutomations ? "hidden" : "contents"}
         >
             {/* ---------------- the session column ---------------- */}
             <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
@@ -4151,104 +4287,6 @@ export default function App() {
       )}
 
       {/* ---------------- dialogs ---------------- */}
-      {showPluginHub && (
-        <PluginHub
-          plugins={plugins}
-          skills={skills}
-          items={market}
-          cwd={cwd || "."}
-          onUse={(skill) => {
-            setShowPluginHub(false);
-            setTimeout(() => insertSkillRef.current?.(skill), 0);
-          }}
-          onInstallMarket={async (id) => {
-            try {
-              await marketInstall(id);
-              setMarket(await marketCatalog());
-              await refreshSkills();
-              toast(t("pluginHub.componentInstalledToast"), "success");
-            } catch (error) {
-              toast(t("pluginHub.installFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onUninstallSkill={async (id) => {
-            try {
-              await deleteSkill(id);
-              setMarket(await marketCatalog());
-              await refreshSkills();
-              toast(t("pluginHub.componentUninstalledToast"), "success");
-            } catch (error) {
-              toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onImportGithub={async (repository) => {
-            const result = await githubImportPlugin(repository);
-            setPlugins(await listPlugins());
-            await refreshSkills();
-            toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
-            return result;
-          }}
-          onOpenMarketplace={pickPluginMarketplace}
-          onInstallMarketplacePlugin={async (marketplacePath, pluginName) => {
-            try {
-              const result = await installMarketplacePlugin(marketplacePath, pluginName);
-              setPlugins(await listPlugins());
-              await refreshSkills();
-              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
-              return result;
-            } catch (error) {
-              toast(t("pluginHub.installFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onUninstallPlugin={async (id, keepData = false) => {
-            try {
-              await uninstallPlugin(id, keepData);
-              setPlugins(await listPlugins());
-              await refreshSkills();
-              toast(t("pluginHub.pluginUninstalledToast"), "success");
-            } catch (error) {
-              toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onSetPluginEnabled={async (id, enabled) => {
-            try {
-              await setPluginEnabled(id, enabled);
-              setPlugins(await listPlugins());
-              await refreshSkills();
-              toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
-            } catch (error) {
-              toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onSetPluginTrusted={async (id, trusted) => {
-            try {
-              await setPluginTrusted(id, trusted);
-              setPlugins(await listPlugins());
-              toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
-            } catch (error) {
-              toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onApplyScaffold={async (pluginId, scaffoldId) => {
-            try {
-              const result = await applyPluginScaffold(pluginId, scaffoldId, cwd || ".");
-              toast(t("pluginHub.scaffoldInstalledToast", { count: result.files }), "success");
-              return result;
-            } catch (error) {
-              toast(t("pluginHub.scaffoldFailed", { error: String(error) }), "error");
-              throw error;
-            }
-          }}
-          onNew={() => setSkillDraft({ name: "", text: "" })}
-          onClose={() => setShowPluginHub(false)}
-        />
-      )}
       {showSourceControl && (
         <SourceControlModal
           key={cwd || "."}

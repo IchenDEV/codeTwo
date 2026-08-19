@@ -7,7 +7,6 @@ import {
   type DragEvent,
 } from "react"
 import {
-  ArrowLeft,
   CheckCircle2,
   Circle,
   CircleDot,
@@ -74,7 +73,6 @@ import {
 } from "./TaskEditorDialog"
 
 interface TaskBoardPageProps {
-  onClose?: () => void
   sessions?: Array<{ id: string; title: string }>
   onOpenSession?: (id: string) => void
 }
@@ -455,7 +453,6 @@ function BoardColumn({
 }
 
 export function TaskBoardPage({
-  onClose,
   sessions = [],
   onOpenSession,
 }: TaskBoardPageProps) {
@@ -549,116 +546,122 @@ export function TaskBoardPage({
 
   return (
     <main className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-      <header className="flex shrink-0 flex-wrap items-center gap-3 bg-background px-6 py-4">
-        {onClose ? (
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="返回" onClick={onClose}>
-            <ArrowLeft data-icon="inline-start" aria-hidden />
-          </Button>
-        ) : null}
-        <div className="min-w-48 flex-1">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <h1 className="text-display font-semibold">任务看板</h1>
-            <p className="text-hint text-muted-foreground">规划、推进并交付你的工作</p>
-          </div>
-        </div>
-
-        <div className="relative min-w-52 flex-1 sm:max-w-60">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            size="compact"
-            className="pl-9 pr-8"
-            type="search"
-            aria-label="搜索任务"
-            placeholder="搜索任务"
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-          {query ? (
-            <button
-              type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label="清除搜索"
-              onClick={() => setQuery("")}
-            >
-              <X aria-hidden className="size-4" />
-            </button>
-          ) : null}
-        </div>
-
-        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <PopoverTrigger
-            render={
-              <Button type="button" variant="secondary" size="compact">
-                <Filter data-icon="inline-start" aria-hidden />
-                筛选
-                {activeFilterCount > 0 ? (
-                  <Badge className="min-w-4 px-1 text-cap">{activeFilterCount}</Badge>
-                ) : null}
-              </Button>
-            }
-          />
-          <PopoverContent
-            align="end"
-            className="grid max-h-(--available-height) gap-4 overflow-y-auto"
-          >
-            <PopoverHeader>
-              <PopoverTitle>筛选任务</PopoverTitle>
-              <PopoverDescription>可组合优先级和标签条件。</PopoverDescription>
-            </PopoverHeader>
-
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-hint font-medium">优先级</legend>
-              {PRIORITIES.map((priority) => (
-                <label key={priority} className="flex items-center gap-2 text-ui">
-                  <Checkbox
-                    checked={priorities.includes(priority)}
-                    onCheckedChange={() =>
-                      setPriorities((current) => toggleFilterValue(current, priority))
-                    }
-                  />
-                  {PRIORITY_LABELS[priority]}
-                </label>
-              ))}
-            </fieldset>
-
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 text-hint font-medium">标签</legend>
-              {availableLabels.length > 0 ? (
-                availableLabels.map((label) => (
-                  <label key={label} className="flex items-center gap-2 text-ui">
-                    <Checkbox
-                      checked={labels.includes(label)}
-                      onCheckedChange={() =>
-                        setLabels((current) => toggleFilterValue(current, label))
-                      }
-                    />
-                    {label}
-                  </label>
-                ))
-              ) : (
-                <p className="text-hint text-muted-foreground">暂无可用标签</p>
-              )}
-            </fieldset>
-
+      <header className="shrink-0 bg-background pb-6 pt-10 sm:pt-14">
+        <div data-page-header-content className="mx-auto w-full max-w-4xl px-6 sm:px-8">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-display font-semibold tracking-tight">任务看板</h1>
+              <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
+                规划、推进并交付你的工作
+              </p>
+            </div>
             <Button
               type="button"
-              variant="ghost"
+              className="shrink-0"
               size="compact"
-              disabled={activeFilterCount === 0}
-              onClick={clearFilters}
+              onClick={() => openEditor(null, "todo")}
             >
-              清除筛选
+              <Plus data-icon="inline-start" aria-hidden />
+              新建任务
             </Button>
-          </PopoverContent>
-        </Popover>
+          </div>
 
-        <Button type="button" size="compact" onClick={() => openEditor(null, "todo")}>
-          <Plus data-icon="inline-start" aria-hidden />
-          新建任务
-        </Button>
+          <div data-page-header-controls className="mt-8 flex items-center gap-3">
+            <div className="relative min-w-52 flex-1">
+              <Search
+                aria-hidden
+                className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                className="h-(--ds-control-field) rounded-(--ds-radius-control) bg-background pl-10 pr-10 ring-1 ring-inset ring-border"
+                type="search"
+                aria-label="搜索任务"
+                placeholder="搜索任务"
+                value={query}
+                onChange={(event) => setQuery(event.currentTarget.value)}
+              />
+              {query ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  aria-label="清除搜索"
+                  onClick={() => setQuery("")}
+                >
+                  <X aria-hidden />
+                </Button>
+              ) : null}
+            </div>
+
+            <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <PopoverTrigger
+                render={
+                  <Button type="button" variant="secondary" size="compact">
+                    <Filter data-icon="inline-start" aria-hidden />
+                    筛选
+                    {activeFilterCount > 0 ? (
+                      <Badge className="min-w-4 px-1 text-cap">{activeFilterCount}</Badge>
+                    ) : null}
+                  </Button>
+                }
+              />
+              <PopoverContent
+                align="end"
+                className="grid max-h-(--available-height) gap-4 overflow-y-auto"
+              >
+                <PopoverHeader>
+                  <PopoverTitle>筛选任务</PopoverTitle>
+                  <PopoverDescription>可组合优先级和标签条件。</PopoverDescription>
+                </PopoverHeader>
+
+                <fieldset className="grid gap-2">
+                  <legend className="mb-1 text-hint font-medium">优先级</legend>
+                  {PRIORITIES.map((priority) => (
+                    <label key={priority} className="flex items-center gap-2 text-ui">
+                      <Checkbox
+                        checked={priorities.includes(priority)}
+                        onCheckedChange={() =>
+                          setPriorities((current) => toggleFilterValue(current, priority))
+                        }
+                      />
+                      {PRIORITY_LABELS[priority]}
+                    </label>
+                  ))}
+                </fieldset>
+
+                <fieldset className="grid gap-2">
+                  <legend className="mb-1 text-hint font-medium">标签</legend>
+                  {availableLabels.length > 0 ? (
+                    availableLabels.map((label) => (
+                      <label key={label} className="flex items-center gap-2 text-ui">
+                        <Checkbox
+                          checked={labels.includes(label)}
+                          onCheckedChange={() =>
+                            setLabels((current) => toggleFilterValue(current, label))
+                          }
+                        />
+                        {label}
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-hint text-muted-foreground">暂无可用标签</p>
+                  )}
+                </fieldset>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="compact"
+                  disabled={activeFilterCount === 0}
+                  onClick={clearFilters}
+                >
+                  清除筛选
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
       </header>
 
       {state.warning ? (

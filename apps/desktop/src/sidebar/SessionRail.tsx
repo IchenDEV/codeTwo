@@ -106,6 +106,7 @@ export function SessionRail({
   onWidth,
   taskBoardOpen,
   onOpenTaskBoard,
+  automationsOpen,
   pluginHubOpen,
   quickQuota,
   quickQuotaLoading,
@@ -155,6 +156,7 @@ export function SessionRail({
   onWidth: (n: number) => void;
   taskBoardOpen: boolean;
   onOpenTaskBoard: () => void;
+  automationsOpen: boolean;
   pluginHubOpen: boolean;
   /** Most constrained provider-owned quota window, for the glanceable rail meter. */
   quickQuota: QuickQuotaSummary | null;
@@ -683,7 +685,8 @@ export function SessionRail({
         </button>
         <button
           data-rail-feature="scheduled-tasks"
-          className={featureRowClass}
+          aria-current={automationsOpen ? "page" : undefined}
+          className={cn(featureRowClass, automationsOpen && "bg-accent font-medium text-foreground")}
           onClick={onOpenAutomations}
         >
           <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -692,7 +695,6 @@ export function SessionRail({
         <button
           data-rail-feature="plugins"
           aria-current={pluginHubOpen ? "page" : undefined}
-          aria-haspopup="dialog"
           className={cn(featureRowClass, pluginHubOpen && "bg-accent font-medium text-foreground")}
           onClick={onOpenMarket}
         >

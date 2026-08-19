@@ -29,17 +29,8 @@ import type {
 import { useT } from "../i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type HubTab = "plugins" | "components" | "market";
 
@@ -210,44 +201,92 @@ export function PluginHub({
     (tab === "plugins" && visiblePlugins.length === 0) ||
     (tab === "components" && visibleSkills.length === 0) ||
     (tab === "market" && visibleMarket.length === 0 && visibleMarketplacePlugins.length === 0);
+  const tabCounts: Record<HubTab, number> = {
+    plugins: plugins.length,
+    components: skills.length,
+    market: items.length + (marketplace?.plugins.length ?? 0),
+  };
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[min(720px,calc(100vh-4rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-        <DialogHeader className="border-b px-6 py-5 pr-14">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div>
-              <DialogTitle className="text-heading">{t("pluginHub.title")}</DialogTitle>
-              <DialogDescription className="mt-1.5 max-w-[580px] leading-relaxed">
+    <main
+      data-plugin-hub-page
+      className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground"
+    >
+      <ScrollArea className="min-h-0 flex-1">
+        <div data-plugin-hub-content className="mx-auto w-full max-w-4xl px-6 pb-20 pt-10 sm:px-8 sm:pt-14">
+          <header className="flex flex-col items-start justify-between gap-4 sm:flex-row">
+            <div className="min-w-0">
+              <h1 className="text-display font-semibold tracking-tight">{t("pluginHub.plugins")}</h1>
+              <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
                 {t("pluginHub.description")}
-              </DialogDescription>
+              </p>
             </div>
-            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:shrink-0">
-              <Button variant="outline" size="sm" onClick={() => void openMarketplace()}>
-                <FolderDown className="size-3.5" />
+            <Button
+              size="compact"
+              className="shrink-0"
+              onClick={() => {
+                onClose();
+                onNew();
+              }}
+            >
+              <Plus />
+              {t("pluginHub.newSkill")}
+            </Button>
+          </header>
+
+          <div className="relative mt-8">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              data-plugin-hub-search
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("pluginHub.search")}
+              className="h-(--ds-control-field) rounded-(--ds-radius-control) bg-background pl-10 ring-1 ring-inset ring-border"
+            />
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <div
+              data-plugin-hub-tabs
+              role="tablist"
+              aria-label={t("pluginHub.title")}
+              className="flex items-center gap-1"
+            >
+              {(["plugins", "components", "market"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === value}
+                  className={
+                    tab === value
+                      ? "rounded-(--ds-radius-control) bg-fill-rest px-3 py-1.5 text-hint text-foreground"
+                      : "rounded-(--ds-radius-control) px-3 py-1.5 text-hint text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  }
+                  onClick={() => setTab(value)}
+                >
+                  {t(`pluginHub.${value}`)} <span className="tabular-nums">{tabCounts[value]}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button variant="secondary" size="compact" onClick={() => void openMarketplace()}>
+                <FolderDown />
                 {t("pluginHub.openMarketplace")}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setGithubOpen((open) => !open)}>
-                <GitFork className="size-3.5" />
+              <Button variant="secondary" size="compact" onClick={() => setGithubOpen((open) => !open)}>
+                <GitFork />
                 {t("pluginHub.github")}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => {
-                  onClose();
-                  onNew();
-                }}
-              >
-                <Plus className="size-3.5" />
-                {t("pluginHub.newSkill")}
               </Button>
             </div>
           </div>
-        </DialogHeader>
 
         {githubOpen && (
           <form
-            className="border-b bg-fill-quiet px-6 py-3"
+            data-plugin-hub-github-form
+            className="mt-4 rounded-(--ds-radius-panel) bg-fill-quiet p-3"
             onSubmit={(event) => {
               event.preventDefault();
               void importGithub();
@@ -262,7 +301,7 @@ export function PluginHub({
                 aria-label={t("pluginHub.githubRepository")}
                 autoFocus
               />
-              <Button type="submit" size="sm" className="shrink-0" disabled={!repository.trim() || importing}>
+              <Button type="submit" size="compact" className="shrink-0" disabled={!repository.trim() || importing}>
                 {importing ? <LoaderCircle className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
                 {t("pluginHub.install")}
               </Button>
@@ -295,43 +334,15 @@ export function PluginHub({
         )}
 
         {marketplaceError && (
-          <div className="flex items-start gap-2 bg-destructive/5 px-6 py-2.5 text-hint text-destructive">
+          <div className="mt-4 flex items-start gap-2 rounded-(--ds-radius-control) bg-destructive/5 p-3 text-hint text-destructive">
             <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
             <span>{marketplaceError}</span>
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-4 bg-fill-quiet px-6 py-3">
-          <Tabs value={tab} onValueChange={(value) => setTab(value as HubTab)} className="shrink-0">
-            <TabsList variant="line">
-              <TabsTrigger value="plugins">
-                {t("pluginHub.plugins")} <span className="text-fine text-muted-foreground">{plugins.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="components">
-                {t("pluginHub.components")} <span className="text-fine text-muted-foreground">{skills.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="market">
-                {t("pluginHub.market")}{" "}
-                <span className="text-fine text-muted-foreground">
-                  {items.length + (marketplace?.plugins.length ?? 0)}
-                </span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <div className="relative ml-auto w-full max-w-72">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("pluginHub.search")}
-              className="pl-8"
-            />
-          </div>
-        </div>
-
-        <ScrollArea className="min-h-0 flex-1">
+          <section aria-live="polite" className="mt-6">
           {tab === "plugins" && (
-            <div className="divide-y px-6">
+            <div className="divide-y divide-border">
               {visiblePlugins.map((plugin) => {
                 const uninstallKey = `plugin:${plugin.id}`;
                 return (
@@ -530,7 +541,7 @@ export function PluginHub({
           )}
 
           {tab === "components" && (
-            <div className="divide-y px-6">
+            <div className="divide-y divide-border">
               {visibleSkills.map((skill) => (
                 <div key={skill.id} className="flex items-center gap-3 py-3.5">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-fill-quiet text-muted-foreground">
@@ -572,7 +583,7 @@ export function PluginHub({
           )}
 
           {tab === "market" && (
-            <div className="divide-y px-6">
+            <div className="divide-y divide-border">
               {marketplace && visibleMarketplacePlugins.length > 0 && (
                 <div className="py-3">
                   <div className="mb-2 flex items-center gap-2">
@@ -698,20 +709,15 @@ export function PluginHub({
           )}
 
           {empty && (
-            <div className="flex min-h-64 flex-col items-center justify-center px-6 text-center">
+            <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
               <Search className="mb-3 size-5 text-muted-foreground/60" />
               <p className="text-ui font-medium">{t("pluginHub.empty")}</p>
               <p className="mt-1 text-hint text-muted-foreground">{t("pluginHub.emptyHint")}</p>
             </div>
           )}
-        </ScrollArea>
-
-        <DialogFooter className="border-t px-6 py-3">
-          <Button variant="outline" onClick={onClose}>
-            {t("pluginHub.done")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </section>
+        </div>
+      </ScrollArea>
+    </main>
   );
 }

@@ -70,6 +70,7 @@ function renderRail(overrides = {}) {
           onWidth={() => {}}
           taskBoardOpen={false}
           onOpenTaskBoard={() => {}}
+          automationsOpen={false}
           pluginHubOpen={false}
           quickQuota={{ remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
           quickQuotaLoading={false}
@@ -88,6 +89,7 @@ describe("SessionRail row layout", () => {
     const opened = [];
     const view = renderRail({
       taskBoardOpen: true,
+      automationsOpen: true,
       onNew: () => opened.push("new"),
       onOpenTaskBoard: () => opened.push("tasks"),
       onOpenAutomations: () => opened.push("scheduled"),
@@ -107,6 +109,8 @@ describe("SessionRail row layout", () => {
       "Settings",
     ]);
     expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
+      .toBe("page");
+    expect(features?.querySelector('[data-rail-feature="scheduled-tasks"]')?.getAttribute("aria-current"))
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of rows) click(row);

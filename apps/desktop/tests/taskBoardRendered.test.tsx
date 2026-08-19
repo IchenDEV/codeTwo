@@ -146,7 +146,23 @@ describe("TaskBoardPage rendered", () => {
   test("renders the full four-column task board with semantic counts", async () => {
     const view = await renderBoard()
 
-    expect(view.container.querySelector("h1")?.textContent).toBe("任务看板")
+    const header = view.container.querySelector("header")
+    const title = header?.querySelector("h1")
+    const description = header?.querySelector("p")
+    const controls = header?.querySelector("[data-page-header-controls]")
+    const content = header?.querySelector("[data-page-header-content]")
+
+    expect(title?.textContent).toBe("任务看板")
+    expect(title?.className).toContain("text-display")
+    expect(title?.className).toContain("tracking-tight")
+    expect(description?.className).toContain("mt-2")
+    expect(description?.className).toContain("text-ui")
+    expect(header?.className).toContain("pt-10")
+    expect(header?.className).toContain("sm:pt-14")
+    expect(content?.className).toContain("max-w-4xl")
+    expect(content?.className).toContain("sm:px-8")
+    expect(controls?.className).toContain("mt-8")
+    expect(view.container.querySelector('button[aria-label="返回"]')).toBeNull()
     const columns = Array.from(
       view.container.querySelectorAll("[data-task-column]"),
     )
