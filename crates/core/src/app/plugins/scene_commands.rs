@@ -102,11 +102,7 @@ fn register_scene_commands(ctx: &Context, inputs: SceneInputs) -> PluginResult {
         let inputs = planning.clone();
         async move {
             let args: PlanArgs = take_args(args)?;
-            json(scene_session_plan_for(
-                &inputs,
-                &args.reference,
-                args.confirm_escalation,
-            )?)
+            json(scene_session_plan_for(&inputs, &args.reference, args.confirm_escalation).await?)
         }
     })?;
 
@@ -417,7 +413,7 @@ async fn apply_scene_to(
     })
 }
 
-fn scene_session_plan_for(
+async fn scene_session_plan_for(
     inputs: &SceneInputs,
     reference: &str,
     confirm_escalation: bool,
@@ -441,7 +437,7 @@ fn scene_session_plan_for(
         });
     }
     let mut params = plan.new_session;
-    let providers = inputs.providers.summaries();
+    let providers = inputs.providers.summaries().await;
     if let Some(params) = params.as_mut() {
         if let Some(wanted) = &params.provider {
             let available = providers
@@ -763,7 +759,7 @@ async fn advance_pipeline(
             applied_scene = Some(outcome);
         }
         None => {
-            let plan = scene_session_plan_for(inputs, &stage.scene, args.confirm)?;
+            let plan = scene_session_plan_for(inputs, &stage.scene, args.confirm).await?;
             if let Some(escalation) = plan.escalation {
                 return Ok(PipelineAdvanceOutcome {
                     instance,

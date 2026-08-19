@@ -33,7 +33,7 @@ use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
 use crate::memory::{
     prompt_source, MemoryCanvasRef, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS,
 };
-use crate::models::builtin_models;
+use crate::models::{available_models, builtin_models};
 use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, SandboxPolicy,
@@ -469,6 +469,36 @@ fn current_model_from_options(options: &[ConfigOptionInfo]) -> Option<String> {
         return None;
     }
     Some(model.current.clone())
+}
+
+/// Keep Codex's newer split model/effort selectors aligned after applying one of the flat
+/// pre-session model variants (for example `gpt-5.6-sol[high]`) through `session/set_model`.
+fn reflect_flat_model_in_options(options: &mut [ConfigOptionInfo], selected: &str) {
+    let (model, effort) = selected
+        .strip_suffix(']')
+        .and_then(|value| value.rsplit_once('['))
+        .map(|(model, effort)| (model, Some(effort)))
+        .unwrap_or((selected, None));
+
+    if let Some(option) = options
+        .iter_mut()
+        .find(|option| option.category.as_deref() == Some("model") || option.id == "model")
+    {
+        if option.choices.iter().any(|choice| choice.id == model) {
+            option.current = model.to_string();
+        }
+    }
+    if let Some(effort) = effort {
+        if let Some(option) = options.iter_mut().find(|option| {
+            option.category.as_deref() == Some("thought_level")
+                || option.id == "effort"
+                || option.id == "reasoning_effort"
+        }) {
+            if option.choices.iter().any(|choice| choice.id == effort) {
+                option.current = effort.to_string();
+            }
+        }
+    }
 }
 
 /// Lower one resolved immutable Canvas payload to ACP blocks.  The summary is always textual;
@@ -2153,7 +2183,7 @@ impl Engine {
         // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
         let resume = sess.acp_session_id.clone();
         let cwd = sess.cwd.clone();
-        let models = builtin_models(&prov.id);
+        let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
         self.state.sessions.lock().unwrap().insert(
             id.to_string(),
@@ -2469,7 +2499,7 @@ impl Engine {
                 // Offer the provider's built-in models straight away. The agent's own list, if it
                 // has one, only arrives at `session/new` — i.e. after the first prompt — and until
                 // then the picker would otherwise have nothing in it at all.
-                let models = builtin_models(&prov.id);
+                let models = available_models(&prov).await;
                 self.state.sessions.lock().unwrap().insert(
                     session_id.clone(),
                     SessionRuntime {
@@ -3072,7 +3102,7 @@ impl Engine {
                                 .unwrap_or_default();
 
                             // The newer config-options surface: model selector + thought level.
-                            let options = resp
+                            let mut options = resp
                                 .config_options
                                 .as_deref()
                                 .map(config_option_infos)
@@ -3108,14 +3138,16 @@ impl Engine {
                                 (models, pending)
                             };
 
-                            // Unless the agent reported a model selector of its own, in which case
-                            // what it says is live wins and the pre-session pick was only ever a
-                            // guess at a list we didn't have.
-                            let pending = pending.filter(|_| option_model.is_none());
+                            // Current Codex accepts the same flat variant ids exposed by its model
+                            // catalogue even though it also reports split model/effort selectors.
+                            // Preserve a deliberate pre-session choice there; retain the old
+                            // provider-owned-selector behavior for adapters we have not verified.
+                            let pending = pending.filter(|_| option_model.is_none() || is_codex);
                             if let Some(want) = pending.filter(|m| *m != current) {
                                 match client.set_model(&id, &want).await {
                                     Ok(()) => {
                                         current = want.clone();
+                                        reflect_flat_model_in_options(&mut options, &want);
                                         let mut map = self.state.sessions.lock().unwrap();
                                         if let Some(r) = map.get_mut(&session) {
                                             r.session.model = Some(want);
@@ -3423,7 +3455,16 @@ impl Engine {
                     None => match &self.state.store {
                         Some(store) => match store.get_session(&session) {
                             Ok(Some(stored_session)) => {
-                                let models = builtin_models(&stored_session.provider);
+                                let models = match self
+                                    .state
+                                    .providers
+                                    .iter()
+                                    .find(|provider| provider.id == stored_session.provider)
+                                    .cloned()
+                                {
+                                    Some(provider) => available_models(&provider).await,
+                                    None => builtin_models(&stored_session.provider),
+                                };
                                 (stored_session, models, false)
                             }
                             Ok(None) => {
@@ -3997,6 +4038,45 @@ mod cwd_tests {
             err.contains("/definitely/not/a/real/directory"),
             "got {err}"
         );
+    }
+}
+
+#[cfg(test)]
+mod model_option_tests {
+    use super::reflect_flat_model_in_options;
+    use crate::event::{ConfigOptionInfo, ModelChoice};
+
+    fn choice(id: &str) -> ModelChoice {
+        ModelChoice {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: None,
+        }
+    }
+
+    #[test]
+    fn flat_codex_variant_updates_split_model_and_effort_options() {
+        let mut options = vec![
+            ConfigOptionInfo {
+                id: "model".into(),
+                name: "Model".into(),
+                category: Some("model".into()),
+                current: "gpt-5.6-sol".into(),
+                choices: vec![choice("gpt-5.6-sol"), choice("gpt-5.6-terra")],
+            },
+            ConfigOptionInfo {
+                id: "effort".into(),
+                name: "Reasoning".into(),
+                category: Some("thought_level".into()),
+                current: "medium".into(),
+                choices: vec![choice("low"), choice("high")],
+            },
+        ];
+
+        reflect_flat_model_in_options(&mut options, "gpt-5.6-terra[high]");
+
+        assert_eq!(options[0].current, "gpt-5.6-terra");
+        assert_eq!(options[1].current, "high");
     }
 }
 
