@@ -3682,24 +3682,38 @@ export default function App() {
           displayProvider={displayProvider}
           model={modelLabel}
           provider={provider}
-          onOpenMarket={openPluginHub}
-          onOpenAutomations={() => setShowAutomations(true)}
+          onOpenMarket={() => {
+            setShowTaskBoard(false);
+            openPluginHub();
+          }}
+          onOpenAutomations={() => {
+            setShowTaskBoard(false);
+            setShowAutomations(true);
+          }}
           width={railWidth}
           onWidth={setRailWidth}
           newHint={hint("new_session")}
           searchHint={hint("open_command_palette")}
           onOpenSearch={() => setShowPalette(true)}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => {
+            setShowTaskBoard(false);
+            setShowSettings(true);
+          }}
           collapsed={displayedRailCollapsed}
           overlay={narrowLayout}
           onToggleCollapse={toggleDisplayedRail}
           needsMeCount={needsMeCount(sessions)}
-          onOpenMissionControl={() => setShowMissionControl(true)}
+          onOpenMissionControl={() => {
+            setShowTaskBoard(false);
+            setShowMissionControl(true);
+          }}
+          missionControlOpen={showMissionControl}
           taskBoardOpen={showTaskBoard}
           onOpenTaskBoard={() => {
             if (showTaskBoard) setShowTaskBoard(false);
             else openTaskBoard();
           }}
+          pluginHubOpen={showPluginHub}
         />
 
         {showTaskBoard && (

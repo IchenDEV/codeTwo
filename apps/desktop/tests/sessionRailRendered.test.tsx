@@ -60,6 +60,7 @@ function renderRail(overrides = {}) {
           model="gpt-5.6-sol"
           provider="codex"
           onOpenMarket={() => {}}
+          onOpenAutomations={() => {}}
           newHint="⌘N"
           searchHint="⌘K"
           onOpenSearch={() => {}}
@@ -71,6 +72,10 @@ function renderRail(overrides = {}) {
           onWidth={() => {}}
           needsMeCount={0}
           onOpenMissionControl={() => {}}
+          missionControlOpen={false}
+          taskBoardOpen={false}
+          onOpenTaskBoard={() => {}}
+          pluginHubOpen={false}
           {...overrides}
         />
       </ToastProvider>
@@ -79,6 +84,37 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("groups primary features into compact labeled navigation rows", () => {
+    activateDom();
+    const opened = [];
+    const view = renderRail({
+      taskBoardOpen: true,
+      onNew: () => opened.push("new"),
+      onOpenMissionControl: () => opened.push("mission"),
+      onOpenTaskBoard: () => opened.push("tasks"),
+      onOpenAutomations: () => opened.push("scheduled"),
+      onOpenMarket: () => opened.push("plugins"),
+      onOpenSettings: () => opened.push("settings"),
+    });
+    const features = view.container.querySelector("[data-rail-features]");
+    const rows = [...(features?.querySelectorAll("button") ?? [])];
+
+    expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "New session",
+      "Mission control",
+      "Task board",
+      "Scheduled tasks",
+      "Plugins",
+      "Settings",
+    ]);
+    expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
+      .toBe("page");
+    for (const row of rows) click(row);
+    expect(opened).toEqual(["new", "mission", "tasks", "scheduled", "plugins", "settings"]);
+
+    view.unmount();
+  });
+
   test("renders three aligned icon rows and keeps useful previews out of the layout", () => {
     activateDom();
     const view = renderRail();

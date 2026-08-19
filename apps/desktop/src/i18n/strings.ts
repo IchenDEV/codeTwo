@@ -19,6 +19,7 @@ export const en = {
   "rail.chooseFolder": "Choose a project folder",
 
   // rail — conversations
+  "rail.features": "Features",
   "rail.newSession": "New session",
   "rail.searchLabel": "Search",
   "rail.allProjects": "All projects",
@@ -1070,6 +1071,7 @@ export const zhCN: Record<StringKey, string> = {
   "rail.removeProject": "从列表移除（会话会保留）",
   "rail.chooseFolder": "选择项目文件夹",
 
+  "rail.features": "功能",
   "rail.newSession": "新建会话",
   "rail.searchLabel": "搜索",
   "rail.allProjects": "所有项目",
