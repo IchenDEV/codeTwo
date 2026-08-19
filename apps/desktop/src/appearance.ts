@@ -81,7 +81,7 @@ function builtInTheme(id: string, name: string): AppearanceTheme {
 }
 
 export const BUILT_IN_THEMES: AppearanceTheme[] = [
-  builtInTheme("code2", "Code2"),
+  builtInTheme("code2", "C2"),
   builtInTheme("ocean", "Ocean"),
   builtInTheme("grove", "Grove"),
   builtInTheme("ember", "Ember"),

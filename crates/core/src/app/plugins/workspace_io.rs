@@ -518,7 +518,7 @@ fn resolve_known_workspace_root(cwd: &str, roots: &[String]) -> Result<PathBuf, 
     });
     if !authorized {
         return Err(PluginError::new(
-            "workspace content search is limited to project and session roots known to CodeTwo",
+            "workspace content search is limited to project and session roots known to C2",
         ));
     }
     Ok(requested)

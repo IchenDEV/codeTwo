@@ -61,7 +61,7 @@ pub struct Device {
     scopes: Vec<String>,
     // `None` is retained only for migration from auth files written before the two remote
     // protocols were isolated. Old bounded/scoped credentials are unambiguously T3 credentials;
-    // old unbounded credentials belong to the original Code2 browser protocol.
+    // old unbounded credentials belong to the original C2 browser protocol.
     #[serde(default)]
     protocol: Option<CredentialProtocol>,
 }

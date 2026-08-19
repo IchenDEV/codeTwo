@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="104" alt="Code2 app icon" />
+  <img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="104" alt="C2 app icon" />
 </p>
 
-<h1 align="center">Code2</h1>
+<h1 align="center">C2</h1>
 
 <p align="center">
   <strong>The document-first coding agent.</strong><br />
@@ -16,15 +16,15 @@
   <a href="docs/plugin-protocol.md">Plugin protocol</a>
 </p>
 
-![Code2 document editor with the skill picker open](docs/screenshots/slash-menu.png)
+![C2 document editor with the skill picker open](docs/screenshots/slash-menu.png)
 
 > [!IMPORTANT]
-> Code2 is pre-release software. The core product works, but there are no signed binary releases
+> C2 is pre-release software. The core product works, but there are no signed binary releases
 > yet. Build it from source and expect APIs, storage, and packaging details to change before 1.0.
 
-## Why Code2
+## Why C2
 
-Most coding-agent clients begin with a chat box. Code2 begins with a document. You can shape a
+Most coding-agent clients begin with a chat box. C2 begins with a document. You can shape a
 long brief with headings and lists, insert skills and files exactly where they belong, inspect the
 whole turn, and only then send it to the agent you choose.
 
@@ -55,7 +55,7 @@ Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM
              Tauri + React  ratatui  Axum + WebSocket
 ```
 
-Code2's internals form a plugin graph inspired by
+C2's internals form a plugin graph inspired by
 [cordis](https://github.com/cordiverse/cordis): storage, agent execution, git, memory, scenes, and
 other subsystems declare what they require and provide. Out-of-process plugins use the same small
 JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands.
@@ -87,7 +87,7 @@ bun install --frozen-lockfile
 bun run tauri dev
 ```
 
-Code2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
+C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
 are documented in [Providers](website/guide/providers.md).
 
 ### Other surfaces
@@ -106,7 +106,7 @@ cargo run -p codetwo-core --example live_demo
 ```
 
 The remote server prints a one-time pairing URL and token. Keep it on a trusted LAN or Tailscale
-tailnet; Code2 does not provide a hosted relay.
+tailnet; C2 does not provide a hosted relay.
 
 ## Repository map
 
@@ -160,7 +160,7 @@ evidence where applicable.
 
 ## Security and privacy
 
-Code2 runs provider CLIs as local child processes and communicates with them over stdio. Code2
+C2 runs provider CLIs as local child processes and communicates with them over stdio. C2
 does not change the provider's own network, authentication, data-retention, or tool policies;
 review those separately before giving a provider access to sensitive code.
 

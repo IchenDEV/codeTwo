@@ -14,7 +14,7 @@ pub fn is_available() -> bool {
     crate::provider::which("tmux").is_some()
 }
 
-/// A tmux-safe session name for a Code2 session id (tmux names can't contain `.` or `:`).
+/// A tmux-safe session name for a C2 session id (tmux names can't contain `.` or `:`).
 pub fn session_name(session_id: &str) -> String {
     let safe: String = session_id
         .chars()
@@ -57,7 +57,7 @@ pub async fn ensure_session(name: &str, cwd: Option<&Path>) -> std::io::Result<(
     run(&refs).await.map(|_| ())
 }
 
-/// Code2-owned tmux sessions (names starting `codetwo-`), newest activity first.
+/// C2-owned tmux sessions (names starting `codetwo-`), newest activity first.
 pub async fn list_sessions() -> Vec<String> {
     run(&["list-sessions", "-F", "#{session_name}"])
         .await

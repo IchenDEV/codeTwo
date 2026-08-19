@@ -560,7 +560,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
         "createdAt": "2026-08-12T00:00:00.000Z",
     });
 
-    // Worktree semantics include a caller-selected base/branch/setup contract that Code2 cannot
+    // Worktree semantics include a caller-selected base/branch/setup contract that C2 cannot
     // faithfully map yet. Refuse it before creating a session instead of running in the wrong
     // checkout.
     let mut unsupported_worktree = create_command.clone();
@@ -995,7 +995,7 @@ async fn native_mobile_creates_a_thread_and_dispatches_a_prompt() {
     .unwrap();
 
     // T3 mobile owns this public id and keeps it as its cache key. Reload around the same durable
-    // Code2 store and confirm both the id and selected interaction mode survive a server restart.
+    // C2 store and confirm both the id and selected interaction mode survive a server restart.
     let (restart_engine, restart_rx) = Engine::with_store(
         vec![provider],
         SkillLibrary::new(builtin_skills()),

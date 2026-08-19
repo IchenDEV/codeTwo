@@ -542,7 +542,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
 }
 
 /// Build the content-search projection once for an older database, then keep it current with
-/// triggers. Legacy user rows are deliberately not backfilled: older Code2 versions stored the
+/// triggers. Legacy user rows are deliberately not backfilled: older C2 versions stored the
 /// fully compiled prompt there (project rules, file contents, expanded skills), not just what the
 /// user authored. Agent text is safe to recover; new user prompts arrive with canonical text.
 fn migrate_session_search(conn: &Connection) -> rusqlite::Result<()> {
@@ -689,7 +689,7 @@ impl Store {
                 .parent()
                 .map(|parent| parent.join("artifacts")),
         };
-        // A delayed candidate may have become eligible while Code2 was closed.
+        // A delayed candidate may have become eligible while C2 was closed.
         store.run_memory_maintenance()?;
         Ok(store)
     }
@@ -2064,7 +2064,7 @@ impl Store {
     /// A new process cannot recover provider children or parked oneshots. Convert every persisted
     /// in-flight state to an honest, non-actionable interruption before any session list is shown.
     pub fn normalize_interrupted_activities(&self) -> Result<usize, StoreError> {
-        const MESSAGE: &str = "Code2 stopped before the turn finished";
+        const MESSAGE: &str = "C2 stopped before the turn finished";
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
         let rows: Vec<(String, Option<String>)> = {
@@ -3654,7 +3654,7 @@ mod tests {
                     reason: RunFailureReason::Interrupted,
                     ref message,
                 } if actual_turn == turn_id
-                    && message == "Code2 stopped before the turn finished"
+                    && message == "C2 stopped before the turn finished"
             ));
         }
         assert_eq!(

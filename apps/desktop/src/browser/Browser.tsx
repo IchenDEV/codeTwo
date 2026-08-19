@@ -159,7 +159,7 @@ function MenuItem({
 /**
  * The built-in browser as browser, not just an iframe with an address bar: tabs along the top,
  * back/forward/reload, an overflow menu with the inspector, zoom and device widths — and the
- * annotate bar at the bottom, which is the part that makes it Code2's browser rather than a
+ * annotate bar at the bottom, which is the part that makes it C2's browser rather than a
  * worse Safari: what you see feeds the prompt.
  *
  * The page itself is a native webview floating over `hostRef`, because an iframe cannot browse:

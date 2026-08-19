@@ -425,7 +425,7 @@ impl Fork {
 
 /// The application root: a [`Runtime`] plus its root [`Context`].
 ///
-/// Everything else — including the parts of Code2 that used to be "the core" — hangs off this as a
+/// Everything else — including the parts of C2 that used to be "the core" — hangs off this as a
 /// plugin.
 pub struct App {
     runtime: Arc<Runtime>,

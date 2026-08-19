@@ -1,12 +1,12 @@
 ---
 layout: false
-title: Code2 — 以文档为中心的编程智能体
+title: C2 — 以文档为中心的编程智能体
 description: 在一个本地界面中编写结构化提示词、组合可复用技能，并运行不同的编程 CLI。
 ---
 
 <div class="codetwo-home" lang="zh-CN">
   <a class="skip-link" href="#main-content">跳到正文</a>
-  <div class="window-bar" aria-label="Code2 窗口">
+  <div class="window-bar" aria-label="C2 窗口">
     <span class="traffic-lights" aria-hidden="true">
       <i></i><i></i><i></i>
     </span>
@@ -14,9 +14,9 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
   </div>
   <header class="site-header">
     <div class="shell header-inner">
-      <a class="brand" href="./" aria-label="Code2 中文首页">
+      <a class="brand" href="./" aria-label="C2 中文首页">
         <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
-        <strong>Code2</strong>
+        <strong>C2</strong>
       </a>
       <nav class="desktop-nav" aria-label="主导航">
         <a href="#product">产品</a>
@@ -69,7 +69,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
           src="/screenshots/app-main.png"
           width="1440"
           height="900"
-          alt="Code2 桌面应用，包含会话栏、文档编辑器和环境面板"
+          alt="C2 桌面应用，包含会话栏、文档编辑器和环境面板"
         />
       </figure>
       <ul class="shell hero-capabilities" aria-label="核心能力">
@@ -88,7 +88,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
             选择智能体<span class="terminal-period">。</span>
           </h2>
           <p>
-            Code2 会先把提示词变成一份可编辑、可复用、可检查的结构化文档，然后再运行。
+            C2 会先把提示词变成一份可编辑、可复用、可检查的结构化文档，然后再运行。
           </p>
         </div>
         <div class="workflow-stage">
@@ -121,7 +121,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
               width="1440"
               height="900"
               loading="lazy"
-              alt="Code2 文档编辑器，已打开技能与内容块选择菜单"
+              alt="C2 文档编辑器，已打开技能与内容块选择菜单"
             />
           </figure>
         </div>
@@ -136,7 +136,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
             编程智能体<span class="terminal-period">。</span>
           </h2>
           <p>
-            Code2 只在本机启动 CLI 或 ACP 适配器。账号、订阅、配额和费用仍由对应 Provider 管理。
+            C2 只在本机启动 CLI 或 ACP 适配器。账号、订阅、配额和费用仍由对应 Provider 管理。
           </p>
         </div>
         <div class="provider-matrix">
@@ -265,7 +265,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
         </h2>
         <div class="open-source-copy">
           <p>
-            Code2 基于 Apache 2.0 许可证开源，为希望自主掌控编程智能体工作流的人而构建。
+            C2 基于 Apache 2.0 许可证开源，为希望自主掌控编程智能体工作流的人而构建。
           </p>
           <div class="actions">
             <a
@@ -289,7 +289,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
       <footer class="shell site-footer">
         <a class="footer-brand" href="./">
           <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
-          Code2
+          C2
         </a>
         <nav aria-label="页脚导航">
           <a href="./guide/getting-started">文档</a>

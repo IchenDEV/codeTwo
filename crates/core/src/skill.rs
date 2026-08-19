@@ -387,7 +387,7 @@ pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
 }
 
 /// A reusable specialist supplied by a plugin. ACP does not standardize provider-native subagent
-/// registration, so Code2 also keeps a deterministic inline delegation fallback.
+/// registration, so C2 also keeps a deterministic inline delegation fallback.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubagentDefinition {
     pub name: String,

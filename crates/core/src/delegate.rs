@@ -12,7 +12,7 @@
 //!
 //! # Why this fits here
 //!
-//! Code2 already implements this pattern — with a human in the manager's chair. Typing `/` is
+//! C2 already implements this pattern — with a human in the manager's chair. Typing `/` is
 //! skill awareness, [`crate::skill::compile_with_context`] is the context assembly, and
 //! `session/prompt` is the delegation. So the question isn't whether the architecture supports a
 //! manager; it's whether a model in that chair beats the human, or beats not having one.

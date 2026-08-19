@@ -158,7 +158,7 @@ and never let a late list response from another client or request roll state bac
 The canonical prompt and the first `running` revision commit in one database transaction.
 Subsequent activity updates use revision-aware writes. On process startup, a persisted `running` or
 `awaiting_input` state cannot still own a provider task or reply channel, so the core advances it to
-`failed` with reason `interrupted`, clears pending input, and reports that Code2 stopped before the
+`failed` with reason `interrupted`, clears pending input, and reports that C2 stopped before the
 turn finished. It never exposes a stale permission button as actionable after restart.
 
 ## Over the wire (remote server)

@@ -15,7 +15,7 @@ const allowlist = JSON.parse(
   readFileSync(resolve(root, "scripts/design-system-allowlist.json"), "utf8"),
 );
 
-describe("Code2 design system", () => {
+describe("C2 design system", () => {
   test("keeps every declared light and dark contrast pair above its contract", () => {
     const results = checkContrastContracts(tokenSource);
     expect(results).toHaveLength(12);

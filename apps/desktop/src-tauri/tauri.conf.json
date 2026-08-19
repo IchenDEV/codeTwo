@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Code2",
+  "productName": "C2",
   "version": "0.0.0",
   "identifier": "dev.codetwo.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Code2",
+        "title": "C2",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

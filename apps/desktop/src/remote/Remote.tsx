@@ -38,7 +38,7 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
 }
 
 /**
- * Remote control for T3 Code mobile and Code2's browser client: toggle network access, mint
+ * Remote control for T3 Code mobile and C2's browser client: toggle network access, mint
  * one-time pairing links (URL + QR), and manage paired devices. A paired device drives the same
  * live engine/sessions as this app; pairing survives restarts, and revoking a device cuts it off
  * immediately.
@@ -186,7 +186,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="t3">T3 Code mobile</SelectItem>
-                  <SelectItem value="legacy">Code2 browser</SelectItem>
+                  <SelectItem value="legacy">C2 browser</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -273,7 +273,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Connect the T3 Code mobile app, or drive Code2 from a browser on another device over
+              Connect the T3 Code mobile app, or drive C2 from a browser on another device over
               the same LAN or Tailscale tailnet. Turning this on serves the app's live sessions on
               all network interfaces; access requires pairing with a one-time link.
             </p>

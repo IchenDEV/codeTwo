@@ -1,4 +1,4 @@
-//! The core's services — every capability Code2 has, published under a name.
+//! The core's services — every capability C2 has, published under a name.
 //!
 //! Before this module, these were fields on a `AppState` struct built by a 200-line `setup()` in
 //! the Tauri bridge: twenty subsystems constructed in a fixed order, each one reachable only by

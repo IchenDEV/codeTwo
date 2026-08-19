@@ -55,7 +55,7 @@ const replacements: Record<Rule, string> = {
   "raw-color": "move the value to tokens.css and consume a semantic --ds-color-* token",
   "fixed-color-class": "replace the fixed Tailwind color with a semantic color role",
   "arbitrary-tailwind": "replace the arbitrary utility with a named semantic token or variant",
-  "off-scale-type": "use one of the eight Code2 type roles",
+  "off-scale-type": "use one of the eight C2 type roles",
   "hardcoded-type-metric": "use a --ds-type-*-size or --ds-type-*-leading role",
   "hardcoded-spacing": "use the 2/4/6/8/12/16/24/32 semantic spacing roles",
   "hardcoded-radius": "use --ds-radius-micro/control/module/modal",

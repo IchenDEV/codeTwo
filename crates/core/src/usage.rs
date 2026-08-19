@@ -31,7 +31,7 @@ use tokio::{
 
 use crate::provider::{which, ProviderId};
 
-/// Whether Code2 could obtain a provider-owned quota snapshot.
+/// Whether C2 could obtain a provider-owned quota snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QuotaStatus {
@@ -177,7 +177,7 @@ enum CodexQuotaError {
 }
 
 /// Ask the installed Codex CLI for its account rate limits over the official local app-server
-/// protocol. Authentication remains owned by Codex; Code2 neither reads nor stores credentials.
+/// protocol. Authentication remains owned by Codex; C2 neither reads nor stores credentials.
 async fn codex_quota() -> Result<ProviderQuotaReport, CodexQuotaError> {
     let executable = which("codex").ok_or(CodexQuotaError::CliNotFound)?;
     let mut child = Command::new(executable)
@@ -198,7 +198,7 @@ async fn codex_quota() -> Result<ProviderQuotaReport, CodexQuotaError> {
             "method": "initialize",
             "id": 1,
             "params": {
-                "clientInfo": { "name": "codetwo", "title": "Code2", "version": env!("CARGO_PKG_VERSION") },
+                "clientInfo": { "name": "codetwo", "title": "C2", "version": env!("CARGO_PKG_VERSION") },
                 "capabilities": null
             }
         }),

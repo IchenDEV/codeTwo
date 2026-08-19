@@ -2,7 +2,7 @@
 //!
 //! Claude Code stores skills as `~/.claude/skills/<name>/SKILL.md` plus a per-project
 //! `.claude/skills/`, and the other harnesses follow the same one-directory-per-skill layout under
-//! their own roots. codeTwo scans whichever of these exist and turns each `SKILL.md` into an
+//! their own roots. C2 scans whichever of these exist and turns each `SKILL.md` into an
 //! [`SkillPayload::AgentSkill`] library entry, so typing `/` in the editor finds the provider-native
 //! skill without any manual registration. Like [`crate::rules`], the conventions are a hardcoded
 //! table and a root that doesn't exist on this machine simply contributes nothing.

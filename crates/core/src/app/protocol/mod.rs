@@ -1,11 +1,11 @@
-//! The Code2 Plugin Protocol — plugins that are not written in Rust, and do not run in this
+//! The C2 Plugin Protocol — plugins that are not written in Rust, and do not run in this
 //! process.
 //!
 //! # Why this exists
 //!
-//! [`crate::app`] made Code2 a plugin graph, but a Rust host can only load Rust plugins it was
+//! [`crate::app`] made C2 a plugin graph, but a Rust host can only load Rust plugins it was
 //! compiled with. That is a real ceiling: it means "plugin" describes how *we* organise our code,
-//! not something a user can add. This closes it. A plugin is a process; Code2 speaks JSON-RPC to
+//! not something a user can add. This closes it. A plugin is a process; C2 speaks JSON-RPC to
 //! it over stdio; and what it contributes — commands, event subscriptions — lands in exactly the
 //! same registries a built-in plugin's do.
 //!

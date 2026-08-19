@@ -228,7 +228,7 @@ async fn canvas_http_lifecycle_is_authenticated_owner_scoped_and_private() {
     let canvas_page = http(addr, "GET", "/canvas", None, b"").await;
     assert_eq!(canvas_page.status, 200);
     private(&canvas_page);
-    assert!(String::from_utf8_lossy(&canvas_page.body).contains("Code2 remote"));
+    assert!(String::from_utf8_lossy(&canvas_page.body).contains("C2 remote"));
     let traversal = http(addr, "GET", "/canvas/%2e%2e/client.html", None, b"").await;
     assert_eq!(traversal.status, 404);
     private(&traversal);

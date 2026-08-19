@@ -155,7 +155,7 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
 }
 
 /// Resolve the model list shown before an ACP session exists. Codex owns a live model catalogue,
-/// so prefer that instead of freezing release names in Code2. Other providers retain their
+/// so prefer that instead of freezing release names in C2. Other providers retain their
 /// documented built-in fallbacks until their CLIs expose an equivalent catalogue API.
 pub async fn available_models(provider: &Provider) -> Vec<ModelChoice> {
     if provider.id != ProviderId::Codex {
@@ -265,7 +265,7 @@ async fn query_codex_models(executable: std::path::PathBuf) -> Result<Vec<ModelC
             "method": "initialize",
             "id": 1,
             "params": {
-                "clientInfo": { "name": "codetwo", "title": "Code2", "version": env!("CARGO_PKG_VERSION") },
+                "clientInfo": { "name": "codetwo", "title": "C2", "version": env!("CARGO_PKG_VERSION") },
                 "capabilities": null
             }
         }),

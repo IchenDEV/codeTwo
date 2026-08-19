@@ -1,6 +1,6 @@
 /* @design-system-version 0.9.0
  *
- * Code2 desktop design tokens. This is the single source of truth for the new system.
+ * C2 desktop design tokens. This is the single source of truth for the new system.
  * Phase 1 deliberately does not remap the production UI yet; the legacy values in styles.css
  * remain baseline debt until the one-shot migration. Product components may consume semantic or
  * shared-component tokens only. Foundation tokens are private inputs for this file.

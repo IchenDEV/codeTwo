@@ -1,6 +1,6 @@
 //! Durable, provider-neutral tool artifacts.
 //!
-//! The transcript stores only opaque artifact ids. Files live under CodeTwo's app-data directory,
+//! The transcript stores only opaque artifact ids. Files live under C2's app-data directory,
 //! are content-addressed internally for deduplication, and can only be read after a matching SQLite
 //! row is found. This keeps provider-returned paths out of the frontend and out of transcript JSON.
 

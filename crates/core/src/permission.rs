@@ -49,7 +49,7 @@ pub enum PermissionMode {
     Yolo,
 }
 
-/// The tool-kind ceiling enforced by Code2's ACP permission mediation. Its compatibility values
+/// The tool-kind ceiling enforced by C2's ACP permission mediation. Its compatibility values
 /// (`read-only` / `workspace-write` / `danger-full-access`) are orthogonal to the approval mode:
 /// this ceiling can veto an ACP permission request even when the mode would allow it.
 ///

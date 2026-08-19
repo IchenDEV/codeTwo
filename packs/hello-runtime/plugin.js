@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// A complete Code2 plugin, in one file. See docs/plugin-protocol.md.
+// A complete C2 plugin, in one file. See docs/plugin-protocol.md.
 //
 // It contributes one command, calls one of the host's from inside it, and listens for a host
-// event. Nothing here is Code2-specific machinery: JSON-RPC 2.0, one object per line, on stdio.
+// event. Nothing here is C2-specific machinery: JSON-RPC 2.0, one object per line, on stdio.
 //
 // Run it by installing this directory as a plugin and marking it **trusted** — installing alone
 // never starts a process.

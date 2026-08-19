@@ -1,29 +1,29 @@
 # Providers
 
-A **provider** is a coding-agent CLI that Code2 drives over the **Agent Client Protocol (ACP)**.
-Code2 does not reimplement the agent or proxy model access: it starts the CLI—or an ACP adapter—as
+A **provider** is a coding-agent CLI that C2 drives over the **Agent Client Protocol (ACP)**.
+C2 does not reimplement the agent or proxy model access: it starts the CLI—or an ACP adapter—as
 a local child process and exchanges JSON-RPC messages over stdin/stdout.
 
 Your provider account remains the source of authentication, subscription, quota, model access, and
-billing. Install and sign in to the provider before starting a real Code2 session.
+billing. Install and sign in to the provider before starting a real C2 session.
 
 ## What “supported” means
 
-For each built-in provider, Code2 has a registered launch specification and a stable provider ID.
-When you choose that provider for a session, Code2:
+For each built-in provider, C2 has a registered launch specification and a stable provider ID.
+When you choose that provider for a session, C2:
 
 1. checks whether the launch command resolves on `PATH`;
 2. starts the native ACP endpoint or adapter locally;
 3. initializes an ACP session and sends the compiled document as the prompt; and
 4. normalizes streamed text, tool calls, permissions, plans, terminal updates, and turn completion
-   into the same Code2 event interface when the provider exposes them.
+   into the same C2 event interface when the provider exposes them.
 
-Support does **not** mean every provider exposes identical models or ACP features. Code2 displays
+Support does **not** mean every provider exposes identical models or ACP features. C2 displays
 what the active ACP endpoint actually reports rather than inventing parity.
 
 ## Eight built-in providers
 
-| Provider | Connection | Code2 launches | Prerequisite |
+| Provider | Connection | C2 launches | Prerequisite |
 | --- | --- | --- | --- |
 | **Claude Code** | ACP adapter | `npx -y @agentclientprotocol/claude-agent-acp` | Node and an authenticated Claude Code setup |
 | **OpenAI Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.1.14` | Node and a local Codex runtime/login |
@@ -36,7 +36,7 @@ what the active ACP endpoint actually reports rather than inventing parity.
 
 ### Native ACP
 
-**Grok** and **Kimi** expose ACP directly, so Code2 can launch them without a Node adapter.
+**Grok** and **Kimi** expose ACP directly, so C2 can launch them without a Node adapter.
 
 ### Built-in CLI ACP modes
 
@@ -58,10 +58,10 @@ npx -y glm-acp-agent --setup
 
 ## Availability and authentication
 
-Code2 shows a health dot for every built-in provider:
+C2 shows a health dot for every built-in provider:
 
 - **green** means the registered launch command resolves on `PATH`;
-- **missing** means Code2 cannot find that command; and
+- **missing** means C2 cannot find that command; and
 - the composer warns before a new session if the selected launch command is missing.
 
 The health check is intentionally narrow. It does not prove that credentials are valid, a provider
@@ -70,8 +70,8 @@ green dot primarily confirms that `npx` is available.
 
 ## Models and provider-specific capabilities
 
-If the ACP endpoint reports models during `session/new`, Code2 shows a model control and sends
-`session/set_model` when you switch. If it reports no model list, Code2 leaves model selection to
+If the ACP endpoint reports models during `session/new`, C2 shows a model control and sends
+`session/set_model` when you switch. If it reports no model list, C2 leaves model selection to
 the provider's own CLI configuration.
 
 The same rule applies to plans, slash commands, MCP tools, images, browser/computer use, and other
@@ -90,6 +90,6 @@ initialize → session/new → session/prompt → stream session/update
 This common transport is what lets the desktop app, TUI, and remote client share one provider-neutral
 session and event model.
 
-Providers that expose MCP support can receive extra tools at session start. In Code2, MCP servers
+Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers
 come from **MCP skills**—see [Skills](/guide/editor#skill-kinds) and the
 [market](/guide/market)'s Browser Tool and Filesystem Tool entries.

@@ -126,7 +126,7 @@ async fn create_change_request_with_runner(
         return Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             format!(
-                "{} remote detected at {}; creating a {} is not enabled in this CodeTwo build",
+                "{} remote detected at {}; creating a {} is not enabled in this C2 build",
                 info.provider_name, info.host, info.change_request_label
             ),
         ));
@@ -225,7 +225,7 @@ fn info_from_parsed(remote_name: String, parsed: ParsedRemote) -> SourceControlI
 
 fn provider_from_hostname(hostname: &str) -> SourceControlProviderKind {
     // A brand-shaped substring is not proof of a provider. Self-hosted installations can use any
-    // domain, so they stay Unknown until CodeTwo has an explicit host configuration surface.
+    // domain, so they stay Unknown until C2 has an explicit host configuration surface.
     if hostname == "github.com" {
         SourceControlProviderKind::GitHub
     } else if hostname == "gitlab.com" {

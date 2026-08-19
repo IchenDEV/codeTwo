@@ -1,6 +1,6 @@
-//! Code2 TUI entrypoint. Same core as the desktop app; ratatui renders it.
+//! C2 TUI entrypoint. Same core as the desktop app; ratatui renders it.
 //!
-//! The TUI does not build a Code2 — it boots one. Storage, providers, the skill library and the
+//! The TUI does not build a C2 — it boots one. Storage, providers, the skill library and the
 //! agent loop all come out of the plugin graph ([`codetwo_core::app`]), which is also why this
 //! file no longer knows the order any of them have to be constructed in.
 //!

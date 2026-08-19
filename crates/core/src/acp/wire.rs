@@ -320,7 +320,7 @@ pub enum SessionUpdate {
     },
     /// Authoritative provider context usage/capacity for the active session. `cost` is an
     /// adapter-specific optional payload; retain it as an opaque value so newer providers remain
-    /// parse-compatible without making cost part of CodeTwo's context-window contract.
+    /// parse-compatible without making cost part of C2's context-window contract.
     UsageUpdate {
         used: u64,
         size: u64,

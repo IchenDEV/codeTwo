@@ -1,4 +1,4 @@
-//! The Code2 Plugin Protocol wire types.
+//! The C2 Plugin Protocol wire types.
 //!
 //! JSON-RPC 2.0, newline-delimited, over the child's stdio — the same shape ACP already uses in
 //! this codebase, for the same reason: it is boring, debuggable with `cat`, and implementable in

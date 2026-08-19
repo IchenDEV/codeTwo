@@ -1,6 +1,6 @@
-//! Code2 desktop bridge: a thin Tauri layer over `codetwo-core`.
+//! C2 desktop bridge: a thin Tauri layer over `codetwo-core`.
 //!
-//! The desktop no longer *builds* a Code2 — it boots one. `setup` starts the core plugin graph
+//! The desktop no longer *builds* a C2 — it boots one. `setup` starts the core plugin graph
 //! ([`codetwo_core::app`]) plus its native host plugins, then subscribes to the graph's event and
 //! terminal services solely to forward their streams to the webview. Its authenticated browser
 //! MCP is contributed as a replacement `engine` builder, not a fork of the boot sequence.
@@ -136,7 +136,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![call])
         .build(tauri::generate_context!())
-        .expect("error while running Code2")
+        .expect("error while running C2")
         .run(|_, _| {});
 }
 

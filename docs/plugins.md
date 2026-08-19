@@ -1,6 +1,6 @@
 # Plugins
 
-Code2 is a plugin graph. This document explains what that means, how to write a plugin, and how
+C2 is a plugin graph. This document explains what that means, how to write a plugin, and how
 the core and host-specific plugins fit together.
 
 The model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
@@ -179,7 +179,7 @@ const graph = await kernelScopes();       // what is loaded, and why something i
 A Rust host can only load Rust plugins it was compiled with. If that were the end of it, "plugin"
 would describe how *we* organise our code rather than something a user can add.
 
-So a plugin can also be a **process**. Code2 speaks JSON-RPC over its stdio, and what it declares —
+So a plugin can also be a **process**. C2 speaks JSON-RPC over its stdio, and what it declares —
 commands, event subscriptions — lands in the same kernel registries a built-in uses: its commands
 show up in `kernel.commands`, are callable through `call()`, and vanish when it unloads. It
 declares `inject` in its manifest and gets the same reactive contract. It is not a lesser citizen.

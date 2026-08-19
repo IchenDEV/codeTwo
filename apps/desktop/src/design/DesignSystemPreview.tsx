@@ -128,7 +128,7 @@ export function DesignSystemPreview() {
         <div className="ds-brand-lockup">
           <span className="ds-brand-mark">C2</span>
           <div>
-            <strong>Code2</strong>
+            <strong>C2</strong>
             <span>Design system</span>
           </div>
         </div>
@@ -183,10 +183,10 @@ export function DesignSystemPreview() {
         <div className="ds-preview-scroll">
           <section className="ds-intro" id="foundation">
             <div>
-              <span className="ds-eyebrow">CODE2 DESIGN SYSTEM 0.9</span>
+              <span className="ds-eyebrow">C2 DESIGN SYSTEM 0.9</span>
               <h1>Quiet structure.<br />Precise density.</h1>
               <p>
-                A compact desktop system that strengthens Code2 without changing its character.
+                A compact desktop system that strengthens C2 without changing its character.
                 Solid neutral planes, fixed blue action, borderless elevation, and platform-native
                 typography.
               </p>
@@ -199,7 +199,7 @@ export function DesignSystemPreview() {
           </section>
 
           <section className="ds-preview-section">
-            <SectionHeading eyebrow="01 · Color" title="Five neutral planes, one Code2 blue" />
+            <SectionHeading eyebrow="01 · Color" title="Five neutral planes, one C2 blue" />
             <div className="ds-color-grid">
               {swatches.map(({ label, token, style }) => (
                 <div className="ds-swatch-card" key={token}>
@@ -221,7 +221,7 @@ export function DesignSystemPreview() {
               {typeRoles.map(([role, metric, className]) => (
                 <div className="ds-type-row" key={role}>
                   <span className="ds-type-meta"><strong>{role}</strong><code>{metric}</code></span>
-                  <span className={className}>Code2 stays compact and legible.</span>
+                  <span className={className}>C2 stays compact and legible.</span>
                 </div>
               ))}
             </div>
@@ -292,7 +292,7 @@ export function DesignSystemPreview() {
                 <label className="ds-field-label" htmlFor="preview-search">Project</label>
                 <div className="ds-input-shell">
                   <Search className="ds-icon-list" />
-                  <input id="preview-search" defaultValue="codeTwo" />
+                  <input id="preview-search" defaultValue="C2" />
                   <kbd>⌘K</kbd>
                 </div>
                 <div className="ds-input-shell ds-static-focus">

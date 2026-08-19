@@ -22,7 +22,7 @@ describe("T3 mobile remote contract", () => {
     const remote = read("src/remote/Remote.tsx");
 
     expect(remote).toContain('<SelectItem value="t3">T3 Code mobile</SelectItem>');
-    expect(remote).toContain('<SelectItem value="legacy">Code2 browser</SelectItem>');
+    expect(remote).toContain('<SelectItem value="legacy">C2 browser</SelectItem>');
     expect(remote).toContain("remotePairingLink(endpointId ?? undefined, protocol)");
   });
 

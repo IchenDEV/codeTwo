@@ -407,7 +407,7 @@ fn sanitize_registry(registry: &mut StoredBrowserState) {
 /// The in-page annotator, injected into every page before its own scripts run. It is dormant until
 /// `browser_annotate` switches it on. Note what is *not* here: any way for the page to call the
 /// app. Data only ever leaves the page when we ask for it, which is what keeps a remote page from
-/// reaching into Code2.
+/// reaching into C2.
 const ANNOTATE_JS: &str = include_str!("annotate.js");
 
 /// A navigation the page made on its own (a link, a redirect, a form post). The address bar follows
@@ -872,7 +872,7 @@ impl Plugin for BrowserPlugin {
             if let Err(error) =
                 start_broker(broker_app, broker_socket, broker_key, broker_scope).await
             {
-                eprintln!("CodeTwo Browser broker stopped: {error}");
+                eprintln!("C2 Browser broker stopped: {error}");
             }
         });
 
@@ -2065,7 +2065,7 @@ pub async fn start_broker(
     _master_key: String,
     _scope: WeakContext,
 ) -> Result<(), String> {
-    Err("CodeTwo Browser is not implemented on this platform".into())
+    Err("C2 Browser is not implemented on this platform".into())
 }
 
 #[cfg(test)]

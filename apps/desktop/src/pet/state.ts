@@ -14,7 +14,7 @@ export interface CodeTwoPetActivity {
 }
 
 /**
- * Collapse CodeTwo's richer session lifecycle into the stable Codex Pet v2 rows.
+ * Collapse C2's richer session lifecycle into the stable Codex Pet v2 rows.
  * Waiting wins over running because an approval request remains busy at the session level.
  */
 export function petAnimationForActivity(activity: CodeTwoPetActivity): CodeTwoPetAnimation {

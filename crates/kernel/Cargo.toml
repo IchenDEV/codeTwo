@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Cordis-style plugin kernel for Code2: contexts, reactive services, scoped effects, and hot-swappable plugins."
+description = "Cordis-style plugin kernel for C2: contexts, reactive services, scoped effects, and hot-swappable plugins."
 
 [dependencies]
 tokio = { workspace = true }

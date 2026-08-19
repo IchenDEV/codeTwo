@@ -49,7 +49,7 @@ fn main() {
     let limits = Limits::from_env();
 
     println!(
-        "\n  Code2 usage — {} transcripts scanned\n",
+        "\n  C2 usage — {} transcripts scanned\n",
         scan.transcripts
     );
     for w in windows(&records, now, &limits) {

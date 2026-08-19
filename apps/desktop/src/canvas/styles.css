@@ -38,7 +38,7 @@
   --canvas-type-caption-size: var(--ds-type-caption-size, 0.75rem);
   --canvas-type-body-size: var(--ds-type-body-size, 0.875rem);
   --canvas-type-body-leading: var(--ds-type-body-leading, 1.4);
-  /* Excalidraw owns the first toolbar row. CodeTwo controls live in this second row so they
+  /* Excalidraw owns the first toolbar row. C2 controls live in this second row so they
      never cover approved selection/drawing/undo tools, including on narrow Remote viewports. */
   --canvas-chrome-offset: 4rem;
   position: relative;
@@ -229,7 +229,7 @@
   font-size: var(--canvas-type-callout-size);
 }
 
-/* Excalidraw moves Hand into a floating control at <=450px. Keep the CodeTwo row below it. */
+/* Excalidraw moves Hand into a floating control at <=450px. Keep the C2 row below it. */
 @media screen and (max-width: 450px) {
   .canvas-editor {
     --canvas-chrome-offset: 8rem;
@@ -237,7 +237,7 @@
 }
 
 /* Excalidraw is a renderer exception; its content styling remains engine-owned. These selectors
-   only remove actions that CodeTwo rejects at the serialization boundary as well. */
+   only remove actions that C2 rejects at the serialization boundary as well. */
 .canvas-editor .ToolIcon[data-canvas-unsupported="true"],
 .canvas-editor [data-canvas-unsupported="true"],
 .canvas-editor .canvas-editor__unsupported,

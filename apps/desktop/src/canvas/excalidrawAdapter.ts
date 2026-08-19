@@ -1,5 +1,5 @@
 /**
- * CodeTwo's only direct integration seam with Excalidraw. Other canvas modules consume the
+ * C2's only direct integration seam with Excalidraw. Other canvas modules consume the
  * narrow re-exports and policy helpers here instead of reaching into the renderer package.
  */
 export { Excalidraw, exportToCanvas } from "@excalidraw/excalidraw";

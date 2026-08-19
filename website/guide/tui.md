@@ -1,6 +1,6 @@
 # The TUI
 
-Code2 ships a terminal UI (built with ratatui) that links the same core as the desktop app — same
+C2 ships a terminal UI (built with ratatui) that links the same core as the desktop app — same
 engine, same SQLite store, same sessions.
 
 ```sh

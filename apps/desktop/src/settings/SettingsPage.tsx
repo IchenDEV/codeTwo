@@ -92,7 +92,7 @@ const CAPABILITY_LABELS = {
   image_generation: "Image generation",
   computer_use: "Computer Use",
   chrome_browser: "Chrome Browser",
-  codetwo_browser: "CodeTwo Browser",
+  codetwo_browser: "C2 Browser",
   sites: "Sites",
 } as const;
 
@@ -675,12 +675,12 @@ export function SettingsPage({
             {tab === "browser" && (
               <Page
                 title="Browser"
-                description="Experimental website permissions granted permanently to CodeTwo Browser. Sensitive actions and downloads always require one-time approval."
+                description="Experimental website permissions granted permanently to C2 Browser. Sensitive actions and downloads always require one-time approval."
               >
                 <Row
                   icon={<Globe className="size-5 text-muted-foreground" />}
                   label="Default browser adapter"
-                  hint="Ordinary requests use CodeTwo Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome."
+                  hint="Ordinary requests use C2 Browser. Explicit Chrome, existing-tab, or existing-login requests use Chrome."
                 >
                   <Badge variant="outline">Experimental</Badge>
                 </Row>

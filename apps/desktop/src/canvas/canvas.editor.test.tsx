@@ -237,7 +237,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
     expect(canvasStyles).toContain('.canvas-editor[data-canvas-theme="light"]');
   });
 
-  test("keeps CodeTwo chrome in a bounded second row without toolbar overlap", () => {
+  test("keeps C2 chrome in a bounded second row without toolbar overlap", () => {
     const chromeRule = canvasStyles.match(/\.canvas-editor__chrome \{([\s\S]*?)\n\}/)?.[1] ?? "";
     expect(chromeRule).toContain("inset-block-start: var(--canvas-chrome-offset)");
     expect(chromeRule).toContain("inset-inline-start: var(--canvas-space-module-inset)");
@@ -351,7 +351,7 @@ describe("CanvasEditor behavioral interaction contract", () => {
     expect(reopened.files["trusted-image-1"]?.mimeType).toBe("image/png");
   });
 
-  test("exposes only bounded CodeTwo style presets and focuses the editor root", () => {
+  test("exposes only bounded C2 style presets and focuses the editor root", () => {
     const onFocusChange = mock(() => undefined);
     const { container } = render(<CanvasEditor initiallyExpanded onFocusChange={onFocusChange} />);
     expect(screen.getByRole("button", { name: "Stroke color black" })).toBeTruthy();

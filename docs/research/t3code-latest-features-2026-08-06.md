@@ -1,4 +1,4 @@
-# t3code 最新功能调研与 Code2 吸纳建议
+# t3code 最新功能调研与 C2 吸纳建议
 
 > 首次调研：2026-08-06；最新复核：2026-08-07（Asia/Singapore）
 > 上游：[`pingdotgg/t3code`](https://github.com/pingdotgg/t3code)
@@ -14,13 +14,13 @@ t3code 截止最新复核的稳定版仍是 **v0.0.31**；最新 nightly 已推�
 [`4f5834ba72c5`](https://github.com/pingdotgg/t3code/commit/4f5834ba72c5905a318c00456dd21271b2fa9d6f)，
 比该 nightly 多 5 个 commit；因此必须分开陈述“已发布 nightly”和“仅已合并 main”。
 
-对 Code2 最值得吸纳的不是整套 t3code 架构，而是五个可独立落地的产品能力：
+对 C2 最值得吸纳的不是整套 t3code 架构，而是五个可独立落地的产品能力：
 
-1. **持久化 thread pinning**：上游行为成熟、Code2 可用更小的数据模型得到同样的“重要会话不漂走”结果。
-2. **ACP-compatible 子代理 / workflow 可观测性**：这是上游最新、战略价值最高的能力，但 Code2 当前 ACP common-denominator 会丢掉一部分 provider-native 信号，必须分阶段做，不能只抄一个 Agents 面板。
-3. **配对二维码的端点选择与回环地址保护**：改动小，直接修正 Code2 现有远程配对的可达性问题。
+1. **持久化 thread pinning**：上游行为成熟、C2 可用更小的数据模型得到同样的“重要会话不漂走”结果。
+2. **ACP-compatible 子代理 / workflow 可观测性**：这是上游最新、战略价值最高的能力，但 C2 当前 ACP common-denominator 会丢掉一部分 provider-native 信号，必须分阶段做，不能只抄一个 Agents 面板。
+3. **配对二维码的端点选择与回环地址保护**：改动小，直接修正 C2 现有远程配对的可达性问题。
 4. **按会话正文搜索 + 可识别的自动标题**：共同解决会话越多越难找的问题。
-5. **长会话读取必须有界**：上游刚修过真实 OOM 路径；Code2 没有同样的全库 hydration，第四轮仍把单会话 transcript 收敛为按完整 user turn 的有界分页与 sequence-aware snapshot/live 合并。
+5. **长会话读取必须有界**：上游刚修过真实 OOM 路径；C2 没有同样的全库 hydration，第四轮仍把单会话 transcript 收敛为按完整 user turn 的有界分页与 sequence-aware snapshot/live 合并。
 
 **四轮实际吸纳覆盖 thread pinning、保守的 ACP launch observability、endpoint-aware pairing QR、规范化会话正文搜索、非侵入式自动标题、稳定 thread shell、长用户消息折叠、显式 Git index / 有界 diff，以及长会话的有界恢复。** 第一轮完成 pin / observability / pairing；扩大版本范围后，第二轮把搜索与标题建立在“用户原文和 provider 编译上下文分离”的数据边界上，并补齐快速切换会话的异步竞态保护、跨项目同步、单会话 turn 所有权和 `>8` 行或 `>600` 字符的消息折叠；第三轮把普通 Commit 改为只提交 index，并让 stage / unstage、diff scope、截断与粗粒度 Git 阶段成为可见行为；第四轮落地按完整 user turn 分页、durable revisioned `SessionActivity` / `Awaiting Input`，并把 worktree isolation 扩展为显式、仅使用本地 refs 的基线选择。这里仍没有声称已完成 core 子代理生命周期、TUI/remote Agents 面板、聚合用量或 interrupt-all。
 
@@ -38,9 +38,9 @@ t3code 截止最新复核的稳定版仍是 **v0.0.31**；最新 nightly 已推�
 
 稳定版 v0.0.31 的官方 release note 主要包括：恢复 T3 Connect 登录、缩小 Electron 安装体积、保留 thread shell 加载状态、原生资源诊断降低空闲工作与磁盘抖动、初始化后识别 Git 仓库、合并 git numstat 调用、编辑文件焦点/实时语法高亮，以及跨会话保留 rendered-markdown 选择。它们是本轮 nightly 增量的基线，不应与 8 月的新功能混写。[官方 release note](https://github.com/pingdotgg/t3code/releases/tag/v0.0.31)
 
-## 调研开始时的 Code2 基线
+## 调研开始时的 C2 基线
 
-Code2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket server，provider 统一通过 ACP 驱动；这与上游 TypeScript event-sourced server 的实现材料不同，所以应吸收行为与不变量，而非逐文件照搬。[项目说明](../../README.md) · [架构说明](../architecture.md)
+C2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket server，provider 统一通过 ACP 驱动；这与上游 TypeScript event-sourced server 的实现材料不同，所以应吸收行为与不变量，而非逐文件照搬。[项目说明](../../README.md) · [架构说明](../architecture.md)
 
 以下是开始吸纳前的基线快照；后续实现已经改变其中 pinning、observability、remote pairing、正文搜索、初始标题、Git workflow 与 transcript 读取等项，保留这份快照用于说明移植起点：
 
@@ -49,12 +49,12 @@ Code2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket ser
 - session rail 有 active / archived、手工 rename 和 archive，但没有持久化 pin。[`SessionRail.tsx`](../../apps/desktop/src/sidebar/SessionRail.tsx)
 - 远程设置已经列出 LAN / Loopback endpoints，也能生成 176px 左右的二维码；但 `remote_pairing_link` 不接收 endpoint，始终由 `pairing_url()` 自动挑一个 host。因此“展示了多个端点”和“二维码能选择端点”目前是两回事。[`Remote.tsx`](../../apps/desktop/src/remote/Remote.tsx) · [`src-tauri/src/lib.rs`](../../apps/desktop/src-tauri/src/lib.rs) · [`server/lib.rs`](../../crates/server/src/lib.rs)
 - terminal 已经支持 font family、font size、scrollback 并能 live apply，因此没有必要重复移植上游 typography 的 terminal 子集。[`terminal/settings.ts`](../../apps/desktop/src/terminal/settings.ts)
-- `delegate.rs` 明确标为未接入 engine / frontend 的 prototype。Code2 还没有稳定的子代理生命周期、聚合用量、全体停止或 Agents surface。[`delegate.rs`](../../crates/core/src/delegate.rs)
+- `delegate.rs` 明确标为未接入 engine / frontend 的 prototype。C2 还没有稳定的子代理生命周期、聚合用量、全体停止或 Agents surface。[`delegate.rs`](../../crates/core/src/delegate.rs)
 - WebSocket 初始只送 session list，transcript 按 session 请求，这一点已经避开了上游“连接即全库 hydration”的同型问题；但 `Store::transcript()` 仍会把选中会话全部读入内存。[`server/lib.rs`](../../crates/server/src/lib.rs) · [`store.rs`](../../crates/core/src/store.rs)
 
 ## 已合并 / 已进 nightly 的重点增量
 
-| 功能 | 合并时间与 commit | 上游状态 | Code2 判断 |
+| 功能 | 合并时间与 commit | 上游状态 | C2 判断 |
 | --- | --- | --- | --- |
 | MCP 工具结果 payload 瘦身 | [`#5482`](https://github.com/pingdotgg/t3code/pull/5482)，[`3da315e7b5c4`](https://github.com/pingdotgg/t3code/commit/3da315e7b5c4537cbc7280f33dadb3f5f0e3baf0)，8 月 6 日 | 最新 nightly | 吸收“历史传输只保留 UI 所需字段”的边界，不照搬其数据模型或样本压缩比 |
 | 工具调用历史快照去重 | [`b7d1981b57f1`](https://github.com/pingdotgg/t3code/commit/b7d1981b57f1c30908808d1939fd4edbc781de12)，8 月 6 日 | nightly 1015 | 已实现更保守的同 turn terminal projection；live event 完整保留 |
@@ -62,8 +62,8 @@ Code2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket ser
 | 配对 QR 真正可扫、可选 endpoint | [`#5360`](https://github.com/pingdotgg/t3code/pull/5360)，[`fff6a5b028f8`](https://github.com/pingdotgg/t3code/commit/fff6a5b028f85122ffef8d3636f390f95ade5172)，8 月 4 日 | main + nightly | 本轮 P0；已实现 endpoint-aware link 与 loopback QR exclusion |
 | 按 user / final-agent 正文搜索 thread | [`#4959`](https://github.com/pingdotgg/t3code/pull/4959)，[`4b71a2ae2ffb`](https://github.com/pingdotgg/t3code/commit/4b71a2ae2ffbbb7b6936051552094b71364cefd4)，7 月 30 日 | main + nightly | 第二轮已实现 provider-neutral FTS 切片 |
 | durable thread title | [`#5357`](https://github.com/pingdotgg/t3code/pull/5357) → [`#5365`](https://github.com/pingdotgg/t3code/pull/5365) → [`#5368`](https://github.com/pingdotgg/t3code/pull/5368)，最终 commit [`2fa1fec8d8f6`](https://github.com/pingdotgg/t3code/commit/2fa1fec8d8f63bc8fa4579e7c0fd280b21de02ef) | main + nightly | 第二轮已实现 deterministic initial title；模型 regeneration 后置 |
-| sidebar thread pinning | [`#5312`](https://github.com/pingdotgg/t3code/pull/5312)，[`da6e1a967825`](https://github.com/pingdotgg/t3code/commit/da6e1a96782594cab3a6925f441731a65be57c11)，8 月 4 日 | main + nightly | 本轮 P0；Code2 做简化版 |
-| 可配置 interface / prompt / code / terminal 字体 | [`#5103`](https://github.com/pingdotgg/t3code/pull/5103)，[`8eca20005b47`](https://github.com/pingdotgg/t3code/commit/8eca20005b47e197b3610f7996f3fd02355c1891)；terminal 行为随后由 [`#5444`](https://github.com/pingdotgg/t3code/pull/5444) 修正于 [`30e471530b3e`](https://github.com/pingdotgg/t3code/commit/30e471530b3e2ddf59caf309636bed940b8b3776) | main + nightly | P2；只补 Code2 尚缺的三类字体 |
+| sidebar thread pinning | [`#5312`](https://github.com/pingdotgg/t3code/pull/5312)，[`da6e1a967825`](https://github.com/pingdotgg/t3code/commit/da6e1a96782594cab3a6925f441731a65be57c11)，8 月 4 日 | main + nightly | 本轮 P0；C2 做简化版 |
+| 可配置 interface / prompt / code / terminal 字体 | [`#5103`](https://github.com/pingdotgg/t3code/pull/5103)，[`8eca20005b47`](https://github.com/pingdotgg/t3code/commit/8eca20005b47e197b3610f7996f3fd02355c1891)；terminal 行为随后由 [`#5444`](https://github.com/pingdotgg/t3code/pull/5444) 修正于 [`30e471530b3e`](https://github.com/pingdotgg/t3code/commit/30e471530b3e2ddf59caf309636bed940b8b3776) | main + nightly | P2；只补 C2 尚缺的三类字体 |
 | 有界 catch-up replay、取消全库 snapshot hydration | [`#5147`](https://github.com/pingdotgg/t3code/pull/5147)，[`ca72e381c64f`](https://github.com/pingdotgg/t3code/commit/ca72e381c64f25d771236eecf70219f68e5f365b)，7 月 31 日 | main + nightly | P1 防御性不变量；不是原样移植 |
 | git action 进度放回 commit button | [`#4963`](https://github.com/pingdotgg/t3code/pull/4963)，[`14dd128a682c`](https://github.com/pingdotgg/t3code/commit/14dd128a682c9ffa8a5941ed4f24d296dfdd4f8d)，7 月 30 日 | main + nightly | P2，小而一致的 UI 改良 |
 
@@ -71,12 +71,12 @@ Code2 是 Rust core + Tauri/React desktop + ratatui TUI + headless WebSocket ser
 
 Nightly 1014 中的 #5482 不再把完整 MCP tool result 塞进 thread payload。PR 在其自己的
 真实样本上报告 payload 从 12.2 MB 降至 546 KB；这个数字只能说明上游样本，不能外推为
-Code2 的压缩比。可迁移的不变量是：**live 执行仍保留完整时序，而重连/历史快照只传恢复 UI
+C2 的压缩比。可迁移的不变量是：**live 执行仍保留完整时序，而重连/历史快照只传恢复 UI
 所需的投影**。[PR 与验证](https://github.com/pingdotgg/t3code/pull/5482)
 
 随后进入 nightly 1015 的
 [`b7d1981`](https://github.com/pingdotgg/t3code/commit/b7d1981b57f1c30908808d1939fd4edbc781de12)
-又删除同一 turn 内已被 terminal update 覆盖的中间 `tool.updated` snapshot 行。Code2 吸收时
+又删除同一 turn 内已被 terminal update 覆盖的中间 `tool.updated` snapshot 行。C2 吸收时
 采用更窄的规则：只有同一 user turn、同一 tool id 且后面确有 `completed` / `failed` 时才丢掉
 较早的 non-terminal 行；terminal 行继承此前缺失的 title、tool kind 与受限 agent metadata。
 后出现的 in-flight update、跨 turn id 重用、没有 terminal 的历史以及所有 live event 均不压缩。
@@ -84,12 +84,12 @@ Code2 的压缩比。可迁移的不变量是：**live 执行仍保留完整时�
 这项投影与 turn-aligned transcript page 在同一 SQLite read transaction 内完成，因此不会为了
 节省历史 payload 破坏 snapshot/live 的可重放边界。
 
-1015 之后 `main` 的 5 个 commit 也逐项核过：unknown ACP approval 保持可操作与 Code2
+1015 之后 `main` 的 5 个 commit 也逐项核过：unknown ACP approval 保持可操作与 C2
 现有的 durable pending-input / 严格 answer routing 同方向；自动权限 fallback 只是文案澄清；
 移动端 pending card 不属于当前 Desktop/TUI/remote surface；inline chip 是局部排版修复；最新
 [`4f5834ba`](https://github.com/pingdotgg/t3code/commit/4f5834ba72c5905a318c00456dd21271b2fa9d6f)
 只修复 snoozed thread 醒来后在发送、settle、archive 或显式打开时没有清除 `woke` 标记的问题。
-Code2 当前没有 snooze/woke 状态，因此不虚构对应迁移；窄视口与 composer chip 已纳入 rendered QA。
+C2 当前没有 snooze/woke 状态，因此不虚构对应迁移；窄视口与 composer chip 已纳入 rendered QA。
 
 ### 1. 配对二维码 endpoint 选择：本轮已吸收
 
@@ -102,7 +102,7 @@ Code2 当前没有 snooze/woke 状态，因此不虚构对应迁移；窄视口�
 
 一手实现：[`ConnectionsSettings.logic.ts@fff6a5b`](https://github.com/pingdotgg/t3code/blob/fff6a5b028f85122ffef8d3636f390f95ade5172/apps/web/src/components/settings/ConnectionsSettings.logic.ts) · [`ConnectionsSettings.tsx@fff6a5b`](https://github.com/pingdotgg/t3code/blob/fff6a5b028f85122ffef8d3636f390f95ade5172/apps/web/src/components/settings/ConnectionsSettings.tsx)
 
-本轮 Code2 落地：
+本轮 C2 落地：
 
 1. 给 `RemoteEndpoint` 增加稳定 id 与 `qr_shareable`（`lan=true`、`loopback=false`）。
 2. `remotePairingLink` 接收所选 endpoint id，先在当前服务端发布列表中校验，再签发 token；不接受前端提供任意 base URL。
@@ -118,7 +118,7 @@ Code2 当前没有 snooze/woke 状态，因此不虚构对应迁移；窄视口�
 
 一手实现：[`ProjectionSnapshotQuery.ts@4b71a2a`](https://github.com/pingdotgg/t3code/blob/4b71a2ae2ffbbb7b6936051552094b71364cefd4/apps/server/src/orchestration/Layers/ProjectionSnapshotQuery.ts) · [`threadSearch.ts@4b71a2a`](https://github.com/pingdotgg/t3code/blob/4b71a2ae2ffbbb7b6936051552094b71364cefd4/packages/client-runtime/src/state/threadSearch.ts) · [`CommandPalette.logic.ts@4b71a2a`](https://github.com/pingdotgg/t3code/blob/4b71a2ae2ffbbb7b6936051552094b71364cefd4/apps/web/src/components/CommandPalette.logic.ts)
 
-Code2 不需要多 environment fan-out，第二轮采用了更小的实现：
+C2 不需要多 environment fan-out，第二轮采用了更小的实现：
 
 - core `Store::search_sessions(query, limit)` 搜索 active + archived，并把归档状态交给结果行明确显示。
 - v2 migration 把旧 `unicode61` 索引原子升级为 trigram FTS5 external-content projection；只索引新的 canonical user `Prompt` 与最终 agent `Text`。旧库只安全回填 agent text，因为旧 user `Text` 含编译后的 rules / skill / file context，不能伪装成用户原文。
@@ -152,7 +152,7 @@ MCP payload 瘦身等改动。#5219 本身横跨 **46 个文件、42 个 commits
 - liveness：[`ThreadBackgroundLiveness.ts@a2ca89a`](https://github.com/pingdotgg/t3code/blob/a2ca89aa10f13a2222e08afd98c66285121d5ba2/apps/server/src/orchestration/ThreadBackgroundLiveness.ts)
 - UI：[`AgentsPanel.tsx@a2ca89a`](https://github.com/pingdotgg/t3code/blob/a2ca89aa10f13a2222e08afd98c66285121d5ba2/apps/web/src/components/AgentsPanel.tsx)
 
-Code2 的关键限制：当前 Claude/Codex 都经过 ACP adapter，架构还明确“unknown session/update variants logged and dropped”。上游却依赖 Claude SDK `task_updated`、`parent_tool_use_id`、workflow progress，以及 Codex `thread/started` / `subAgentActivity` 等 provider-native 信号。因此，在不改 adapter 或不接原生 provider extension 的前提下，Code2 无法诚实达到同等观测粒度。
+C2 的关键限制：当前 Claude/Codex 都经过 ACP adapter，架构还明确“unknown session/update variants logged and dropped”。上游却依赖 Claude SDK `task_updated`、`parent_tool_use_id`、workflow progress，以及 Codex `thread/started` / `subAgentActivity` 等 provider-native 信号。因此，在不改 adapter 或不接原生 provider extension 的前提下，C2 无法诚实达到同等观测粒度。
 
 本轮只吸收这个能力的 **phase zero**：ACP `tool_call` 若明确携带 provider-neutral `kind`，就随 event 与 transcript 保留；只有 tool kind/title/structured input 明确命中 agent/workflow launch signal 时，core 才从 raw input 投影描述性白名单字段。每个字段最多 2,048 字符、总预算 8,192 字符，command、secret、cwd、request id 等任意 payload 不会进入持久化或广播。Desktop 在 live update 与 transcript replay 中保留这些字段，并用窄规则生成只读 Agents roster；普通 task、shell 或只在文本中提到 agent 的调用仍留在 Tools。
 
@@ -161,7 +161,7 @@ Code2 的关键限制：当前 Claude/Codex 都经过 ACP adapter，架构还明
 建议分三片：
 
 1. **共享状态模型先行**：在 Rust core 定义 `AgentTaskLinkage`、`AgentTaskStatus`、`AgentTaskEvent` 与纯 fold；状态归 core，Desktop/TUI/remote 共用，避免把业务 fold 放 React。
-2. **Code2-owned delegation 先接入**：把现有 `delegate.rs` prototype 晋升为 engine 能控制的 manager/executor lifecycle，先验证 panel、usage、interrupt-all 和持久化语义。
+2. **C2-owned delegation 先接入**：把现有 `delegate.rs` prototype 晋升为 engine 能控制的 manager/executor lifecycle，先验证 panel、usage、interrupt-all 和持久化语义。
 3. **provider-native 扩展后接入**：对 ACP extension feature-detect，保留 unknown payload；只有拿到明确 task id / parent id 才标为 agent。没有 stamp 的 background shell 保持普通 tool row，禁止 UI 猜测。
 
 第一阶段验收应以 mock wire fixture 为主：乱序 completion、重复 progress、idle 后 reactivation、父 turn 停止时所有 child 都收到 interrupt、late usage 不倒退。不要把“画出了 Agents panel”当作完成。
@@ -172,7 +172,7 @@ Code2 的关键限制：当前 Claude/Codex 都经过 ACP adapter，架构还明
 
 上游的标题规则从“复述请求/产物名称”改成“几周后仍可识别的 subject + outcome”；3–8 词、少于 40 字符，忽略 plan/report/PR、工具、监控等 incidental instructions。长 thread regeneration 在 8,000 字符预算内固定保留首条 user message（最多 2,000 字符）和最新 tail，避免标题被最近一次 assistant finding 带偏。随后又把 prompt 重构成显式 plaintext template，行为不变、便于校准。[`TextGenerationPrompts.ts@2fa1fec`](https://github.com/pingdotgg/t3code/blob/2fa1fec8d8f63bc8fa4579e7c0fd280b21de02ef/apps/server/src/textGeneration/TextGenerationPrompts.ts) · [`ProviderCommandReactor.ts@9bd2a4c`](https://github.com/pingdotgg/t3code/blob/9bd2a4c6886a4c20e0a0a937dc98dd118c645c8f/apps/server/src/orchestration/Layers/ProviderCommandReactor.ts)
 
-Code2 可复用上述 editorial rules，但不能照搬上游默认 GPT-5.6 Luna 的选择：Code2 目前没有独立 text-generation service，调用正在进行的 ACP session 会污染 provider-native conversation。第二轮已完成第 1 步：
+C2 可复用上述 editorial rules，但不能照搬上游默认 GPT-5.6 Luna 的选择：C2 目前没有独立 text-generation service，调用正在进行的 ACP session 会污染 provider-native conversation。第二轮已完成第 1 步：
 
 1. 首次 user prompt 后用 deterministic local heuristic 生成最多 8 词 / 40 字符的标题；中日韩脚本按 24 字符截断；
 2. 等 app-owned isolated generation service 存在后，再启用模型标题与 regeneration；
@@ -182,13 +182,13 @@ Code2 可复用上述 editorial rules，但不能照搬上游默认 GPT-5.6 Luna
 
 上游 pin 是 server-backed：`pinnedAt`、pin/unpin command/event、DB migration、client capability 与 web/mobile 一致排序。它还与 settle/snooze 生命周期联动。[`036_ProjectionThreadsPinned.ts@da6e1a9`](https://github.com/pingdotgg/t3code/blob/da6e1a96782594cab3a6925f441731a65be57c11/apps/server/src/persistence/Migrations/036_ProjectionThreadsPinned.ts) · [`SidebarV2.tsx@da6e1a9`](https://github.com/pingdotgg/t3code/blob/da6e1a96782594cab3a6925f441731a65be57c11/apps/web/src/components/SidebarV2.tsx) · [`decider.ts@da6e1a9`](https://github.com/pingdotgg/t3code/blob/da6e1a96782594cab3a6925f441731a65be57c11/apps/server/src/orchestration/decider.ts)
 
-Code2 没有 settle/snooze，本轮做了更小的正确版本：`sessions.pinned INTEGER NOT NULL DEFAULT 0`，active sessions 按 pinned first、组内 created-at descending 排序，archive 会解除 pin。字段由 core 持久化和序列化，Desktop 提供操作面；TUI/remote 尚未新增控件，因此不能写成全 surface 已对齐。
+C2 没有 settle/snooze，本轮做了更小的正确版本：`sessions.pinned INTEGER NOT NULL DEFAULT 0`，active sessions 按 pinned first、组内 created-at descending 排序，archive 会解除 pin。字段由 core 持久化和序列化，Desktop 提供操作面；TUI/remote 尚未新增控件，因此不能写成全 surface 已对齐。
 
 ### 5. 长会话与 reconnect：先固化“有界”不变量
 
 上游真实事故来自两个无界读取：stale cursor 追赶时读取整个 global event log 再在 JS 过滤，以及 snapshot endpoint hydration 全库 message/activity payload。修复后 replay gap 上限为 1,000；过旧或超前 cursor 直接退回 fresh per-thread snapshot，项目级读取改用不含 thread bodies 的轻量 read model。[`ws.ts@ca72e38`](https://github.com/pingdotgg/t3code/blob/ca72e381c64f25d771236eecf70219f68e5f365b/apps/server/src/ws.ts) · [`http.ts@ca72e38`](https://github.com/pingdotgg/t3code/blob/ca72e381c64f25d771236eecf70219f68e5f365b/apps/server/src/orchestration/http.ts)
 
-Code2 不应复制 1,000 这个常数；应复制三个不变量：
+C2 不应复制 1,000 这个常数；应复制三个不变量：
 
 - shell/list snapshot 不携带 transcript body；
 - per-session transcript 支持 limit/cursor，首次只拿最近窗口，需要时向前分页；
@@ -202,11 +202,11 @@ Code2 不应复制 1,000 这个常数；应复制三个不变量：
 
 但最初“窄 pane 自动缩小 terminal font 直到 80 列”的行为在第二天被移除：最终规则是 **split 改变 rows/columns，不改变用户设置的 font size**。[`surface.ts@30e4715`](https://github.com/pingdotgg/t3code/blob/30e471530b3e2ddf59caf309636bed940b8b3776/apps/web/src/terminal/ghostty/surface.ts) · [修正 PR](https://github.com/pingdotgg/t3code/pull/5444)
 
-因此 Code2 若扩展 Appearance，只补 interface / prompt / code family+size；terminal 已有设置，而且应保持 split 后字号不变。
+因此 C2 若扩展 Appearance，只补 interface / prompt / code family+size；terminal 已有设置，而且应保持 split 后字号不变。
 
 git progress 的最终模式也值得作为 UI law：运行中状态、耗时、最新 hook 输出应放在发起动作的 commit button 内，floating toast 只报告最终成功/失败。[`GitActionsControl.logic.ts@14dd128`](https://github.com/pingdotgg/t3code/blob/14dd128a682c9ffa8a5941ed4f24d296dfdd4f8d/apps/web/src/components/GitActionsControl.logic.ts) · [`GitActionsControl.tsx@14dd128`](https://github.com/pingdotgg/t3code/blob/14dd128a682c9ffa8a5941ed4f24d296dfdd4f8d/apps/web/src/components/GitActionsControl.tsx)
 
-Code2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committing… / Pushing… / Creating PR…` 并保持按钮宽高；等 core 真能发 phase/hook event 后再加第二行，不能伪造进度。
+C2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committing… / Pushing… / Creating PR…` 并保持按钮宽高；等 core 真能发 phase/hook event 后再加第二行，不能伪造进度。
 
 ## 不应当作当前功能吸收的未交付项
 
@@ -217,8 +217,8 @@ Code2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committin
 | --- | --- | --- |
 | [`#5471 rich tool-call transcript`](https://github.com/pingdotgg/t3code/pull/5471) | open | tool rows、inline diffs、thinking bursts、live status | 等合并并观察与 #5219 quiet timeline 的最终组合 |
 | [`#5461 automatic thread labels`](https://github.com/pingdotgg/t3code/pull/5461) | closed，未合并 | 自动标签可能补足 title + pin 的检索层 | 不预建 schema；先做正文 search |
-| [`#5226 modular theme library`](https://github.com/pingdotgg/t3code/pull/5226) | open | appearance 扩展 | Code2 有严格 design tokens，暂不引入外部主题 DSL |
-| [`#5446 tag files/directories from anywhere`](https://github.com/pingdotgg/t3code/pull/5446) | open | composer context 选择 | 先不突破 Code2 project/worktree scope |
+| [`#5226 modular theme library`](https://github.com/pingdotgg/t3code/pull/5226) | open | appearance 扩展 | C2 有严格 design tokens，暂不引入外部主题 DSL |
+| [`#5446 tag files/directories from anywhere`](https://github.com/pingdotgg/t3code/pull/5446) | open | composer context 选择 | 先不突破 C2 project/worktree scope |
 
 ## 本轮实际吸纳范围与后续顺序
 
@@ -269,7 +269,7 @@ Code2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committin
 
 - status 采用 NUL-safe porcelain 解析；`MM` 会同时出现在 Staged changes 与 Changes，rename 同时保留新旧 literal path。
 - file-level stage / unstage 始终使用 `--` 与 literal pathspec；批量操作最多接收 256 个明确路径。unborn repo、stage 后又修改的 `AM`、SHA-1 / SHA-256 空树和 rename 筛选均有真实 Git 回归。
-- 普通 Commit 不再隐式 `git add -A`，只提交当前 index；建议提交信息也只读取 staged files。提交失败不会由 Code2 清空 message 或重置 index，push 失败会真实向上传播。
+- 普通 Commit 不再隐式 `git add -A`，只提交当前 index；建议提交信息也只读取 staged files。提交失败不会由 C2 清空 message 或重置 index，push 失败会真实向上传播。
 - diff 明确区分 `all / staged / unstaged`；禁用 external diff、textconv、pager 与颜色，并施加 2 MiB stdout、64 KiB stderr、256 files、10 秒共享预算。untracked 通过隔离临时 index 进入 working-tree diff，不污染用户 index；文件集竞态返回 `working_tree_changed`，所有截断都有结构化原因。
 - Desktop 用有界 numstat 替代为统计而加载整份 patch；预览再设 4,000 行 DOM 上限，并用单调 request id 丢弃迟到 diff。Git status/stat、checkpoint list 与 Suggest 也各自淘汰迟到响应，旧结果不会覆盖新 index 或用户后来编辑的 message。按钮内只呈现能够诚实观测的 `Committing / Pushing / Creating PR`，不虚构 Git hook 子阶段。
 - Source Control 在桌面与 390px 窄视口均可用；message 有可见 label，错误使用 live alert，交互保持原生 button、至少 24px 的小型操作目标、focus ring 与 pressed/busy 语义。checkpoint revert 会先明确确认，再进入受控 phase，异常不会成为未处理 Promise。
@@ -282,7 +282,7 @@ Code2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committin
 - core 持久化单调 revision 的 `SessionActivity`：`idle`、`running`、`awaiting_input`、`failed`。Desktop、TUI 与 remote 按 revision 合并 session snapshot 和 event，重载或多客户端观察不会让迟到快照倒退状态；`Awaiting Input` 的 pending sequence 提供跨会话 FIFO。进程重启后无法恢复 provider task / reply channel 的 `running` 或 `awaiting_input` 会原子归一化为 `failed(interrupted)`，清除失效按钮而不是伪装仍可回答。
 - worktree 新建会话显式选择 **Off / Current / Local origin default**。两种有效基线都只解析本地 ref：Current 使用当前 `HEAD`，origin default 只接受本地 symbolic `refs/remotes/origin/HEAD`；实现绝不 fetch、猜 `main` / `master`、静默 fallback 或替换用户选择。会话持久化真正用于创建 checkout 的 ref + SHA；missing、dangling 或 stale origin ref 均按本地事实展示，其中 stale 也不会触发隐式网络更新。
 - worktree 会话同时持久化创建时的目录身份：Unix 使用 device + inode，Windows 使用 volume serial + file index。每次 prompt 与进程恢复都在 `running` 状态、`TurnStarted`、transcript 写入或 ACP 交互之前重新验证；即使替换目录复制了同样的 `.git` marker 也会 fail closed。旧数据库行没有身份记录时，只允许更窄的 Git/path 校验，并在 Desktop/TUI 明示 `identity unverified`。
-- 清理路径不依赖“先检查、后 rename/remove”的竞态窗口：当前实现全平台保留路径、Git registration 与 branch，返回需要人工处理的明确错误，绝不因身份检查刚刚通过就移动后来替换进来的目录。它牺牲自动清理，换取不会误伤不属于 Code2 的工作区。
+- 清理路径不依赖“先检查、后 rename/remove”的竞态窗口：当前实现全平台保留路径、Git registration 与 branch，返回需要人工处理的明确错误，绝不因身份检查刚刚通过就移动后来替换进来的目录。它牺牲自动清理，换取不会误伤不属于 C2 的工作区。
 - interface/prompt/code typography 仍只在确有需求时作为独立工作处理。
 
 ## 本轮验证
@@ -295,12 +295,12 @@ Code2 目前只有一个 `busy` boolean，最小吸收可以先显示 `Committin
 
 ## 移植与许可证边界
 
-t3code 当前源码使用 MIT License，Copyright 2026 T3 Tools Inc.；Code2 workspace 声明 Apache-2.0。吸收产品行为和重新实现不产生逐段复制问题；若直接复制或实质性改写上游源码，应保留 MIT copyright 与 permission notice，并把来源 commit 写入 NOTICE/third-party 记录。[上游 LICENSE@4f5834b](https://github.com/pingdotgg/t3code/blob/4f5834ba72c5905a318c00456dd21271b2fa9d6f/LICENSE) · [Code2 workspace license](../../Cargo.toml)
+t3code 当前源码使用 MIT License，Copyright 2026 T3 Tools Inc.；C2 workspace 声明 Apache-2.0。吸收产品行为和重新实现不产生逐段复制问题；若直接复制或实质性改写上游源码，应保留 MIT copyright 与 permission notice，并把来源 commit 写入 NOTICE/third-party 记录。[上游 LICENSE@4f5834b](https://github.com/pingdotgg/t3code/blob/4f5834ba72c5905a318c00456dd21271b2fa9d6f/LICENSE) · [C2 workspace license](../../Cargo.toml)
 
 ## 最终取舍
 
 - **本轮已做**：server-backed pin；bounded ACP launch metadata + Desktop Agents roster；endpoint-aware pairing；canonical conversation search；非侵入式 initial title；稳定 thread shell；长 user message 折叠；按完整 user turn 对齐的 bounded transcript pagination；snapshot-only tool history projection；durable revisioned `SessionActivity` / `Awaiting Input`；显式且仅使用本地 ref 的 worktree baseline；跨客户端 session/turn/error/permission 状态隔离；explicit index、selective staging、bounded/no-external diff 与诚实的 Git action phase。
 - **紧接着做**：在真实签名 Tauri app 与 Windows CI 中补齐平台级 E2E；这不改变本轮已通过的 core/server/TUI/Desktop/web 验证边界。
 - **作为后续独立 epic 做**：完整 provider-native observability；只有 adapter 暴露可靠 linkage 后，才增加 core lifecycle、usage、全 surface 展示与 interrupt-all。
-- **只借鉴不照搬**：event-sourced orchestration、Electron renderer recovery、Cloudflare self-update/relay 逻辑；它们解决的运行时与 Code2 的 Rust/Tauri/ACP 边界不同。
+- **只借鉴不照搬**：event-sourced orchestration、Electron renderer recovery、Cloudflare self-update/relay 逻辑；它们解决的运行时与 C2 的 Rust/Tauri/ACP 边界不同。
 - **暂不做**：所有 open PR 功能；等进入 `main` 且最好进入 nightly 后重新核验。

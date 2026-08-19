@@ -122,7 +122,7 @@ function skillItems(editor: CodeTwoEditor, skills: SkillInfo[]): DefaultReactSug
     return {
       title: `${kind}: ${s.name}`,
       subtext: s.description,
-      group: s.source ?? "Code2 components",
+      group: s.source ?? "C2 components",
       icon,
       onItemClick: () => {
         // A macro with slot metadata gets the parameterized card (R1); everything else — and a
@@ -211,7 +211,7 @@ function canvasSlashItem(onInsert: () => void): DefaultReactSuggestionItem {
   return {
     title: "Canvas",
     subtext: "Draw a structured canvas in this prompt",
-    group: "Code2 components",
+    group: "C2 components",
     icon: <Sparkles className="size-3.5" />,
     onItemClick: () => {
       void onInsert();

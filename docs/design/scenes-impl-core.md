@@ -800,7 +800,7 @@ pub fn parse_linear_issue_id(value: &serde_json::Value) -> Option<String>       
 pub async fn comment_linear(token: &str, issue_id: &str, body: &str) -> std::io::Result<String>
 pub fn parse_linear_comment(value: &serde_json::Value) -> std::io::Result<String>  // pure; success:false → Err
 
-/// Delegation activity-trail body: attribution line ("Delegated to CodeTwo scene <ref>"),
+/// Delegation activity-trail body: attribution line ("Delegated to C2 scene <ref>"),
 /// session title, produced artifacts as a bullet list of (title, url-or-summary). Pure, tested.
 pub fn delegation_comment(scene_ref: &str, session_title: &str, artifacts: &[(String, String)]) -> String
 ```

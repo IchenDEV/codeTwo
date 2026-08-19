@@ -1,4 +1,4 @@
-# Code2 desktop design system
+# C2 desktop design system
 
 Status: **0.9.0 candidate**. The system is structurally frozen; it becomes 1.0.0 only after the
 preview has been checked on Windows with Segoe UI/Cascadia in light and dark mode.
@@ -23,11 +23,11 @@ the `import.meta.env.DEV` gate.
 
 ## Design direction
 
-Freeze and strengthen the existing Code2 visual language. It is a compact desktop tool, not a
+Freeze and strengthen the existing C2 visual language. It is a compact desktop tool, not a
 mobile layout and not a showcase for decorative effects.
 
 - One compact density. Content may remain comfortable; chrome stays tight.
-- Quiet neutral planes establish hierarchy. Code2 blue identifies the primary action.
+- Quiet neutral planes establish hierarchy. C2 blue identifies the primary action.
 - Persistent panels, cards, inputs, popovers, and dialogs are borderless and separated by solid
   surface tones plus controlled elevation.
 - Hover changes surface or text tone only. It never lifts, scales, or blooms a shadow.
@@ -66,7 +66,7 @@ Components cannot mix transparency to invent a sixth plane. macOS sidebar vibran
 native-material exception; Windows uses a solid sidebar. Cards, inputs, popovers, and dialogs are
 always solid. Reduced Transparency forces the macOS sidebar to its solid token.
 
-Code2 blue is fixed for primary actions. Use no more than one primary action per local area.
+C2 blue is fixed for primary actions. Use no more than one primary action per local area.
 Success, warning, destructive, and neutral keyboard focus have dedicated roles. A color change must
 be made centrally, pass the light and dark contrast contracts, and land in an isolated visual-token
 commit with light, dark, and narrow screenshots.
@@ -196,13 +196,13 @@ import primitive libraries directly. Radix-backed wrappers and the direct `radix
 are not part of the desktop UI contract.
 
 AI-native presentation patterns may use selected AI Elements source components under
-`components/ai-elements`. Adapt them to Code2 tokens and ACP data rather than adding Next.js or
+`components/ai-elements`. Adapt them to C2 tokens and ACP data rather than adding Next.js or
 AI SDK transport assumptions. Do not reimplement conversations, messages, reasoning, tools,
 plans, or task progress inside product surfaces when an AI Element fits the behavior.
 
 Terminal, Monaco/Shiki, and BlockNote are controlled content-renderer exceptions:
 
-- their surrounding chrome uses Code2 semantic tokens;
+- their surrounding chrome uses C2 semantic tokens;
 - xterm may use its fixed ANSI palette;
 - Monaco/Shiki may own syntax colors and editor content typography;
 - BlockNote may own document typography inside the document surface.
@@ -216,7 +216,7 @@ Text is represented by `data-ds-bold-text` until Phase 2 wires the native Tauri 
 is no independent UI zoom in v1; the product retains one compact density. Semantic colors are
 checked in both schemes by `bun run check:design`.
 
-## Behavioral laws retained from Code2
+## Behavioral laws retained from C2
 
 - Live transcript follows the bottom only while the reader is already at the latest content.
   Pointer or keyboard interaction pauses following and exposes “Jump to latest.” Prepending history

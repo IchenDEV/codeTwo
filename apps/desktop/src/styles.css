@@ -909,7 +909,7 @@
   overflow: hidden;
 }
 
-/* Canvas cards use the same semantic radius contracts as the surrounding Code2 surfaces. */
+/* Canvas cards use the same semantic radius contracts as the surrounding C2 surfaces. */
 .canvas-ui-module {
   border-radius: var(--ds-radius-module);
 }

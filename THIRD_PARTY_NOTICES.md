@@ -2,7 +2,7 @@
 
 ## @xterm/xterm 5.5.0 and @xterm/addon-fit 0.10.0
 
-CodeTwo bundles the xterm.js terminal renderer and its fit addon (embedded in `codetwo-server`
+C2 bundles the xterm.js terminal renderer and its fit addon (embedded in `codetwo-server`
 and served at `/term/`) under the MIT license. The bundled files are the packages' published UMD
 builds; the Remote terminal view does not fetch runtime resources from a CDN or other network
 origin.
@@ -28,7 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 ## @excalidraw/excalidraw 0.18.1
 
-CodeTwo bundles the self-hosted React canvas renderer `@excalidraw/excalidraw@0.18.1` under its
+C2 bundles the self-hosted React canvas renderer `@excalidraw/excalidraw@0.18.1` under its
 MIT license. The bundled package includes its local fonts and renderer assets; the Remote island
 does not fetch runtime resources from a CDN or other network origin.
 
@@ -51,7 +51,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 ## Naiwa Codex Pet v2 atlas
 
-CodeTwo bundles the original Naiwa pet atlas by Yitian Sun (sandytruant), distributed under the
+C2 bundles the original Naiwa pet atlas by Yitian Sun (sandytruant), distributed under the
 MIT License by the awesome-codex-pet project:
 https://github.com/legeling/awesome-codex-pet/tree/main/pets/naiwa--sandytruant
 
@@ -74,7 +74,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 ## @petx/core and @petx/react 0.2.0
 
-CodeTwo uses the PetX React renderer and its Codex Pet v2 spritesheet geometry under the MIT
+C2 uses the PetX React renderer and its Codex Pet v2 spritesheet geometry under the MIT
 license.
 
 Copyright (c) 2026 IchenDEV
