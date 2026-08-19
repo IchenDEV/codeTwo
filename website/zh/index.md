@@ -1,41 +1,41 @@
 ---
 layout: false
-title: Code2 — The document-first coding agent
-description: Compose structured prompts, weave in reusable skills, and run your coding CLIs through one local interface.
+title: Code2 — 以文档为中心的编程智能体
+description: 在一个本地界面中编写结构化提示词、组合可复用技能，并运行不同的编程 CLI。
 ---
 
-<div class="codetwo-home">
-  <a class="skip-link" href="#main-content">Skip to content</a>
-  <div class="window-bar" aria-label="Code2 window">
+<div class="codetwo-home" lang="zh-CN">
+  <a class="skip-link" href="#main-content">跳到正文</a>
+  <div class="window-bar" aria-label="Code2 窗口">
     <span class="traffic-lights" aria-hidden="true">
       <i></i><i></i><i></i>
     </span>
-    <span>code2 — local agent workspace</span>
+    <span>code2 — 本地智能体工作区</span>
   </div>
   <header class="site-header">
     <div class="shell header-inner">
-      <a class="brand" href="./" aria-label="Code2 home">
+      <a class="brand" href="./" aria-label="Code2 中文首页">
         <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
         <strong>Code2</strong>
       </a>
-      <nav class="desktop-nav" aria-label="Primary navigation">
-        <a href="#product">Product</a>
-        <a href="#providers">Providers</a>
-        <a href="./guide/getting-started">Docs</a>
-        <a class="locale-link" href="./zh/" lang="zh-CN">中文</a>
+      <nav class="desktop-nav" aria-label="主导航">
+        <a href="#product">产品</a>
+        <a href="#providers">提供方</a>
+        <a href="./guide/getting-started">文档</a>
+        <a class="locale-link" href="../" lang="en-US">English</a>
         <a class="nav-cta" href="https://github.com/IchenDEV/codeTwo">GitHub</a>
       </nav>
       <details class="mobile-nav">
-        <summary aria-label="Open navigation">
+        <summary aria-label="打开导航">
           <svg aria-hidden="true" viewBox="0 0 24 24">
             <path d="M5 7h14M5 12h14M5 17h14" />
           </svg>
         </summary>
-        <nav aria-label="Mobile navigation">
-          <a href="#product">Product</a>
-          <a href="#providers">Providers</a>
-          <a href="./guide/getting-started">Docs</a>
-          <a class="locale-link" href="./zh/" lang="zh-CN">中文</a>
+        <nav aria-label="移动端导航">
+          <a href="#product">产品</a>
+          <a href="#providers">提供方</a>
+          <a href="./guide/getting-started">文档</a>
+          <a class="locale-link" href="../" lang="en-US">English</a>
           <a href="https://github.com/IchenDEV/codeTwo">GitHub</a>
         </nav>
       </details>
@@ -46,39 +46,37 @@ description: Compose structured prompts, weave in reusable skills, and run your 
       <div class="shell hero-copy">
         <div class="section-command" aria-hidden="true">$ code2 --compose</div>
         <h1 id="hero-title">
-          The document-first<br />
-          coding agent<span class="terminal-period">.</span>
+          以文档为中心的<br />
+          编程智能体<span class="terminal-period">。</span>
         </h1>
         <p>
-          Compose structured prompts, weave in reusable skills, and run Claude
-          Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi, or GLM through one
-          local interface.
+          编写结构化提示词，组合可复用技能，并在一个本地界面中运行 Claude Code、Codex、Grok、Cursor、OpenCode、Pi、Kimi 或 GLM。
         </p>
         <div class="actions">
           <a class="button button-primary" href="./guide/getting-started">
             <span aria-hidden="true">&gt;</span>
-            Build from source
+            从源码构建
           </a>
           <a class="button button-secondary" href="https://github.com/IchenDEV/codeTwo">
             <span aria-hidden="true">&lt;/&gt;</span>
-            View source
+            查看源码
           </a>
         </div>
-        <p class="hero-meta">Local-first · ACP orchestration · Apache-2.0</p>
+        <p class="hero-meta">本地优先 · ACP 统一接入 · Apache-2.0</p>
       </div>
       <figure class="shell screenshot-frame hero-window">
         <img
           src="/screenshots/app-main.png"
           width="1440"
           height="900"
-          alt="Code2 desktop app with a session rail, document composer, and environment dock"
+          alt="Code2 桌面应用，包含会话栏、文档编辑器和环境面板"
         />
       </figure>
-      <ul class="shell hero-capabilities" aria-label="Key capabilities">
-        <li><span aria-hidden="true">&gt;_</span> Structured documents</li>
-        <li><span aria-hidden="true">&gt;_</span> Inline skills</li>
-        <li><span aria-hidden="true">&gt;_</span> 8 providers</li>
-        <li><span aria-hidden="true">&gt;_</span> One local core</li>
+      <ul class="shell hero-capabilities" aria-label="核心能力">
+        <li><span aria-hidden="true">&gt;_</span> 结构化文档</li>
+        <li><span aria-hidden="true">&gt;_</span> 内联技能</li>
+        <li><span aria-hidden="true">&gt;_</span> 8 个 Provider</li>
+        <li><span aria-hidden="true">&gt;_</span> 一个本地核心</li>
       </ul>
     </section>
     <section id="product" class="workflow" aria-labelledby="workflow-title">
@@ -86,12 +84,11 @@ description: Compose structured prompts, weave in reusable skills, and run your 
         <div class="section-command" aria-hidden="true">$ code2 workflow --inspect</div>
         <div class="workflow-head">
           <h2 id="workflow-title">
-            Write the work.<br />
-            Choose the agent<span class="terminal-period">.</span>
+            写下任务。<br />
+            选择智能体<span class="terminal-period">。</span>
           </h2>
           <p>
-            Code2 turns a prompt into a structured document you can edit,
-            reuse, and inspect before it runs.
+            Code2 会先把提示词变成一份可编辑、可复用、可检查的结构化文档，然后再运行。
           </p>
         </div>
         <div class="workflow-stage">
@@ -99,28 +96,22 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <li>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
-                <h3>Compose as a document</h3>
-                <p>Shape the brief with headings, lists, and context.</p>
+                <h3>像写文档一样组织任务</h3>
+                <p>用标题、列表和上下文梳理需求。</p>
               </div>
             </li>
             <li>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
-                <h3>Add skills and files inline</h3>
-                <p>
-                  Reference reusable skills and project files without leaving
-                  the document.
-                </p>
+                <h3>在文档中加入技能和文件</h3>
+                <p>无需离开文档，就能引用可复用技能和项目文件。</p>
               </div>
             </li>
             <li>
               <span class="terminal-mark" aria-hidden="true">&gt;</span>
               <div>
-                <h3>Run through ACP</h3>
-                <p>
-                  Pick a provider and send the compiled prompt over one
-                  protocol.
-                </p>
+                <h3>通过 ACP 运行</h3>
+                <p>选择提供方，通过同一协议发送编译后的提示词。</p>
               </div>
             </li>
           </ol>
@@ -130,7 +121,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
               width="1440"
               height="900"
               loading="lazy"
-              alt="Code2 document editor with the slash picker open for skills and blocks"
+              alt="Code2 文档编辑器，已打开技能与内容块选择菜单"
             />
           </figure>
         </div>
@@ -141,12 +132,11 @@ description: Compose structured prompts, weave in reusable skills, and run your 
         <div class="section-command" aria-hidden="true">$ code2 providers --list</div>
         <div class="providers-head">
           <h2 id="providers-title">
-            Bring the agent<br />
-            you already use<span class="terminal-period">.</span>
+            带上你已经在用的<br />
+            编程智能体<span class="terminal-period">。</span>
           </h2>
           <p>
-            Code2 starts the CLI or ACP adapter on your machine. Your provider
-            account, subscription, quota, and billing stay with the provider.
+            Code2 只在本机启动 CLI 或 ACP 适配器。账号、订阅、配额和费用仍由对应 Provider 管理。
           </p>
         </div>
         <div class="provider-matrix">
@@ -154,7 +144,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">01</span>
             <div>
               <h3>Claude Code</h3>
-              <p>ACP adapter · Node required</p>
+              <p>ACP 适配器 · 需要 Node</p>
               <code>claude-agent-acp</code>
             </div>
           </article>
@@ -162,7 +152,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">02</span>
             <div>
               <h3>OpenAI Codex</h3>
-              <p>App Server adapter · Node required</p>
+              <p>App Server 适配器 · 需要 Node</p>
               <code>codex-acp@1.1.14</code>
             </div>
           </article>
@@ -170,7 +160,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">03</span>
             <div>
               <h3>Grok</h3>
-              <p>Native ACP</p>
+              <p>原生 ACP</p>
               <code>grok agent stdio</code>
             </div>
           </article>
@@ -178,7 +168,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">04</span>
             <div>
               <h3>Cursor</h3>
-              <p>Built-in ACP mode</p>
+              <p>内置 ACP 模式</p>
               <code>cursor-agent --acp</code>
             </div>
           </article>
@@ -186,7 +176,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">05</span>
             <div>
               <h3>OpenCode</h3>
-              <p>Built-in ACP mode</p>
+              <p>内置 ACP 模式</p>
               <code>opencode acp</code>
             </div>
           </article>
@@ -194,7 +184,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">06</span>
             <div>
               <h3>Pi</h3>
-              <p>Community adapter · Node required</p>
+              <p>社区适配器 · 需要 Node</p>
               <code>pi-acp</code>
             </div>
           </article>
@@ -202,26 +192,26 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <span class="provider-index">07</span>
             <div>
               <h3>Kimi</h3>
-              <p>Native ACP</p>
+              <p>原生 ACP</p>
               <code>kimi acp</code>
             </div>
           </article>
           <article class="provider-entry">
             <span class="provider-index">08</span>
             <div>
-              <h3>ZCode (GLM)</h3>
-              <p>GLM ACP agent · Node required</p>
+              <h3>ZCode（GLM）</h3>
+              <p>GLM ACP 智能体 · 需要 Node</p>
               <code>glm-acp-agent</code>
             </div>
           </article>
         </div>
         <div class="provider-facts">
-          <p><span>LOCAL</span> The CLI or adapter runs as a child process on your machine.</p>
-          <p><span>ACP</span> Native endpoints and adapters share one submission/event interface.</p>
-          <p><span>STATUS</span> A green dot means the required launch command is on your PATH.</p>
+          <p><span>本地</span> CLI 或适配器以子进程方式运行在你的机器上。</p>
+          <p><span>ACP</span> 原生端点和适配器统一使用同一套提交/事件接口。</p>
+          <p><span>状态</span> 绿点表示所需启动命令已出现在 PATH 中。</p>
         </div>
         <a class="provider-doc-link" href="./guide/providers">
-          Compare setup requirements <span aria-hidden="true">↗</span>
+          对比安装要求 <span aria-hidden="true">↗</span>
         </a>
       </div>
     </section>
@@ -229,15 +219,15 @@ description: Compose structured prompts, weave in reusable skills, and run your 
       <div class="shell">
         <div class="section-command" aria-hidden="true">$ code2 architecture --local</div>
         <h2 id="architecture-title">
-          One local core.<br />
-          Three ways in<span class="terminal-period">.</span>
+          一个本地核心。<br />
+          三种使用方式<span class="terminal-period">。</span>
         </h2>
         <div
           class="architecture-flow"
           role="img"
-          aria-label="Coding CLIs connect over ACP to the Rust core, which powers Desktop, TUI, and Remote surfaces"
+          aria-label="编程 CLI 通过 ACP 连接 Rust 核心，由核心驱动桌面端、终端界面和远程控制"
         >
-          <div class="architecture-node"><span>Coding CLIs</span></div>
+          <div class="architecture-node"><span>编程 CLI</span></div>
           <svg class="flow-arrow" aria-hidden="true" viewBox="0 0 100 20">
             <path d="M1 10h92M86 3l7 7-7 7" />
           </svg>
@@ -248,7 +238,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <path d="M1 10h92M86 3l7 7-7 7" />
           </svg>
           <div class="architecture-node architecture-node-core">
-            <span>Rust core</span>
+            <span>Rust 核心</span>
           </div>
           <div class="architecture-branches">
             <svg class="branch-lines" aria-hidden="true" viewBox="0 0 210 270">
@@ -256,9 +246,9 @@ description: Compose structured prompts, weave in reusable skills, and run your 
               <path d="m188 31 8 7-8 7M188 128l8 7-8 7M188 225l8 7-8 7" />
             </svg>
             <div class="architecture-outputs">
-              <div class="output-node"><span>Desktop</span></div>
-              <div class="output-node"><span>TUI</span></div>
-              <div class="output-node"><span>Remote</span></div>
+              <div class="output-node"><span>桌面端</span></div>
+              <div class="output-node"><span>终端界面</span></div>
+              <div class="output-node"><span>远程控制</span></div>
             </div>
           </div>
         </div>
@@ -270,13 +260,12 @@ description: Compose structured prompts, weave in reusable skills, and run your 
       </div>
       <div class="shell open-source-grid">
         <h2 id="open-source-title">
-          Open source,<br />
-          from the core out<span class="terminal-period">.</span>
+          从核心开始，<br />
+          全面开源<span class="terminal-period">。</span>
         </h2>
         <div class="open-source-copy">
           <p>
-            Code2 is licensed under Apache 2.0 and built in the open for people
-            who want control over their coding-agent workflow.
+            Code2 基于 Apache 2.0 许可证开源，为希望自主掌控编程智能体工作流的人而构建。
           </p>
           <div class="actions">
             <a
@@ -289,10 +278,10 @@ description: Compose structured prompts, weave in reusable skills, and run your 
                   d="M12 .7a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.2.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.6.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.5.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.8 5.4-5.5 5.7.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6A11.5 11.5 0 0 0 12 .7Z"
                 />
               </svg>
-              View on GitHub
+              在 GitHub 查看
             </a>
             <a class="quiet-link" href="./reference/architecture">
-              Read the architecture <span aria-hidden="true">↗</span>
+              阅读架构说明 <span aria-hidden="true">↗</span>
             </a>
           </div>
         </div>
@@ -302,8 +291,8 @@ description: Compose structured prompts, weave in reusable skills, and run your 
           <img class="brand-mark" src="/logo.svg" width="32" height="32" alt="" />
           Code2
         </a>
-        <nav aria-label="Footer navigation">
-          <a href="./guide/getting-started">Docs</a>
+        <nav aria-label="页脚导航">
+          <a href="./guide/getting-started">文档</a>
           <a href="https://github.com/IchenDEV/codeTwo">GitHub</a>
           <a href="https://github.com/IchenDEV/codeTwo/blob/main/LICENSE">Apache-2.0</a>
         </nav>

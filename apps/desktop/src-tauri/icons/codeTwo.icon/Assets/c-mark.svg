@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <path d="M594 328C545 284 470 268 404 291C319 321 263 401 263 500C263 616 342 713 448 737C508 751 567 738 612 706"
-        fill="none" stroke="#FFFFFF" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M590 306H438C342 306 286 365 286 464V560C286 659 342 718 438 718H590"
+        fill="none" stroke="#F4F7F1" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -1,10 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="two" x1="0.22" y1="0.08" x2="0.78" y2="0.92">
-      <stop offset="0" stop-color="#9EF0FF"/>
-      <stop offset="1" stop-color="#48B9F2"/>
-    </linearGradient>
-  </defs>
-  <path d="M592 383C616 328 674 300 731 320C790 341 821 406 802 463C792 493 771 517 747 541L590 696H805"
-        fill="none" stroke="url(#two)" stroke-width="82" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M568 397C587 341 642 309 704 316C773 324 818 380 813 447C810 488 787 519 751 551L584 706H813"
+        fill="none" stroke="#59EF69" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

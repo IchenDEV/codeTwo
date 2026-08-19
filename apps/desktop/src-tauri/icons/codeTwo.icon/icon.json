@@ -1,13 +1,9 @@
 {
   "fill" : {
-    "linear-gradient" : {
-      "angle" : 135,
-      "colors" : [
-        "extended-srgb:0.19216,0.18039,0.50588,1.00000",
-        "extended-srgb:0.12549,0.10588,0.32157,1.00000",
-        "extended-srgb:0.06667,0.08235,0.18431,1.00000"
-      ]
-    }
+    "linear-gradient" : [
+      "extended-srgb:0.06275,0.09020,0.07059,1.00000",
+      "extended-srgb:0.00784,0.01569,0.01176,1.00000"
+    ]
   },
   "groups" : [
     {
@@ -17,11 +13,16 @@
           "name" : "C"
         }
       ],
+      "name" : "Document frame",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.32
       },
-      "specular" : true
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
     },
     {
       "layers" : [
@@ -30,20 +31,22 @@
           "name" : "2"
         }
       ],
+      "name" : "Agent path",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.38
       },
-      "specular" : true
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
     }
   ],
   "supported-platforms" : {
     "circles" : [
       "watchOS"
     ],
-    "squares" : [
-      "macOS",
-      "iOS"
-    ]
+    "squares" : "shared"
   }
 }
