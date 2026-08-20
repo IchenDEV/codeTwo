@@ -25,6 +25,22 @@ document.addEventListener("contextmenu", (e) => {
   if (!editable && !appContextMenu) e.preventDefault();
 });
 
+// Electrobun drag regions include their descendants. Mark interactive descendants explicitly so
+// title-bar buttons, fields and links keep receiving clicks instead of starting a window move.
+const interactiveSelector =
+  "button, input, textarea, select, a, summary, [role='button'], [contenteditable='true']";
+const protectInteractiveNode = (node: Node) => {
+  if (!(node instanceof Element)) return;
+  if (node.matches(interactiveSelector)) node.classList.add("electrobun-webkit-app-region-no-drag");
+  for (const element of node.querySelectorAll(interactiveSelector)) {
+    element.classList.add("electrobun-webkit-app-region-no-drag");
+  }
+};
+protectInteractiveNode(document.documentElement);
+new MutationObserver((records) => {
+  for (const record of records) for (const node of record.addedNodes) protectInteractiveNode(node);
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
   const Root = showPetPreview

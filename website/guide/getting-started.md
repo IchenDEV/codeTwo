@@ -1,20 +1,20 @@
 # Install & run
 
-C2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus a
-Bun-built frontend.
+C2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus an
+Electrobun desktop host and Bun-built React renderer.
 
 ## Prerequisites
 
 | Tool                     | Why                                         | Notes                                         |
 | ------------------------ | ------------------------------------------- | --------------------------------------------- |
-| **Rust** (1.82+)         | builds the core, TUI, server, and Tauri app | [rustup.rs](https://rustup.rs)                |
+| **Rust** (1.82+)         | builds the core, TUI, server, and desktop sidecar | [rustup.rs](https://rustup.rs)           |
 | **Zig** (0.15.2 exactly) | builds the embedded Ghostty terminal engine | [ziglang.org](https://ziglang.org/download/)  |
-| **Bun**                  | builds the desktop frontend                 | [bun.sh](https://bun.sh)                      |
+| **Bun**                  | builds the Electrobun host and desktop renderer | [bun.sh](https://bun.sh)                  |
 | **git**                  | worktrees, checkpoints, source control      | usually already installed                     |
 | A **provider CLI**       | to actually drive an agent                  | at least one of the supported providers below |
 
-You also need the OS toolchain Tauri requires (Xcode CLT on macOS; `webkit2gtk` + build essentials on
-Linux). See [tauri.app prerequisites](https://tauri.app/start/prerequisites/).
+You also need your platform's native build tools. macOS builds use Xcode's command-line tools; the
+layered `.icon` source additionally needs full Xcode.
 
 On macOS, install the pinned Zig version with Homebrew:
 
@@ -54,7 +54,7 @@ cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
 ```sh
 cd apps/desktop
 bun install --frozen-lockfile
-bun run tauri dev        # opens the desktop window
+bun run dev              # builds the renderer + Rust sidecar and opens Electrobun
 ```
 
 ## Run the TUI

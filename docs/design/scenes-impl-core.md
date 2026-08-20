@@ -3,7 +3,7 @@
 Companion to `docs/scenes.md` (normative spec) and `docs/design/scenes-impl-frontend.md`.
 This document is the authoritative implementation design for the core side; implementing agents
 follow it and note any deviation in their handoff. All paths under repo root. "core" =
-`crates/core/src/`, "desktop" = `apps/desktop/src-tauri/src/lib.rs`.
+`crates/core/src/`, "desktop host" = `apps/desktop/src-host/src/lib.rs`.
 
 ---
 
@@ -300,24 +300,11 @@ Store methods: `set_session_scene(&self, session_id, scene_ref: Option<&str>, cu
 and `session_scene(&self, session_id) -> Option<(String, bool)>`. Optionally surface on the
 `Session` struct as `#[serde(default)]` fields (append-only, wire-safe).
 
-### 1.7 Desktop assembly (`apps/desktop/src-tauri/src/lib.rs`)
+### 1.7 Desktop exposure (`apps/desktop/src-host/src/lib.rs`)
 
-- `AppState` gains `scenes: Mutex<Arc<SceneLibrary>>`; init in `setup`.
-- `fn reload_scenes(state: &AppState)` next to `reload_skills` (108): project dir =
-  `skills_cwd.join(".codetwo/scenes")`, user dir = `dirs::config_dir()/codetwo/scenes`, plugin
-  dirs = for each **enabled** plugin, `<plugin root>/scenes` (no plugin.rs changes in R3).
-- Commands (appended to `generate_handler!`, append-only):
-
-| Command | Params | Returns |
-|---|---|---|
-| `list_scenes` | `state, cwd: Option<String>` (cwd triggers `reload_scenes`, same contract as `list_skills`) | `Vec<SceneInfo>` — `{ reference, name, title, description, icon, source, plugin_id, keywords, session_mode: Option<String>, has_brief: bool, localizations }` |
-| `get_scene` | `state, reference: String` | `Result<SceneDetail, String>` — `{ reference, source, scene: Scene }` |
-| `list_pipelines` | `state` | `Vec<PipelineInfo>` — `{ reference, name, title, description, icon, source, stage_count }` |
-| `get_pipeline` | `state, reference: String` | `Result<PipelineDetail, String>` |
-| `apply_scene` | `state, session, reference, confirm_escalation: bool` | `Result<SceneApplyOutcome, String>` — `{ applied: Vec<String>, pending: Vec<String>, escalation: Option<{from,to}>, plan_first: Option<bool>, suppress_unpinned: bool, pinned_skills: Vec<String> }`. Soft-apply: issues `Op::SetExecutionPolicy` + memory command, persists `set_session_scene`. On escalation-not-confirmed: applies NOTHING, returns the prompt. |
-| `scene_session_plan` | `state, reference, cwd` | `Result<SceneSessionParams, String>` — full-apply params the frontend feeds to `new_session`, then `set_session_scene` + `set_model`/`set_config_option` |
-| `set_session_scene` | `state, session, reference: Option<String>, customized: bool` | `Result<(), String>` |
-| `get_session_scene` | `state, session` | `Result<Option<SessionSceneState>, String>` — `{ reference, customized, resolved: bool }` (`resolved:false` → warning chip) |
+Scene commands register on the core plugin graph. The desktop's generic `call` protocol exposes
+them automatically, so this roadmap adds no host state, wrapper commands, or dispatch-table
+entries. Project/user/plugin scene resolution remains core product policy.
 
 - `keymap.rs`: new `Action::CycleScene` — the 5 append edits (enum, `ALL` array + count, `as_str`
   → `"cycle_scene"`, `label` → `"Cycle scene"`, `default_key` → `"shift+tab"`).

@@ -1,7 +1,7 @@
 //! The SQ/EQ interface between the core and any frontend (codex's Submission-Queue / Event-Queue
-//! pattern). Frontends push [`Op`]s and consume a stream of [`Event`]s. The Tauri bridge forwards
-//! Ops via `#[tauri::command]` and streams Events over an `ipc::Channel`; the ratatui TUI calls the
-//! same core API in-process. One agent loop, two renderers.
+//! pattern). Frontends push [`Op`]s and consume a stream of [`Event`]s. The Electrobun desktop
+//! forwards both through its Rust sidecar; the ratatui TUI calls the same core API in-process. One
+//! agent loop, two renderers.
 //!
 //! The engine that turns `Op`s into `Event`s (by driving [`crate::acp`]) lands in M1; these are the
 //! stable types both sides code against.

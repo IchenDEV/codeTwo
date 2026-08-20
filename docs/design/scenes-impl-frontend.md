@@ -44,7 +44,7 @@ Pure helpers in the same file:
   App shows a confirm dialog naming both modes before applying a looser scene, never silent.
 - `nextSceneInRing(ring: string[], scenes, active): string | null`.
 
-Bridge functions expected (append at bridge.ts tail; each guarded by `inTauri` + feature-detect):
+Bridge functions expected (append at bridge.ts tail; each guarded by `inDesktop` + feature-detect):
 `listScenes(cwd)`, `getScene(reference)`, `applySceneToSession(session, reference, strength:
 "soft"|"full", confirmEscalation)`, `sceneSessionPlan(reference, cwd)`, `setSessionScene`,
 `getSessionScene`, `usageBySession(session)`, `recordSceneArtifact(session, artifactKey,

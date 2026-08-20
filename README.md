@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="104" alt="C2 app icon" />
+  <img src="apps/desktop/assets/128x128@2x.png" width="104" alt="C2 app icon" />
 </p>
 
 <h1 align="center">C2</h1>
@@ -38,7 +38,7 @@ whole turn, and only then send it to the agent you choose.
   derived memories retain their sources and can be pinned or forgotten.
 - **Git-aware execution.** Use per-session worktrees, automatic checkpoints, diffs, revert, and
   explicit commit/push flows.
-- **Three surfaces.** The same core powers a Tauri desktop app, a ratatui TUI, and a paired remote
+- **Three surfaces.** The same core powers an Electrobun desktop app, a ratatui TUI, and a paired remote
   web client.
 
 ## How it fits together
@@ -52,7 +52,7 @@ Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM
                     ┌─────────┼─────────┐
                     │         │         │
                 Desktop      TUI      Remote
-             Tauri + React  ratatui  Axum + WebSocket
+          Electrobun + React  ratatui  Axum + WebSocket
 ```
 
 C2's internals form a plugin graph inspired by
@@ -68,7 +68,7 @@ JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands.
 - Zig **0.15.2** exactly, required by the embedded Ghostty terminal engine
 - Bun
 - Git
-- The [Tauri system prerequisites](https://tauri.app/start/prerequisites/) for your platform
+- Your platform's native build tools (Xcode command-line tools on macOS)
 - At least one supported provider CLI if you want to run a real agent turn
 
 On macOS, install the pinned Zig version with Homebrew:
@@ -82,9 +82,8 @@ Then clone the repository and run the desktop app:
 
 ```sh
 git clone https://github.com/IchenDEV/codeTwo.git
-cd codeTwo/apps/desktop
-bun install --frozen-lockfile
-bun run tauri dev
+cd codeTwo
+./script/build_and_run.sh
 ```
 
 C2 detects provider CLIs on your `PATH`. Provider-specific setup and the exact adapter commands
@@ -134,7 +133,7 @@ tailnet; C2 does not provide a hosted relay.
 | [`crates/core`](crates/core)     | ACP engine, sessions, providers, memory, git, terminal, browser, and skills |
 | [`crates/tui`](crates/tui)       | ratatui frontend                                                            |
 | [`crates/server`](crates/server) | Headless server, pairing, WebSocket protocol, and remote client             |
-| [`apps/desktop`](apps/desktop)   | Tauri v2 + React + BlockNote desktop app                                    |
+| [`apps/desktop`](apps/desktop)   | Electrobun + React + BlockNote desktop app                                  |
 | [`website`](website)             | VitePress documentation and GitHub Pages site                               |
 | [`docs`](docs)                   | Architecture, design laws, roadmap, and protocol notes                      |
 

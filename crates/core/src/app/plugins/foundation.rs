@@ -1,6 +1,6 @@
 //! The bottom of the graph: paths, storage, the event bus, and the provider registry.
 //!
-//! Nothing here is new behaviour. It is the same construction the Tauri `setup()` did in a fixed
+//! Nothing here is new behaviour. It is the same construction the old desktop setup did in a fixed
 //! order, split into four plugins that declare what they need and are free to load in any order —
 //! or not at all. An app without `store` is a real configuration now, not a code path nobody
 //! tested: everything that needs storage simply stays pending.

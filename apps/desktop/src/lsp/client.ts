@@ -1,5 +1,5 @@
 /**
- * A minimal Language Server Protocol client over the Tauri bridge.
+ * A minimal Language Server Protocol client over the native sidecar bridge.
  *
  * The Rust side owns the process and the stdio framing; what crosses the bridge is one JSON-RPC
  * message per event. This client owns the protocol: the initialize handshake, document sync, and

@@ -4,13 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "bun run check:design && tsc --noEmit && vite build",
+    "dev": "bun scripts/run-electrobun.ts dev --watch",
+    "dev:renderer": "vite",
+    "build": "bun scripts/run-electrobun.ts build --env=dev",
+    "build:app": "bun scripts/run-electrobun.ts build --env=stable",
+    "build:renderer": "bun run check:design && tsc --noEmit && vite build",
     "build:canvas:remote": "vite build --config vite.canvas.config.ts",
     "check:design": "bun scripts/check-design-system.ts",
     "test": "bun test",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -20,9 +22,6 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@petx/react": "0.2.0",
     "@shikijs/monaco": "^4.4.1",
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/plugin-dialog": "^2.7.2",
-    "@tauri-apps/plugin-shell": "^2.0.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/xterm": "^5.5.0",
@@ -39,11 +38,12 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2.0.0",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "electrobun": "1.18.1",
     "happy-dom": "^20.11.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.6.0",

@@ -6,9 +6,9 @@ const desktop = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(desktop, path), "utf8");
 
 describe("T3 mobile remote contract", () => {
-  test("keeps the renderer-to-Tauri pairing protocol explicit and defaults to T3", () => {
+  test("keeps the renderer-to-native-host pairing protocol explicit and defaults to T3", () => {
     const bridge = read("src/bridge.ts");
-    const remotePlugin = read("src-tauri/src/remote.rs");
+    const remotePlugin = read("src-host/src/remote.rs");
 
     expect(bridge).toContain('export type RemoteClientProtocol = "t3" | "legacy"');
     expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "t3"');

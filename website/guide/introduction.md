@@ -51,7 +51,7 @@ skills, git, and the PTY. Three frontends link it:
 
 | Surface | Stack |
 | --- | --- |
-| Desktop | Tauri v2 + React + BlockNote |
+| Desktop | Electrobun + React + BlockNote + Rust sidecar |
 | Terminal | ratatui |
 | Remote | Axum WebSocket + T3 Code mobile compatibility + a mobile web client |
 

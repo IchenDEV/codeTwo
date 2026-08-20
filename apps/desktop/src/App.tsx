@@ -1857,7 +1857,7 @@ export default function App() {
     };
   }, [refreshSessions, t, toast]);
 
-  // Rendered QA has no Tauri event bridge in the Vite shell. This query-controlled fixture is
+  // Rendered QA has no desktop event bridge in the Vite shell. This query-controlled fixture is
   // development-only and is replaced at build time, so production never gets a fake default.
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -4339,9 +4339,8 @@ export default function App() {
               line, matching the rail and dock headers. With the rail collapsed, the inset clears
               the traffic lights and the expand button takes the wordmark's place. */}
           <header
-            data-tauri-drag-region
             className={cn(
-              "flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
+              "electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
               displayedRailCollapsed ? "pl-[78px]" : "pl-4",
             )}
           >
@@ -4352,17 +4351,17 @@ export default function App() {
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
             {activeProjectName && (
               <>
-                <span data-tauri-drag-region className="max-w-40 truncate text-ui text-muted-foreground">
+                <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
                   {activeProjectName}
                 </span>
                 <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
               </>
             )}
-            <span data-tauri-drag-region className="max-w-96 truncate text-ui font-medium">
+            <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
 
-            <div data-tauri-drag-region className="flex-1" />
+            <div className="electrobun-webkit-app-region-drag flex-1" />
 
             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                 is in flight — and the way back to the answer without leaving the mode for good. */}

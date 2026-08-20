@@ -351,7 +351,7 @@
   }
 }
 
-/* Tauri maps the OS bold-text setting to this attribute during the Phase 2 migration. */
+/* The desktop host maps the OS bold-text setting to this attribute during the Phase 2 migration. */
 [data-ds-bold-text="true"] {
   --ds-font-weight-regular: 550;
   --ds-font-weight-medium: 650;

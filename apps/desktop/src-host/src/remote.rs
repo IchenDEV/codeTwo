@@ -246,8 +246,7 @@ impl Plugin for RemotePlugin {
             canvas_gate: ctx
                 .get::<CanvasService>()
                 .ok_or_else(|| PluginError::new("canvas service is unavailable"))?
-                .gate
-                .clone(),
+                .gate,
             auth_path: self.auth_path.clone(),
             lifecycle: Mutex::new(RemoteLifecycle::default()),
         });
@@ -289,7 +288,7 @@ impl Plugin for RemotePlugin {
                     addr,
                     auth.clone(),
                     service.store.clone(),
-                    service.canvas_gate.clone(),
+                    service.canvas_gate,
                 )
                 .await;
                 let (local, task) = match bound {

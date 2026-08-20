@@ -1,7 +1,7 @@
 # Scene UI screenshots
 
 Captured from the vite dev preview (headless Chromium, 1440×900) at the R1–R14 tip. The preview
-runs without a Tauri backend, so scenes come from `bridge.ts`'s `FALLBACK_SCENES` — the five
+runs without the native desktop host, so scenes come from `bridge.ts`'s `FALLBACK_SCENES` — the five
 builtins. Emoji glyphs render as boxes in the headless container's font set; a real desktop build
 draws the scene icons.
 

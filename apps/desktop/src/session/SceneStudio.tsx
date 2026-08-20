@@ -166,21 +166,21 @@ export function SceneStudio({
 
   return (
     <div className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background" data-page="scene-studio">
-      <header data-tauri-drag-region className="flex shrink-0 items-center gap-2 py-1.5 pl-20 pr-3">
+      <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 py-1.5 pl-20 pr-3">
         <Button type="button" variant="ghost" size="icon-sm" aria-label={request ? t("sceneStudio.backToLibrary") : t("sceneStudio.back")} onClick={goBack}>
           <ArrowLeft />
         </Button>
         <Clapperboard className="size-4 text-muted-foreground" />
-        <span data-tauri-drag-region className="text-ui font-medium">{t("sceneStudio.title")}</span>
+        <span className="electrobun-webkit-app-region-drag text-ui font-medium">{t("sceneStudio.title")}</span>
         {request && (
           <>
-            <span data-tauri-drag-region className="text-muted-foreground/50">/</span>
-            <span data-tauri-drag-region className="truncate text-ui text-muted-foreground">
+            <span className="electrobun-webkit-app-region-drag text-muted-foreground/50">/</span>
+            <span className="electrobun-webkit-app-region-drag truncate text-ui text-muted-foreground">
               {request.kind === "edit" ? request.scene.title : request.kind === "duplicate" ? t("sceneEditor.duplicateTitle") : t("sceneEditor.createTitle")}
             </span>
           </>
         )}
-        <div data-tauri-drag-region className="flex-1" />
+        <div className="electrobun-webkit-app-region-drag flex-1" />
         {!request && (
           <Button type="button" size="sm" onClick={() => onRequest({ kind: "create" })}>
             <Plus data-icon="inline-start" />

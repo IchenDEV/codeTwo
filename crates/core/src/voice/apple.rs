@@ -34,27 +34,19 @@ const AUTH_TIMEOUT: Duration = Duration::from_secs(120);
 const RECOGNIZE_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Privacy frameworks attribute permission prompts to an application bundle, not a loose Mach-O
-/// executable. Tauri's normal development runner starts `target/debug/codetwo-desktop` directly;
-/// asking Speech for authorization from that process makes TCC abort before Rust can return an
-/// error, even when the binary contains an unbound `__info_plist` section.
+/// executable. Electrobun packages this native host below `Contents/Resources/app/bin`; walking
+/// ancestors keeps that helper eligible while still rejecting a bare Cargo executable.
 fn is_app_bundle_executable(path: &Path) -> bool {
-    let Some(macos_dir) = path.parent() else {
-        return false;
-    };
-    let Some(contents_dir) = macos_dir.parent() else {
-        return false;
-    };
-    let Some(app_dir) = contents_dir.parent() else {
-        return false;
-    };
-
-    macos_dir.file_name().is_some_and(|name| name == "MacOS")
-        && contents_dir
-            .file_name()
-            .is_some_and(|name| name == "Contents")
-        && app_dir
+    path.ancestors().any(|ancestor| {
+        ancestor
             .extension()
             .is_some_and(|extension| extension == "app")
+            && path
+                .strip_prefix(ancestor)
+                .ok()
+                .and_then(|relative| relative.components().next())
+                .is_some_and(|component| component.as_os_str() == "Contents")
+    })
 }
 
 fn running_from_app_bundle() -> bool {
@@ -233,13 +225,16 @@ mod tests {
     #[test]
     fn privacy_frameworks_are_only_used_from_an_app_bundle() {
         assert!(is_app_bundle_executable(Path::new(
-            "/Applications/C2.app/Contents/MacOS/codetwo-desktop"
+            "/Applications/C2.app/Contents/Resources/app/bin/codetwo-desktop-host"
+        )));
+        assert!(is_app_bundle_executable(Path::new(
+            "/Applications/C2.app/Contents/MacOS/launcher"
         )));
         assert!(!is_app_bundle_executable(Path::new(
-            "/tmp/target/debug/codetwo-desktop"
+            "/tmp/target/debug/codetwo-desktop-host"
         )));
         assert!(!is_app_bundle_executable(Path::new(
-            "/tmp/not-an-app.app/codetwo-desktop"
+            "/tmp/not-an-app.app/codetwo-desktop-host"
         )));
     }
 

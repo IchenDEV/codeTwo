@@ -114,7 +114,7 @@ export interface SceneConstraints {
   tools?: { allow?: string[]; deny?: string[] };
 }
 
-/** Lossless Agent Scenes 1.0 document used by the editor and Tauri bridge. */
+/** Lossless Agent Scenes 1.0 document used by the editor and desktop bridge. */
 export interface SceneDocument {
   $schema: string;
   name: string;

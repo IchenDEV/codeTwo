@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { WebviewTagElement } from "electrobun/view";
 import {
   ArrowLeft,
   ArrowRight,
@@ -59,6 +60,7 @@ import {
   type BrowserHistoryState,
   type StorageLike,
 } from "./history";
+import { embeddedBrowserRenderer, registerBrowserWebview } from "./electrobun";
 
 const BLANK = "about:blank";
 
@@ -156,6 +158,35 @@ function MenuItem({
   );
 }
 
+function BrowserWebview({
+  label,
+  url,
+  visible,
+}: {
+  label: string;
+  url: string;
+  visible: boolean;
+}) {
+  const connect = useCallback(
+    (element: HTMLElement | null) =>
+      registerBrowserWebview(label, element as WebviewTagElement | null),
+    [label],
+  );
+  return (
+    <electrobun-webview
+      ref={connect}
+      src={url}
+      renderer={embeddedBrowserRenderer}
+      partition="persist:codetwo-browser"
+      sandbox=""
+      className={cn(
+        "absolute inset-0 h-full! w-full! bg-transparent",
+        !visible && "invisible",
+      )}
+    />
+  );
+}
+
 /**
  * The built-in browser as browser, not just an iframe with an address bar: tabs along the top,
  * back/forward/reload, an overflow menu with the inspector, zoom and device widths — and the
@@ -179,7 +210,7 @@ export function BrowserPanel({
   /** Logical source project. Worktree sessions keep browser history with their source project. */
   projectPath: string | null;
   /** The dock's open state. It closes by sweeping its width to zero without unmounting, and a
-   *  native view has no idea it is inside a collapsed box — it would keep painting over the app. */
+   *  child webview has no idea it is inside a collapsed box — it would keep painting over the app. */
   visible: boolean;
   onNavigate: (u: string) => void;
   /** Everything the user marked up on the page, one entry per annotated element. */
@@ -676,14 +707,26 @@ export function BrowserPanel({
       )}
 
       {/* ---- the page --------------------------------------------------------------------- */}
-      {/* `hostRef` is a hole in the layout, not a container: it holds no page, it only says where
-          the native webview goes. A device width narrows the hole and the page follows. */}
+      {/* Electrobun keeps each sandboxed child webview aligned to its custom element. A device
+          width narrows this container and the native page follows without accepting iframe CSP. */}
       <div className={cn("relative min-h-0 flex-1", device && "bg-muted/40")}>
         <div
           ref={hostRef}
-          className={cn("h-full", device && "mx-auto shadow-lg ring-1 ring-foreground/15")}
+          className={cn("relative h-full", device && "mx-auto shadow-lg ring-1 ring-foreground/15")}
           style={device ? { width: device } : undefined}
-        />
+        >
+          {isDesktop &&
+            tabs
+              .filter((tab) => tab.url !== BLANK)
+              .map((tab) => (
+                <BrowserWebview
+                  key={tab.id}
+                  label={labelOf(tab.id)}
+                  url={tab.url}
+                  visible={tab.id === activeId && showPage}
+                />
+              ))}
+        </div>
         {blank && (
           // No webview for a blank tab: an empty native page paints a white sheet, which in dark
           // mode reads as a rendering bug rather than an empty tab.
@@ -745,7 +788,7 @@ export function BrowserPanel({
           </div>
         )}
         {!blank && !isDesktop && (
-          // `bun run dev` in a real browser has no native side. Say so rather than showing a void.
+          // The standalone Vite renderer has no native side. Say so rather than showing a void.
           <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
             <p className="text-hint text-muted-foreground">{t("browser.desktopOnly")}</p>
           </div>

@@ -9,8 +9,9 @@ Protocol (ACP)** and presents them through a **document-first** UI. One Rust cor
   providers (Grok natively; Claude Code & Codex via official adapters). We implement the client
   loop once and treat each backend as a launch command.
 - **Codex is the template, not opencode.** opencode is now all-TypeScript + Electron. Codex is
-  all-Rust with a `core` + a ratatui `tui` and an SQ/EQ event model. A Rust core lets the Tauri GUI
-  and a ratatui TUI link the same code with no server/serialization boundary.
+  all-Rust with a `core` + a ratatui `tui` and an SQ/EQ event model. The TUI links that core
+  directly; the Electrobun app runs the same graph in a bundled Rust sidecar so the UI host stays
+  in Bun without moving product logic into TypeScript.
 
 ## Shape: a plugin graph, not a program with hooks
 
@@ -43,17 +44,20 @@ only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-pr
    │  permission ask/allow/deny × tool+glob; modes incl. YOLO               │
    │  event      SQ/EQ types (Op in, Event out)                            │
    └───────────────▲───────────────────────────────────────▲──────────────┘
-                   │ tauri::command + ipc::Channel          │ links directly
-        apps/desktop/src-tauri (Rust bridge)          crates/tui (ratatui)  [M3]
+                   │ JSON-lines call + event protocol        │ links directly
+       apps/desktop/src-host (Rust sidecar)            crates/tui (ratatui)  [M3]
                    │
-     apps/desktop/src  (React + Vite + BlockNote)
+       Electrobun typed RPC (Bun main process)
+                   │
+     apps/desktop/src  (React + Vite + BlockNote + sandboxed webviews)
 ```
 
 ## The SQ/EQ interface (`core::event`)
 
 Frontends never touch ACP directly. They push [`Op`]s (NewSession, Prompt, Cancel,
 AnswerPermission, …) and consume [`Event`]s (AgentText, ToolCall, PermissionRequest, TurnEnded, …).
-- Tauri bridge: `Op` via `#[tauri::command]`, `Event` stream via `ipc::Channel`.
+- Electrobun desktop: the renderer makes one typed `call` RPC; the Bun main process relays it to
+  the Rust sidecar, whose reverse event envelopes carry engine and terminal streams.
 - TUI: calls the same core engine in-process, renders `Event`s in its draw loop.
 
 The M1 engine is the piece that consumes `Op`s and, by driving `core::acp`, produces `Event`s. The
@@ -160,7 +164,7 @@ state, not a crash).
 
 ## Milestones
 
-- **M0 (done):** workspace + tested core + Tauri/React/BlockNote scaffold + `/` skill menu.
+- **M0 (done):** workspace + tested core + desktop React/BlockNote scaffold + `/` skill menu.
 - **M1 (done):** engine (Op→Event) with permission parking, SQLite session store + transcript,
   git-worktree manager (creation and the explicit discard/cleanup flow), PTY, disk-backed skill
   library. All offline-tested.
@@ -168,10 +172,10 @@ state, not a crash).
   live transcript, permission modal, embedded terminal, provider/mode pickers.
 - **M3 (done):** ratatui TUI on the same core (session list, transcript, composer + `/` skill
   picker, inline permission prompts, provider/mode cyclers).
-- **M4 (done, minus packaging):** lazy ACP session creation with MCP attach at `session/new`,
+- **M4 (done):** lazy ACP session creation with MCP attach at `session/new`,
   dynamic add/remove skills reflected live in picker + compiler, transcript load on session select.
-  **Remaining:** bundle a Node sidecar (so Claude/Codex adapters need no system Node) + app
-  packaging/notarization — platform-specific, not verifiable in this environment.
+  **Remaining:** bundle a Node sidecar so Claude/Codex adapters need no system Node, plus signed and
+  notarized release automation.
 
 ## Test coverage (offline, no provider binary needed)
 
@@ -184,6 +188,6 @@ Rust crates compile clean (zero warnings).
 
 ```sh
 cargo test -p codetwo-core          # core, offline (mock ACP agent)
-cd apps/desktop && bun install && bun run build   # frontend
-cd apps/desktop && bun run tauri dev              # launch the desktop app (needs a display)
+cd apps/desktop && bun install && bun run build:renderer  # renderer only
+cd apps/desktop && bun run dev                          # build and launch Electrobun
 ```

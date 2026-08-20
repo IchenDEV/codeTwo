@@ -10,9 +10,9 @@ what taking that seriously looks like in a Rust codebase.
 
 ## The problem it replaces
 
-Before: `apps/desktop/src-tauri/src/lib.rs` had a 200-line `setup()` that constructed twenty
-subsystems in one fixed order into an `AppState` struct with twenty fields, and 185 hand-written
-`#[tauri::command]` wrappers that reached into it. Three consequences, all of them structural:
+Before the plugin graph, the desktop host had a 200-line setup that constructed twenty subsystems
+in one fixed order into an `AppState` struct with twenty fields, plus 185 hand-written command
+wrappers that reached into it. Three consequences, all of them structural:
 
 - **Adding a feature meant editing the middle of the app** — the state struct, the setup function,
   the handler table, and the frontend bridge, before writing a line of the feature.
@@ -178,7 +178,7 @@ const graph = await kernelScopes();       // what is loaded, and why something i
 ```
 
 `call` is the extension surface. A plugin that registers `foo.bar` is callable the moment it loads
-— no `#[tauri::command]`, no entry in `generate_handler!`, no new function in `bridge.ts`.
+— no native command wrapper, no dispatch-table entry, no new function in `bridge.ts`.
 
 ## The unified plugin manager
 
@@ -280,8 +280,8 @@ registry.register_arc(Box::new(|| my_engine));  // or replace a built-in by name
 CoreApp::boot_with(config, registry).await?;
 ```
 
-The desktop uses the second form: it needs one different engine constructor (its authenticated
-browser MCP), so it replaces the `engine` plugin's construction step and keeps everything else.
+The desktop sidecar adds only its host-owned automation, event, language-server, and remote
+plugins; product commands still come from the same built-in registry as the TUI and server.
 
 ## Two senses of "plugin"
 
@@ -309,27 +309,24 @@ The application migration is complete:
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
-- The desktop registers five host plugins — `automation`, `browser`, `desktop-events`, `lsp` and
-  `remote` — beside the core registry. Its authenticated browser MCP remains a replacement
-  `engine` builder, the one host-specific construction seam. That engine also declares the browser
-  host service as a requirement, so disabling `browser` unloads the engine and its
-  automation/remote dependents instead of leaving a tool pointed at a dead socket.
-- The Tauri command table contains one entry, `call`. The TypeScript bridge has one native
-  `invoke`, which calls it. There are no compatibility business wrappers or duplicated
-  `AppState` service handles.
+- The Electrobun desktop registers four sidecar plugins — `automation`, `desktop-events`, `lsp`
+  and `remote` — beside the core registry. The default engine stays intact.
+- The renderer exposes one typed `call` request. Electrobun relays it to the sidecar's JSON-lines
+  `call` method, so there are no compatibility business wrappers or duplicated `AppState`
+  service handles.
 
 The `desktop-events` plugin is deliberately host plumbing rather than a business API: it turns
-core broadcast events into Tauri window events and reloads with either source service. Browser
-persistence remains native host state because it backs Tauri webviews, while the authenticated
-broker task, socket cleanup, native webviews, and public command surface are all owned by the
-`browser` plugin scope.
+core broadcasts into sidecar event envelopes; Electrobun forwards those to the renderer. Manual
+browser tabs persist in the renderer and render as sandboxed `<electrobun-webview>` elements.
+The former authenticated agent-browser MCP is not registered because Electrobun's stable
+BrowserView API does not yet supply the screenshot and evaluated-value primitives that contract
+requires; restoring it requires an upstream-capable adapter, not a pretend partial tool.
 
 ### Adding another subsystem
 
 1. Add a `Plugin` implementation and declare every service it consumes in `inject`.
 2. Register all commands, tasks and cleanup on the supplied `Context`.
-3. Add it to the core registry, or to the relevant host registry when it requires host-native
-   types such as `AppHandle`.
+3. Add it to the core registry, or to the sidecar registry when it requires desktop-host services.
 4. Call its `subsystem.verb` commands through `CoreApp::call`; do not add another bridge wrapper.
 5. Test that its commands exist while active and disappear when the plugin or a required
    dependency is disabled.
@@ -338,9 +335,8 @@ Desktop-only registration follows the same loader contract:
 
 ```rust
 let mut registry = codetwo_core::app::plugins::builtin_registry();
-registry.register(move || {
-    BrowserPlugin::new(app_handle.clone(), socket_path.clone(), master_key.clone())
-});
-let config = AppConfig::new(&data_dir).with("browser", PluginEntry::default());
+let events = events.clone();
+registry.register(move || HostEventsPlugin::new(events.clone()));
+let config = AppConfig::new(&data_dir).with("desktop-events", PluginEntry::default());
 let app = CoreApp::boot_with(config, registry).await?;
 ```

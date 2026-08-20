@@ -77,13 +77,12 @@ jobs:
       - name: Build versioned ad-hoc signed DMG
         working-directory: apps/desktop
         env:
+          ELECTROBUN_AD_HOC_SIGN: "1"
+          ELECTROBUN_CREATE_DMG: "1"
+          ELECTROBUN_DEVELOPER_ID: "-"
           NODE_OPTIONS: --max-old-space-size=4096
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -euo pipefail
-          config="$(jq -cn --arg version "$RELEASE_VERSION" \
-            '{version:$version,bundle:{macOS:{signingIdentity:"-"}}}')"
-          bun run tauri build --bundles dmg --config "$config"
+        run: bun run build:app
 
       - name: Verify and stage release package
         shell: bash
@@ -93,9 +92,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          dmg_count="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print | wc -l | tr -d ' ')"
+          dmg_count="$(find apps/desktop/artifacts -maxdepth 1 -name 'stable-macos-arm64-*.dmg' -print | wc -l | tr -d ' ')"
           test "$dmg_count" -eq 1
-          dmg_path="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          dmg_path="$(find apps/desktop/artifacts -maxdepth 1 -name 'stable-macos-arm64-*.dmg' -print -quit)"
           hdiutil verify "$dmg_path"
 
           mount_dir="$(mktemp -d)"
@@ -113,7 +112,7 @@ jobs:
           test -n "$device"
 
           app="$mount_dir/C2.app"
-          executable="$app/Contents/MacOS/codetwo-desktop"
+          executable="$app/Contents/MacOS/launcher"
           info_plist="$app/Contents/Info.plist"
           test -d "$app"
           test -L "$mount_dir/Applications"

@@ -266,7 +266,7 @@ export function ScenePicker({
   const { locale } = useLanguage();
   const toast = useToast();
   // Lossy SKILL.md export (docs/scenes.md §Interop), downloaded as a Blob through a transient
-  // anchor — deliberately no Tauri save-dialog plumbing for a plain text file.
+  // anchor — deliberately no native save-dialog plumbing for a plain text file.
   const exportSkill = async (scene: SceneInfo) => {
     const md = await exportSceneSkillMd(scene.reference);
     if (md === null) return;

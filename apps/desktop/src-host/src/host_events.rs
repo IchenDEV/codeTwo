@@ -1,4 +1,4 @@
-//! Scope-owned forwarding from core broadcasts to Tauri window events.
+//! Scope-owned forwarding from core broadcasts to the desktop host protocol.
 
 use codetwo_core::app::{EventBus, TerminalEvent, TerminalOutputEvent};
 use codetwo_kernel::{
@@ -6,16 +6,17 @@ use codetwo_kernel::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast;
 
+use crate::EventSink;
+
 pub struct HostEventsPlugin {
-    app: AppHandle,
+    host: EventSink,
 }
 
 impl HostEventsPlugin {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app }
+    pub fn new(host: EventSink) -> Self {
+        Self { host }
     }
 }
 
@@ -50,7 +51,7 @@ impl Plugin for HostEventsPlugin {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Forwards core engine and terminal broadcasts to Tauri windows.")
+        Some("Forwards core engine and terminal broadcasts to the desktop renderer.")
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
@@ -58,12 +59,12 @@ impl Plugin for HostEventsPlugin {
             .get::<EventBus>()
             .ok_or_else(|| PluginError::new("event bus is unavailable"))?
             .subscribe();
-        let app = self.app.clone();
+        let host = self.host.clone();
         ctx.spawn(async move {
             loop {
                 match engine_events.recv().await {
                     Ok(event) => {
-                        let _ = app.emit("engine-event", event);
+                        let _ = host.emit("engine-event", event);
                     }
                     Err(broadcast::error::RecvError::Lagged(count)) => {
                         eprintln!("engine-event pump lagged; dropped {count} events");
@@ -73,7 +74,7 @@ impl Plugin for HostEventsPlugin {
             }
         });
 
-        let app = self.app.clone();
+        let host = self.host.clone();
         ctx.on::<TerminalOutputEvent, _>(move |event| {
             let project_path = match &event.realm {
                 CommandRealm::Global => None,
@@ -81,7 +82,7 @@ impl Plugin for HostEventsPlugin {
             };
             match &event.event {
                 TerminalEvent::Data { id, data } => {
-                    let _ = app.emit(
+                    let _ = host.emit(
                         "pty-output",
                         PtyOutput {
                             id: id.clone(),
@@ -91,7 +92,7 @@ impl Plugin for HostEventsPlugin {
                     );
                 }
                 TerminalEvent::Title { id, title } => {
-                    let _ = app.emit(
+                    let _ = host.emit(
                         "pty-title",
                         PtyTitle {
                             id: id.clone(),
@@ -101,7 +102,7 @@ impl Plugin for HostEventsPlugin {
                     );
                 }
                 TerminalEvent::Exit { id } => {
-                    let _ = app.emit(
+                    let _ = host.emit(
                         "pty-exit",
                         PtyExit {
                             id: id.clone(),

@@ -33,7 +33,7 @@
 //! - **Reloadability.** Reconfigure `store` and the engine — which was built against it — is torn
 //!   down and rebuilt automatically. Nothing holds a stale handle, because nothing is asked to
 //!   handle its dependencies changing.
-//! - **One extension surface.** A plugin's commands *are* the app's public API. The Tauri bridge
+//! - **One extension surface.** A plugin's commands *are* the app's public API. The desktop bridge
 //!   exposes only [`CoreApp::call`]; in-process hosts can additionally consume typed services for
 //!   streaming protocols without constructing a second copy of the subsystem.
 //! - **Plugins that are not ours.** [`protocol`] lets a plugin be a process in any language, whose

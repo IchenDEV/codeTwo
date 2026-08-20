@@ -46,7 +46,7 @@ impl Event for WorkspaceChanged {
 /// One event from the agent loop, republished on the kernel bus.
 ///
 /// [`crate::app::EventBus`] carries the same stream over a broadcast channel for consumers that
-/// want a receiver (the Tauri pump, the remote server). This carries it to *plugins*, so a
+/// want a receiver (the desktop event pump, the remote server). This carries it to *plugins*, so a
 /// listener is owned by a scope and disappears when that plugin unloads.
 pub struct EngineEvent(pub crate::event::Event);
 

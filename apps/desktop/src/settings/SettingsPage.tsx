@@ -372,7 +372,7 @@ export function SettingsPage({
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
       <aside className="glass-rail flex w-56 shrink-0 flex-col">
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
-        <div data-tauri-drag-region className="settings-titlebar shrink-0" />
+        <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
           {NAV.filter(({ id }) => memoryEnabled || id !== "memory").map(
             ({ id, icon: Icon, labelKey, label }) => (
@@ -407,13 +407,12 @@ export function SettingsPage({
         {/* The same 40px bar as the main shell's header, border and all. */}
         <header
           data-settings-titlebar
-          data-tauri-drag-region
-          className="settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
+          className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
         >
-          <span data-tauri-drag-region className="text-ui font-medium text-muted-foreground">
+          <span className="electrobun-webkit-app-region-drag text-ui font-medium text-muted-foreground">
             {t("settings.title")}
           </span>
-          <div data-tauri-drag-region className="flex-1" />
+          <div className="electrobun-webkit-app-region-drag flex-1" />
           {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
             <Button
               variant="ghost"

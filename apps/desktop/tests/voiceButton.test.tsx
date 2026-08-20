@@ -33,7 +33,7 @@ class FakeRecognition {
 }
 dom.window.SpeechRecognition = FakeRecognition;
 
-// Real bridge: outside Tauri `isDesktop` is false, so the button picks Web Speech up from window.
+// Real bridge: outside Electrobun `isDesktop` is false, so the button picks Web Speech up from window.
 const { VoiceButton, makeTranscriptHandler } = await import("../src/voice/VoiceButton");
 const { TooltipProvider } = await import("../src/components/ui/tooltip");
 

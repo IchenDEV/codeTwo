@@ -52,8 +52,8 @@ The first dictation raises two macOS prompts — microphone and speech recogniti
   `CODETWO_TRANSCRIBE_CMD` with an absolute path.
 - **`CODETWO_TRANSCRIBE_CMD` set in your shell profile?** A GUI app doesn't read that. Launch
   C2 from a terminal, or rely on route 3.
-- **Running `tauri dev`?** The dev binary isn't bundled, so the OS prompts are attributed to your
-  terminal rather than to C2. Route 3 needs the bundled app.
+- **Running only the Vite renderer?** It has no native host, so route 3 is unavailable. Use
+  `bun run dev` or `script/build_and_run.sh` to run the bundled Electrobun app.
 
 ## Privacy
 

@@ -14,7 +14,7 @@ Phase 2 migrates every desktop surface in one coordinated change and removes the
 Open the development-only preview with:
 
 ```text
-bun run dev
+bun run dev:renderer
 http://localhost:1420/?design-system=1
 ```
 
@@ -212,7 +212,7 @@ Every exception is file-scoped with a reason in `scripts/design-system-allowlist
 ## Accessibility
 
 Version 1 includes Reduced Motion, Reduced Transparency, Increased Contrast, and Bold Text. Bold
-Text is represented by `data-ds-bold-text` until Phase 2 wires the native Tauri preference. There
+Text is represented by `data-ds-bold-text` until Phase 2 wires the native desktop preference. There
 is no independent UI zoom in v1; the product retains one compact density. Semantic colors are
 checked in both schemes by `bun run check:design`.
 

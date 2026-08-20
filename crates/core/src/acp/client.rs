@@ -13,7 +13,7 @@ use crate::error::AcpError;
 
 pub struct AcpClient {
     conn: Arc<Connection>,
-    // Wrapped in a std Mutex so `AcpClient` is `Sync` (needed to live in Tauri state / the engine's
+    // Wrapped in a std Mutex so `AcpClient` is `Sync` (needed to live in desktop host state / the engine's
     // shared session map). We only touch it to kill the child on drop.
     child: Option<Mutex<Child>>,
     terminated: AtomicBool,
