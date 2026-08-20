@@ -1,7 +1,7 @@
 use codetwo_core::{
-    AgentId, ProviderConfiguration, ProviderId, ResultContract, Store, StoreError, Task,
-    TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    AgentId, OrchestrationEventKind, ProviderConfiguration, ProviderId, ResultContract, Store,
+    StoreError, Task, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemAttemptStatus,
+    WorkItemEdge, WorkItemId, WorkItemStatus,
 };
 
 fn task() -> Task {
@@ -108,7 +108,9 @@ fn task_graph_with_work_items_and_edges_round_trips() {
         }],
     };
 
-    store.put_task_graph(&task.id, &graph, 200).unwrap();
+    store
+        .apply_task_graph(&task.id, 0, &graph, "Initial graph", 200)
+        .unwrap();
 
     assert_eq!(store.get_task_graph(&task.id).unwrap(), graph);
 }
@@ -119,13 +121,15 @@ fn store_rejects_a_second_running_executor_attempt_for_the_same_task() {
     let task = task();
     store.create_task(&task, 100).unwrap();
     store
-        .put_task_graph(
+        .apply_task_graph(
             &task.id,
+            0,
             &TaskGraph {
                 revision: 1,
                 work_items: vec![work_item("work-1", "First"), work_item("work-2", "Second")],
                 edges: Vec::new(),
             },
+            "Initial graph",
             200,
         )
         .unwrap();
@@ -156,13 +160,15 @@ fn completing_an_attempt_releases_the_serial_executor_slot() {
     let task = task();
     store.create_task(&task, 100).unwrap();
     store
-        .put_task_graph(
+        .apply_task_graph(
             &task.id,
+            0,
             &TaskGraph {
                 revision: 1,
                 work_items: vec![work_item("work-1", "First"), work_item("work-2", "Second")],
                 edges: Vec::new(),
             },
+            "Initial graph",
             200,
         )
         .unwrap();
@@ -196,4 +202,39 @@ fn completing_an_attempt_releases_the_serial_executor_slot() {
     assert_eq!(completed.status, WorkItemAttemptStatus::Succeeded);
     assert_eq!(completed.finished_at_ms, Some(400));
     assert!(second.is_ok());
+}
+
+#[test]
+fn stale_graph_patch_is_rejected_and_does_not_append_an_event() {
+    let store = Store::open_in_memory().unwrap();
+    let task = task();
+    store.create_task(&task, 100).unwrap();
+    let graph = TaskGraph {
+        revision: 1,
+        work_items: vec![work_item("work-1", "First")],
+        edges: Vec::new(),
+    };
+    store
+        .apply_task_graph(&task.id, 0, &graph, "Initial graph", 200)
+        .unwrap();
+
+    let stale = store.apply_task_graph(&task.id, 0, &graph, "Stale retry", 201);
+    let events = store.list_orchestration_events(&task.id).unwrap();
+
+    assert!(matches!(
+        stale,
+        Err(StoreError::TaskRevisionConflict {
+            expected: 0,
+            actual: 1,
+            ..
+        })
+    ));
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].kind, OrchestrationEventKind::TaskCreated);
+    assert_eq!(
+        events[1].kind,
+        OrchestrationEventKind::TaskGraphChanged {
+            reason: "Initial graph".into()
+        }
+    );
 }

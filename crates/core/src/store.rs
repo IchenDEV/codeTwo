@@ -68,6 +68,12 @@ pub enum StoreError {
         attempt: u32,
         reason: String,
     },
+    #[error("task revision conflict for {task_id}: expected {expected}, found {actual}")]
+    TaskRevisionConflict {
+        task_id: String,
+        expected: u64,
+        actual: u64,
+    },
 }
 
 const SCHEMA: &str = "

@@ -9,8 +9,8 @@ use rusqlite::OptionalExtension;
 
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, Task, TaskGraph, TaskId, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId,
+    AgentId, OrchestrationEvent, OrchestrationEventKind, Task, TaskGraph, TaskId, WorkItemAttempt,
+    WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -76,6 +76,17 @@ CREATE TABLE IF NOT EXISTS task_work_item_attempts_v2 (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS task_one_running_executor_v2
   ON task_work_item_attempts_v2(task_id) WHERE status='running';
+CREATE TABLE IF NOT EXISTS task_orchestration_events_v2 (
+  task_id        TEXT NOT NULL,
+  sequence       INTEGER NOT NULL,
+  graph_revision INTEGER NOT NULL,
+  kind_json      TEXT NOT NULL,
+  created_at_ms  INTEGER NOT NULL,
+  PRIMARY KEY (task_id, sequence),
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
+);
+CREATE INDEX IF NOT EXISTS task_orchestration_events_v2_order
+  ON task_orchestration_events_v2(task_id, sequence);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +103,13 @@ pub(crate) fn install(conn: &rusqlite::Connection) -> Result<(), StoreError> {
         "INSERT OR IGNORE INTO task_graph_revisions_v2(task_id,revision,updated_at_ms)
          SELECT id,0,created_at_ms FROM tasks_v2",
         [],
+    )?;
+    let created = serde_json::to_string(&OrchestrationEventKind::TaskCreated)?;
+    conn.execute(
+        "INSERT OR IGNORE INTO task_orchestration_events_v2
+           (task_id,sequence,graph_revision,kind_json,created_at_ms)
+         SELECT id,1,0,?1,created_at_ms FROM tasks_v2",
+        [created],
     )?;
     Ok(())
 }
@@ -121,6 +139,16 @@ impl Store {
             "INSERT INTO task_graph_revisions_v2(task_id,revision,updated_at_ms)
              VALUES (?1,0,?2)",
             rusqlite::params![task.id.as_str(), now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,1,0,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&OrchestrationEventKind::TaskCreated)?,
+                now_ms,
+            ],
         )?;
         tx.execute(
             "INSERT INTO task_result_contracts_v2
@@ -181,13 +209,24 @@ impl Store {
         }))
     }
 
-    pub fn put_task_graph(
+    pub fn apply_task_graph(
         &self,
         task_id: &TaskId,
+        expected_revision: u64,
         graph: &TaskGraph,
+        reason: &str,
         now_ms: i64,
-    ) -> Result<(), StoreError> {
+    ) -> Result<OrchestrationEvent, StoreError> {
         validate_graph(graph)?;
+        let next_revision = expected_revision.checked_add(1).ok_or_else(|| {
+            StoreError::InvalidTaskGraph("expected revision cannot be incremented".into())
+        })?;
+        if graph.revision != next_revision {
+            return Err(StoreError::InvalidTaskGraph(format!(
+                "next revision must be {next_revision}, got {}",
+                graph.revision
+            )));
+        }
         let revision = i64::try_from(graph.revision)
             .map_err(|_| StoreError::InvalidTaskGraph("revision exceeds SQLite range".into()))?;
         let mut conn = self.conn.lock().unwrap();
@@ -200,6 +239,18 @@ impl Store {
         if !task_exists {
             return Err(StoreError::TaskNotFound {
                 task_id: task_id.as_str().to_string(),
+            });
+        }
+        let actual_revision: i64 = tx.query_row(
+            "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if actual_revision as u64 != expected_revision {
+            return Err(StoreError::TaskRevisionConflict {
+                task_id: task_id.as_str().to_string(),
+                expected: expected_revision,
+                actual: actual_revision as u64,
             });
         }
         let running: bool = tx.query_row(
@@ -259,8 +310,35 @@ impl Store {
             "UPDATE tasks_v2 SET updated_at_ms=?2 WHERE id=?1",
             rusqlite::params![task_id.as_str(), now_ms],
         )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::TaskGraphChanged {
+            reason: reason.to_string(),
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
         tx.commit()?;
-        Ok(())
+        Ok(OrchestrationEvent {
+            task_id: task_id.clone(),
+            sequence: sequence as u64,
+            graph_revision: graph.revision,
+            kind,
+            created_at_ms: now_ms,
+        })
     }
 
     pub fn get_task_graph(&self, task_id: &TaskId) -> Result<TaskGraph, StoreError> {
@@ -444,6 +522,38 @@ impl Store {
             started_at_ms,
             finished_at_ms: Some(now_ms),
         })
+    }
+
+    pub fn list_orchestration_events(
+        &self,
+        task_id: &TaskId,
+    ) -> Result<Vec<OrchestrationEvent>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT sequence,graph_revision,kind_json,created_at_ms
+             FROM task_orchestration_events_v2
+             WHERE task_id=?1 ORDER BY sequence ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?;
+        let mut events = Vec::new();
+        for row in rows {
+            let (sequence, graph_revision, kind, created_at_ms) = row?;
+            events.push(OrchestrationEvent {
+                task_id: task_id.clone(),
+                sequence: sequence as u64,
+                graph_revision: graph_revision as u64,
+                kind: serde_json::from_str(&kind)?,
+                created_at_ms,
+            });
+        }
+        Ok(events)
     }
 }
 

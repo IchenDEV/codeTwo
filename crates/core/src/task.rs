@@ -173,6 +173,23 @@ pub struct TaskGraph {
     pub edges: Vec<WorkItemEdge>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OrchestrationEventKind {
+    TaskCreated,
+    TaskGraphChanged { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OrchestrationEvent {
+    pub task_id: TaskId,
+    pub sequence: u64,
+    pub graph_revision: u64,
+    pub kind: OrchestrationEventKind,
+    pub created_at_ms: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentRole {
