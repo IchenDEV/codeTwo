@@ -1,4 +1,10 @@
-import type { CodeTwoRPC, DesktopEvent, OpenDialogOptions, SaveDialogOptions } from "./rpc";
+import type {
+  AppUpdateStatus,
+  CodeTwoRPC,
+  DesktopEvent,
+  OpenDialogOptions,
+  SaveDialogOptions,
+} from "./rpc";
 
 type EventListener = (payload: unknown) => void;
 
@@ -87,4 +93,12 @@ export async function desktopSetBrowserZoom(webviewId: number, factor: number): 
 
 export async function desktopOpenDevtools(): Promise<void> {
   await (await client()).request.openDevtools();
+}
+
+export async function desktopUpdateStatus(): Promise<AppUpdateStatus> {
+  return (await client()).request.updateStatus();
+}
+
+export async function desktopCheckForUpdates(): Promise<AppUpdateStatus> {
+  return (await client()).request.updateCheck();
 }

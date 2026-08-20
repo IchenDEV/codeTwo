@@ -2,6 +2,10 @@
 /target
 **/target
 
+# SwiftPM
+**/.build
+**/.swiftpm
+
 # Node / Bun
 node_modules
 dist

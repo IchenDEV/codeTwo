@@ -22,6 +22,7 @@ export default {
     mac: {
       createDmg: process.env.ELECTROBUN_CREATE_DMG === "1",
       codesign: process.env.ELECTROBUN_AD_HOC_SIGN === "1",
+      notarize: process.env.ELECTROBUN_NOTARIZE === "1",
       bundleCEF: false,
       defaultRenderer: "native",
       icons: "assets/codeTwo.iconset",
