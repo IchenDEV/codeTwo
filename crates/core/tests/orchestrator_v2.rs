@@ -1,7 +1,7 @@
 use codetwo_core::{
     apply_orchestration_patch, AgentSkillContribution, AgentSkillOrigin, AgentSkillRef,
     AgentSkillResolver, ExecutorAssignment, ExecutorOutcome, GraphOperation, InMemoryExecutor,
-    InMemoryPlanner, OrchestrationPatch, OrchestrationValidationError, Orchestrator,
+    InMemoryPlanner, LoopCeilings, OrchestrationPatch, OrchestrationValidationError, Orchestrator,
     ProviderConfiguration, ProviderId, ResultContract, SceneCatalogV2, SceneOrigin, SceneRef,
     Session, Skill, SkillPayload, Store, Task, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem,
     WorkItemId, WorkItemStatus,
@@ -358,4 +358,80 @@ async fn consecutive_failures_pause_the_task_before_a_fourth_execution() {
         orchestrator.execute_next(&task.id, 800).await,
         Err(codetwo_core::OrchestratorError::TaskPaused { .. })
     ));
+}
+
+#[tokio::test]
+async fn repeated_replanning_without_evidence_pauses_instead_of_inventing_a_flow() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let task = Task {
+        id: TaskId::new("task-no-progress"),
+        status: TaskStatus::Active,
+        result_contract: ResultContract {
+            goal: "Make observable progress".into(),
+            required_deliverables: vec!["Result".into()],
+            completion_conditions: vec!["done".into()],
+            boundaries: Vec::new(),
+            known_risks: Vec::new(),
+            unresolved_facts: Vec::new(),
+        },
+        provider_configuration: ProviderConfiguration {
+            provider: ProviderId::Codex,
+            model: None,
+            reasoning_effort: None,
+        },
+        budget: TaskBudget {
+            max_cost_microusd: None,
+            max_tokens: None,
+            max_duration_seconds: None,
+        },
+    };
+    store.create_task(&task, 100).unwrap();
+    let scenes = Arc::new(SceneCatalogV2::builtin());
+    let skills = Arc::new(authentic_skill_resolver());
+    let skill = skills.resolve("review").unwrap().reference.clone();
+    let initial = work_item("official:software-development", skill);
+    let mut churned = initial.clone();
+    churned.reason = "Planner rewrote the reason without producing evidence".into();
+    let planner = Arc::new(InMemoryPlanner::new([
+        OrchestrationPatch {
+            expected_revision: 0,
+            reason: "Propose initial work".into(),
+            operations: vec![GraphOperation::Add {
+                work_item: initial,
+                depends_on: Vec::new(),
+            }],
+        },
+        OrchestrationPatch {
+            expected_revision: 1,
+            reason: "Rewrite the proposal without evidence".into(),
+            operations: vec![GraphOperation::Update { work_item: churned }],
+        },
+    ]));
+    let executor = Arc::new(InMemoryExecutor::new(
+        ExecutorAssignment {
+            agent_id: "unused-agent".into(),
+            session_id: "unused-session".into(),
+        },
+        [],
+    ));
+    let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills)
+        .with_loop_ceilings(LoopCeilings {
+            consecutive_failures: 100,
+            repeated_work_item_attempts: 100,
+            repeated_agent_skill_set_attempts: 100,
+            replans_without_progress: 1,
+            total_attempts_without_cost: 100,
+        });
+
+    orchestrator.plan_once(&task.id, 200).await.unwrap();
+    orchestrator.plan_once(&task.id, 300).await.unwrap();
+
+    let snapshot = orchestrator.snapshot(&task.id).unwrap();
+    assert_eq!(snapshot.status, TaskStatus::Paused);
+    assert_eq!(snapshot.loop_guard.replans_without_progress, 1);
+    assert!(snapshot
+        .loop_guard
+        .pause_reason
+        .as_deref()
+        .is_some_and(|reason| reason.contains("replans without new completion evidence")));
 }
