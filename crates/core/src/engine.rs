@@ -149,6 +149,7 @@ impl PermissionRouter {
 /// parts, and resolves permissions.
 pub struct SessionHandler {
     session_id: SessionId,
+    provider: ProviderId,
     events: mpsc::UnboundedSender<Event>,
     policy: Arc<Mutex<PermissionPolicy>>,
     router: PermissionRouter,
@@ -164,6 +165,7 @@ pub struct SessionHandler {
 impl SessionHandler {
     pub fn new(
         session_id: SessionId,
+        provider: ProviderId,
         events: mpsc::UnboundedSender<Event>,
         policy: Arc<Mutex<PermissionPolicy>>,
         router: PermissionRouter,
@@ -171,6 +173,7 @@ impl SessionHandler {
     ) -> Self {
         Self {
             session_id,
+            provider,
             events,
             policy,
             router,
@@ -457,6 +460,138 @@ fn config_option_infos(options: &[crate::acp::wire::SessionConfigOption]) -> Vec
                 .collect(),
         })
         .collect()
+}
+
+/// Normalize only provider values that are protocol-valid aliases for the same real behavior.
+/// glm-acp-agent 1.6 currently exposes six accepted strings for GLM-5.3, while Z.AI documents
+/// three distinct service levels; presenting all six would give the slider fake precision.
+fn provider_config_option_infos(
+    provider: &ProviderId,
+    options: &[crate::acp::wire::SessionConfigOption],
+) -> Vec<ConfigOptionInfo> {
+    let mut infos = config_option_infos(options);
+    let is_effort = |option: &ConfigOptionInfo| {
+        option.category.as_deref() == Some("thought_level")
+            || option.id == "effort"
+            || option.id == "reasoning_effort"
+    };
+    if *provider == ProviderId::Pi {
+        // pi-acp 0.0.33 advertises the same six strings for every model and omits Pi's supported
+        // `max` value. Until the adapter consumes Pi's model-specific thinking-level RPC, hiding
+        // that known-false menu is more truthful than presenting a selectable fake capability.
+        infos.retain(|option| !is_effort(option));
+        return infos;
+    }
+    if *provider != ProviderId::ZCode {
+        return infos;
+    }
+    let is_glm_53 = infos
+        .iter()
+        .find(|option| option.category.as_deref() == Some("model") || option.id == "model")
+        .map(|option| {
+            option.current.starts_with("glm-5.3")
+                || option.current.starts_with("glm-5.2")
+                || option.current.starts_with("glm-5.1")
+        })
+        .unwrap_or(false);
+    if !is_glm_53 {
+        return infos;
+    }
+    if let Some(effort) = infos.iter_mut().find(|option| is_effort(option)) {
+        effort.current = match effort.current.as_str() {
+            "minimal" | "light" => "low",
+            "medium" => "high",
+            "xhigh" | "ultra" => "max",
+            current => current,
+        }
+        .to_string();
+        effort
+            .choices
+            .retain(|choice| matches!(choice.id.as_str(), "low" | "high" | "max"));
+    }
+    infos
+}
+
+/// Some agents expose a model-specific effort ladder before ACP's config-options surface. Grok's
+/// current ACP server puts it in `ModelInfo._meta.reasoningEfforts` and switches it through the
+/// legacy `session/set_mode` method. Turn that provider-owned metadata into the same frontend shape
+/// without inventing levels or applying one provider's matrix to another.
+fn reasoning_option_from_models(
+    models: Option<&crate::acp::wire::SessionModelState>,
+) -> Option<ConfigOptionInfo> {
+    let models = models?;
+    let model = models
+        .available_models
+        .iter()
+        .find(|model| model.model_id == models.current_model_id)
+        .or_else(|| models.available_models.first())?;
+    let raw = model.meta.get("reasoningEfforts")?.as_array()?;
+    let mut choices: Vec<ModelChoice> = raw
+        .iter()
+        .filter_map(|effort| {
+            let id = effort
+                .get("value")
+                .or_else(|| effort.get("id"))?
+                .as_str()?
+                .to_string();
+            let name = effort
+                .get("label")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(&id)
+                .to_string();
+            let description = effort
+                .get("description")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            Some(ModelChoice {
+                id,
+                name,
+                description,
+            })
+        })
+        .collect();
+    if choices.len() < 2 {
+        return None;
+    }
+    const ORDER: [&str; 9] = [
+        "off", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+    ];
+    choices.sort_by_key(|choice| {
+        ORDER
+            .iter()
+            .position(|effort| *effort == choice.id)
+            .unwrap_or(ORDER.len())
+    });
+    let current = model
+        .meta
+        .get("reasoningEffort")
+        .and_then(serde_json::Value::as_str)
+        .filter(|current| choices.iter().any(|choice| choice.id == *current))
+        .map(str::to_string)
+        .or_else(|| {
+            raw.iter().find_map(|effort| {
+                effort
+                    .get("default")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+                    .then(|| {
+                        effort
+                            .get("value")
+                            .or_else(|| effort.get("id"))
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                    })
+                    .flatten()
+            })
+        })
+        .unwrap_or_else(|| choices[0].id.clone());
+    Some(ConfigOptionInfo {
+        id: "reasoning_effort".into(),
+        name: "Reasoning Effort".into(),
+        category: Some("thought_level".into()),
+        current,
+        choices,
+    })
 }
 
 /// The current model implied by a config option set, for the session record: the display name of
@@ -888,6 +1023,7 @@ mod usage_update_tests {
     use crate::engine::PermissionRouter;
     use crate::event::Event;
     use crate::permission::PermissionPolicy;
+    use crate::provider::ProviderId;
     use tokio::sync::mpsc;
 
     #[tokio::test]
@@ -895,6 +1031,7 @@ mod usage_update_tests {
         let (events, mut received) = mpsc::unbounded_channel();
         let handler = SessionHandler::new(
             "session-1".into(),
+            ProviderId::Grok,
             events,
             Arc::new(Mutex::new(PermissionPolicy::default())),
             PermissionRouter::default(),
@@ -1112,7 +1249,7 @@ impl ClientHandler for SessionHandler {
             SessionUpdate::ConfigOptionUpdate { config_options } => (
                 Some(Event::ConfigOptions {
                     session,
-                    options: config_option_infos(&config_options),
+                    options: provider_config_option_infos(&self.provider, &config_options),
                 }),
                 None,
                 Vec::new(),
@@ -1341,6 +1478,10 @@ struct SessionRuntime {
     /// [`builtin_models`] for its provider when it reports none — which is most of them today,
     /// since the ACP model API is UNSTABLE and widely unimplemented.
     models: Vec<ModelChoice>,
+    /// Last complete selector set received from the agent. Most providers return a replacement
+    /// set after each change; Grok's legacy mode method returns `{}`, so its metadata-derived
+    /// effort option is updated here after a successful switch.
+    config_options: Vec<ConfigOptionInfo>,
     /// Whether [`SessionRuntime::models`] came from the agent rather than our built-in list. A
     /// built-in choice is one the agent never advertised, so it's applied on a best-effort
     /// `session/set_model` and reported honestly when the agent won't take it.
@@ -1802,7 +1943,9 @@ impl Engine {
             Ok(_) => true,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
             Err(error) => {
-                return Err(format!("couldn't inspect session worktree at {root}: {error}"))
+                return Err(format!(
+                    "couldn't inspect session worktree at {root}: {error}"
+                ))
             }
         };
         if checkout_present {
@@ -2030,8 +2173,7 @@ impl Engine {
                 continue;
             };
             let recorded_path = std::path::PathBuf::from(recorded);
-            let recorded_canonical =
-                std::fs::canonicalize(&recorded_path).unwrap_or(recorded_path);
+            let recorded_canonical = std::fs::canonicalize(&recorded_path).unwrap_or(recorded_path);
             if recorded_canonical == target && !session.worktree_discarded {
                 return Err(format!(
                     "refusing to discard {}: it belongs to session “{}”; discard it from that session instead",
@@ -2069,8 +2211,9 @@ impl Engine {
             None => {
                 // Git no longer knows this directory; it exists only inside our own container and
                 // no session claims it, so plain removal is the only cleanup left.
-                std::fs::remove_dir_all(&target)
-                    .map_err(|error| format!("couldn't remove stale worktree directory: {error}"))?;
+                std::fs::remove_dir_all(&target).map_err(|error| {
+                    format!("couldn't remove stale worktree directory: {error}")
+                })?;
                 let _ = std::fs::remove_dir(&container);
                 Ok(crate::worktree::DiscardedWorktree {
                     removed_checkout: true,
@@ -2164,6 +2307,7 @@ impl Engine {
         }));
         let handler = Arc::new(SessionHandler::new(
             id.to_string(),
+            sess.provider.clone(),
             self.state.events.clone(),
             policy.clone(),
             self.state.router.clone(),
@@ -2198,6 +2342,7 @@ impl Engine {
                 cwd: cwd.clone(),
                 policy,
                 models: models.clone(),
+                config_options: Vec::new(),
                 models_reported: false,
             },
         );
@@ -2410,6 +2555,7 @@ impl Engine {
                 }));
                 let handler = Arc::new(SessionHandler::new(
                     sess.id.clone(),
+                    sess.provider.clone(),
                     self.state.events.clone(),
                     policy.clone(),
                     self.state.router.clone(),
@@ -2513,6 +2659,7 @@ impl Engine {
                         cwd: cwd_stored.clone(),
                         policy,
                         models: models.clone(),
+                        config_options: Vec::new(),
                         models_reported: false,
                     },
                 );
@@ -2808,13 +2955,14 @@ impl Engine {
                         compiled.prompt = format!("{preamble}\n\n{}", compiled.prompt);
                     }
                 }
-                let is_codex = {
+                let current_provider = {
                     let sessions = self.state.sessions.lock().unwrap();
                     sessions
                         .get(&session)
-                        .map(|runtime| runtime.session.provider == ProviderId::Codex)
-                        .unwrap_or(false)
+                        .map(|runtime| runtime.session.provider.clone())
+                        .unwrap_or_else(|| ProviderId::Custom("unknown".into()))
                 };
+                let is_codex = current_provider == ProviderId::Codex;
                 if let Some(config) = &self.state.desktop_mcp {
                     let server = config.scene_server_for_session(&session);
                     if !compiled
@@ -3002,6 +3150,22 @@ impl Engine {
                         replaying.store(false, Ordering::SeqCst);
                         match loaded {
                             Ok(resp) => {
+                                let mut restored_options = resp
+                                    .config_options
+                                    .as_deref()
+                                    .map(|options| {
+                                        provider_config_option_infos(&current_provider, options)
+                                    })
+                                    .unwrap_or_default();
+                                if !restored_options.iter().any(|option| {
+                                    option.category.as_deref() == Some("thought_level")
+                                }) {
+                                    if let Some(option) =
+                                        reasoning_option_from_models(resp.models.as_ref())
+                                    {
+                                        restored_options.push(option);
+                                    }
+                                }
                                 let (models, current, options) = {
                                     let mut map = self.state.sessions.lock().unwrap();
                                     let mut models = Vec::new();
@@ -3025,13 +3189,9 @@ impl Engine {
                                             current = m.current_model_id.clone();
                                         }
                                         models = r.models.clone();
+                                        r.config_options = restored_options.clone();
                                     }
-                                    let options = resp
-                                        .config_options
-                                        .as_deref()
-                                        .map(config_option_infos)
-                                        .unwrap_or_default();
-                                    (models, current, options)
+                                    (models, current, restored_options)
                                 };
                                 if !models.is_empty() {
                                     self.emit(Event::Models {
@@ -3105,8 +3265,20 @@ impl Engine {
                             let mut options = resp
                                 .config_options
                                 .as_deref()
-                                .map(config_option_infos)
+                                .map(|options| {
+                                    provider_config_option_infos(&current_provider, options)
+                                })
                                 .unwrap_or_default();
+                            if !options
+                                .iter()
+                                .any(|option| option.category.as_deref() == Some("thought_level"))
+                            {
+                                if let Some(option) =
+                                    reasoning_option_from_models(resp.models.as_ref())
+                                {
+                                    options.push(option);
+                                }
+                            }
                             let option_model = current_model_from_options(&options);
 
                             // A model chosen before this point had no ACP session to be sent to,
@@ -3173,6 +3345,12 @@ impl Engine {
                                         });
                                     }
                                 }
+                            }
+
+                            if let Some(runtime) =
+                                self.state.sessions.lock().unwrap().get_mut(&session)
+                            {
+                                runtime.config_options = options.clone();
                             }
 
                             if !models.is_empty() {
@@ -3530,10 +3708,16 @@ impl Engine {
             } => {
                 let target = {
                     let map = self.state.sessions.lock().unwrap();
-                    map.get(&session)
-                        .map(|r| (r.client.clone(), r.acp_session_id.clone()))
+                    map.get(&session).map(|r| {
+                        (
+                            r.client.clone(),
+                            r.acp_session_id.clone(),
+                            r.session.provider.clone(),
+                            r.config_options.clone(),
+                        )
+                    })
                 };
-                let Some((client, Some(acp_sid))) = target else {
+                let Some((client, Some(acp_sid), provider, previous_options)) = target else {
                     // No live ACP session yet (fresh or resumed): nothing to switch on. The UI's
                     // pickers are populated by the agent, so this is a "try again after the first
                     // prompt" state, not a crash.
@@ -3545,15 +3729,49 @@ impl Engine {
                     });
                     return Ok(());
                 };
+
+                // Grok's current ACP extension advertises effort in ModelInfo metadata and uses
+                // the legacy mode method to change it. Keep the generic frontend contract while
+                // sending the method this provider actually implements.
+                if provider == ProviderId::Grok && config_id == "reasoning_effort" {
+                    match client.set_mode(&acp_sid, &value).await {
+                        Ok(()) => {
+                            let mut options = previous_options;
+                            if let Some(option) = options.iter_mut().find(|option| {
+                                option.id == config_id
+                                    && option.choices.iter().any(|choice| choice.id == value)
+                            }) {
+                                option.current = value;
+                            }
+                            if let Some(runtime) =
+                                self.state.sessions.lock().unwrap().get_mut(&session)
+                            {
+                                runtime.config_options = options.clone();
+                            }
+                            self.emit(Event::ConfigOptions { session, options });
+                        }
+                        Err(e) => self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!("reasoning effort can't be changed here: {e}"),
+                            terminal: false,
+                            request_id: None,
+                        }),
+                    }
+                    return Ok(());
+                }
+
                 match client.set_config_option(&acp_sid, &config_id, &value).await {
                     Ok(options) => {
-                        let options = config_option_infos(&options);
-                        if let Some(model) = current_model_from_options(&options) {
+                        let options = provider_config_option_infos(&provider, &options);
+                        {
                             let mut map = self.state.sessions.lock().unwrap();
                             if let Some(rt) = map.get_mut(&session) {
-                                rt.session.model = Some(model);
-                                if let Some(store) = &self.state.store {
-                                    let _ = store.upsert_session(&rt.session);
+                                rt.config_options = options.clone();
+                                if let Some(model) = current_model_from_options(&options) {
+                                    rt.session.model = Some(model);
+                                    if let Some(store) = &self.state.store {
+                                        let _ = store.upsert_session(&rt.session);
+                                    }
                                 }
                             }
                         }
@@ -4043,8 +4261,12 @@ mod cwd_tests {
 
 #[cfg(test)]
 mod model_option_tests {
-    use super::reflect_flat_model_in_options;
+    use super::{
+        provider_config_option_infos, reasoning_option_from_models, reflect_flat_model_in_options,
+    };
+    use crate::acp::wire::{ModelInfo, SessionModelState};
     use crate::event::{ConfigOptionInfo, ModelChoice};
+    use crate::provider::ProviderId;
 
     fn choice(id: &str) -> ModelChoice {
         ModelChoice {
@@ -4077,6 +4299,105 @@ mod model_option_tests {
 
         assert_eq!(options[0].current, "gpt-5.6-terra");
         assert_eq!(options[1].current, "high");
+    }
+
+    #[test]
+    fn provider_model_metadata_supplies_only_its_own_effort_ladder() {
+        let models = SessionModelState {
+            current_model_id: "grok-4.6".into(),
+            available_models: vec![ModelInfo {
+                model_id: "grok-4.6".into(),
+                name: "Grok 4.6".into(),
+                description: None,
+                meta: serde_json::json!({
+                    "reasoningEffort": "xhigh",
+                    "reasoningEfforts": [
+                        {"value":"xhigh","label":"Extra High Effort"},
+                        {"value":"high","label":"High Effort","default":true},
+                        {"value":"medium","label":"Medium Effort"},
+                        {"value":"low","label":"Low Effort"}
+                    ]
+                }),
+            }],
+        };
+
+        let option = reasoning_option_from_models(Some(&models)).expect("effort metadata");
+        assert_eq!(option.current, "xhigh");
+        assert_eq!(
+            option
+                .choices
+                .iter()
+                .map(|choice| choice.id.as_str())
+                .collect::<Vec<_>>(),
+            ["low", "medium", "high", "xhigh"]
+        );
+    }
+
+    #[test]
+    fn glm_53_aliases_collapse_to_three_real_service_levels() {
+        let wire = serde_json::from_value::<Vec<crate::acp::wire::SessionConfigOption>>(
+            serde_json::json!([
+                {"id":"model","name":"Model","type":"select","category":"model",
+                 "currentValue":"glm-5.3","options":[{"value":"glm-5.3","name":"GLM-5.3"}]},
+                {"id":"thought_level","name":"Thinking","type":"select","category":"thought_level",
+                 "currentValue":"xhigh","options":[
+                    {"value":"minimal","name":"Minimal"},{"value":"low","name":"Low"},
+                    {"value":"medium","name":"Medium"},{"value":"high","name":"High"},
+                    {"value":"xhigh","name":"X-High"},{"value":"max","name":"Max"}
+                 ]}
+            ]),
+        )
+        .unwrap();
+
+        let options = provider_config_option_infos(&ProviderId::ZCode, &wire);
+        let effort = options
+            .iter()
+            .find(|option| option.id == "thought_level")
+            .unwrap();
+        assert_eq!(effort.current, "max");
+        assert_eq!(
+            effort
+                .choices
+                .iter()
+                .map(|choice| choice.id.as_str())
+                .collect::<Vec<_>>(),
+            ["low", "high", "max"]
+        );
+    }
+
+    #[test]
+    fn pi_fixed_adapter_ladder_is_not_presented_as_model_specific_truth() {
+        let wire: Vec<crate::acp::wire::SessionConfigOption> =
+            serde_json::from_value(serde_json::json!([
+                {
+                    "id": "model",
+                    "name": "Model",
+                    "category": "model",
+                    "type": "select",
+                    "currentValue": "anthropic/claude-opus-4-8",
+                    "options": [{"value": "anthropic/claude-opus-4-8", "name": "Claude Opus 4.8"}]
+                },
+                {
+                    "id": "thought_level",
+                    "name": "Thinking",
+                    "category": "thought_level",
+                    "type": "select",
+                    "currentValue": "high",
+                    "options": [
+                        {"value": "off", "name": "Off"},
+                        {"value": "minimal", "name": "Minimal"},
+                        {"value": "low", "name": "Low"},
+                        {"value": "medium", "name": "Medium"},
+                        {"value": "high", "name": "High"},
+                        {"value": "xhigh", "name": "Extra High"}
+                    ]
+                }
+            ]))
+            .unwrap();
+
+        let options = provider_config_option_infos(&ProviderId::Pi, &wire);
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].id, "model");
     }
 }
 
@@ -4751,9 +5072,15 @@ for line in sys.stdin:
         let outcome = engine.discard_session_worktree(&session_id).await.unwrap();
 
         assert!(outcome.removed_checkout);
-        assert_eq!(outcome.deleted_branch.as_deref(), Some(expected_branch.as_str()));
+        assert_eq!(
+            outcome.deleted_branch.as_deref(),
+            Some(expected_branch.as_str())
+        );
         assert!(!root.exists());
-        assert_eq!(crate::worktree::registrations(&repo).await.unwrap().len(), 1);
+        assert_eq!(
+            crate::worktree::registrations(&repo).await.unwrap().len(),
+            1
+        );
         let branches = git(&repo, &["branch", "--list", &expected_branch]);
         assert!(branches.is_empty(), "branch must be deleted: {branches}");
         loop {
@@ -4894,17 +5221,17 @@ for line in sys.stdin:
                 .iter()
                 .find(|entry| {
                     std::fs::canonicalize(&entry.path)
-                        .map(|canonical| {
-                            Some(canonical)
-                                == std::fs::canonicalize(path).ok()
-                        })
+                        .map(|canonical| Some(canonical) == std::fs::canonicalize(path).ok())
                         .unwrap_or(entry.path == path)
                 })
                 .unwrap_or_else(|| panic!("no entry for {path} in {entries:?}"))
         };
         let session_entry = find(&session_root);
         assert_eq!(session_entry.kind, super::WorktreeEntryKind::Session);
-        assert_eq!(session_entry.session_id.as_deref(), Some(session.id.as_str()));
+        assert_eq!(
+            session_entry.session_id.as_deref(),
+            Some(session.id.as_str())
+        );
         assert!(session_entry.registered);
         let orphan_entry = find(&orphan.path.to_string_lossy());
         assert_eq!(orphan_entry.kind, super::WorktreeEntryKind::Orphan);

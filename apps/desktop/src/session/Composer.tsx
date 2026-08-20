@@ -3,6 +3,8 @@ import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   GitBranch,
   ListChecks,
@@ -18,6 +20,7 @@ import {
   Store,
   Ticket,
   TriangleAlert,
+  Zap,
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
@@ -47,6 +50,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import "@/components/ui/reasoning-selector.css";
 
 interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
@@ -204,6 +208,55 @@ interface PickerRow {
   isDefault: boolean;
   selected: boolean;
   select: () => void;
+}
+
+const REASONING_STEP_INSET = 26;
+
+/** Provider-owned discrete effort choices presented through the reference's continuous slider. */
+export function ReasoningScale({
+  label,
+  rows,
+  onSelect,
+}: {
+  label: string;
+  rows: PickerRow[];
+  onSelect: (row: PickerRow) => void;
+}) {
+  const selectedIndex = Math.max(0, rows.findIndex((row) => row.selected));
+  const selected = rows[selectedIndex];
+  const progress = rows.length > 1 ? selectedIndex / (rows.length - 1) : 0;
+  const fillAdjustment = REASONING_STEP_INSET * (1 - 2 * progress);
+  const fillWidth = `calc(${progress * 100}% + ${fillAdjustment}px)`;
+
+  return (
+    <div className="reasoning-selector-scale">
+      <div className="reasoning-selector-track" aria-hidden>
+        <span className="reasoning-selector-fill" style={{ width: fillWidth }} />
+        <span className="reasoning-selector-dots">
+          {rows.map((row, index) => (
+            <span
+              key={row.key}
+              className="reasoning-selector-dot"
+              data-active={index <= selectedIndex}
+            />
+          ))}
+        </span>
+      </div>
+      <input
+        className="reasoning-selector-range"
+        type="range"
+        min={0}
+        max={Math.max(0, rows.length - 1)}
+        step={1}
+        value={selectedIndex}
+        aria-label={label}
+        aria-valuetext={selected?.label}
+        title={selected?.detail || selected?.label}
+        autoFocus
+        onInput={(event) => onSelect(rows[Number(event.currentTarget.value)])}
+      />
+    </div>
+  );
 }
 
 /**
@@ -546,8 +599,8 @@ export function ModelPicker({
   hasSession: boolean;
 }) {
   const t = useT();
-  const [modelOpen, setModelOpen] = useState(false);
-  const [effortOpen, setEffortOpen] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorPanel, setSelectorPanel] = useState<"reasoning" | "model">("reasoning");
   const families = useMemo(() => groupModels(models), [models]);
   if (!hasSession) return null;
 
@@ -557,6 +610,8 @@ export function ModelPicker({
   const effortOpt = configOptions.find(
     (o) => o.category === "thought_level" || o.id === "effort" || o.id === "reasoning_effort",
   );
+  const activeFamily = familyOf(families, current);
+  const activeVariant = variantOf(families, current);
 
   let modelLabel: string;
   let modelRows: PickerRow[];
@@ -577,21 +632,8 @@ export function ModelPicker({
       selected: c.id === modelOpt.current,
       select: () => onConfigOption(modelOpt.id, c.id),
     }));
-    if (effortOpt) {
-      effortLabel = effortOpt.choices.find((c) => c.id === effortOpt.current)?.name || effortOpt.current;
-      effortRows = effortOpt.choices.map((c) => ({
-        key: c.id,
-        label: c.name,
-        detail: c.description,
-        isDefault: false,
-        selected: c.id === effortOpt.current,
-        select: () => onConfigOption(effortOpt.id, c.id),
-      }));
-    }
   } else {
     // Flat list: regroup by the effort suffix parsed out of each name.
-    const activeFamily = familyOf(families, current);
-    const activeVariant = variantOf(families, current);
     const active = models.find((m) => m.id === current);
     modelLabel = activeFamily?.label ?? active?.name ?? current ?? t("composer.defaultModel");
     modelRows = families.map((f) => ({
@@ -602,38 +644,95 @@ export function ModelPicker({
       selected: f === activeFamily,
       select: () => onModel(pickVariant(f, activeVariant?.effort ?? null, defaultModel).id),
     }));
-    if (activeFamily) {
-      effortLabel = effortName(activeVariant?.effort ?? null);
-      effortRows = activeFamily.variants.map((v) => ({
-        key: v.choice.id,
-        label: effortName(v.effort),
-        isDefault: v.choice.id === defaultModel,
-        selected: v.choice.id === current,
-        select: () => onModel(v.choice.id),
-      }));
-    }
   }
 
-  return (
-    <>
-      <Popover open={modelOpen} onOpenChange={setModelOpen}>
+  // Effort is independently provider-owned. Some ACP agents (notably Grok) report a normal model
+  // list plus a separate metadata-derived effort option, rather than a model config option. Never
+  // discard that real ladder just because the model selector arrived through the older surface.
+  if (effortOpt) {
+    effortLabel = effortOpt.choices.find((c) => c.id === effortOpt.current)?.name || effortOpt.current;
+    effortRows = effortOpt.choices.map((c) => ({
+      key: c.id,
+      label: c.name,
+      detail: c.description,
+      isDefault: false,
+      selected: c.id === effortOpt.current,
+      select: () => onConfigOption(effortOpt.id, c.id),
+    }));
+  } else if (activeFamily) {
+    effortLabel = effortName(activeVariant?.effort ?? null);
+    effortRows = activeFamily.variants.map((v) => ({
+      key: v.choice.id,
+      label: effortName(v.effort),
+      isDefault: v.choice.id === defaultModel,
+      selected: v.choice.id === current,
+      select: () => onModel(v.choice.id),
+    }));
+  }
+
+  if (effortRows.length > 1) {
+    return (
+      <Popover
+        open={selectorOpen}
+        onOpenChange={(open) => {
+          setSelectorOpen(open);
+          if (!open) setSelectorPanel("reasoning");
+        }}
+      >
         <PopoverTrigger
-          render={<Chip title={t("composer.model")}>
-            <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-            <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
-              {modelLabel}
-            </span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-          </Chip>}
+          render={
+            <button
+              type="button"
+              className="reasoning-selector-trigger"
+              title={`${t("composer.model")}: ${modelLabel} · ${t("composer.reasoning")}: ${effortLabel}`}
+              aria-label={`${modelLabel} ${effortLabel}`}
+            >
+              <span className="reasoning-selector-trigger-model">{modelLabel}</span>
+              <span className="reasoning-selector-trigger-effort">{effortLabel}</span>
+              <ChevronDown className="reasoning-selector-trigger-chevron" aria-hidden />
+            </button>
+          }
         />
-        <PopoverContent align="start" side="top" className="w-64 p-1.5">
-          {modelRows.length === 0 ? (
-            <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
-              {t("composer.noModels")}
-            </p>
+        <PopoverContent
+          align="center"
+          side="top"
+          sideOffset={17}
+          className={cn(
+            "reasoning-selector-popup",
+            selectorPanel === "model" && "reasoning-selector-popup--menu",
+          )}
+        >
+          {selectorPanel === "reasoning" ? (
+            <>
+              <div className="reasoning-selector-header">
+                <button
+                  type="button"
+                  className="reasoning-selector-header-button"
+                  onClick={() => setSelectorPanel("model")}
+                >
+                  <span>{t("composer.advanced")}</span>
+                  <ChevronRight aria-hidden />
+                </button>
+                <Zap className="reasoning-selector-header-icon" strokeWidth={2} aria-hidden />
+              </div>
+              <ReasoningScale
+                label={t("composer.reasoning")}
+                rows={effortRows}
+                onSelect={(row) => row.select()}
+              />
+            </>
           ) : (
             <>
-              <MenuSection>{t("composer.model")}</MenuSection>
+              <div className="reasoning-selector-header">
+                <button
+                  type="button"
+                  className="reasoning-selector-header-button"
+                  onClick={() => setSelectorPanel("reasoning")}
+                >
+                  <ChevronLeft aria-hidden />
+                  <span>{t("composer.model")}</span>
+                </button>
+              </div>
               <ScrollArea className="max-h-80">
                 {modelRows.map((r) => (
                   <MenuRow
@@ -644,7 +743,8 @@ export function ModelPicker({
                     detail={r.detail}
                     onClick={() => {
                       r.select();
-                      setModelOpen(false);
+                      setSelectorPanel("reasoning");
+                      setSelectorOpen(false);
                     }}
                   />
                 ))}
@@ -653,35 +753,47 @@ export function ModelPicker({
           )}
         </PopoverContent>
       </Popover>
+    );
+  }
 
-      {/* Only worth a chip when there's an actual choice to make. */}
-      {effortRows.length > 1 && (
-        <Popover open={effortOpen} onOpenChange={setEffortOpen}>
-          <PopoverTrigger
-            render={<Chip title={t("composer.reasoning")}>
-              <span>{effortLabel}</span>
-              <ChevronDown className="size-3 shrink-0 opacity-50" />
-            </Chip>}
-          />
-          <PopoverContent align="start" side="top" className="w-44 p-1.5">
-            <MenuSection>{t("composer.reasoning")}</MenuSection>
-            {effortRows.map((r) => (
-              <MenuRow
-                key={r.key}
-                selected={r.selected}
-                isDefault={r.isDefault}
-                label={r.label}
-                detail={r.detail}
-                onClick={() => {
-                  r.select();
-                  setEffortOpen(false);
-                }}
-              />
-            ))}
-          </PopoverContent>
-        </Popover>
-      )}
-    </>
+  return (
+    <Popover open={selectorOpen} onOpenChange={setSelectorOpen}>
+      <PopoverTrigger
+        render={<Chip title={t("composer.model")}>
+          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
+          <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
+            {modelLabel}
+          </span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>}
+      />
+      <PopoverContent align="start" side="top" className="w-64 p-1.5">
+        {modelRows.length === 0 ? (
+          <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
+            {t("composer.noModels")}
+          </p>
+        ) : (
+          <>
+            <MenuSection>{t("composer.model")}</MenuSection>
+            <ScrollArea className="max-h-80">
+              {modelRows.map((r) => (
+                <MenuRow
+                  key={r.key}
+                  selected={r.selected}
+                  isDefault={r.isDefault}
+                  label={r.label}
+                  detail={r.detail}
+                  onClick={() => {
+                    r.select();
+                    setSelectorOpen(false);
+                  }}
+                />
+              ))}
+            </ScrollArea>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
