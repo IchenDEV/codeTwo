@@ -17,6 +17,7 @@
 
 pub mod acp;
 pub mod activity;
+pub mod agent_skill_v2;
 pub mod app;
 pub mod artifact;
 pub mod automation;
@@ -65,6 +66,7 @@ pub mod workspace_search;
 pub mod worktree;
 
 pub use activity::{ActivityTracker, TurnLease};
+pub use agent_skill_v2::{AgentSkillContribution, AgentSkillResolver, ResolvedAgentSkill};
 pub use artifact::{ArtifactRef, ArtifactStore, ToolOutput, ToolOutputNormalizer};
 pub use automation::{
     next_automation_run_after, Automation, AutomationInput, AutomationRun,
