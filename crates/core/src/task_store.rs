@@ -9,9 +9,10 @@ use rusqlite::OptionalExtension;
 
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, AgentRole, ArtifactProvenance, LoopGuardState, OrchestrationEvent,
-    OrchestrationEventKind, Task, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItemAttempt,
-    WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
+    AgentId, AgentRole, ArtifactProvenance, LoopGuardState, MaterialGoalChangeReceipt,
+    OrchestrationEvent, OrchestrationEventKind, ResultContract, ResultContractRefinement, Task,
+    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItemAttempt,
+    WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -260,6 +261,194 @@ impl Store {
             created_at_ms: created_at,
             updated_at_ms: updated_at,
         }))
+    }
+
+    pub fn refine_result_contract(
+        &self,
+        task_id: &TaskId,
+        refinement: &ResultContractRefinement,
+        now_ms: i64,
+    ) -> Result<TaskRecord, StoreError> {
+        validate_refinement(refinement)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let current: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT t.result_contract_revision,c.contract_json
+                 FROM tasks_v2 t
+                 JOIN task_result_contracts_v2 c
+                   ON c.task_id=t.id AND c.revision=t.result_contract_revision
+                 WHERE t.id=?1",
+                [task_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let Some((actual_revision, contract_json)) = current else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        if actual_revision as u64 != refinement.expected_revision {
+            return Err(StoreError::ResultContractRevisionConflict {
+                task_id: task_id.as_str().to_string(),
+                expected: refinement.expected_revision,
+                actual: actual_revision as u64,
+            });
+        }
+        let mut contract: ResultContract = serde_json::from_str(&contract_json)?;
+        let previous = contract.clone();
+        if let Some(goal) = &refinement.clarified_goal {
+            contract.goal = goal.trim().to_string();
+        }
+        append_unique(
+            &mut contract.required_deliverables,
+            &refinement.add_required_deliverables,
+        );
+        append_unique(
+            &mut contract.completion_conditions,
+            &refinement.add_completion_conditions,
+        );
+        append_unique(&mut contract.boundaries, &refinement.add_boundaries);
+        append_unique(&mut contract.known_risks, &refinement.add_known_risks);
+        append_unique(
+            &mut contract.unresolved_facts,
+            &refinement.add_unresolved_facts,
+        );
+        if contract == previous {
+            return Err(StoreError::InvalidResultContractRefinement(
+                "refinement must add or clarify contract content".into(),
+            ));
+        }
+        let goal_change = (contract.goal != previous.goal).then(|| MaterialGoalChangeReceipt {
+            before: previous.goal,
+            after: contract.goal.clone(),
+            reason: refinement.reason.trim().to_string(),
+        });
+        let next_revision = actual_revision.checked_add(1).ok_or_else(|| {
+            StoreError::InvalidResultContractRefinement("revision exceeds SQLite range".into())
+        })?;
+        tx.execute(
+            "INSERT INTO task_result_contracts_v2
+               (task_id,revision,contract_json,reason,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                next_revision,
+                serde_json::to_string(&contract)?,
+                refinement.reason.trim(),
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE tasks_v2
+             SET result_contract_revision=?2,updated_at_ms=?3
+             WHERE id=?1",
+            rusqlite::params![task_id.as_str(), next_revision, now_ms],
+        )?;
+        let graph_revision: i64 = tx.query_row(
+            "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::ResultContractRefined {
+            previous_revision: actual_revision as u64,
+            revision: next_revision as u64,
+            reason: refinement.reason.trim().to_string(),
+            goal_change,
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                graph_revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        drop(conn);
+        self.get_task(task_id)?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })
+    }
+
+    pub fn finalize_task(
+        &self,
+        task_id: &TaskId,
+        now_ms: i64,
+    ) -> Result<TaskCompletionEvaluation, StoreError> {
+        let record = self
+            .get_task(task_id)?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })?;
+        let graph = self.get_task_graph(task_id)?;
+        let evaluation = evaluate_completion(&record.task.result_contract, &graph);
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let current: (i64, i64) = tx.query_row(
+            "SELECT t.result_contract_revision,g.revision
+             FROM tasks_v2 t
+             JOIN task_graph_revisions_v2 g ON g.task_id=t.id
+             WHERE t.id=?1",
+            [task_id.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if current.0 as u64 != record.result_contract_revision {
+            return Err(StoreError::ResultContractRevisionConflict {
+                task_id: task_id.as_str().to_string(),
+                expected: record.result_contract_revision,
+                actual: current.0 as u64,
+            });
+        }
+        if current.1 as u64 != graph.revision {
+            return Err(StoreError::TaskRevisionConflict {
+                task_id: task_id.as_str().to_string(),
+                expected: graph.revision,
+                actual: current.1 as u64,
+            });
+        }
+        tx.execute(
+            "UPDATE tasks_v2 SET status_json=?2,updated_at_ms=?3 WHERE id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&evaluation.status)?,
+                now_ms,
+            ],
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::TaskOutcomeRecorded {
+            status: evaluation.status,
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                graph.revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(evaluation)
     }
 
     pub fn apply_task_graph(
@@ -1001,6 +1190,130 @@ fn validate_graph(graph: &TaskGraph) -> Result<(), StoreError> {
         }
     }
     Ok(())
+}
+
+fn validate_refinement(refinement: &ResultContractRefinement) -> Result<(), StoreError> {
+    validate_contract_text("reason", &refinement.reason, 2_048)?;
+    if let Some(goal) = &refinement.clarified_goal {
+        validate_contract_text("clarified_goal", goal, 4_096)?;
+    }
+    for (field, values) in [
+        (
+            "required deliverable",
+            &refinement.add_required_deliverables,
+        ),
+        (
+            "completion condition",
+            &refinement.add_completion_conditions,
+        ),
+        ("boundary", &refinement.add_boundaries),
+        ("known risk", &refinement.add_known_risks),
+        ("unresolved fact", &refinement.add_unresolved_facts),
+    ] {
+        if values.len() > 256 {
+            return Err(StoreError::InvalidResultContractRefinement(format!(
+                "too many {field} additions"
+            )));
+        }
+        for value in values {
+            validate_contract_text(field, value, 2_048)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_contract_text(field: &str, value: &str, maximum: usize) -> Result<(), StoreError> {
+    let length = value.trim().chars().count();
+    if length == 0 || length > maximum {
+        return Err(StoreError::InvalidResultContractRefinement(format!(
+            "{field} must contain between 1 and {maximum} characters"
+        )));
+    }
+    Ok(())
+}
+
+fn append_unique(target: &mut Vec<String>, additions: &[String]) {
+    for addition in additions {
+        let addition = addition.trim();
+        if !target.iter().any(|existing| existing == addition) {
+            target.push(addition.to_string());
+        }
+    }
+}
+
+fn evaluate_completion(contract: &ResultContract, graph: &TaskGraph) -> TaskCompletionEvaluation {
+    let successful: Vec<_> = graph
+        .work_items
+        .iter()
+        .filter(|item| {
+            item.status == WorkItemStatus::Succeeded && !item.completion_evidence.is_empty()
+        })
+        .collect();
+    let satisfied_deliverables: Vec<_> = contract
+        .required_deliverables
+        .iter()
+        .filter(|deliverable| {
+            successful
+                .iter()
+                .any(|item| item.expected_outputs.contains(deliverable))
+        })
+        .cloned()
+        .collect();
+    let missing_deliverables: Vec<_> = contract
+        .required_deliverables
+        .iter()
+        .filter(|deliverable| !satisfied_deliverables.contains(deliverable))
+        .cloned()
+        .collect();
+    let satisfied_conditions: Vec<_> = contract
+        .completion_conditions
+        .iter()
+        .filter(|condition| {
+            successful
+                .iter()
+                .any(|item| item.result_contract_conditions.contains(condition))
+        })
+        .cloned()
+        .collect();
+    let missing_conditions: Vec<_> = contract
+        .completion_conditions
+        .iter()
+        .filter(|condition| !satisfied_conditions.contains(condition))
+        .cloned()
+        .collect();
+    let evidence: Vec<_> = successful
+        .iter()
+        .flat_map(|item| {
+            item.completion_evidence
+                .iter()
+                .map(move |evidence| format!("{}: {evidence}", item.id.as_str()))
+        })
+        .collect();
+    let blockers: Vec<_> = graph
+        .work_items
+        .iter()
+        .filter_map(|item| item.blocker.clone())
+        .collect();
+    let status = if missing_deliverables.is_empty()
+        && missing_conditions.is_empty()
+        && contract.unresolved_facts.is_empty()
+    {
+        TaskStatus::Completed
+    } else if !evidence.is_empty() {
+        TaskStatus::PartiallyCompleted
+    } else {
+        TaskStatus::Blocked
+    };
+    TaskCompletionEvaluation {
+        status,
+        satisfied_deliverables,
+        missing_deliverables,
+        satisfied_conditions,
+        missing_conditions,
+        evidence,
+        unresolved_facts: contract.unresolved_facts.clone(),
+        blockers,
+    }
 }
 
 fn attempt_status_db(status: WorkItemAttemptStatus) -> &'static str {

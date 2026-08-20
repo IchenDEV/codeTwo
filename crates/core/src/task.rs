@@ -67,6 +67,40 @@ pub struct ResultContract {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ResultContractRefinement {
+    pub expected_revision: u64,
+    pub reason: String,
+    pub clarified_goal: Option<String>,
+    pub add_required_deliverables: Vec<String>,
+    pub add_completion_conditions: Vec<String>,
+    pub add_boundaries: Vec<String>,
+    pub add_known_risks: Vec<String>,
+    pub add_unresolved_facts: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialGoalChangeReceipt {
+    pub before: String,
+    pub after: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCompletionEvaluation {
+    pub status: TaskStatus,
+    pub satisfied_deliverables: Vec<String>,
+    pub missing_deliverables: Vec<String>,
+    pub satisfied_conditions: Vec<String>,
+    pub missing_conditions: Vec<String>,
+    pub evidence: Vec<String>,
+    pub unresolved_facts: Vec<String>,
+    pub blockers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderConfiguration {
     pub provider: ProviderId,
     pub model: Option<String>,
@@ -189,8 +223,21 @@ pub struct TaskGraph {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OrchestrationEventKind {
     TaskCreated,
-    TaskGraphChanged { reason: String },
-    TaskPaused { reason: String },
+    TaskGraphChanged {
+        reason: String,
+    },
+    TaskPaused {
+        reason: String,
+    },
+    ResultContractRefined {
+        previous_revision: u64,
+        revision: u64,
+        reason: String,
+        goal_change: Option<MaterialGoalChangeReceipt>,
+    },
+    TaskOutcomeRecorded {
+        status: TaskStatus,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -153,10 +153,11 @@ pub use store::{IssueDelegation,
 };
 pub use task::{
     AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
-    ArtifactProvenance, LoopCeilings, LoopGuardState, OrchestrationEvent,
-    OrchestrationEventKind, ProviderConfiguration, ResultContract, RunSnapshot, SceneOrigin,
-    SceneRef, Task, TaskArtifactStatus, TaskBudget, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
-    WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
+    ArtifactProvenance, LoopCeilings, LoopGuardState, MaterialGoalChangeReceipt,
+    OrchestrationEvent, OrchestrationEventKind, ProviderConfiguration, ResultContract,
+    ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef, Task, TaskArtifactStatus,
+    TaskBudget, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItem,
+    WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
 };
 pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};

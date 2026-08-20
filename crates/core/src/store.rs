@@ -74,6 +74,16 @@ pub enum StoreError {
         expected: u64,
         actual: u64,
     },
+    #[error(
+        "Result Contract revision conflict for {task_id}: expected {expected}, found {actual}"
+    )]
+    ResultContractRevisionConflict {
+        task_id: String,
+        expected: u64,
+        actual: u64,
+    },
+    #[error("invalid Result Contract refinement: {0}")]
+    InvalidResultContractRefinement(String),
     #[error("session lease conflict for {session_id}: {reason}")]
     SessionLeaseConflict { session_id: String, reason: String },
     #[error("invalid Task Artifact: {0}")]
