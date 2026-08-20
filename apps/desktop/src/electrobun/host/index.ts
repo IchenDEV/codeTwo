@@ -12,6 +12,11 @@ import {
 } from "./acp";
 import { BunDatabase } from "./database";
 import {
+  providerToolset,
+  withProviderToolInstructions,
+  type ProviderToolset,
+} from "./providerTools";
+import {
   LspManager,
   TerminalManager,
   augmentGuiPath,
@@ -47,6 +52,7 @@ interface SessionRuntime {
   id: string;
   cwd: string;
   provider: ProviderDefinition;
+  toolset: ProviderToolset;
   model: string | null;
   permissionMode: string;
   sandboxPolicy: string;
@@ -565,7 +571,10 @@ export class PureBunHost {
     try {
       const peer = await this.connect(runtime);
       if (!runtime.acpSessionId) throw new Error("ACP session was not created");
-      const response = object(await peer.prompt(runtime.acpSessionId, blocks));
+      const response = object(await peer.prompt(
+        runtime.acpSessionId,
+        withProviderToolInstructions(blocks, runtime.toolset.instructions),
+      ));
       const stopReason = optionalString(response.stopReason) ?? "end_turn";
       runtime.busy = false;
       runtime.turnId = null;
@@ -596,7 +605,7 @@ export class PureBunHost {
         notification: (method, params) => this.onAcpNotification(runtime, method, params),
         request: (method, params) => this.onAcpRequest(runtime, method, params),
         closed: (error) => this.onAcpClosed(runtime, error),
-      });
+      }, runtime.toolset.mcpServers);
       runtime.peer = peer;
       const initialized = object(await peer.initialize());
       const capabilities = object(initialized.agentCapabilities);
@@ -907,6 +916,7 @@ export class PureBunHost {
       id,
       cwd: string(session.cwd, "cwd"),
       provider,
+      toolset: providerToolset(provider.id),
       model: optionalString(session.model),
       permissionMode: optionalString(session.permission_mode) ?? "ask",
       sandboxPolicy: optionalString(session.sandbox_policy) ?? "workspace_write",

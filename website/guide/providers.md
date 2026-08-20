@@ -68,15 +68,30 @@ The health check is intentionally narrow. It does not prove that credentials are
 account has quota, or an adapter package can finish downloading. For an adapter-backed provider, a
 green dot primarily confirms that `npx` is available.
 
-## Models and provider-specific capabilities
+## Models and special-tool capabilities
 
 If the ACP endpoint reports models during `session/new`, C2 shows a model control and sends
 `session/set_model` when you switch. If it reports no model list, C2 leaves model selection to
 the provider's own CLI configuration.
 
-The same rule applies to plans, slash commands, MCP tools, images, browser/computer use, and other
-capabilities: availability depends on the chosen provider, adapter version, and host runtime. A
-provider being listed above does not imply that every optional capability is available.
+Provider-native features still depend on the chosen provider and adapter version. Host tools are
+projected separately through C2's provider-neutral tool layer, so they do not become Codex-only just
+because C2 discovered them from the local OpenAI runtime:
+
+- **Computer Use** is attached to non-Codex providers through its verified standalone stdio MCP
+  adapter when the signed local service is available.
+- **Chrome Browser** is attached through the configured `node_repl` MCP runtime when the Browser
+  and Chrome plugins are enabled. Extension connectivity is verified on the first real call.
+- **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
+  BrowserView UI is separate from an ACP/MCP tool surface, so C2 reports this capability as
+  unavailable instead of silently routing through the removed Rust sidecar.
+- **Image Generation** and **Sites** remain provider-native until the host exposes a real portable
+  MCP adapter. C2 reports them as unavailable for other providers instead of claiming false parity.
+
+MCP servers are fixed when an ACP session starts. The Pure Bun host performs this projection itself;
+the packaged Electrobun desktop does not launch the legacy Rust desktop sidecar. After enabling or
+repairing a host tool, restart C2 and open a new session so the selected provider receives the bridge
+in `session/new`.
 
 ## The ACP loop
 
@@ -90,6 +105,7 @@ initialize → session/new → session/prompt → stream session/update
 This common transport is what lets the desktop app, TUI, and remote client share one provider-neutral
 session and event model.
 
-Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers
-come from **MCP skills**—see [Skills](/guide/editor#skill-kinds) and the
-[market](/guide/market)'s Browser Tool and Filesystem Tool entries.
+Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers can
+come from the provider-neutral host-tool layer described above or from **MCP skills**—see
+[Skills](/guide/editor#skill-kinds) and the [market](/guide/market)'s Browser Tool and Filesystem
+Tool entries.

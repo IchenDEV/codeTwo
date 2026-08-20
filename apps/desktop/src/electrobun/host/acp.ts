@@ -1,6 +1,7 @@
 import type { Subprocess } from "bun";
 
 import { which } from "./system";
+import { providerToolset, type AcpMcpServer } from "./providerTools";
 
 export interface ProviderDefinition {
   id: string;
@@ -108,7 +109,7 @@ export function providerSummaries(): unknown[] {
     available: which(provider.command) !== null,
     needs_node: provider.needsNode,
     models: provider.models,
-    capabilities: [],
+    capabilities: providerToolset(provider.id).capabilities,
   }));
 }
 
@@ -134,13 +135,26 @@ export interface AcpCallbacks {
   closed(error: Error): void;
 }
 
+export function sessionRequestParams(
+  cwd: string,
+  mcpServers: AcpMcpServer[],
+  sessionId?: string,
+): { cwd: string; mcpServers: AcpMcpServer[]; sessionId?: string } {
+  return { ...(sessionId ? { sessionId } : {}), cwd, mcpServers };
+}
+
 export class AcpPeer {
   private readonly child: Subprocess<"pipe", "pipe", "inherit">;
   private readonly pending = new Map<string, PendingRequest>();
   private nextId = 1;
   private closed = false;
 
-  constructor(provider: ProviderDefinition, cwd: string, private readonly callbacks: AcpCallbacks) {
+  constructor(
+    provider: ProviderDefinition,
+    cwd: string,
+    private readonly callbacks: AcpCallbacks,
+    private readonly mcpServers: AcpMcpServer[],
+  ) {
     const executable = which(provider.command);
     if (!executable) throw new Error(`${provider.displayName} is not installed (${provider.command})`);
     this.child = Bun.spawn([executable, ...provider.args], {
@@ -162,11 +176,14 @@ export class AcpPeer {
   }
 
   async newSession(cwd: string): Promise<Record<string, unknown>> {
-    return this.request("session/new", { cwd, mcpServers: [] }) as Promise<Record<string, unknown>>;
+    return this.request("session/new", sessionRequestParams(cwd, this.mcpServers)) as Promise<Record<string, unknown>>;
   }
 
   async loadSession(sessionId: string, cwd: string): Promise<Record<string, unknown>> {
-    return this.request("session/load", { sessionId, cwd, mcpServers: [] }) as Promise<Record<string, unknown>>;
+    return this.request(
+      "session/load",
+      sessionRequestParams(cwd, this.mcpServers, sessionId),
+    ) as Promise<Record<string, unknown>>;
   }
 
   async prompt(sessionId: string, prompt: unknown[]): Promise<Record<string, unknown>> {
