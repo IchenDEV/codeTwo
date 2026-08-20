@@ -34,7 +34,9 @@ pub use utility::{UsagePlugin, VoicePlugin};
 pub use workspace::{GitPlugin, KeymapPlugin, MarketPlugin};
 pub use workspace_io::{ArtifactsPlugin, ProjectsPlugin, WorkspacePlugin, WorkspaceSearchPlugin};
 
-use codetwo_kernel::PluginRegistry;
+use codetwo_kernel::{
+    PluginCategory, PluginMetadata, PluginOrigin, PluginRegistry, PluginScopeSupport,
+};
 
 /// The names of every built-in, in the order a fresh config enables them.
 ///
@@ -100,5 +102,58 @@ pub fn builtin_registry() -> PluginRegistry {
     registry.register(|| CostPlugin);
     registry.register(|| KernelPlugin);
     registry.register(|| ExtensionsPlugin);
+
+    for (name, category) in [
+        ("paths", PluginCategory::Foundation),
+        ("store", PluginCategory::Foundation),
+        ("bus", PluginCategory::Foundation),
+        ("providers", PluginCategory::Foundation),
+        ("engine", PluginCategory::Foundation),
+        ("memory", PluginCategory::Foundation),
+        ("kernel", PluginCategory::Foundation),
+        ("workspace", PluginCategory::Workspace),
+        ("projects", PluginCategory::Workspace),
+        ("artifacts", PluginCategory::Workspace),
+        ("workspace-search", PluginCategory::Workspace),
+        ("issues", PluginCategory::Workspace),
+        ("scenes", PluginCategory::Automation),
+        ("scene-runtime", PluginCategory::Automation),
+        ("scene-commands", PluginCategory::Automation),
+        ("git", PluginCategory::DeveloperTools),
+        ("terminal", PluginCategory::DeveloperTools),
+        ("cost", PluginCategory::DeveloperTools),
+        ("plugin-hub", PluginCategory::Interface),
+        ("canvas", PluginCategory::Interface),
+        ("document", PluginCategory::Interface),
+        ("keymap", PluginCategory::Interface),
+        ("usage", PluginCategory::Interface),
+        ("voice", PluginCategory::Interface),
+        ("skills", PluginCategory::Integration),
+        ("market", PluginCategory::Integration),
+        ("extensions", PluginCategory::Integration),
+    ] {
+        let scope_support = if matches!(
+            name,
+            "git" | "workspace" | "artifacts" | "workspace-search" | "issues" | "terminal"
+        ) {
+            vec![PluginScopeSupport::User, PluginScopeSupport::Project]
+        } else {
+            vec![PluginScopeSupport::User]
+        };
+
+        registry
+            .set_metadata(
+                name,
+                PluginMetadata {
+                    origin: PluginOrigin::BuiltIn,
+                    category,
+                    scope_support,
+                    essential: name == "kernel",
+                    default_enabled: true,
+                },
+            )
+            .expect("built-in metadata must refer to a registered plugin");
+    }
+
     registry
 }

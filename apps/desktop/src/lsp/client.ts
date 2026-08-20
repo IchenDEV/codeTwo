@@ -20,6 +20,11 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+// The App enables this only after the active project catalog has loaded. Starting closed avoids a
+// file-editor mount racing a persisted project-level disable during desktop bootstrap.
+let runtimeEnabled = false;
+let runtimeGeneration = 0;
+
 /** Languages served by an external LSP server rather than Monaco's built-in workers. */
 const SERVER_GROUPS: Record<string, string[]> = {
   rust: ["rust"],
@@ -42,7 +47,7 @@ function groupOf(lang: string): string | null {
 }
 
 export function isLspLanguage(lang: string): boolean {
-  return groupOf(lang) !== null;
+  return runtimeEnabled && groupOf(lang) !== null;
 }
 
 export function pathToUri(p: string): string {
@@ -129,6 +134,7 @@ export class LspClient {
 
   /** Feed one raw message from the bridge into the protocol machinery. */
   handle(payload: string): void {
+    if (this.dead || !runtimeEnabled) return;
     let msg: Json;
     try {
       msg = JSON.parse(payload);
@@ -165,7 +171,7 @@ export class LspClient {
   }
 
   request(method: string, params: Json): Promise<Json> {
-    if (this.dead) return Promise.resolve(null);
+    if (this.dead || !runtimeEnabled) return Promise.resolve(null);
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -177,11 +183,12 @@ export class LspClient {
   }
 
   notify(method: string, params: Json): void {
-    if (this.dead) return;
+    if (this.dead || !runtimeEnabled) return;
     void this.send({ jsonrpc: "2.0", method, params });
   }
 
   private send(msg: Json): Promise<void> {
+    if (this.dead || !runtimeEnabled) return Promise.resolve();
     return lspSend(this.key, JSON.stringify(msg));
   }
 
@@ -235,6 +242,10 @@ export class LspClient {
   dispose(): void {
     this.dead = true;
     LspClient.clients.delete(this.key);
+    for (const timer of this.changeTimer.values()) clearTimeout(timer);
+    this.changeTimer.clear();
+    this.changeText.clear();
+    this.openVersions.clear();
     for (const p of this.pending.values()) p.reject(new Error("LSP client disposed"));
     this.pending.clear();
   }
@@ -242,6 +253,7 @@ export class LspClient {
 
 /** The live client whose project contains `path` and whose server speaks `lang`, if any. */
 export function clientForPath(path: string, lang: string): LspClient | null {
+  if (!runtimeEnabled) return null;
   for (const client of LspClient.clients.values()) {
     if (client.langs.includes(lang) && path.startsWith(`${client.cwd}/`)) return client;
   }
@@ -253,6 +265,31 @@ export function clientForPath(path: string, lang: string): LspClient | null {
 /** One in-flight/complete acquisition per (cwd, server group); null is a cached "not installed". */
 const acquisitions = new Map<string, Promise<LspClient | null>>();
 let listening = false;
+type RuntimeEnabledListener = (workspace: string | undefined) => void;
+const runtimeEnabledListeners = new Set<RuntimeEnabledListener>();
+
+/** Apply the active project component policy without ever calling the unloadable LSP commands. */
+export function setLspRuntimeEnabled(enabled: boolean, workspace?: string): void {
+  if (runtimeEnabled === enabled) return;
+  runtimeEnabled = enabled;
+  runtimeGeneration += 1;
+  acquisitions.clear();
+  if (!enabled) {
+    for (const client of [...LspClient.clients.values()]) client.dispose();
+    return;
+  }
+  for (const listener of runtimeEnabledListeners) listener(workspace);
+}
+
+export function isLspRuntimeEnabled(): boolean {
+  return runtimeEnabled;
+}
+
+/** Reconnect mounted editor models after a suspended component is resumed. */
+export function onLspRuntimeEnabled(listener: RuntimeEnabledListener): () => void {
+  runtimeEnabledListeners.add(listener);
+  return () => runtimeEnabledListeners.delete(listener);
+}
 
 async function ensureListeners(): Promise<void> {
   if (listening) return;
@@ -274,17 +311,20 @@ async function ensureListeners(): Promise<void> {
  * server binary is installed or the handshake failed — callers treat that as "no LSP here".
  */
 export async function getClient(cwd: string, lang: string): Promise<LspClient | null> {
+  if (!runtimeEnabled) return null;
   const group = groupOf(lang);
   if (!group) return null;
   const cacheKey = `${cwd}::${group}`;
   let acq = acquisitions.get(cacheKey);
   if (!acq) {
+    const generation = runtimeGeneration;
     // Never cache a rejection: a null is "no LSP for now", a rejected promise would be forever.
     acq = (async () => {
       try {
         await ensureListeners();
+        if (!runtimeEnabled || generation !== runtimeGeneration) return null;
         const key = await lspStart(cwd, lang);
-        if (!key) return null;
+        if (!key || !runtimeEnabled || generation !== runtimeGeneration) return null;
         const client = LspClient.clients.get(key) ?? new LspClient(key, cwd, SERVER_GROUPS[group]);
         return (await client.ready) ? client : null;
       } catch {

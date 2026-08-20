@@ -4,6 +4,7 @@
 //! made through it is filed under that scope, which is why unloading a plugin is exact rather than
 //! best-effort. Cordis puts it well: the context *is* the plugin's undo log.
 
+use crate::command::CommandRealm;
 use crate::error::{KernelError, PluginError};
 use crate::event::{BoxFuture, Event, Handler, JsonListenerEntry, ListenerEntry};
 use crate::plugin::{FnPlugin, Injection, Plugin};
@@ -20,21 +21,33 @@ use std::sync::Arc;
 pub struct Context {
     runtime: Arc<Runtime>,
     scope: ScopeId,
+    command_realm: CommandRealm,
     /// Service-name → realm overrides inherited from [`Context::isolate`].
     isolate: Arc<HashMap<String, u64>>,
 }
 
 impl Context {
     pub(crate) fn for_scope(runtime: Arc<Runtime>, scope: ScopeId) -> Context {
-        Context { runtime, scope, isolate: Arc::new(HashMap::new()) }
+        Context {
+            runtime,
+            scope,
+            command_realm: CommandRealm::Global,
+            isolate: Arc::new(HashMap::new()),
+        }
     }
 
     pub(crate) fn with_isolate(
         runtime: Arc<Runtime>,
         scope: ScopeId,
         isolate: Arc<HashMap<String, u64>>,
+        command_realm: CommandRealm,
     ) -> Context {
-        Context { runtime, scope, isolate }
+        Context {
+            runtime,
+            scope,
+            command_realm,
+            isolate,
+        }
     }
 
     /// The scope this context registers into.
@@ -44,6 +57,24 @@ impl Context {
 
     pub fn runtime(&self) -> &Arc<Runtime> {
         &self.runtime
+    }
+
+    /// The command namespace used by registrations and calls made through this context.
+    pub fn command_realm(&self) -> &CommandRealm {
+        &self.command_realm
+    }
+
+    /// Derive a context that registers and dispatches commands in `realm`.
+    ///
+    /// Plugins loaded through the derived context inherit the realm. Services and events retain
+    /// their existing isolation semantics.
+    pub fn with_command_realm(&self, realm: CommandRealm) -> Context {
+        Context {
+            runtime: self.runtime.clone(),
+            scope: self.scope,
+            command_realm: realm,
+            isolate: self.isolate.clone(),
+        }
     }
 
     /// Wait until the plugin graph is settled. Never call this from inside `apply`.
@@ -62,8 +93,17 @@ impl Context {
     }
 
     pub fn plugin_arc(&self, plugin: Arc<dyn Plugin>, config: Value) -> Fork {
-        let scope = self.runtime.spawn_scope(self.scope, plugin, config, self.isolate.clone());
-        Fork { runtime: self.runtime.clone(), scope }
+        let scope = self.runtime.spawn_scope(
+            self.scope,
+            plugin,
+            config,
+            self.isolate.clone(),
+            self.command_realm.clone(),
+        );
+        Fork {
+            runtime: self.runtime.clone(),
+            scope,
+        }
     }
 
     /// Ask the kernel to tear this scope down and apply it again.
@@ -94,7 +134,8 @@ impl Context {
     /// Fails if something already provides that name in this realm — a shadowed service is a bug
     /// that shows up somewhere else, later, as the wrong behaviour.
     pub fn provide<S: Service>(&self, value: Arc<S>) -> Result<(), KernelError> {
-        self.runtime.provide_service(self.scope, S::NAME, value, &self.isolate)
+        self.runtime
+            .provide_service(self.scope, S::NAME, value, &self.isolate)
     }
 
     /// Publish a service under a name chosen at runtime — for plugins that wrap something dynamic
@@ -104,13 +145,17 @@ impl Context {
         name: &str,
         value: Arc<dyn std::any::Any + Send + Sync>,
     ) -> Result<(), KernelError> {
-        self.runtime.provide_service(self.scope, name, value, &self.isolate)
+        self.runtime
+            .provide_service(self.scope, name, value, &self.isolate)
     }
 
     /// Look a service up by type. `None` means "not provided here" — which for an injected
     /// service cannot happen, since the plugin would not be running.
     pub fn get<S: Service>(&self) -> Option<Arc<S>> {
-        self.runtime.lookup_service(S::NAME, &self.isolate)?.downcast::<S>().ok()
+        self.runtime
+            .lookup_service(S::NAME, &self.isolate)?
+            .downcast::<S>()
+            .ok()
     }
 
     /// Look up an injected service, or fail with a message worth reading. Use inside `apply` for
@@ -139,7 +184,12 @@ impl Context {
         for name in names {
             isolate.insert((*name).to_string(), self.runtime.new_realm());
         }
-        Context { runtime: self.runtime.clone(), scope: self.scope, isolate: Arc::new(isolate) }
+        Context {
+            runtime: self.runtime.clone(),
+            scope: self.scope,
+            command_realm: self.command_realm.clone(),
+            isolate: Arc::new(isolate),
+        }
     }
 
     /// The realm a service name resolves to in this context. `0` is global.
@@ -207,7 +257,11 @@ impl Context {
         };
         self.runtime.add_listener(
             TypeId::of::<E>(),
-            ListenerEntry { scope: self.scope, seq, handler: Box::new(Handler::<E>(handler)) },
+            ListenerEntry {
+                scope: self.scope,
+                seq,
+                handler: Box::new(Handler::<E>(handler)),
+            },
         );
     }
 
@@ -321,6 +375,7 @@ impl Context {
         let handler = Arc::new(handler);
         self.runtime.register_command(
             self.scope,
+            self.command_realm.clone(),
             name.into(),
             description.map(str::to_string),
             Arc::new(move |args| {
@@ -330,12 +385,25 @@ impl Context {
         )
     }
 
+    /// Prevent this command realm from inheriting a same-named global command.
+    ///
+    /// A project plugin manager uses this when a project explicitly disables a plugin. Like a
+    /// command registration, the blocker belongs to this context's scope and is removed on reload
+    /// or disposal. A command registered directly in this realm still wins over the blocker.
+    pub fn block_command_fallback(&self, name: impl Into<String>) -> Result<(), KernelError> {
+        self.runtime.register_command_fallback_block(
+            self.scope,
+            self.command_realm.clone(),
+            name.into(),
+        )
+    }
+
     /// Invoke a command by name. This is the whole dispatch layer: bridges call it, plugins call
     /// it, nobody maintains a table.
     pub async fn call(&self, name: &str, args: Value) -> Result<Value, KernelError> {
         let handler = self
             .runtime
-            .command_handler(name)
+            .command_handler(&self.command_realm, name)?
             .ok_or_else(|| KernelError::UnknownCommand(name.to_string()))?;
         handler(args).await.map_err(|error| KernelError::Command {
             name: name.to_string(),
@@ -365,6 +433,7 @@ impl Context {
 pub struct WeakContext {
     runtime: std::sync::Weak<Runtime>,
     scope: ScopeId,
+    command_realm: CommandRealm,
     isolate: Arc<HashMap<String, u64>>,
 }
 
@@ -374,6 +443,7 @@ impl WeakContext {
         Some(Context {
             runtime: self.runtime.upgrade()?,
             scope: self.scope,
+            command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         })
     }
@@ -385,6 +455,7 @@ impl Context {
         WeakContext {
             runtime: Arc::downgrade(&self.runtime),
             scope: self.scope,
+            command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         }
     }

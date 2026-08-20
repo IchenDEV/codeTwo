@@ -9,7 +9,8 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use codetwo_core::app::events::PluginsChanged;
 use codetwo_core::app::Paths;
@@ -29,11 +30,22 @@ impl LspPlugin {
     }
 }
 
-pub struct LspState(pub Mutex<HashMap<String, Server>>);
+pub struct LspState {
+    servers: Mutex<HashMap<String, Server>>,
+    accepting_starts: AtomicBool,
+    closing: AtomicBool,
+}
 
 pub struct Server {
     child: Child,
     stdin: ChildStdin,
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -71,6 +83,7 @@ fn lsp_start(
     cwd: String,
     lang: String,
 ) -> Result<Option<String>, String> {
+    state.ensure_open()?;
     let plugins_dir = paths.plugins();
     if plugins_dir.is_dir() {
         let plugins = codetwo_core::plugin::load_dir(&plugins_dir).unwrap_or_default();
@@ -144,7 +157,7 @@ fn start_server(
         return Ok(None);
     };
     let key = format!("{key_name}:{cwd}");
-    let mut servers = state.0.lock().unwrap();
+    let mut servers = state.lock_for_start()?;
     if let Some(server) = servers.get_mut(&key) {
         match server.child.try_wait() {
             Ok(None) => return Ok(Some(key)),
@@ -184,7 +197,7 @@ fn expand_project_dir(value: &str, cwd: &str) -> String {
 
 /// Forward one already-serialized JSON-RPC message to the server, framed.
 fn lsp_send(state: &LspState, key: String, payload: String) -> Result<(), String> {
-    let mut servers = state.0.lock().unwrap();
+    let mut servers = state.lock_for_start()?;
     let server = servers.get_mut(&key).ok_or("no such language server")?;
     let framed = format!("Content-Length: {}\r\n\r\n{}", payload.len(), payload);
     server
@@ -237,13 +250,57 @@ fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
 }
 
 impl LspState {
-    /// Kill every child. Called on app exit — an orphaned rust-analyzer indexes forever.
-    pub fn kill_all(&self) {
-        let mut servers = self.0.lock().unwrap();
-        for (_, mut server) in servers.drain() {
-            let _ = server.child.kill();
-            let _ = server.child.wait();
+    fn new() -> Self {
+        Self {
+            servers: Mutex::new(HashMap::new()),
+            accepting_starts: AtomicBool::new(true),
+            closing: AtomicBool::new(false),
         }
+    }
+
+    fn ensure_open(&self) -> Result<(), String> {
+        if self.closing.load(Ordering::Acquire) {
+            Err("language-server plugin is unloading".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Take the same lock used by shutdown and re-check the closing gate while holding it. This
+    /// makes spawning and registering a child atomic with respect to plugin teardown.
+    fn lock_for_start(&self) -> Result<MutexGuard<'_, HashMap<String, Server>>, String> {
+        let servers = self.servers.lock().unwrap();
+        self.ensure_open()?;
+        if !self.accepting_starts.load(Ordering::Acquire) {
+            return Err("language-server runtime is disabled".into());
+        }
+        Ok(servers)
+    }
+
+    /// Stop the current servers without closing the service. Plugin bundle changes use this to
+    /// make the next editor request resolve the updated language-server definition.
+    fn stop_all(&self) {
+        self.servers.lock().unwrap().clear();
+    }
+
+    /// Component policy is reversible and independent of permanent plugin shutdown. Suspending
+    /// closes the start gate before taking the server lock, so a start still scanning PATH either
+    /// observes the gate at insertion or finishes first and is drained here.
+    fn set_runtime_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.ensure_open()?;
+        self.accepting_starts.store(enabled, Ordering::Release);
+        if !enabled {
+            self.stop_all();
+        }
+        Ok(())
+    }
+
+    /// Permanently close the service and kill every child. The gate is set before taking the
+    /// server lock: an in-flight spawn either finishes first and is drained here, or observes the
+    /// gate after acquiring the lock and refuses to spawn.
+    fn shutdown(&self) {
+        self.closing.store(true, Ordering::Release);
+        self.stop_all();
     }
 }
 
@@ -270,12 +327,12 @@ impl Plugin for LspPlugin {
         let paths = ctx
             .get::<Paths>()
             .ok_or_else(|| PluginError::new("paths service is unavailable"))?;
-        let state = Arc::new(LspState(Mutex::new(HashMap::new())));
+        let state = Arc::new(LspState::new());
         let cleanup = state.clone();
-        ctx.effect(move || cleanup.kill_all());
+        ctx.effect(move || cleanup.shutdown());
         let changed = state.clone();
         ctx.on::<PluginsChanged, _>(move |_| {
-            changed.kill_all();
+            changed.stop_all();
             None
         });
 
@@ -302,6 +359,22 @@ impl Plugin for LspPlugin {
         })?;
 
         #[derive(Deserialize)]
+        struct RuntimeEnabledArgs {
+            enabled: bool,
+        }
+        let runtime_service = state.clone();
+        ctx.command("lsp.set_runtime_enabled", move |args| {
+            let service = runtime_service.clone();
+            async move {
+                let args: RuntimeEnabledArgs = take_args(args)?;
+                service
+                    .set_runtime_enabled(args.enabled)
+                    .map_err(PluginError::new)?;
+                Ok(Value::Null)
+            }
+        })?;
+
+        #[derive(Deserialize)]
         struct SendArgs {
             key: String,
             payload: String,
@@ -315,5 +388,67 @@ impl Plugin for LspPlugin {
             }
         })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LspState;
+
+    #[test]
+    fn shutdown_closes_the_lsp_start_gate() {
+        let state = LspState::new();
+
+        assert!(state.lock_for_start().is_ok());
+        state.shutdown();
+
+        assert_eq!(
+            state.lock_for_start().err().as_deref(),
+            Some("language-server plugin is unloading")
+        );
+    }
+
+    #[test]
+    fn stop_all_preserves_the_lsp_start_gate() {
+        let state = LspState::new();
+
+        state.stop_all();
+        assert!(state.lock_for_start().is_ok());
+
+        state.set_runtime_enabled(false).unwrap();
+        state.stop_all();
+        assert_eq!(
+            state.lock_for_start().err().as_deref(),
+            Some("language-server runtime is disabled")
+        );
+    }
+
+    #[test]
+    fn suspend_rejects_a_start_that_reaches_the_lock_after_scanning() {
+        let state = LspState::new();
+
+        // `lsp_start` has passed its early check and is scanning plugin/PATH candidates here.
+        assert!(state.ensure_open().is_ok());
+        state.set_runtime_enabled(false).unwrap();
+
+        assert_eq!(
+            state.lock_for_start().err().as_deref(),
+            Some("language-server runtime is disabled")
+        );
+    }
+
+    #[test]
+    fn resume_reopens_component_gate_but_not_permanent_shutdown() {
+        let state = LspState::new();
+
+        state.set_runtime_enabled(false).unwrap();
+        state.set_runtime_enabled(true).unwrap();
+        assert!(state.lock_for_start().is_ok());
+
+        state.shutdown();
+        assert_eq!(
+            state.set_runtime_enabled(true).err().as_deref(),
+            Some("language-server plugin is unloading")
+        );
     }
 }

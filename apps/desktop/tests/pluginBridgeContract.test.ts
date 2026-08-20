@@ -18,7 +18,10 @@ describe("plugin bridge contract", () => {
     const native = readFileSync(resolve(desktop, "src-tauri/src/lib.rs"), "utf8");
 
     expect(bridge.match(/\binvoke(?:<[^>]+>)?\(/g)).toEqual(['invoke<T>(']);
-    expect(bridge).toContain('invoke<T>("call", { name, args: args ?? null })');
+    expect(bridge).toContain('invoke<T>("call", {');
+    expect(bridge).toContain("projectPath,");
+    expect(bridge).toContain('call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)');
+    expect(bridge).toContain('call("lsp.set_runtime_enabled", { enabled }, projectPath)');
     expect(native.match(/^#\[tauri::command\]/gm)).toHaveLength(1);
     expect(native).toContain("tauri::generate_handler![call]");
   });

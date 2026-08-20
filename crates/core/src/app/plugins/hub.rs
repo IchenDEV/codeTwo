@@ -10,12 +10,16 @@
 
 use crate::app::events::PluginsChanged;
 use crate::app::service::{LoaderService, Paths, PluginHub};
-use crate::app::{json, take_args};
+use crate::app::{
+    json, take_args, PluginChangeRequest, PluginManager, PluginOverride, PluginScope,
+};
 use crate::github_skills;
 use crate::plugin;
 use crate::plugin::{InstalledPlugin, PluginCounts, PluginScaffold};
 use crate::plugin_marketplace::{self, MarketplacePluginSource};
-use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use codetwo_kernel::{
+    async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json as jval, Value};
 use std::path::{Path, PathBuf};
@@ -103,6 +107,21 @@ struct FlagArgs {
     value: bool,
 }
 
+async fn reconcile_and_announce(
+    manager: &PluginManager,
+    hub: &PluginHub,
+    context: &WeakContext,
+) -> PluginResult {
+    manager
+        .sync_installed_bundles(&hub.dir)
+        .map_err(PluginError::new)?;
+    if let Some(context) = context.upgrade() {
+        context.emit(PluginsChanged).await;
+        context.flush().await;
+    }
+    Ok(())
+}
+
 // ---- installed bundles ------------------------------------------------------------------------
 
 pub struct HubPlugin;
@@ -118,33 +137,30 @@ impl Plugin for HubPlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["paths"])
+        Injection::required(["paths", "plugin-manager"])
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let paths = ctx.expect::<Paths>()?;
+        let manager = ctx.expect::<PluginManager>()?;
         let hub = Arc::new(PluginHub {
             dir: paths.plugins(),
+            inventory: tokio::sync::Mutex::new(()),
         });
         ctx.provide(hub.clone())?;
-
-        // Changing the installed set invalidates the skill and scene libraries; they listen.
-        let announce = {
-            let weak = ctx.weak();
-            move || {
-                if let Some(ctx) = weak.upgrade() {
-                    let emitting = ctx.clone();
-                    ctx.spawn(async move {
-                        emitting.emit(PluginsChanged).await;
-                    });
-                }
-            }
-        };
+        {
+            let _inventory = hub.inventory.lock().await;
+            manager
+                .sync_installed_bundles(&hub.dir)
+                .map_err(PluginError::new)?;
+        }
+        let reconcile_context = ctx.weak();
 
         let listed = hub.clone();
         ctx.command("plugins.list", move |_| {
             let hub = listed.clone();
             async move {
+                let _inventory = hub.inventory.lock().await;
                 json(
                     hub.installed()
                         .into_iter()
@@ -159,18 +175,21 @@ impl Plugin for HubPlugin {
             repository: String,
         }
         let importing = hub.clone();
-        let after_import = announce.clone();
+        let import_manager = manager.clone();
+        let import_context = reconcile_context.clone();
         ctx.command("plugins.import_github", move |args| {
             let hub = importing.clone();
-            let announce = after_import.clone();
+            let manager = import_manager.clone();
+            let context = import_context.clone();
             async move {
                 let args: ImportArgs = take_args(args)?;
                 let checkout = github_skills::checkout(&args.repository)
                     .await
                     .map_err(PluginError::new)?;
                 let bundle = plugin::from_github(&checkout).map_err(PluginError::new)?;
+                let _inventory = hub.inventory.lock().await;
                 let installed = plugin::install(&hub.dir, bundle).map_err(PluginError::new)?;
-                announce();
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 json(PluginImportResult {
                     plugin: installed.into(),
                 })
@@ -192,10 +211,12 @@ impl Plugin for HubPlugin {
             plugin_name: String,
         }
         let marketplace_hub = hub.clone();
-        let after_marketplace = announce.clone();
+        let marketplace_manager = manager.clone();
+        let marketplace_context = reconcile_context.clone();
         ctx.command("plugins.install_marketplace", move |args| {
             let hub = marketplace_hub.clone();
-            let announce = after_marketplace.clone();
+            let manager = marketplace_manager.clone();
+            let context = marketplace_context.clone();
             async move {
                 let args: MarketplaceInstallArgs = take_args(args)?;
                 let marketplace = plugin_marketplace::load(Path::new(&args.marketplace_path))
@@ -261,8 +282,9 @@ impl Plugin for HubPlugin {
                 if bundle.plugin.version == "0.0.0" && !entry.version.is_empty() {
                     bundle.plugin.version = entry.version.clone();
                 }
+                let _inventory = hub.inventory.lock().await;
                 let installed = plugin::install(&hub.dir, bundle).map_err(PluginError::new)?;
-                announce();
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 json(PluginImportResult {
                     plugin: installed.into(),
                 })
@@ -270,42 +292,60 @@ impl Plugin for HubPlugin {
         })?;
 
         let enabled = hub.clone();
-        let after_enable = announce.clone();
+        let enable_manager = manager.clone();
+        let enable_context = reconcile_context.clone();
         ctx.command("plugins.set_enabled", move |args| {
             let hub = enabled.clone();
-            let announce = after_enable.clone();
+            let manager = enable_manager.clone();
+            let context = enable_context.clone();
             async move {
                 let args: FlagArgs = take_args(args)?;
+                let _inventory = hub.inventory.lock().await;
                 let plugin = plugin::set_enabled(&hub.dir, &args.id, args.value)
                     .map_err(PluginError::new)?;
-                announce();
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 json(PluginInfo::from(plugin))
             }
         })?;
 
         let trusted = hub.clone();
-        let after_trust = announce.clone();
+        let trust_manager = manager.clone();
+        let trust_context = reconcile_context.clone();
         ctx.command("plugins.set_trusted", move |args| {
             let hub = trusted.clone();
-            let announce = after_trust.clone();
+            let manager = trust_manager.clone();
+            let context = trust_context.clone();
             async move {
                 let args: FlagArgs = take_args(args)?;
+                let _inventory = hub.inventory.lock().await;
                 let plugin = plugin::set_trusted(&hub.dir, &args.id, args.value)
                     .map_err(PluginError::new)?;
-                announce();
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 json(PluginInfo::from(plugin))
             }
         })?;
 
         let removed = hub.clone();
+        let remove_manager = manager.clone();
+        let remove_context = reconcile_context.clone();
         ctx.command("plugins.uninstall", move |args| {
             let hub = removed.clone();
-            let announce = announce.clone();
+            let manager = remove_manager.clone();
+            let context = remove_context.clone();
             async move {
                 let args: IdArgs = take_args(args)?;
+                let _inventory = hub.inventory.lock().await;
+                // Remove explicit runtime overrides before revoking trust. Otherwise an explicit
+                // Enabled policy would keep the factory enabled just long enough for its hard
+                // trust gate to fail the reconcile, preventing uninstall from reaching teardown.
+                manager
+                    .forget_installed_bundle_policy(&args.id)
+                    .map_err(PluginError::new)?;
+                plugin::set_trusted(&hub.dir, &args.id, false).map_err(PluginError::new)?;
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 plugin::uninstall_with_options(&hub.dir, &args.id, args.keep_data)
                     .map_err(PluginError::new)?;
-                announce();
+                reconcile_and_announce(&manager, &hub, &context).await?;
                 Ok(Value::Bool(true))
             }
         })?;
@@ -365,11 +405,12 @@ impl Plugin for KernelPlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["loader"])
+        Injection::required(["loader", "plugin-manager"])
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let loader = ctx.expect::<LoaderService>()?;
+        let manager = ctx.expect::<PluginManager>()?;
 
         let runtime = ctx.runtime().clone();
         ctx.command_described(
@@ -412,15 +453,37 @@ impl Plugin for KernelPlugin {
             value: bool,
         }
         let toggled = loader.clone();
+        let legacy_manager = manager.clone();
         ctx.command_described(
             "kernel.set_enabled",
             Some("Load or unload one plugin, live."),
             move |args| {
                 let loader = toggled.clone();
+                let manager = legacy_manager.clone();
                 async move {
                     let args: EnableArgs = take_args(args)?;
-                    let errors = loader.0.lock().unwrap().set_enabled(&args.name, args.value);
-                    report(errors)
+                    // Keep the old command shape, but route it through the durable manager so a
+                    // compatibility caller cannot create a restart-only state.
+                    drop(loader);
+                    let plan = manager
+                        .plan(PluginChangeRequest {
+                            plugin: args.name,
+                            scope: PluginScope::User,
+                            state: Some(if args.value {
+                                PluginOverride::Enabled
+                            } else {
+                                PluginOverride::Disabled
+                            }),
+                            config: None,
+                            component: None,
+                        })
+                        .map_err(PluginError::new)?;
+                    let result = manager.apply(&plan.id).map_err(PluginError::new)?;
+                    manager
+                        .settle_and_mark_last_good(&result)
+                        .await
+                        .map_err(PluginError::new)?;
+                    Ok(Value::Bool(true))
                 }
             },
         )?;
@@ -430,37 +493,117 @@ impl Plugin for KernelPlugin {
             name: String,
             config: Value,
         }
+        let configured_manager = manager.clone();
         ctx.command_described(
             "kernel.configure",
             Some("Replace one plugin's config; it reloads, nothing else does."),
             move |args| {
                 let loader = loader.clone();
+                let manager = configured_manager.clone();
                 async move {
                     let args: ConfigureArgs = take_args(args)?;
-                    let errors = loader
-                        .0
-                        .lock()
-                        .unwrap()
-                        .reconfigure(&args.name, args.config);
-                    report(errors)
+                    drop(loader);
+                    let plan = manager
+                        .plan(PluginChangeRequest {
+                            plugin: args.name,
+                            scope: PluginScope::User,
+                            state: Some(PluginOverride::Enabled),
+                            config: Some(args.config),
+                            component: None,
+                        })
+                        .map_err(PluginError::new)?;
+                    let result = manager.apply(&plan.id).map_err(PluginError::new)?;
+                    manager
+                        .settle_and_mark_last_good(&result)
+                        .await
+                        .map_err(PluginError::new)?;
+                    Ok(Value::Bool(true))
+                }
+            },
+        )?;
+
+        #[derive(Deserialize)]
+        struct CatalogArgs {
+            #[serde(default)]
+            scope: Option<PluginScope>,
+        }
+        let catalogued = manager.clone();
+        ctx.command_described(
+            "plugins.catalog",
+            Some("Unified built-in and host plugin catalog for one user or project scope."),
+            move |args| {
+                let manager = catalogued.clone();
+                async move {
+                    let args: CatalogArgs = take_args(args)?;
+                    json(
+                        manager
+                            .catalog(args.scope.unwrap_or(PluginScope::User))
+                            .map_err(PluginError::new)?,
+                    )
+                }
+            },
+        )?;
+
+        let planned = manager.clone();
+        ctx.command_described(
+            "plugins.plan_change",
+            Some("Plan one revision-bound plugin or component change and its cascade."),
+            move |args| {
+                let manager = planned.clone();
+                async move {
+                    let request: PluginChangeRequest = take_args(args)?;
+                    json(manager.plan(request).map_err(PluginError::new)?)
+                }
+            },
+        )?;
+
+        #[derive(Deserialize)]
+        struct PlanIdArgs {
+            id: String,
+        }
+        let applied = manager.clone();
+        ctx.command_described(
+            "plugins.apply_change",
+            Some("Stop affected work, apply one planned change, and wait for the graph to settle."),
+            move |args| {
+                let manager = applied.clone();
+                async move {
+                    let args: PlanIdArgs = take_args(args)?;
+                    let result = manager.apply(&args.id).map_err(PluginError::new)?;
+                    manager
+                        .settle_and_mark_last_good(&result)
+                        .await
+                        .map_err(PluginError::new)?;
+                    json(result)
+                }
+            },
+        )?;
+
+        #[derive(Deserialize)]
+        struct ResetArgs {
+            plugin: String,
+            #[serde(default)]
+            scope: Option<PluginScope>,
+        }
+        let reset = manager.clone();
+        ctx.command_described(
+            "plugins.reset",
+            Some("Reset one plugin to the default for a user or project scope."),
+            move |args| {
+                let manager = reset.clone();
+                async move {
+                    let args: ResetArgs = take_args(args)?;
+                    let result = manager
+                        .reset(args.scope.unwrap_or(PluginScope::User), &args.plugin)
+                        .map_err(PluginError::new)?;
+                    manager
+                        .settle_and_mark_last_good(&result)
+                        .await
+                        .map_err(PluginError::new)?;
+                    json(result)
                 }
             },
         )?;
         Ok(())
     }
-}
-
-/// A config edit that names a plugin nobody registered is reported, not fatal — the rest of the
-/// edit still applied.
-fn report(errors: Vec<codetwo_kernel::KernelError>) -> Result<Value, PluginError> {
-    if errors.is_empty() {
-        return Ok(Value::Bool(true));
-    }
-    Err(PluginError::new(
-        errors
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("; "),
-    ))
 }

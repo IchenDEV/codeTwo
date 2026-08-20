@@ -16,9 +16,11 @@ const WAVE_DURATION_MS = 820;
 
 export function CodeTwoPet({
   animation,
+  voiceEnabled,
   onVoiceText,
 }: {
   animation: CodeTwoPetAnimation;
+  voiceEnabled: boolean;
   onVoiceText: (text: string) => void;
 }) {
   const t = useT();
@@ -63,7 +65,7 @@ export function CodeTwoPet({
       </button>
 
       <div className="codetwo-pet-controls">
-        <VoiceButton onText={onVoiceText} />
+        {voiceEnabled ? <VoiceButton onText={onVoiceText} /> : null}
         <Button
           type="button"
           variant="secondary"

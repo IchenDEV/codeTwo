@@ -46,10 +46,12 @@ function config(overrides = {}) {
     onWorktreeBase: () => {},
     planMode: false,
     onPlan: () => {},
+    memoryEnabled: true,
     memoryRead: "inherit",
     memoryWrite: "inherit",
     onMemoryPolicy: () => {},
     hasSession: false,
+    scenesEnabled: true,
     scenes: [sceneInfo()],
     activeScene: sceneInfo(),
     autoScene: false,
@@ -179,6 +181,53 @@ describe("SceneChip", () => {
     await flush();
     button(dom.document.body, "Manage scenes").click();
     expect(opened).toBe(true);
+    rendered.unmount();
+  });
+
+  test("keeps session configuration while removing every scene surface", async () => {
+    activateDom();
+    const rendered = renderChip(config({ scenesEnabled: false }));
+    const trigger = rendered.container.querySelector(
+      '[aria-label="Session configuration: Session configuration"]',
+    );
+    expect(trigger).toBeTruthy();
+
+    await reactAct(async () => {
+      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      }));
+      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    const content = dom.document.body.textContent ?? "";
+    expect(content).toContain("Ask first");
+    expect(content).toContain("Memory on");
+    expect(content).not.toContain("Develop");
+    expect(content).not.toContain("Auto scene");
+    expect(content).not.toContain("Manage scenes");
+    rendered.unmount();
+  });
+
+  test("removes the memory policy control when memory is disabled", async () => {
+    activateDom();
+    const rendered = renderChip(config({ memoryEnabled: false }));
+    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+    await reactAct(async () => {
+      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      }));
+      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    expect(dom.document.body.textContent).not.toContain("Memory on");
     rendered.unmount();
   });
 });

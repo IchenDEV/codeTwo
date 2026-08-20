@@ -30,9 +30,7 @@ use crate::canvas::{
 };
 use crate::error::AcpError;
 use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
-use crate::memory::{
-    prompt_source, MemoryCanvasRef, MemoryTurnProvenance, MEMORY_SETTLE_DELAY_SECS,
-};
+use crate::memory::{prompt_source, MemoryCanvasRef, MemoryCapability, MemoryTurnProvenance};
 use crate::models::{available_models, builtin_models};
 use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
@@ -1500,9 +1498,14 @@ struct EngineState {
     scene_artifacts: Mutex<Option<crate::scene_artifact::SceneArtifactStore>>,
     events: mpsc::UnboundedSender<Event>,
     sessions: Mutex<HashMap<SessionId, SessionRuntime>>,
+    /// Provider processes that have spawned but are not yet a fully initialized session.
+    starting_clients: Mutex<Vec<Arc<AcpClient>>>,
+    shutting_down: AtomicBool,
     activity: ActivityTracker,
     router: PermissionRouter,
     store: Option<Arc<Store>>,
+    /// Optional because persistence and provider-neutral memory have independent lifecycles.
+    memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
     desktop_mcp: Option<DesktopMcpConfig>,
 }
@@ -1559,7 +1562,14 @@ impl Engine {
         providers: Vec<Provider>,
         skills: SkillLibrary,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, None, CanvasFeatureGate::default(), None)
+        Self::build(
+            providers,
+            skills,
+            None,
+            None,
+            CanvasFeatureGate::default(),
+            None,
+        )
     }
 
     /// Like [`Engine::new`] but persists sessions and transcripts to `store`.
@@ -1568,10 +1578,30 @@ impl Engine {
         skills: SkillLibrary,
         store: Arc<Store>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        let memory = Self::permanent_memory(store.clone());
         Self::build(
             providers,
             skills,
             Some(store),
+            Some(memory),
+            CanvasFeatureGate::default(),
+            None,
+        )
+    }
+
+    /// Plugin construction path: persistence remains available when `memory` is absent or later
+    /// revoked. Direct constructors retain their historical always-on memory for compatibility.
+    pub fn with_store_and_memory(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        memory: Option<MemoryCapability>,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            memory,
             CanvasFeatureGate::default(),
             None,
         )
@@ -1586,7 +1616,15 @@ impl Engine {
         store: Arc<Store>,
         canvas_gate: CanvasFeatureGate,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
-        Self::build(providers, skills, Some(store), canvas_gate, None)
+        let memory = Self::permanent_memory(store.clone());
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            Some(memory),
+            canvas_gate,
+            None,
+        )
     }
 
     /// Desktop construction path that attaches C2's internal browser MCP to every Codex
@@ -1596,6 +1634,7 @@ impl Engine {
         providers: Vec<Provider>,
         skills: SkillLibrary,
         store: Arc<Store>,
+        memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: DesktopMcpConfig,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
@@ -1603,15 +1642,25 @@ impl Engine {
             providers,
             skills,
             Some(store),
+            memory,
             canvas_gate,
             Some(desktop_mcp),
         )
+    }
+
+    fn permanent_memory(store: Arc<Store>) -> MemoryCapability {
+        let memory = MemoryCapability::new(store);
+        if let Err(error) = memory.catch_up() {
+            tracing::warn!("memory catch-up failed: {error}");
+        }
+        memory
     }
 
     fn build(
         providers: Vec<Provider>,
         skills: SkillLibrary,
         store: Option<Arc<Store>>,
+        memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: Option<DesktopMcpConfig>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
@@ -1630,9 +1679,12 @@ impl Engine {
             scene_artifacts: Mutex::new(None),
             events,
             sessions: Mutex::new(HashMap::new()),
+            starting_clients: Mutex::new(Vec::new()),
+            shutting_down: AtomicBool::new(false),
             activity,
             router,
             store,
+            memory,
             canvas_gate,
             desktop_mcp,
         });
@@ -1641,6 +1693,60 @@ impl Engine {
 
     pub fn router(&self) -> &PermissionRouter {
         &self.state.router
+    }
+
+    fn track_starting_client(&self, client: &Arc<AcpClient>) -> bool {
+        let mut starting = self.state.starting_clients.lock().unwrap();
+        if self.state.shutting_down.load(Ordering::Acquire) {
+            client.terminate();
+            return false;
+        }
+        starting.push(client.clone());
+        true
+    }
+
+    fn untrack_starting_client(&self, client: &Arc<AcpClient>) {
+        self.state
+            .starting_clients
+            .lock()
+            .unwrap()
+            .retain(|candidate| !Arc::ptr_eq(candidate, client));
+    }
+
+    /// Stop every live provider owned by this engine.
+    ///
+    /// This is the synchronous unload boundary used by the engine plugin. Pending local approval
+    /// routes are released first, then ACP receives a best-effort cancellation, and finally the
+    /// provider process is terminated so an in-flight prompt cannot outlive the plugin scope.
+    pub fn shutdown(&self) {
+        if self.state.shutting_down.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let sessions = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(session, runtime)| {
+                (
+                    session.clone(),
+                    runtime.client.clone(),
+                    runtime.acp_session_id.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let starting = self.state.starting_clients.lock().unwrap().clone();
+        for (session, client, acp_session_id) in sessions {
+            self.state.activity.cancel_pending(&session);
+            if let Some(acp_session_id) = acp_session_id {
+                let _ = client.cancel(&acp_session_id);
+            }
+            client.terminate();
+        }
+        for client in starting {
+            client.terminate();
+        }
     }
 
     /// Atomically resolve one pending permission. Protocol adapters use the boolean result as the
@@ -2314,14 +2420,21 @@ impl Engine {
             self.state.store.clone(),
         ));
         let replaying = handler.replay_flag();
-        let client = acp::spawn(&prov.launch, handler)
-            .await
-            .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
-        let init = client
-            .initialize(client_capabilities())
-            .await
-            .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?;
-        let client = Arc::new(client);
+        let client = Arc::new(
+            acp::spawn(&prov.launch, handler)
+                .await
+                .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?,
+        );
+        if !self.track_starting_client(&client) {
+            return Err("engine is shutting down".into());
+        }
+        let init = match client.initialize(client_capabilities()).await {
+            Ok(init) => init,
+            Err(error) => {
+                self.untrack_starting_client(&client);
+                return Err(format!("couldn't relaunch {}: {error}", prov.display_name));
+            }
+        };
 
         // The stored ACP session id becomes the resume cursor; the live id stays unset until the
         // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
@@ -2329,7 +2442,15 @@ impl Engine {
         let cwd = sess.cwd.clone();
         let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
-        self.state.sessions.lock().unwrap().insert(
+        let mut sessions = self.state.sessions.lock().unwrap();
+        if self.state.shutting_down.load(Ordering::Acquire) {
+            drop(sessions);
+            self.untrack_starting_client(&client);
+            client.terminate();
+            return Err("engine is shutting down".into());
+        }
+        self.untrack_starting_client(&client);
+        sessions.insert(
             id.to_string(),
             SessionRuntime {
                 session: sess,
@@ -2346,6 +2467,7 @@ impl Engine {
                 models_reported: false,
             },
         );
+        drop(sessions);
         if !models.is_empty() {
             self.emit(Event::Models {
                 session: id.to_string(),
@@ -2445,6 +2567,9 @@ impl Engine {
 
     /// Process one submission. Long-running work (a prompt turn) is spawned so this returns promptly.
     pub async fn submit(&self, op: Op) -> Result<(), AcpError> {
+        if self.state.shutting_down.load(Ordering::Acquire) {
+            return Err(AcpError::Closed);
+        }
         match op {
             Op::NewSession {
                 provider,
@@ -2563,8 +2688,17 @@ impl Engine {
                 ));
 
                 let replaying = handler.replay_flag();
-                let client = acp::spawn(&prov.launch, handler).await?;
-                let init = client.initialize(client_capabilities()).await?;
+                let client = Arc::new(acp::spawn(&prov.launch, handler).await?);
+                if !self.track_starting_client(&client) {
+                    return Err(AcpError::Closed);
+                }
+                let init = match client.initialize(client_capabilities()).await {
+                    Ok(init) => init,
+                    Err(error) => {
+                        self.untrack_starting_client(&client);
+                        return Err(error);
+                    }
+                };
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
@@ -2589,6 +2723,7 @@ impl Engine {
                             prepared_worktree = Some((prepared.repo_root, prepared.worktree));
                         }
                         Err(error) => {
+                            self.untrack_starting_client(&client);
                             self.emit(Event::Error {
                                 session: None,
                                 message: format!("couldn't create worktree: {error}"),
@@ -2598,6 +2733,26 @@ impl Engine {
                             return Ok(());
                         }
                     }
+                }
+
+                // Offer the provider's built-in models straight away. Keep the client tracked
+                // while this async probe runs so plugin unload can still terminate it.
+                let models = available_models(&prov).await;
+
+                // Moving a starting client into the live session map is atomic with shutdown:
+                // shutdown sets the flag before taking this same lock, so it either sees the new
+                // session or this path refuses to persist/insert it.
+                let mut live_sessions = self.state.sessions.lock().unwrap();
+                if self.state.shutting_down.load(Ordering::Acquire) {
+                    drop(live_sessions);
+                    self.untrack_starting_client(&client);
+                    if let (Some((repo, worktree)), Some(baseline)) =
+                        (prepared_worktree.as_ref(), sess.worktree_baseline.as_ref())
+                    {
+                        let _ =
+                            crate::worktree::rollback_created(repo, worktree, &baseline.sha).await;
+                    }
+                    return Err(AcpError::Closed);
                 }
 
                 if let Some(store) = &self.state.store {
@@ -2612,6 +2767,8 @@ impl Engine {
                         None => store.upsert_session(&sess),
                     };
                     if let Err(e) = persisted {
+                        drop(live_sessions);
+                        self.untrack_starting_client(&client);
                         let mut message = format!("couldn't persist new session: {e}");
                         if let (Some((repo, worktree)), Some(baseline)) =
                             (prepared_worktree.as_ref(), sess.worktree_baseline.as_ref())
@@ -2642,15 +2799,12 @@ impl Engine {
                 self.state
                     .activity
                     .register(&session_id, sess.activity.clone());
-                // Offer the provider's built-in models straight away. The agent's own list, if it
-                // has one, only arrives at `session/new` — i.e. after the first prompt — and until
-                // then the picker would otherwise have nothing in it at all.
-                let models = available_models(&prov).await;
-                self.state.sessions.lock().unwrap().insert(
+                self.untrack_starting_client(&client);
+                live_sessions.insert(
                     session_id.clone(),
                     SessionRuntime {
                         session: sess,
-                        client: Arc::new(client),
+                        client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
                         caps: init.caps(),
@@ -2663,6 +2817,7 @@ impl Engine {
                         models_reported: false,
                     },
                 );
+                drop(live_sessions);
                 self.emit(Event::SessionCreated {
                     session: session_id.clone(),
                     cwd: cwd_stored,
@@ -2991,19 +3146,18 @@ impl Engine {
                         request_id: request_id.clone(),
                     });
                 }
-                let memory_context = self
-                    .state
-                    .store
-                    .as_ref()
-                    .and_then(|store| {
-                        match store.memory_context_with_receipt(&cwd, &session, &memory_source) {
-                            Ok(context) => Some(context),
-                            Err(e) => {
-                                tracing::warn!("load memory context failed: {e}");
-                                None
-                            }
+                let memory_turn = self.state.memory.as_ref().and_then(|memory| {
+                    match memory.recall(&cwd, &session, &memory_source) {
+                        Ok(turn) => turn,
+                        Err(e) => {
+                            tracing::warn!("load memory context failed: {e}");
+                            None
                         }
-                    })
+                    }
+                });
+                let memory_context = memory_turn
+                    .as_ref()
+                    .map(|turn| turn.context().clone())
                     .unwrap_or_default();
                 let provider_prompt = if memory_context.block.is_empty() {
                     compiled.prompt.clone()
@@ -3092,14 +3246,10 @@ impl Engine {
                 // The canonical prompt was already persisted atomically with Running activity.
                 // Attach Memory's receipt to that same sequence instead of writing a duplicate user
                 // part; the transient recalled block remains provider-only context.
-                if let (Some(store), Some(seq)) = (&self.state.store, transcript_seq) {
-                    match store.save_memory_receipt(
-                        &cwd,
-                        &session,
-                        seq,
-                        &memory_source,
-                        &memory_context,
-                    ) {
+                if let (Some(memory), Some(turn), Some(seq)) =
+                    (&self.state.memory, &memory_turn, transcript_seq)
+                {
+                    match memory.receipt(turn, &cwd, &session, seq, &memory_source) {
                         Ok(Some(receipt)) => self.emit(Event::MemoryContext {
                             session: session.clone(),
                             receipt,
@@ -3386,6 +3536,7 @@ impl Engine {
                 let sess_for_task = session.clone();
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
+                let turn_memory = self.state.memory.clone();
                 let memory_project = images_cwd.clone();
                 // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
                 // carries plain handles instead of engine references. Best-effort by design:
@@ -3448,35 +3599,18 @@ impl Engine {
                                             "finalize conversation search failed: {error}"
                                         );
                                     }
-                                    if let Some(seq) = transcript_seq {
-                                        match store.capture_completed_turn_with_provenance(
+                                    if let (Some(memory), Some(turn), Some(seq)) =
+                                        (&turn_memory, &memory_turn, transcript_seq)
+                                    {
+                                        if let Err(e) = memory.complete_turn(
+                                            turn,
                                             &memory_project,
                                             &sess_for_task,
                                             &memory_source,
                                             seq,
                                             provenance,
                                         ) {
-                                            Ok(_) => {
-                                                let maintenance_store = store.clone();
-                                                tokio::spawn(async move {
-                                                    tokio::time::sleep(
-                                                        std::time::Duration::from_secs(
-                                                            MEMORY_SETTLE_DELAY_SECS,
-                                                        ),
-                                                    )
-                                                    .await;
-                                                    if let Err(e) =
-                                                        maintenance_store.run_memory_maintenance()
-                                                    {
-                                                        tracing::warn!(
-                                                            "memory maintenance failed: {e}"
-                                                        );
-                                                    }
-                                                });
-                                            }
-                                            Err(e) => {
-                                                tracing::warn!("capture memory failed: {e}")
-                                            }
+                                            tracing::warn!("capture memory failed: {e}");
                                         }
                                     }
                                     // Scene artifact auto-capture (R8): scan the turn's agent

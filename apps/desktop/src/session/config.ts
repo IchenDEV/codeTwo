@@ -37,11 +37,15 @@ export interface SessionConfig {
   onWorktreeBase: (v: WorktreeBaselineKind | null) => void;
   planMode: boolean;
   onPlan: (v: boolean) => void;
+  /** Component-policy gate for the memory picker and its persistence calls. */
+  memoryEnabled: boolean;
   memoryRead: MemoryAccess;
   memoryWrite: MemoryAccess;
   onMemoryPolicy: (read: MemoryAccess, write: MemoryAccess) => void;
   /** Whether a session exists yet — some controls have nothing to act on before that. */
   hasSession: boolean;
+  /** Component-policy gate for every scene, banner, studio, and pipeline surface. */
+  scenesEnabled: boolean;
   /** Resolved scenes (project > user > plugin > builtin) for the scene chip and pickers. */
   scenes: SceneInfo[];
   activeScene: SceneInfo | null;

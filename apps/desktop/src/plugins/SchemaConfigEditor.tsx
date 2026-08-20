@@ -1,0 +1,347 @@
+import { useEffect, useMemo, useState } from "react";
+
+import { Loader2, Save } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+
+import type { PluginManagerLabels } from "./types";
+
+type JsonPrimitive = string | number | boolean | null;
+
+interface JsonSchema {
+  type?: string | string[];
+  title?: string;
+  description?: string;
+  default?: unknown;
+  enum?: JsonPrimitive[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: unknown;
+}
+
+interface SimpleObjectSchema extends JsonSchema {
+  properties: Record<string, JsonSchema>;
+}
+
+const SUPPORTED_FIELD_TYPES = new Set(["string", "number", "integer", "boolean"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asSimpleObjectSchema(value: unknown): SimpleObjectSchema | null {
+  if (!isRecord(value) || !isRecord(value.properties)) return null;
+  if (value.type !== undefined && value.type !== "object") return null;
+
+  const properties = value.properties as Record<string, JsonSchema>;
+  const supported = Object.values(properties).every((property) => {
+    if (!isRecord(property)) return false;
+    if (Array.isArray(property.enum) && property.enum.length > 0) {
+      return property.enum.every(
+        (entry) => entry === null || ["string", "number", "boolean"].includes(typeof entry),
+      );
+    }
+    return typeof property.type === "string" && SUPPORTED_FIELD_TYPES.has(property.type);
+  });
+
+  return supported ? ({ ...value, properties } as SimpleObjectSchema) : null;
+}
+
+function formatJson(value: unknown): string {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function initialObject(value: unknown): Record<string, unknown> {
+  return isRecord(value) ? { ...value } : {};
+}
+
+function enumKey(value: JsonPrimitive): string {
+  return JSON.stringify(value);
+}
+
+function enumLabel(value: JsonPrimitive): string {
+  return value === null ? "null" : String(value);
+}
+
+function updateProperty(
+  current: Record<string, unknown>,
+  name: string,
+  value: unknown,
+): Record<string, unknown> {
+  if (value !== undefined) return { ...current, [name]: value };
+  const next = { ...current };
+  delete next[name];
+  return next;
+}
+
+function SchemaField({
+  name,
+  schema,
+  required,
+  value,
+  onChange,
+}: {
+  name: string;
+  schema: JsonSchema;
+  required: boolean;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const id = `plugin-config-${name}`;
+  const label = schema.title ?? name;
+
+  if (schema.enum?.length) {
+    const items = schema.enum.map((entry) => ({ value: enumKey(entry), label: enumLabel(entry) }));
+    const selected = schema.enum.find((entry) => Object.is(entry, value)) ?? schema.default ?? schema.enum[0];
+    return (
+      <Field>
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        {schema.description ? <FieldDescription>{schema.description}</FieldDescription> : null}
+        <Select
+          items={items}
+          value={enumKey(selected as JsonPrimitive)}
+          onValueChange={(key) => {
+            const next = schema.enum?.find((entry) => enumKey(entry) === key);
+            if (next !== undefined) onChange(next);
+          }}
+        >
+          <SelectTrigger id={id} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectGroup>
+              {items.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+
+  if (schema.type === "boolean") {
+    return (
+      <Field orientation="horizontal">
+        <Checkbox
+          id={id}
+          checked={typeof value === "boolean" ? value : Boolean(schema.default)}
+          onCheckedChange={(checked) => onChange(checked === true)}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <FieldLabel htmlFor={id}>{label}</FieldLabel>
+          {schema.description ? <FieldDescription>{schema.description}</FieldDescription> : null}
+        </div>
+      </Field>
+    );
+  }
+
+  const inputType = schema.type === "number" || schema.type === "integer" ? "number" : "text";
+  const displayed = value ?? schema.default ?? "";
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      {schema.description ? <FieldDescription>{schema.description}</FieldDescription> : null}
+      <Input
+        id={id}
+        type={inputType}
+        step={schema.type === "integer" ? 1 : undefined}
+        required={required}
+        value={String(displayed)}
+        onInput={(event) => {
+          const raw = event.currentTarget.value;
+          if (inputType === "text") {
+            onChange(raw);
+            return;
+          }
+          onChange(raw === "" ? undefined : Number(raw));
+        }}
+      />
+    </Field>
+  );
+}
+
+export function SchemaConfigEditor({
+  config,
+  schema,
+  labels,
+  onSave,
+}: {
+  config: unknown;
+  schema: unknown;
+  labels: PluginManagerLabels;
+  onSave: (config: unknown) => Promise<void>;
+}) {
+  const simpleSchema = useMemo(() => asSimpleObjectSchema(schema), [schema]);
+  const incomingJson = useMemo(() => formatJson(config), [config]);
+  const [draft, setDraft] = useState<Record<string, unknown>>(() => initialObject(config));
+  const [json, setJson] = useState(incomingJson);
+  const [mode, setMode] = useState<"form" | "json">(simpleSchema ? "form" : "json");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDraft(initialObject(JSON.parse(incomingJson)));
+    setJson(incomingJson);
+    setJsonError(null);
+    setSaveError(null);
+  }, [incomingJson]);
+
+  useEffect(() => {
+    if (!simpleSchema) setMode("json");
+  }, [simpleSchema]);
+
+  const changeDraft = (name: string, value: unknown) => {
+    const next = updateProperty(draft, name, value);
+    setDraft(next);
+    setJson(formatJson(next));
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setJsonError(null);
+    setSaveError(null);
+    let next: unknown = draft;
+    if (mode === "json") {
+      try {
+        next = JSON.parse(json);
+      } catch (error) {
+        setJsonError(error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
+    if (simpleSchema && !isRecord(next)) {
+      setJsonError("Configuration must be a JSON object.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await onSave(next);
+      setDraft(initialObject(next));
+      setJson(formatJson(next));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const actions = (
+    <>
+      {saveError ? (
+        <p role="alert" className="text-fine text-destructive">
+          {saveError}
+        </p>
+      ) : null}
+      <Button type="button" size="compact" disabled={saving} onClick={() => void save()}>
+        {saving ? (
+          <Loader2 data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <Save data-icon="inline-start" />
+        )}
+        {saving ? labels.saving : labels.saveConfiguration}
+      </Button>
+    </>
+  );
+
+  const jsonEditor = (
+    <Field data-invalid={Boolean(jsonError)}>
+      <FieldLabel htmlFor="plugin-config-json">{labels.advancedJson}</FieldLabel>
+      <Textarea
+        id="plugin-config-json"
+        className="min-h-64 font-mono text-fine"
+        value={json}
+        aria-invalid={Boolean(jsonError)}
+        onChange={(event) => {
+          setJson(event.currentTarget.value);
+          setJsonError(null);
+        }}
+      />
+      {jsonError ? <FieldError>{jsonError}</FieldError> : null}
+    </Field>
+  );
+
+  if (!simpleSchema) {
+    return (
+      <div className="flex flex-col gap-4">
+        {jsonEditor}
+        {actions}
+      </div>
+    );
+  }
+
+  return (
+    <Tabs
+      value={mode}
+      onValueChange={(value) => {
+        const next = value as "form" | "json";
+        if (next === "json") {
+          setJson(formatJson(draft));
+        } else if (mode === "json") {
+          try {
+            const parsed = JSON.parse(json);
+            if (!isRecord(parsed)) throw new Error("Configuration must be a JSON object.");
+            setDraft(parsed);
+            setJsonError(null);
+          } catch (error) {
+            setJsonError(error instanceof Error ? error.message : String(error));
+            return;
+          }
+        }
+        setMode(next);
+      }}
+      className="gap-4"
+    >
+      <TabsList variant="line">
+        <TabsTrigger value="form">{labels.form}</TabsTrigger>
+        <TabsTrigger value="json">{labels.advancedJson}</TabsTrigger>
+      </TabsList>
+      <TabsContent value="form" className="flex flex-col gap-4">
+        <FieldGroup>
+          {Object.entries(simpleSchema.properties).map(([name, property]) => (
+            <SchemaField
+              key={name}
+              name={name}
+              schema={property}
+              required={simpleSchema.required?.includes(name) ?? false}
+              value={draft[name]}
+              onChange={(value) => changeDraft(name, value)}
+            />
+          ))}
+        </FieldGroup>
+        {actions}
+      </TabsContent>
+      <TabsContent value="json" className="flex flex-col gap-4">
+        {jsonEditor}
+        {actions}
+      </TabsContent>
+    </Tabs>
+  );
+}

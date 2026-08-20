@@ -84,6 +84,7 @@ export function Dock({
   onWidth,
   autoTab,
   highlightFile,
+  availableSurfaces = ["browser", "terminal", "files", "git"],
 }: {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive and the
       collapse can actually animate — unmounting was why closing used to just blink away. */
@@ -122,6 +123,8 @@ export function Dock({
   autoTab?: DockSurface | null;
   /** The file the agent last touched, marked in the files tree while nothing is open. */
   highlightFile?: string | null;
+  /** Component policy gate. Disabled surfaces are neither advertised nor mounted. */
+  availableSurfaces?: DockSurface[];
 }) {
   const t = useT();
   const dirtyPaths = useDirtyPaths();
@@ -135,11 +138,15 @@ export function Dock({
 
   useEffect(() => {
     let stop: (() => void) | null = null;
+    setTermTitles({});
     void (async () => {
-      stop = await onPtyTitle(({ id, title }) => setTermTitles((v) => ({ ...v, [id]: title })));
+      stop = await onPtyTitle(({ id, title, project_path }) => {
+        if (project_path !== projectPath) return;
+        setTermTitles((v) => ({ ...v, [id]: title }));
+      });
     })();
     return () => stop?.();
-  }, []);
+  }, [projectPath]);
 
   const activeTermId = termId(sessionKey, activeTerm, tmux);
 
@@ -151,9 +158,12 @@ export function Dock({
 
   // What the panel shows: the live tab, or — while collapsing — whatever was open last, so the
   // content doesn't vanish mid-animation.
+  const availableSurfaceSet = new Set(availableSurfaces);
+  const visibleSurfaces = SURFACES.filter(({ id }) => availableSurfaceSet.has(id));
   const lastTab = useRef<DockTab>("home");
   if (tab) lastTab.current = tab;
-  const shown = tab ?? lastTab.current;
+  const requested = tab ?? lastTab.current;
+  const shown = requested === "home" || availableSurfaceSet.has(requested) ? requested : "home";
 
   // `invisible` only after the collapse has finished: a zero-width element still paints its
   // module shadow as a hairline at the window edge, and hiding it any earlier would cut the
@@ -253,7 +263,7 @@ export function Dock({
                 {t("dock.openSurfaceHint")}
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3">
-                {SURFACES.map(({ id, icon: Icon, titleKey, descKey }) => (
+                {visibleSurfaces.map(({ id, icon: Icon, titleKey, descKey }) => (
                   <button
                     key={id}
                     onClick={() => onTab(id)}
@@ -283,7 +293,7 @@ export function Dock({
           {/* h-7! — the primitive pins horizontal lists to h-9 via a group variant that outranks a
               plain h-7, and the extra 8px is exactly what pushed this row off the 28px title line. */}
           <TabsList className="h-7! gap-0.5 bg-transparent p-0">
-            {SURFACES.map(({ id, icon: Icon, titleKey }) => (
+            {visibleSurfaces.map(({ id, icon: Icon, titleKey }) => (
               <TabsTrigger
                 key={id}
                 value={id}
@@ -311,7 +321,7 @@ export function Dock({
         {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. The strip
             is the same h-9 bordered bar as the files tabs; the emulator below follows the app's
             scheme, so no dark slab and no frame around it. */}
-        <TabsContent value="terminal" className="m-0 flex min-h-0 flex-1 flex-col">
+        {availableSurfaceSet.has("terminal") && <TabsContent value="terminal" className="m-0 flex min-h-0 flex-1 flex-col">
           <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-2">
             {terms.map((n) => (
               <button
@@ -378,12 +388,17 @@ export function Dock({
           </div>
           {terms.map((n) => (
             <div key={n} className="min-h-0 flex-1" style={{ display: n === activeTerm ? "flex" : "none" }}>
-              <TerminalPanel id={termId(sessionKey, n, tmux)} cwd={cwd} tmux={tmux} />
+              <TerminalPanel
+                id={termId(sessionKey, n, tmux)}
+                cwd={cwd}
+                projectPath={projectPath}
+                tmux={tmux}
+              />
             </div>
           ))}
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="browser" className="m-0 flex min-h-0 flex-1">
+        {availableSurfaceSet.has("browser") && <TabsContent value="browser" className="m-0 flex min-h-0 flex-1">
           <BrowserPanel
             url={browserUrl}
             projectPath={projectPath}
@@ -391,11 +406,11 @@ export function Dock({
             onNavigate={onNavigate}
             onAnnotate={onAnnotate}
           />
-        </TabsContent>
+        </TabsContent>}
 
         {/* Files, reference-style: tabs over the viewer, and the tree in its own column on the
             far right with the search box on top. */}
-        <TabsContent value="files" className="m-0 flex min-h-0 flex-1">
+        {availableSurfaceSet.has("files") && <TabsContent value="files" className="m-0 flex min-h-0 flex-1">
           <div className="flex min-w-0 flex-1 flex-col">
             {/* One tab per open file. Active gets the primary underline. h-9 matches the tree's
                 search row on the other side of the border, so the two strips read as one bar. */}
@@ -462,9 +477,9 @@ export function Dock({
               openPath={activeFile ?? highlightFile ?? null}
             />
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="git" className="m-0 min-h-0 flex-1">
+        {availableSurfaceSet.has("git") && <TabsContent value="git" className="m-0 min-h-0 flex-1">
           <ScrollArea className="h-full">
             <div className="space-y-2.5 p-4 text-hint">
               {git?.is_repo ? (
@@ -509,7 +524,7 @@ export function Dock({
               )}
             </div>
           </ScrollArea>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
       )}
       </div>

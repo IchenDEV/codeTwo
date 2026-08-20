@@ -1,6 +1,7 @@
 //! The high-level ACP client: the small set of calls a frontend/engine makes to drive a prompt turn.
 //! Wraps a [`Connection`] and (in production) owns the provider child process.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
@@ -15,6 +16,7 @@ pub struct AcpClient {
     // Wrapped in a std Mutex so `AcpClient` is `Sync` (needed to live in Tauri state / the engine's
     // shared session map). We only touch it to kill the child on drop.
     child: Option<Mutex<Child>>,
+    terminated: AtomicBool,
 }
 
 impl AcpClient {
@@ -22,6 +24,7 @@ impl AcpClient {
         Self {
             conn,
             child: child.map(Mutex::new),
+            terminated: AtomicBool::new(false),
         }
     }
 
@@ -183,15 +186,27 @@ impl AcpClient {
             },
         )
     }
-}
 
-impl Drop for AcpClient {
-    fn drop(&mut self) {
-        // Don't leak provider subprocesses when a client is dropped.
+    /// Terminate the owned provider process without waiting for it to exit.
+    ///
+    /// Plugin unload is synchronous, so it must never park on `Child::wait`. Closing the child is
+    /// enough to end its stdio connection; the reader task then rejects outstanding requests and
+    /// lets their turn leases take the normal provider-failure path.
+    pub fn terminate(&self) {
+        if self.terminated.swap(true, Ordering::AcqRel) {
+            return;
+        }
         if let Some(child) = &self.child {
             if let Ok(mut child) = child.lock() {
                 let _ = child.start_kill();
             }
         }
+    }
+}
+
+impl Drop for AcpClient {
+    fn drop(&mut self) {
+        // Don't leak provider subprocesses when a client is dropped.
+        self.terminate();
     }
 }

@@ -8,10 +8,18 @@
  */
 import * as monaco from "monaco-editor";
 
-import { clientForPath, getClient, isLspLanguage, pathToUri, type LspClient } from "./client";
+import {
+  clientForPath,
+  getClient,
+  isLspLanguage,
+  onLspRuntimeEnabled,
+  pathToUri,
+  type LspClient,
+} from "./client";
 import { applyDiagnostics, registerProviders } from "./providers";
 
 const synced = new Set<string>();
+const mountedModels = new Map<monaco.editor.ITextModel, string>();
 let openerRegistered = false;
 
 /** Where cross-file navigation lands before the target editor exists — consumed on its mount. */
@@ -84,6 +92,13 @@ function muteBuiltinTs(lang: string): void {
 /** Hook `model` up to its project's language server, if one exists for its language. */
 export async function attachLsp(cwd: string, model: monaco.editor.ITextModel): Promise<void> {
   ensureOpener();
+  if (!mountedModels.has(model)) {
+    model.onWillDispose(() => {
+      mountedModels.delete(model);
+      synced.delete(pathToUri(model.uri.path));
+    });
+  }
+  mountedModels.set(model, cwd);
   const lang = model.getLanguageId();
   if (!isLspLanguage(lang)) return;
   const client = await getClient(cwd, lang);
@@ -108,6 +123,14 @@ export async function attachLsp(cwd: string, model: monaco.editor.ITextModel): P
     });
   }
 }
+
+onLspRuntimeEnabled((workspace) => {
+  for (const [model, cwd] of mountedModels) {
+    if (!model.isDisposed() && (workspace === undefined || workspace === cwd)) {
+      void attachLsp(cwd, model);
+    }
+  }
+});
 
 function wireDiagnostics(client: LspClient): void {
   client.onDiagnostics ??= applyDiagnostics;

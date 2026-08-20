@@ -101,13 +101,48 @@ export function VoiceButton({
   const t = useT();
   const recRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const bufferRef = useRef("");
   const pressStartRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
+  const activeRef = useRef(true);
 
   useEffect(() => {
-    voiceAvailable().then(setHasLocal).catch(() => setHasLocal(false));
+    activeRef.current = true;
+    voiceAvailable()
+      .then((available) => {
+        if (activeRef.current) setHasLocal(available);
+      })
+      .catch(() => {
+        if (activeRef.current) setHasLocal(false);
+      });
+    return () => {
+      activeRef.current = false;
+      const recognition = recRef.current;
+      recRef.current = null;
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        try {
+          recognition.stop();
+        } catch {
+          // Already stopped.
+        }
+      }
+      const recorder = mediaRef.current;
+      mediaRef.current = null;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        if (recorder.state !== "inactive") recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      chunksRef.current = [];
+      bufferRef.current = "";
+    };
   }, []);
 
   const stopAll = () => {
@@ -166,6 +201,11 @@ export function VoiceButton({
       return;
     }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!activeRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    streamRef.current = stream;
     const mimeType = preferredRecordingType();
     const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
     chunksRef.current = [];
@@ -174,12 +214,18 @@ export function VoiceButton({
     };
     mr.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      mediaRef.current = null;
+      if (!activeRef.current) return;
       setMode("transcribing");
       try {
         // Send WAV, not the recorder's native container: whisper.cpp and the other local
         // transcribers read 16 kHz PCM and nothing else.
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || mimeType });
-        const text = (await transcribeAudio(await toWav16kMono(blob), "wav")).trim();
+        const wav = await toWav16kMono(blob);
+        if (!activeRef.current) return;
+        const text = (await transcribeAudio(wav, "wav")).trim();
+        if (!activeRef.current) return;
         if (text && onTranscript) {
           // The local transcriber's single result rides the same structuring path as buffered
           // Web-Speech finals.
@@ -214,6 +260,7 @@ export function VoiceButton({
       // Re-check rather than trusting the mount-time answer: the transcriber may have been
       // installed since the app started.
       const local = hasLocal || (await voiceAvailable().catch(() => false));
+      if (!activeRef.current) return;
       setHasLocal(local);
       if (local) await startRecording();
       else {

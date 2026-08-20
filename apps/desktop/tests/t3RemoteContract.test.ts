@@ -14,8 +14,8 @@ describe("T3 mobile remote contract", () => {
     expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "t3"');
     expect(bridge).toContain("client_protocol: clientProtocol,");
     expect(remotePlugin).toContain('args.client_protocol.as_deref().unwrap_or("t3")');
-    expect(remotePlugin).toContain('"t3" => handle.auth.issue_t3_pairing_token(ttl)');
-    expect(remotePlugin).toContain('"legacy" => handle.auth.issue_pairing_token(ttl)');
+    expect(remotePlugin).toContain('"t3" => auth.issue_t3_pairing_token(ttl)');
+    expect(remotePlugin).toContain('"legacy" => auth.issue_pairing_token(ttl)');
   });
 
   test("exposes T3 and legacy clients without conflating their pairing codes", () => {

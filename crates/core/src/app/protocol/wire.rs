@@ -36,6 +36,9 @@ pub struct InitializeParams {
     /// A private directory the plugin may write to. Created before the process starts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_dir: Option<String>,
+    /// Normalized project identity for a project-scoped instance. Absent for the user scope.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<String>,
 }
 
 /// What a plugin declares it contributes.

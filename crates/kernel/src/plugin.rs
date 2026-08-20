@@ -7,7 +7,88 @@
 
 use crate::context::Context;
 use crate::error::PluginError;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Where a plugin implementation comes from.
+///
+/// This is deliberately about code provenance, not where its configuration is stored. A desktop
+/// host plugin is still [`PluginOrigin::Host`] when a project-level override enables it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginOrigin {
+    /// Compiled into C2's shared core.
+    #[default]
+    BuiltIn,
+    /// Supplied by a host such as the desktop application.
+    Host,
+    /// Installed separately from C2.
+    ThirdParty,
+}
+
+/// Stable, user-facing group for a plugin catalog.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginCategory {
+    Foundation,
+    Workspace,
+    Automation,
+    DeveloperTools,
+    Interface,
+    Integration,
+    #[default]
+    Other,
+}
+
+/// Configuration scopes in which a plugin may be enabled.
+///
+/// The name intentionally differs from the runtime's scope types: this describes support declared
+/// by a factory, not one live plugin instance.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginScopeSupport {
+    #[default]
+    User,
+    Project,
+}
+
+/// Catalog metadata shared by built-in, host, and third-party plugins.
+///
+/// Defaults preserve the loader's original behaviour: an existing plugin is a user-scoped,
+/// non-essential built-in that is enabled by a freshly-created [`PluginEntry`](crate::PluginEntry).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginMetadata {
+    #[serde(default)]
+    pub origin: PluginOrigin,
+    #[serde(default)]
+    pub category: PluginCategory,
+    #[serde(default = "default_scope_support")]
+    pub scope_support: Vec<PluginScopeSupport>,
+    #[serde(default)]
+    pub essential: bool,
+    #[serde(default = "default_true")]
+    pub default_enabled: bool,
+}
+
+fn default_scope_support() -> Vec<PluginScopeSupport> {
+    vec![PluginScopeSupport::User]
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for PluginMetadata {
+    fn default() -> Self {
+        PluginMetadata {
+            origin: PluginOrigin::BuiltIn,
+            category: PluginCategory::Other,
+            scope_support: default_scope_support(),
+            essential: false,
+            default_enabled: true,
+        }
+    }
+}
 
 /// The services a plugin depends on.
 ///
@@ -29,7 +110,10 @@ impl Injection {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        Injection { required: names.into_iter().map(Into::into).collect(), optional: Vec::new() }
+        Injection {
+            required: names.into_iter().map(Into::into).collect(),
+            optional: Vec::new(),
+        }
     }
 
     pub fn optional<I, S>(names: I) -> Self
@@ -37,7 +121,10 @@ impl Injection {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        Injection { required: Vec::new(), optional: names.into_iter().map(Into::into).collect() }
+        Injection {
+            required: Vec::new(),
+            optional: names.into_iter().map(Into::into).collect(),
+        }
     }
 
     pub fn with_optional<I, S>(mut self, names: I) -> Self
@@ -67,6 +154,11 @@ impl Injection {
 pub trait Plugin: Send + Sync + 'static {
     /// Stable identifier — the key in the config file, the label in the plugin manager.
     fn name(&self) -> &str;
+
+    /// Stable information used to render and protect this plugin in a management surface.
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata::default()
+    }
 
     /// Services this plugin needs. Defaults to none.
     fn inject(&self) -> Injection {
@@ -105,6 +197,7 @@ pub trait Plugin: Send + Sync + 'static {
 pub struct FnPlugin<F> {
     name: String,
     inject: Injection,
+    metadata: PluginMetadata,
     apply: F,
 }
 
@@ -114,11 +207,21 @@ where
     Fut: std::future::Future<Output = Result<(), PluginError>> + Send + 'static,
 {
     pub fn new(name: impl Into<String>, apply: F) -> Self {
-        FnPlugin { name: name.into(), inject: Injection::default(), apply }
+        FnPlugin {
+            name: name.into(),
+            inject: Injection::default(),
+            metadata: PluginMetadata::default(),
+            apply,
+        }
     }
 
     pub fn with_inject(mut self, inject: Injection) -> Self {
         self.inject = inject;
+        self
+    }
+
+    pub fn with_metadata(mut self, metadata: PluginMetadata) -> Self {
+        self.metadata = metadata;
         self
     }
 }
@@ -131,6 +234,10 @@ where
 {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn metadata(&self) -> PluginMetadata {
+        self.metadata.clone()
     }
 
     fn inject(&self) -> Injection {

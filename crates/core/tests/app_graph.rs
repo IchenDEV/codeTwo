@@ -200,25 +200,25 @@ async fn bad_arguments_are_reported_against_the_command() {
 }
 
 #[tokio::test]
-async fn turning_storage_off_takes_everything_downstream_with_it() {
+async fn turning_storage_off_is_rejected_when_enabled_dependents_would_be_pending() {
     let (app, _dir) = boot().await;
     assert_eq!(status_of(&app, "engine"), Status::Active);
 
-    app.call(
-        "kernel.set_enabled",
-        json!({ "name": "store", "value": false }),
-    )
-    .await
-    .unwrap();
+    let error = app
+        .call(
+            "kernel.set_enabled",
+            json!({ "name": "store", "value": false }),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("did not settle"), "{error}");
+    assert!(error.contains("Pending"), "{error}");
     app.flush().await;
 
-    assert_eq!(status_of(&app, "store"), Status::Disposed);
-    assert_eq!(
-        status_of(&app, "engine"),
-        Status::Pending,
-        "the engine needs a store"
-    );
-    assert_eq!(status_of(&app, "memory"), Status::Pending);
+    assert_eq!(status_of(&app, "store"), Status::Active);
+    assert_eq!(status_of(&app, "engine"), Status::Active);
+    assert_eq!(status_of(&app, "memory"), Status::Active);
     for plugin in [
         "artifacts",
         "canvas",
@@ -233,8 +233,8 @@ async fn turning_storage_off_takes_everything_downstream_with_it() {
     ] {
         assert_eq!(
             status_of(&app, plugin),
-            Status::Pending,
-            "{plugin} needs storage downstream"
+            Status::Active,
+            "{plugin} should be restored by the rejected transaction"
         );
     }
     assert_eq!(
@@ -242,27 +242,13 @@ async fn turning_storage_off_takes_everything_downstream_with_it() {
         Status::Active,
         "git never needed one"
     );
-    assert!(app.service::<StoreService>().is_none());
+    assert!(app.service::<StoreService>().is_some());
     assert!(
         app.call("memory.list", json!({ "project_path": "/tmp/demo" }))
             .await
-            .is_err(),
-        "the surface goes away with the plugin instead of failing at call time"
+            .is_ok(),
+        "rollback restores the command surface"
     );
-
-    // And back again, with no restart.
-    app.call(
-        "kernel.set_enabled",
-        json!({ "name": "store", "value": true }),
-    )
-    .await
-    .unwrap();
-    app.flush().await;
-    assert_eq!(status_of(&app, "engine"), Status::Active);
-    assert!(app
-        .call("memory.list", json!({ "project_path": "/tmp/demo" }))
-        .await
-        .is_ok());
 }
 
 #[tokio::test]
@@ -293,7 +279,7 @@ async fn disabling_a_leaf_removes_its_service_and_command_surface() {
 }
 
 #[tokio::test]
-async fn a_host_engine_can_reactively_require_a_host_capability() {
+async fn disabling_a_required_host_capability_rolls_back_the_transaction() {
     let dir = tempfile::tempdir().unwrap();
     let mut registry = codetwo_core::app::plugins::builtin_registry();
     registry.register_arc(Box::new(|| {
@@ -309,17 +295,21 @@ async fn a_host_engine_can_reactively_require_a_host_capability() {
         .unwrap();
     assert_eq!(status_of(&app, "engine"), Status::Active);
 
-    app.call(
-        "kernel.set_enabled",
-        json!({ "name": "terminal", "value": false }),
-    )
-    .await
-    .unwrap();
+    let error = app
+        .call(
+            "kernel.set_enabled",
+            json!({ "name": "terminal", "value": false }),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("did not settle"), "{error}");
+    assert!(error.contains("Pending"), "{error}");
     app.flush().await;
 
-    assert_eq!(status_of(&app, "engine"), Status::Pending);
-    assert!(app.service::<EngineService>().is_none());
-    assert!(app.call("engine.new_session", Value::Null).await.is_err());
+    assert_eq!(status_of(&app, "terminal"), Status::Active);
+    assert_eq!(status_of(&app, "engine"), Status::Active);
+    assert!(app.service::<EngineService>().is_some());
 }
 
 #[tokio::test]
@@ -386,7 +376,11 @@ async fn a_minimal_host_can_run_two_plugins_and_nothing_else() {
     assert!(!commands.iter().any(|name| name.starts_with("sessions.")));
     // Only the loader itself, which the root provides so a plugin manager has something to manage.
     let services: Vec<String> = app.services().into_iter().map(|s| s.name).collect();
-    assert_eq!(services, ["loader"], "neither plugin publishes a service");
+    assert_eq!(
+        services,
+        ["loader", "plugin-config", "plugin-manager"],
+        "neither plugin publishes a feature service"
+    );
 }
 
 #[tokio::test]
@@ -421,8 +415,8 @@ async fn stopping_unloads_the_whole_graph() {
     let services: Vec<String> = app.services().into_iter().map(|s| s.name).collect();
     assert_eq!(
         services,
-        ["loader"],
-        "everything but the root's own service is gone"
+        ["loader", "plugin-config", "plugin-manager"],
+        "everything but the root management services is gone"
     );
     assert!(app.commands().is_empty());
 }

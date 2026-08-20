@@ -67,6 +67,24 @@ afterEach(() => {
 });
 
 describe("VoiceButton hold-to-talk", () => {
+  test("stops capture without delivering a transcript when policy unmounts the button", async () => {
+    const transcripts = [];
+    const rendered = mountButton(
+      <VoiceButton onText={() => {}} onTranscript={async (full) => transcripts.push(full)} />,
+    );
+    const btn = micButton(rendered.container);
+    fire(btn, "pointerdown");
+    await flush();
+    const recognition = lastRec();
+    recognition.emitFinal("must not reach an unloaded plugin");
+
+    rendered.unmount();
+    await flush();
+
+    expect(recognition.stopped).toBe(true);
+    expect(transcripts).toEqual([]);
+  });
+
   test("hold ≥300ms buffers finals and delivers one onTranscript on release", async () => {
     const transcripts = [];
     const chunks = [];

@@ -1,7 +1,9 @@
 //! Scope-owned forwarding from core broadcasts to Tauri window events.
 
-use codetwo_core::app::{EventBus, TerminalEvent, TerminalService};
-use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
+use codetwo_core::app::{EventBus, TerminalEvent, TerminalOutputEvent};
+use codetwo_kernel::{
+    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult,
+};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -21,12 +23,20 @@ impl HostEventsPlugin {
 struct PtyOutput {
     id: String,
     data: String,
+    project_path: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
 struct PtyTitle {
     id: String,
     title: String,
+    project_path: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct PtyExit {
+    id: String,
+    project_path: Option<String>,
 }
 
 #[async_trait]
@@ -36,7 +46,7 @@ impl Plugin for HostEventsPlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["bus"]).with_optional(["terminal"])
+        Injection::required(["bus"])
     }
 
     fn description(&self) -> Option<&str> {
@@ -48,10 +58,6 @@ impl Plugin for HostEventsPlugin {
             .get::<EventBus>()
             .ok_or_else(|| PluginError::new("event bus is unavailable"))?
             .subscribe();
-        let terminal_events = ctx
-            .get::<TerminalService>()
-            .map(|service| service.subscribe());
-
         let app = self.app.clone();
         ctx.spawn(async move {
             loop {
@@ -67,28 +73,45 @@ impl Plugin for HostEventsPlugin {
             }
         });
 
-        if let Some(mut terminal_events) = terminal_events {
-            let app = self.app.clone();
-            ctx.spawn(async move {
-                loop {
-                    match terminal_events.recv().await {
-                        Ok(TerminalEvent::Data { id, data }) => {
-                            let _ = app.emit("pty-output", PtyOutput { id, data });
-                        }
-                        Ok(TerminalEvent::Title { id, title }) => {
-                            let _ = app.emit("pty-title", PtyTitle { id, title });
-                        }
-                        Ok(TerminalEvent::Exit { id }) => {
-                            let _ = app.emit("pty-exit", id);
-                        }
-                        Err(broadcast::error::RecvError::Lagged(count)) => {
-                            eprintln!("terminal event pump lagged; dropped {count} events");
-                        }
-                        Err(broadcast::error::RecvError::Closed) => break,
-                    }
+        let app = self.app.clone();
+        ctx.on::<TerminalOutputEvent, _>(move |event| {
+            let project_path = match &event.realm {
+                CommandRealm::Global => None,
+                CommandRealm::Project(path) => Some(path.clone()),
+            };
+            match &event.event {
+                TerminalEvent::Data { id, data } => {
+                    let _ = app.emit(
+                        "pty-output",
+                        PtyOutput {
+                            id: id.clone(),
+                            data: data.clone(),
+                            project_path,
+                        },
+                    );
                 }
-            });
-        }
+                TerminalEvent::Title { id, title } => {
+                    let _ = app.emit(
+                        "pty-title",
+                        PtyTitle {
+                            id: id.clone(),
+                            title: title.clone(),
+                            project_path,
+                        },
+                    );
+                }
+                TerminalEvent::Exit { id } => {
+                    let _ = app.emit(
+                        "pty-exit",
+                        PtyExit {
+                            id: id.clone(),
+                            project_path,
+                        },
+                    );
+                }
+            }
+            None
+        });
         Ok(())
     }
 }

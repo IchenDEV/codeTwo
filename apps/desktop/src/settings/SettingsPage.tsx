@@ -194,6 +194,7 @@ export function SettingsPage({
   projectPath,
   project,
   onProjectWorktreeMode,
+  memoryEnabled,
   initialTab = "general",
   onClose,
 }: {
@@ -208,6 +209,7 @@ export function SettingsPage({
   projectPath: string;
   project: Project | null;
   onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
+  memoryEnabled: boolean;
   initialTab?: SettingsTab;
   onClose: () => void;
 }) {
@@ -221,6 +223,11 @@ export function SettingsPage({
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   useEffect(() => setTab(initialTab), [initialTab]);
+  useEffect(() => {
+    if (!memoryEnabled) {
+      setTab((current) => current === "memory" ? "general" : current);
+    }
+  }, [memoryEnabled]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -367,21 +374,23 @@ export function SettingsPage({
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div data-tauri-drag-region className="settings-titlebar shrink-0" />
         <nav className="flex-1 space-y-0.5 px-2">
-          {NAV.map(({ id, icon: Icon, labelKey, label }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors",
-                id === tab
-                  ? "bg-accent font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              {labelKey ? t(labelKey) : label}
-            </button>
-          ))}
+          {NAV.filter(({ id }) => memoryEnabled || id !== "memory").map(
+            ({ id, icon: Icon, labelKey, label }) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors",
+                  id === tab
+                    ? "bg-accent font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4 shrink-0" />
+                {labelKey ? t(labelKey) : label}
+              </button>
+            ),
+          )}
         </nav>
         <button
           disabled={projectModeSaving}
@@ -597,7 +606,7 @@ export function SettingsPage({
               </Page>
             )}
 
-            {tab === "memory" && <MemorySettingsPage projectPath={projectPath} />}
+            {tab === "memory" && memoryEnabled && <MemorySettingsPage projectPath={projectPath} />}
 
             {tab === "usage" && (
               <UsagePanel

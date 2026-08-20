@@ -5,7 +5,7 @@
 //! the engine exists; it listens for [`EngineEvent`]. Delete either plugin and the other keeps
 //! working — which is the property a giant `AppState` could never give us.
 
-use codetwo_kernel::Event;
+use codetwo_kernel::{CommandRealm, Event};
 use std::path::PathBuf;
 
 /// The skill library was rebuilt (a skill was saved or deleted, a plugin was toggled, the
@@ -53,4 +53,18 @@ pub struct EngineEvent(pub crate::event::Event);
 impl Event for EngineEvent {
     type Output = ();
     const NAME: &'static str = "engine/event";
+}
+
+/// One terminal event from any live terminal plugin instance, including project-isolated ones.
+///
+/// [`crate::app::TerminalService`] retains its broadcast stream for core and server consumers.
+/// This typed mirror crosses service isolation so a host event bridge needs only one listener.
+pub struct TerminalOutputEvent {
+    pub realm: CommandRealm,
+    pub event: crate::app::TerminalEvent,
+}
+
+impl Event for TerminalOutputEvent {
+    type Output = ();
+    const NAME: &'static str = "terminal/output";
 }

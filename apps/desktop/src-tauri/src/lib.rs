@@ -27,7 +27,9 @@ use std::sync::Arc;
 use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp};
 use codetwo_core::{CanvasFeatureGate, DesktopMcpConfig, Engine};
-use codetwo_kernel::PluginEntry;
+use codetwo_kernel::{
+    PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginScopeSupport,
+};
 use tauri::{Manager, State};
 
 struct AppState {
@@ -46,12 +48,14 @@ async fn call(
     state: State<'_, AppState>,
     name: String,
     args: Option<serde_json::Value>,
+    project_path: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    state
-        .core
-        .call(&name, args.unwrap_or(serde_json::Value::Null))
-        .await
-        .map_err(|error| error.to_string())
+    let args = args.unwrap_or(serde_json::Value::Null);
+    let result = match project_path {
+        Some(project_path) => state.core.call_in_project(project_path, &name, args).await,
+        None => state.core.call(&name, args).await,
+    };
+    result.map_err(|error| error.to_string())
 }
 
 fn now_millis() -> i64 {
@@ -98,6 +102,7 @@ pub fn run() {
                             inputs.providers,
                             inputs.skills,
                             inputs.store,
+                            inputs.memory,
                             canvas_gate,
                             desktop_mcp.clone(),
                         )
@@ -105,6 +110,18 @@ pub fn run() {
                     ["browser"],
                 ))
             }));
+            registry
+                .set_metadata(
+                    "engine",
+                    PluginMetadata {
+                        origin: PluginOrigin::BuiltIn,
+                        category: PluginCategory::Foundation,
+                        scope_support: vec![PluginScopeSupport::User],
+                        essential: false,
+                        default_enabled: true,
+                    },
+                )
+                .expect("desktop engine replacement must remain registered");
 
             let handle = app.handle().clone();
             registry.register(move || automation::AutomationPlugin::new(handle.clone()));
@@ -120,6 +137,32 @@ pub fn run() {
             registry.register(move || host_events::HostEventsPlugin::new(handle.clone()));
             let remote_auth_path = data_dir.join("remote-devices.json");
             registry.register(move || remote::RemotePlugin::new(remote_auth_path.clone()));
+
+            for (name, category, essential, project_scoped) in [
+                ("automation", PluginCategory::Automation, false, false),
+                ("browser", PluginCategory::Interface, false, false),
+                ("lsp", PluginCategory::DeveloperTools, false, true),
+                ("desktop-events", PluginCategory::Foundation, true, false),
+                ("remote", PluginCategory::Integration, false, false),
+            ] {
+                let scope_support = if project_scoped {
+                    vec![PluginScopeSupport::User, PluginScopeSupport::Project]
+                } else {
+                    vec![PluginScopeSupport::User]
+                };
+                registry
+                    .set_metadata(
+                        name,
+                        PluginMetadata {
+                            origin: PluginOrigin::Host,
+                            category,
+                            scope_support,
+                            essential,
+                            default_enabled: true,
+                        },
+                    )
+                    .expect("host metadata must refer to a registered plugin");
+            }
 
             let config = AppConfig::new(&data_dir)
                 .with("automation", PluginEntry::default())

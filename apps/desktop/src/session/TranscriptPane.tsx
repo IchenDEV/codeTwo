@@ -27,6 +27,7 @@ interface TranscriptPaneProps {
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
   petAnimation: CodeTwoPetAnimation;
+  voiceEnabled: boolean;
   onVoiceText: (text: string) => void;
   onAddSelection: (text: string) => void;
   onExplainSelection: (text: string) => void;
@@ -47,6 +48,7 @@ export function TranscriptPane({
   canPinPlan,
   onSaveTemplate,
   petAnimation,
+  voiceEnabled,
   onVoiceText,
   onAddSelection,
   onExplainSelection,
@@ -129,7 +131,11 @@ export function TranscriptPane({
                 ))}
               </ol>
               {variant === "main" && appearance.petEnabled ? (
-                <CodeTwoPet animation={petAnimation} onVoiceText={onVoiceText} />
+                <CodeTwoPet
+                  animation={petAnimation}
+                  voiceEnabled={voiceEnabled}
+                  onVoiceText={onVoiceText}
+                />
               ) : null}
             </>
           )}

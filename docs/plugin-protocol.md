@@ -4,8 +4,9 @@ Version **1.0.0**.
 
 A plugin is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the plugin declares —
 commands, event subscriptions — is registered in the same kernel registries a built-in Rust plugin
-uses. Its commands appear in `kernel.commands`, are callable from any frontend through
-`call("name", args)`, and disappear the instant it unloads.
+uses. Installed runtimes have stable managed names of the form `bundle:<id>`. Their commands appear
+in `kernel.commands`, are callable from a frontend in the matching command realm, and disappear the
+instant the runtime unloads.
 
 Write one in any language that can read stdin and write stdout.
 
@@ -37,7 +38,8 @@ graph. A plugin that misses the window is marked failed, by name, and everything
   "protocolVersion": "1.0.0",
   "host": { "name": "code2", "version": "0.0.0", "commands": ["git.status", "memory.list", "…"] },
   "config": { "…": "your entry from the plugin config, verbatim" },
-  "dataDir": "/home/me/.codetwo/plugins/.data/my-plugin"
+  "dataDir": "/home/me/.codetwo/plugins/.data/my-plugin/projects/09a7…",
+  "projectPath": "/home/me/work/my-project"
 }}
 ```
 
@@ -58,8 +60,16 @@ graph. A plugin that misses the window is marked failed, by name, and everything
 Compatibility is by **major version**. Declaring `2.x` to a `1.x` host is refused with a readable
 error; omitting `protocolVersion` is tolerated.
 
-`dataDir` is yours to write to and is created before you start. `host.commands` is the host's
-surface at that moment — useful for feature-detecting rather than assuming.
+`dataDir` is yours to write to and is created before you start. A user-scoped instance keeps the
+legacy directory `<plugins-dir>/.data/<id>`. A project-scoped instance gets
+`<plugins-dir>/.data/<id>/projects/<blake3(normalized-project-path)>`, so two projects do not share
+runtime files. `projectPath` is the normalized project identity for that instance and is omitted
+for the user-scoped instance.
+
+`host.commands` is the callable surface visible from this realm at initialization time. A
+user-scoped instance sees global commands only. A project instance sees global commands plus
+commands registered for the same normalized project; it never receives another project's command
+list. `command/call` uses that same realm and its normal project fallback/blocking rules.
 
 ## Methods
 
@@ -82,10 +92,10 @@ readable failure at the caller — the frontend sees `my.greet: <your message>`.
 | `event/emit` | notification | `{ name, payload }` | — |
 | `log` | notification | `{ level, message }` | — |
 
-`command/call` reaches *any* command in the running graph, by name, through the same registry a
-Rust plugin uses. There is no privileged back door and no separate API: if `git.status` is loaded,
-you can call it; if the `git` plugin is turned off, you cannot, and you get the same "no command
-named…" error everyone else does.
+`command/call` reaches a command visible in the process's realm, by name, through the same registry
+a Rust plugin uses. There is no privileged back door and no separate API: if `git.status` is
+visible there, you can call it; if the `git` plugin is turned off or project fallback is blocked,
+you cannot, and you get the same error everyone else does.
 
 `level` is one of `error`, `warn`, `info`, `debug`, `trace`.
 
@@ -104,7 +114,9 @@ decision to expose one — see `publish_host_events` in
 `crates/core/src/app/plugins/extensions.rs`.
 
 Your own `event/emit` goes onto the host's JSON bus, where other plugins (in or out of process) can
-subscribe to it.
+subscribe to it. The JSON bus is currently host-wide, not project-confidential: project process
+isolation does not filter events by realm. Do not put project secrets on an event merely because
+the sender or subscriber is a project-scoped runtime.
 
 ## Declaring a plugin
 
@@ -120,7 +132,8 @@ Add a `runtime` block to your bundle's `plugin.json`:
     "args": ["dist/plugin.js"],
     "env": { "MY_PLUGIN_MODE": "release" },
     "inject": ["store"],
-    "optionalInject": ["engine"]
+    "optionalInject": ["engine"],
+    "scopeSupport": ["user", "project"]
   }
 }
 ```
@@ -130,6 +143,12 @@ The process starts with the bundle directory as its working directory.
 `inject` gets you the same reactive contract a Rust plugin has: your process is not started until
 those services exist, and is **restarted** if one is replaced. It is declared in the manifest rather
 than at `initialize` because the host needs to know before deciding whether to start you at all.
+
+`scopeSupport` is an explicit capability declaration. If it is omitted, the runtime supports only
+`["user"]` for backwards compatibility. Include `"project"` only when the process is prepared for
+one independently managed process, command realm, `dataDir`, and `projectPath` per active project.
+The bundle's skills and other data-only extension components are not made project-scoped by this
+field; they remain user-only and are managed through Bundle Tools.
 
 A bundle whose only component is a `runtime` block is a valid bundle.
 
@@ -142,7 +161,8 @@ A process starts only when its bundle is **enabled *and* trusted**. Trust is a s
 user action, and installing a bundle that ships a `runtime` block raises a diagnostic saying so.
 Until then the plugin is listed by `extensions.list` under `untrusted` and does not run.
 
-For development, `extensions` takes `{ "allow_untrusted": true }`. Do not ship that.
+Trust is a hard gate in every realm. The legacy `extensions.allow_untrusted` setting is deprecated
+and ignored; it cannot bypass this check.
 
 ## Lifecycle
 
@@ -158,8 +178,12 @@ enabled + trusted ──▶ spawn ──▶ initialize ──▶ register comman
 Unloading is exact: the process is killed and every command it contributed is gone. Nothing has to
 remember to clean up, because the plugin's scope owns all of it.
 
-Installing, removing, enabling, or trusting a bundle makes the `extensions` plugin rebuild itself,
-which restarts exactly the set that should be running.
+Installed runtimes are ordinary dynamically registered factories named `bundle:<id>`. Installing,
+removing, enabling, trusting, or replacing a bundle reconciles that factory set and every live
+eligible realm immediately. Add and remove do not require an application restart; replacing a
+manifest or installed record rebuilds the same-named runtime because its factory revision changed.
+User and project state changes go through `plugins.catalog`, `plugins.plan_change`, and
+`plugins.apply_change`, including stale-plan protection and immediate unload.
 
 A complete, runnable example lives in [`packs/hello-runtime/`](../packs/hello-runtime): it
 contributes a command, calls `git.status` back through the host from inside it, feature-detects the
@@ -195,9 +219,11 @@ rl.on("line", async (line) => {
 ## Limits, stated plainly
 
 - **No sandbox.** A trusted plugin is a process with your user's permissions. Trust is the whole
-  boundary; treat it as such.
+  OS security boundary; project command/data/process isolation does not restrict filesystem,
+  network, environment, or the host-wide JSON event bus. Treat it as such.
 - **No timeout on `command/invoke`.** A plugin that never answers a command hangs that caller — not
   the graph. The handshake is the only bounded wait.
-- **One process per bundle.** Fan-out inside your plugin if you need more.
+- **One process per active managed realm.** A project-capable runtime may have one global process
+  and separate processes for multiple live projects. Fan out inside one realm if you need more.
 - **Rust plugins are still compile-time.** This protocol is how a plugin gets added without
   rebuilding C2; it is not dynamic loading of native code, and deliberately so.
