@@ -6,6 +6,33 @@ use codetwo_core::scene::{Gate, SceneLibrary, TransitionTrigger};
 use codetwo_core::{SceneSessionMode, SceneWorktree, SlotKind};
 
 #[test]
+fn legacy_loader_ignores_a_scenes_v2_document() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("software-development.scene.json"),
+        r#"{
+          "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+          "id": "official:software-development",
+          "version": "2.0.0",
+          "title": "Software Development",
+          "description": "Software engineering domain context.",
+          "domain": "software-development",
+          "provenance": { "kind": "official" },
+          "agent_skill_selectors": ["software-development"],
+          "capability_namespaces": ["workspace", "source-control"]
+        }"#,
+    )
+    .unwrap();
+
+    let library = SceneLibrary::load(Some(dir.path()), None, &[]);
+
+    assert!(library
+        .scenes()
+        .iter()
+        .all(|entry| entry.scene.name != "software-development"));
+}
+
+#[test]
 fn all_six_fixtures_load() {
     let lib = SceneLibrary::builtin();
     let names: Vec<&str> = lib.scenes().iter().map(|s| s.scene.name.as_str()).collect();
