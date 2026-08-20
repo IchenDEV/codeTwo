@@ -88,10 +88,20 @@ because C2 discovered them from the local OpenAI runtime:
 - **Image Generation** and **Sites** remain provider-native until the host exposes a real portable
   MCP adapter. C2 reports them as unavailable for other providers instead of claiming false parity.
 
-MCP servers are fixed when an ACP session starts. The Pure Bun host performs this projection itself;
-the packaged Electrobun desktop does not launch the legacy Rust desktop sidecar. After enabling or
-repairing a host tool, restart C2 and open a new session so the selected provider receives the bridge
-in `session/new`.
+MCP servers are fixed when an ACP session starts. The Pure Bun desktop host and Rust CoreApp host
+implement the same logical provider-toolset interface as separate adapters:
+
+- packaged Electrobun desktop performs discovery and ACP injection in TypeScript/Bun and does not
+  launch the legacy Rust desktop sidecar;
+- TUI and server perform discovery and ACP injection in the Rust core for both `session/new` and
+  `session/load`;
+- Rust-hosted interactive tools require the process to run as the logged-in user with an active
+  macOS GUI session. Linux and headless/remote-only servers report Computer Use and Chrome as
+  unavailable instead of claiming a broken bridge.
+
+After enabling or repairing a host tool, restart C2 or open a new session. A saved session receives
+the bridge when C2 reattaches it with `session/load`; an already-live ACP session cannot add MCP
+servers in place.
 
 ## The ACP loop
 

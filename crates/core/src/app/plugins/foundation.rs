@@ -208,9 +208,12 @@ impl Plugin for ProvidersPlugin {
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        let codex = CodexRuntimeDiscovery::detect();
-        let providers = registry_with_codex_runtime(&codex);
-        let service = Arc::new(ProviderService { providers, codex });
+        let host_tools = CodexRuntimeDiscovery::detect();
+        let providers = registry_with_codex_runtime(&host_tools);
+        let service = Arc::new(ProviderService {
+            providers,
+            host_tools,
+        });
 
         let listed = service.clone();
         ctx.command("providers.list", move |_| {

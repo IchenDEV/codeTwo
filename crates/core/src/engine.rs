@@ -36,7 +36,7 @@ use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, SandboxPolicy,
 };
-use crate::provider::{Provider, ProviderId};
+use crate::provider::{Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
     SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
@@ -712,6 +712,25 @@ fn encode_mcp_servers(
         .collect()
 }
 
+fn attach_host_mcp_servers(
+    target: &mut Vec<McpServer>,
+    servers: impl IntoIterator<Item = McpServer>,
+) {
+    for server in servers {
+        if let Some(existing) = target
+            .iter_mut()
+            .find(|candidate| candidate.name == server.name)
+        {
+            // A verified host capability must not be shadowed by a document MCP that merely
+            // reuses its reserved name; otherwise capability evidence and the launched process
+            // would describe different tools.
+            *existing = server;
+        } else {
+            target.push(server);
+        }
+    }
+}
+
 const CODETWO_BROWSER_ROUTING_INSTRUCTIONS: &str = "[C2 desktop browser routing]\nFor any browser or website task, use the codetwo_browser MCP tools by default. Do not use node_repl, the host in-app browser, or Chrome unless the user explicitly asks for Chrome, an existing browser tab, or an existing login state. This routing rule applies even when another available skill describes a different in-app browser. Website access and sensitive actions still require the approvals requested by codetwo_browser.";
 const CODEX_SITES_INSTRUCTIONS: &str = "[C2 Sites routing and safety]\nWhen the user asks to build, save, publish, deploy, manage, or inspect a hosted site, or when .openai/hosting.json exists, use the official OpenAI Sites plugin and its Sites skills. Reuse the exact project_id from .openai/hosting.json; never invent or transform Sites identifiers, and never expose or persist connector credentials. Treat saving a version and deploying it as separate stages, and remember that every Sites deployment URL is production. Immediately before any deployment, access-policy change, environment/secret change, custom-domain change, bypass-token generation, or deletion, require an explicit ACP or MCP approval even in Full Access; if the connector does not request one, stop and ask the user. A request for a local build or saved version alone never authorizes production deployment.";
 
@@ -728,6 +747,14 @@ fn with_codex_sites_routing(prompt: String, enabled: bool) -> String {
         format!("{CODEX_SITES_INSTRUCTIONS}\n\n{prompt}")
     } else {
         prompt
+    }
+}
+
+fn with_provider_tool_instructions(prompt: String, instructions: &[String]) -> String {
+    if instructions.is_empty() {
+        prompt
+    } else {
+        format!("[C2 host tools]\n{}\n\n{prompt}", instructions.join("\n"))
     }
 }
 
@@ -1508,6 +1535,9 @@ struct EngineState {
     memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
     desktop_mcp: Option<DesktopMcpConfig>,
+    /// Host-backed special tools keyed by provider id. Discovery and native-vs-MCP decisions stay
+    /// outside the engine; this map is the engine's only interface to either host adapter.
+    provider_tools: HashMap<String, ProviderToolset>,
 }
 
 /// Desktop-only bootstrap material for C2's authenticated browser MCP sidecar. The master
@@ -1569,6 +1599,7 @@ impl Engine {
             None,
             CanvasFeatureGate::default(),
             None,
+            HashMap::new(),
         )
     }
 
@@ -1586,6 +1617,7 @@ impl Engine {
             Some(memory),
             CanvasFeatureGate::default(),
             None,
+            HashMap::new(),
         )
     }
 
@@ -1604,6 +1636,26 @@ impl Engine {
             memory,
             CanvasFeatureGate::default(),
             None,
+            HashMap::new(),
+        )
+    }
+
+    /// Plugin construction path with host-backed special tools projected per provider.
+    pub fn with_store_memory_and_provider_tools(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        memory: Option<MemoryCapability>,
+        provider_tools: HashMap<String, ProviderToolset>,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            memory,
+            CanvasFeatureGate::default(),
+            None,
+            provider_tools,
         )
     }
 
@@ -1624,6 +1676,7 @@ impl Engine {
             Some(memory),
             canvas_gate,
             None,
+            HashMap::new(),
         )
     }
 
@@ -1645,6 +1698,7 @@ impl Engine {
             memory,
             canvas_gate,
             Some(desktop_mcp),
+            HashMap::new(),
         )
     }
 
@@ -1663,6 +1717,7 @@ impl Engine {
         memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: Option<DesktopMcpConfig>,
+        provider_tools: HashMap<String, ProviderToolset>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         let (events, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
@@ -1687,6 +1742,7 @@ impl Engine {
             memory,
             canvas_gate,
             desktop_mcp,
+            provider_tools,
         });
         (Engine { state }, rx)
     }
@@ -3118,6 +3174,16 @@ impl Engine {
                         .unwrap_or_else(|| ProviderId::Custom("unknown".into()))
                 };
                 let is_codex = current_provider == ProviderId::Codex;
+                let provider_toolset = self
+                    .state
+                    .provider_tools
+                    .get(current_provider.as_str())
+                    .cloned()
+                    .unwrap_or_default();
+                attach_host_mcp_servers(
+                    &mut compiled.mcp_servers,
+                    provider_toolset.mcp_servers.iter().cloned(),
+                );
                 if let Some(config) = &self.state.desktop_mcp {
                     let server = config.scene_server_for_session(&session);
                     if !compiled
@@ -3179,6 +3245,10 @@ impl Engine {
                 });
                 let provider_prompt =
                     with_auto_scene_routing(provider_prompt, auto_scene_instructions);
+                let provider_prompt = with_provider_tool_instructions(
+                    provider_prompt,
+                    &provider_toolset.instructions,
+                );
                 let provider_prompt = with_codetwo_browser_routing(
                     provider_prompt,
                     is_codex && self.state.desktop_mcp.is_some(),
@@ -5668,9 +5738,10 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        auto_scene_routing_instructions, elicitation_message, encode_mcp_servers, rich_tool_kind,
-        sites_permission_kind, with_auto_scene_routing, with_codetwo_browser_routing,
-        with_codex_sites_routing, DesktopMcpConfig,
+        attach_host_mcp_servers, auto_scene_routing_instructions, elicitation_message,
+        encode_mcp_servers, rich_tool_kind, sites_permission_kind, with_auto_scene_routing,
+        with_codetwo_browser_routing, with_codex_sites_routing, with_provider_tool_instructions,
+        DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
     use crate::artifact::ToolSource;
@@ -5697,6 +5768,44 @@ mod mcp_tests {
         )
         .unwrap();
         assert_eq!(encoded[0]["type"], "http");
+    }
+
+    #[test]
+    fn verified_host_mcp_bridges_cannot_be_shadowed_by_document_skills() {
+        let server = |name: &str, command: &str| McpServer {
+            name: name.into(),
+            cwd: None,
+            transport: McpTransport::Stdio {
+                command: command.into(),
+                args: Vec::new(),
+                env: Vec::new(),
+            },
+        };
+        let explicit = server("computer-use", "explicit-computer-use");
+        let automatic = server("computer-use", "automatic-computer-use");
+        let browser = server("node_repl", "node-repl");
+        let mut attached = vec![explicit.clone()];
+        attach_host_mcp_servers(&mut attached, [automatic.clone(), browser.clone()]);
+
+        assert_eq!(attached, vec![automatic, browser]);
+    }
+
+    #[test]
+    fn provider_tool_instructions_are_transport_neutral() {
+        let instructions = vec![
+            "Use the computer-use MCP tools for Mac app interaction.".to_string(),
+            "Use node_repl for the user's existing Chrome state.".to_string(),
+        ];
+        let prompt =
+            with_provider_tool_instructions("inspect the current app".into(), &instructions);
+        assert!(prompt.starts_with("[C2 host tools]"));
+        assert!(prompt.contains("computer-use MCP tools"));
+        assert!(prompt.contains("node_repl"));
+        assert!(prompt.ends_with("inspect the current app"));
+        assert_eq!(
+            with_provider_tool_instructions("plain".into(), &[]),
+            "plain"
+        );
     }
 
     #[test]

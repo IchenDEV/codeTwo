@@ -121,7 +121,7 @@ pub use permission::{
 pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{
     default_registry, registry_with_codex_runtime, CapabilityState, LaunchSpec, Provider,
-    ProviderCapability, ProviderCapabilityId, ProviderId,
+    ProviderCapability, ProviderCapabilityId, ProviderId, ProviderToolset,
 };
 pub use pty::PtySession;
 pub use risk_v2::{

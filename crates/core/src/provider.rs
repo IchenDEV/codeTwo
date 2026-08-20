@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::codex_runtime::CodexRuntimeDiscovery;
+use crate::skill::McpServer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -39,6 +40,18 @@ pub struct ProviderCapability {
     pub reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+}
+
+/// The complete host-tool projection for one provider.
+///
+/// Callers do not need to know whether a capability is native to the provider or supplied by a
+/// host-backed MCP adapter. ACP session creation consumes `mcp_servers`; provider selectors and
+/// diagnostics consume `capabilities`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProviderToolset {
+    pub capabilities: Vec<ProviderCapability>,
+    pub mcp_servers: Vec<McpServer>,
+    pub instructions: Vec<String>,
 }
 
 /// Identifies a provider. `Custom` lets users register their own ACP-speaking command.

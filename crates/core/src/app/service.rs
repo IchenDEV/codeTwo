@@ -13,7 +13,7 @@ use crate::event::Event;
 use crate::keymap::Keymap;
 use crate::memory::MemoryCapability;
 use crate::models::available_models;
-use crate::provider::{Provider, ProviderCapability};
+use crate::provider::{Provider, ProviderCapability, ProviderToolset};
 use crate::scene::SceneLibrary;
 use crate::scene_artifact::SceneArtifactStore;
 use crate::skill::{builtin_skills, Skill, SkillLibrary};
@@ -196,10 +196,10 @@ pub struct ProviderSummary {
     pub capabilities: Vec<ProviderCapability>,
 }
 
-/// The provider registry plus the one-shot Codex runtime probe it was built from.
+/// The provider registry plus the one-shot host-tool probe it was built from.
 pub struct ProviderService {
     pub providers: Vec<Provider>,
-    pub codex: CodexRuntimeDiscovery,
+    pub host_tools: CodexRuntimeDiscovery,
 }
 
 impl Service for ProviderService {
@@ -207,6 +207,18 @@ impl Service for ProviderService {
 }
 
 impl ProviderService {
+    pub fn toolsets(&self) -> HashMap<String, ProviderToolset> {
+        self.providers
+            .iter()
+            .map(|provider| {
+                (
+                    provider.id.as_str().to_string(),
+                    self.host_tools.toolset(&provider.id),
+                )
+            })
+            .collect()
+    }
+
     pub async fn summaries(&self) -> Vec<ProviderSummary> {
         let mut summaries = Vec::with_capacity(self.providers.len());
         for provider in &self.providers {
@@ -216,11 +228,7 @@ impl ProviderService {
                 available: provider.is_available(),
                 needs_node: provider.needs_node,
                 models: available_models(provider).await,
-                capabilities: if provider.id == crate::provider::ProviderId::Codex {
-                    self.codex.capability_projection(true)
-                } else {
-                    Vec::new()
-                },
+                capabilities: self.host_tools.toolset(&provider.id).capabilities,
             });
         }
         summaries

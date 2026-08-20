@@ -88,6 +88,26 @@ value the agent never offered; a single-question form also projects onto permiss
 so clients that only render approvals can still answer it. See
 `crates/core/tests/engine_elicitation.rs`.
 
+## Provider-neutral host tools
+
+Special tools sit behind one logical `ProviderToolset` interface: provider capability states, MCP
+servers fixed at ACP session creation, and short routing/safety instructions. There are two host
+adapters because the runtime genuinely varies:
+
+- `apps/desktop/src/electrobun/host/providerTools.ts` serves the packaged Electrobun desktop in
+  TypeScript/Bun. It discovers and verifies local tool runtimes and passes their stdio MCP servers
+  directly to the desktop's ACP peer. The packaged app does not launch a Rust executable.
+- `crates/core/src/codex_runtime.rs` serves Rust CoreApp hosts, currently TUI and server. The
+  providers plugin takes one read-only discovery snapshot; the engine selects the current
+  provider's toolset and passes it to both `session/new` and `session/load`.
+
+Codex keeps provider-native tools and does not receive duplicate MCP adapters. Other providers can
+receive the signed Computer Use MCP and configured Chrome `node_repl` MCP. Image Generation and
+Sites are reported unavailable outside Codex until their host exposes a portable MCP surface; C2
+does not claim parity based only on an installed plugin. Interactive bridges in the Rust host also
+require an active macOS GUI login for the same user, so Linux, headless, and non-GUI server
+processes fail closed instead of advertising unusable app control.
+
 ## Context sync: whose memory is it?
 
 Two transcripts and one recall layer can participate in a turn. They are not the same thing:

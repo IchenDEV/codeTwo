@@ -26,10 +26,11 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
-/// What the engine is built from. A host that needs a different construction — the desktop
-/// attaches its authenticated browser MCP to Codex sessions — gets these and returns an engine.
+/// What the engine is built from. A host that needs a different construction gets these and
+/// returns an engine without forking the plugin graph.
 pub struct EngineInputs {
     pub providers: Vec<crate::provider::Provider>,
+    pub provider_tools: std::collections::HashMap<String, crate::provider::ProviderToolset>,
     pub skills: crate::skill::SkillLibrary,
     pub store: Arc<crate::store::Store>,
     pub memory: Option<crate::memory::MemoryCapability>,
@@ -109,17 +110,19 @@ impl Plugin for EnginePlugin {
 
         let inputs = EngineInputs {
             providers: providers.providers.clone(),
+            provider_tools: providers.toolsets(),
             skills: skills.library(),
             store: store.0.clone(),
             memory: ctx.get::<MemoryService>().map(|memory| memory.0.clone()),
         };
         let (engine, mut rx) = match &self.builder {
             Some(build) => build(inputs),
-            None => Engine::with_store_and_memory(
+            None => Engine::with_store_memory_and_provider_tools(
                 inputs.providers,
                 inputs.skills,
                 inputs.store,
                 inputs.memory,
+                inputs.provider_tools,
             ),
         };
         let engine = Arc::new(engine);
