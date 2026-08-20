@@ -4,13 +4,19 @@
 //! a bounded patch against the current revision and installed Scene/Agent Skill identities before
 //! producing the next Task Graph. It contains no reusable workflow or fixed stage definition.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::agent_skill_v2::AgentSkillResolver;
 use crate::scene_v2::{SceneCatalogV2, SceneV2Origin};
+use crate::store::{Store, StoreError};
+use crate::task::{
+    AgentId, OrchestrationEvent, Task, TaskId, WorkItemAttempt, WorkItemAttemptStatus,
+};
 use crate::task::{SceneOrigin, TaskGraph, WorkItem, WorkItemEdge, WorkItemId, WorkItemStatus};
 
 const MAX_PATCH_OPERATIONS: usize = 64;
@@ -88,6 +94,323 @@ pub enum OrchestrationValidationError {
     DependencyCycle,
     #[error("Task Graph would contain {actual} running Executor Work Items")]
     MultipleRunningExecutors { actual: usize },
+}
+
+#[derive(Debug, Clone)]
+pub struct PlannerInput {
+    pub task: Task,
+    pub graph: TaskGraph,
+}
+
+#[async_trait]
+pub trait PlannerPort: Send + Sync {
+    async fn propose(&self, input: PlannerInput) -> Result<OrchestrationPatch, String>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutorAssignment {
+    pub agent_id: AgentId,
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecutionPreparation {
+    pub task: Task,
+    pub work_item: WorkItem,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecutionRequest {
+    pub task: Task,
+    pub work_item: WorkItem,
+    pub attempt: WorkItemAttempt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExecutorOutcome {
+    Succeeded { evidence: Vec<String> },
+    Failed { message: String },
+    Cancelled { message: String },
+    Uncertain { message: String },
+}
+
+#[async_trait]
+pub trait ExecutorPort: Send + Sync {
+    async fn assignment(
+        &self,
+        preparation: ExecutionPreparation,
+    ) -> Result<ExecutorAssignment, String>;
+
+    async fn execute(&self, request: ExecutionRequest) -> Result<ExecutorOutcome, String>;
+}
+
+#[derive(Debug, Error)]
+pub enum OrchestratorError {
+    #[error(transparent)]
+    Store(#[from] StoreError),
+    #[error(transparent)]
+    Validation(#[from] OrchestrationValidationError),
+    #[error("planner: {0}")]
+    Planner(String),
+    #[error("executor: {0}")]
+    Executor(String),
+    #[error("task has no executable Work Item")]
+    NoExecutableWork,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExecutionStep {
+    pub attempt: WorkItemAttempt,
+    pub outcome: ExecutorOutcome,
+    pub event: OrchestrationEvent,
+}
+
+pub struct Orchestrator {
+    store: Arc<Store>,
+    planner: Arc<dyn PlannerPort>,
+    executor: Arc<dyn ExecutorPort>,
+    scenes: Arc<SceneCatalogV2>,
+    skills: Arc<AgentSkillResolver>,
+}
+
+impl Orchestrator {
+    pub fn new(
+        store: Arc<Store>,
+        planner: Arc<dyn PlannerPort>,
+        executor: Arc<dyn ExecutorPort>,
+        scenes: Arc<SceneCatalogV2>,
+        skills: Arc<AgentSkillResolver>,
+    ) -> Self {
+        Self {
+            store,
+            planner,
+            executor,
+            scenes,
+            skills,
+        }
+    }
+
+    pub async fn plan_once(
+        &self,
+        task_id: &TaskId,
+        now_ms: i64,
+    ) -> Result<OrchestrationEvent, OrchestratorError> {
+        let record = self
+            .store
+            .get_task(task_id)?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })?;
+        let graph = self.store.get_task_graph(task_id)?;
+        let patch = self
+            .planner
+            .propose(PlannerInput {
+                task: record.task,
+                graph: graph.clone(),
+            })
+            .await
+            .map_err(OrchestratorError::Planner)?;
+        let next = apply_orchestration_patch(&graph, &patch, &self.scenes, &self.skills)?;
+        Ok(self.store.apply_task_graph(
+            task_id,
+            patch.expected_revision,
+            &next,
+            &patch.reason,
+            now_ms,
+        )?)
+    }
+
+    pub async fn execute_next(
+        &self,
+        task_id: &TaskId,
+        now_ms: i64,
+    ) -> Result<ExecutionStep, OrchestratorError> {
+        let record = self
+            .store
+            .get_task(task_id)?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })?;
+        let graph = self.store.get_task_graph(task_id)?;
+        let work_item = next_executable_work_item(&graph)
+            .cloned()
+            .ok_or(OrchestratorError::NoExecutableWork)?;
+        let assignment = self
+            .executor
+            .assignment(ExecutionPreparation {
+                task: record.task.clone(),
+                work_item: work_item.clone(),
+            })
+            .await
+            .map_err(OrchestratorError::Executor)?;
+        let attempt = self.store.start_work_item_attempt(
+            task_id,
+            &work_item.id,
+            &assignment.agent_id,
+            &assignment.session_id,
+            now_ms,
+        )?;
+        let outcome = self
+            .executor
+            .execute(ExecutionRequest {
+                task: record.task,
+                work_item: work_item.clone(),
+                attempt: attempt.clone(),
+            })
+            .await
+            .unwrap_or_else(|message| ExecutorOutcome::Failed { message });
+        let (attempt_status, operation, reason) = outcome_transition(&work_item, &outcome);
+        let completed_attempt = self.store.finish_work_item_attempt(
+            task_id,
+            &work_item.id,
+            attempt.attempt,
+            attempt_status,
+            now_ms,
+        )?;
+        let patch = OrchestrationPatch {
+            expected_revision: graph.revision,
+            reason,
+            operations: vec![operation],
+        };
+        let next = apply_orchestration_patch(&graph, &patch, &self.scenes, &self.skills)?;
+        let event = self.store.apply_task_graph(
+            task_id,
+            patch.expected_revision,
+            &next,
+            &patch.reason,
+            now_ms,
+        )?;
+        Ok(ExecutionStep {
+            attempt: completed_attempt,
+            outcome,
+            event,
+        })
+    }
+}
+
+fn next_executable_work_item(graph: &TaskGraph) -> Option<&WorkItem> {
+    graph.work_items.iter().find(|candidate| {
+        matches!(
+            candidate.status,
+            WorkItemStatus::Proposed | WorkItemStatus::Ready
+        ) && graph
+            .edges
+            .iter()
+            .filter(|edge| edge.dependent == candidate.id)
+            .all(|edge| {
+                graph.work_items.iter().any(|item| {
+                    item.id == edge.prerequisite && item.status == WorkItemStatus::Succeeded
+                })
+            })
+    })
+}
+
+fn outcome_transition(
+    work_item: &WorkItem,
+    outcome: &ExecutorOutcome,
+) -> (WorkItemAttemptStatus, GraphOperation, String) {
+    match outcome {
+        ExecutorOutcome::Succeeded { evidence } => (
+            WorkItemAttemptStatus::Succeeded,
+            GraphOperation::Complete {
+                work_item_id: work_item.id.clone(),
+                evidence: evidence.clone(),
+            },
+            format!(
+                "Work Item `{}` produced completion evidence",
+                work_item.id.as_str()
+            ),
+        ),
+        ExecutorOutcome::Failed { message } => (
+            WorkItemAttemptStatus::Failed,
+            GraphOperation::Update {
+                work_item: terminal_work_item(work_item, WorkItemStatus::Failed, message),
+            },
+            format!("Work Item `{}` failed", work_item.id.as_str()),
+        ),
+        ExecutorOutcome::Cancelled { message } => (
+            WorkItemAttemptStatus::Cancelled,
+            GraphOperation::Update {
+                work_item: terminal_work_item(work_item, WorkItemStatus::Cancelled, message),
+            },
+            format!("Work Item `{}` was cancelled", work_item.id.as_str()),
+        ),
+        ExecutorOutcome::Uncertain { message } => (
+            WorkItemAttemptStatus::Uncertain,
+            GraphOperation::Update {
+                work_item: terminal_work_item(work_item, WorkItemStatus::Blocked, message),
+            },
+            format!(
+                "Work Item `{}` has an uncertain outcome",
+                work_item.id.as_str()
+            ),
+        ),
+    }
+}
+
+fn terminal_work_item(item: &WorkItem, status: WorkItemStatus, message: &str) -> WorkItem {
+    let mut terminal = item.clone();
+    terminal.status = status;
+    terminal.blocker = Some(message.to_string());
+    terminal
+}
+
+pub struct InMemoryPlanner {
+    patches: Mutex<VecDeque<OrchestrationPatch>>,
+}
+
+impl InMemoryPlanner {
+    pub fn new(patches: impl IntoIterator<Item = OrchestrationPatch>) -> Self {
+        Self {
+            patches: Mutex::new(patches.into_iter().collect()),
+        }
+    }
+}
+
+#[async_trait]
+impl PlannerPort for InMemoryPlanner {
+    async fn propose(&self, _input: PlannerInput) -> Result<OrchestrationPatch, String> {
+        self.patches
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| "no in-memory planner reply remains".into())
+    }
+}
+
+pub struct InMemoryExecutor {
+    assignment: ExecutorAssignment,
+    outcomes: Mutex<VecDeque<ExecutorOutcome>>,
+}
+
+impl InMemoryExecutor {
+    pub fn new(
+        assignment: ExecutorAssignment,
+        outcomes: impl IntoIterator<Item = ExecutorOutcome>,
+    ) -> Self {
+        Self {
+            assignment,
+            outcomes: Mutex::new(outcomes.into_iter().collect()),
+        }
+    }
+}
+
+#[async_trait]
+impl ExecutorPort for InMemoryExecutor {
+    async fn assignment(
+        &self,
+        _preparation: ExecutionPreparation,
+    ) -> Result<ExecutorAssignment, String> {
+        Ok(self.assignment.clone())
+    }
+
+    async fn execute(&self, _request: ExecutionRequest) -> Result<ExecutorOutcome, String> {
+        self.outcomes
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| "no in-memory Executor outcome remains".into())
+    }
 }
 
 pub fn apply_orchestration_patch(

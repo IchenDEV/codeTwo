@@ -24,6 +24,18 @@ macro_rules! string_id {
                 &self.0
             }
         }
+
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                Self::new(value)
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                Self::new(value)
+            }
+        }
     };
 }
 

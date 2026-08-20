@@ -1,9 +1,12 @@
 use codetwo_core::{
     apply_orchestration_patch, AgentSkillContribution, AgentSkillOrigin, AgentSkillRef,
-    AgentSkillResolver, GraphOperation, OrchestrationPatch, OrchestrationValidationError,
-    SceneCatalogV2, SceneOrigin, SceneRef, Skill, SkillPayload, TaskGraph, WorkItem, WorkItemId,
-    WorkItemStatus,
+    AgentSkillResolver, ExecutorAssignment, ExecutorOutcome, GraphOperation, InMemoryExecutor,
+    InMemoryPlanner, OrchestrationPatch, OrchestrationValidationError, Orchestrator,
+    ProviderConfiguration, ProviderId, ResultContract, SceneCatalogV2, SceneOrigin, SceneRef,
+    Session, Skill, SkillPayload, Store, Task, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem,
+    WorkItemId, WorkItemStatus,
 };
+use std::sync::Arc;
 
 fn authentic_skill_resolver() -> AgentSkillResolver {
     AgentSkillResolver::new([AgentSkillContribution {
@@ -23,8 +26,12 @@ fn authentic_skill_resolver() -> AgentSkillResolver {
 }
 
 fn work_item(scene_id: &str, skill: AgentSkillRef) -> WorkItem {
+    work_item_named("work-1", scene_id, skill)
+}
+
+fn work_item_named(id: &str, scene_id: &str, skill: AgentSkillRef) -> WorkItem {
     WorkItem {
-        id: WorkItemId::new("work-1"),
+        id: WorkItemId::new(id),
         objective: "Review the implementation".into(),
         result_contract_conditions: vec!["reviewed".into()],
         scenes: vec![SceneRef {
@@ -96,4 +103,143 @@ fn patch_rejects_an_unknown_scene_without_mutating_the_graph() {
     ));
     assert_eq!(current.revision, 4);
     assert!(current.work_items.is_empty());
+}
+
+#[tokio::test]
+async fn orchestrator_plans_and_completes_one_work_item_through_ports() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let task = Task {
+        id: TaskId::new("task-1"),
+        status: TaskStatus::Active,
+        result_contract: ResultContract {
+            goal: "Review Scenes 2.0".into(),
+            required_deliverables: vec!["Review report".into()],
+            completion_conditions: vec!["reviewed".into()],
+            boundaries: Vec::new(),
+            known_risks: Vec::new(),
+            unresolved_facts: Vec::new(),
+        },
+        provider_configuration: ProviderConfiguration {
+            provider: ProviderId::Codex,
+            model: Some("gpt-5.6-sol".into()),
+            reasoning_effort: Some("high".into()),
+        },
+        budget: TaskBudget {
+            max_cost_microusd: None,
+            max_tokens: None,
+            max_duration_seconds: None,
+        },
+    };
+    store.create_task(&task, 100).unwrap();
+    let session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&session).unwrap();
+    let scenes = Arc::new(SceneCatalogV2::builtin());
+    let skills = Arc::new(authentic_skill_resolver());
+    let skill = skills.resolve("review").unwrap().reference.clone();
+    let planner = Arc::new(InMemoryPlanner::new([OrchestrationPatch {
+        expected_revision: 0,
+        reason: "Review evidence is required".into(),
+        operations: vec![GraphOperation::Add {
+            work_item: work_item("official:software-development", skill),
+            depends_on: Vec::new(),
+        }],
+    }]));
+    let executor = Arc::new(InMemoryExecutor::new(
+        ExecutorAssignment {
+            agent_id: "agent-1".into(),
+            session_id: session.id,
+        },
+        [ExecutorOutcome::Succeeded {
+            evidence: vec!["Review report recorded".into()],
+        }],
+    ));
+    let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills);
+
+    orchestrator.plan_once(&task.id, 200).await.unwrap();
+    orchestrator.execute_next(&task.id, 300).await.unwrap();
+
+    let graph = store.get_task_graph(&task.id).unwrap();
+    assert_eq!(graph.revision, 2);
+    assert_eq!(graph.work_items[0].status, WorkItemStatus::Succeeded);
+    assert_eq!(
+        graph.work_items[0].completion_evidence,
+        ["Review report recorded"]
+    );
+}
+
+#[tokio::test]
+async fn orchestrator_executes_dependent_work_items_serially() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let task = Task {
+        id: TaskId::new("task-serial"),
+        status: TaskStatus::Active,
+        result_contract: ResultContract {
+            goal: "Produce and verify a change".into(),
+            required_deliverables: vec!["Change".into(), "Verification".into()],
+            completion_conditions: vec!["changed".into(), "verified".into()],
+            boundaries: Vec::new(),
+            known_risks: Vec::new(),
+            unresolved_facts: Vec::new(),
+        },
+        provider_configuration: ProviderConfiguration {
+            provider: ProviderId::Codex,
+            model: None,
+            reasoning_effort: None,
+        },
+        budget: TaskBudget {
+            max_cost_microusd: None,
+            max_tokens: None,
+            max_duration_seconds: None,
+        },
+    };
+    store.create_task(&task, 100).unwrap();
+    let session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&session).unwrap();
+    let scenes = Arc::new(SceneCatalogV2::builtin());
+    let skills = Arc::new(authentic_skill_resolver());
+    let skill = skills.resolve("review").unwrap().reference.clone();
+    let planner = Arc::new(InMemoryPlanner::new([OrchestrationPatch {
+        expected_revision: 0,
+        reason: "The change must precede verification".into(),
+        operations: vec![
+            GraphOperation::Add {
+                work_item: work_item_named(
+                    "work-change",
+                    "official:software-development",
+                    skill.clone(),
+                ),
+                depends_on: Vec::new(),
+            },
+            GraphOperation::Add {
+                work_item: work_item_named("work-verify", "official:testing-quality", skill),
+                depends_on: vec![WorkItemId::new("work-change")],
+            },
+        ],
+    }]));
+    let executor = Arc::new(InMemoryExecutor::new(
+        ExecutorAssignment {
+            agent_id: "agent-1".into(),
+            session_id: session.id,
+        },
+        [
+            ExecutorOutcome::Succeeded {
+                evidence: vec!["Change produced".into()],
+            },
+            ExecutorOutcome::Succeeded {
+                evidence: vec!["Verification passed".into()],
+            },
+        ],
+    ));
+    let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills);
+
+    orchestrator.plan_once(&task.id, 200).await.unwrap();
+    orchestrator.execute_next(&task.id, 300).await.unwrap();
+    orchestrator.execute_next(&task.id, 400).await.unwrap();
+
+    let graph = store.get_task_graph(&task.id).unwrap();
+    assert_eq!(graph.revision, 3);
+    assert!(graph
+        .work_items
+        .iter()
+        .all(|item| item.status == WorkItemStatus::Succeeded));
 }

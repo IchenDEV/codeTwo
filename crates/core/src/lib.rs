@@ -101,7 +101,10 @@ pub use memory::{
 };
 pub use models::builtin_models;
 pub use orchestrator::{
-    apply_orchestration_patch, GraphOperation, OrchestrationPatch, OrchestrationValidationError,
+    apply_orchestration_patch, ExecutionPreparation, ExecutionRequest, ExecutionStep,
+    ExecutorAssignment, ExecutorOutcome, ExecutorPort, GraphOperation, InMemoryExecutor,
+    InMemoryPlanner, OrchestrationPatch, OrchestrationValidationError, Orchestrator,
+    OrchestratorError, PlannerInput, PlannerPort,
 };
 pub use permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
