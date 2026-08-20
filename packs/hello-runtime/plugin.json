@@ -6,10 +6,15 @@
   "author": { "name": "C2" },
   "license": "MIT",
   "keywords": ["example", "plugin-protocol", "runtime"],
-  "runtime": {
-    "protocol": "1.0.0",
-    "command": "node",
-    "args": ["plugin.js"],
-    "inject": []
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.0.0",
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["plugin.js"],
+        "inject": []
+      }
+    }
   }
 }

@@ -3,6 +3,10 @@
 C2 is a plugin graph. This document explains what that means, how to write a plugin, and how
 the core and host-specific plugins fit together.
 
+For the normative package, naming, lifecycle, scope, security, compatibility, and host-capability
+rules, see the [C2 Plugin Standard 1.0.0](plugin-standard.md). This document focuses on the graph's
+implementation and rationale.
+
 The model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
 [`crates/kernel`](../crates/kernel). Cordis' claim is that an application is not a program with
 extension points bolted on; it is a graph of plugins that happens to boot. We agree, and this is
@@ -205,8 +209,8 @@ State changes use a two-step protocol:
 `kernel.set_enabled` and `kernel.configure` remain compatibility commands, but they route through
 the same durable manager rather than mutating an unrelated in-memory switch.
 
-An installed bundle with a `runtime` block joins this same catalog as a dynamically registered
-third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
+An installed bundle with `extensions.dev.codetwo.runtime` joins this same catalog as a dynamically
+registered third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
 `plugins.plan_change`, and `plugins.apply_change` for user or project policy just as compiled
 factories do; they do not maintain a second process-lifecycle state machine. Importing, installing,
 removing, changing trust, or replacing the installed record reconciles the dynamic factory set
@@ -258,8 +262,8 @@ commands, event subscriptions — lands in the same kernel registries a built-in
 show up in `kernel.commands`, are callable through `call()`, and vanish when it unloads. It
 declares `inject` in its manifest and gets the same reactive contract. It is not a lesser citizen.
 
-A bundle opts in with a `runtime` block in `plugin.json`, and the process starts only once the user
-marks the bundle **trusted** — installing still executes nothing. See
+A portable bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
+starts only once the user marks the bundle **trusted** — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
 
 The runtime appears in the managed catalog as `bundle:<id>`. Existing manifests are user-only:
@@ -280,8 +284,10 @@ registry.register_arc(Box::new(|| my_engine));  // or replace a built-in by name
 CoreApp::boot_with(config, registry).await?;
 ```
 
-The desktop sidecar adds only its host-owned automation, event, language-server, and remote
-plugins; product commands still come from the same built-in registry as the TUI and server.
+A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
+remote modules; product commands remain behind the same command seam as the TUI and server. The
+current Pure Bun compatibility host implements that seam directly and reports its missing adapters
+explicitly rather than claiming the Rust graph is present.
 
 ## Two senses of "plugin"
 
@@ -294,8 +300,8 @@ They meet in `plugin-hub`, and it is worth keeping them apart:
   GitHub. Installing it executes nothing; it contributes skills, subagent definitions, MCP server
   definitions, scenes, and scaffolds. See `docs/architecture.md`.
 
-`plugin-hub` manages bundles; `extensions` turns the ones that ship a `runtime` block into kernel
-plugins. Both are themselves kernel plugins.
+`plugin-hub` manages bundles; `extensions` turns the ones that ship a C2 process runtime into
+kernel plugins. Both are themselves kernel plugins.
 
 ## Migration status
 
@@ -309,15 +315,15 @@ The application migration is complete:
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
-- The Electrobun desktop registers four sidecar plugins — `automation`, `desktop-events`, `lsp`
-  and `remote` — beside the core registry. The default engine stays intact.
-- The renderer exposes one typed `call` request. Electrobun relays it to the sidecar's JSON-lines
-  `call` method, so there are no compatibility business wrappers or duplicated `AppState`
-  service handles.
+- The experimental Electrobun desktop registers one in-process `pure-bun` compatibility host. It
+  preserves the renderer's typed command/event contract, but it is intentionally not full
+  plugin-graph parity. Its exact supported and fail-closed capabilities are recorded in the
+  [standard's host profiles](plugin-standard.md#7-host-capability-profiles).
+- The renderer exposes one typed `call` request. Electrobun dispatches it directly to the Bun host;
+  no Rust sidecar is built or bundled by the desktop package.
 
-The `desktop-events` plugin is deliberately host plumbing rather than a business API: it turns
-core broadcasts into sidecar event envelopes; Electrobun forwards those to the renderer. Manual
-browser tabs persist in the renderer and render as sandboxed `<electrobun-webview>` elements.
+Desktop event envelopes remain host plumbing rather than a business API. Manual browser tabs
+persist in the renderer and render as sandboxed `<electrobun-webview>` elements.
 The former authenticated agent-browser MCP is not registered because Electrobun's stable
 BrowserView API does not yet supply the screenshot and evaluated-value primitives that contract
 requires; restoring it requires an upstream-capable adapter, not a pretend partial tool.

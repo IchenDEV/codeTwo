@@ -35,6 +35,28 @@ detection alone is not conformance.
 
 `未达到全量完成`.
 
+### 2026-08-20 implementation delta
+
+The original ledger below remains a dated record of the 2026-08-09 tranche. Since then, C2 has:
+
+- added the [C2 Plugin Standard 1.0.0](../plugin-standard.md), with C2 runtime data under the
+  Agent Plugins-compliant `extensions.dev.codetwo` namespace;
+- unified built-in, host, and trusted third-party process runtimes behind one catalog and
+  revision-bound `plan_change -> apply_change` lifecycle;
+- added durable user/project policy, true project child graphs and command realms, per-project
+  process data, active-resource leases, last-known-good rollback, safe mode, and reset;
+- made installed process bundles live `bundle:<id>` factories with immediate add, replace, unload,
+  trust, and enable reconciliation;
+- retained explicit unsupported states for hooks, workflows, monitors, channels, apps, settings,
+  bin, themes, output styles, dependencies, user config, and socket LSP;
+- introduced an experimental Pure Bun Electrobun host. It preserves the renderer command/event
+  shape but currently fails closed for plugin install/lifecycle, project policy, scenes/pipelines,
+  canvas, remote, voice, isolated worktrees, provider quotas, and background automation execution.
+
+“Project/local/managed installation stores” in the remaining list still refers to bundle provenance
+and package stores. It does not negate the now-implemented user/project **runtime policy** and
+project runtime isolation.
+
 Implemented and covered by build or automated tests in this change:
 
 - Agent Plugins 1.0.0 local schema selection, manifest/skill/MCP validation, per-component failure

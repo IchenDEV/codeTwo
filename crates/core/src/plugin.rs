@@ -24,6 +24,8 @@ const MAX_FILES: usize = 5_000;
 const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_BUNDLE_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_DEPTH: usize = 12;
+const C2_EXTENSION_NAMESPACE: &str = "dev.codetwo";
+const C2_PLUGIN_STANDARD_VERSION: &str = "1.0.0";
 const AGENT_PLUGIN_SCHEMA_JSON: &str =
     include_str!("../schemas/agent-plugins/1.0.0/plugin.schema.json");
 const AGENT_MCP_SCHEMA_JSON: &str = include_str!("../schemas/agent-plugins/1.0.0/mcp.schema.json");
@@ -61,7 +63,7 @@ pub struct PluginCounts {
     pub scenes: usize,
     #[serde(default)]
     pub pipelines: usize,
-    /// 1 when the bundle ships a `runtime` block — a process C2 speaks the plugin protocol to.
+    /// 1 when the bundle ships a C2 runtime declaration — a process C2 speaks the protocol to.
     /// Counted so a code-only plugin is a legitimate bundle rather than "no components".
     #[serde(default)]
     pub runtime: usize,
@@ -160,8 +162,8 @@ pub struct PluginScaffold {
     pub files: usize,
 }
 
-/// A bundle that ships **code**: a process C2 speaks the plugin protocol to
-/// (`docs/plugin-protocol.md`).
+/// A bundle that ships **code** through `extensions.dev.codetwo.runtime`: a process C2 speaks the
+/// plugin protocol to (`docs/plugin-protocol.md`).
 ///
 /// Installing one still executes nothing. The process starts only when the user has marked the
 /// plugin **trusted** *and* enabled — see [`crate::app::protocol`], which is the only place that
@@ -330,13 +332,111 @@ struct RawManifest {
     user_config: Option<Value>,
     #[serde(default)]
     interface: Value,
-    /// C2 extension: a process to speak the plugin protocol to. Parsed but never started here.
+    /// Agent Plugins client extension data. C2 owns `extensions.dev.codetwo`.
+    #[serde(default)]
+    extensions: Value,
+    /// Legacy C2 field for native Codex/Claude manifests. Agent Plugins manifests must use the
+    /// namespaced `extensions.dev.codetwo.runtime` field instead.
     #[serde(default)]
     runtime: Option<Value>,
 }
 
-/// Validate a manifest `runtime` block. A malformed one is a diagnostic, not an install failure:
-/// the rest of the bundle (skills, scenes, scaffolds) is still perfectly good content.
+fn semantic_version_major(value: &str) -> Option<u64> {
+    let core = value.split(['-', '+']).next()?;
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    parts.next()?.parse::<u64>().ok()?;
+    parts.next()?.parse::<u64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(major)
+}
+
+fn c2_extension_runtime(
+    manifest: &RawManifest,
+    diagnostics: &mut Vec<PluginDiagnostic>,
+) -> Option<Value> {
+    let extension = manifest
+        .extensions
+        .as_object()?
+        .get(C2_EXTENSION_NAMESPACE)?
+        .as_object()?;
+    let standard_version = extension
+        .get("standardVersion")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let supported_major = semantic_version_major(C2_PLUGIN_STANDARD_VERSION)
+        .expect("C2 plugin standard version must be semantic");
+    match semantic_version_major(standard_version) {
+        Some(major) if major == supported_major => {}
+        Some(_) => {
+            diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Warning,
+                code: "c2_extension.unsupported_version".into(),
+                message: format!(
+                    "Ignored {C2_EXTENSION_NAMESPACE} extension version {standard_version}; this host supports {C2_PLUGIN_STANDARD_VERSION}"
+                ),
+                component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
+            });
+            return None;
+        }
+        None => {
+            diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Warning,
+                code: "c2_extension.invalid_version".into(),
+                message: format!(
+                    "Ignored {C2_EXTENSION_NAMESPACE} extension without a valid standardVersion"
+                ),
+                component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
+            });
+            return None;
+        }
+    }
+    for key in extension
+        .keys()
+        .filter(|key| !matches!(key.as_str(), "standardVersion" | "runtime"))
+    {
+        diagnostics.push(PluginDiagnostic {
+            level: PluginDiagnosticLevel::Warning,
+            code: "c2_extension.unknown_field".into(),
+            message: format!("Ignored unknown {C2_EXTENSION_NAMESPACE} extension field: {key}"),
+            component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
+        });
+    }
+    extension.get("runtime").cloned()
+}
+
+fn select_runtime(
+    manifests: &[(PluginStandard, RawManifest)],
+    diagnostics: &mut Vec<PluginDiagnostic>,
+) -> Option<Value> {
+    let mut selected = None;
+    for (standard, manifest) in manifests {
+        let candidate = if *standard == PluginStandard::AgentPlugins {
+            c2_extension_runtime(manifest, diagnostics)
+        } else {
+            manifest.runtime.clone()
+        };
+        let Some(candidate) = candidate else {
+            continue;
+        };
+        if selected.is_some() {
+            diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Warning,
+                code: "runtime.manifest_conflict".into(),
+                message: "Ignored lower-priority runtime declaration; precedence is Agent Plugins, Codex, then Claude Code".into(),
+                component: None,
+            });
+        } else {
+            selected = Some(candidate);
+        }
+    }
+    selected
+}
+
+/// Validate the selected C2 `runtime` declaration. A malformed one is a diagnostic, not an install
+/// failure: the rest of the bundle (skills, scenes, scaffolds) is still perfectly good content.
 fn parse_runtime(
     raw: Option<&Value>,
     diagnostics: &mut Vec<PluginDiagnostic>,
@@ -388,6 +488,7 @@ fn parse_runtime(
 #[derive(Debug, Default)]
 struct ManifestSet {
     primary: RawManifest,
+    runtime: Option<Value>,
     standards: Vec<PluginStandard>,
     skill_paths: Vec<String>,
     agent_paths: Vec<String>,
@@ -525,7 +626,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
 
     let scaffolds = discover_scaffolds(&plugin_root)?;
     let (scene_count, pipeline_count) = count_scene_components(&plugin_root);
-    let runtime = parse_runtime(manifest.runtime.as_ref(), &mut manifest_set.diagnostics);
+    let runtime = parse_runtime(manifest_set.runtime.as_ref(), &mut manifest_set.diagnostics);
     let counts = PluginCounts {
         skills: components
             .iter()
@@ -936,8 +1037,10 @@ fn load_manifest_set(root: &Path, paths: &[PathBuf]) -> Result<ManifestSet, Plug
     let lsp_servers = discover_lsp_servers(root, &parsed, &mut diagnostics)?;
     let extension_components =
         discover_extension_components(root, &parsed, &lsp_servers, &mut diagnostics)?;
+    let runtime = select_runtime(&parsed, &mut diagnostics);
     Ok(ManifestSet {
         primary,
+        runtime,
         agent_portable: standards.contains(&PluginStandard::AgentPlugins),
         standards,
         skill_paths,
@@ -1113,16 +1216,24 @@ fn validate_agent_manifest(
             component: Some("plugin.json".into()),
         });
     }
-    if object
-        .get("extensions")
-        .is_some_and(|value| !value.is_object())
-    {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Warning,
-            code: "agent_manifest_extensions_ignored".into(),
-            message: "Ignored non-object Agent Plugins extensions field".into(),
-            component: Some("plugin.json".into()),
-        });
+    if let Some(extensions) = object.get("extensions") {
+        match extensions.as_object() {
+            Some(extensions) => {
+                if let Some((namespace, _)) =
+                    extensions.iter().find(|(_, value)| !value.is_object())
+                {
+                    return Err(PluginError::Invalid(format!(
+                        "Agent Plugins extension {namespace} must be an object"
+                    )));
+                }
+            }
+            None => diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Warning,
+                code: "agent_manifest_extensions_ignored".into(),
+                message: "Ignored non-object Agent Plugins extensions field".into(),
+                component: Some("plugin.json".into()),
+            }),
+        }
     }
     for key in [
         "version",
@@ -3069,6 +3180,146 @@ mod tests {
             serde_json::to_value(project).unwrap()["scopeSupport"],
             serde_json::json!(["user", "project"])
         );
+    }
+
+    #[test]
+    fn loads_c2_runtime_from_agent_plugins_namespace() {
+        let root = std::env::temp_dir().join(format!(
+            "codetwo-namespaced-runtime-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write(
+            &root.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"portable-runtime",
+              "extensions":{"dev.codetwo":{
+                "standardVersion":"1.0.0",
+                "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"],"scopeSupport":["user","project"]}
+              }}
+            }"#,
+        );
+        write(&root.join("plugin.js"), "process.exit(0);\n");
+
+        let bundle = from_github(&checkout(root)).unwrap();
+        let runtime = bundle.plugin.runtime.expect("C2 runtime must be loaded");
+        assert_eq!(runtime.command, "node");
+        assert_eq!(runtime.args, ["plugin.js"]);
+        assert_eq!(
+            runtime.scope_support,
+            [
+                codetwo_kernel::PluginScopeSupport::User,
+                codetwo_kernel::PluginScopeSupport::Project,
+            ]
+        );
+        assert_eq!(bundle.plugin.counts.runtime, 1);
+        assert!(!bundle
+            .plugin
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "agent_manifest_unknown_field"));
+    }
+
+    #[test]
+    fn unsupported_c2_extension_keeps_portable_components() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-future-extension-{}", uuid::Uuid::new_v4()));
+        write(
+            &root.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"future-runtime",
+              "extensions":{"dev.codetwo":{
+                "standardVersion":"2.0.0",
+                "runtime":{"command":"node"}
+              }}
+            }"#,
+        );
+        write(
+            &root.join("skills/review/SKILL.md"),
+            "---\nname: review\ndescription: Review a change\n---\nReview the current change.",
+        );
+
+        let bundle = from_github(&checkout(root)).unwrap();
+        assert_eq!(bundle.plugin.counts.skills, 1);
+        assert_eq!(bundle.plugin.counts.runtime, 0);
+        assert!(bundle.plugin.runtime.is_none());
+        assert!(bundle
+            .plugin
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "c2_extension.unsupported_version"));
+    }
+
+    #[test]
+    fn rejects_non_object_agent_plugin_extension_member() {
+        let root = std::env::temp_dir().join(format!(
+            "codetwo-invalid-extension-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write(
+            &root.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"invalid-extension",
+              "extensions":{"dev.codetwo":"invalid"}
+            }"#,
+        );
+        assert!(matches!(
+            from_github(&checkout(root)),
+            Err(PluginError::Invalid(message)) if message.contains("extension dev.codetwo must be an object")
+        ));
+    }
+
+    #[test]
+    fn keeps_top_level_runtime_for_native_manifests() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-native-runtime-{}", uuid::Uuid::new_v4()));
+        write(
+            &root.join(".codex-plugin/plugin.json"),
+            r#"{
+              "name":"native-runtime",
+              "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"]}
+            }"#,
+        );
+        write(&root.join("plugin.js"), "process.exit(0);\n");
+
+        let bundle = from_github(&checkout(root)).unwrap();
+        assert_eq!(bundle.plugin.standard, PluginStandard::Codex);
+        assert_eq!(bundle.plugin.counts.runtime, 1);
+        assert_eq!(bundle.plugin.runtime.unwrap().command, "node");
+    }
+
+    #[test]
+    fn checked_in_hello_runtime_conforms_to_the_c2_namespace() {
+        let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packs/hello-runtime");
+        let root =
+            std::env::temp_dir().join(format!("codetwo-hello-runtime-{}", uuid::Uuid::new_v4()));
+        let plugin_root = root.join("packs/hello-runtime");
+        std::fs::create_dir_all(&plugin_root).unwrap();
+        std::fs::copy(source.join("plugin.json"), plugin_root.join("plugin.json")).unwrap();
+        std::fs::copy(source.join("plugin.js"), plugin_root.join("plugin.js")).unwrap();
+
+        // GitHubCheckout owns and removes its root on drop, so it must only receive this temp copy.
+        let bundle = from_github(&GitHubCheckout {
+            root,
+            spec: crate::github_skills::GitHubRepoSpec {
+                owner: "IchenDEV".into(),
+                repo: "codeTwo".into(),
+                reference: None,
+                subpath: Some(PathBuf::from("packs/hello-runtime")),
+            },
+        })
+        .unwrap();
+
+        assert_eq!(bundle.plugin.standard, PluginStandard::AgentPlugins);
+        assert_eq!(bundle.plugin.counts.runtime, 1);
+        assert_eq!(bundle.plugin.runtime.unwrap().command, "node");
+        assert!(!bundle
+            .plugin
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == "agent_manifest_unknown_field"));
     }
 
     fn write(path: &Path, text: &str) {

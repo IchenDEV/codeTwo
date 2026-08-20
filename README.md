@@ -13,6 +13,7 @@
   <a href="https://ichendev.github.io/codeTwo/">Website</a> ·
   <a href="website/guide/getting-started.md">Get started</a> ·
   <a href="docs/architecture.md">Architecture</a> ·
+  <a href="docs/plugin-standard.md">Plugin standard</a> ·
   <a href="docs/plugin-protocol.md">Plugin protocol</a>
 </p>
 
@@ -38,8 +39,9 @@ whole turn, and only then send it to the agent you choose.
   derived memories retain their sources and can be pinned or forgotten.
 - **Git-aware execution.** Use per-session worktrees, automatic checkpoints, diffs, revert, and
   explicit commit/push flows.
-- **Three surfaces.** The same core powers an Electrobun desktop app, a ratatui TUI, and a paired remote
-  web client.
+- **Three surfaces.** C2 ships an Electrobun desktop app, a ratatui TUI, and a paired remote web
+  client. The experimental desktop build runs an in-process Bun host; the TUI and server retain the
+  Rust core.
 
 ## How it fits together
 
@@ -58,7 +60,8 @@ Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM
 C2's internals form a plugin graph inspired by
 [cordis](https://github.com/cordiverse/cordis): storage, agent execution, git, memory, scenes, and
 other subsystems declare what they require and provide. Out-of-process plugins use the same small
-JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands.
+JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands. Package, lifecycle,
+scope, security, and host behavior follow the [C2 Plugin Standard](docs/plugin-standard.md).
 
 ## Build from source
 
