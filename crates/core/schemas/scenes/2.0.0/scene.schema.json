@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "title": "CodeTwo Scene Definition",
+  "description": "A Scenes 2.0 domain work environment. It contains discovery context and no workflow or execution policy.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "const": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json"
+    },
+    "id": { "$ref": "#/$defs/reference" },
+    "version": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "description": { "type": "string", "maxLength": 512 },
+    "domain": { "$ref": "#/$defs/slug" },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "url": { "type": ["string", "null"] }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "localizations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "title": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "provenance": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "kind": { "enum": ["official", "personal", "project"] } },
+          "required": ["kind"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "plugin" },
+            "plugin_id": { "$ref": "#/$defs/reference" },
+            "publisher": { "type": "string", "minLength": 1, "maxLength": 120 }
+          },
+          "required": ["kind", "plugin_id", "publisher"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "agent_skill_selectors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reference" },
+      "uniqueItems": true
+    },
+    "capability_namespaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reference" },
+      "uniqueItems": true
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "$schema",
+    "id",
+    "version",
+    "title",
+    "description",
+    "domain",
+    "provenance",
+    "agent_skill_selectors",
+    "capability_namespaces",
+    "extensions"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$"
+    }
+  }
+}
