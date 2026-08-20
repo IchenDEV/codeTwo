@@ -53,6 +53,7 @@ describe("TurnCard rendered activity", () => {
 
     expect(status?.getAttribute("aria-live")).toBe("polite");
     expect(orb?.getAttribute("aria-hidden")).toBe("true");
+    expect(orb?.getAttribute("data-activity-state")).toBe("working");
     expect(orb?.getAttribute("aria-label")).toBe("Working…");
     expect(orb?.style.width).toBe("20px");
     expect(status?.textContent?.trim().length).toBeGreaterThan(0);
@@ -64,9 +65,9 @@ describe("TurnCard rendered activity", () => {
     disableCanvasDrawing();
     const rendered = mount(<TurnCard turn={runningTurn(["Checking constraints"])} />);
 
-    expect(
-      rendered.container.querySelector('[role="status"] canvas')?.getAttribute("aria-label"),
-    ).toBe("Solving…");
+    const orb = rendered.container.querySelector('[role="status"] canvas');
+    expect(orb?.getAttribute("data-activity-state")).toBe("solving");
+    expect(orb?.getAttribute("aria-label")).toBe("Solving…");
     rendered.unmount();
   });
 

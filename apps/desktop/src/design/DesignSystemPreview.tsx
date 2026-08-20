@@ -4,12 +4,12 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
-  LoaderCircle,
   Monitor,
   Moon,
   Search,
   Sun,
 } from "lucide-react";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import "./tokens.css";
 import "./preview.css";
 
@@ -321,7 +321,10 @@ export function DesignSystemPreview() {
                   <span><Check className="ds-icon-inline" /></span>
                   Keep the panel visible
                 </label>
-                <div className="ds-status-row"><LoaderCircle className="ds-icon-list ds-spinner" /> Refreshing provider quota</div>
+                <div className="ds-status-row"><ActivityOrb state="searching" visualSize={14} aria-hidden="true" /> Refreshing provider quota</div>
+                <div className="ds-status-row"><ActivityOrb state="working" visualSize={14} aria-hidden="true" /> Agent working</div>
+                <div className="ds-status-row"><ActivityOrb state="listening" visualSize={14} aria-hidden="true" /> Listening to voice input</div>
+                <div className="ds-status-row"><ActivityOrb state="shaping" visualSize={14} aria-hidden="true" /> Structuring transcript</div>
                 <div className="ds-status-row ds-status-warning"><AlertTriangle className="ds-icon-list" /> Quota unavailable</div>
               </div>
 

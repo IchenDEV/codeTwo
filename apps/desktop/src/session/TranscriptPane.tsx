@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 
 import { TurnCard } from "./TurnCard";
 import { SelectionActions } from "./SelectionActions";
@@ -91,7 +92,7 @@ export function TranscriptPane({
               role="status"
               className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground"
             >
-              <Loader2 className="size-4 animate-spin" aria-hidden />
+              <ActivityOrb state="connecting" aria-hidden="true" />
               {t("session.loading")}
             </p>
           ) : (
