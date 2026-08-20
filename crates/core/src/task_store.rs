@@ -11,9 +11,9 @@ use crate::store::{Store, StoreError};
 use crate::task::{
     AgentId, AgentRole, ArtifactProvenance, LoopGuardState, MaterialGoalChangeReceipt,
     OrchestrationEvent, OrchestrationEventKind, ResultContract, ResultContractRefinement, Task,
-    TaskBudget, TaskBudgetState, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease,
-    TaskStatus, TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    TaskBudget, TaskBudgetState, TaskCacheReceipt, TaskCompletionEvaluation, TaskGraph, TaskId,
+    TaskSessionLease, TaskStatus, TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus,
+    WorkItemEdge, WorkItemId, WorkItemStatus,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -133,6 +133,17 @@ CREATE TABLE IF NOT EXISTS task_budget_state_v2 (
   updated_at_ms INTEGER NOT NULL,
   FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
 );
+CREATE TABLE IF NOT EXISTS task_cache_receipts_v2 (
+  task_id       TEXT NOT NULL,
+  work_item_id  TEXT NOT NULL,
+  attempt       INTEGER NOT NULL,
+  receipt_json  TEXT NOT NULL,
+  recorded_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (task_id, work_item_id, attempt),
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
+);
+CREATE INDEX IF NOT EXISTS task_cache_receipts_v2_order
+  ON task_cache_receipts_v2(task_id, recorded_at_ms, work_item_id, attempt);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1030,6 +1041,82 @@ impl Store {
             artifacts.push(serde_json::from_str(&row?)?);
         }
         Ok(artifacts)
+    }
+
+    pub fn record_task_cache_receipt(&self, receipt: &TaskCacheReceipt) -> Result<(), StoreError> {
+        if receipt
+            .structural_reuse
+            .stable_prefix_identity
+            .trim()
+            .is_empty()
+            || receipt
+                .structural_reuse
+                .session_compatibility_identity
+                .trim()
+                .is_empty()
+        {
+            return Err(StoreError::InvalidTaskCacheReceipt(
+                "structural identities cannot be empty".into(),
+            ));
+        }
+        let conn = self.conn.lock().unwrap();
+        let attempt_exists: bool = conn.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM task_work_item_attempts_v2
+               WHERE task_id=?1 AND work_item_id=?2 AND attempt=?3
+             )",
+            rusqlite::params![
+                receipt.task_id.as_str(),
+                receipt.work_item_id.as_str(),
+                receipt.attempt,
+            ],
+            |row| row.get(0),
+        )?;
+        if !attempt_exists {
+            return Err(StoreError::InvalidTaskCacheReceipt(
+                "receipt does not match a Work Item attempt".into(),
+            ));
+        }
+        conn.execute(
+            "INSERT INTO task_cache_receipts_v2
+               (task_id,work_item_id,attempt,receipt_json,recorded_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                receipt.task_id.as_str(),
+                receipt.work_item_id.as_str(),
+                receipt.attempt,
+                serde_json::to_string(receipt)?,
+                receipt.recorded_at_ms,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_task_cache_receipts(
+        &self,
+        task_id: &TaskId,
+    ) -> Result<Vec<TaskCacheReceipt>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let task_exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks_v2 WHERE id=?1)",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if !task_exists {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        let mut statement = conn.prepare(
+            "SELECT receipt_json FROM task_cache_receipts_v2
+             WHERE task_id=?1 ORDER BY recorded_at_ms ASC,work_item_id ASC,attempt ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], |row| row.get::<_, String>(0))?;
+        let mut receipts = Vec::new();
+        for row in rows {
+            receipts.push(serde_json::from_str(&row?)?);
+        }
+        Ok(receipts)
     }
 
     pub fn task_budget_state(&self, task_id: &TaskId) -> Result<TaskBudgetState, StoreError> {

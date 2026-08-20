@@ -90,6 +90,8 @@ pub enum StoreError {
     SessionLeaseConflict { session_id: String, reason: String },
     #[error("invalid Task Artifact: {0}")]
     InvalidTaskArtifact(String),
+    #[error("invalid Task cache receipt: {0}")]
+    InvalidTaskCacheReceipt(String),
 }
 
 const SCHEMA: &str = "

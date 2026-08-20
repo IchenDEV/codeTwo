@@ -159,6 +159,53 @@ impl TaskBudgetState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProviderCacheMetrics {
+    Unknown,
+    Reported {
+        fresh_input_tokens: u64,
+        cached_input_tokens: u64,
+    },
+}
+
+impl ProviderCacheMetrics {
+    pub fn hit_rate_basis_points(&self) -> Option<u16> {
+        let Self::Reported {
+            fresh_input_tokens,
+            cached_input_tokens,
+        } = self
+        else {
+            return None;
+        };
+        let total = fresh_input_tokens.checked_add(*cached_input_tokens)?;
+        if total == 0 {
+            return None;
+        }
+        let basis_points = cached_input_tokens.saturating_mul(10_000) / total;
+        Some(basis_points.min(10_000) as u16)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StructuralPromptReuse {
+    pub stable_prefix_identity: String,
+    pub session_compatibility_identity: String,
+    pub reused_compatible_session: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCacheReceipt {
+    pub task_id: TaskId,
+    pub work_item_id: WorkItemId,
+    pub attempt: u32,
+    pub provider_cache: ProviderCacheMetrics,
+    pub structural_reuse: StructuralPromptReuse,
+    pub recorded_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SceneOrigin {
     Official,
     Personal,

@@ -156,11 +156,11 @@ pub use store::{
 pub use task::{
     AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
     ArtifactProvenance, LoopCeilings, LoopGuardState, MaterialGoalChangeReceipt,
-    OrchestrationEvent, OrchestrationEventKind, ProviderConfiguration, ResultContract,
-    ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef, Task, TaskArtifactStatus,
-    TaskBudget, TaskBudgetState, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease,
-    TaskStatus, TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    OrchestrationEvent, OrchestrationEventKind, ProviderCacheMetrics, ProviderConfiguration,
+    ResultContract, ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef,
+    StructuralPromptReuse, Task, TaskArtifactStatus, TaskBudget, TaskBudgetState, TaskCacheReceipt,
+    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, TaskUsageObservation,
+    WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
 };
 pub use task_capsule::{
     compile_task_capsule, session_compatibility_key, CapabilityManifestEntry,
