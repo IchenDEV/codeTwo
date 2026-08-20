@@ -5,6 +5,7 @@ fn task_snapshot_round_trips_through_the_public_domain_model() {
     let authored = serde_json::json!({
         "task_id": "task-1",
         "revision": 3,
+        "result_contract_revision": 1,
         "status": "active",
         "result_contract": {
             "goal": "Ship Scenes 2.0",
@@ -25,12 +26,34 @@ fn task_snapshot_round_trips_through_the_public_domain_model() {
             "edges": []
         },
         "agents": [],
+        "session_leases": [],
         "artifacts": [],
+        "cache_receipts": [],
         "blockers": [],
         "budget": {
             "max_cost_microusd": null,
             "max_tokens": 120000,
             "max_duration_seconds": null
+        },
+        "budget_state": {
+            "observations": 0,
+            "fresh_input_tokens": null,
+            "provider_cached_input_tokens": null,
+            "output_tokens": null,
+            "cost_microusd": null,
+            "elapsed_seconds": 0,
+            "hard_limit_reason": null
+        },
+        "loop_guard": {
+            "total_attempts": 0,
+            "consecutive_failures": 0,
+            "repeated_work_item_attempts": 0,
+            "repeated_agent_skill_set_attempts": 0,
+            "replans_without_progress": 0,
+            "last_work_item_id": null,
+            "last_agent_skill_set_identity": null,
+            "last_progress_identity": null,
+            "pause_reason": null
         }
     });
 

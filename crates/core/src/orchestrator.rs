@@ -15,8 +15,8 @@ use crate::agent_skill_v2::AgentSkillResolver;
 use crate::scene_v2::{SceneCatalogV2, SceneV2Origin};
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, LoopCeilings, LoopGuardState, OrchestrationEvent, Task, TaskId, TaskStatus,
-    WorkItemAttempt, WorkItemAttemptStatus,
+    AgentId, LoopCeilings, LoopGuardState, OrchestrationEvent, RunSnapshot, Task, TaskId,
+    TaskStatus, WorkItemAttempt, WorkItemAttemptStatus,
 };
 use crate::task::{SceneOrigin, TaskGraph, WorkItem, WorkItemEdge, WorkItemId, WorkItemStatus};
 
@@ -204,6 +204,10 @@ impl Orchestrator {
     pub fn with_loop_ceilings(mut self, loop_ceilings: LoopCeilings) -> Self {
         self.loop_ceilings = loop_ceilings;
         self
+    }
+
+    pub fn snapshot(&self, task_id: &TaskId) -> Result<RunSnapshot, OrchestratorError> {
+        Ok(self.store.task_snapshot(task_id)?)
     }
 
     pub async fn plan_once(

@@ -9,11 +9,12 @@ use rusqlite::OptionalExtension;
 
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, AgentRole, ArtifactProvenance, LoopGuardState, MaterialGoalChangeReceipt,
-    OrchestrationEvent, OrchestrationEventKind, ResultContract, ResultContractRefinement, Task,
-    TaskBudget, TaskBudgetState, TaskCacheReceipt, TaskCompletionEvaluation, TaskGraph, TaskId,
-    TaskSessionLease, TaskStatus, TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus,
-    WorkItemEdge, WorkItemId, WorkItemStatus,
+    AgentAssignment, AgentId, AgentRole, AgentStatus, ArtifactProvenance, LoopGuardState,
+    MaterialGoalChangeReceipt, OrchestrationEvent, OrchestrationEventKind, ResultContract,
+    ResultContractRefinement, RunSnapshot, Task, TaskBudget, TaskBudgetState, TaskCacheReceipt,
+    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
+    TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
+    WorkItemStatus,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -294,6 +295,87 @@ impl Store {
             created_at_ms: created_at,
             updated_at_ms: updated_at,
         }))
+    }
+
+    pub fn task_snapshot(&self, task_id: &TaskId) -> Result<RunSnapshot, StoreError> {
+        let record = self
+            .get_task(task_id)?
+            .ok_or_else(|| StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            })?;
+        let task_graph = self.get_task_graph(task_id)?;
+        let session_leases = self.list_task_session_leases(task_id)?;
+        let artifacts = self.list_task_artifacts(task_id)?;
+        let cache_receipts = self.list_task_cache_receipts(task_id)?;
+        let budget_state = self.task_budget_state(task_id)?;
+        let loop_guard = self.task_loop_guard(task_id)?;
+        let agents = self.task_agents(task_id, &session_leases)?;
+        let mut blockers = BTreeSet::new();
+        blockers.extend(
+            task_graph
+                .work_items
+                .iter()
+                .filter_map(|item| item.blocker.clone()),
+        );
+        blockers.extend(loop_guard.pause_reason.iter().cloned());
+        blockers.extend(budget_state.hard_limit_reason.iter().cloned());
+        Ok(RunSnapshot {
+            task_id: task_id.clone(),
+            revision: task_graph.revision,
+            result_contract_revision: record.result_contract_revision,
+            status: record.task.status,
+            result_contract: record.task.result_contract,
+            provider_configuration: record.task.provider_configuration,
+            task_graph,
+            agents,
+            session_leases,
+            artifacts,
+            cache_receipts,
+            blockers: blockers.into_iter().collect(),
+            budget: record.task.budget,
+            budget_state,
+            loop_guard,
+        })
+    }
+
+    fn task_agents(
+        &self,
+        task_id: &TaskId,
+        leases: &[TaskSessionLease],
+    ) -> Result<Vec<AgentAssignment>, StoreError> {
+        let mut agents: Vec<_> = leases
+            .iter()
+            .filter(|lease| lease.role == AgentRole::Manager)
+            .map(|lease| AgentAssignment {
+                agent_id: lease.agent_id.clone(),
+                role: AgentRole::Manager,
+                status: if lease.released_at_ms.is_some() {
+                    AgentStatus::Completed
+                } else {
+                    AgentStatus::Running
+                },
+                session_id: lease.session_id.clone(),
+                work_item_id: None,
+            })
+            .collect();
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT work_item_id,agent_id,session_id,status
+             FROM task_work_item_attempts_v2
+             WHERE task_id=?1 ORDER BY started_at_ms ASC,work_item_id ASC,attempt ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], |row| {
+            let status: String = row.get(3)?;
+            Ok(AgentAssignment {
+                agent_id: AgentId::new(row.get::<_, String>(1)?),
+                role: AgentRole::Executor,
+                status: agent_status_db(&status)?,
+                session_id: row.get(2)?,
+                work_item_id: Some(WorkItemId::new(row.get::<_, String>(0)?)),
+            })
+        })?;
+        agents.extend(rows.collect::<rusqlite::Result<Vec<_>>>()?);
+        Ok(agents)
     }
 
     pub fn refine_result_contract(
@@ -1776,6 +1858,21 @@ fn attempt_status_db(status: WorkItemAttemptStatus) -> &'static str {
         WorkItemAttemptStatus::Failed => "failed",
         WorkItemAttemptStatus::Cancelled => "cancelled",
         WorkItemAttemptStatus::Uncertain => "uncertain",
+    }
+}
+
+fn agent_status_db(status: &str) -> rusqlite::Result<AgentStatus> {
+    match status {
+        "running" => Ok(AgentStatus::Running),
+        "succeeded" => Ok(AgentStatus::Completed),
+        "failed" => Ok(AgentStatus::Failed),
+        "cancelled" => Ok(AgentStatus::Cancelled),
+        "uncertain" => Ok(AgentStatus::Uncertain),
+        other => Err(rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            format!("unknown Work Item attempt status `{other}`").into(),
+        )),
     }
 }
 

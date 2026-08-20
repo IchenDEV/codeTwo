@@ -404,3 +404,40 @@ fn task_artifact_versions_keep_attempt_and_content_provenance() {
     assert_eq!(history[1].attempt, 2);
     assert_ne!(history[0].content_identity, history[1].content_identity);
 }
+
+#[test]
+fn authoritative_snapshot_surfaces_pause_reason_and_remaining_work() {
+    let store = Store::open_in_memory().unwrap();
+    let task = task();
+    store.create_task(&task, 100).unwrap();
+    store
+        .apply_task_graph(
+            &task.id,
+            0,
+            &TaskGraph {
+                revision: 1,
+                work_items: vec![work_item("work-remaining", "Finish the result")],
+                edges: Vec::new(),
+            },
+            "Work remains",
+            200,
+        )
+        .unwrap();
+    store
+        .pause_task(&task.id, "user paused before external work", 300)
+        .unwrap();
+
+    let snapshot = store.task_snapshot(&task.id).unwrap();
+
+    assert_eq!(snapshot.revision, 1);
+    assert_eq!(snapshot.result_contract_revision, 1);
+    assert_eq!(snapshot.status, TaskStatus::Paused);
+    assert_eq!(snapshot.task_graph.work_items.len(), 1);
+    assert_eq!(
+        snapshot.loop_guard.pause_reason.as_deref(),
+        Some("user paused before external work")
+    );
+    assert_eq!(snapshot.blockers, ["user paused before external work"]);
+    assert_eq!(snapshot.budget_state.observations, 0);
+    assert!(snapshot.cache_receipts.is_empty());
+}

@@ -481,12 +481,17 @@ pub struct Task {
 pub struct RunSnapshot {
     pub task_id: TaskId,
     pub revision: u64,
+    pub result_contract_revision: u64,
     pub status: TaskStatus,
     pub result_contract: ResultContract,
     pub provider_configuration: ProviderConfiguration,
     pub task_graph: TaskGraph,
     pub agents: Vec<AgentAssignment>,
+    pub session_leases: Vec<TaskSessionLease>,
     pub artifacts: Vec<ArtifactProvenance>,
+    pub cache_receipts: Vec<TaskCacheReceipt>,
     pub blockers: Vec<String>,
     pub budget: TaskBudget,
+    pub budget_state: TaskBudgetState,
+    pub loop_guard: LoopGuardState,
 }
