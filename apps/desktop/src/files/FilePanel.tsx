@@ -423,7 +423,7 @@ export function FilePanel({
       {/* h-9 matches the viewer's file-tab strip across the border — one continuous bar. */}
       <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
         <Input
-          className="h-7 text-hint"
+          className="h-(--ds-control-mini) text-hint"
           placeholder={t("files.filter")}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
