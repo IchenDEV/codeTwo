@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { normalizeProviderInfo } from "../src/bridge";
 import { sessionRequestParams, validateMcpTransports } from "../src/electrobun/host/acp";
 import {
+  detectHostToolEvidence,
   loadConfiguredBrowserUse,
   loadConfiguredComputerUse,
   projectProviderToolset,
@@ -42,8 +43,6 @@ const readyEvidence: HostToolEvidence = {
   browserEnabled: true,
   chromeEnabled: true,
   chromeMcp,
-  browserSkillPath: "/plugins/browser/SKILL.md",
-  chromeSkillPath: "/plugins/chrome/SKILL.md",
   browserBackends: ["chrome", "iab"],
   sitesEnabled: true,
   sitesVersion: "0.1.34",
@@ -59,13 +58,26 @@ const readyEvidence: HostToolEvidence = {
     displayName: "OpenAI Browser / Chrome",
     available: true,
     reason: null,
-    providers: [],
+    providers: ["codex"],
     excludeProviders: [],
   }],
   browserUseConfigErrors: [],
 };
 
 describe("provider capability wire compatibility", () => {
+  test("publishes the built-in backend catalog with the correct provider scopes", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-catalog-"));
+    try {
+      const evidence = detectHostToolEvidence({}, directory);
+      expect(evidence.computerUseBackends.find((backend) => backend.id === "cua")?.providers)
+        .toEqual([]);
+      expect(evidence.browserUseBackends.find((backend) => backend.id === "openai-browser")?.providers)
+        .toEqual(["codex"]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test("defaults a missing capability list from older or compact backends", () => {
     expect(
       normalizeProviderInfo({
@@ -116,24 +128,32 @@ describe("provider capability wire compatibility", () => {
     });
   });
 
-  test("accepts the Browser and Chrome plugin backends independently", () => {
+  test("keeps the Browser and Chrome plugin backends native to Codex", () => {
     for (const evidence of [
       { ...readyEvidence, chromeEnabled: false, browserBackends: ["iab"] },
       { ...readyEvidence, browserEnabled: false, browserBackends: ["chrome"] },
     ]) {
-      const tools = projectProviderToolset(evidence, "claude_code");
-      expect(tools.mcpServers.map((server) => server.name)).toContain("node_repl");
-      expect(tools.capabilities.find((item) => item.id === "chrome_browser")?.state)
+      const codex = projectProviderToolset(evidence, "codex");
+      expect(codex.mcpServers).toEqual([]);
+      expect(codex.capabilities.find((item) => item.id === "chrome_browser")?.state)
         .not.toBe("unavailable");
+
+      const claude = projectProviderToolset(evidence, "claude_code");
+      expect(claude.mcpServers.map((server) => server.name)).not.toContain("node_repl");
+      expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.state)
+        .toBe("unavailable");
     }
   });
 
   test("projects portable host tools onto Claude without duplicating Codex-native tools", () => {
     const claude = projectProviderToolset(readyEvidence, "claude_code");
-    expect(claude.mcpServers.map((server) => server.name)).toEqual(["codetwo-openai-computer-use", "node_repl"]);
+    expect(claude.mcpServers.map((server) => server.name)).toEqual(["codetwo-openai-computer-use"]);
     expect(claude.capabilities.find((item) => item.id === "computer_use")?.state).toBe("ready");
     expect(claude.capabilities.find((item) => item.id === "image_generation")?.state).toBe("unavailable");
     expect(claude.capabilities.find((item) => item.id === "sites")?.state).toBe("unavailable");
+    expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.state).toBe("unavailable");
+    expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.reason)
+      .toContain("Codex-native");
     expect(withProviderToolInstructions([{ type: "text", text: "hello" }], claude.instructions)[0])
       .toMatchObject({ type: "text" });
 
@@ -281,7 +301,7 @@ describe("provider capability wire compatibility", () => {
       }, "claude_code");
 
       expect(selected.selections.claude_code).toBe("second");
-      expect(toolset.mcpServers.map((server) => server.name)).toEqual(["node_repl", "second-computer"]);
+      expect(toolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
 
       saveComputerUseSelection(directory, "claude_code", "automatic", {
         ...evidence,
@@ -337,21 +357,26 @@ describe("provider capability wire compatibility", () => {
       expect(custom.capabilities.find((item) => item.id === "chrome_browser")?.reason)
         .toContain("Playwright MCP");
 
-      saveBrowserUseSelection(directory, "claude_code", "openai-browser", {
+      expect(() => saveBrowserUseSelection(directory, "claude_code", "openai-browser", {
+        ...evidence,
+        configuredBrowserUse: selected.bridges,
+        browserUseSelections: selected.selections,
+      })).toThrow("is not configured for provider");
+
+      saveBrowserUseSelection(directory, "codex", "openai-browser", {
         ...evidence,
         configuredBrowserUse: selected.bridges,
         browserUseSelections: selected.selections,
       });
       const openAi = loadConfiguredBrowserUse(directory);
-      const portable = projectProviderToolset({
+      const native = projectProviderToolset({
         ...evidence,
         configuredBrowserUse: openAi.bridges,
         browserUseSelections: openAi.selections,
-      }, "claude_code");
-      expect(portable.mcpServers.map((server) => server.name)).toEqual([
-        "codetwo-openai-computer-use",
-        "node_repl",
-      ]);
+      }, "codex");
+      expect(native.mcpServers).toEqual([]);
+      expect(native.capabilities.find((item) => item.id === "chrome_browser")?.state)
+        .not.toBe("unavailable");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

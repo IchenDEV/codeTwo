@@ -105,10 +105,12 @@ adapters because the runtime genuinely varies:
   The Pure Bun host refreshes its own discovery snapshot after the same command. Existing sessions
   retain their startup MCP set and are not interrupted.
 
-The signed OpenAI Computer Use and Browser/Chrome adapters remain built-in fallbacks, while entries
-in `host-tools.json` can attach Cua Driver, Browser Use, Playwright, Chrome DevTools, or any other MCP
-computer/browser-control backend to any provider. Settings offers Automatic, no external backend,
-and every compatible configured backend.
+The signed OpenAI Computer Use adapter remains a built-in portable fallback. OpenAI Browser/Chrome
+stays Codex-native because its runtime requires the active Codex turn and session; C2 never exports
+its private `node_repl` endpoint to another provider. Entries in `host-tools.json` can attach Cua
+Driver, Browser Use, Playwright, Chrome DevTools, or another standard MCP computer/browser-control
+backend to compatible providers. Settings offers Automatic, no external backend, and every
+compatible configured backend.
 An explicit selection replaces C2's portable OpenAI fallback for non-Codex providers; Codex keeps
 provider-native tools because the host cannot disable provider-owned capabilities. Image Generation
 and Sites remain unavailable outside Codex until their host exposes a portable MCP surface; C2 does

@@ -418,14 +418,15 @@ impl HostToolDiscovery {
     fn from_codex_and_path(codex: CodexRuntimeDiscovery, path: PathBuf) -> Self {
         let configured = read_configured_computer_use(&path);
         let configured_browser = read_configured_browser_use(&path);
-        let openai_browser_available = codex
-            .toolset(&ProviderId::ClaudeCode)
-            .capabilities
-            .iter()
-            .any(|capability| {
-                capability.id == ProviderCapabilityId::ChromeBrowser
-                    && capability.state != CapabilityState::Unavailable
-            });
+        let openai_browser_available =
+            codex
+                .toolset(&ProviderId::Codex)
+                .capabilities
+                .iter()
+                .any(|capability| {
+                    capability.id == ProviderCapabilityId::ChromeBrowser
+                        && capability.state != CapabilityState::Unavailable
+                });
         let mut browser_backends = vec![openai_browser_option(openai_browser_available)];
         browser_backends.extend(configured_browser.backends);
         Self {
@@ -863,13 +864,13 @@ fn openai_browser_option(available: bool) -> BrowserUseBackendOption {
         display_name: "OpenAI Browser / Chrome".into(),
         available,
         reason: Some(if available {
-            "The signed OpenAI Browser runtime is available through node_repl. Connectivity is verified on the first real call."
+            "The signed Codex-native OpenAI Browser runtime is available. Connectivity is verified on the first real call."
                 .into()
         } else {
             "Enable the OpenAI Browser or Chrome plugin and its node_repl runtime, then restart C2."
                 .into()
         }),
-        providers: Vec::new(),
+        providers: vec!["codex".into()],
         exclude_providers: Vec::new(),
     }
 }
@@ -1064,6 +1065,36 @@ mod tests {
             },
         ];
         codex
+    }
+
+    #[test]
+    fn openai_browser_backend_is_available_only_to_codex() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut codex = codex_without_host_tools();
+        codex.capabilities = vec![ProviderCapability {
+            id: ProviderCapabilityId::ChromeBrowser,
+            state: CapabilityState::Unverified,
+            version: Some("test".into()),
+            experimental: true,
+            reason: Some("OpenAI Browser is available natively.".into()),
+            fix: None,
+        }];
+
+        let settings = HostToolDiscovery::from_codex_and_path(
+            codex,
+            directory.path().join(HOST_TOOLS_CONFIG_FILE),
+        )
+        .browser_use_settings();
+        let openai = settings
+            .backends
+            .iter()
+            .find(|backend| backend.id == OPENAI_BROWSER_BACKEND)
+            .unwrap();
+
+        assert!(openai.available);
+        assert!(openai.matches("codex"));
+        assert!(!openai.matches("claude_code"));
+        assert_eq!(openai.providers, ["codex"]);
     }
 
     #[test]

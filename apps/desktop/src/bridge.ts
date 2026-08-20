@@ -1105,7 +1105,7 @@ export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
         display_name: "OpenAI Browser / Chrome",
         available: false,
         reason: "Browser Use backends are discovered by the desktop host.",
-        providers: [],
+        providers: ["codex"],
         exclude_providers: [],
       }],
       errors: [],

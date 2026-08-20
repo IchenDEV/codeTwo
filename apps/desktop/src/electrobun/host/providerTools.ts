@@ -55,8 +55,6 @@ export interface HostToolEvidence {
   browserEnabled: boolean;
   chromeEnabled: boolean;
   chromeMcp: AcpMcpServer | null;
-  browserSkillPath: string | null;
-  chromeSkillPath: string | null;
   browserBackends: string[];
   sitesEnabled: boolean;
   sitesVersion: string | null;
@@ -754,10 +752,6 @@ export function detectHostToolEvidence(
     env: [{ name: "CODEX_HOME", value: codexHome }],
     cwd: computerBundle!.root,
   } satisfies AcpMcpServer : null;
-  const browserBundle = codexHome ? bundledPlugin(codexHome, "browser") : null;
-  const browserSkillPath = browserBundle ? join(browserBundle.root, "skills", "control-in-app-browser", "SKILL.md") : null;
-  const chromeBundle = codexHome ? bundledPlugin(codexHome, "chrome") : null;
-  const chromeSkillPath = chromeBundle ? join(chromeBundle.root, "skills", "control-chrome", "SKILL.md") : null;
   const sitesBundle = codexHome ? bundledPlugin(codexHome, "sites") : null;
   const cuaPath = string(nodeEnv.SKY_CUA_SERVICE_PATH);
   const computerConfigured = dataDir
@@ -782,9 +776,9 @@ export function detectHostToolEvidence(
     displayName: "OpenAI Browser / Chrome",
     available: openAiBrowserAvailable,
     reason: openAiBrowserAvailable
-      ? "The signed OpenAI Browser runtime is available through node_repl. Connectivity is verified on the first real call."
+      ? "The signed Codex-native OpenAI Browser runtime is available. Connectivity is verified on the first real call."
       : "Enable the OpenAI Browser or Chrome plugin and its node_repl runtime, then restart C2.",
-    providers: [],
+    providers: ["codex"],
     excludeProviders: [],
   };
 
@@ -799,8 +793,6 @@ export function detectHostToolEvidence(
     browserEnabled,
     chromeEnabled,
     chromeMcp,
-    browserSkillPath: browserSkillPath && isFile(browserSkillPath) ? browserSkillPath : null,
-    chromeSkillPath: chromeSkillPath && isFile(chromeSkillPath) ? chromeSkillPath : null,
     browserBackends,
     sitesEnabled: pluginEnabled(config, "sites@openai-bundled"),
     sitesVersion: sitesBundle?.version ?? null,
@@ -854,8 +846,6 @@ export function projectProviderToolset(evidence: HostToolEvidence, providerId: s
   const browserExplicitlySelected = browserSelection !== null
     && browserSelection !== BROWSER_USE_AUTOMATIC
     && browserSelection !== BROWSER_USE_DISABLED;
-  const portableBrowserAllowed = browserSelection !== BROWSER_USE_DISABLED
-    && (!browserExplicitlySelected || browserSelection === OPENAI_BROWSER_BACKEND);
   const hostState: CapabilityState = evidence.hostVersion && VERIFIED_HOST_VERSIONS.has(evidence.hostVersion)
     ? "ready"
     : "unverified";
@@ -928,7 +918,7 @@ export function projectProviderToolset(evidence: HostToolEvidence, providerId: s
     && evidence.chromeMcp !== null
     && ((evidence.browserEnabled && evidence.browserBackends.includes("iab"))
       || (evidence.chromeEnabled && evidence.browserBackends.includes("chrome")));
-  if (chromeReady && (providerId === "codex" || portableBrowserAllowed)) {
+  if (chromeReady && providerId === "codex") {
     replaceCapability(capabilities, capability(
       "chrome_browser",
       "unverified",
@@ -952,24 +942,15 @@ export function projectProviderToolset(evidence: HostToolEvidence, providerId: s
       "Use Codex for Sites until the host exposes a portable Sites MCP adapter.",
       evidence.sitesVersion,
     ));
+    replaceCapability(capabilities, capability(
+      "chrome_browser",
+      "unavailable",
+      "OpenAI Browser/Chrome is Codex-native and is not exported through its private runtime.",
+      "Configure a compatible Browser Use, Playwright, Chrome DevTools, or other standard MCP backend.",
+    ));
     if (portableComputerReady && portableComputerAllowed) {
       mcpServers.push(evidence.computerMcp!);
       instructions.push(COMPUTER_USE_INSTRUCTIONS);
-    }
-    if (chromeReady && portableBrowserAllowed) {
-      mcpServers.push(evidence.chromeMcp!);
-      const browserInstructions = [
-        evidence.browserBackends.includes("iab") && evidence.browserSkillPath
-          ? `For website tasks, use node_repl and follow the installed Browser skill at ${JSON.stringify(evidence.browserSkillPath)}.`
-          : null,
-        evidence.browserBackends.includes("chrome") && evidence.chromeSkillPath
-          ? `For tasks requiring the user's existing Chrome state, use node_repl and follow the installed Chrome skill at ${JSON.stringify(evidence.chromeSkillPath)}.`
-          : null,
-      ].filter((instruction): instruction is string => instruction !== null);
-      if (browserInstructions.length === 0) browserInstructions.push(BROWSER_USE_INSTRUCTIONS);
-      for (const instruction of browserInstructions) {
-        if (!instructions.includes(instruction)) instructions.push(instruction);
-      }
     }
   }
 

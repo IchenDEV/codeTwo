@@ -97,8 +97,8 @@ impl CodexRuntimeDiscovery {
                             "Enable or repair the signed Computer Use plugin, then restart C2.",
                         ),
                         ProviderCapabilityId::ChromeBrowser => (
-                            "A usable provider-neutral Chrome MCP adapter was not found.",
-                            "Enable or repair the Browser and Chrome plugins, then restart C2.",
+                            "OpenAI Browser/Chrome is Codex-native and is not exported through its private runtime.",
+                            "Configure a compatible Browser Use, Playwright, Chrome DevTools, or other standard MCP backend.",
                         ),
                         ProviderCapabilityId::CodetwoBrowser => unreachable!(),
                     };
@@ -204,9 +204,6 @@ struct ConfigEvidence {
     sites_plugin: bool,
     sites_version: Option<String>,
     node_repl_path: Option<PathBuf>,
-    node_mcp: Option<McpServer>,
-    browser_skill_path: Option<PathBuf>,
-    chrome_skill_path: Option<PathBuf>,
     browser_backends: Vec<String>,
     cua_path: Option<PathBuf>,
     cua_signature: Option<SignatureInfo>,
@@ -463,40 +460,6 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             "The OpenAI Browser/Chrome runtime is configured; extension connectivity is verified on the first real call.",
             Some("If the first call fails, open Chrome and reconnect the OpenAI extension."),
         );
-        if let Some(server) = config.node_mcp.clone() {
-            portable_mcp.push(PortableMcpBridge {
-                id: ProviderCapabilityId::ChromeBrowser,
-                state: CapabilityState::Unverified,
-                version: evidence.host_version.clone(),
-                reason: "The OpenAI Browser/Chrome runtime is available through a provider-neutral node_repl MCP adapter; extension connectivity is verified on the first real call."
-                    .into(),
-                fix: Some(
-                    "If the first call fails, open Chrome and reconnect the OpenAI extension."
-                        .into(),
-                ),
-                server,
-                instruction: {
-                    let mut instructions = Vec::new();
-                    if config.browser_backends.iter().any(|backend| backend == "iab") {
-                        if let Some(path) = &config.browser_skill_path {
-                            instructions.push(format!(
-                                "For website tasks, use node_repl and follow the installed Browser skill at `{}`.",
-                                path.display()
-                            ));
-                        }
-                    }
-                    if config.browser_backends.iter().any(|backend| backend == "chrome") {
-                        if let Some(path) = &config.chrome_skill_path {
-                            instructions.push(format!(
-                                "For tasks requiring the user's existing Chrome state, use node_repl and follow the installed Chrome skill at `{}`.",
-                                path.display()
-                            ));
-                        }
-                    }
-                    (!instructions.is_empty()).then(|| instructions.join(" "))
-                },
-            });
-        }
     } else {
         update_capability(
             &mut capabilities,
@@ -632,7 +595,6 @@ fn read_config() -> Result<ConfigEvidence, String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .collect();
-    let node_mcp = node.and_then(|node| node_repl_mcp(node, &value));
     let computer_root = bundled_plugin_root(&home, "computer-use");
     let computer_mcp = computer_root.as_ref().and_then(|root| {
         let launcher = root.join("bin/computer-use-client-launcher");
@@ -646,12 +608,6 @@ fn read_config() -> Result<ConfigEvidence, String> {
             },
         })
     });
-    let browser_skill_path = bundled_plugin_root(&home, "browser")
-        .map(|root| root.join("skills/control-in-app-browser/SKILL.md"))
-        .filter(|path| path.is_file());
-    let chrome_skill_path = bundled_plugin_root(&home, "chrome")
-        .map(|root| root.join("skills/control-chrome/SKILL.md"))
-        .filter(|path| path.is_file());
     Ok(ConfigEvidence {
         computer_plugin: plugin("computer-use@openai-bundled"),
         computer_version: bundled_plugin_version(&home, "computer-use"),
@@ -661,60 +617,9 @@ fn read_config() -> Result<ConfigEvidence, String> {
         sites_plugin: plugin("sites@openai-bundled"),
         sites_version: bundled_plugin_version(&home, "sites"),
         node_repl_path: path(node, "command"),
-        node_mcp,
-        browser_skill_path,
-        chrome_skill_path,
         browser_backends: backends,
         cua_path: path(env, "SKY_CUA_SERVICE_PATH"),
         cua_signature: None,
-    })
-}
-
-fn node_repl_mcp(node: &Value, config: &Value) -> Option<McpServer> {
-    let command = node.get("command")?.as_str()?.trim();
-    if command.is_empty() || !Path::new(command).is_file() {
-        return None;
-    }
-    let args = node
-        .get("args")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let mut env = node
-        .get("env")
-        .and_then(Value::as_table)
-        .into_iter()
-        .flat_map(|table| table.iter())
-        .filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_string())))
-        .collect::<Vec<_>>();
-    if let Some(inherited) = config
-        .get("shell_environment_policy")
-        .and_then(|policy| policy.get("set"))
-        .and_then(Value::as_table)
-    {
-        for (name, value) in inherited {
-            // This hash allowlist is required by the browser client and is not a credential. Do
-            // not forward arbitrary shell-policy values into provider-visible MCP launch config.
-            if name == "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S"
-                && !env.iter().any(|(candidate, _)| candidate == name)
-            {
-                if let Some(value) = value.as_str() {
-                    env.push((name.clone(), value.to_string()));
-                }
-            }
-        }
-    }
-    Some(McpServer {
-        name: "node_repl".into(),
-        cwd: node.get("cwd").and_then(Value::as_str).map(str::to_string),
-        transport: McpTransport::Stdio {
-            command: command.into(),
-            args,
-            env,
-        },
     })
 }
 
@@ -896,11 +801,6 @@ mod tests {
                 sites_plugin: true,
                 sites_version: Some("0.1.34".into()),
                 node_repl_path: Some(std::env::current_exe().unwrap()),
-                node_mcp: Some(stdio_server("node_repl")),
-                browser_skill_path: Some(
-                    "/plugins/browser/skills/control-in-app-browser/SKILL.md".into(),
-                ),
-                chrome_skill_path: Some("/plugins/chrome/skills/control-chrome/SKILL.md".into()),
                 browser_backends: vec!["chrome".into(), "iab".into()],
                 cua_path: Some(std::env::current_exe().unwrap()),
                 cua_signature: Some(valid_signature(CUA_BUNDLE_ID)),
@@ -1005,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn portable_mcp_tools_are_projected_onto_non_codex_providers() {
+    fn portable_computer_use_is_projected_without_private_browser_runtime() {
         let discovery = evaluate(ready_evidence());
         let tools = discovery.toolset(&ProviderId::ClaudeCode);
         assert_eq!(
@@ -1014,7 +914,7 @@ mod tests {
                 .iter()
                 .map(|server| server.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["codetwo-openai-computer-use", "node_repl"]
+            vec!["codetwo-openai-computer-use"]
         );
         assert_eq!(
             tools
@@ -1025,6 +925,21 @@ mod tests {
                 .state,
             CapabilityState::Ready
         );
+        assert_eq!(
+            tools
+                .capabilities
+                .iter()
+                .find(|capability| capability.id == ProviderCapabilityId::ChromeBrowser)
+                .unwrap()
+                .state,
+            CapabilityState::Unavailable
+        );
+        assert!(tools
+            .capabilities
+            .iter()
+            .find(|capability| capability.id == ProviderCapabilityId::ChromeBrowser)
+            .and_then(|capability| capability.reason.as_deref())
+            .is_some_and(|reason| reason.contains("Codex-native")));
         for id in [
             ProviderCapabilityId::ImageGeneration,
             ProviderCapabilityId::Sites,
@@ -1052,11 +967,8 @@ mod tests {
             config.chrome_plugin = chrome_plugin;
             config.browser_backends = vec![backend.into()];
 
-            let tools = evaluate(evidence).toolset(&ProviderId::ClaudeCode);
-            assert!(tools
-                .mcp_servers
-                .iter()
-                .any(|server| server.name == "node_repl"));
+            let tools = evaluate(evidence).toolset(&ProviderId::Codex);
+            assert!(tools.mcp_servers.is_empty());
             assert_ne!(
                 tools
                     .capabilities
@@ -1130,36 +1042,5 @@ mod tests {
             bundled_plugin_version(directory.path(), "sites").as_deref(),
             Some("0.1.34")
         );
-    }
-
-    #[test]
-    fn node_repl_bridge_forwards_only_the_required_shell_policy_value() {
-        let executable = std::env::current_exe().unwrap();
-        let node: Value = toml::from_str(&format!(
-            r#"
-command = {command:?}
-[env]
-BROWSER_USE_AVAILABLE_BACKENDS = "chrome"
-"#,
-            command = executable.to_string_lossy()
-        ))
-        .unwrap();
-        let config: Value = toml::from_str(
-            r#"
-[shell_environment_policy.set]
-NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "abc123"
-SKY_PRIVATE_TOKEN = "must-not-cross-the-provider-boundary"
-"#,
-        )
-        .unwrap();
-
-        let server = node_repl_mcp(&node, &config).unwrap();
-        let McpTransport::Stdio { env, .. } = server.transport else {
-            panic!("node_repl must use stdio");
-        };
-        assert!(env.iter().any(|(name, value)| {
-            name == "NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S" && value == "abc123"
-        }));
-        assert!(!env.iter().any(|(name, _)| name == "SKY_PRIVATE_TOKEN"));
     }
 }

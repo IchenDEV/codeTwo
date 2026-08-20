@@ -142,7 +142,7 @@ describe("Computer Use settings", () => {
 });
 
 describe("Browser Use settings", () => {
-  test("lets the user choose OpenAI Browser or another configured browser MCP", async () => {
+  test("keeps OpenAI Browser Codex-only while other browser MCPs remain selectable", async () => {
     const browserSettings = {
       selections: { claude_code: "automatic" },
       backends: [
@@ -150,8 +150,8 @@ describe("Browser Use settings", () => {
           id: "openai-browser",
           display_name: "OpenAI Browser / Chrome",
           available: true,
-          reason: "The signed OpenAI Browser runtime is available through node_repl.",
-          providers: [],
+          reason: "The signed Codex-native OpenAI Browser runtime is available.",
+          providers: ["codex"],
           exclude_providers: [],
         },
         {
@@ -196,12 +196,21 @@ describe("Browser Use settings", () => {
     });
     const trigger = view.container.querySelector('[data-browser-use-provider="claude_code"]');
     await openSelect(trigger);
+    const openAiForClaude = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
+      .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
+    expect(openAiForClaude).toBeUndefined();
     const playwright = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
       .find((item) => item.textContent?.trim() === "Playwright MCP");
     await selectItem(playwright);
 
     expect(saved).toEqual([["claude_code", "playwright"]]);
     expect(trigger?.textContent).toContain("Playwright MCP");
+
+    const codexTrigger = view.container.querySelector('[data-browser-use-provider="codex"]');
+    await openSelect(codexTrigger);
+    const openAiForCodex = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
+      .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
+    expect(openAiForCodex).toBeDefined();
     view.unmount();
   });
 });

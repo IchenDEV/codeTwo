@@ -74,15 +74,15 @@ If the ACP endpoint reports models during `session/new`, C2 shows a model contro
 `session/set_model` when you switch. If it reports no model list, C2 leaves model selection to
 the provider's own CLI configuration.
 
-Provider-native features still depend on the chosen provider and adapter version. Host tools are
-projected separately through C2's provider-neutral tool layer, so they do not become Codex-only just
-because C2 discovered them from the local OpenAI runtime:
+Provider-native features still depend on the chosen provider and adapter version. C2 projects only
+tools with a real portable MCP boundary across providers; private provider runtimes stay native:
 
 - **Computer Use** can come from the verified OpenAI fallback or an explicitly configured Cua/other
   MCP backend. A configured backend can target every provider or a named subset.
-- **Browser Use** discovers the installed OpenAI Browser/Chrome plugins and attaches their
-  `node_repl` MCP runtime to any provider. Browser Use, Playwright MCP, Chrome DevTools MCP, and
-  other stdio/HTTP/SSE implementations can also be registered in `host-tools.json`.
+- **Browser Use** keeps the installed OpenAI Browser/Chrome runtime native to Codex because
+  `node_repl` requires the active Codex turn and session. Browser Use, Playwright MCP, Chrome
+  DevTools MCP, and other stdio/HTTP/SSE implementations can be registered in `host-tools.json`
+  for compatible non-Codex providers.
 - **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
   BrowserView UI is separate from an ACP/MCP tool surface, so C2 reports this capability as
   unavailable instead of silently routing through the removed Rust sidecar.
@@ -157,10 +157,10 @@ them natively; C2 only shares them across providers when a real MCP driver or ga
 
 ### Configure Browser Use or another browser MCP
 
-In **Settings → Browser Use**, each provider can choose Automatic, no external backend,
-**OpenAI Browser / Chrome**, or any configured browser MCP. The OpenAI option appears automatically
-when C2 verifies the installed Codex Browser runtime and its `node_repl` adapter. Other brands use
-the `browser_use` array in the same `host-tools.json` file:
+In **Settings → Browser Use**, each provider can choose Automatic, no external backend, or any
+compatible configured browser MCP. Codex can additionally choose **OpenAI Browser / Chrome** when
+C2 verifies its installed native Browser runtime. Other brands use the `browser_use` array in the
+same `host-tools.json` file:
 
 ```json
 {
@@ -225,9 +225,9 @@ control and materialize credentials at deploy time instead of committing them:
 ```
 
 `browser_use_selection` has the same per-provider and `"*"` fallback semantics as Computer Use.
-An explicit custom selection replaces C2's portable OpenAI Browser bridge for non-Codex providers;
-provider-native tools remain provider-owned. Existing sessions keep their startup MCP snapshot, so
-start a new session after changing a Browser Use backend.
+Configured MCP backends are portable; provider-native tools remain provider-owned. Existing
+sessions keep their startup MCP snapshot, so start a new session after changing a Browser Use
+backend.
 
 MCP servers are fixed when an ACP session starts. The Pure Bun desktop host and Rust CoreApp host
 implement the same logical provider-toolset interface as separate adapters:
