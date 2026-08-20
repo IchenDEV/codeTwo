@@ -1,0 +1,94 @@
+// @ts-nocheck
+import { afterEach, describe, expect, test } from "bun:test";
+import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
+
+activateDom();
+const { ModelPicker, ReasoningScale } = await import("../src/session/Composer");
+const { I18nProvider } = await import("../src/i18n");
+
+afterEach(() => {
+  dom.document.body.replaceChildren();
+  restoreDom();
+});
+
+const choices = ["Minimal", "Low", "Medium", "High", "Extra High"].map((label, index) => ({
+  key: label.toLowerCase().replaceAll(" ", "-"),
+  label,
+  detail: label === "Extra High" ? "Deepest reasoning for complex tasks" : null,
+  isDefault: label === "Medium",
+  selected: index === 3,
+  select: () => {},
+}));
+
+describe("ReasoningScale", () => {
+  test("renders the reference slider with the current provider-owned effort", () => {
+    activateDom();
+    const rendered = mount(
+      <ReasoningScale label="Reasoning" rows={choices} onSelect={() => {}} />,
+    );
+
+    const range = rendered.container.querySelector('input[type="range"]');
+    expect(range?.getAttribute("min")).toBe("0");
+    expect(range?.getAttribute("max")).toBe("4");
+    expect(range?.getAttribute("aria-valuetext")).toBe("High");
+    expect(range?.getAttribute("value")).toBe("3");
+    expect(dom.document.activeElement).toBe(range);
+    expect(rendered.container.querySelectorAll('[data-active="true"]')).toHaveLength(4);
+    expect(rendered.container.querySelector(".reasoning-selector-fill")?.getAttribute("style") ?? "").toContain("75%");
+    rendered.unmount();
+  });
+
+  test("forwards the exact provider-owned choice", () => {
+    activateDom();
+    const picked: string[] = [];
+    const rendered = mount(
+      <ReasoningScale
+        label="Reasoning"
+        rows={choices}
+        onSelect={(row) => picked.push(row.key)}
+      />,
+    );
+
+    const range = rendered.container.querySelector('input[type="range"]');
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(range), "value")?.set;
+    if (setter) setter.call(range, "4");
+    else range.value = "4";
+    range.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    expect(picked).toEqual(["extra-high"]);
+    rendered.unmount();
+  });
+
+  test("uses a provider effort option even when the model arrives through legacy ACP models", () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <ModelPicker
+          models={[{ id: "grok-4.6", name: "Grok 4.6", description: null }]}
+          current="grok-4.6"
+          defaultModel="grok-4.6"
+          provider="grok"
+          onModel={() => {}}
+          configOptions={[{
+            id: "reasoning_effort",
+            name: "Reasoning Effort",
+            category: "thought_level",
+            current: "xhigh",
+            choices: [
+              { id: "low", name: "Low Effort", description: null },
+              { id: "medium", name: "Medium Effort", description: null },
+              { id: "high", name: "High Effort", description: null },
+              { id: "xhigh", name: "Extra High Effort", description: null },
+            ],
+          }]}
+          onConfigOption={() => {}}
+          hasSession
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = rendered.container.querySelector(".reasoning-selector-trigger");
+    expect(trigger?.textContent).toContain("Grok 4.6");
+    expect(trigger?.textContent).toContain("Extra High Effort");
+    rendered.unmount();
+  });
+});

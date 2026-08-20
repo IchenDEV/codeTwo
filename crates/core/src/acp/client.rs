@@ -19,7 +19,10 @@ pub struct AcpClient {
 
 impl AcpClient {
     pub fn new(conn: Arc<Connection>, child: Option<Child>) -> Self {
-        Self { conn, child: child.map(Mutex::new) }
+        Self {
+            conn,
+            child: child.map(Mutex::new),
+        }
     }
 
     /// The underlying connection, for advanced/unsupported calls.
@@ -28,7 +31,10 @@ impl AcpClient {
     }
 
     /// Negotiate protocol version and exchange capabilities.
-    pub async fn initialize(&self, client_capabilities: Value) -> Result<InitializeResponse, AcpError> {
+    pub async fn initialize(
+        &self,
+        client_capabilities: Value,
+    ) -> Result<InitializeResponse, AcpError> {
         self.conn
             .request(
                 "initialize",
@@ -56,7 +62,13 @@ impl AcpClient {
         mcp_servers: Vec<Value>,
     ) -> Result<NewSessionResponse, AcpError> {
         self.conn
-            .request("session/new", NewSessionRequest { cwd: cwd.into(), mcp_servers })
+            .request(
+                "session/new",
+                NewSessionRequest {
+                    cwd: cwd.into(),
+                    mcp_servers,
+                },
+            )
             .await
     }
 
@@ -102,6 +114,23 @@ impl AcpClient {
         Ok(())
     }
 
+    /// Switch an agent's legacy ACP session mode. Grok currently exposes its model-specific
+    /// reasoning ladder through `ModelInfo._meta.reasoningEfforts` and accepts those values here,
+    /// rather than through the newer `session/set_config_option` surface.
+    pub async fn set_mode(&self, session_id: &str, mode_id: &str) -> Result<(), AcpError> {
+        let _: serde_json::Value = self
+            .conn
+            .request(
+                "session/set_mode",
+                SetModeRequest {
+                    session_id: session_id.to_string(),
+                    mode_id: mode_id.to_string(),
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Set a session config option (`session/set_config_option`, UNSTABLE) — how current adapters
     /// switch model and reasoning effort. Answers with the full replacement option set. Adapters
     /// without the method reply method-not-found; the caller surfaces that, it isn't fatal.
@@ -136,7 +165,10 @@ impl AcpClient {
             .conn
             .request(
                 "session/prompt",
-                PromptRequest { session_id: session_id.to_string(), prompt: blocks },
+                PromptRequest {
+                    session_id: session_id.to_string(),
+                    prompt: blocks,
+                },
             )
             .await?;
         Ok(r.stop_reason)
@@ -144,8 +176,12 @@ impl AcpClient {
 
     /// Interrupt the current turn (fire-and-forget notification).
     pub fn cancel(&self, session_id: &str) -> Result<(), AcpError> {
-        self.conn
-            .notify("session/cancel", CancelNotification { session_id: session_id.to_string() })
+        self.conn.notify(
+            "session/cancel",
+            CancelNotification {
+                session_id: session_id.to_string(),
+            },
+        )
     }
 }
 

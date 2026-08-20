@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use codetwo_core::acp::{AcpClient, Connection, ContentBlock, StopReason};
 use codetwo_core::permission::{PermissionMode, PermissionPolicy};
 use codetwo_core::session::{Part, Role};
-use codetwo_core::{Event, PermissionRouter, SessionHandler, Store};
+use codetwo_core::{Event, PermissionRouter, ProviderId, SessionHandler, Store};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
@@ -88,6 +88,7 @@ async fn agent_output_is_persisted() {
     }));
     let handler = Arc::new(SessionHandler::new(
         "s1".into(),
+        ProviderId::Codex,
         events_tx,
         policy,
         router,

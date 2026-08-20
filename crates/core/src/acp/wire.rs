@@ -129,6 +129,10 @@ pub struct ModelInfo {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
+    /// Provider extensions such as Grok's per-model `reasoningEfforts`. Kept raw because ACP has
+    /// not standardized this metadata shape; consumers must feature-detect every field.
+    #[serde(rename = "_meta", default)]
+    pub meta: Value,
 }
 
 /// The models an agent offers, and which one is live.
@@ -146,6 +150,14 @@ pub struct SetModelRequest {
     pub session_id: String,
     #[serde(rename = "modelId")]
     pub model_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetModeRequest {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "modeId")]
+    pub mode_id: String,
 }
 
 // ---- session config options (ACP: UNSTABLE) --------------------------------------------------
