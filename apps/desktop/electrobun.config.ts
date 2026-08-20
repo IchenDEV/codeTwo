@@ -1,10 +1,5 @@
 import type { ElectrobunConfig } from "electrobun";
 
-const hostBinary =
-  process.platform === "win32"
-    ? "../../target/release/codetwo-desktop-host.exe"
-    : "../../target/release/codetwo-desktop-host";
-
 export default {
   app: {
     name: "C2",
@@ -21,10 +16,9 @@ export default {
     },
     copy: {
       dist: "views/main",
-      [hostBinary]: `bin/${hostBinary.split("/").at(-1)}`,
     },
-    watch: ["../../crates", "src-host", "src", "index.html", "vite.config.ts"],
-    watchIgnore: ["dist/**", "../../target/**"],
+    watch: ["src", "index.html", "vite.config.ts", "scripts/prepare-electrobun.ts"],
+    watchIgnore: ["dist/**"],
     mac: {
       createDmg: process.env.ELECTROBUN_CREATE_DMG === "1",
       codesign: process.env.ELECTROBUN_AD_HOC_SIGN === "1",

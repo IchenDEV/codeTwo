@@ -1,6 +1,5 @@
-import Electrobun, { BrowserView, BrowserWindow, PATHS, Screen, Utils } from "electrobun/bun";
+import Electrobun, { BrowserView, BrowserWindow, Screen, Utils } from "electrobun/bun";
 import { basename, extname, join } from "node:path";
-import { mkdirSync } from "node:fs";
 
 import type {
   CodeTwoRPC,
@@ -9,154 +8,7 @@ import type {
   OpenDialogOptions,
   SaveDialogOptions,
 } from "./rpc";
-
-interface HostResponse {
-  id?: number;
-  result?: unknown;
-  error?: string;
-  method?: string;
-  params?: DesktopEvent;
-}
-
-class NativeHost {
-  private child: Bun.Subprocess<"pipe", "pipe", "inherit"> | null = null;
-  private nextId = 1;
-  private pending = new Map<
-    number,
-    { resolve: (value: unknown) => void; reject: (error: Error) => void }
-  >();
-  private ready = false;
-  private readonly readyPromise: Promise<void>;
-  private resolveReady!: () => void;
-  private rejectReady!: (error: Error) => void;
-
-  constructor(private readonly onEvent: (event: DesktopEvent) => void) {
-    this.readyPromise = new Promise<void>((resolve, reject) => {
-      this.resolveReady = resolve;
-      this.rejectReady = reject;
-    });
-  }
-
-  async start(): Promise<void> {
-    const executable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
-    const hostPath = join(PATHS.RESOURCES_FOLDER, "app", "bin", executable);
-    const dataDir = join(Utils.paths.appData, "dev.codetwo.app");
-    mkdirSync(dataDir, { recursive: true });
-
-    this.child = Bun.spawn([hostPath, "--data-dir", dataDir], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "inherit",
-    });
-    void this.readOutput(this.child.stdout);
-    void this.child.exited.then((code) => {
-      const error = new Error(`C2 native host exited with status ${code}`);
-      if (!this.ready) this.rejectReady(error);
-      for (const pending of this.pending.values()) pending.reject(error);
-      this.pending.clear();
-    });
-
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        this.readyPromise,
-        new Promise<never>((_, reject) => {
-          timeout = setTimeout(() => reject(new Error("C2 native host did not become ready")), 60_000);
-        }),
-      ]);
-    } finally {
-      if (timeout) clearTimeout(timeout);
-    }
-  }
-
-  async call(name: string, args: unknown, projectPath: string | null): Promise<unknown> {
-    await this.readyPromise;
-    return this.request("call", { name, args, project_path: projectPath });
-  }
-
-  async shutdown(): Promise<void> {
-    const child = this.child;
-    if (!child) return;
-    try {
-      await Promise.race([
-        this.request("shutdown", null),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("native host shutdown timed out")), 2_000),
-        ),
-      ]);
-      child.stdin.end();
-      const exited = await Promise.race([
-        child.exited.then(() => true),
-        new Promise<false>((resolve) => setTimeout(() => resolve(false), 3_000)),
-      ]);
-      if (!exited) {
-        child.kill();
-        await child.exited;
-      }
-    } catch {
-      child.kill();
-    } finally {
-      this.child = null;
-    }
-  }
-
-  private request(method: string, params: unknown): Promise<unknown> {
-    const child = this.child;
-    if (!child) return Promise.reject(new Error("C2 native host is not running"));
-    const id = this.nextId++;
-    const promise = new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-    });
-    child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
-    child.stdin.flush();
-    return promise;
-  }
-
-  private async readOutput(stdout: ReadableStream<Uint8Array>): Promise<void> {
-    const decoder = new TextDecoder();
-    const reader = stdout.getReader();
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let newline = buffer.indexOf("\n");
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (line) this.handleLine(line);
-        newline = buffer.indexOf("\n");
-      }
-    }
-    const tail = (buffer + decoder.decode()).trim();
-    if (tail) this.handleLine(tail);
-  }
-
-  private handleLine(line: string): void {
-    let message: HostResponse;
-    try {
-      message = JSON.parse(line) as HostResponse;
-    } catch (error) {
-      console.error("C2 native host emitted invalid protocol data", error, line);
-      return;
-    }
-
-    if (message.method === "event" && message.params) {
-      if (message.params.name === "host-ready") {
-        this.ready = true;
-        this.resolveReady();
-      }
-      this.onEvent(message.params);
-      return;
-    }
-    if (typeof message.id !== "number") return;
-    const pending = this.pending.get(message.id);
-    if (!pending) return;
-    this.pending.delete(message.id);
-    if (message.error) pending.reject(new Error(message.error));
-    else pending.resolve(message.result);
-  }
-}
+import { PureBunHost } from "./host";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -229,23 +81,11 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
 const queuedEvents: DesktopEvent[] = [];
 let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
-const host = new NativeHost((event) => {
+const dataDir = process.env.CODETWO_DATA_DIR ?? join(Utils.paths.appData, "dev.codetwo.app");
+const host = new PureBunHost(dataDir, (event) => {
   if (rendererReady) rpc.send.event(event);
   else queuedEvents.push(event);
 });
-
-try {
-  await host.start();
-} catch (error) {
-  await Utils.showMessageBox({
-    type: "error",
-    title: "C2 could not start",
-    message: error instanceof Error ? error.message : String(error),
-    buttons: ["Quit"],
-  });
-  Utils.quit();
-  throw error;
-}
 
 rpc = BrowserView.defineRPC<CodeTwoRPC>({
   maxRequestTime: Infinity,

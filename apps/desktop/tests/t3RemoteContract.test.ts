@@ -6,16 +6,15 @@ const desktop = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(desktop, path), "utf8");
 
 describe("T3 mobile remote contract", () => {
-  test("keeps the renderer-to-native-host pairing protocol explicit and defaults to T3", () => {
+  test("keeps the renderer pairing protocol explicit and fails closed in the Bun trial", () => {
     const bridge = read("src/bridge.ts");
-    const remotePlugin = read("src-host/src/remote.rs");
+    const host = read("src/electrobun/host/index.ts");
 
     expect(bridge).toContain('export type RemoteClientProtocol = "t3" | "legacy"');
     expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "t3"');
     expect(bridge).toContain("client_protocol: clientProtocol,");
-    expect(remotePlugin).toContain('args.client_protocol.as_deref().unwrap_or("t3")');
-    expect(remotePlugin).toContain('"t3" => auth.issue_t3_pairing_token(ttl)');
-    expect(remotePlugin).toContain('"legacy" => auth.issue_pairing_token(ttl)');
+    expect(host).toContain('this.register("remote.start", () => this.unsupported("remote.start", "remote server"))');
+    expect(host).toContain('this.register("remote.pairing_link", () => null)');
   });
 
   test("exposes T3 and legacy clients without conflating their pairing codes", () => {

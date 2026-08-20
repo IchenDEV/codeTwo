@@ -31,7 +31,7 @@ import {
   type EmbeddedBrowserTab,
 } from "./browser/electrobun";
 
-// Typed renderer bridge to the Rust core through Electrobun and the native sidecar.
+// Typed renderer bridge to Electrobun's in-process Bun desktop host.
 
 export interface ProviderInfo {
   id: string;
@@ -1205,7 +1205,7 @@ export async function readText(cwd: string, path: string): Promise<string> {
 }
 
 /**
- * Raw bytes for the image preview. JSON sidecar results arrive as a number array; the ArrayBuffer
+ * Raw bytes for the image preview. JSON host results arrive as a number array; the ArrayBuffer
  * branch keeps the wrapper compatible with direct binary transports.
  */
 export async function readBinary(cwd: string, path: string): Promise<Uint8Array> {
