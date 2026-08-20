@@ -57,6 +57,7 @@ pub mod skill;
 pub mod source_control;
 pub mod store;
 pub mod task;
+pub mod task_capsule;
 pub mod task_store;
 pub mod term;
 pub mod testsignal;
@@ -148,8 +149,9 @@ pub use skill::{
     SlotKind, SubagentDefinition,
 };
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
-pub use store::{IssueDelegation, 
-    PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store, StoreError,
+pub use store::{
+    IssueDelegation, PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store,
+    StoreError,
 };
 pub use task::{
     AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
@@ -159,6 +161,11 @@ pub use task::{
     TaskBudget, TaskBudgetState, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease,
     TaskStatus, TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
     WorkItemId, WorkItemStatus,
+};
+pub use task_capsule::{
+    compile_task_capsule, session_compatibility_key, CapabilityManifestEntry,
+    CompiledTaskCapsule, SessionCompatibilityKey, StablePromptLayer, StablePromptLayerKind,
+    TaskCapsuleContext, TaskCapsuleError,
 };
 pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
