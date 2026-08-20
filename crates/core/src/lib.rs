@@ -148,7 +148,7 @@ pub use task::{
     AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
     ArtifactProvenance, ProviderConfiguration, ResultContract, RunSnapshot, SceneOrigin, SceneRef,
     Task, TaskArtifactStatus, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemEdge,
-    WorkItemId, WorkItemStatus,
+    WorkItemAttempt, WorkItemAttemptStatus, WorkItemId, WorkItemStatus,
 };
 pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};

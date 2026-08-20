@@ -50,6 +50,24 @@ pub enum StoreError {
     },
     #[error("invalid automation: {0}")]
     InvalidAutomation(String),
+    #[error("task not found: {task_id}")]
+    TaskNotFound { task_id: String },
+    #[error("work item not found: {task_id}/{work_item_id}")]
+    WorkItemNotFound {
+        task_id: String,
+        work_item_id: String,
+    },
+    #[error("task already has a running Executor attempt: {task_id}")]
+    TaskExecutorBusy { task_id: String },
+    #[error("invalid Task Graph: {0}")]
+    InvalidTaskGraph(String),
+    #[error("invalid Work Item attempt {task_id}/{work_item_id}/{attempt}: {reason}")]
+    InvalidTaskAttempt {
+        task_id: String,
+        work_item_id: String,
+        attempt: u32,
+        reason: String,
+    },
 }
 
 const SCHEMA: &str = "

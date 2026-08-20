@@ -142,6 +142,29 @@ pub struct WorkItemEdge {
     pub dependent: WorkItemId,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkItemAttemptStatus {
+    Running,
+    Succeeded,
+    Failed,
+    Cancelled,
+    Uncertain,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkItemAttempt {
+    pub task_id: TaskId,
+    pub work_item_id: WorkItemId,
+    pub attempt: u32,
+    pub agent_id: AgentId,
+    pub session_id: SessionId,
+    pub status: WorkItemAttemptStatus,
+    pub started_at_ms: i64,
+    pub finished_at_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskGraph {
