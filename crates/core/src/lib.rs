@@ -53,6 +53,7 @@ pub mod session;
 pub mod skill;
 pub mod source_control;
 pub mod store;
+pub mod task;
 pub mod term;
 pub mod testsignal;
 pub mod tmux;
@@ -133,6 +134,12 @@ pub use skill::{
 pub use source_control::{SourceControlInfo, SourceControlProviderKind};
 pub use store::{IssueDelegation, 
     PipelineInstance, PipelineTransitionRecord, SessionSearchHit, Store, StoreError,
+};
+pub use task::{
+    AgentAssignment, AgentId, AgentRole, AgentSkillOrigin, AgentSkillRef, AgentStatus,
+    ArtifactProvenance, ProviderConfiguration, ResultContract, RunSnapshot, SceneOrigin, SceneRef,
+    Task, TaskArtifactStatus, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemEdge,
+    WorkItemId, WorkItemStatus,
 };
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
