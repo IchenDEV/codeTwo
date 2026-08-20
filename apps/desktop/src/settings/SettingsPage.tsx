@@ -16,10 +16,13 @@ import {
 import {
   browserPermissions,
   browserRevokePermission,
+  checkForAppUpdates,
   confirmNative,
   discardOrphanWorktree,
   discardSessionWorktree,
+  getAppUpdateStatus,
   listProjectWorktrees,
+  type AppUpdateStatus,
   type KeymapEntry,
   type Project,
   type ProjectWorktreeMode,
@@ -197,6 +200,8 @@ export function SettingsPage({
   memoryEnabled,
   initialTab = "general",
   onClose,
+  updateStatusLoader = getAppUpdateStatus,
+  updateCheckStarter = checkForAppUpdates,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -212,6 +217,8 @@ export function SettingsPage({
   memoryEnabled: boolean;
   initialTab?: SettingsTab;
   onClose: () => void;
+  updateStatusLoader?: () => Promise<AppUpdateStatus>;
+  updateCheckStarter?: () => Promise<AppUpdateStatus>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -222,12 +229,44 @@ export function SettingsPage({
     [providers],
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
       setTab((current) => current === "memory" ? "general" : current);
     }
   }, [memoryEnabled]);
+  useEffect(() => {
+    if (tab !== "general") return;
+    let active = true;
+    void updateStatusLoader()
+      .then((status) => {
+        if (active) setAppUpdate(status);
+      })
+      .catch((error) => {
+        if (active) setAppUpdate({ state: "unavailable", message: String(error) });
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, updateStatusLoader]);
+  useEffect(() => {
+    if (tab !== "general" || appUpdate?.state !== "checking") return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void updateStatusLoader()
+        .then((status) => {
+          if (active) setAppUpdate(status);
+        })
+        .catch((error) => {
+          if (active) setAppUpdate({ state: "unavailable", message: String(error) });
+        });
+    }, 1000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [tab, appUpdate?.state, updateStatusLoader]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -322,6 +361,32 @@ export function SettingsPage({
       resetAppearanceSettings();
     } else if (tab === "keybindings") {
       onResetAll?.();
+    }
+  };
+
+  const appUpdateHint = (() => {
+    switch (appUpdate?.state) {
+      case "ready":
+        return t("settings.updateReady", { version: appUpdate.currentVersion ?? t("settings.updateUnknownVersion") });
+      case "checking":
+        return t("settings.updateChecking");
+      case "not-configured":
+        return t("settings.updateNotConfigured");
+      case "unsupported":
+        return t("settings.updateUnsupported");
+      case "unavailable":
+        return t("settings.updateUnavailable");
+      default:
+        return t("settings.updateLoading");
+    }
+  })();
+
+  const startUpdateCheck = async () => {
+    setAppUpdate({ state: "checking", currentVersion: appUpdate?.currentVersion });
+    try {
+      setAppUpdate(await updateCheckStarter());
+    } catch (error) {
+      setAppUpdate({ state: "unavailable", message: String(error) });
     }
   };
 
@@ -444,6 +509,21 @@ export function SettingsPage({
                       ))}
                     </SelectContent>
                   </Select>
+                </Row>
+
+                <GroupHeading>{t("settings.softwareUpdate")}</GroupHeading>
+
+                <Row label={t("settings.checkForUpdates")} hint={appUpdateHint}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={appUpdate?.state !== "ready"}
+                    onClick={() => void startUpdateCheck()}
+                  >
+                    {appUpdate?.state === "checking"
+                      ? t("settings.updateCheckingButton")
+                      : t("settings.checkNow")}
+                  </Button>
                 </Row>
 
                 <GroupHeading>{t("settings.terminal")}</GroupHeading>

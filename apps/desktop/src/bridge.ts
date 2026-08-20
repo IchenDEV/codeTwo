@@ -6,9 +6,12 @@ import {
   desktopOpenExternal,
   desktopOpenPath,
   desktopSaveDialog,
+  desktopCheckForUpdates,
+  desktopUpdateStatus,
   isElectrobun,
   listenDesktop,
 } from "./electrobun/client";
+import type { AppUpdateStatus } from "./electrobun/rpc";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -32,6 +35,16 @@ import {
 } from "./browser/electrobun";
 
 // Typed renderer bridge to Electrobun's in-process Bun desktop host.
+
+export type { AppUpdateStatus };
+
+export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
+  return desktopUpdateStatus();
+}
+
+export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
+  return desktopCheckForUpdates();
+}
 
 export interface ProviderInfo {
   id: string;

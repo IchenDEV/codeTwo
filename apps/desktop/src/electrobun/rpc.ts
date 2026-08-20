@@ -23,6 +23,19 @@ export interface SaveDialogOptions {
   filters?: DialogFilter[];
 }
 
+export type AppUpdateState =
+  | "unsupported"
+  | "unavailable"
+  | "not-configured"
+  | "ready"
+  | "checking";
+
+export interface AppUpdateStatus {
+  state: AppUpdateState;
+  currentVersion?: string;
+  message?: string;
+}
+
 export type CodeTwoRPC = {
   bun: RPCSchema<{
     requests: {
@@ -38,6 +51,8 @@ export type CodeTwoRPC = {
       showItemInFolder: { params: { path: string }; response: boolean };
       browserZoom: { params: { webviewId: number; factor: number }; response: void };
       openDevtools: { params: undefined; response: void };
+      updateStatus: { params: undefined; response: AppUpdateStatus };
+      updateCheck: { params: undefined; response: AppUpdateStatus };
     };
     messages: Record<never, never>;
   }>;

@@ -13,3 +13,18 @@ function run(command: string[], cwd: string): void {
 }
 
 run(["bun", "run", "build:renderer"], desktopRoot);
+
+if (process.platform === "darwin") {
+  run(
+    [
+      "/usr/bin/swift",
+      "build",
+      "--disable-automatic-resolution",
+      "--configuration",
+      "release",
+      "--package-path",
+      resolve(desktopRoot, "native", "update-helper"),
+    ],
+    desktopRoot,
+  );
+}

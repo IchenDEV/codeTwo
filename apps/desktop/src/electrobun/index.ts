@@ -9,6 +9,7 @@ import type {
   SaveDialogOptions,
 } from "./rpc";
 import { PureBunHost } from "./host";
+import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -123,6 +124,8 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         BrowserView.getById(webviewId)?.setPageZoom(factor);
       },
       openDevtools: () => mainWindow.webview.openDevTools(),
+      updateStatus: getAppUpdateStatus,
+      updateCheck: startAppUpdateCheck,
     },
     messages: {},
   },
