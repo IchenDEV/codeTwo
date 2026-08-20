@@ -78,8 +78,8 @@ Provider-native features still depend on the chosen provider and adapter version
 projected separately through C2's provider-neutral tool layer, so they do not become Codex-only just
 because C2 discovered them from the local OpenAI runtime:
 
-- **Computer Use** is attached to non-Codex providers through its verified standalone stdio MCP
-  adapter when the signed local service is available.
+- **Computer Use** can come from the verified OpenAI fallback or an explicitly configured Cua/other
+  MCP backend. A configured backend can target every provider or a named subset.
 - **Chrome Browser** is attached through the configured `node_repl` MCP runtime when the Browser
   and Chrome plugins are enabled. Extension connectivity is verified on the first real call.
 - **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
@@ -88,6 +88,57 @@ because C2 discovered them from the local OpenAI runtime:
 - **Image Generation** and **Sites** remain provider-native until the host exposes a real portable
   MCP adapter. C2 reports them as unavailable for other providers instead of claiming false parity.
 
+### Configure Cua or another computer-use MCP
+
+C2 reads `host-tools.json` from its data directory at startup. TUI/server use
+`~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
+`CODETWO_DATA_DIR` when that environment variable is set. Backends are never started merely because
+their executable is installed: each entry requires `enabled: true`.
+
+For [Cua Driver](https://cua.ai/docs/reference/cua-driver/cli-reference), whose binary exposes a
+stdio MCP server with `cua-driver mcp`:
+
+```json
+{
+  "schema_version": 1,
+  "computer_use": [
+    {
+      "id": "cua",
+      "enabled": true,
+      "display_name": "Cua Driver",
+      "server": {
+        "name": "cua-driver",
+        "command": "cua-driver",
+        "args": ["mcp"]
+      }
+    }
+  ]
+}
+```
+
+Omitting `providers` attaches the backend to every provider. Use `providers: ["claude_code"]` to
+allow only named providers, or `exclude_providers: ["codex"]` to retain Codex's native tool. Any
+other stdio MCP driver uses the same shape and can supply `env` as a string map and an optional
+`cwd`. A remote MCP computer server uses this `server` shape instead:
+
+```json
+{
+  "name": "remote-computer",
+  "type": "http",
+  "url": "http://127.0.0.1:8000/mcp",
+  "headers": {}
+}
+```
+
+HTTP and SSE entries fail before session creation if the selected ACP provider did not advertise
+that transport. A resolved stdio command or configured URL is reported as **unverified** until its
+first real MCP call succeeds. Duplicate server names and invalid commands fail closed and appear in
+the provider capability reason.
+
+OpenAI Responses CUA, Anthropic's versioned `computer` tool, and Gemini Computer Use are
+model-API-native action loops, not interchangeable MCP servers. Their provider adapter may expose
+them natively; C2 only shares them across providers when a real MCP driver or gateway is configured.
+
 MCP servers are fixed when an ACP session starts. The Pure Bun desktop host and Rust CoreApp host
 implement the same logical provider-toolset interface as separate adapters:
 
@@ -95,9 +146,9 @@ implement the same logical provider-toolset interface as separate adapters:
   launch the legacy Rust desktop sidecar;
 - TUI and server perform discovery and ACP injection in the Rust core for both `session/new` and
   `session/load`;
-- Rust-hosted interactive tools require the process to run as the logged-in user with an active
-  macOS GUI session. Linux and headless/remote-only servers report Computer Use and Chrome as
-  unavailable instead of claiming a broken bridge.
+- the built-in OpenAI interactive bridge requires the process to run as the logged-in user with an
+  active macOS GUI session; configured Cua/cross-OS/remote MCP backends follow their own runtime
+  requirements.
 
 After enabling or repairing a host tool, restart C2 or open a new session. A saved session receives
 the bridge when C2 reattaches it with `session/load`; an already-live ACP session cannot add MCP

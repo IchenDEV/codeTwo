@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { normalizeProviderInfo } from "../src/bridge";
-import { sessionRequestParams } from "../src/electrobun/host/acp";
+import { sessionRequestParams, validateMcpTransports } from "../src/electrobun/host/acp";
 import {
+  loadConfiguredComputerUse,
   projectProviderToolset,
   stdioServer,
   withProviderToolInstructions,
@@ -11,7 +15,7 @@ import {
 } from "../src/electrobun/host/providerTools";
 
 const computerMcp: AcpMcpServer = {
-  name: "computer-use",
+  name: "codetwo-openai-computer-use",
   command: "/plugins/computer-use-client-launcher",
   args: ["mcp"],
   env: [{ name: "CODEX_HOME", value: "/tmp/codex-home" }],
@@ -40,6 +44,8 @@ const readyEvidence: HostToolEvidence = {
   sitesEnabled: true,
   sitesVersion: "0.1.34",
   configError: null,
+  configuredComputerUse: [],
+  hostToolsConfigErrors: [],
 };
 
 describe("provider capability wire compatibility", () => {
@@ -95,7 +101,7 @@ describe("provider capability wire compatibility", () => {
 
   test("projects portable host tools onto Claude without duplicating Codex-native tools", () => {
     const claude = projectProviderToolset(readyEvidence, "claude_code");
-    expect(claude.mcpServers.map((server) => server.name)).toEqual(["computer-use", "node_repl"]);
+    expect(claude.mcpServers.map((server) => server.name)).toEqual(["codetwo-openai-computer-use", "node_repl"]);
     expect(claude.capabilities.find((item) => item.id === "computer_use")?.state).toBe("ready");
     expect(claude.capabilities.find((item) => item.id === "image_generation")?.state).toBe("unavailable");
     expect(claude.capabilities.find((item) => item.id === "sites")?.state).toBe("unavailable");
@@ -122,5 +128,88 @@ describe("provider capability wire compatibility", () => {
       value: "abc123",
     });
     expect(server?.env.some((entry) => entry.name === "SKY_PRIVATE_TOKEN")).toBe(false);
+  });
+
+  test("loads Cua Driver and other explicitly enabled stdio computer-use backends", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-"));
+    try {
+      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
+        schema_version: 1,
+        computer_use: [
+          {
+            id: "cua",
+            enabled: true,
+            display_name: "Cua Driver",
+            providers: ["claude_code", "grok"],
+            server: {
+              name: "cua-driver",
+              command: process.execPath,
+              args: ["mcp"],
+            },
+          },
+          {
+            id: "disabled-brand",
+            enabled: false,
+            server: { command: "/not/used" },
+          },
+        ],
+      }));
+
+      const configured = loadConfiguredComputerUse(directory);
+      expect(configured.errors).toEqual([]);
+      expect(configured.bridges).toHaveLength(1);
+      const evidence = {
+        ...readyEvidence,
+        configuredComputerUse: configured.bridges,
+      };
+      const claude = projectProviderToolset(evidence, "claude_code");
+      expect(claude.mcpServers.map((server) => server.name)).toContain("cua-driver");
+      expect(claude.capabilities.find((item) => item.id === "computer_use")?.reason)
+        .toContain("Cua Driver");
+      expect(projectProviderToolset(evidence, "codex").mcpServers).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("supports remote computer-use MCP only when the ACP provider advertises its transport", () => {
+    const server: AcpMcpServer = {
+      name: "remote-computer",
+      type: "http",
+      url: "http://127.0.0.1:8000/mcp",
+      headers: [],
+    };
+    expect(() => validateMcpTransports([server], {
+      agentCapabilities: { mcpCapabilities: { http: true } },
+    })).not.toThrow();
+    expect(() => validateMcpTransports([server], { agentCapabilities: {} }))
+      .toThrow("did not advertise");
+  });
+
+  test("fails the configured computer-use registry closed when any enabled backend is invalid", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-invalid-"));
+    try {
+      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
+        schema_version: 1,
+        computer_use: [
+          {
+            id: "otherwise-valid",
+            enabled: true,
+            server: { command: process.execPath },
+          },
+          {
+            id: "missing",
+            enabled: true,
+            server: { command: "definitely-not-a-real-c2-test-command" },
+          },
+        ],
+      }));
+
+      const configured = loadConfiguredComputerUse(directory);
+      expect(configured.bridges).toEqual([]);
+      expect(configured.errors.join("\n")).toContain("definitely-not-a-real-c2-test-command");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

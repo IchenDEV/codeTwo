@@ -568,7 +568,7 @@ fn read_config() -> Result<ConfigEvidence, String> {
     let computer_mcp = computer_root.as_ref().and_then(|root| {
         let launcher = root.join("bin/computer-use-client-launcher");
         launcher.is_file().then(|| McpServer {
-            name: "computer-use".into(),
+            name: "codetwo-openai-computer-use".into(),
             cwd: Some(root.to_string_lossy().into_owned()),
             transport: McpTransport::Stdio {
                 command: launcher.to_string_lossy().into_owned(),
@@ -817,7 +817,7 @@ mod tests {
             config: Ok(ConfigEvidence {
                 computer_plugin: true,
                 computer_version: Some("1.0.0".into()),
-                computer_mcp: Some(stdio_server("computer-use")),
+                computer_mcp: Some(stdio_server("codetwo-openai-computer-use")),
                 browser_plugin: true,
                 chrome_plugin: true,
                 sites_plugin: true,
@@ -938,7 +938,7 @@ mod tests {
                 .iter()
                 .map(|server| server.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["computer-use", "node_repl"]
+            vec!["codetwo-openai-computer-use", "node_repl"]
         );
         assert_eq!(
             tools

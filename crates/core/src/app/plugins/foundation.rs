@@ -7,7 +7,7 @@
 
 use crate::app::service::{EventBus, Paths, ProviderService, StoreService};
 use crate::app::{json, take_args};
-use crate::codex_runtime::CodexRuntimeDiscovery;
+use crate::host_tools::HostToolDiscovery;
 use crate::provider::registry_with_codex_runtime;
 use crate::store::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
@@ -207,9 +207,14 @@ impl Plugin for ProvidersPlugin {
         Some("Which coding CLIs can be launched, and what they can do.")
     }
 
+    fn inject(&self) -> Injection {
+        Injection::required(["paths"])
+    }
+
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        let host_tools = CodexRuntimeDiscovery::detect();
-        let providers = registry_with_codex_runtime(&host_tools);
+        let paths = ctx.expect::<Paths>()?;
+        let host_tools = HostToolDiscovery::detect(&paths.data_dir);
+        let providers = registry_with_codex_runtime(host_tools.codex());
         let service = Arc::new(ProviderService {
             providers,
             host_tools,

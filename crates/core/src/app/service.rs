@@ -7,9 +7,9 @@
 
 use crate::app::PluginConfigStore;
 use crate::canvas::CanvasFeatureGate;
-use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::engine::Engine;
 use crate::event::Event;
+use crate::host_tools::HostToolDiscovery;
 use crate::keymap::Keymap;
 use crate::memory::MemoryCapability;
 use crate::models::available_models;
@@ -199,7 +199,7 @@ pub struct ProviderSummary {
 /// The provider registry plus the one-shot host-tool probe it was built from.
 pub struct ProviderService {
     pub providers: Vec<Provider>,
-    pub host_tools: CodexRuntimeDiscovery,
+    pub host_tools: HostToolDiscovery,
 }
 
 impl Service for ProviderService {

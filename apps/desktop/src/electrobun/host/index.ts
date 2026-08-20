@@ -12,8 +12,10 @@ import {
 } from "./acp";
 import { BunDatabase } from "./database";
 import {
-  providerToolset,
+  detectHostToolEvidence,
+  projectProviderToolset,
   withProviderToolInstructions,
+  type HostToolEvidence,
   type ProviderToolset,
 } from "./providerTools";
 import {
@@ -150,6 +152,7 @@ function textContent(value: unknown): string | null {
 
 export class PureBunHost {
   private readonly database: BunDatabase;
+  private readonly hostTools: HostToolEvidence;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
   private readonly handlers = new Map<string, Handler>();
@@ -161,6 +164,7 @@ export class PureBunHost {
 
   constructor(dataDir: string, private readonly onEvent: (event: DesktopEvent) => void) {
     augmentGuiPath();
+    this.hostTools = detectHostToolEvidence(process.env, dataDir);
     this.database = new BunDatabase(dataDir);
     this.terminal = new TerminalManager(onEvent);
     this.lsp = new LspManager(onEvent);
@@ -213,7 +217,7 @@ export class PureBunHost {
   }
 
   private registerCommands(dataDir: string): void {
-    this.register("providers.list", () => providerSummaries());
+    this.register("providers.list", () => providerSummaries(this.hostTools));
     this.register("projects.list", () => this.database.listProjects());
     this.register("projects.add", (args) => {
       const path = string(args.path, "path");
@@ -916,7 +920,7 @@ export class PureBunHost {
       id,
       cwd: string(session.cwd, "cwd"),
       provider,
-      toolset: providerToolset(provider.id),
+      toolset: projectProviderToolset(this.hostTools, provider.id),
       model: optionalString(session.model),
       permissionMode: optionalString(session.permission_mode) ?? "ask",
       sandboxPolicy: optionalString(session.sandbox_policy) ?? "workspace_write",

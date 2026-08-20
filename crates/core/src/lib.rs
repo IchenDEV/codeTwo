@@ -36,6 +36,7 @@ pub mod event;
 pub mod git;
 pub mod github_skills;
 pub mod harness;
+pub mod host_tools;
 pub mod issues;
 pub mod keymap;
 pub mod market;
@@ -100,6 +101,7 @@ pub use engine::{
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
+pub use host_tools::{HostToolDiscovery, HOST_TOOLS_CONFIG_FILE};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;

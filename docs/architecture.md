@@ -95,18 +95,21 @@ servers fixed at ACP session creation, and short routing/safety instructions. Th
 adapters because the runtime genuinely varies:
 
 - `apps/desktop/src/electrobun/host/providerTools.ts` serves the packaged Electrobun desktop in
-  TypeScript/Bun. It discovers and verifies local tool runtimes and passes their stdio MCP servers
+  TypeScript/Bun. It discovers configured stdio/HTTP/SSE MCP runtimes and passes compatible servers
   directly to the desktop's ACP peer. The packaged app does not launch a Rust executable.
-- `crates/core/src/codex_runtime.rs` serves Rust CoreApp hosts, currently TUI and server. The
-  providers plugin takes one read-only discovery snapshot; the engine selects the current
+- `crates/core/src/host_tools.rs` serves Rust CoreApp hosts, currently TUI and server, and consumes
+  the same `host-tools.json` contract. `codex_runtime.rs` is only one built-in discovery source
+  behind it. The providers plugin takes one read-only snapshot; the engine selects the current
   provider's toolset and passes it to both `session/new` and `session/load`.
 
-Codex keeps provider-native tools and does not receive duplicate MCP adapters. Other providers can
-receive the signed Computer Use MCP and configured Chrome `node_repl` MCP. Image Generation and
-Sites are reported unavailable outside Codex until their host exposes a portable MCP surface; C2
-does not claim parity based only on an installed plugin. Interactive bridges in the Rust host also
-require an active macOS GUI login for the same user, so Linux, headless, and non-GUI server
-processes fail closed instead of advertising unusable app control.
+The signed OpenAI Computer Use adapter remains a built-in fallback, while explicitly enabled
+entries in `host-tools.json` can attach Cua Driver or any other MCP computer-control backend to any
+provider. Configured entries can replace a fallback by reusing its MCP server name. Codex keeps its
+provider-native tools unless an external backend is explicitly enabled for it. Image Generation
+and Sites remain unavailable outside Codex until their host exposes a portable MCP surface; C2 does
+not claim parity based only on an installed plugin. Interactive OpenAI bridges in the Rust host also
+require an active macOS GUI login for the same user. Independently configured remote or cross-OS
+MCP backends remain usable when their own runtime and the selected ACP transport support them.
 
 ## Context sync: whose memory is it?
 
