@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS memory_settings (
 );
 INSERT OR IGNORE INTO memory_settings (singleton, enabled, capture, inject) VALUES (1, 1, 1, 1);
 
+CREATE TABLE IF NOT EXISTS memory_project_settings (
+  project_path TEXT PRIMARY KEY,
+  capture TEXT NOT NULL DEFAULT 'inherit',
+  inject TEXT NOT NULL DEFAULT 'inherit',
+  include_external_context TEXT NOT NULL DEFAULT 'inherit'
+);
+
 CREATE TABLE IF NOT EXISTS memories (
   id            TEXT PRIMARY KEY,
   project_path  TEXT NOT NULL,
@@ -56,12 +63,19 @@ CREATE TABLE IF NOT EXISTS memories (
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL,
   accessed_at   INTEGER,
-  access_count  INTEGER NOT NULL DEFAULT 0
+  access_count  INTEGER NOT NULL DEFAULT 0,
+  origin        TEXT NOT NULL DEFAULT 'automatic',
+  forgotten_at  INTEGER,
+  supersedes_id TEXT,
+  conflict_with_id TEXT,
+  conflict_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS memories_project_active
   ON memories(project_path, active, layer, updated_at DESC);
 CREATE INDEX IF NOT EXISTS memories_session
   ON memories(session_id, layer, updated_at DESC);
+CREATE INDEX IF NOT EXISTS memories_project_activity
+  ON memories(project_path, active, pinned, accessed_at, updated_at);
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
   id              TEXT PRIMARY KEY,
@@ -128,6 +142,54 @@ impl Default for MemorySettings {
             include_external_context: true,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryPolicyValue {
+    #[default]
+    Inherit,
+    Allow,
+    Deny,
+}
+
+impl MemoryPolicyValue {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Inherit => "inherit",
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+        }
+    }
+
+    fn resolve(self, global: bool) -> bool {
+        match self {
+            Self::Inherit => global,
+            Self::Allow => true,
+            Self::Deny => false,
+        }
+    }
+}
+
+impl TryFrom<&str> for MemoryPolicyValue {
+    type Error = rusqlite::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "inherit" => Ok(Self::Inherit),
+            "allow" => Ok(Self::Allow),
+            "deny" => Ok(Self::Deny),
+            _ => Err(rusqlite::Error::InvalidQuery),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryProjectPolicy {
+    pub project_path: String,
+    pub capture: MemoryPolicyValue,
+    pub inject: MemoryPolicyValue,
+    pub include_external_context: MemoryPolicyValue,
 }
 
 /// Per-turn provenance used by the contamination gate and retained for audit. `used_tools` is
@@ -415,6 +477,13 @@ pub struct MemoryRecord {
     pub active: bool,
     pub created_at: i64,
     pub updated_at: i64,
+    pub accessed_at: Option<i64>,
+    pub access_count: u64,
+    pub origin: String,
+    pub forgotten_at: Option<i64>,
+    pub supersedes_id: Option<String>,
+    pub conflict_with_id: Option<String>,
+    pub conflict_reason: Option<String>,
     /// Fused retrieval score. List views leave this unset.
     pub relevance: Option<f64>,
     /// Raw transcripts and derived profiles are inspected, not edited, in the memory UI.
@@ -428,6 +497,30 @@ pub struct MemoryStats {
     pub l2: u64,
     pub l3: u64,
     pub pending: u64,
+    pub active: u64,
+    pub pinned: u64,
+    pub recent: u64,
+    pub forgotten: u64,
+    pub conflicts: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryEvidence {
+    pub session_id: String,
+    pub session_title: String,
+    pub part_seq: i64,
+    pub created_at: i64,
+    pub excerpt: String,
+    pub available: bool,
+    pub redacted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryUsage {
+    pub session_id: String,
+    pub session_title: String,
+    pub user_part_seq: i64,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -444,6 +537,30 @@ pub(crate) fn install(conn: &Connection) -> Result<(), StoreError> {
         "ALTER TABLE memory_settings ADD COLUMN include_external_context INTEGER NOT NULL DEFAULT 1",
         [],
     );
+    for statement in [
+        "ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'automatic'",
+        "ALTER TABLE memories ADD COLUMN forgotten_at INTEGER",
+        "ALTER TABLE memories ADD COLUMN supersedes_id TEXT",
+        "ALTER TABLE memories ADD COLUMN conflict_with_id TEXT",
+        "ALTER TABLE memories ADD COLUMN conflict_reason TEXT",
+    ] {
+        let _ = conn.execute(statement, []);
+    }
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS memory_project_settings (
+           project_path TEXT PRIMARY KEY,
+           capture TEXT NOT NULL DEFAULT 'inherit',
+           inject TEXT NOT NULL DEFAULT 'inherit',
+           include_external_context TEXT NOT NULL DEFAULT 'inherit'
+         );
+         CREATE INDEX IF NOT EXISTS memories_project_activity
+           ON memories(project_path,active,pinned,accessed_at,updated_at);
+         UPDATE memories SET origin=CASE
+           WHEN layer='L3' THEN 'profile'
+           WHEN session_id IS NULL AND sources_json='[]' THEN 'manual'
+           ELSE origin
+         END WHERE origin='automatic';",
+    )?;
     Ok(())
 }
 
@@ -481,10 +598,66 @@ impl Store {
         drop(conn);
         // If learning was paused while candidates became eligible, resuming it should not require
         // another provider turn or app restart to finish the queue.
-        if settings.enabled && settings.capture {
+        if settings.enabled {
             self.run_memory_maintenance()?;
         }
         Ok(())
+    }
+
+    pub fn memory_project_policy(
+        &self,
+        project_path: &str,
+    ) -> Result<MemoryProjectPolicy, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        memory_project_policy_with_conn(&conn, project_path)
+    }
+
+    pub fn set_memory_project_policy(
+        &self,
+        policy: &MemoryProjectPolicy,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO memory_project_settings
+               (project_path,capture,inject,include_external_context)
+             VALUES (?1,?2,?3,?4)
+             ON CONFLICT(project_path) DO UPDATE SET
+               capture=excluded.capture,
+               inject=excluded.inject,
+               include_external_context=excluded.include_external_context",
+            params![
+                policy.project_path,
+                policy.capture.as_str(),
+                policy.inject.as_str(),
+                policy.include_external_context.as_str(),
+            ],
+        )?;
+        drop(conn);
+        if policy.capture == MemoryPolicyValue::Allow {
+            self.run_memory_maintenance()?;
+        }
+        Ok(())
+    }
+
+    fn effective_memory_settings(&self, project_path: &str) -> Result<MemorySettings, StoreError> {
+        let global = self.memory_settings()?;
+        if !global.enabled {
+            return Ok(MemorySettings {
+                enabled: false,
+                capture: false,
+                inject: false,
+                include_external_context: false,
+            });
+        }
+        let policy = self.memory_project_policy(project_path)?;
+        Ok(MemorySettings {
+            enabled: true,
+            capture: policy.capture.resolve(global.capture),
+            inject: policy.inject.resolve(global.inject),
+            include_external_context: policy
+                .include_external_context
+                .resolve(global.include_external_context),
+        })
     }
 
     /// Add a user-authored L1 memory. Manual notes are high confidence but still recalled data.
@@ -495,7 +668,11 @@ impl Store {
         content: &str,
         pinned: bool,
     ) -> Result<MemoryRecord, StoreError> {
-        let content = redact_sensitive(content.trim());
+        ensure_memory_category(category)?;
+        if content.trim().is_empty() {
+            return Err(rusqlite::Error::InvalidQuery.into());
+        }
+        let content = content.trim().to_string();
         let now = now_millis();
         let conn = self.conn.lock().unwrap();
         let id = insert_or_reinforce_l1(
@@ -508,6 +685,7 @@ impl Store {
             &[],
             pinned,
             now,
+            "manual",
         )?;
         refresh_profile(&conn, project_path, now)?;
         load_memory(&conn, &id)?.ok_or_else(|| rusqlite::Error::QueryReturnedNoRows.into())
@@ -521,13 +699,34 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
-                    pinned,active,created_at,updated_at
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason
              FROM memories WHERE project_path=?1 AND active=1
+                            AND conflict_with_id IS NULL
              ORDER BY pinned DESC,
                       CASE layer WHEN 'L3' THEN 0 WHEN 'L1' THEN 1 ELSE 2 END,
                       updated_at DESC LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![project_path, limit as i64], row_to_memory)?;
+        collect_rows(rows)
+    }
+
+    pub fn list_managed_memories(
+        &self,
+        project_path: &str,
+        limit: usize,
+    ) -> Result<Vec<MemoryRecord>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason
+             FROM memories WHERE project_path=?1
+             ORDER BY CASE WHEN conflict_with_id IS NOT NULL THEN 0 ELSE 1 END,
+                      active DESC,pinned DESC,
+                      MAX(COALESCE(accessed_at,0),updated_at) DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![project_path, limit.min(500) as i64], row_to_memory)?;
         collect_rows(rows)
     }
 
@@ -550,19 +749,283 @@ impl Store {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
+        let now = now_millis();
         tx.execute(
-            "UPDATE memories SET active=?2, updated_at=?3 WHERE id=?1",
-            params![id, active as i64, now_millis()],
+            "UPDATE memories SET active=?2, forgotten_at=?3, updated_at=?4 WHERE id=?1",
+            params![
+                id,
+                active as i64,
+                if active { None } else { Some(now) },
+                now
+            ],
         )?;
         if let Some((project_path, layer)) = affected {
             // L3 is derived from L1. Rebuild it in the same transaction so forgetting a stable
             // note cannot leave its text behind in the profile that gets injected next turn.
+            if layer == "L1" {
+                refresh_profile(&tx, &project_path, now)?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn update_memory(
+        &self,
+        id: &str,
+        category: &str,
+        content: &str,
+    ) -> Result<MemoryRecord, StoreError> {
+        ensure_memory_category(category)?;
+        if content.trim().is_empty() {
+            return Err(rusqlite::Error::InvalidQuery.into());
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let (project_path, layer, origin): (String, String, String) = tx.query_row(
+            "SELECT project_path,layer,origin FROM memories WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        if origin != "manual" && origin != "user_correction" {
+            return Err(rusqlite::Error::InvalidQuery.into());
+        }
+        tx.execute(
+            "UPDATE memories SET category=?2,content=?3,keywords_json=?4,updated_at=?5 WHERE id=?1",
+            params![
+                id,
+                category,
+                content.trim(),
+                serde_json::to_string(&tokenize(content).into_iter().take(16).collect::<Vec<_>>())?,
+                now_millis(),
+            ],
+        )?;
+        if layer == "L1" {
+            refresh_profile(&tx, &project_path, now_millis())?;
+        }
+        let memory = load_memory(&tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        tx.commit()?;
+        Ok(memory)
+    }
+
+    pub fn set_memory_category(
+        &self,
+        id: &str,
+        category: &str,
+    ) -> Result<MemoryRecord, StoreError> {
+        ensure_memory_category(category)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let (project_path, layer): (String, String) = tx.query_row(
+            "SELECT project_path,layer FROM memories WHERE id=?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        tx.execute(
+            "UPDATE memories SET category=?2,updated_at=?3 WHERE id=?1",
+            params![id, category, now_millis()],
+        )?;
+        if layer == "L1" {
+            refresh_profile(&tx, &project_path, now_millis())?;
+        }
+        let memory = load_memory(&tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        tx.commit()?;
+        Ok(memory)
+    }
+
+    pub fn correct_memory(
+        &self,
+        id: &str,
+        category: &str,
+        content: &str,
+    ) -> Result<MemoryRecord, StoreError> {
+        ensure_memory_category(category)?;
+        if content.trim().is_empty() {
+            return Err(rusqlite::Error::InvalidQuery.into());
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let original = load_memory(&tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+        if original.layer == "L3" {
+            return Err(rusqlite::Error::InvalidQuery.into());
+        }
+        let now = now_millis();
+        tx.execute(
+            "UPDATE memories SET active=0,forgotten_at=?2,updated_at=?2 WHERE id=?1",
+            params![id, now],
+        )?;
+        let correction = MemoryRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            project_path: original.project_path.clone(),
+            session_id: None,
+            layer: "L1".into(),
+            category: category.to_string(),
+            content: content.trim().to_string(),
+            confidence: 1.0,
+            sources: original.sources,
+            pinned: true,
+            active: true,
+            created_at: now,
+            updated_at: now,
+            accessed_at: None,
+            access_count: 0,
+            origin: "user_correction".into(),
+            forgotten_at: None,
+            supersedes_id: Some(id.to_string()),
+            conflict_with_id: None,
+            conflict_reason: None,
+            relevance: None,
+            editable: true,
+        };
+        insert_memory(&tx, &correction)?;
+        refresh_profile(&tx, &original.project_path, now)?;
+        tx.commit()?;
+        Ok(correction)
+    }
+
+    pub fn delete_memory(&self, id: &str) -> Result<(), StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let affected: Option<(String, String)> = tx
+            .query_row(
+                "SELECT project_path,layer FROM memories WHERE id=?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        let receipts = {
+            let mut stmt =
+                tx.prepare("SELECT session_id,user_part_seq,items_json FROM memory_receipts")?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (session_id, user_part_seq, json) in receipts {
+            let mut items: Vec<MemoryReceiptItem> = serde_json::from_str(&json)?;
+            let before = items.len();
+            items.retain(|item| item.id != id);
+            if items.len() != before {
+                if items.is_empty() {
+                    tx.execute(
+                        "DELETE FROM memory_receipts WHERE session_id=?1 AND user_part_seq=?2",
+                        params![session_id, user_part_seq],
+                    )?;
+                } else {
+                    tx.execute(
+                        "UPDATE memory_receipts SET items_json=?3 WHERE session_id=?1 AND user_part_seq=?2",
+                        params![session_id, user_part_seq, serde_json::to_string(&items)?],
+                    )?;
+                }
+            }
+        }
+        tx.execute(
+            "UPDATE memories SET supersedes_id=NULL WHERE supersedes_id=?1",
+            [id],
+        )?;
+        tx.execute(
+            "UPDATE memories SET conflict_with_id=NULL,conflict_reason=NULL WHERE conflict_with_id=?1",
+            [id],
+        )?;
+        tx.execute("DELETE FROM memories WHERE id=?1", [id])?;
+        if let Some((project_path, layer)) = affected {
             if layer == "L1" {
                 refresh_profile(&tx, &project_path, now_millis())?;
             }
         }
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn memory_evidence(
+        &self,
+        id: &str,
+        reveal: bool,
+    ) -> Result<Vec<MemoryEvidence>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let sources_json: Option<String> = conn
+            .query_row(
+                "SELECT sources_json FROM memories WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(sources_json) = sources_json else {
+            return Ok(Vec::new());
+        };
+        let sources: Vec<MemorySourceRef> = serde_json::from_str(&sources_json)?;
+        let mut evidence = Vec::new();
+        for source in sources {
+            let row: Option<(String, i64, Option<String>)> = conn
+                .query_row(
+                    "SELECT s.title,s.created_at,p.part_json FROM sessions s
+                     LEFT JOIN parts p ON p.session_id=s.id AND p.seq=?2 WHERE s.id=?1",
+                    params![source.session_id, source.part_seq],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .optional()?;
+            let (session_title, created_at, part_json) =
+                row.unwrap_or_else(|| (short_id(&source.session_id).to_string(), 0, None));
+            let text = part_json
+                .as_deref()
+                .and_then(|json| serde_json::from_str::<Part>(json).ok())
+                .and_then(|part| match part {
+                    Part::Text { text } => Some(text),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            let excerpt_text = if reveal {
+                text.trim().to_string()
+            } else {
+                redact_sensitive(text.trim())
+            };
+            evidence.push(MemoryEvidence {
+                session_id: source.session_id,
+                session_title,
+                part_seq: source.part_seq,
+                created_at,
+                excerpt: truncate_chars(&excerpt_text, 600),
+                available: part_json.is_some(),
+                redacted: !reveal,
+            });
+        }
+        Ok(evidence)
+    }
+
+    pub fn memory_usages(&self, id: &str) -> Result<Vec<MemoryUsage>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT r.session_id,s.title,r.user_part_seq,r.created_at,r.items_json
+             FROM memory_receipts r LEFT JOIN sessions s ON s.id=r.session_id
+             ORDER BY r.created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?;
+        let mut usages = Vec::new();
+        for row in rows {
+            let (session_id, title, user_part_seq, created_at, json) = row?;
+            let items: Vec<MemoryReceiptItem> = serde_json::from_str(&json)?;
+            if items.iter().any(|item| item.id == id) {
+                usages.push(MemoryUsage {
+                    session_title: title.unwrap_or_else(|| short_id(&session_id).to_string()),
+                    session_id,
+                    user_part_seq,
+                    created_at,
+                });
+            }
+        }
+        Ok(usages)
     }
 
     pub fn memory_stats(&self, project_path: &str) -> Result<MemoryStats, StoreError> {
@@ -598,6 +1061,31 @@ impl Store {
             [project_path],
             |r| r.get(0),
         )?;
+        let recent_since = now_millis() - 30 * 24 * 60 * 60 * 1_000;
+        let (active, pinned, recent, forgotten, conflicts) = conn.query_row(
+            "SELECT
+               SUM(CASE WHEN active=1 AND layer!='L3' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN active=1 AND pinned=1 AND layer!='L3' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN active=1 AND accessed_at>=?2 AND layer!='L3' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN active=0 AND forgotten_at IS NOT NULL THEN 1 ELSE 0 END),
+               SUM(CASE WHEN conflict_with_id IS NOT NULL THEN 1 ELSE 0 END)
+             FROM memories WHERE project_path=?1",
+            params![project_path, recent_since],
+            |row| {
+                Ok((
+                    row.get::<_, Option<u64>>(0)?.unwrap_or(0),
+                    row.get::<_, Option<u64>>(1)?.unwrap_or(0),
+                    row.get::<_, Option<u64>>(2)?.unwrap_or(0),
+                    row.get::<_, Option<u64>>(3)?.unwrap_or(0),
+                    row.get::<_, Option<u64>>(4)?.unwrap_or(0),
+                ))
+            },
+        )?;
+        stats.active = active;
+        stats.pinned = pinned;
+        stats.recent = recent;
+        stats.forgotten = forgotten;
+        stats.conflicts = conflicts;
         Ok(stats)
     }
 
@@ -631,7 +1119,7 @@ impl Store {
         current_session: &str,
         query: &str,
     ) -> Result<MemoryContext, StoreError> {
-        let settings = self.memory_settings()?;
+        let settings = self.effective_memory_settings(project_path)?;
         let (read, _) = self.session_memory_policy(current_session)?;
         if !settings.enabled || !settings.inject || read == MemoryAccess::Deny {
             return Ok(MemoryContext::default());
@@ -816,7 +1304,7 @@ impl Store {
         user_part_seq: i64,
         mut provenance: MemoryTurnProvenance,
     ) -> Result<usize, StoreError> {
-        let settings = self.memory_settings()?;
+        let settings = self.effective_memory_settings(project_path)?;
         if !settings.enabled || !settings.capture || prompt_source.trim().is_empty() {
             return Ok(0);
         }
@@ -900,8 +1388,15 @@ impl Store {
                     active: true,
                     created_at: now,
                     updated_at: now,
+                    accessed_at: None,
+                    access_count: 0,
+                    origin: "automatic".into(),
+                    forgotten_at: None,
+                    supersedes_id: None,
+                    conflict_with_id: None,
+                    conflict_reason: None,
                     relevance: None,
-                    editable: true,
+                    editable: false,
                 },
             )?;
             prune_episodes(&conn, project_path)?;
@@ -918,7 +1413,7 @@ impl Store {
     /// tests and maintenance tooling; normal callers should use [`Store::run_memory_maintenance`].
     pub fn run_memory_maintenance_at(&self, now: i64) -> Result<usize, StoreError> {
         let settings = self.memory_settings()?;
-        if !settings.enabled || !settings.capture {
+        if !settings.enabled {
             return Ok(0);
         }
         let mut conn = self.conn.lock().unwrap();
@@ -944,7 +1439,12 @@ impl Store {
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
         let mut projects = HashSet::new();
+        let mut promoted = 0;
         for (id, project, session, category, content, confidence, sources_json) in &candidates {
+            let project_policy = memory_project_policy_with_conn(&tx, project)?;
+            if !project_policy.capture.resolve(settings.capture) {
+                continue;
+            }
             let sources: Vec<MemorySourceRef> = serde_json::from_str(sources_json)?;
             insert_or_reinforce_l1(
                 &tx,
@@ -956,7 +1456,9 @@ impl Store {
                 &sources,
                 false,
                 now,
+                "automatic",
             )?;
+            promoted += 1;
             tx.execute(
                 "UPDATE memory_candidates SET status='promoted',processed_at=?2 WHERE id=?1",
                 params![id, now],
@@ -967,7 +1469,7 @@ impl Store {
             refresh_profile(&tx, &project, now)?;
         }
         tx.commit()?;
-        Ok(candidates.len())
+        Ok(promoted)
     }
 
     pub fn memory_turn_audit(
@@ -1031,14 +1533,47 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
     lines.join("\n")
 }
 
+fn memory_project_policy_with_conn(
+    conn: &Connection,
+    project_path: &str,
+) -> Result<MemoryProjectPolicy, StoreError> {
+    let row: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT capture,inject,include_external_context
+             FROM memory_project_settings WHERE project_path=?1",
+            [project_path],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let (capture, inject, external) =
+        row.unwrap_or_else(|| ("inherit".into(), "inherit".into(), "inherit".into()));
+    Ok(MemoryProjectPolicy {
+        project_path: project_path.to_string(),
+        capture: MemoryPolicyValue::try_from(capture.as_str())?,
+        inject: MemoryPolicyValue::try_from(inject.as_str())?,
+        include_external_context: MemoryPolicyValue::try_from(external.as_str())?,
+    })
+}
+
+fn ensure_memory_category(category: &str) -> Result<(), StoreError> {
+    if matches!(
+        category,
+        "constraint" | "preference" | "fact" | "relationship" | "event" | "episode"
+    ) {
+        Ok(())
+    } else {
+        Err(rusqlite::Error::InvalidQuery.into())
+    }
+}
+
 fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRecord> {
     let sources_json: String = row.get(7)?;
     let layer: String = row.get(3)?;
+    let origin: String = row.get(14)?;
     Ok(MemoryRecord {
         id: row.get(0)?,
         project_path: row.get(1)?,
         session_id: row.get(2)?,
-        editable: layer != "L3",
         layer,
         category: row.get(4)?,
         content: row.get(5)?,
@@ -1048,6 +1583,14 @@ fn row_to_memory(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRecord> {
         active: row.get::<_, i64>(9)? != 0,
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        accessed_at: row.get(12)?,
+        access_count: row.get(13)?,
+        editable: origin == "manual" || origin == "user_correction",
+        origin,
+        forgotten_at: row.get(15)?,
+        supersedes_id: row.get(16)?,
+        conflict_with_id: row.get(17)?,
+        conflict_reason: row.get(18)?,
         relevance: None,
     })
 }
@@ -1067,7 +1610,8 @@ fn load_memory(conn: &Connection, id: &str) -> Result<Option<MemoryRecord>, Stor
     let record = conn
         .query_row(
             "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
-                    pinned,active,created_at,updated_at FROM memories WHERE id=?1",
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason FROM memories WHERE id=?1",
             [id],
             row_to_memory,
         )
@@ -1086,8 +1630,9 @@ fn insert_memory(conn: &Connection, record: &MemoryRecord) -> Result<(), StoreEr
     conn.execute(
         "INSERT INTO memories
            (id,project_path,session_id,layer,category,content,keywords_json,confidence,sources_json,
-            pinned,active,created_at,updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+            supersedes_id,conflict_with_id,conflict_reason)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20)",
         params![
             record.id,
             record.project_path,
@@ -1102,6 +1647,13 @@ fn insert_memory(conn: &Connection, record: &MemoryRecord) -> Result<(), StoreEr
             record.active as i64,
             record.created_at,
             record.updated_at,
+            record.accessed_at,
+            record.access_count,
+            record.origin,
+            record.forgotten_at,
+            record.supersedes_id,
+            record.conflict_with_id,
+            record.conflict_reason,
         ],
     )?;
     Ok(())
@@ -1118,6 +1670,7 @@ fn insert_or_reinforce_l1(
     sources: &[MemorySourceRef],
     pinned: bool,
     now: i64,
+    origin: &str,
 ) -> Result<String, StoreError> {
     let content = content.trim();
     if content.is_empty() {
@@ -1125,9 +1678,9 @@ fn insert_or_reinforce_l1(
     }
     let target_tokens: HashSet<String> = tokenize(content).into_iter().collect();
     let mut stmt = conn.prepare(
-        "SELECT id,content,confidence,sources_json,pinned FROM memories
+        "SELECT id,content,confidence,sources_json,pinned,origin FROM memories
          WHERE project_path=?1 AND layer='L1' AND category=?2 AND active=1
-         ORDER BY updated_at DESC LIMIT 200",
+         ORDER BY CASE WHEN origin='user_correction' THEN 0 ELSE 1 END,updated_at DESC LIMIT 200",
     )?;
     let rows = stmt.query_map(params![project_path, category], |r| {
         Ok((
@@ -1136,14 +1689,19 @@ fn insert_or_reinforce_l1(
             r.get::<_, f64>(2)?,
             r.get::<_, String>(3)?,
             r.get::<_, i64>(4)? != 0,
+            r.get::<_, String>(5)?,
         ))
     })?;
     let candidates = rows.collect::<rusqlite::Result<Vec<_>>>()?;
     drop(stmt);
 
-    for (id, existing, old_confidence, source_json, was_pinned) in candidates {
+    for (id, existing, old_confidence, source_json, was_pinned, existing_origin) in candidates {
         let existing_tokens: HashSet<String> = tokenize(&existing).into_iter().collect();
-        if jaccard(&target_tokens, &existing_tokens) >= DUPLICATE_THRESHOLD {
+        let similarity = jaccard(&target_tokens, &existing_tokens);
+        if similarity >= DUPLICATE_THRESHOLD {
+            if origin == "automatic" && existing_origin == "user_correction" {
+                return Ok(id);
+            }
             let mut merged: Vec<MemorySourceRef> =
                 serde_json::from_str(&source_json).unwrap_or_default();
             for source in sources {
@@ -1163,6 +1721,62 @@ fn insert_or_reinforce_l1(
             )?;
             return Ok(id);
         }
+        if origin == "automatic"
+            && existing_origin == "user_correction"
+            && conservative_conflict(content, &existing, similarity)
+        {
+            let prior: Option<(String, String)> = conn
+                .query_row(
+                    "SELECT id,sources_json FROM memories
+                     WHERE project_path=?1 AND category=?2 AND content=?3 AND conflict_with_id=?4
+                     ORDER BY updated_at DESC LIMIT 1",
+                    params![project_path, category, content, id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?;
+            if let Some((prior_id, sources_json)) = prior {
+                let mut merged: Vec<MemorySourceRef> =
+                    serde_json::from_str(&sources_json).unwrap_or_default();
+                for source in sources {
+                    if !merged.contains(source) {
+                        merged.push(source.clone());
+                    }
+                }
+                conn.execute(
+                    "UPDATE memories SET sources_json=?2,updated_at=?3 WHERE id=?1",
+                    params![prior_id, serde_json::to_string(&merged)?, now],
+                )?;
+                return Ok(prior_id);
+            }
+            let conflict_id = uuid::Uuid::new_v4().to_string();
+            insert_memory(
+                conn,
+                &MemoryRecord {
+                    id: conflict_id.clone(),
+                    project_path: project_path.to_string(),
+                    session_id: session_id.map(str::to_string),
+                    layer: "L1".into(),
+                    category: category.to_string(),
+                    content: content.to_string(),
+                    confidence,
+                    sources: sources.to_vec(),
+                    pinned: false,
+                    active: false,
+                    created_at: now,
+                    updated_at: now,
+                    accessed_at: None,
+                    access_count: 0,
+                    origin: "automatic".into(),
+                    forgotten_at: None,
+                    supersedes_id: None,
+                    conflict_with_id: Some(id),
+                    conflict_reason: Some("automatic_conflicts_with_user_correction".into()),
+                    relevance: None,
+                    editable: false,
+                },
+            )?;
+            return Ok(conflict_id);
+        }
     }
 
     let id = uuid::Uuid::new_v4().to_string();
@@ -1181,8 +1795,15 @@ fn insert_or_reinforce_l1(
             active: true,
             created_at: now,
             updated_at: now,
+            accessed_at: None,
+            access_count: 0,
+            origin: origin.to_string(),
+            forgotten_at: None,
+            supersedes_id: None,
+            conflict_with_id: None,
+            conflict_reason: None,
             relevance: None,
-            editable: true,
+            editable: origin == "manual" || origin == "user_correction",
         },
     )?;
     Ok(id)
@@ -1198,8 +1819,9 @@ fn search_with_conn(
     if terms.is_empty() {
         let mut stmt = conn.prepare(
             "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
-                    pinned,active,created_at,updated_at
-             FROM memories WHERE project_path=?1 AND active=1
+                    pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                    supersedes_id,conflict_with_id,conflict_reason
+             FROM memories WHERE project_path=?1 AND active=1 AND conflict_with_id IS NULL
              ORDER BY pinned DESC, updated_at DESC LIMIT ?2",
         )?;
         let rows = stmt.query_map(params![project_path, limit as i64], row_to_memory)?;
@@ -1209,8 +1831,9 @@ fn search_with_conn(
     let mut by_layer: BTreeMap<String, Vec<Candidate>> = BTreeMap::new();
     let mut stmt = conn.prepare(
         "SELECT id,project_path,session_id,layer,category,content,confidence,sources_json,
-                pinned,active,created_at,updated_at
-         FROM memories WHERE project_path=?1 AND active=1
+                pinned,active,created_at,updated_at,accessed_at,access_count,origin,forgotten_at,
+                supersedes_id,conflict_with_id,conflict_reason
+         FROM memories WHERE project_path=?1 AND active=1 AND conflict_with_id IS NULL
          ORDER BY updated_at DESC LIMIT ?2",
     )?;
     for row in stmt.query_map(
@@ -1281,6 +1904,13 @@ fn search_with_conn(
                 active: true,
                 created_at,
                 updated_at: created_at,
+                accessed_at: None,
+                access_count: 0,
+                origin: "automatic".into(),
+                forgotten_at: None,
+                supersedes_id: None,
+                conflict_with_id: None,
+                conflict_reason: None,
                 relevance: None,
                 editable: false,
             },
@@ -1521,11 +2151,16 @@ fn refresh_profile(conn: &Connection, project_path: &str, now: i64) -> Result<()
         .optional()?;
     if let Some(id) = existing {
         conn.execute(
-            "UPDATE memories SET content=?2,keywords_json=?3,sources_json=?4,active=1,updated_at=?5 WHERE id=?1",
+            "UPDATE memories SET content=?2,keywords_json=?3,sources_json=?4,
+                                 active=1,origin='profile',forgotten_at=NULL,
+                                 conflict_with_id=NULL,conflict_reason=NULL,updated_at=?5
+             WHERE id=?1",
             params![
                 id,
                 content,
-                serde_json::to_string(&tokenize(&content).into_iter().take(16).collect::<Vec<_>>())?,
+                serde_json::to_string(
+                    &tokenize(&content).into_iter().take(16).collect::<Vec<_>>()
+                )?,
                 serde_json::to_string(&sources)?,
                 now,
             ],
@@ -1546,8 +2181,15 @@ fn refresh_profile(conn: &Connection, project_path: &str, now: i64) -> Result<()
                 active: true,
                 created_at: now,
                 updated_at: now,
+                accessed_at: None,
+                access_count: 0,
+                origin: "profile".into(),
+                forgotten_at: None,
+                supersedes_id: None,
+                conflict_with_id: None,
+                conflict_reason: None,
                 relevance: None,
-                editable: true,
+                editable: false,
             },
         )?;
     }
@@ -1707,6 +2349,35 @@ fn jaccard(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
     }
     let intersection = a.intersection(b).count() as f64;
     intersection / (a.len() + b.len() - intersection as usize) as f64
+}
+
+fn conservative_conflict(candidate: &str, correction: &str, similarity: f64) -> bool {
+    if similarity < 0.3 {
+        return false;
+    }
+    let has_negative = |text: &str| {
+        let lower = text.to_lowercase();
+        contains_any(
+            &lower,
+            &[
+                " not ",
+                "never",
+                "don't",
+                "do not",
+                "mustn't",
+                "cannot",
+                "no longer",
+                "不要",
+                "禁止",
+                "不能",
+                "不再",
+                "无需",
+                "別",
+                "别",
+            ],
+        ) || lower.starts_with("not ")
+    };
+    has_negative(candidate) != has_negative(correction)
 }
 
 fn lexical_score(terms: &[String], text: &str, phrase: &str) -> f64 {
@@ -2319,6 +2990,175 @@ mod tests {
         assert!(!store.transcript(&s.id).unwrap().iter().any(
             |(_, part)| matches!(part, Part::Text { text } if text.contains("Prefer concise"))
         ));
+    }
+
+    #[test]
+    fn project_policy_overrides_defaults_but_not_the_global_master() {
+        let store = Store::open_in_memory().unwrap();
+        let s = session(&store, "/work");
+        store
+            .add_memory("/work", "constraint", "Always use the store API", true)
+            .unwrap();
+        store
+            .set_memory_settings(MemorySettings {
+                enabled: true,
+                capture: false,
+                inject: true,
+                include_external_context: true,
+            })
+            .unwrap();
+        store
+            .set_memory_project_policy(&MemoryProjectPolicy {
+                project_path: "/work".into(),
+                capture: MemoryPolicyValue::Allow,
+                inject: MemoryPolicyValue::Deny,
+                include_external_context: MemoryPolicyValue::Inherit,
+            })
+            .unwrap();
+
+        assert!(store
+            .memory_context("/work", &s.id, "store API")
+            .unwrap()
+            .is_empty());
+        let seq = completed_turn(&store, &s, "I prefer short status updates");
+        store
+            .capture_completed_turn("/work", &s.id, "I prefer short status updates", seq)
+            .unwrap();
+        assert_eq!(store.memory_stats("/work").unwrap().l2, 1);
+
+        store
+            .set_memory_settings(MemorySettings {
+                enabled: false,
+                capture: true,
+                inject: true,
+                include_external_context: true,
+            })
+            .unwrap();
+        store
+            .set_memory_project_policy(&MemoryProjectPolicy {
+                project_path: "/work".into(),
+                capture: MemoryPolicyValue::Allow,
+                inject: MemoryPolicyValue::Allow,
+                include_external_context: MemoryPolicyValue::Allow,
+            })
+            .unwrap();
+        assert!(store
+            .memory_context("/work", &s.id, "store API")
+            .unwrap()
+            .is_empty());
+        let seq = completed_turn(&store, &s, "Always run the full test suite");
+        store
+            .capture_completed_turn("/work", &s.id, "Always run the full test suite", seq)
+            .unwrap();
+        assert_eq!(store.memory_stats("/work").unwrap().l2, 1);
+    }
+
+    #[test]
+    fn correction_preserves_evidence_and_permanent_delete_keeps_the_session() {
+        let store = Store::open_in_memory().unwrap();
+        let s = session(&store, "/work");
+        let prompt = "Always use Bun. Authorization: Bearer secret-value";
+        let seq = completed_turn(&store, &s, prompt);
+        store
+            .capture_completed_turn("/work", &s.id, prompt, seq)
+            .unwrap();
+        let automatic = store
+            .list_managed_memories("/work", 20)
+            .unwrap()
+            .into_iter()
+            .find(|memory| memory.layer == "L2")
+            .unwrap();
+        assert!(store
+            .update_memory(&automatic.id, "constraint", "Never use Bun")
+            .is_err());
+
+        let correction = store
+            .correct_memory(&automatic.id, "constraint", "Never use Bun")
+            .unwrap();
+        assert_eq!(correction.origin, "user_correction");
+        assert_eq!(
+            correction.supersedes_id.as_deref(),
+            Some(automatic.id.as_str())
+        );
+        assert!(correction.pinned);
+        let managed = store.list_managed_memories("/work", 20).unwrap();
+        let original = managed
+            .iter()
+            .find(|memory| memory.id == automatic.id)
+            .unwrap();
+        assert!(!original.active);
+        assert!(original.forgotten_at.is_some());
+
+        let redacted = store.memory_evidence(&correction.id, false).unwrap();
+        let revealed = store.memory_evidence(&correction.id, true).unwrap();
+        assert!(!redacted[0].excerpt.contains("secret-value"));
+        assert!(revealed[0].excerpt.contains("secret-value"));
+
+        let context = store
+            .memory_context_with_receipt("/work", &s.id, "How should we use Bun?")
+            .unwrap();
+        let receipt_seq = store
+            .append_part(
+                &s.id,
+                Role::User,
+                &Part::Text {
+                    text: "Use Bun?".into(),
+                },
+            )
+            .unwrap();
+        store
+            .save_memory_receipt("/work", &s.id, receipt_seq, "Use Bun?", &context)
+            .unwrap();
+        assert_eq!(store.memory_usages(&correction.id).unwrap().len(), 1);
+
+        store.delete_memory(&correction.id).unwrap();
+        assert!(store
+            .transcript(&s.id)
+            .unwrap()
+            .iter()
+            .any(|(_, part)| matches!(part, Part::Text { text } if text.contains("secret-value"))));
+        assert!(store.list_memory_receipts(&s.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn later_automatic_conflict_is_quarantined_behind_user_correction() {
+        let store = Store::open_in_memory().unwrap();
+        let s = session(&store, "/work");
+        let first_seq = completed_turn(&store, &s, "Always use Bun");
+        store
+            .capture_completed_turn("/work", &s.id, "Always use Bun", first_seq)
+            .unwrap();
+        let automatic = store
+            .list_managed_memories("/work", 20)
+            .unwrap()
+            .into_iter()
+            .find(|memory| memory.layer == "L2")
+            .unwrap();
+        let correction = store
+            .correct_memory(&automatic.id, "constraint", "Never use Bun")
+            .unwrap();
+
+        let later_seq = completed_turn(&store, &s, "Always use Bun");
+        store
+            .capture_completed_turn("/work", &s.id, "Always use Bun", later_seq)
+            .unwrap();
+        store
+            .run_memory_maintenance_at(now_millis() + MEMORY_SETTLE_DELAY_MS + 1)
+            .unwrap();
+
+        let managed = store.list_managed_memories("/work", 30).unwrap();
+        let conflict = managed
+            .iter()
+            .find(|memory| memory.conflict_with_id.as_deref() == Some(correction.id.as_str()))
+            .unwrap();
+        assert!(!conflict.active);
+        assert!(conflict.forgotten_at.is_none());
+        assert!(!store
+            .list_memories("/work", 30)
+            .unwrap()
+            .iter()
+            .any(|memory| memory.id == conflict.id));
+        assert_eq!(store.memory_stats("/work").unwrap().conflicts, 1);
     }
 
     #[test]

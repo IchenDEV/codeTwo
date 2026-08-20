@@ -25,8 +25,8 @@ describe("Settings page layout contract", () => {
   test("removes and closes the Memory tab when its component policy is disabled", () => {
     expect(source).toContain('NAV.filter(({ id }) => memoryEnabled || id !== "memory")');
     expect(source).toContain('current === "memory" ? "general" : current');
-    expect(source).toContain(
-      '{tab === "memory" && memoryEnabled && <MemorySettingsPage projectPath={projectPath} />}',
+    expect(source).toMatch(
+      /\{tab === "memory" && memoryEnabled && \([\s\S]*?<MemorySettingsPage[\s\S]*?projectPath=\{projectPath\}[\s\S]*?projects=\{projects\}[\s\S]*?onOpenSession=\{onOpenSession\}[\s\S]*?\/>(?:[\s\S]*?)\)\}/,
     );
   });
 });

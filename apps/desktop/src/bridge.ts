@@ -351,6 +351,15 @@ export interface MemorySettings {
   include_external_context: boolean;
 }
 
+export type MemoryPolicyValue = "inherit" | "allow" | "deny";
+
+export interface MemoryProjectPolicy {
+  project_path: string;
+  capture: MemoryPolicyValue;
+  inject: MemoryPolicyValue;
+  include_external_context: MemoryPolicyValue;
+}
+
 export interface MemorySourceRef {
   session_id: string;
   part_seq: number;
@@ -369,6 +378,13 @@ export interface MemoryRecord {
   active: boolean;
   created_at: number;
   updated_at: number;
+  accessed_at: number | null;
+  access_count: number;
+  origin: "manual" | "automatic" | "user_correction" | "profile";
+  forgotten_at: number | null;
+  supersedes_id: string | null;
+  conflict_with_id: string | null;
+  conflict_reason: string | null;
   relevance: number | null;
   editable: boolean;
 }
@@ -379,6 +395,28 @@ export interface MemoryStats {
   l2: number;
   l3: number;
   pending: number;
+  active: number;
+  pinned: number;
+  recent: number;
+  forgotten: number;
+  conflicts: number;
+}
+
+export interface MemoryEvidence {
+  session_id: string;
+  session_title: string;
+  part_seq: number;
+  created_at: number;
+  excerpt: string;
+  available: boolean;
+  redacted: boolean;
+}
+
+export interface MemoryUsage {
+  session_id: string;
+  session_title: string;
+  user_part_seq: number;
+  created_at: number;
 }
 
 export interface MemoryReceiptItem {
@@ -999,8 +1037,25 @@ export async function saveMemorySettings(settings: MemorySettings): Promise<void
   if (inDesktop) await call("memory.set_settings", { settings });
 }
 
+export async function getMemoryProjectPolicy(projectPath: string): Promise<MemoryProjectPolicy> {
+  return inDesktop
+    ? call<MemoryProjectPolicy>("memory.project_policy", { project_path: projectPath })
+    : { project_path: projectPath, capture: "inherit", inject: "inherit", include_external_context: "inherit" };
+}
+
+export async function saveMemoryProjectPolicy(
+  projectPath: string,
+  policy: MemoryProjectPolicy,
+): Promise<void> {
+  if (inDesktop) await call("memory.set_project_policy", { project_path: projectPath, policy });
+}
+
 export async function listMemories(projectPath: string, limit = 100): Promise<MemoryRecord[]> {
   return inDesktop ? call<MemoryRecord[]>("memory.list", { project_path: projectPath, limit }) : [];
+}
+
+export async function listManagedMemories(projectPath: string, limit = 500): Promise<MemoryRecord[]> {
+  return inDesktop ? call<MemoryRecord[]>("memory.manage_list", { project_path: projectPath, limit }) : [];
 }
 
 export async function searchMemories(projectPath: string, query: string, limit = 50): Promise<MemoryRecord[]> {
@@ -1012,7 +1067,7 @@ export async function searchMemories(projectPath: string, query: string, limit =
 export async function getMemoryStats(projectPath: string): Promise<MemoryStats> {
   return inDesktop
     ? call<MemoryStats>("memory.stats", { project_path: projectPath })
-    : { l0: 0, l1: 0, l2: 0, l3: 0, pending: 0 };
+    : { l0: 0, l1: 0, l2: 0, l3: 0, pending: 0, active: 0, pinned: 0, recent: 0, forgotten: 0, conflicts: 0 };
 }
 
 export async function addMemory(
@@ -1035,6 +1090,30 @@ export async function setMemoryPinned(id: string, pinned: boolean): Promise<void
 
 export async function setMemoryActive(id: string, active: boolean): Promise<void> {
   if (inDesktop) await call("memory.set_active", { id, value: active });
+}
+
+export async function updateMemory(id: string, category: string, content: string): Promise<MemoryRecord> {
+  return call<MemoryRecord>("memory.update", { id, category, content });
+}
+
+export async function setMemoryCategory(id: string, category: string): Promise<MemoryRecord> {
+  return call<MemoryRecord>("memory.set_category", { id, category });
+}
+
+export async function correctMemory(id: string, category: string, content: string): Promise<MemoryRecord> {
+  return call<MemoryRecord>("memory.correct", { id, category, content });
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  if (inDesktop) await call("memory.delete", { id });
+}
+
+export async function getMemoryEvidence(id: string, reveal = false): Promise<MemoryEvidence[]> {
+  return inDesktop ? call<MemoryEvidence[]>("memory.evidence", { id, reveal }) : [];
+}
+
+export async function getMemoryUsages(id: string): Promise<MemoryUsage[]> {
+  return inDesktop ? call<MemoryUsage[]>("memory.usages", { id }) : [];
 }
 
 export async function setSessionMemoryPolicy(

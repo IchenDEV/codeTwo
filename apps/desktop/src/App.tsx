@@ -4030,7 +4030,12 @@ export default function App() {
           provider={provider}
           projectPath={activeProject ?? cwd}
           project={projects.find((project) => project.path === activeProject) ?? null}
+          projects={projects}
           onProjectWorktreeMode={updateProjectWorktreeMode}
+          onOpenSession={(id) => {
+            setShowSettings(false);
+            void selectSession(id);
+          }}
           memoryEnabled={memorySettingsEnabled}
           onClose={() => {
             setShowSettings(false);
