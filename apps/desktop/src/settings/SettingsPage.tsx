@@ -196,7 +196,9 @@ export function SettingsPage({
   provider,
   projectPath,
   project,
+  projects = [],
   onProjectWorktreeMode,
+  onOpenSession = () => {},
   memoryEnabled,
   initialTab = "general",
   onClose,
@@ -213,7 +215,9 @@ export function SettingsPage({
   provider: string;
   projectPath: string;
   project: Project | null;
+  projects?: Project[];
   onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
+  onOpenSession?: (sessionId: string) => void;
   memoryEnabled: boolean;
   initialTab?: SettingsTab;
   onClose: () => void;
@@ -492,7 +496,12 @@ export function SettingsPage({
         </header>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto w-full max-w-[680px] px-8 pb-20 pt-8">
+          <div
+            className={cn(
+              "mx-auto w-full pb-20",
+              tab === "memory" ? "settings-memory-page" : "settings-standard-page",
+            )}
+          >
             {tab === "general" && (
               <Page title={t("settings.general")} description={t("settings.generalHint")}>
                 <Row label={t("settings.language")} hint={t("settings.languageHint")}>
@@ -685,7 +694,13 @@ export function SettingsPage({
               </Page>
             )}
 
-            {tab === "memory" && memoryEnabled && <MemorySettingsPage projectPath={projectPath} />}
+            {tab === "memory" && memoryEnabled && (
+              <MemorySettingsPage
+                projectPath={projectPath}
+                projects={projects}
+                onOpenSession={onOpenSession}
+              />
+            )}
 
             {tab === "usage" && (
               <UsagePanel

@@ -25,6 +25,43 @@ function nullableText(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+const MEMORY_CATEGORIES = new Set([
+  "constraint",
+  "preference",
+  "fact",
+  "relationship",
+  "event",
+  "episode",
+]);
+
+function memoryCategory(value: string): string {
+  if (!MEMORY_CATEGORIES.has(value))
+    throw new Error("unsupported memory category");
+  return value;
+}
+
+function redactMemoryEvidence(value: string): string {
+  return value
+    .replace(/(authorization\s*:\s*bearer\s+)\S+/gi, "$1[REDACTED]")
+    .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
+    .replace(
+      /\b([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))\s*=\s*\S+/g,
+      "$1=[REDACTED]",
+    )
+    .replace(
+      /-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g,
+      "[REDACTED PRIVATE MATERIAL]",
+    );
+}
+
+function partText(value: unknown): string {
+  const part = jsonValue<Record<string, unknown>>(value, {});
+  const content = text(part.text ?? part.display)
+    .replace(/\s+/g, " ")
+    .trim();
+  return redactMemoryEvidence(content).slice(0, 600);
+}
+
 const BASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
@@ -74,6 +111,12 @@ CREATE TABLE IF NOT EXISTS memory_settings (
   include_external_context INTEGER NOT NULL DEFAULT 1
 );
 INSERT OR IGNORE INTO memory_settings(singleton) VALUES(1);
+CREATE TABLE IF NOT EXISTS memory_project_settings (
+  project_path TEXT PRIMARY KEY,
+  capture TEXT NOT NULL DEFAULT 'inherit',
+  inject TEXT NOT NULL DEFAULT 'inherit',
+  include_external_context TEXT NOT NULL DEFAULT 'inherit'
+);
 CREATE TABLE IF NOT EXISTS memories (
   id TEXT PRIMARY KEY,
   project_path TEXT NOT NULL,
@@ -90,9 +133,16 @@ CREATE TABLE IF NOT EXISTS memories (
   updated_at INTEGER NOT NULL,
   accessed_at INTEGER,
   access_count INTEGER NOT NULL DEFAULT 0,
+  origin TEXT NOT NULL DEFAULT 'automatic',
+  forgotten_at INTEGER,
+  supersedes_id TEXT,
+  conflict_with_id TEXT,
+  conflict_reason TEXT,
   scope_id TEXT,
   scope_kind TEXT
 );
+CREATE INDEX IF NOT EXISTS memories_project_activity
+  ON memories(project_path,active,pinned,accessed_at,updated_at);
 CREATE TABLE IF NOT EXISTS memory_receipts (
   session_id TEXT NOT NULL,
   user_part_seq INTEGER NOT NULL,
@@ -149,6 +199,41 @@ export class BunDatabase {
     this.db = new Database(this.path, { create: true, strict: true });
     this.db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
     this.db.exec(BASE_SCHEMA);
+    this.migrateMemoryManagement();
+  }
+
+  private migrateMemoryManagement(): void {
+    const additions = [
+      "ALTER TABLE memories ADD COLUMN origin TEXT NOT NULL DEFAULT 'automatic'",
+      "ALTER TABLE memories ADD COLUMN forgotten_at INTEGER",
+      "ALTER TABLE memories ADD COLUMN supersedes_id TEXT",
+      "ALTER TABLE memories ADD COLUMN conflict_with_id TEXT",
+      "ALTER TABLE memories ADD COLUMN conflict_reason TEXT",
+    ];
+    for (const statement of additions) {
+      try {
+        this.db.exec(statement);
+      } catch (error) {
+        if (!String(error).toLowerCase().includes("duplicate column"))
+          throw error;
+      }
+    }
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_project_settings (
+        project_path TEXT PRIMARY KEY,
+        capture TEXT NOT NULL DEFAULT 'inherit',
+        inject TEXT NOT NULL DEFAULT 'inherit',
+        include_external_context TEXT NOT NULL DEFAULT 'inherit'
+      );
+      CREATE INDEX IF NOT EXISTS memories_project_activity
+        ON memories(project_path,active,pinned,accessed_at,updated_at);
+      UPDATE memories SET origin=CASE
+        WHEN layer='L3' THEN 'profile'
+        WHEN session_id IS NULL AND sources_json='[]' THEN 'manual'
+        ELSE origin
+      END
+      WHERE origin='automatic';
+    `);
   }
 
   close(): void {
@@ -397,6 +482,45 @@ export class BunDatabase {
       );
   }
 
+  memoryProjectPolicy(projectPath: string): Record<string, string> {
+    const row = this.db
+      .query("SELECT * FROM memory_project_settings WHERE project_path=?")
+      .get(projectPath) as Row | null;
+    return {
+      project_path: projectPath,
+      capture: text(row?.capture, "inherit"),
+      inject: text(row?.inject, "inherit"),
+      include_external_context: text(row?.include_external_context, "inherit"),
+    };
+  }
+
+  setMemoryProjectPolicy(
+    projectPath: string,
+    policy: Record<string, unknown>,
+  ): void {
+    const allowed = new Set(["inherit", "allow", "deny"]);
+    const value = (key: string) => {
+      const candidate = text(policy[key], "inherit");
+      if (!allowed.has(candidate))
+        throw new Error(`${key} must be inherit, allow, or deny`);
+      return candidate;
+    };
+    this.db
+      .query(
+        `INSERT INTO memory_project_settings(project_path,capture,inject,include_external_context)
+         VALUES(?,?,?,?) ON CONFLICT(project_path) DO UPDATE SET
+           capture=excluded.capture,
+           inject=excluded.inject,
+           include_external_context=excluded.include_external_context`,
+      )
+      .run(
+        projectPath,
+        value("capture"),
+        value("inject"),
+        value("include_external_context"),
+      );
+  }
+
   listMemories(projectPath: string, limit: number, query?: string): unknown[] {
     const where = query
       ? "project_path=? AND active=1 AND content LIKE ? ESCAPE '\\'"
@@ -412,35 +536,266 @@ export class BunDatabase {
       .all(...params) as Row[]).map((row) => this.memoryFromRow(row));
   }
 
+  listManagedMemories(projectPath: string, limit: number): unknown[] {
+    return (
+      this.db
+        .query(
+          `SELECT * FROM memories WHERE project_path=?
+         ORDER BY CASE WHEN conflict_with_id IS NOT NULL THEN 0 ELSE 1 END,
+                  active DESC,pinned DESC,
+                  MAX(COALESCE(accessed_at,0),updated_at) DESC LIMIT ?`,
+        )
+        .all(projectPath, Math.max(1, Math.min(limit, 500))) as Row[]
+    ).map((row) => this.memoryFromRow(row));
+  }
+
   memoryStats(projectPath: string): Record<string, number> {
     const rows = this.db
       .query("SELECT layer,COUNT(*) AS count FROM memories WHERE project_path=? AND active=1 GROUP BY layer")
       .all(projectPath) as Row[];
-    const stats = { l0: 0, l1: 0, l2: 0, l3: 0, pending: 0 };
+    const stats = {
+      l0: 0,
+      l1: 0,
+      l2: 0,
+      l3: 0,
+      pending: 0,
+      active: 0,
+      pinned: 0,
+      recent: 0,
+      forgotten: 0,
+      conflicts: 0,
+    };
     for (const row of rows) {
       const key = text(row.layer).toLowerCase() as keyof typeof stats;
       if (key in stats) stats[key] = Number(row.count ?? 0);
     }
+    const summary = this.db
+      .query(
+        `SELECT
+           SUM(CASE WHEN active=1 AND layer!='L3' THEN 1 ELSE 0 END) AS active,
+           SUM(CASE WHEN active=1 AND pinned=1 AND layer!='L3' THEN 1 ELSE 0 END) AS pinned,
+           SUM(CASE WHEN active=1 AND accessed_at>=? AND layer!='L3' THEN 1 ELSE 0 END) AS recent,
+           SUM(CASE WHEN active=0 AND forgotten_at IS NOT NULL THEN 1 ELSE 0 END) AS forgotten,
+           SUM(CASE WHEN conflict_with_id IS NOT NULL THEN 1 ELSE 0 END) AS conflicts
+         FROM memories WHERE project_path=?`,
+      )
+      .get(Date.now() - 30 * 24 * 60 * 60 * 1000, projectPath) as Row | null;
+    stats.active = Number(summary?.active ?? 0);
+    stats.pinned = Number(summary?.pinned ?? 0);
+    stats.recent = Number(summary?.recent ?? 0);
+    stats.forgotten = Number(summary?.forgotten ?? 0);
+    stats.conflicts = Number(summary?.conflicts ?? 0);
     return stats;
   }
 
   addMemory(projectPath: string, category: string, content: string, pinned: boolean): unknown {
+    if (!content.trim()) throw new Error("memory content is required");
     const id = crypto.randomUUID();
     const now = Date.now();
     this.db
       .query(
         `INSERT INTO memories(
           id,project_path,session_id,layer,category,content,keywords_json,confidence,
-          sources_json,pinned,active,created_at,updated_at,access_count
-        ) VALUES(?,?,NULL,'L1',?,?,'[]',1.0,'[]',?,1,?,?,0)`,
+          sources_json,pinned,active,created_at,updated_at,access_count,origin
+        ) VALUES(?,?,NULL,'L1',?,?,'[]',1.0,'[]',?,1,?,?,0,'manual')`,
       )
-      .run(id, projectPath, category, content, pinned ? 1 : 0, now, now);
+      .run(
+        id,
+        projectPath,
+        memoryCategory(category),
+        content.trim(),
+        pinned ? 1 : 0,
+        now,
+        now,
+      );
     const row = this.db.query("SELECT * FROM memories WHERE id=?").get(id) as Row;
     return this.memoryFromRow(row);
   }
 
   setMemoryFlag(id: string, field: "pinned" | "active", value: boolean): void {
-    this.db.query(`UPDATE memories SET ${field}=?,updated_at=? WHERE id=?`).run(value ? 1 : 0, Date.now(), id);
+    const now = Date.now();
+    if (field === "active") {
+      this.db
+        .query(
+          "UPDATE memories SET active=?,forgotten_at=?,updated_at=? WHERE id=?",
+        )
+        .run(value ? 1 : 0, value ? null : now, now, id);
+      return;
+    }
+    this.db
+      .query("UPDATE memories SET pinned=?,updated_at=? WHERE id=?")
+      .run(value ? 1 : 0, now, id);
+  }
+
+  updateMemory(id: string, category: string, content: string): unknown {
+    if (!content.trim()) throw new Error("memory content is required");
+    const row = this.db
+      .query("SELECT origin FROM memories WHERE id=?")
+      .get(id) as Row | null;
+    if (!row) throw new Error("memory not found");
+    if (!new Set(["manual", "user_correction"]).has(text(row.origin))) {
+      throw new Error(
+        "automatic memory must be corrected instead of overwritten",
+      );
+    }
+    this.db
+      .query("UPDATE memories SET category=?,content=?,updated_at=? WHERE id=?")
+      .run(memoryCategory(category), content.trim(), Date.now(), id);
+    return this.memoryFromRow(
+      this.db.query("SELECT * FROM memories WHERE id=?").get(id) as Row,
+    );
+  }
+
+  setMemoryCategory(id: string, category: string): unknown {
+    this.db
+      .query("UPDATE memories SET category=?,updated_at=? WHERE id=?")
+      .run(memoryCategory(category), Date.now(), id);
+    const row = this.db
+      .query("SELECT * FROM memories WHERE id=?")
+      .get(id) as Row | null;
+    if (!row) throw new Error("memory not found");
+    return this.memoryFromRow(row);
+  }
+
+  correctMemory(id: string, category: string, content: string): unknown {
+    if (!content.trim()) throw new Error("memory content is required");
+    const run = this.db.transaction(() => {
+      const original = this.db
+        .query("SELECT * FROM memories WHERE id=?")
+        .get(id) as Row | null;
+      if (!original) throw new Error("memory not found");
+      if (text(original.layer) === "L3")
+        throw new Error("project profile is regenerated from stable memories");
+      const now = Date.now();
+      const correctionId = crypto.randomUUID();
+      this.db
+        .query(
+          "UPDATE memories SET active=0,forgotten_at=?,updated_at=? WHERE id=?",
+        )
+        .run(now, now, id);
+      this.db
+        .query(
+          `INSERT INTO memories(
+             id,project_path,session_id,layer,category,content,keywords_json,confidence,
+             sources_json,pinned,active,created_at,updated_at,access_count,origin,supersedes_id
+           ) VALUES(?,?,NULL,'L1',?,?,'[]',1.0,?,1,1,?,?,0,'user_correction',?)`,
+        )
+        .run(
+          correctionId,
+          text(original.project_path),
+          memoryCategory(category),
+          content.trim(),
+          text(original.sources_json, "[]"),
+          now,
+          now,
+          id,
+        );
+      return this.memoryFromRow(
+        this.db
+          .query("SELECT * FROM memories WHERE id=?")
+          .get(correctionId) as Row,
+      );
+    });
+    return run();
+  }
+
+  deleteMemory(id: string): void {
+    const run = this.db.transaction(() => {
+      const receipts = this.db
+        .query("SELECT rowid,items_json FROM memory_receipts")
+        .all() as Row[];
+      for (const receipt of receipts) {
+        const items = jsonValue<Record<string, unknown>[]>(
+          receipt.items_json,
+          [],
+        );
+        const kept = items.filter((item) => item.id !== id);
+        if (kept.length !== items.length) {
+          if (kept.length === 0) {
+            this.db
+              .query("DELETE FROM memory_receipts WHERE rowid=?")
+              .run(Number(receipt.rowid));
+          } else {
+            this.db
+              .query("UPDATE memory_receipts SET items_json=? WHERE rowid=?")
+              .run(JSON.stringify(kept), Number(receipt.rowid));
+          }
+        }
+      }
+      this.db
+        .query("UPDATE memories SET supersedes_id=NULL WHERE supersedes_id=?")
+        .run(id);
+      this.db
+        .query(
+          "UPDATE memories SET conflict_with_id=NULL,conflict_reason=NULL WHERE conflict_with_id=?",
+        )
+        .run(id);
+      this.db.query("DELETE FROM memories WHERE id=?").run(id);
+    });
+    run();
+  }
+
+  memoryEvidence(id: string, reveal = false): unknown[] {
+    const row = this.db
+      .query("SELECT sources_json FROM memories WHERE id=?")
+      .get(id) as Row | null;
+    if (!row) return [];
+    const sources = jsonValue<{ session_id: string; part_seq: number }[]>(
+      row.sources_json,
+      [],
+    );
+    return sources.map((source) => {
+      const evidence = this.db
+        .query(
+          `SELECT s.title,s.created_at,p.part_json FROM sessions s
+           LEFT JOIN parts p ON p.session_id=s.id AND p.seq=? WHERE s.id=?`,
+        )
+        .get(source.part_seq, source.session_id) as Row | null;
+      const part = jsonValue<Record<string, unknown>>(evidence?.part_json, {});
+      const rawExcerpt = text(part.text ?? part.display)
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 600);
+      return {
+        session_id: source.session_id,
+        session_title: text(evidence?.title, source.session_id.slice(0, 8)),
+        part_seq: source.part_seq,
+        created_at: Number(evidence?.created_at ?? 0),
+        excerpt: evidence?.part_json
+          ? reveal
+            ? rawExcerpt
+            : partText(evidence.part_json)
+          : "",
+        available: Boolean(evidence?.part_json),
+        redacted: !reveal,
+      };
+    });
+  }
+
+  memoryUsages(id: string): unknown[] {
+    const rows = this.db
+      .query(
+        `SELECT r.session_id,r.user_part_seq,r.created_at,s.title,r.items_json
+         FROM memory_receipts r LEFT JOIN sessions s ON s.id=r.session_id
+         ORDER BY r.created_at DESC`,
+      )
+      .all() as Row[];
+    return rows.flatMap((row) => {
+      const used = jsonValue<Record<string, unknown>[]>(
+        row.items_json,
+        [],
+      ).some((item) => item.id === id);
+      return used
+        ? [
+            {
+              session_id: text(row.session_id),
+              session_title: text(row.title, text(row.session_id).slice(0, 8)),
+              user_part_seq: Number(row.user_part_seq ?? 0),
+              created_at: Number(row.created_at ?? 0),
+            },
+          ]
+        : [];
+    });
   }
 
   memoryReceipts(sessionId: string): unknown[] {
@@ -589,8 +944,16 @@ export class BunDatabase {
       updated_at: Number(row.updated_at ?? 0),
       accessed_at: row.accessed_at == null ? null : Number(row.accessed_at),
       access_count: Number(row.access_count ?? 0),
+      origin: text(
+        row.origin,
+        text(row.layer) === "L3" ? "profile" : "automatic",
+      ),
+      forgotten_at: row.forgotten_at == null ? null : Number(row.forgotten_at),
+      supersedes_id: nullableText(row.supersedes_id),
+      conflict_with_id: nullableText(row.conflict_with_id),
+      conflict_reason: nullableText(row.conflict_reason),
       relevance: null,
-      editable: text(row.layer) !== "L3",
+      editable: new Set(["manual", "user_correction"]).has(text(row.origin)),
     };
   }
 

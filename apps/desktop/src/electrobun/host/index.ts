@@ -331,7 +331,13 @@ export class PureBunHost {
 
     this.register("memory.settings", () => this.database.memorySettings());
     this.register("memory.set_settings", (args) => this.database.setMemorySettings(object(args.settings)));
+    this.register("memory.project_policy", (args) => this.database.memoryProjectPolicy(string(args.project_path, "project_path")));
+    this.register("memory.set_project_policy", (args) => this.database.setMemoryProjectPolicy(
+      string(args.project_path, "project_path"),
+      object(args.policy),
+    ));
     this.register("memory.list", (args) => this.database.listMemories(string(args.project_path, "project_path"), number(args.limit, 100)));
+    this.register("memory.manage_list", (args) => this.database.listManagedMemories(string(args.project_path, "project_path"), number(args.limit, 500)));
     this.register("memory.search", (args) => this.database.listMemories(string(args.project_path, "project_path"), number(args.limit, 50), string(args.query, "query")));
     this.register("memory.stats", (args) => this.database.memoryStats(string(args.project_path, "project_path")));
     this.register("memory.add", (args) => this.database.addMemory(
@@ -342,6 +348,18 @@ export class PureBunHost {
     ));
     this.register("memory.set_pinned", (args) => this.database.setMemoryFlag(string(args.id, "id"), "pinned", boolean(args.value)));
     this.register("memory.set_active", (args) => this.database.setMemoryFlag(string(args.id, "id"), "active", boolean(args.value)));
+    this.register("memory.update", (args) => this.database.updateMemory(
+      string(args.id, "id"), string(args.category, "category"), string(args.content, "content"),
+    ));
+    this.register("memory.set_category", (args) => this.database.setMemoryCategory(
+      string(args.id, "id"), string(args.category, "category"),
+    ));
+    this.register("memory.correct", (args) => this.database.correctMemory(
+      string(args.id, "id"), string(args.category, "category"), string(args.content, "content"),
+    ));
+    this.register("memory.delete", (args) => this.database.deleteMemory(string(args.id, "id")));
+    this.register("memory.evidence", (args) => this.database.memoryEvidence(string(args.id, "id"), boolean(args.reveal)));
+    this.register("memory.usages", (args) => this.database.memoryUsages(string(args.id, "id")));
     this.register("memory.set_session_policy", () => this.unsupported("memory.set_session_policy", "per-session memory policy"));
     this.register("memory.receipts", (args) => this.database.memoryReceipts(string(args.session, "session")));
 

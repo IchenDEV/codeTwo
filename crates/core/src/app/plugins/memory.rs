@@ -7,7 +7,7 @@
 
 use crate::app::service::{MemoryService, StoreService};
 use crate::app::{json, take_args};
-use crate::memory::{MemoryCapability, MemorySettings};
+use crate::memory::{MemoryCapability, MemoryProjectPolicy, MemorySettings};
 use crate::session::MemoryAccess;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -66,6 +66,39 @@ impl Plugin for MemoryPlugin {
             }
         })?;
 
+        let project_policy = store.clone();
+        ctx.command("memory.project_policy", move |args| {
+            let store = project_policy.clone();
+            async move {
+                let args: ProjectArgs = take_args(args)?;
+                json(
+                    store
+                        .memory_project_policy(&args.project_path)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ProjectPolicyArgs {
+            project_path: String,
+            policy: MemoryProjectPolicy,
+        }
+        let set_project_policy = store.clone();
+        ctx.command("memory.set_project_policy", move |args| {
+            let store = set_project_policy.clone();
+            async move {
+                let args: ProjectPolicyArgs = take_args(args)?;
+                if args.policy.project_path != args.project_path {
+                    return Err(PluginError::new("project policy path mismatch"));
+                }
+                store
+                    .set_memory_project_policy(&args.policy)
+                    .map_err(PluginError::new)?;
+                Ok(Value::Bool(true))
+            }
+        })?;
+
         let listed = store.clone();
         ctx.command("memory.list", move |args| {
             let store = listed.clone();
@@ -74,6 +107,22 @@ impl Plugin for MemoryPlugin {
                 json(
                     store
                         .list_memories(&args.project_path, args.limit.unwrap_or(100).min(500))
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let managed = store.clone();
+        ctx.command("memory.manage_list", move |args| {
+            let store = managed.clone();
+            async move {
+                let args: ProjectArgs = take_args(args)?;
+                json(
+                    store
+                        .list_managed_memories(
+                            &args.project_path,
+                            args.limit.unwrap_or(500).min(500),
+                        )
                         .map_err(PluginError::new)?,
                 )
             }
@@ -168,6 +217,98 @@ impl Plugin for MemoryPlugin {
                     .set_memory_active(&args.id, args.value)
                     .map_err(PluginError::new)?;
                 Ok(Value::Bool(true))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct EditArgs {
+            id: String,
+            category: String,
+            content: String,
+        }
+        let updated = store.clone();
+        ctx.command("memory.update", move |args| {
+            let store = updated.clone();
+            async move {
+                let args: EditArgs = take_args(args)?;
+                json(
+                    store
+                        .update_memory(&args.id, &args.category, &args.content)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct CategoryArgs {
+            id: String,
+            category: String,
+        }
+        let categorized = store.clone();
+        ctx.command("memory.set_category", move |args| {
+            let store = categorized.clone();
+            async move {
+                let args: CategoryArgs = take_args(args)?;
+                json(
+                    store
+                        .set_memory_category(&args.id, &args.category)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let corrected = store.clone();
+        ctx.command("memory.correct", move |args| {
+            let store = corrected.clone();
+            async move {
+                let args: EditArgs = take_args(args)?;
+                json(
+                    store
+                        .correct_memory(&args.id, &args.category, &args.content)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct IdArgs {
+            id: String,
+        }
+        let deleted = store.clone();
+        ctx.command("memory.delete", move |args| {
+            let store = deleted.clone();
+            async move {
+                let args: IdArgs = take_args(args)?;
+                store.delete_memory(&args.id).map_err(PluginError::new)?;
+                Ok(Value::Bool(true))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct EvidenceArgs {
+            id: String,
+            #[serde(default)]
+            reveal: bool,
+        }
+        let evidence = store.clone();
+        ctx.command("memory.evidence", move |args| {
+            let store = evidence.clone();
+            async move {
+                let args: EvidenceArgs = take_args(args)?;
+                json(
+                    store
+                        .memory_evidence(&args.id, args.reveal)
+                        .map_err(PluginError::new)?,
+                )
+            }
+        })?;
+
+        let usages = store.clone();
+        ctx.command("memory.usages", move |args| {
+            let store = usages.clone();
+            async move {
+                let args: IdArgs = take_args(args)?;
+                json(store.memory_usages(&args.id).map_err(PluginError::new)?)
             }
         })?;
 

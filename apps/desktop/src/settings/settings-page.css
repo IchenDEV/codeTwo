@@ -1,3 +1,18 @@
 .settings-titlebar {
   height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
 }
+
+.settings-standard-page {
+  max-width: 42.5rem;
+  padding: 2rem 2rem 0;
+}
+.settings-memory-page {
+  max-width: 77.5rem;
+  padding: 1.5rem 1.5rem 0;
+}
+
+@media (max-width: 50rem) {
+  .settings-memory-page {
+    padding: 1rem 1rem 0;
+  }
+}
