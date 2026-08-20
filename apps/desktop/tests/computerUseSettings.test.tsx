@@ -140,3 +140,68 @@ describe("Computer Use settings", () => {
     view.unmount();
   });
 });
+
+describe("Browser Use settings", () => {
+  test("lets the user choose OpenAI Browser or another configured browser MCP", async () => {
+    const browserSettings = {
+      selections: { claude_code: "automatic" },
+      backends: [
+        {
+          id: "openai-browser",
+          display_name: "OpenAI Browser / Chrome",
+          available: true,
+          reason: "The signed OpenAI Browser runtime is available through node_repl.",
+          providers: [],
+          exclude_providers: [],
+        },
+        {
+          id: "playwright",
+          display_name: "Playwright MCP",
+          available: true,
+          reason: null,
+          providers: [],
+          exclude_providers: [],
+        },
+      ],
+      errors: [],
+    };
+    const saved = [];
+    const view = mount(
+      <I18nProvider>
+        <SettingsPage
+          bindings={[]}
+          capturing={null}
+          onCapture={() => {}}
+          providers={providers}
+          provider="claude_code"
+          projectPath="/workspace"
+          project={null}
+          onProjectWorktreeMode={async () => {}}
+          memoryEnabled={false}
+          initialTab="browser-use"
+          onClose={() => {}}
+          browserUseSettingsLoader={async () => browserSettings}
+          browserUseSelectionSaver={async (provider, backend) => {
+            saved.push([provider, backend]);
+            return { ...browserSettings, selections: { ...browserSettings.selections, [provider]: backend } };
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.container.textContent).toContain("OpenAI Browser / Chrome");
+      expect(view.container.textContent).toContain("Playwright MCP");
+      expect(view.container.textContent).toContain("Provider-native browser tools remain owned");
+    });
+    const trigger = view.container.querySelector('[data-browser-use-provider="claude_code"]');
+    await openSelect(trigger);
+    const playwright = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
+      .find((item) => item.textContent?.trim() === "Playwright MCP");
+    await selectItem(playwright);
+
+    expect(saved).toEqual([["claude_code", "playwright"]]);
+    expect(trigger?.textContent).toContain("Playwright MCP");
+    view.unmount();
+  });
+});

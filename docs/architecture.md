@@ -99,14 +99,16 @@ adapters because the runtime genuinely varies:
   directly to the desktop's ACP peer. The packaged app does not launch a Rust executable.
 - `crates/core/src/host_tools.rs` serves Rust CoreApp hosts, currently TUI and server, and consumes
   the same `host-tools.json` contract. `codex_runtime.rs` is only one built-in discovery source
-  behind it. `computer_use.select` persists a per-provider choice and refreshes a toolset projection
-  shared with the engine; each session snapshots that projection when it is created or revived.
+  behind it. `computer_use.select` and `browser_use.select` persist per-provider choices and refresh
+  a toolset projection shared with the engine; each session snapshots that projection when it is
+  created or revived.
   The Pure Bun host refreshes its own discovery snapshot after the same command. Existing sessions
   retain their startup MCP set and are not interrupted.
 
-The signed OpenAI Computer Use adapter remains a built-in fallback, while explicitly enabled
-entries in `host-tools.json` can attach Cua Driver or any other MCP computer-control backend to any
-provider. Settings offers Automatic, no external backend, and every compatible configured backend.
+The signed OpenAI Computer Use and Browser/Chrome adapters remain built-in fallbacks, while entries
+in `host-tools.json` can attach Cua Driver, Browser Use, Playwright, Chrome DevTools, or any other MCP
+computer/browser-control backend to any provider. Settings offers Automatic, no external backend,
+and every compatible configured backend.
 An explicit selection replaces C2's portable OpenAI fallback for non-Codex providers; Codex keeps
 provider-native tools because the host cannot disable provider-owned capabilities. Image Generation
 and Sites remain unavailable outside Codex until their host exposes a portable MCP surface; C2 does

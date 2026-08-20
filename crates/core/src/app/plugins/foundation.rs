@@ -252,6 +252,26 @@ impl Plugin for ProvidersPlugin {
             }
         })?;
 
+        let browser_settings = service.clone();
+        ctx.command("browser_use.settings", move |_| {
+            let settings = browser_settings.clone();
+            async move { json(settings.browser_use_settings()) }
+        })?;
+
+        let browser_selection_path = paths.data_dir.clone();
+        let browser_selected = service.clone();
+        ctx.command("browser_use.select", move |args| {
+            let path = browser_selection_path.clone();
+            let selected = browser_selected.clone();
+            async move {
+                let args: ComputerUseSelectionArgs = take_args(args)?;
+                HostToolDiscovery::select_browser_use_backend(&path, &args.provider, &args.backend)
+                    .map_err(PluginError::new)?;
+                selected.refresh_host_tools(HostToolDiscovery::detect(&path));
+                json(selected.browser_use_settings())
+            }
+        })?;
+
         ctx.provide(service)?;
         Ok(())
     }

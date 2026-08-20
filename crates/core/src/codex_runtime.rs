@@ -121,43 +121,53 @@ impl CodexRuntimeDiscovery {
         }
     }
 
-    /// Project the provider toolset without C2's portable OpenAI Computer Use MCP bridge.
-    ///
-    /// Codex-native tools remain provider-owned and cannot be disabled by the host. Other
-    /// providers use this projection when the user explicitly selects a different external
-    /// computer-use backend in C2 settings.
-    pub(crate) fn toolset_without_portable_computer_use(
+    /// Project a provider toolset without selected portable OpenAI MCP bridges.
+    pub(crate) fn toolset_without_portable_capabilities(
         &self,
         provider: &ProviderId,
+        excluded: &[ProviderCapabilityId],
     ) -> ProviderToolset {
         let mut toolset = self.toolset(provider);
         if provider == &ProviderId::Codex {
             return toolset;
         }
 
-        let computer_bridges = self
+        let excluded_bridges = self
             .portable_mcp
             .iter()
-            .filter(|bridge| bridge.id == ProviderCapabilityId::ComputerUse)
+            .filter(|bridge| excluded.contains(&bridge.id))
             .collect::<Vec<_>>();
         toolset.mcp_servers.retain(|server| {
-            !computer_bridges
+            !excluded_bridges
                 .iter()
                 .any(|bridge| bridge.server == *server)
         });
         toolset.instructions.retain(|instruction| {
-            !computer_bridges
+            !excluded_bridges
                 .iter()
                 .any(|bridge| bridge.instruction.as_deref() == Some(instruction.as_str()))
         });
-        update_capability(
-            &mut toolset.capabilities,
-            ProviderCapabilityId::ComputerUse,
-            CapabilityState::Unavailable,
-            None,
-            "No external Computer Use backend is selected for this provider.",
-            Some("Choose Automatic or an available backend in Settings → Computer Use."),
-        );
+        for id in excluded {
+            let (reason, fix) = match id {
+                ProviderCapabilityId::ComputerUse => (
+                    "No external Computer Use backend is selected for this provider.",
+                    "Choose Automatic or an available backend in Settings → Computer Use.",
+                ),
+                ProviderCapabilityId::ChromeBrowser => (
+                    "No external Browser Use backend is selected for this provider.",
+                    "Choose Automatic or an available backend in Settings → Browser Use.",
+                ),
+                _ => continue,
+            };
+            update_capability(
+                &mut toolset.capabilities,
+                *id,
+                CapabilityState::Unavailable,
+                None,
+                reason,
+                Some(fix),
+            );
+        }
         toolset
     }
 }
@@ -195,6 +205,7 @@ struct ConfigEvidence {
     sites_version: Option<String>,
     node_repl_path: Option<PathBuf>,
     node_mcp: Option<McpServer>,
+    browser_skill_path: Option<PathBuf>,
     chrome_skill_path: Option<PathBuf>,
     browser_backends: Vec<String>,
     cua_path: Option<PathBuf>,
@@ -242,8 +253,8 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             ProviderCapabilityId::ChromeBrowser,
             CapabilityState::Unavailable,
             None,
-            "A verified ChatGPT host and Chrome plugin were not found.",
-            Some("Install the OpenAI Chrome plugin and extension, then restart C2."),
+            "A verified ChatGPT host and Browser runtime were not found.",
+            Some("Install the OpenAI Browser or Chrome plugin, then restart C2."),
         ),
         make_capability(
             ProviderCapabilityId::CodetwoBrowser,
@@ -432,13 +443,17 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
         }
     }
 
-    let chrome_ready = config.chrome_plugin
-        && config.browser_plugin
-        && node_ready
-        && config
-            .browser_backends
-            .iter()
-            .any(|backend| backend == "chrome");
+    let chrome_ready = node_ready
+        && ((config.browser_plugin
+            && config
+                .browser_backends
+                .iter()
+                .any(|backend| backend == "iab"))
+            || (config.chrome_plugin
+                && config
+                    .browser_backends
+                    .iter()
+                    .any(|backend| backend == "chrome")));
     if chrome_ready {
         update_capability(
             &mut capabilities,
@@ -460,12 +475,26 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
                         .into(),
                 ),
                 server,
-                instruction: config.chrome_skill_path.as_ref().map(|path| {
-                    format!(
-                        "For tasks requiring the user's existing Chrome state, use node_repl and follow the installed Chrome skill at `{}`.",
-                        path.display()
-                    )
-                }),
+                instruction: {
+                    let mut instructions = Vec::new();
+                    if config.browser_backends.iter().any(|backend| backend == "iab") {
+                        if let Some(path) = &config.browser_skill_path {
+                            instructions.push(format!(
+                                "For website tasks, use node_repl and follow the installed Browser skill at `{}`.",
+                                path.display()
+                            ));
+                        }
+                    }
+                    if config.browser_backends.iter().any(|backend| backend == "chrome") {
+                        if let Some(path) = &config.chrome_skill_path {
+                            instructions.push(format!(
+                                "For tasks requiring the user's existing Chrome state, use node_repl and follow the installed Chrome skill at `{}`.",
+                                path.display()
+                            ));
+                        }
+                    }
+                    (!instructions.is_empty()).then(|| instructions.join(" "))
+                },
             });
         }
     } else {
@@ -474,8 +503,8 @@ fn evaluate(evidence: HostEvidence) -> CodexRuntimeDiscovery {
             ProviderCapabilityId::ChromeBrowser,
             CapabilityState::Unavailable,
             evidence.host_version.clone(),
-            "The Browser/Chrome plugins, chrome backend, or node_repl runtime are missing.",
-            Some("Enable the Browser and Chrome plugins, install the extension, then restart C2."),
+            "The Browser/Chrome plugin, configured browser backend, or node_repl runtime is missing.",
+            Some("Enable the Browser or Chrome plugin, repair its browser connection, then restart C2."),
         );
     }
 
@@ -617,6 +646,9 @@ fn read_config() -> Result<ConfigEvidence, String> {
             },
         })
     });
+    let browser_skill_path = bundled_plugin_root(&home, "browser")
+        .map(|root| root.join("skills/control-in-app-browser/SKILL.md"))
+        .filter(|path| path.is_file());
     let chrome_skill_path = bundled_plugin_root(&home, "chrome")
         .map(|root| root.join("skills/control-chrome/SKILL.md"))
         .filter(|path| path.is_file());
@@ -630,6 +662,7 @@ fn read_config() -> Result<ConfigEvidence, String> {
         sites_version: bundled_plugin_version(&home, "sites"),
         node_repl_path: path(node, "command"),
         node_mcp,
+        browser_skill_path,
         chrome_skill_path,
         browser_backends: backends,
         cua_path: path(env, "SKY_CUA_SERVICE_PATH"),
@@ -864,6 +897,9 @@ mod tests {
                 sites_version: Some("0.1.34".into()),
                 node_repl_path: Some(std::env::current_exe().unwrap()),
                 node_mcp: Some(stdio_server("node_repl")),
+                browser_skill_path: Some(
+                    "/plugins/browser/skills/control-in-app-browser/SKILL.md".into(),
+                ),
                 chrome_skill_path: Some("/plugins/chrome/skills/control-chrome/SKILL.md".into()),
                 browser_backends: vec!["chrome".into(), "iab".into()],
                 cua_path: Some(std::env::current_exe().unwrap()),
@@ -998,6 +1034,34 @@ mod tests {
                     .capabilities
                     .iter()
                     .find(|capability| capability.id == id)
+                    .unwrap()
+                    .state,
+                CapabilityState::Unavailable
+            );
+        }
+    }
+
+    #[test]
+    fn browser_and_chrome_plugins_enable_their_backends_independently() {
+        for (browser_plugin, chrome_plugin, backend) in
+            [(true, false, "iab"), (false, true, "chrome")]
+        {
+            let mut evidence = ready_evidence();
+            let config = evidence.config.as_mut().unwrap();
+            config.browser_plugin = browser_plugin;
+            config.chrome_plugin = chrome_plugin;
+            config.browser_backends = vec![backend.into()];
+
+            let tools = evaluate(evidence).toolset(&ProviderId::ClaudeCode);
+            assert!(tools
+                .mcp_servers
+                .iter()
+                .any(|server| server.name == "node_repl"));
+            assert_ne!(
+                tools
+                    .capabilities
+                    .iter()
+                    .find(|capability| capability.id == ProviderCapabilityId::ChromeBrowser)
                     .unwrap()
                     .state,
                 CapabilityState::Unavailable

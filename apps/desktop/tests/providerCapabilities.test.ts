@@ -6,8 +6,10 @@ import { join } from "node:path";
 import { normalizeProviderInfo } from "../src/bridge";
 import { sessionRequestParams, validateMcpTransports } from "../src/electrobun/host/acp";
 import {
+  loadConfiguredBrowserUse,
   loadConfiguredComputerUse,
   projectProviderToolset,
+  saveBrowserUseSelection,
   saveComputerUseSelection,
   stdioServer,
   withProviderToolInstructions,
@@ -40,6 +42,7 @@ const readyEvidence: HostToolEvidence = {
   browserEnabled: true,
   chromeEnabled: true,
   chromeMcp,
+  browserSkillPath: "/plugins/browser/SKILL.md",
   chromeSkillPath: "/plugins/chrome/SKILL.md",
   browserBackends: ["chrome", "iab"],
   sitesEnabled: true,
@@ -49,6 +52,17 @@ const readyEvidence: HostToolEvidence = {
   computerUseSelections: {},
   computerUseBackends: [],
   hostToolsConfigErrors: [],
+  configuredBrowserUse: [],
+  browserUseSelections: {},
+  browserUseBackends: [{
+    id: "openai-browser",
+    displayName: "OpenAI Browser / Chrome",
+    available: true,
+    reason: null,
+    providers: [],
+    excludeProviders: [],
+  }],
+  browserUseConfigErrors: [],
 };
 
 describe("provider capability wire compatibility", () => {
@@ -100,6 +114,18 @@ describe("provider capability wire compatibility", () => {
       cwd: "/tmp/project",
       mcpServers,
     });
+  });
+
+  test("accepts the Browser and Chrome plugin backends independently", () => {
+    for (const evidence of [
+      { ...readyEvidence, chromeEnabled: false, browserBackends: ["iab"] },
+      { ...readyEvidence, browserEnabled: false, browserBackends: ["chrome"] },
+    ]) {
+      const tools = projectProviderToolset(evidence, "claude_code");
+      expect(tools.mcpServers.map((server) => server.name)).toContain("node_repl");
+      expect(tools.capabilities.find((item) => item.id === "chrome_browser")?.state)
+        .not.toBe("unavailable");
+    }
   });
 
   test("projects portable host tools onto Claude without duplicating Codex-native tools", () => {
@@ -272,6 +298,60 @@ describe("provider capability wire compatibility", () => {
         computerUseBackends: automatic.backends,
       }, "claude_code");
       expect(automaticToolset.mcpServers.map((server) => server.name)).toEqual(["first-computer"]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("selects OpenAI Browser or a configured browser MCP independently per provider", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-browser-tools-selection-"));
+    try {
+      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
+        schema_version: 1,
+        browser_use: [{
+          id: "playwright",
+          enabled: false,
+          display_name: "Playwright MCP",
+          server: { name: "playwright", command: process.execPath, args: ["server.js"] },
+        }],
+      }));
+
+      const configured = loadConfiguredBrowserUse(directory);
+      const evidence = {
+        ...readyEvidence,
+        configuredBrowserUse: configured.bridges,
+        browserUseSelections: configured.selections,
+        browserUseBackends: [...readyEvidence.browserUseBackends, ...configured.backends],
+      };
+      saveBrowserUseSelection(directory, "claude_code", "playwright", evidence);
+      const selected = loadConfiguredBrowserUse(directory);
+      const custom = projectProviderToolset({
+        ...evidence,
+        configuredBrowserUse: selected.bridges,
+        browserUseSelections: selected.selections,
+      }, "claude_code");
+      expect(custom.mcpServers.map((server) => server.name)).toEqual([
+        "codetwo-openai-computer-use",
+        "playwright",
+      ]);
+      expect(custom.capabilities.find((item) => item.id === "chrome_browser")?.reason)
+        .toContain("Playwright MCP");
+
+      saveBrowserUseSelection(directory, "claude_code", "openai-browser", {
+        ...evidence,
+        configuredBrowserUse: selected.bridges,
+        browserUseSelections: selected.selections,
+      });
+      const openAi = loadConfiguredBrowserUse(directory);
+      const portable = projectProviderToolset({
+        ...evidence,
+        configuredBrowserUse: openAi.bridges,
+        browserUseSelections: openAi.selections,
+      }, "claude_code");
+      expect(portable.mcpServers.map((server) => server.name)).toEqual([
+        "codetwo-openai-computer-use",
+        "node_repl",
+      ]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

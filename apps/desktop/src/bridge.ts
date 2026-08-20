@@ -89,6 +89,9 @@ export interface ComputerUseSettings {
   errors: string[];
 }
 
+export type BrowserUseBackendOption = ComputerUseBackendOption;
+export type BrowserUseSettings = ComputerUseSettings;
+
 interface ComputerUseBackendWire {
   id: string;
   display_name?: string;
@@ -1089,6 +1092,35 @@ export async function selectComputerUseBackend(
   if (!inDesktop) return getComputerUseSettings();
   return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
     "computer_use.select",
+    { provider, backend },
+  ));
+}
+
+export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
+  if (!inDesktop) {
+    return {
+      selections: {},
+      backends: [{
+        id: "openai-browser",
+        display_name: "OpenAI Browser / Chrome",
+        available: false,
+        reason: "Browser Use backends are discovered by the desktop host.",
+        providers: [],
+        exclude_providers: [],
+      }],
+      errors: [],
+    };
+  }
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>("browser_use.settings"));
+}
+
+export async function selectBrowserUseBackend(
+  provider: string,
+  backend: string,
+): Promise<BrowserUseSettings> {
+  if (!inDesktop) return getBrowserUseSettings();
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
+    "browser_use.select",
     { provider, backend },
   ));
 }

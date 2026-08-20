@@ -237,6 +237,10 @@ impl ProviderService {
         self.host_tools.read().unwrap().computer_use_settings()
     }
 
+    pub fn browser_use_settings(&self) -> crate::host_tools::BrowserUseSettings {
+        self.host_tools.read().unwrap().browser_use_settings()
+    }
+
     pub fn refresh_host_tools(&self, host_tools: HostToolDiscovery) {
         let provider_tools = self
             .providers

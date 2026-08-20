@@ -80,8 +80,9 @@ because C2 discovered them from the local OpenAI runtime:
 
 - **Computer Use** can come from the verified OpenAI fallback or an explicitly configured Cua/other
   MCP backend. A configured backend can target every provider or a named subset.
-- **Chrome Browser** is attached through the configured `node_repl` MCP runtime when the Browser
-  and Chrome plugins are enabled. Extension connectivity is verified on the first real call.
+- **Browser Use** discovers the installed OpenAI Browser/Chrome plugins and attaches their
+  `node_repl` MCP runtime to any provider. Browser Use, Playwright MCP, Chrome DevTools MCP, and
+  other stdio/HTTP/SSE implementations can also be registered in `host-tools.json`.
 - **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
   BrowserView UI is separate from an ACP/MCP tool surface, so C2 reports this capability as
   unavailable instead of silently routing through the removed Rust sidecar.
@@ -153,6 +154,80 @@ the provider capability reason.
 OpenAI Responses CUA, Anthropic's versioned `computer` tool, and Gemini Computer Use are
 model-API-native action loops, not interchangeable MCP servers. Their provider adapter may expose
 them natively; C2 only shares them across providers when a real MCP driver or gateway is configured.
+
+### Configure Browser Use or another browser MCP
+
+In **Settings → Browser Use**, each provider can choose Automatic, no external backend,
+**OpenAI Browser / Chrome**, or any configured browser MCP. The OpenAI option appears automatically
+when C2 verifies the installed Codex Browser runtime and its `node_repl` adapter. Other brands use
+the `browser_use` array in the same `host-tools.json` file:
+
+```json
+{
+  "schema_version": 1,
+  "browser_use_selection": {
+    "claude_code": "browser-use",
+    "codex": "openai-browser"
+  },
+  "browser_use": [
+    {
+      "id": "browser-use",
+      "enabled": false,
+      "display_name": "Browser Use",
+      "server": {
+        "command": "uvx",
+        "args": ["--from", "browser-use[cli]", "browser-use", "--mcp"]
+      }
+    },
+    {
+      "id": "playwright",
+      "enabled": false,
+      "display_name": "Playwright MCP",
+      "server": {
+        "command": "npx",
+        "args": ["-y", "@playwright/mcp@latest"]
+      }
+    },
+    {
+      "id": "chrome-devtools",
+      "enabled": false,
+      "display_name": "Chrome DevTools MCP",
+      "server": {
+        "command": "npx",
+        "args": ["-y", "chrome-devtools-mcp@latest"]
+      }
+    }
+  ]
+}
+```
+
+These commands follow the official [Browser Use MCP](https://docs.browser-use.com/open-source/customize/integrations/mcp-server),
+[Playwright MCP](https://github.com/microsoft/playwright-mcp), and
+[Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) launch forms. C2 only
+resolves the configured executable while loading settings; package download, browser permissions,
+and MCP connectivity are verified when a new session first calls the backend. Pin package versions
+instead of `@latest` when reproducible deployments matter.
+
+A hosted browser MCP uses the normal remote transport shape. Keep the app-data file out of version
+control and materialize credentials at deploy time instead of committing them:
+
+```json
+{
+  "id": "browser-use-cloud",
+  "display_name": "Browser Use Cloud",
+  "server": {
+    "name": "browser-use-cloud",
+    "type": "http",
+    "url": "https://api.browser-use.com/mcp",
+    "headers": { "x-browser-use-api-key": "replace-at-deploy-time" }
+  }
+}
+```
+
+`browser_use_selection` has the same per-provider and `"*"` fallback semantics as Computer Use.
+An explicit custom selection replaces C2's portable OpenAI Browser bridge for non-Codex providers;
+provider-native tools remain provider-owned. Existing sessions keep their startup MCP snapshot, so
+start a new session after changing a Browser Use backend.
 
 MCP servers are fixed when an ACP session starts. The Pure Bun desktop host and Rust CoreApp host
 implement the same logical provider-toolset interface as separate adapters:
