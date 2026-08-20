@@ -443,6 +443,22 @@ impl Store {
                 work_item_id: work_item_id.as_str().to_string(),
             });
         }
+        let leased_role: Option<String> = tx
+            .query_row(
+                "SELECT role FROM task_session_leases_v2
+                 WHERE session_id=?1 AND released_at_ms IS NULL",
+                [session_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if leased_role.as_deref() == Some("manager") {
+            return Err(invalid_attempt(
+                task_id,
+                work_item_id,
+                0,
+                "Manager Session cannot execute a Work Item",
+            ));
+        }
         let running: bool = tx.query_row(
             "SELECT EXISTS(
                SELECT 1 FROM task_work_item_attempts_v2
@@ -669,6 +685,20 @@ impl Store {
         };
         tx.commit()?;
         Ok(lease)
+    }
+
+    pub fn list_task_session_leases(
+        &self,
+        task_id: &TaskId,
+    ) -> Result<Vec<TaskSessionLease>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT lease_id,task_id,session_id,agent_id,role,compatibility_identity,
+                    leased_at_ms,released_at_ms
+             FROM task_session_leases_v2 WHERE task_id=?1 ORDER BY lease_id ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], task_session_lease_row)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub fn record_task_artifact(&self, provenance: &ArtifactProvenance) -> Result<(), StoreError> {

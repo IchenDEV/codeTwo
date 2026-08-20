@@ -133,17 +133,25 @@ async fn orchestrator_plans_and_completes_one_work_item_through_ports() {
     store.create_task(&task, 100).unwrap();
     let session = Session::new(ProviderId::Codex, "/work/project");
     store.upsert_session(&session).unwrap();
+    let manager_session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&manager_session).unwrap();
     let scenes = Arc::new(SceneCatalogV2::builtin());
     let skills = Arc::new(authentic_skill_resolver());
     let skill = skills.resolve("review").unwrap().reference.clone();
-    let planner = Arc::new(InMemoryPlanner::new([OrchestrationPatch {
-        expected_revision: 0,
-        reason: "Review evidence is required".into(),
-        operations: vec![GraphOperation::Add {
-            work_item: work_item("official:software-development", skill),
-            depends_on: Vec::new(),
-        }],
-    }]));
+    let planner = Arc::new(
+        InMemoryPlanner::new([OrchestrationPatch {
+            expected_revision: 0,
+            reason: "Review evidence is required".into(),
+            operations: vec![GraphOperation::Add {
+                work_item: work_item("official:software-development", skill),
+                depends_on: Vec::new(),
+            }],
+        }])
+        .with_manager_assignment(ExecutorAssignment {
+            agent_id: "manager-1".into(),
+            session_id: manager_session.id,
+        }),
+    );
     let executor = Arc::new(InMemoryExecutor::new(
         ExecutorAssignment {
             agent_id: "agent-1".into(),
@@ -156,6 +164,7 @@ async fn orchestrator_plans_and_completes_one_work_item_through_ports() {
     let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills);
 
     orchestrator.plan_once(&task.id, 200).await.unwrap();
+    assert!(store.list_task_session_leases(&task.id).unwrap().is_empty());
     orchestrator.execute_next(&task.id, 300).await.unwrap();
 
     let graph = store.get_task_graph(&task.id).unwrap();
@@ -195,27 +204,35 @@ async fn orchestrator_executes_dependent_work_items_serially() {
     store.create_task(&task, 100).unwrap();
     let session = Session::new(ProviderId::Codex, "/work/project");
     store.upsert_session(&session).unwrap();
+    let manager_session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&manager_session).unwrap();
     let scenes = Arc::new(SceneCatalogV2::builtin());
     let skills = Arc::new(authentic_skill_resolver());
     let skill = skills.resolve("review").unwrap().reference.clone();
-    let planner = Arc::new(InMemoryPlanner::new([OrchestrationPatch {
-        expected_revision: 0,
-        reason: "The change must precede verification".into(),
-        operations: vec![
-            GraphOperation::Add {
-                work_item: work_item_named(
-                    "work-change",
-                    "official:software-development",
-                    skill.clone(),
-                ),
-                depends_on: Vec::new(),
-            },
-            GraphOperation::Add {
-                work_item: work_item_named("work-verify", "official:testing-quality", skill),
-                depends_on: vec![WorkItemId::new("work-change")],
-            },
-        ],
-    }]));
+    let planner = Arc::new(
+        InMemoryPlanner::new([OrchestrationPatch {
+            expected_revision: 0,
+            reason: "The change must precede verification".into(),
+            operations: vec![
+                GraphOperation::Add {
+                    work_item: work_item_named(
+                        "work-change",
+                        "official:software-development",
+                        skill.clone(),
+                    ),
+                    depends_on: Vec::new(),
+                },
+                GraphOperation::Add {
+                    work_item: work_item_named("work-verify", "official:testing-quality", skill),
+                    depends_on: vec![WorkItemId::new("work-change")],
+                },
+            ],
+        }])
+        .with_manager_assignment(ExecutorAssignment {
+            agent_id: "manager-1".into(),
+            session_id: manager_session.id,
+        }),
+    );
     let executor = Arc::new(InMemoryExecutor::new(
         ExecutorAssignment {
             agent_id: "agent-1".into(),
@@ -233,6 +250,9 @@ async fn orchestrator_executes_dependent_work_items_serially() {
     let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills);
 
     orchestrator.plan_once(&task.id, 200).await.unwrap();
+    let leases = store.list_task_session_leases(&task.id).unwrap();
+    assert_eq!(leases.len(), 1);
+    assert_eq!(leases[0].role, codetwo_core::AgentRole::Manager);
     orchestrator.execute_next(&task.id, 300).await.unwrap();
     orchestrator.execute_next(&task.id, 400).await.unwrap();
 

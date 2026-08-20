@@ -105,6 +105,10 @@ pub struct PlannerInput {
 #[async_trait]
 pub trait PlannerPort: Send + Sync {
     async fn propose(&self, input: PlannerInput) -> Result<OrchestrationPatch, String>;
+
+    async fn manager_assignment(&self, _task: &Task) -> Result<Option<ExecutorAssignment>, String> {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -202,22 +206,25 @@ impl Orchestrator {
                 task_id: task_id.as_str().to_string(),
             })?;
         let graph = self.store.get_task_graph(task_id)?;
+        let task = record.task;
         let patch = self
             .planner
             .propose(PlannerInput {
-                task: record.task,
+                task: task.clone(),
                 graph: graph.clone(),
             })
             .await
             .map_err(OrchestratorError::Planner)?;
         let next = apply_orchestration_patch(&graph, &patch, &self.scenes, &self.skills)?;
-        Ok(self.store.apply_task_graph(
+        let event = self.store.apply_task_graph(
             task_id,
             patch.expected_revision,
             &next,
             &patch.reason,
             now_ms,
-        )?)
+        )?;
+        self.ensure_manager_if_needed(&task, &next, now_ms).await?;
+        Ok(event)
     }
 
     pub async fn execute_next(
@@ -286,6 +293,64 @@ impl Orchestrator {
             event,
         })
     }
+
+    async fn ensure_manager_if_needed(
+        &self,
+        task: &Task,
+        graph: &TaskGraph,
+        now_ms: i64,
+    ) -> Result<(), OrchestratorError> {
+        if !manager_required(graph)
+            || self
+                .store
+                .list_task_session_leases(&task.id)?
+                .iter()
+                .any(|lease| {
+                    lease.role == crate::task::AgentRole::Manager && lease.released_at_ms.is_none()
+                })
+        {
+            return Ok(());
+        }
+        let Some(assignment) = self
+            .planner
+            .manager_assignment(task)
+            .await
+            .map_err(OrchestratorError::Planner)?
+        else {
+            return Ok(());
+        };
+        let provider = serde_json::to_vec(&task.provider_configuration)
+            .expect("Provider Configuration serialization cannot fail");
+        let compatibility = format!(
+            "manager:{}:{}",
+            task.id.as_str(),
+            blake3::hash(&provider).to_hex()
+        );
+        self.store.lease_task_session(
+            &task.id,
+            &assignment.session_id,
+            &assignment.agent_id,
+            crate::task::AgentRole::Manager,
+            &compatibility,
+            now_ms,
+        )?;
+        Ok(())
+    }
+}
+
+fn manager_required(graph: &TaskGraph) -> bool {
+    graph
+        .work_items
+        .iter()
+        .filter(|item| {
+            !matches!(
+                item.status,
+                WorkItemStatus::Succeeded | WorkItemStatus::Cancelled | WorkItemStatus::Superseded
+            )
+        })
+        .take(2)
+        .count()
+        > 1
 }
 
 fn next_executable_work_item(graph: &TaskGraph) -> Option<&WorkItem> {
@@ -357,13 +422,20 @@ fn terminal_work_item(item: &WorkItem, status: WorkItemStatus, message: &str) ->
 
 pub struct InMemoryPlanner {
     patches: Mutex<VecDeque<OrchestrationPatch>>,
+    manager_assignment: Option<ExecutorAssignment>,
 }
 
 impl InMemoryPlanner {
     pub fn new(patches: impl IntoIterator<Item = OrchestrationPatch>) -> Self {
         Self {
             patches: Mutex::new(patches.into_iter().collect()),
+            manager_assignment: None,
         }
+    }
+
+    pub fn with_manager_assignment(mut self, assignment: ExecutorAssignment) -> Self {
+        self.manager_assignment = Some(assignment);
+        self
     }
 }
 
@@ -375,6 +447,10 @@ impl PlannerPort for InMemoryPlanner {
             .unwrap()
             .pop_front()
             .ok_or_else(|| "no in-memory planner reply remains".into())
+    }
+
+    async fn manager_assignment(&self, _task: &Task) -> Result<Option<ExecutorAssignment>, String> {
+        Ok(self.manager_assignment.clone())
     }
 }
 
