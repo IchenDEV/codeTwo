@@ -24,6 +24,7 @@ pub mod automation;
 pub mod brief;
 pub mod browser;
 pub mod canvas;
+pub mod capability_v2;
 pub mod codex_runtime;
 pub mod context;
 pub mod cost;
@@ -85,6 +86,11 @@ pub use canvas::{
     CanvasProviderImageCapability, CanvasRect, CanvasRef, CanvasRevision, CanvasSceneEnvelope,
     CanvasSnapshot, CanvasStaticAsset, CanvasTheme, CanvasTool, CANVAS_FEATURE_GATE,
     CANVAS_SCHEMA_VERSION, EXCALIDRAW_ENGINE, EXCALIDRAW_ENGINE_VERSION,
+};
+pub use capability_v2::{
+    propose_plugin_installations, resolve_work_item_capabilities, CapabilityAdapter,
+    CapabilityAdapterState, CapabilityReadiness, CapabilityReadinessStatus,
+    CapabilityResolutionError, ConcreteEffect, PluginInstallCandidate, PluginInstallProposal,
 };
 pub use context::{estimate_tokens, ContextUsage};
 pub use engine::{
