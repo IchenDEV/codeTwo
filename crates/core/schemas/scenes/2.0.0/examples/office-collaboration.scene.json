@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:office-collaboration",
+  "version": "2.0.0",
+  "title": "Office and Collaboration",
+  "description": "Domain context for documents, communication, schedules, tasks, and team coordination.",
+  "domain": "office-collaboration",
+  "localizations": {
+    "zh-CN": {
+      "title": "办公与协作",
+      "description": "用于文档、沟通、日程、任务和团队协调的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["office-collaboration"],
+  "capability_namespaces": ["collaboration", "documents"],
+  "extensions": {}
+}

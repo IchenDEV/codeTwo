@@ -123,8 +123,9 @@ pub use scene_artifact::{
 };
 pub use scene_runtime::{evaluate_exit, ExitEvaluation, SceneRuntime};
 pub use scene_v2::{
-    parse_scene_v2, validate_scene_v2, SceneDefinitionV2, SceneV2Author, SceneV2Error,
-    SceneV2Localization, SceneV2Origin, SCENE_V2_SCHEMA_ID,
+    parse_scene_v2, validate_scene_v2, ResolvedSceneV2, SceneCatalogDiagnostic, SceneCatalogV2,
+    SceneDefinitionV2, SceneV2Author, SceneV2Error, SceneV2Localization, SceneV2Origin,
+    SCENE_V2_SCHEMA_ID,
 };
 pub use session::{
     MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,

@@ -5,6 +5,8 @@
 //! artifacts, hooks, completion rules, stages, and pipelines as unknown fields.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -100,6 +102,167 @@ pub fn validate_scene_v2(scene: &SceneDefinitionV2) -> Result<(), SceneV2Error> 
         validate_text("publisher", publisher, 120)?;
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedSceneV2 {
+    pub definition: SceneDefinitionV2,
+    pub path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SceneCatalogDiagnostic {
+    pub path: PathBuf,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SceneCatalogV2 {
+    scenes: Vec<ResolvedSceneV2>,
+    diagnostics: Vec<SceneCatalogDiagnostic>,
+}
+
+static BUILTIN_SCENES_V2: LazyLock<SceneCatalogV2> = LazyLock::new(|| {
+    let fixtures = [
+        include_str!("../schemas/scenes/2.0.0/examples/software-development.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/testing-quality.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/operations-reliability.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/product-research.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/ux-design.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/data-analysis.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/content-growth.scene.json"),
+        include_str!("../schemas/scenes/2.0.0/examples/office-collaboration.scene.json"),
+    ];
+    let scenes = fixtures
+        .into_iter()
+        .map(|json| ResolvedSceneV2 {
+            definition: parse_scene_v2(json).expect("official Scenes 2.0 fixture must be valid"),
+            path: None,
+        })
+        .collect();
+    SceneCatalogV2 {
+        scenes,
+        diagnostics: Vec::new(),
+    }
+});
+
+impl SceneCatalogV2 {
+    pub fn builtin() -> Self {
+        BUILTIN_SCENES_V2.clone()
+    }
+
+    pub fn scenes(&self) -> &[ResolvedSceneV2] {
+        &self.scenes
+    }
+
+    pub fn diagnostics(&self) -> &[SceneCatalogDiagnostic] {
+        &self.diagnostics
+    }
+
+    pub fn resolve(&self, id: &str) -> Option<&ResolvedSceneV2> {
+        self.scenes.iter().find(|entry| entry.definition.id == id)
+    }
+
+    pub fn load(
+        personal_dir: Option<&std::path::Path>,
+        project_dir: Option<&std::path::Path>,
+        plugins: &[(String, PathBuf)],
+    ) -> Self {
+        let mut catalog = Self::builtin();
+        if let Some(dir) = personal_dir {
+            catalog.load_dir(dir, ExpectedOrigin::Personal);
+        }
+        if let Some(dir) = project_dir {
+            catalog.load_dir(dir, ExpectedOrigin::Project);
+        }
+        for (plugin_id, dir) in plugins {
+            catalog.load_dir(dir, ExpectedOrigin::Plugin(plugin_id));
+        }
+        catalog
+    }
+
+    fn load_dir(&mut self, dir: &std::path::Path, expected: ExpectedOrigin<'_>) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+            Err(error) => {
+                self.diagnostics.push(SceneCatalogDiagnostic {
+                    path: dir.to_path_buf(),
+                    message: error.to_string(),
+                });
+                return;
+            }
+        };
+        let mut paths: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with(".scene.json"))
+            })
+            .collect();
+        paths.sort();
+        for path in paths {
+            let result = std::fs::read_to_string(&path)
+                .map_err(|error| error.to_string())
+                .and_then(|json| parse_scene_v2(&json).map_err(|error| error.to_string()))
+                .and_then(|definition| {
+                    if expected.matches(&definition.provenance) {
+                        Ok(definition)
+                    } else {
+                        Err(format!(
+                            "provenance does not match the {} catalog",
+                            expected.label()
+                        ))
+                    }
+                })
+                .and_then(|definition| {
+                    if self.resolve(&definition.id).is_some() {
+                        Err(format!("duplicate Scene id `{}`", definition.id))
+                    } else {
+                        Ok(definition)
+                    }
+                });
+            match result {
+                Ok(definition) => self.scenes.push(ResolvedSceneV2 {
+                    definition,
+                    path: Some(path),
+                }),
+                Err(message) => self
+                    .diagnostics
+                    .push(SceneCatalogDiagnostic { path, message }),
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ExpectedOrigin<'a> {
+    Personal,
+    Project,
+    Plugin(&'a str),
+}
+
+impl ExpectedOrigin<'_> {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Personal => "personal",
+            Self::Project => "project",
+            Self::Plugin(_) => "plugin",
+        }
+    }
+
+    fn matches(self, actual: &SceneV2Origin) -> bool {
+        match (self, actual) {
+            (Self::Personal, SceneV2Origin::Personal) | (Self::Project, SceneV2Origin::Project) => {
+                true
+            }
+            (Self::Plugin(expected), SceneV2Origin::Plugin { plugin_id, .. }) => {
+                plugin_id == expected
+            }
+            _ => false,
+        }
+    }
 }
 
 fn validate_unique_identifiers(

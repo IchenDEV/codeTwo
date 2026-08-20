@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:product-research",
+  "version": "2.0.0",
+  "title": "Product and Research",
+  "description": "Domain context for product discovery, evidence gathering, and decision support.",
+  "domain": "product-research",
+  "localizations": {
+    "zh-CN": {
+      "title": "产品与调研",
+      "description": "用于产品发现、证据收集和决策支持的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["product-research"],
+  "capability_namespaces": ["knowledge", "web"],
+  "extensions": {}
+}

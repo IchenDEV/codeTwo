@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:ux-design",
+  "version": "2.0.0",
+  "title": "UX and Design",
+  "description": "Domain context for interaction design, visual systems, prototypes, and usability evidence.",
+  "domain": "ux-design",
+  "localizations": {
+    "zh-CN": {
+      "title": "UX 与设计",
+      "description": "用于交互设计、视觉系统、原型和可用性证据的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["ux-design"],
+  "capability_namespaces": ["design", "workspace"],
+  "extensions": {}
+}

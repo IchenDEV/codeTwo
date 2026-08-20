@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:content-growth",
+  "version": "2.0.0",
+  "title": "Content and Growth",
+  "description": "Domain context for content systems, audiences, distribution, and growth evidence.",
+  "domain": "content-growth",
+  "localizations": {
+    "zh-CN": {
+      "title": "内容与增长",
+      "description": "用于内容系统、受众、分发和增长证据的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["content-growth"],
+  "capability_namespaces": ["content", "publishing"],
+  "extensions": {}
+}
