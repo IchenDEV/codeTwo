@@ -116,6 +116,48 @@ pub struct TaskBudget {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskUsageObservation {
+    pub fresh_input_tokens: Option<u64>,
+    pub provider_cached_input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cost_microusd: Option<u64>,
+    pub elapsed_seconds: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskBudgetState {
+    pub observations: u64,
+    pub fresh_input_tokens: Option<u64>,
+    pub provider_cached_input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+    pub cost_microusd: Option<u64>,
+    pub elapsed_seconds: u64,
+    pub hard_limit_reason: Option<String>,
+}
+
+impl Default for TaskBudgetState {
+    fn default() -> Self {
+        Self {
+            observations: 0,
+            fresh_input_tokens: None,
+            provider_cached_input_tokens: None,
+            output_tokens: None,
+            cost_microusd: None,
+            elapsed_seconds: 0,
+            hard_limit_reason: None,
+        }
+    }
+}
+
+impl TaskBudgetState {
+    pub fn observed_tokens_excluding_cache(&self) -> Option<u64> {
+        Some(self.fresh_input_tokens?.saturating_add(self.output_tokens?))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SceneOrigin {
     Official,
@@ -238,6 +280,12 @@ pub enum OrchestrationEventKind {
     TaskOutcomeRecorded {
         status: TaskStatus,
     },
+    TaskBudgetChanged {
+        reason: String,
+    },
+    TaskResumed {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,6 +334,7 @@ pub struct LoopCeilings {
     pub repeated_work_item_attempts: u64,
     pub repeated_agent_skill_set_attempts: u64,
     pub replans_without_progress: u64,
+    pub total_attempts_without_cost: u64,
 }
 
 impl Default for LoopCeilings {
@@ -295,6 +344,7 @@ impl Default for LoopCeilings {
             repeated_work_item_attempts: 5,
             repeated_agent_skill_set_attempts: 6,
             replans_without_progress: 4,
+            total_attempts_without_cost: 24,
         }
     }
 }

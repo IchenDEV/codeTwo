@@ -11,8 +11,9 @@ use crate::store::{Store, StoreError};
 use crate::task::{
     AgentId, AgentRole, ArtifactProvenance, LoopGuardState, MaterialGoalChangeReceipt,
     OrchestrationEvent, OrchestrationEventKind, ResultContract, ResultContractRefinement, Task,
-    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItemAttempt,
-    WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
+    TaskBudget, TaskBudgetState, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease,
+    TaskStatus, TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
+    WorkItemId, WorkItemStatus,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -126,6 +127,12 @@ CREATE TABLE IF NOT EXISTS task_loop_guard_v2 (
   updated_at_ms                   INTEGER NOT NULL,
   FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
 );
+CREATE TABLE IF NOT EXISTS task_budget_state_v2 (
+  task_id       TEXT PRIMARY KEY,
+  state_json    TEXT NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
+);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -148,6 +155,12 @@ pub(crate) fn install(conn: &rusqlite::Connection) -> Result<(), StoreError> {
         "INSERT OR IGNORE INTO task_loop_guard_v2(task_id,state_json,updated_at_ms)
          SELECT id,?1,created_at_ms FROM tasks_v2",
         [loop_guard],
+    )?;
+    let budget_state = serde_json::to_string(&TaskBudgetState::default())?;
+    conn.execute(
+        "INSERT OR IGNORE INTO task_budget_state_v2(task_id,state_json,updated_at_ms)
+         SELECT id,?1,created_at_ms FROM tasks_v2",
+        [budget_state],
     )?;
     let created = serde_json::to_string(&OrchestrationEventKind::TaskCreated)?;
     conn.execute(
@@ -186,6 +199,15 @@ impl Store {
             rusqlite::params![
                 task.id.as_str(),
                 serde_json::to_string(&LoopGuardState::default())?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_budget_state_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&TaskBudgetState::default())?,
                 now_ms,
             ],
         )?;
@@ -1010,6 +1032,298 @@ impl Store {
         Ok(artifacts)
     }
 
+    pub fn task_budget_state(&self, task_id: &TaskId) -> Result<TaskBudgetState, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let state: Option<String> = conn
+            .query_row(
+                "SELECT state_json FROM task_budget_state_v2 WHERE task_id=?1",
+                [task_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(state) = state else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        Ok(serde_json::from_str(&state)?)
+    }
+
+    pub fn record_task_usage(
+        &self,
+        task_id: &TaskId,
+        observation: &TaskUsageObservation,
+        now_ms: i64,
+    ) -> Result<TaskBudgetState, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let row: Option<(String, String, String)> = tx
+            .query_row(
+                "SELECT t.status_json,t.budget_json,b.state_json
+                 FROM tasks_v2 t
+                 JOIN task_budget_state_v2 b ON b.task_id=t.id
+                 WHERE t.id=?1",
+                [task_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((status_json, budget_json, state_json)) = row else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        let status: TaskStatus = serde_json::from_str(&status_json)?;
+        let budget: TaskBudget = serde_json::from_str(&budget_json)?;
+        let mut state: TaskBudgetState = serde_json::from_str(&state_json)?;
+        state.fresh_input_tokens = accumulate_observation(
+            state.fresh_input_tokens,
+            observation.fresh_input_tokens,
+            state.observations,
+        );
+        state.provider_cached_input_tokens = accumulate_observation(
+            state.provider_cached_input_tokens,
+            observation.provider_cached_input_tokens,
+            state.observations,
+        );
+        state.output_tokens = accumulate_observation(
+            state.output_tokens,
+            observation.output_tokens,
+            state.observations,
+        );
+        state.cost_microusd = accumulate_observation(
+            state.cost_microusd,
+            observation.cost_microusd,
+            state.observations,
+        );
+        state.observations = state.observations.saturating_add(1);
+        state.elapsed_seconds = state.elapsed_seconds.max(observation.elapsed_seconds);
+        state.hard_limit_reason = budget_limit_reason(&budget, &state);
+        tx.execute(
+            "UPDATE task_budget_state_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), serde_json::to_string(&state)?, now_ms],
+        )?;
+        if status == TaskStatus::Active {
+            if let Some(reason) = state.hard_limit_reason.as_deref() {
+                tx.execute(
+                    "UPDATE tasks_v2 SET status_json=?2,updated_at_ms=?3 WHERE id=?1",
+                    rusqlite::params![
+                        task_id.as_str(),
+                        serde_json::to_string(&TaskStatus::Paused)?,
+                        now_ms,
+                    ],
+                )?;
+                let loop_json: String = tx.query_row(
+                    "SELECT state_json FROM task_loop_guard_v2 WHERE task_id=?1",
+                    [task_id.as_str()],
+                    |row| row.get(0),
+                )?;
+                let mut loop_state: LoopGuardState = serde_json::from_str(&loop_json)?;
+                loop_state.pause_reason = Some(reason.to_string());
+                tx.execute(
+                    "UPDATE task_loop_guard_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+                    rusqlite::params![
+                        task_id.as_str(),
+                        serde_json::to_string(&loop_state)?,
+                        now_ms,
+                    ],
+                )?;
+                let graph_revision: i64 = tx.query_row(
+                    "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+                    [task_id.as_str()],
+                    |row| row.get(0),
+                )?;
+                let sequence: i64 = tx.query_row(
+                    "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+                     WHERE task_id=?1",
+                    [task_id.as_str()],
+                    |row| row.get(0),
+                )?;
+                let kind = OrchestrationEventKind::TaskPaused {
+                    reason: reason.to_string(),
+                };
+                tx.execute(
+                    "INSERT INTO task_orchestration_events_v2
+                       (task_id,sequence,graph_revision,kind_json,created_at_ms)
+                     VALUES (?1,?2,?3,?4,?5)",
+                    rusqlite::params![
+                        task_id.as_str(),
+                        sequence,
+                        graph_revision,
+                        serde_json::to_string(&kind)?,
+                        now_ms,
+                    ],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(state)
+    }
+
+    pub fn update_task_budget(
+        &self,
+        task_id: &TaskId,
+        budget: &TaskBudget,
+        reason: &str,
+        now_ms: i64,
+    ) -> Result<OrchestrationEvent, StoreError> {
+        validate_control_reason(reason)?;
+        let mut state = self.task_budget_state(task_id)?;
+        state.hard_limit_reason = budget_limit_reason(budget, &state);
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE tasks_v2 SET budget_json=?2,updated_at_ms=?3 WHERE id=?1",
+            rusqlite::params![task_id.as_str(), serde_json::to_string(budget)?, now_ms],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        tx.execute(
+            "UPDATE task_budget_state_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), serde_json::to_string(&state)?, now_ms],
+        )?;
+        let graph_revision: i64 = tx.query_row(
+            "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::TaskBudgetChanged {
+            reason: reason.trim().to_string(),
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                graph_revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(OrchestrationEvent {
+            task_id: task_id.clone(),
+            sequence: sequence as u64,
+            graph_revision: graph_revision as u64,
+            kind,
+            created_at_ms: now_ms,
+        })
+    }
+
+    pub fn resume_task(
+        &self,
+        task_id: &TaskId,
+        reason: &str,
+        now_ms: i64,
+    ) -> Result<OrchestrationEvent, StoreError> {
+        validate_control_reason(reason)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let row: Option<(String, String, String, String)> = tx
+            .query_row(
+                "SELECT t.status_json,t.budget_json,b.state_json,l.state_json
+                 FROM tasks_v2 t
+                 JOIN task_budget_state_v2 b ON b.task_id=t.id
+                 JOIN task_loop_guard_v2 l ON l.task_id=t.id
+                 WHERE t.id=?1",
+                [task_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?;
+        let Some((status_json, budget_json, budget_state_json, loop_state_json)) = row else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        let status: TaskStatus = serde_json::from_str(&status_json)?;
+        if status != TaskStatus::Paused {
+            return Err(StoreError::InvalidTaskControl(format!(
+                "only a paused Task can resume; current status is {status:?}"
+            )));
+        }
+        let budget: TaskBudget = serde_json::from_str(&budget_json)?;
+        let mut budget_state: TaskBudgetState = serde_json::from_str(&budget_state_json)?;
+        if let Some(reason) = budget_limit_reason(&budget, &budget_state) {
+            return Err(StoreError::InvalidTaskControl(format!(
+                "Task budget is still exhausted: {reason}"
+            )));
+        }
+        budget_state.hard_limit_reason = None;
+        let previous_loop: LoopGuardState = serde_json::from_str(&loop_state_json)?;
+        let loop_state = LoopGuardState {
+            total_attempts: previous_loop.total_attempts,
+            ..LoopGuardState::default()
+        };
+        tx.execute(
+            "UPDATE tasks_v2 SET status_json=?2,updated_at_ms=?3 WHERE id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&TaskStatus::Active)?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE task_budget_state_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&budget_state)?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "UPDATE task_loop_guard_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&loop_state)?,
+                now_ms,
+            ],
+        )?;
+        let graph_revision: i64 = tx.query_row(
+            "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::TaskResumed {
+            reason: reason.trim().to_string(),
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                graph_revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(OrchestrationEvent {
+            task_id: task_id.clone(),
+            sequence: sequence as u64,
+            graph_revision: graph_revision as u64,
+            kind,
+            created_at_ms: now_ms,
+        })
+    }
+
     pub fn task_loop_guard(&self, task_id: &TaskId) -> Result<LoopGuardState, StoreError> {
         let conn = self.conn.lock().unwrap();
         let state: Option<String> = conn
@@ -1042,18 +1356,20 @@ impl Store {
         } else {
             state.consecutive_failures.saturating_add(1)
         };
-        state.repeated_work_item_attempts =
-            if state.last_work_item_id.as_ref() == Some(work_item_id) {
-                state.repeated_work_item_attempts.saturating_add(1)
-            } else {
-                1
-            };
-        state.repeated_agent_skill_set_attempts =
-            if state.last_agent_skill_set_identity.as_deref() == Some(agent_skill_set_identity) {
-                state.repeated_agent_skill_set_attempts.saturating_add(1)
-            } else {
-                1
-            };
+        state.repeated_work_item_attempts = if succeeded {
+            0
+        } else if state.last_work_item_id.as_ref() == Some(work_item_id) {
+            state.repeated_work_item_attempts.saturating_add(1)
+        } else {
+            1
+        };
+        state.repeated_agent_skill_set_attempts = if succeeded {
+            0
+        } else if state.last_agent_skill_set_identity.as_deref() == Some(agent_skill_set_identity) {
+            state.repeated_agent_skill_set_attempts.saturating_add(1)
+        } else {
+            1
+        };
         state.last_work_item_id = Some(work_item_id.clone());
         state.last_agent_skill_set_identity = Some(agent_skill_set_identity.to_string());
         self.write_loop_guard(task_id, &state, now_ms)?;
@@ -1314,6 +1630,56 @@ fn evaluate_completion(contract: &ResultContract, graph: &TaskGraph) -> TaskComp
         unresolved_facts: contract.unresolved_facts.clone(),
         blockers,
     }
+}
+
+fn accumulate_observation(
+    aggregate: Option<u64>,
+    observation: Option<u64>,
+    previous_observations: u64,
+) -> Option<u64> {
+    if previous_observations == 0 {
+        observation
+    } else {
+        Some(aggregate?.saturating_add(observation?))
+    }
+}
+
+fn budget_limit_reason(budget: &TaskBudget, state: &TaskBudgetState) -> Option<String> {
+    if let (Some(maximum), Some(observed)) = (budget.max_cost_microusd, state.cost_microusd) {
+        if observed >= maximum {
+            return Some(format!(
+                "cost budget reached: {observed} of {maximum} microusd"
+            ));
+        }
+    }
+    if let (Some(maximum), Some(observed)) =
+        (budget.max_tokens, state.observed_tokens_excluding_cache())
+    {
+        if observed >= maximum {
+            return Some(format!(
+                "token budget reached: {observed} of {maximum} fresh input and output tokens"
+            ));
+        }
+    }
+    if let Some(maximum) = budget.max_duration_seconds {
+        if state.elapsed_seconds >= maximum {
+            return Some(format!(
+                "time budget reached: {} of {maximum} seconds",
+                state.elapsed_seconds
+            ));
+        }
+    }
+    None
+}
+
+fn validate_control_reason(reason: &str) -> Result<(), StoreError> {
+    let length = reason.trim().chars().count();
+    if length == 0 || length > 2_048 {
+        return Err(StoreError::InvalidTaskControl(
+            "reason must contain between 1 and 2048 characters".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn attempt_status_db(status: WorkItemAttemptStatus) -> &'static str {

@@ -404,6 +404,18 @@ impl Orchestrator {
                 "paused after {} replans without new completion evidence",
                 state.replans_without_progress
             ))
+        } else if state.consecutive_failures > 0
+            && state.total_attempts >= self.loop_ceilings.total_attempts_without_cost
+            && self
+                .store
+                .task_budget_state(task_id)?
+                .cost_microusd
+                .is_none()
+        {
+            Some(format!(
+                "paused after {} total attempts because provider cost is unavailable",
+                state.total_attempts
+            ))
         } else {
             None
         };

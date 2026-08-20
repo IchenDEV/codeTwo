@@ -84,6 +84,8 @@ pub enum StoreError {
     },
     #[error("invalid Result Contract refinement: {0}")]
     InvalidResultContractRefinement(String),
+    #[error("invalid Task control: {0}")]
+    InvalidTaskControl(String),
     #[error("session lease conflict for {session_id}: {reason}")]
     SessionLeaseConflict { session_id: String, reason: String },
     #[error("invalid Task Artifact: {0}")]

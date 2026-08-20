@@ -156,8 +156,9 @@ pub use task::{
     ArtifactProvenance, LoopCeilings, LoopGuardState, MaterialGoalChangeReceipt,
     OrchestrationEvent, OrchestrationEventKind, ProviderConfiguration, ResultContract,
     ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef, Task, TaskArtifactStatus,
-    TaskBudget, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItem,
-    WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
+    TaskBudget, TaskBudgetState, TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease,
+    TaskStatus, TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
+    WorkItemId, WorkItemStatus,
 };
 pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
