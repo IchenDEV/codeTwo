@@ -56,6 +56,7 @@ pub mod skill;
 pub mod source_control;
 pub mod store;
 pub mod task;
+pub mod task_store;
 pub mod term;
 pub mod testsignal;
 pub mod tmux;
@@ -149,6 +150,7 @@ pub use task::{
     Task, TaskArtifactStatus, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemEdge,
     WorkItemId, WorkItemStatus,
 };
+pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};
 pub use testsignal::{classify_test_command, test_outcome, TestOutcome};
 pub use workspace_search::{WorkspaceContentMatch, WorkspaceSearchOptions, WorkspaceSearchResult};

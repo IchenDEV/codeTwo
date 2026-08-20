@@ -683,6 +683,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: Path::new(path)
@@ -699,6 +700,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: None,
