@@ -31,6 +31,6 @@ Tick **tmux** in the terminal header and C2 runs each terminal inside a named tm
 If tmux isn't installed the toggle simply falls back to a plain login shell.
 
 ::: tip
-Under the hood the PTY is managed by the Rust core (via `portable-pty`), and output is streamed to
-the frontend over a Tauri channel — the same PTY machinery is available to the remote server too.
+Under the hood the PTY is managed by the Rust core, and output reaches the renderer through the
+desktop sidecar event stream — the same PTY machinery is available to the remote server too.
 :::

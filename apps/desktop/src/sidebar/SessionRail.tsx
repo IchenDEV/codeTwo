@@ -622,13 +622,12 @@ export function SessionRail({
       {/* Keep the wordmark and controls centred in the same 48px title row as the main header,
           with enough clearance for the macOS traffic lights. */}
       <div
-        data-tauri-drag-region
-        className="flex shrink-0 items-center gap-1 py-2.5 pl-24 pr-3"
+        className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pl-24 pr-3"
       >
-        <span data-tauri-drag-region className="min-w-0 truncate text-heading font-semibold">
+        <span className="electrobun-webkit-app-region-drag min-w-0 truncate text-heading font-semibold">
           {t("app.name")}
         </span>
-        <div data-tauri-drag-region className="min-w-0 flex-1" />
+        <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
         <Tooltip>
           <TooltipTrigger
             render={<Button

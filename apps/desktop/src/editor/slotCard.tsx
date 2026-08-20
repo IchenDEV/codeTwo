@@ -30,7 +30,7 @@ export interface SlotCardProps {
 }
 
 /**
- * The Composer-owned seam for pickers the card itself must not reach into Tauri for — mirrors
+ * The Composer-owned seam for pickers the card itself must not reach into desktop IPC for — mirrors
  * `CanvasBlockRuntimeContext`. `carriedArtifacts` stays `[]` until the R4 carry state exists.
  */
 export interface SlotCardRuntime {

@@ -2,7 +2,7 @@
 //!
 //! `git` is the clearest example of what the command registry buys us. It injects nothing, owns no
 //! state, and every one of its thirteen commands is a two-line call into [`crate::git`] — yet
-//! before this each one existed twice, as a core function and as a hand-written `#[tauri::command]`
+//! before this each one existed twice, as a core function and as a hand-written desktop wrapper
 //! wrapper listed in a 185-entry table. Here the plugin *is* the registration.
 
 use crate::app::events::SkillsChanged;

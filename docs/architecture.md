@@ -1,16 +1,19 @@
 # Architecture
 
 C2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
-Protocol (ACP)** and presents them through a **document-first** UI. One Rust core; two frontends.
+Protocol (ACP)** and presents them through a **document-first** UI. The TUI and server use the Rust
+core; the experimental Electrobun desktop build uses an in-process TypeScript/Bun host.
 
 ## Why this shape
 
 - **ACP is the common abstraction.** JSON-RPC over stdio, with entry points for all three
   providers (Grok natively; Claude Code & Codex via official adapters). We implement the client
   loop once and treat each backend as a launch command.
-- **Codex is the template, not opencode.** opencode is now all-TypeScript + Electron. Codex is
-  all-Rust with a `core` + a ratatui `tui` and an SQ/EQ event model. A Rust core lets the Tauri GUI
-  and a ratatui TUI link the same code with no server/serialization boundary.
+- **The Rust core remains the reference implementation.** The TUI and server link it directly.
+  The current Electrobun experiment instead implements the renderer command/event contract inside
+  Bun, so its packaged desktop artifact has no Rust executable. It covers the primary local path
+  (projects, sessions, ACP, constrained workspace I/O, Git, PTY and LSP) and fails closed for
+  capabilities that have not migrated yet.
 
 ## Shape: a plugin graph, not a program with hooks
 
@@ -23,7 +26,8 @@ config rather than from a constructor.
 That is why the module list below reads as a menu rather than a build order: `store` and `engine`
 have no fixed sequence, the app runs without either, and reconfiguring one reloads exactly what was
 built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
-hand-wired.
+hand-wired, and the [C2 Plugin Standard 1.0.0](plugin-standard.md) for the normative package,
+lifecycle, scope, security, and host-capability contract.
 
 A plugin does not have to be ours, or Rust. A bundle can ship a **process** that C2 speaks
 JSON-RPC to over stdio; the commands it declares land in the same registry a built-in's do and are
@@ -33,32 +37,33 @@ only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-pr
 ## Layers
 
 ```
-                     crates/kernel  (the plugin runtime — cordis in Rust)
-                       crates/core  (Rust library — no UI)
-   ┌──────────────────────────────────────────────────────────────────────┐
-   │  acp        ACP client over stdio (JSON-RPC peer + wire types)         │
-   │  provider   registry: launch spec + availability per backend          │
-   │  session    session / message / part model                            │
-   │  skill      skill library + document→prompt compiler                   │
-   │  permission ask/allow/deny × tool+glob; modes incl. YOLO               │
-   │  event      SQ/EQ types (Op in, Event out)                            │
-   └───────────────▲───────────────────────────────────────▲──────────────┘
-                   │ tauri::command + ipc::Channel          │ links directly
-        apps/desktop/src-tauri (Rust bridge)          crates/tui (ratatui)  [M3]
-                   │
-     apps/desktop/src  (React + Vite + BlockNote)
+                 crates/kernel  (the plugin runtime — cordis in Rust)
+                   crates/core  (Rust library — no UI)
+   ┌──────────────────────────────────────────────────────────────┐
+   │ ACP, providers, sessions, skills, policy, events and plugins │
+   └──────────────────┬───────────────────────┬───────────────────┘
+                      │ links directly        │ links directly
+              crates/tui (ratatui)     crates/server (Axum)
+
+   apps/desktop/src/electrobun/host  (TypeScript/Bun implementation)
+                      │ ACP + SQLite + Git + PTY + LSP
+                      │ Electrobun typed RPC
+   apps/desktop/src  (React + Vite + BlockNote + sandboxed webviews)
 ```
 
 ## The SQ/EQ interface (`core::event`)
 
 Frontends never touch ACP directly. They push [`Op`]s (NewSession, Prompt, Cancel,
 AnswerPermission, …) and consume [`Event`]s (AgentText, ToolCall, PermissionRequest, TurnEnded, …).
-- Tauri bridge: `Op` via `#[tauri::command]`, `Event` stream via `ipc::Channel`.
+- Electrobun desktop trial: the renderer makes one typed `call` RPC to the in-process Bun host;
+  reverse event envelopes carry engine and terminal streams.
 - TUI: calls the same core engine in-process, renders `Event`s in its draw loop.
 
-The M1 engine is the piece that consumes `Op`s and, by driving `core::acp`, produces `Event`s. The
-ACP `ClientHandler` implemented by the engine translates `session/update` → `Event`s and routes
-`session/request_permission` through the permission engine (auto-answer or surface an `Ask`).
+The Rust M1 engine consumes `Op`s and, by driving `core::acp`, produces `Event`s. Its ACP
+`ClientHandler` translates `session/update` → `Event`s and routes `session/request_permission`
+through the permission engine (auto-answer or surface an `Ask`). The Bun desktop trial implements
+the renderer-facing subset independently; its displayed permission/sandbox modes are policy state,
+not an OS-enforced sandbox.
 
 ## ACP client (`core::acp`)
 
@@ -160,7 +165,7 @@ state, not a crash).
 
 ## Milestones
 
-- **M0 (done):** workspace + tested core + Tauri/React/BlockNote scaffold + `/` skill menu.
+- **M0 (done):** workspace + tested core + desktop React/BlockNote scaffold + `/` skill menu.
 - **M1 (done):** engine (Op→Event) with permission parking, SQLite session store + transcript,
   git-worktree manager (creation and the explicit discard/cleanup flow), PTY, disk-backed skill
   library. All offline-tested.
@@ -168,10 +173,10 @@ state, not a crash).
   live transcript, permission modal, embedded terminal, provider/mode pickers.
 - **M3 (done):** ratatui TUI on the same core (session list, transcript, composer + `/` skill
   picker, inline permission prompts, provider/mode cyclers).
-- **M4 (done, minus packaging):** lazy ACP session creation with MCP attach at `session/new`,
+- **M4 (done):** lazy ACP session creation with MCP attach at `session/new`,
   dynamic add/remove skills reflected live in picker + compiler, transcript load on session select.
-  **Remaining:** bundle a Node sidecar (so Claude/Codex adapters need no system Node) + app
-  packaging/notarization — platform-specific, not verifiable in this environment.
+  **Remaining:** bundle a Node sidecar so Claude/Codex adapters need no system Node, plus signed and
+  notarized release automation.
 
 ## Test coverage (offline, no provider binary needed)
 
@@ -184,6 +189,6 @@ Rust crates compile clean (zero warnings).
 
 ```sh
 cargo test -p codetwo-core          # core, offline (mock ACP agent)
-cd apps/desktop && bun install && bun run build   # frontend
-cd apps/desktop && bun run tauri dev              # launch the desktop app (needs a display)
+cd apps/desktop && bun install && bun run build:renderer  # renderer only
+cd apps/desktop && bun run dev                          # build and launch Electrobun
 ```

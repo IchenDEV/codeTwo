@@ -72,7 +72,7 @@ function IssueRefCard({
   const t = useT();
   return (
     <div className="canvas-ui-module my-1 flex items-center gap-3 bg-fill-quiet p-2.5" contentEditable={false}>
-      {/* Same external-link shape as the Issues modal rows: a plain anchor, which Tauri routes
+      {/* Same external-link shape as the Issues modal rows: a plain anchor, which Electrobun routes
           to the system browser. */}
       <a
         href={props.url}

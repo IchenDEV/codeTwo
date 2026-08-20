@@ -1,7 +1,7 @@
 //! The core's services — every capability C2 has, published under a name.
 //!
 //! Before this module, these were fields on a `AppState` struct built by a 200-line `setup()` in
-//! the Tauri bridge: twenty subsystems constructed in a fixed order, each one reachable only by
+//! the old desktop bridge: twenty subsystems constructed in a fixed order, each one reachable only by
 //! whoever held the struct. Now each is a [`Service`] published by the plugin that owns it, and
 //! reached by anything that declares it in `inject`. The wiring is no longer a place in the code.
 

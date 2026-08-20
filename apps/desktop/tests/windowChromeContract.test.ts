@@ -1,19 +1,20 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const tauriConfig = JSON.parse(
-  readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+const electrobunHost = readFileSync(
+  new URL("../src/electrobun/index.ts", import.meta.url),
+  "utf8",
 );
 const dockSource = readFileSync(new URL("../src/dock/Dock.tsx", import.meta.url), "utf8");
 
 describe("macOS window chrome contract", () => {
   test("keeps the traffic lights lowered on the 48px titlebar", () => {
-    const mainWindow = tauriConfig.app.windows.find(
-      (window: { label?: string }) => window.label === "main",
-    );
+    expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
+    expect(electrobunHost).toContain("trafficLightOffset: { x: 14, y: 27 }");
+  });
 
-    expect(mainWindow?.titleBarStyle).toBe("Overlay");
-    expect(mainWindow?.trafficLightPosition).toEqual({ x: 14, y: 27 });
+  test("keeps the native macOS window shadow", () => {
+    expect(electrobunHost).not.toMatch(/\btransparent:\s*true/);
   });
 
   test("keeps both dock header states aligned to the 48px titlebar", () => {

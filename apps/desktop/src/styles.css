@@ -275,9 +275,8 @@
     inset: 0;
     width: 100%;
   }
-  /* The window is transparent and macOS paints an NSVisualEffectView underneath it, so every layer
-     above has to stay out of the way — an opaque body would hide the material completely. The rail
-     adds its own tint on top while the main workspace paints an opaque surface. */
+  /* Let `.app-shell` own the window surface and corner radius. The native Electrobun window stays
+     opaque so macOS retains its system-drawn window shadow. */
   html,
   body {
     background: transparent;
@@ -314,12 +313,11 @@
    ------------------------------------------------------------------------ */
 @layer components {
   /* ---- flat shell --------------------------------------------------------------------------
-     The native window owns the sidebar material. Keep this outer wrapper transparent so the rail
-     can reveal that material; the main workspace paints its own opaque background. The radius still
-     matches windowEffects.radius in tauri.conf.json so nothing paints square corners over the
-     window's rounded ones. */
+     T3-style layout: opaque panes separated by 1px borders, not floating modules on glass. The
+     shell is solid; the radius still matches the Electrobun window radius so nothing
+     paints square corners over the window's rounded ones. */
   .app-shell {
-    background: transparent;
+    background: var(--background);
     border-radius: 12px;
     overflow: hidden;
   }

@@ -1,18 +1,18 @@
 # 安装与运行
 
-C2 尚未发布预编译安装包，需要从源码运行。项目由 Cargo 工作区和 Bun 构建的前端组成。
+C2 尚未发布预编译安装包，需要从源码运行。项目由 Cargo 工作区、Electrobun 桌面宿主和 Bun 构建的 React 渲染器组成。
 
 ## 环境要求
 
 | 工具 | 用途 | 说明 |
 | --- | --- | --- |
-| **Rust**（1.82+） | 构建核心、TUI、服务端和 Tauri 应用 | [rustup.rs](https://rustup.rs) |
+| **Rust**（1.82+） | 构建核心、TUI、服务端和桌面端 sidecar | [rustup.rs](https://rustup.rs) |
 | **Zig**（必须为 0.15.2） | 构建内嵌的 Ghostty 终端引擎 | [ziglang.org](https://ziglang.org/download/) |
-| **Bun** | 构建桌面端前端 | [bun.sh](https://bun.sh) |
+| **Bun** | 构建 Electrobun 宿主和桌面端渲染器 | [bun.sh](https://bun.sh) |
 | **git** | 工作树、检查点和版本控制 | 通常已安装 |
 | 至少一个**提供方 CLI** | 实际驱动智能体 | 可选项见下文 |
 
-还需要安装 Tauri 对应的系统工具链：macOS 使用 Xcode Command Line Tools；Linux 使用 `webkit2gtk` 和基础构建工具。详见 [Tauri 环境要求](https://tauri.app/start/prerequisites/)。
+还需要安装平台原生构建工具。macOS 构建使用 Xcode Command Line Tools；分层 `.icon` 源文件还需要完整 Xcode。
 
 在 macOS 上可通过 Homebrew 安装指定版本的 Zig：
 
@@ -51,7 +51,7 @@ cargo test -p codetwo-core -p codetwo-tui -p codetwo-server
 ```sh
 cd apps/desktop
 bun install --frozen-lockfile
-bun run tauri dev        # 打开桌面窗口
+bun run dev              # 构建渲染器与 Rust sidecar，并打开 Electrobun 窗口
 ```
 
 ## 运行 TUI

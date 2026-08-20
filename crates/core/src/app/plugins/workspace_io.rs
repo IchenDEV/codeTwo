@@ -1,7 +1,7 @@
 //! Workspace files, projects, artifacts, search, and worktree metadata.
 //!
 //! These commands deliberately live below every host. Path validation and search authorization
-//! are product policy, not Tauri policy, so the desktop, TUI, and remote server must share them.
+//! are product policy, not GUI-framework policy, so the desktop, TUI, and remote server share them.
 
 use crate::app::service::StoreService;
 use crate::app::{json, take_args};

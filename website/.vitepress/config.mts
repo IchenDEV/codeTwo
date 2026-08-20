@@ -161,7 +161,7 @@ export default defineConfig({
             { text: "Project memory", link: "/guide/memory" },
             { text: "Document editor & skills", link: "/guide/editor" },
             { text: "Project rules", link: "/guide/rules" },
-            { text: "Skill market", link: "/guide/market" },
+            { text: "Plugins & market", link: "/guide/market" },
             { text: "Git, checkpoints & worktrees", link: "/guide/git" },
             { text: "Permissions & sandbox", link: "/guide/permissions" },
             { text: "Issues & project scripts", link: "/guide/issues" },

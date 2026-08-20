@@ -22,8 +22,8 @@ it through a small submission/event interface.
    │  keymap     shared keybindings                                         │
    │  pty        embedded-terminal PTYs                                     │
    └───────────▲───────────────────────▲──────────────────────▲───────────┘
-        Tauri desktop             ratatui TUI          codetwo-server (remote)
-     (React + BlockNote)        (crates/tui)          (Axum WebSocket)
+      Electrobun desktop          ratatui TUI          codetwo-server (remote)
+  (React + Rust sidecar)        (crates/tui)          (Axum WebSocket)
 ```
 
 ## The SQ/EQ interface
@@ -32,7 +32,8 @@ Frontends never touch ACP directly. They push **Ops** (NewSession, Prompt, Cance
 SetPermissionMode, SetModel) and consume a stream of **Events** (AgentText, ToolCall,
 PermissionRequest, TurnEnded, Error, …). See the [Op / Event protocol](/reference/protocol).
 
-- The **desktop** bridge forwards Ops via Tauri commands and streams Events over a channel.
+- The **desktop** sends typed Electrobun RPC to a bundled Rust sidecar; one JSON-lines bridge
+  carries named commands in and event streams out.
 - The **TUI** calls the engine in-process and renders Events in its draw loop.
 - The **server** forwards Ops from WebSocket clients and broadcasts Events back.
 

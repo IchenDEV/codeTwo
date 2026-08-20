@@ -5,13 +5,13 @@ app. Open it in the side dock with `Mod+B`, or the panel button in the header �
 
 ## Navigating
 
-Type a URL in the address bar and press Enter (or **Go**). The page loads in an embedded frame.
+Type a URL in the address bar and press Enter. The page loads in a sandboxed Electrobun child
+webview, so sites that reject iframe embedding can still render.
 
 ## Quick annotate → prompt
 
-The **annotate bar** at the bottom is the point of the feature: type a note about what you're looking
-at and press **Add to prompt**. C2 turns the current URL and your note into a **browser-context
-block** and inserts it into your prompt document, so the agent sees what you see.
+Turn on **Annotate**, select elements in the page, and add notes or temporary style changes. Press
+**Add to prompt** to turn those selections into **browser-context blocks** in the prompt document.
 
 A rendered context block looks like:
 
@@ -27,7 +27,8 @@ the [Plugin Hub market](/guide/market) and add it to your prompt. That attaches 
 the session so the agent can drive a browser itself (the MCP server binary must be installed).
 
 ::: info Limits
-The embedded browser uses an iframe, so sites that send `X-Frame-Options: DENY` won't render inside
-it. A native webview child window with a visual element-picker (à la Cursor) is a future enhancement;
-today annotate captures the URL and your note.
+Embedded tabs are for manual browsing and annotation. Electrobun's stable BrowserView surface does
+not yet provide the screenshot and evaluated-result primitives C2's former authenticated
+agent-browser adapter required, so agents cannot take over these tabs. A separately installed
+browser MCP still runs as its own tool.
 :::

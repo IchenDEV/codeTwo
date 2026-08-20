@@ -5,6 +5,12 @@ composable components, project scaffolds, and the built-in component market. Ope
 package button at the foot of the session rail, the [command palette](/guide/keybindings), or with
 `Mod+Shift+M`.
 
+> [!IMPORTANT]
+> The Rust core implements the complete bundle manager and live process runtime. The experimental
+> Pure Bun Electrobun desktop currently shows the compatibility catalog but fails closed for bundle
+> installation, marketplace operations, and dynamic plugin lifecycle. It does not pretend that an
+> empty catalog is full support.
+
 ## Installing a GitHub plugin
 
 Choose **Install from GitHub**, then enter one of these forms:
@@ -30,6 +36,8 @@ my-plugin/
 ├── mcp.json                     # Agent Plugins portable MCP
 ├── .mcp.json
 ├── .lsp.json
+├── scenes/<name>.scene.json
+├── scenes/<name>.pipeline.json
 ├── scaffolds/<name>/
 │   ├── scaffold.json
 │   └── ...project files
@@ -60,8 +68,60 @@ Installed packages expose these composable or runtime component types:
 - **LSP** — valid stdio definitions from `.lsp.json` or inline `lspServers` can replace the stock
   language server for matching language ids after the plugin is explicitly trusted. Socket LSP is
   inventoried but not run.
+- **Scenes and Pipelines** — versioned declarative scene and pipeline files are composed into the
+  Rust core's scene library. Their assignment, hooks, scheduling, artifacts, and execution require
+  the corresponding host capability.
+- **Scaffolds** — bounded project templates applied only after a complete overwrite conflict check.
+- **C2 process runtime** — a trusted child process that contributes live commands and event
+  subscriptions through the C2 Plugin Protocol. It appears in the manager as `bundle:<id>` and is
+  unloaded with its commands and owned resources.
 
 The compiled-prompt preview lists attached Skills, Subagents, and MCP servers before a turn runs.
+
+## Declaring a C2 process runtime
+
+Agent Plugins 1.0.0 has a closed top-level manifest. Put C2 behavior under the client-extension
+namespace rather than adding a top-level `runtime` field:
+
+```json
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.0.0",
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["dist/plugin.js"],
+        "inject": ["store"],
+        "optionalInject": ["engine"],
+        "scopeSupport": ["user", "project"]
+      }
+    }
+  }
+}
+```
+
+The complete normative contract is the
+[C2 Plugin Standard 1.0.0](https://github.com/IchenDEV/codeTwo/blob/main/docs/plugin-standard.md);
+the stdio JSON-RPC messages are documented in the
+[C2 Plugin Protocol](https://github.com/IchenDEV/codeTwo/blob/main/docs/plugin-protocol.md).
+
+## Live management and project scope
+
+The reference manager lists built-in modules, host adapters, installed process bundles, C2-owned UI
+descriptors, and marketplace entries in one catalog. A state change is always planned first: the
+plan reports dependencies and active resources and is bound to the current graph/config revision.
+Only that confirmed, unused plan can be applied. Disable, configuration changes, trust revocation,
+replacement, and uninstall reconcile live without an app restart.
+
+A runtime is user-only unless it explicitly declares `scopeSupport: ["user", "project"]`. Project
+support creates an independent process, command realm, and data directory for each live project.
+Skills and other data-only components in the same bundle remain user-wide; the UI does not present
+project runtime policy as isolation for them. If policy cannot boot, C2 restores the last-known-good
+state or exposes safe mode and reset through the essential management plane.
 
 ## Opening a marketplace
 
@@ -101,6 +161,10 @@ preserved for the package. MCP starts only when composed into a session; plugin 
 the package is enabled, explicitly trusted, and a matching file is opened. Disable a package to
 remove its prompt/runtime components from new sessions, or revoke trust to block executable native
 components. Uninstall can delete the package-owned persistent data or retain it for a later reinstall.
+
+Trust is not an OS sandbox. A trusted process has the user's filesystem, environment, and network
+permissions, and the current JSON event bus is host-wide rather than project-confidential. Review
+runtime bundles as executable software.
 
 ## Built-in market and local skills
 

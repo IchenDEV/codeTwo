@@ -18,15 +18,16 @@ use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, Plugi
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
+
+use crate::EventSink;
 
 pub struct LspPlugin {
-    app: AppHandle,
+    host: EventSink,
 }
 
 impl LspPlugin {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app }
+    pub fn new(host: EventSink) -> Self {
+        Self { host }
     }
 }
 
@@ -77,7 +78,7 @@ fn candidates(lang: &str) -> &'static [(&'static str, &'static [&'static str])] 
 /// Spawn (or reuse) a server for `lang` rooted at `cwd`. `None` means "nothing installed for this
 /// language" — an expected outcome, not an error.
 fn lsp_start(
-    app: &AppHandle,
+    host: &EventSink,
     state: &LspState,
     paths: &Paths,
     cwd: String,
@@ -119,7 +120,7 @@ fn lsp_start(
                 env.push(("CODEX_PROJECT_DIR".into(), cwd.clone()));
                 env.push(("PLUGIN_PROJECT_DIR".into(), cwd.clone()));
                 if let Some(key) = start_server(
-                    app,
+                    host,
                     state,
                     &cwd,
                     &format!("plugin:{}:{}", plugin.id, server.name),
@@ -137,7 +138,7 @@ fn lsp_start(
             .iter()
             .map(|arg| (*arg).to_string())
             .collect::<Vec<_>>();
-        if let Some(key) = start_server(app, state, &cwd, bin, bin, &args, &[])? {
+        if let Some(key) = start_server(host, state, &cwd, bin, bin, &args, &[])? {
             return Ok(Some(key));
         }
     }
@@ -145,7 +146,7 @@ fn lsp_start(
 }
 
 fn start_server(
-    app: &AppHandle,
+    host: &EventSink,
     state: &LspState,
     cwd: &str,
     key_name: &str,
@@ -178,9 +179,9 @@ fn start_server(
     let stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
     {
-        let app = app.clone();
+        let host = host.clone();
         let key = key.clone();
-        std::thread::spawn(move || read_loop(app, key, stdout));
+        std::thread::spawn(move || read_loop(host, key, stdout));
     }
     servers.insert(key.clone(), Server { child, stdin });
     Ok(Some(key))
@@ -208,7 +209,7 @@ fn lsp_send(state: &LspState, key: String, payload: String) -> Result<(), String
 }
 
 /// Read framed messages off the server's stdout until it closes, emitting each to the webview.
-fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
+fn read_loop(host: EventSink, key: String, stdout: ChildStdout) {
     let mut reader = BufReader::new(stdout);
     loop {
         let mut content_length = 0usize;
@@ -216,7 +217,7 @@ fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) | Err(_) => {
-                    let _ = app.emit("lsp-exit", key.clone());
+                    let _ = host.emit("lsp-exit", key.clone());
                     return;
                 }
                 Ok(_) => {}
@@ -234,11 +235,11 @@ fn read_loop(app: AppHandle, key: String, stdout: ChildStdout) {
         }
         let mut buf = vec![0u8; content_length];
         if reader.read_exact(&mut buf).is_err() {
-            let _ = app.emit("lsp-exit", key.clone());
+            let _ = host.emit("lsp-exit", key.clone());
             return;
         }
         if let Ok(payload) = String::from_utf8(buf) {
-            let _ = app.emit(
+            let _ = host.emit(
                 "lsp-message",
                 LspMessage {
                     key: key.clone(),
@@ -341,17 +342,17 @@ impl Plugin for LspPlugin {
             cwd: String,
             lang: String,
         }
-        let app = self.app.clone();
+        let host = self.host.clone();
         let service = state.clone();
         let plugin_paths = paths.clone();
         ctx.command("lsp.start", move |args| {
-            let app = app.clone();
+            let host = host.clone();
             let service = service.clone();
             let plugin_paths = plugin_paths.clone();
             async move {
                 let args: StartArgs = take_args(args)?;
                 serde_json::to_value(
-                    lsp_start(&app, &service, &plugin_paths, args.cwd, args.lang)
+                    lsp_start(&host, &service, &plugin_paths, args.cwd, args.lang)
                         .map_err(PluginError::new)?,
                 )
                 .map_err(PluginError::new)

@@ -16,8 +16,8 @@ function prettySize(bytes: number): string {
  *
  * The text path can't serve these: `read_text` refuses anything with a NUL byte in the first block,
  * which is every PNG ever written, so a picture used to open as the word "binary file". The bytes
- * come over Tauri's binary IPC and become a blob URL — a `data:` URI would mean base64'ing
- * megabytes through the JSON bridge for no benefit.
+ * come over the sidecar JSON protocol and become a blob URL — a `data:` URI would mean base64'ing
+ * the same bytes again for no benefit.
  *
  * Checkerboard behind the image, because transparent PNGs are most of what a UI project contains
  * and "white logo on white pane" looks like a failed load.

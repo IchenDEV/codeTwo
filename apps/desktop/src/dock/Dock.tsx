@@ -250,8 +250,11 @@ export function Dock({
         <>
           {/* Same 48px bar as the surface header below; the shared 28px control plus 10px block
               insets keep the border on the same line even though this row only holds Close. */}
-          <div data-dock-titlebar data-tauri-drag-region className="flex items-center gap-1 border-b px-3 py-2.5">
-            <div data-tauri-drag-region className="flex-1" />
+          <div
+            data-dock-titlebar
+            className="electrobun-webkit-app-region-drag flex items-center gap-1 border-b px-3 py-2.5"
+          >
+            <div className="electrobun-webkit-app-region-drag flex-1" />
             <Button variant="ghost" size="compact" className="w-(--ds-control-normal) px-0" onClick={onClose} title={t("dock.close")}>
               <X className="size-3.5" />
             </Button>
@@ -289,7 +292,10 @@ export function Dock({
             same reason: the overlay title bar leaves nothing else to grab. */}
         {/* Frameless tab pills rather than the boxed segmented control — the dock's chrome should
             weigh less than what's inside it. */}
-        <div data-dock-titlebar data-tauri-drag-region className="flex items-center gap-1 border-b px-3 py-2.5">
+        <div
+          data-dock-titlebar
+          className="electrobun-webkit-app-region-drag flex items-center gap-1 border-b px-3 py-2.5"
+        >
           {/* h-7! — the primitive pins horizontal lists to h-9 via a group variant that outranks a
               plain h-7, and the extra 8px is exactly what pushed this row off the 28px title line. */}
           <TabsList className="h-7! gap-0.5 bg-transparent p-0">
@@ -312,7 +318,7 @@ export function Dock({
               </TabsTrigger>
             ))}
           </TabsList>
-          <div data-tauri-drag-region className="flex-1" />
+          <div className="electrobun-webkit-app-region-drag flex-1" />
           <Button variant="ghost" size="icon" className="size-6" onClick={onClose} title={t("dock.close")}>
             <X className="size-3.5" />
           </Button>

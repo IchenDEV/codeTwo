@@ -14,8 +14,9 @@ website/.vitepress/dist
 # Reference repos (cloned for study, never vendored)
 /references
 
-# Tauri build output
-apps/desktop/src-tauri/gen
+# Electrobun build output
+apps/desktop/build
+apps/desktop/artifacts
 
 # OS / editor
 .DS_Store

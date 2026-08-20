@@ -5,8 +5,8 @@
 //! the request and surfacing an [`Event::PermissionRequest`] the UI answers via
 //! [`Op::AnswerPermission`].
 //!
-//! Both frontends use this identically: the Tauri bridge forwards `Op`s and streams `Event`s over a
-//! channel; the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
+//! Both frontends use this identically: the desktop sidecar forwards `Op`s and streams `Event`s;
+//! the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};

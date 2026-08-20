@@ -20,19 +20,20 @@ use codetwo_kernel::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter};
 use tokio::sync::broadcast;
+
+use crate::EventSink;
 
 const TICK_SECONDS: u64 = 30;
 const SESSION_CREATION_TIMEOUT_SECONDS: u64 = 120;
 
 pub struct AutomationPlugin {
-    app: AppHandle,
+    host: EventSink,
 }
 
 impl AutomationPlugin {
-    pub fn new(app: AppHandle) -> Self {
-        Self { app }
+    pub fn new(host: EventSink) -> Self {
+        Self { host }
     }
 }
 
@@ -40,7 +41,7 @@ pub struct AutomationRuntime {
     engine: Arc<Engine>,
     store: Arc<Store>,
     events: broadcast::Sender<Event>,
-    app: AppHandle,
+    host: EventSink,
     scope: WeakContext,
 }
 
@@ -49,20 +50,20 @@ impl AutomationRuntime {
         engine: Arc<Engine>,
         store: Arc<Store>,
         events: broadcast::Sender<Event>,
-        app: AppHandle,
+        host: EventSink,
         scope: WeakContext,
     ) -> Self {
         Self {
             engine,
             store,
             events,
-            app,
+            host,
             scope,
         }
     }
 
     fn notify(&self, automation_id: &str) {
-        let _ = self.app.emit("automation-changed", automation_id);
+        let _ = self.host.emit("automation-changed", automation_id);
     }
 
     pub async fn schedule_loop(self: Arc<Self>) {
@@ -354,7 +355,7 @@ impl Plugin for AutomationPlugin {
             engine,
             store,
             events,
-            self.app.clone(),
+            self.host.clone(),
             ctx.weak(),
         ));
 

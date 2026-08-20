@@ -3,6 +3,10 @@
 C2 is a plugin graph. This document explains what that means, how to write a plugin, and how
 the core and host-specific plugins fit together.
 
+For the normative package, naming, lifecycle, scope, security, compatibility, and host-capability
+rules, see the [C2 Plugin Standard 1.0.0](plugin-standard.md). This document focuses on the graph's
+implementation and rationale.
+
 The model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
 [`crates/kernel`](../crates/kernel). Cordis' claim is that an application is not a program with
 extension points bolted on; it is a graph of plugins that happens to boot. We agree, and this is
@@ -10,9 +14,9 @@ what taking that seriously looks like in a Rust codebase.
 
 ## The problem it replaces
 
-Before: `apps/desktop/src-tauri/src/lib.rs` had a 200-line `setup()` that constructed twenty
-subsystems in one fixed order into an `AppState` struct with twenty fields, and 185 hand-written
-`#[tauri::command]` wrappers that reached into it. Three consequences, all of them structural:
+Before the plugin graph, the desktop host had a 200-line setup that constructed twenty subsystems
+in one fixed order into an `AppState` struct with twenty fields, plus 185 hand-written command
+wrappers that reached into it. Three consequences, all of them structural:
 
 - **Adding a feature meant editing the middle of the app** — the state struct, the setup function,
   the handler table, and the frontend bridge, before writing a line of the feature.
@@ -178,7 +182,7 @@ const graph = await kernelScopes();       // what is loaded, and why something i
 ```
 
 `call` is the extension surface. A plugin that registers `foo.bar` is callable the moment it loads
-— no `#[tauri::command]`, no entry in `generate_handler!`, no new function in `bridge.ts`.
+— no native command wrapper, no dispatch-table entry, no new function in `bridge.ts`.
 
 ## The unified plugin manager
 
@@ -205,8 +209,8 @@ State changes use a two-step protocol:
 `kernel.set_enabled` and `kernel.configure` remain compatibility commands, but they route through
 the same durable manager rather than mutating an unrelated in-memory switch.
 
-An installed bundle with a `runtime` block joins this same catalog as a dynamically registered
-third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
+An installed bundle with `extensions.dev.codetwo.runtime` joins this same catalog as a dynamically
+registered third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
 `plugins.plan_change`, and `plugins.apply_change` for user or project policy just as compiled
 factories do; they do not maintain a second process-lifecycle state machine. Importing, installing,
 removing, changing trust, or replacing the installed record reconciles the dynamic factory set
@@ -258,8 +262,8 @@ commands, event subscriptions — lands in the same kernel registries a built-in
 show up in `kernel.commands`, are callable through `call()`, and vanish when it unloads. It
 declares `inject` in its manifest and gets the same reactive contract. It is not a lesser citizen.
 
-A bundle opts in with a `runtime` block in `plugin.json`, and the process starts only once the user
-marks the bundle **trusted** — installing still executes nothing. See
+A portable bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
+starts only once the user marks the bundle **trusted** — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
 
 The runtime appears in the managed catalog as `bundle:<id>`. Existing manifests are user-only:
@@ -280,8 +284,10 @@ registry.register_arc(Box::new(|| my_engine));  // or replace a built-in by name
 CoreApp::boot_with(config, registry).await?;
 ```
 
-The desktop uses the second form: it needs one different engine constructor (its authenticated
-browser MCP), so it replaces the `engine` plugin's construction step and keeps everything else.
+A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
+remote modules; product commands remain behind the same command seam as the TUI and server. The
+current Pure Bun compatibility host implements that seam directly and reports its missing adapters
+explicitly rather than claiming the Rust graph is present.
 
 ## Two senses of "plugin"
 
@@ -294,8 +300,8 @@ They meet in `plugin-hub`, and it is worth keeping them apart:
   GitHub. Installing it executes nothing; it contributes skills, subagent definitions, MCP server
   definitions, scenes, and scaffolds. See `docs/architecture.md`.
 
-`plugin-hub` manages bundles; `extensions` turns the ones that ship a `runtime` block into kernel
-plugins. Both are themselves kernel plugins.
+`plugin-hub` manages bundles; `extensions` turns the ones that ship a C2 process runtime into
+kernel plugins. Both are themselves kernel plugins.
 
 ## Migration status
 
@@ -309,27 +315,24 @@ The application migration is complete:
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
-- The desktop registers five host plugins — `automation`, `browser`, `desktop-events`, `lsp` and
-  `remote` — beside the core registry. Its authenticated browser MCP remains a replacement
-  `engine` builder, the one host-specific construction seam. That engine also declares the browser
-  host service as a requirement, so disabling `browser` unloads the engine and its
-  automation/remote dependents instead of leaving a tool pointed at a dead socket.
-- The Tauri command table contains one entry, `call`. The TypeScript bridge has one native
-  `invoke`, which calls it. There are no compatibility business wrappers or duplicated
-  `AppState` service handles.
+- The experimental Electrobun desktop registers one in-process `pure-bun` compatibility host. It
+  preserves the renderer's typed command/event contract, but it is intentionally not full
+  plugin-graph parity. Its exact supported and fail-closed capabilities are recorded in the
+  [standard's host profiles](plugin-standard.md#7-host-capability-profiles).
+- The renderer exposes one typed `call` request. Electrobun dispatches it directly to the Bun host;
+  no Rust sidecar is built or bundled by the desktop package.
 
-The `desktop-events` plugin is deliberately host plumbing rather than a business API: it turns
-core broadcast events into Tauri window events and reloads with either source service. Browser
-persistence remains native host state because it backs Tauri webviews, while the authenticated
-broker task, socket cleanup, native webviews, and public command surface are all owned by the
-`browser` plugin scope.
+Desktop event envelopes remain host plumbing rather than a business API. Manual browser tabs
+persist in the renderer and render as sandboxed `<electrobun-webview>` elements.
+The former authenticated agent-browser MCP is not registered because Electrobun's stable
+BrowserView API does not yet supply the screenshot and evaluated-value primitives that contract
+requires; restoring it requires an upstream-capable adapter, not a pretend partial tool.
 
 ### Adding another subsystem
 
 1. Add a `Plugin` implementation and declare every service it consumes in `inject`.
 2. Register all commands, tasks and cleanup on the supplied `Context`.
-3. Add it to the core registry, or to the relevant host registry when it requires host-native
-   types such as `AppHandle`.
+3. Add it to the core registry, or to the sidecar registry when it requires desktop-host services.
 4. Call its `subsystem.verb` commands through `CoreApp::call`; do not add another bridge wrapper.
 5. Test that its commands exist while active and disappear when the plugin or a required
    dependency is disabled.
@@ -338,9 +341,8 @@ Desktop-only registration follows the same loader contract:
 
 ```rust
 let mut registry = codetwo_core::app::plugins::builtin_registry();
-registry.register(move || {
-    BrowserPlugin::new(app_handle.clone(), socket_path.clone(), master_key.clone())
-});
-let config = AppConfig::new(&data_dir).with("browser", PluginEntry::default());
+let events = events.clone();
+registry.register(move || HostEventsPlugin::new(events.clone()));
+let config = AppConfig::new(&data_dir).with("desktop-events", PluginEntry::default());
 let app = CoreApp::boot_with(config, registry).await?;
 ```

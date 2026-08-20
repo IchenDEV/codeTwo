@@ -1,50 +1,48 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const desktop = resolve(import.meta.dir, "..");
-const repository = resolve(desktop, "../..");
+import { PureBunHost } from "../src/electrobun/host";
 
-function rustFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    return entry.isDirectory() ? rustFiles(path) : path.endsWith(".rs") ? [path] : [];
-  });
-}
+const desktop = resolve(import.meta.dir, "..");
 
 describe("plugin bridge contract", () => {
-  test("keeps one native invoke and one Tauri command", () => {
+  test("keeps one typed Electrobun request backed by the in-process Bun host", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
-    const native = readFileSync(resolve(desktop, "src-tauri/src/lib.rs"), "utf8");
+    const client = readFileSync(resolve(desktop, "src/electrobun/client.ts"), "utf8");
+    const main = readFileSync(resolve(desktop, "src/electrobun/index.ts"), "utf8");
+    const config = readFileSync(resolve(desktop, "electrobun.config.ts"), "utf8");
+    const prepare = readFileSync(resolve(desktop, "scripts/prepare-electrobun.ts"), "utf8");
 
-    expect(bridge.match(/\binvoke(?:<[^>]+>)?\(/g)).toEqual(['invoke<T>(']);
-    expect(bridge).toContain('invoke<T>("call", {');
-    expect(bridge).toContain("projectPath,");
-    expect(bridge).toContain('call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)');
+    expect(bridge).toContain("return desktopCall<T>(name, args ?? null, projectPath)");
+    expect(bridge).toContain("projectPath: string | null = callProjectPath");
+    expect(bridge).toContain(
+      'call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)',
+    );
     expect(bridge).toContain('call("lsp.set_runtime_enabled", { enabled }, projectPath)');
-    expect(native.match(/^#\[tauri::command\]/gm)).toHaveLength(1);
-    expect(native).toContain("tauri::generate_handler![call]");
+    expect(client).toContain("rpc.request.call({ name, args, projectPath })");
+    expect(main).toContain("new PureBunHost(dataDir");
+    expect(main).toContain("host.call(name, args, projectPath)");
+    expect(`${main}\n${config}\n${prepare}`).not.toContain("codetwo-desktop-host");
+    expect(`${config}\n${prepare}`).not.toContain("cargo");
+    expect(`${bridge}\n${client}\n${main}`).not.toContain("@tauri-apps");
   });
 
-  test("registers every static command used by the bridge", () => {
+  test("registers every static command used by the bridge", async () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
-    const pluginSources = [
-      ...rustFiles(resolve(repository, "crates/core/src/app/plugins")),
-      ...rustFiles(resolve(desktop, "src-tauri/src")),
-    ]
-      .map((path) => readFileSync(path, "utf8"))
-      .join("\n");
-
     const used = new Set(
       [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/g)].map((match) => match[1]),
     );
-    const registered = new Set(
-      [...pluginSources.matchAll(/ctx\.command(?:_described)?\(\s*"([^"]+)"/g)].map(
-        (match) => match[1],
-      ),
-    );
-
-    expect([...used].filter((name) => !registered.has(name))).toEqual([]);
-    expect(used.size).toBeGreaterThan(180);
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-bun-contract-"));
+    const host = new PureBunHost(dataDir, () => {});
+    try {
+      const registered = new Set(host.commands());
+      expect([...used].filter((name) => !registered.has(name))).toEqual([]);
+      expect(used.size).toBeGreaterThan(170);
+    } finally {
+      await host.shutdown();
+      rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });

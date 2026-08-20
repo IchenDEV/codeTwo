@@ -51,7 +51,7 @@ export interface CanvasBlockHandle {
 
 /** The Composer-owned seam for draft persistence and send-time freezing. Keeping this context
  * outside BlockNote's schema lets tests inject a deterministic bridge without changing the block
- * shape or allowing the block to call Tauri directly. */
+ * shape or allowing the block to call the desktop host directly. */
 export interface CanvasBlockRuntime {
   enabled: boolean;
   /**

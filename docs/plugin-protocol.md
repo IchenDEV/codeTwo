@@ -2,6 +2,10 @@
 
 Version **1.0.0**.
 
+This document defines the process wire format. Bundle terminology, manifest namespacing, trust,
+policy, contribution support, and host capability rules are normative in the
+[C2 Plugin Standard 1.0.0](plugin-standard.md).
+
 A plugin is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the plugin declares —
 commands, event subscriptions — is registered in the same kernel registries a built-in Rust plugin
 uses. Installed runtimes have stable managed names of the form `bundle:<id>`. Their commands appear
@@ -120,23 +124,33 @@ the sender or subscriber is a project-scoped runtime.
 
 ## Declaring a plugin
 
-Add a `runtime` block to your bundle's `plugin.json`:
+For an Agent Plugins 1.0.0 bundle, add the runtime under C2's client-extension namespace. The
+portable schema is closed, so a top-level `runtime` field is non-conforming and ignored:
 
 ```json
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "my-plugin",
   "version": "1.0.0",
-  "runtime": {
-    "protocol": "1.0.0",
-    "command": "node",
-    "args": ["dist/plugin.js"],
-    "env": { "MY_PLUGIN_MODE": "release" },
-    "inject": ["store"],
-    "optionalInject": ["engine"],
-    "scopeSupport": ["user", "project"]
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.0.0",
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["dist/plugin.js"],
+        "env": { "MY_PLUGIN_MODE": "release" },
+        "inject": ["store"],
+        "optionalInject": ["engine"],
+        "scopeSupport": ["user", "project"]
+      }
+    }
   }
 }
 ```
+
+Native `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` overlays retain compatibility
+with the historical top-level `runtime` field. New portable bundles must use the namespace above.
 
 The process starts with the bundle directory as its working directory.
 
@@ -150,7 +164,7 @@ one independently managed process, command realm, `dataDir`, and `projectPath` p
 The bundle's skills and other data-only extension components are not made project-scoped by this
 field; they remain user-only and are managed through Bundle Tools.
 
-A bundle whose only component is a `runtime` block is a valid bundle.
+A bundle whose only component is `extensions.dev.codetwo.runtime` is a valid bundle.
 
 ## Trust
 
@@ -158,7 +172,7 @@ A bundle whose only component is a `runtime` block is a valid bundle.
 protocol — it is the reason the protocol is shaped this way.
 
 A process starts only when its bundle is **enabled *and* trusted**. Trust is a separate, deliberate
-user action, and installing a bundle that ships a `runtime` block raises a diagnostic saying so.
+user action, and installing a bundle that ships a C2 runtime raises a diagnostic saying so.
 Until then the plugin is listed by `extensions.list` under `untrusted` and does not run.
 
 Trust is a hard gate in every realm. The legacy `extensions.allow_untrusted` setting is deprecated

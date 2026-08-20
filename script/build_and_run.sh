@@ -2,11 +2,19 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_PROCESS="codetwo-desktop"
 BUNDLE_ID="dev.codetwo.app"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DESKTOP_DIR="$ROOT_DIR/apps/desktop"
-APP_BUNDLE="$ROOT_DIR/target/debug/bundle/macos/C2.app"
+case "$(uname -m)" in
+  arm64|aarch64) ELECTROBUN_ARCH="arm64" ;;
+  x86_64) ELECTROBUN_ARCH="x64" ;;
+  *)
+    echo "unsupported macOS architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+APP_BUNDLE="$DESKTOP_DIR/build/dev-macos-$ELECTROBUN_ARCH/C2-dev.app"
+APP_EXECUTABLE="$APP_BUNDLE/Contents/MacOS/launcher"
 STATE_DIR="$ROOT_DIR/.codex/run"
 PID_FILE="$STATE_DIR/codetwo-dev.pid"
 APP_RUNNER_PID=""
@@ -39,16 +47,17 @@ stop_existing() {
   if [[ -f "$PID_FILE" ]]; then
     previous_pid="$(<"$PID_FILE")"
     if [[ "$previous_pid" =~ ^[0-9]+$ ]] && kill -0 "$previous_pid" >/dev/null 2>&1; then
-      kill "$previous_pid" >/dev/null 2>&1 || true
-      for _ in {1..20}; do
-        kill -0 "$previous_pid" >/dev/null 2>&1 || break
-        sleep 0.1
-      done
+      previous_command="$(ps -p "$previous_pid" -o command= 2>/dev/null || true)"
+      if [[ "$previous_command" == *"$DESKTOP_DIR/build/"*"/Contents/MacOS/launcher"* ]]; then
+        kill "$previous_pid" >/dev/null 2>&1 || true
+        for _ in {1..20}; do
+          kill -0 "$previous_pid" >/dev/null 2>&1 || break
+          sleep 0.1
+        done
+      fi
     fi
     rm -f "$PID_FILE"
   fi
-
-  pkill -x "$APP_PROCESS" >/dev/null 2>&1 || true
 }
 
 cleanup() {
@@ -56,9 +65,8 @@ cleanup() {
     kill "$APP_RUNNER_PID" >/dev/null 2>&1 || true
     wait "$APP_RUNNER_PID" >/dev/null 2>&1 || true
   fi
-  pkill -x "$APP_PROCESS" >/dev/null 2>&1 || true
 
-  if [[ -f "$PID_FILE" ]] && [[ "$(<"$PID_FILE")" == "$$" ]]; then
+  if [[ -f "$PID_FILE" ]] && [[ "$(<"$PID_FILE")" == "$APP_RUNNER_PID" ]]; then
     rm -f "$PID_FILE"
   fi
 }
@@ -69,10 +77,14 @@ build_app() {
     bun install --frozen-lockfile
   fi
 
-  # A raw `tauri dev` executable has an unbound Info.plist. macOS TCC therefore aborts when
-  # speech recognition asks for permission. Building the debug .app binds the privacy strings to
-  # the process while preserving debug symbols and fast incremental Rust builds.
-  bun run tauri build --debug --bundles app
+  # Always run from the generated bundle so macOS can attribute microphone and speech-recognition
+  # permission prompts to C2 instead of to a loose helper executable.
+  bun run build
+
+  if [[ ! -x "$APP_EXECUTABLE" ]]; then
+    echo "Electrobun did not create $APP_EXECUTABLE" >&2
+    exit 1
+  fi
 
   for privacy_key in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription; do
     privacy_value="$(/usr/bin/plutil -extract "$privacy_key" raw -- "$APP_BUNDLE/Contents/Info.plist")"
@@ -81,42 +93,24 @@ build_app() {
       exit 1
     fi
   done
-
-  # Tauri's debug bundler leaves an ad-hoc linker signature whose Info.plist is not bound and does
-  # not carry the audio-input entitlement. Re-sign the finished bundle so TCC evaluates exactly the
-  # privacy metadata above instead of terminating the process.
-  /usr/bin/codesign \
-    --force \
-    --deep \
-    --sign - \
-    --entitlements "$DESKTOP_DIR/src-tauri/Entitlements.plist" \
-    "$APP_BUNDLE"
-  /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
 }
 
 start_app() {
-  echo "$$" > "$PID_FILE"
-  /usr/bin/open -W -n "$APP_BUNDLE" &
+  "$APP_EXECUTABLE" &
   APP_RUNNER_PID=$!
+  echo "$APP_RUNNER_PID" > "$PID_FILE"
 }
 
 wait_for_app() {
-  for _ in {1..240}; do
-    if pgrep -x "$APP_PROCESS" >/dev/null 2>&1; then
-      echo "C2 launched successfully (process: $APP_PROCESS)."
-      return 0
-    fi
-
+  for _ in {1..20}; do
     if ! kill -0 "$APP_RUNNER_PID" >/dev/null 2>&1; then
       wait "$APP_RUNNER_PID"
       return $?
     fi
-
-    sleep 0.5
+    sleep 0.25
   done
 
-  echo "C2 did not launch within 120 seconds." >&2
-  return 1
+  echo "C2 launched successfully (pid: $APP_RUNNER_PID)."
 }
 
 case "$MODE" in
@@ -150,7 +144,7 @@ case "$MODE" in
     build_app
     start_app
     wait_for_app
-    /usr/bin/log stream --info --style compact --predicate "process == \"$APP_PROCESS\""
+    /usr/bin/log stream --info --style compact --predicate "processID == $APP_RUNNER_PID"
     ;;
   --telemetry|telemetry)
     stop_existing

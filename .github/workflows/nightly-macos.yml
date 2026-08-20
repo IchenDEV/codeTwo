@@ -40,18 +40,20 @@ jobs:
       - name: Build ad-hoc signed DMG
         working-directory: apps/desktop
         env:
+          ELECTROBUN_AD_HOC_SIGN: "1"
+          ELECTROBUN_CREATE_DMG: "1"
+          ELECTROBUN_DEVELOPER_ID: "-"
           NODE_OPTIONS: --max-old-space-size=4096
-        run: >-
-          bun run tauri build --bundles dmg
-          --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+        run: bun run build:app
 
       - name: Verify and stage nightly package
         shell: bash
         run: |
           set -euo pipefail
 
-          dmg_path="$(find target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
-          test -n "$dmg_path"
+          dmg_count="$(find apps/desktop/artifacts -maxdepth 1 -name 'stable-macos-arm64-*.dmg' -print | wc -l | tr -d ' ')"
+          test "$dmg_count" -eq 1
+          dmg_path="$(find apps/desktop/artifacts -maxdepth 1 -name 'stable-macos-arm64-*.dmg' -print -quit)"
           hdiutil verify "$dmg_path"
 
           mount_dir="$(mktemp -d)"
@@ -69,7 +71,7 @@ jobs:
           test -n "$device"
 
           app="$mount_dir/C2.app"
-          executable="$app/Contents/MacOS/codetwo-desktop"
+          executable="$app/Contents/MacOS/launcher"
           test -d "$app"
           test -L "$mount_dir/Applications"
           test "$(plutil -extract CFBundleName raw -- "$app/Contents/Info.plist")" = "C2"

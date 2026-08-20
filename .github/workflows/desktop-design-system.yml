@@ -31,7 +31,7 @@ jobs:
         run: bun run check:design
       - name: Run desktop tests
         run: bun test
-      - name: Build desktop webview
+      - name: Build desktop renderer
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        run: bun run build
+        run: bun run build:renderer

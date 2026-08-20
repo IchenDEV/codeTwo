@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { shouldUseWebSpeech } from "../src/voice/platform";
 
 describe("shouldUseWebSpeech", () => {
-  test("never uses Web Speech inside the Tauri desktop app", () => {
+  test("never uses Web Speech inside the Electrobun desktop app", () => {
     expect(shouldUseWebSpeech(true, true)).toBe(false);
   });
 
