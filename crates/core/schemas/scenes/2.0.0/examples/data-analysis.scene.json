@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:data-analysis",
+  "version": "2.0.0",
+  "title": "Data Analysis",
+  "description": "Domain context for datasets, quantitative analysis, visualization, and evidence.",
+  "domain": "data-analysis",
+  "localizations": {
+    "zh-CN": {
+      "title": "数据分析",
+      "description": "用于数据集、量化分析、可视化和证据的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["data-analysis"],
+  "capability_namespaces": ["data"],
+  "extensions": {}
+}

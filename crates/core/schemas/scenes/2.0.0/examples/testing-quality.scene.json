@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:testing-quality",
+  "version": "2.0.0",
+  "title": "Testing and Quality",
+  "description": "Domain context for verification, quality evidence, and defect investigation.",
+  "domain": "testing-quality",
+  "localizations": {
+    "zh-CN": {
+      "title": "测试与质量",
+      "description": "用于验证、质量证据和缺陷调查的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["testing-quality"],
+  "capability_namespaces": ["workspace"],
+  "extensions": {}
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://codetwo.app/schemas/scenes/2.0.0/scene.schema.json",
+  "id": "official:operations-reliability",
+  "version": "2.0.0",
+  "title": "Operations and Reliability",
+  "description": "Domain context for operating systems, reliability, incidents, and delivery environments.",
+  "domain": "operations-reliability",
+  "localizations": {
+    "zh-CN": {
+      "title": "运维与可靠性",
+      "description": "用于系统运维、可靠性、事故和交付环境的领域上下文。"
+    }
+  },
+  "provenance": { "kind": "official" },
+  "agent_skill_selectors": ["operations-reliability"],
+  "capability_namespaces": ["infrastructure", "observability"],
+  "extensions": {}
+}

@@ -50,6 +50,50 @@ pub enum StoreError {
     },
     #[error("invalid automation: {0}")]
     InvalidAutomation(String),
+    #[error("task not found: {task_id}")]
+    TaskNotFound { task_id: String },
+    #[error("work item not found: {task_id}/{work_item_id}")]
+    WorkItemNotFound {
+        task_id: String,
+        work_item_id: String,
+    },
+    #[error("task already has a running Executor attempt: {task_id}")]
+    TaskExecutorBusy { task_id: String },
+    #[error("invalid Task Graph: {0}")]
+    InvalidTaskGraph(String),
+    #[error("invalid Work Item attempt {task_id}/{work_item_id}/{attempt}: {reason}")]
+    InvalidTaskAttempt {
+        task_id: String,
+        work_item_id: String,
+        attempt: u32,
+        reason: String,
+    },
+    #[error("task revision conflict for {task_id}: expected {expected}, found {actual}")]
+    TaskRevisionConflict {
+        task_id: String,
+        expected: u64,
+        actual: u64,
+    },
+    #[error(
+        "Result Contract revision conflict for {task_id}: expected {expected}, found {actual}"
+    )]
+    ResultContractRevisionConflict {
+        task_id: String,
+        expected: u64,
+        actual: u64,
+    },
+    #[error("invalid Result Contract refinement: {0}")]
+    InvalidResultContractRefinement(String),
+    #[error("invalid Task control: {0}")]
+    InvalidTaskControl(String),
+    #[error("session lease conflict for {session_id}: {reason}")]
+    SessionLeaseConflict { session_id: String, reason: String },
+    #[error("invalid Task Artifact: {0}")]
+    InvalidTaskArtifact(String),
+    #[error("invalid Task cache receipt: {0}")]
+    InvalidTaskCacheReceipt(String),
+    #[error("invalid Risk Gate: {0}")]
+    InvalidRiskGate(String),
 }
 
 const SCHEMA: &str = "
@@ -683,6 +727,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: Path::new(path)
@@ -699,6 +744,7 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
+        crate::task_store::install(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: None,
