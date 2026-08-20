@@ -23,7 +23,7 @@ impl RemotePlugin {
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 struct RemoteStatus {
     port: u16,
     endpoints: Vec<codetwo_server::PairingEndpoint>,
@@ -44,13 +44,135 @@ struct RemoteHandle {
     task: tokio::task::JoinHandle<()>,
 }
 
+impl RemoteHandle {
+    fn status(&self) -> RemoteStatus {
+        RemoteStatus {
+            port: self.port,
+            endpoints: RemoteRuntime::endpoints(self.port),
+        }
+    }
+
+    #[cfg(test)]
+    fn for_test(port: u16, task: tokio::task::JoinHandle<()>) -> Self {
+        Self {
+            port,
+            auth: Arc::new(codetwo_server::AuthState::load(None)),
+            task,
+        }
+    }
+}
+
+impl Drop for RemoteHandle {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+enum RemotePhase {
+    Idle,
+    Starting(u64),
+    Running(RemoteHandle),
+    Closed,
+}
+
+struct RemoteLifecycle {
+    phase: RemotePhase,
+    next_ticket: u64,
+}
+
+impl Default for RemoteLifecycle {
+    fn default() -> Self {
+        Self {
+            phase: RemotePhase::Idle,
+            next_ticket: 0,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum RemoteStart {
+    Begin(u64),
+    Running(RemoteStatus),
+}
+
+impl RemoteLifecycle {
+    fn begin_start(&mut self) -> Result<RemoteStart, String> {
+        match &self.phase {
+            RemotePhase::Idle => {}
+            RemotePhase::Starting(_) => return Err("remote server is already starting".into()),
+            RemotePhase::Running(handle) => {
+                return Ok(RemoteStart::Running(handle.status()));
+            }
+            RemotePhase::Closed => return Err("remote plugin is unloading".into()),
+        }
+
+        self.next_ticket = self
+            .next_ticket
+            .checked_add(1)
+            .ok_or_else(|| "remote start generation exhausted".to_string())?;
+        let ticket = self.next_ticket;
+        self.phase = RemotePhase::Starting(ticket);
+        Ok(RemoteStart::Begin(ticket))
+    }
+
+    fn finish_start(&mut self, ticket: u64, handle: RemoteHandle) -> Result<RemoteStatus, String> {
+        match &self.phase {
+            RemotePhase::Starting(current) if *current == ticket => {
+                let status = handle.status();
+                self.phase = RemotePhase::Running(handle);
+                Ok(status)
+            }
+            RemotePhase::Closed => Err("remote plugin is unloading".into()),
+            _ => Err("remote server start was cancelled".into()),
+        }
+    }
+
+    fn fail_start(&mut self, ticket: u64) {
+        if matches!(&self.phase, RemotePhase::Starting(current) if *current == ticket) {
+            self.phase = RemotePhase::Idle;
+        }
+    }
+
+    fn stop(&mut self) {
+        if !matches!(&self.phase, RemotePhase::Closed) {
+            self.phase = RemotePhase::Idle;
+        }
+    }
+
+    fn shutdown(&mut self) {
+        self.phase = RemotePhase::Closed;
+    }
+
+    fn status(&self) -> Option<RemoteStatus> {
+        match &self.phase {
+            RemotePhase::Running(handle) => Some(handle.status()),
+            _ => None,
+        }
+    }
+
+    fn running_access(&self) -> Option<(u16, Arc<codetwo_server::AuthState>)> {
+        match &self.phase {
+            RemotePhase::Running(handle) => Some((handle.port, handle.auth.clone())),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    fn starting_ticket(&self) -> Option<u64> {
+        match &self.phase {
+            RemotePhase::Starting(ticket) => Some(*ticket),
+            _ => None,
+        }
+    }
+}
+
 struct RemoteRuntime {
     engine: Arc<Engine>,
     store: Arc<Store>,
     events: broadcast::Sender<Event>,
     canvas_gate: codetwo_core::CanvasFeatureGate,
     auth_path: PathBuf,
-    running: Mutex<Option<RemoteHandle>>,
+    lifecycle: Mutex<RemoteLifecycle>,
 }
 
 impl RemoteRuntime {
@@ -59,8 +181,8 @@ impl RemoteRuntime {
     }
 
     fn auth(&self) -> Arc<codetwo_server::AuthState> {
-        if let Some(handle) = &*self.running.lock().unwrap() {
-            return handle.auth.clone();
+        if let Some((_, auth)) = self.lifecycle.lock().unwrap().running_access() {
+            return auth;
         }
         Arc::new(codetwo_server::AuthState::load(Some(
             self.auth_path.clone(),
@@ -68,9 +190,11 @@ impl RemoteRuntime {
     }
 
     fn stop(&self) {
-        if let Some(handle) = self.running.lock().unwrap().take() {
-            handle.task.abort();
-        }
+        self.lifecycle.lock().unwrap().stop();
+    }
+
+    fn shutdown(&self) {
+        self.lifecycle.lock().unwrap().shutdown();
     }
 }
 
@@ -125,10 +249,10 @@ impl Plugin for RemotePlugin {
                 .gate
                 .clone(),
             auth_path: self.auth_path.clone(),
-            running: Mutex::new(None),
+            lifecycle: Mutex::new(RemoteLifecycle::default()),
         });
         let cleanup = runtime.clone();
-        ctx.effect(move || cleanup.stop());
+        ctx.effect(move || cleanup.shutdown());
 
         #[derive(Deserialize)]
         struct StartArgs {
@@ -140,20 +264,26 @@ impl Plugin for RemotePlugin {
             let service = service.clone();
             async move {
                 let args: StartArgs = take_args(args)?;
-                if let Some(handle) = &*service.running.lock().unwrap() {
-                    return json(RemoteStatus {
-                        port: handle.port,
-                        endpoints: RemoteRuntime::endpoints(handle.port),
-                    });
-                }
+                let ticket = match service
+                    .lifecycle
+                    .lock()
+                    .unwrap()
+                    .begin_start()
+                    .map_err(PluginError::new)?
+                {
+                    RemoteStart::Begin(ticket) => ticket,
+                    RemoteStart::Running(status) => return json(status),
+                };
                 let port = args.port.unwrap_or(4599);
-                let addr: std::net::SocketAddr = format!("0.0.0.0:{port}")
-                    .parse()
-                    .map_err(PluginError::new)?;
+                let addr: std::net::SocketAddr =
+                    format!("0.0.0.0:{port}").parse().map_err(|error| {
+                        service.lifecycle.lock().unwrap().fail_start(ticket);
+                        PluginError::new(error)
+                    })?;
                 let auth = Arc::new(codetwo_server::AuthState::load(Some(
                     service.auth_path.clone(),
                 )));
-                let (local, task) = codetwo_server::bind_and_serve_with_canvas(
+                let bound = codetwo_server::bind_and_serve_with_canvas(
                     service.engine.clone(),
                     service.events.clone(),
                     addr,
@@ -161,17 +291,27 @@ impl Plugin for RemotePlugin {
                     service.store.clone(),
                     service.canvas_gate.clone(),
                 )
-                .await
-                .map_err(PluginError::new)?;
-                let status = RemoteStatus {
-                    port: local.port(),
-                    endpoints: RemoteRuntime::endpoints(local.port()),
+                .await;
+                let (local, task) = match bound {
+                    Ok(bound) => bound,
+                    Err(error) => {
+                        service.lifecycle.lock().unwrap().fail_start(ticket);
+                        return Err(PluginError::new(error));
+                    }
                 };
-                *service.running.lock().unwrap() = Some(RemoteHandle {
-                    port: local.port(),
-                    auth,
-                    task,
-                });
+                let status = service
+                    .lifecycle
+                    .lock()
+                    .unwrap()
+                    .finish_start(
+                        ticket,
+                        RemoteHandle {
+                            port: local.port(),
+                            auth,
+                            task,
+                        },
+                    )
+                    .map_err(PluginError::new)?;
                 json(status)
             }
         })?;
@@ -189,15 +329,7 @@ impl Plugin for RemotePlugin {
         ctx.command("remote.status", move |_| {
             let service = service.clone();
             async move {
-                let status = service
-                    .running
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map(|handle| RemoteStatus {
-                        port: handle.port,
-                        endpoints: RemoteRuntime::endpoints(handle.port),
-                    });
+                let status = service.lifecycle.lock().unwrap().status();
                 json(status)
             }
         })?;
@@ -216,11 +348,13 @@ impl Plugin for RemotePlugin {
             let service = service.clone();
             async move {
                 let args: PairingArgs = take_args(args)?;
-                let guard = service.running.lock().unwrap();
-                let handle = guard
-                    .as_ref()
+                let (port, auth) = service
+                    .lifecycle
+                    .lock()
+                    .unwrap()
+                    .running_access()
                     .ok_or_else(|| PluginError::new("turn on network access first"))?;
-                let endpoints = RemoteRuntime::endpoints(handle.port);
+                let endpoints = RemoteRuntime::endpoints(port);
                 let endpoint = codetwo_server::select_pairing_endpoint(
                     &endpoints,
                     args.endpoint_id.as_deref(),
@@ -231,8 +365,8 @@ impl Plugin for RemotePlugin {
                         .unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
                 );
                 let token = match args.client_protocol.as_deref().unwrap_or("t3") {
-                    "t3" => handle.auth.issue_t3_pairing_token(ttl),
-                    "legacy" => handle.auth.issue_pairing_token(ttl),
+                    "t3" => auth.issue_t3_pairing_token(ttl),
+                    "legacy" => auth.issue_pairing_token(ttl),
                     protocol => {
                         return Err(PluginError::new(format!(
                             "unsupported remote client protocol: {protocol}"
@@ -278,5 +412,81 @@ impl Plugin for RemotePlugin {
             }
         })?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RemoteHandle, RemoteLifecycle, RemoteStart};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    struct Dropped(Arc<AtomicBool>);
+
+    impl Drop for Dropped {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Release);
+        }
+    }
+
+    fn start_ticket(lifecycle: &mut RemoteLifecycle) -> u64 {
+        match lifecycle.begin_start().unwrap() {
+            RemoteStart::Begin(ticket) => ticket,
+            RemoteStart::Running(_) => panic!("test lifecycle unexpectedly running"),
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_start_is_single_flight_and_shutdown_rejects_late_server() {
+        let mut lifecycle = RemoteLifecycle::default();
+        let ticket = start_ticket(&mut lifecycle);
+        assert_eq!(
+            lifecycle.begin_start().unwrap_err(),
+            "remote server is already starting"
+        );
+
+        lifecycle.shutdown();
+        let dropped = Arc::new(AtomicBool::new(false));
+        let guard = Dropped(dropped.clone());
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            std::future::pending::<()>().await;
+        });
+        tokio::task::yield_now().await;
+        let late = RemoteHandle::for_test(4599, task);
+
+        assert_eq!(
+            lifecycle.finish_start(ticket, late).unwrap_err(),
+            "remote plugin is unloading"
+        );
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !dropped.load(Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("late remote server task should be aborted");
+        assert_eq!(
+            lifecycle.begin_start().unwrap_err(),
+            "remote plugin is unloading"
+        );
+    }
+
+    #[tokio::test]
+    async fn stopped_start_cannot_complete_into_a_new_start_slot() {
+        let mut lifecycle = RemoteLifecycle::default();
+        let first = start_ticket(&mut lifecycle);
+        lifecycle.stop();
+        let second = start_ticket(&mut lifecycle);
+        let task = tokio::spawn(std::future::pending::<()>());
+        let late = RemoteHandle::for_test(4599, task);
+
+        assert_ne!(first, second);
+        assert_eq!(
+            lifecycle.finish_start(first, late).unwrap_err(),
+            "remote server start was cancelled"
+        );
+        assert_eq!(lifecycle.starting_ticket(), Some(second));
     }
 }

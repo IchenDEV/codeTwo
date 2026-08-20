@@ -18,9 +18,9 @@
 //! "handle your dependency being swapped underneath you" is a correctness burden every plugin
 //! author would have to carry, and most would carry wrongly.
 
-use crate::command::{CommandEntry, CommandInfo};
+use crate::command::{CommandEntry, CommandInfo, CommandRealm};
 use crate::error::{KernelError, PluginError};
-use crate::event::{JsonListenerEntry, ListenerEntry};
+use crate::event::{Event, JsonListenerEntry, ListenerEntry};
 use crate::plugin::{Injection, Plugin};
 use crate::service::{AnyService, ServiceInfo};
 use serde_json::Value;
@@ -67,6 +67,7 @@ pub struct ScopeInfo {
     pub missing: Vec<String>,
     pub services: Vec<String>,
     pub commands: Vec<String>,
+    pub command_realm: CommandRealm,
     pub config: Value,
 }
 
@@ -85,7 +86,9 @@ pub(crate) struct ScopeState {
     generation: u64,
     disposables: Vec<Box<dyn FnOnce() + Send>>,
     services: Vec<(String, u64)>,
-    commands: Vec<String>,
+    commands: Vec<(CommandRealm, String)>,
+    command_fallback_blocks: Vec<(CommandRealm, String)>,
+    command_realm: CommandRealm,
 }
 
 struct ServiceRecord {
@@ -109,7 +112,11 @@ pub(crate) struct State {
     services: HashMap<(String, u64), ServiceRecord>,
     listeners: HashMap<TypeId, Vec<ListenerEntry>>,
     json_listeners: HashMap<String, Vec<JsonListenerEntry>>,
-    commands: HashMap<String, CommandEntry>,
+    commands: HashMap<(CommandRealm, String), CommandEntry>,
+    /// Project scopes that deliberately suppress inheritance of a global command. A set of owner
+    /// scopes makes blocker replacement race-free: an old fork may be queued for disposal while
+    /// its replacement is already queued to load.
+    command_fallback_blocks: HashMap<(CommandRealm, String), std::collections::HashSet<ScopeId>>,
     queue: VecDeque<Job>,
     /// Scopes with a refresh already waiting. Two changes before the driver gets to either one is
     /// one reload, not two — otherwise every plugin loaded before its dependency would apply twice.
@@ -143,6 +150,8 @@ impl Runtime {
             disposables: Vec::new(),
             services: Vec::new(),
             commands: Vec::new(),
+            command_fallback_blocks: Vec::new(),
+            command_realm: CommandRealm::Global,
         };
         let runtime = Arc::new(Runtime {
             state: Mutex::new(State {
@@ -154,6 +163,7 @@ impl Runtime {
                 listeners: HashMap::new(),
                 json_listeners: HashMap::new(),
                 commands: HashMap::new(),
+                command_fallback_blocks: HashMap::new(),
                 queue: VecDeque::new(),
                 queued_refresh: std::collections::HashSet::new(),
                 running: 0,
@@ -168,7 +178,9 @@ impl Runtime {
     }
 
     pub(crate) fn state(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     /// Wait until the graph is settled: no job queued, none running.
@@ -205,8 +217,17 @@ impl Runtime {
                 error: scope.error.clone(),
                 inject: scope.inject.clone(),
                 missing: missing_injections(&state, scope),
-                services: scope.services.iter().map(|(name, _)| name.clone()).collect(),
-                commands: scope.commands.clone(),
+                services: scope
+                    .services
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .collect(),
+                commands: scope
+                    .commands
+                    .iter()
+                    .map(|(_, name)| name.clone())
+                    .collect(),
+                command_realm: scope.command_realm.clone(),
                 config: scope.config.clone(),
             })
             .collect()
@@ -214,7 +235,11 @@ impl Runtime {
 
     /// Status of one scope, or [`Status::Disposed`] if it is gone.
     pub fn status(&self, scope: ScopeId) -> Status {
-        self.state().scopes.get(&scope).map(|s| s.status).unwrap_or(Status::Disposed)
+        self.state()
+            .scopes
+            .get(&scope)
+            .map(|s| s.status)
+            .unwrap_or(Status::Disposed)
     }
 
     /// Every live service and who provides it.
@@ -244,14 +269,19 @@ impl Runtime {
         let mut out: Vec<_> = state
             .commands
             .iter()
-            .map(|(name, entry)| CommandInfo {
+            .map(|((realm, name), entry)| CommandInfo {
                 name: name.clone(),
-                plugin: state.scopes.get(&entry.scope).map(|s| s.name.clone()).unwrap_or_default(),
+                realm: realm.clone(),
+                plugin: state
+                    .scopes
+                    .get(&entry.scope)
+                    .map(|s| s.name.clone())
+                    .unwrap_or_default(),
                 scope: entry.scope,
                 description: entry.description.clone(),
             })
             .collect();
-        out.sort_by(|a, b| a.name.cmp(&b.name));
+        out.sort_by(|a, b| (&a.name, &a.realm).cmp(&(&b.name, &b.realm)));
         out
     }
 
@@ -295,6 +325,7 @@ impl Runtime {
         plugin: Arc<dyn Plugin>,
         config: Value,
         isolate: Arc<HashMap<String, u64>>,
+        command_realm: CommandRealm,
     ) -> ScopeId {
         let id = {
             let mut state = self.state();
@@ -315,6 +346,8 @@ impl Runtime {
                 disposables: Vec::new(),
                 services: Vec::new(),
                 commands: Vec::new(),
+                command_fallback_blocks: Vec::new(),
+                command_realm,
             };
             state.scopes.insert(id, scope);
             if let Some(parent) = state.scopes.get_mut(&parent) {
@@ -329,7 +362,9 @@ impl Runtime {
     pub(crate) fn set_config(&self, scope: ScopeId, config: Value) {
         {
             let mut state = self.state();
-            let Some(entry) = state.scopes.get_mut(&scope) else { return };
+            let Some(entry) = state.scopes.get_mut(&scope) else {
+                return;
+            };
             if entry.config == config {
                 return;
             }
@@ -344,7 +379,10 @@ impl Runtime {
         isolate: &HashMap<String, u64>,
     ) -> Option<AnyService> {
         let realm = isolate.get(name).copied().unwrap_or(GLOBAL_REALM);
-        self.state().services.get(&(name.to_string(), realm)).map(|record| record.value.clone())
+        self.state()
+            .services
+            .get(&(name.to_string(), realm))
+            .map(|record| record.value.clone())
     }
 
     pub(crate) fn provide_service(
@@ -364,7 +402,13 @@ impl Runtime {
             if !state.scopes.contains_key(&scope) {
                 return Err(KernelError::Disposed);
             }
-            state.services.insert(key, ServiceRecord { value, provider: scope });
+            state.services.insert(
+                key,
+                ServiceRecord {
+                    value,
+                    provider: scope,
+                },
+            );
             if let Some(entry) = state.scopes.get_mut(&scope) {
                 entry.services.push((name.to_string(), realm));
             }
@@ -376,26 +420,82 @@ impl Runtime {
     pub(crate) fn register_command(
         &self,
         scope: ScopeId,
+        realm: CommandRealm,
         name: String,
         description: Option<String>,
         handler: crate::command::CommandHandler,
     ) -> Result<(), KernelError> {
         let mut state = self.state();
-        if state.commands.contains_key(&name) {
+        let key = (realm, name.clone());
+        if state.commands.contains_key(&key) {
             return Err(KernelError::CommandConflict(name));
         }
         if !state.scopes.contains_key(&scope) {
             return Err(KernelError::Disposed);
         }
-        state.commands.insert(name.clone(), CommandEntry { scope, handler, description });
+        state.commands.insert(
+            key.clone(),
+            CommandEntry {
+                scope,
+                handler,
+                description,
+            },
+        );
         if let Some(entry) = state.scopes.get_mut(&scope) {
-            entry.commands.push(name);
+            entry.commands.push(key);
         }
         Ok(())
     }
 
-    pub(crate) fn command_handler(&self, name: &str) -> Option<crate::command::CommandHandler> {
-        self.state().commands.get(name).map(|entry| entry.handler.clone())
+    pub(crate) fn command_handler(
+        &self,
+        realm: &CommandRealm,
+        name: &str,
+    ) -> Result<Option<crate::command::CommandHandler>, KernelError> {
+        let state = self.state();
+        let local = (realm.clone(), name.to_string());
+        if let Some(entry) = state.commands.get(&local) {
+            return Ok(Some(entry.handler.clone()));
+        }
+        if matches!(realm, CommandRealm::Global) {
+            return Ok(None);
+        }
+        if state
+            .command_fallback_blocks
+            .get(&local)
+            .is_some_and(|owners| !owners.is_empty())
+        {
+            return Err(KernelError::CommandFallbackBlocked {
+                realm: realm.clone(),
+                name: name.to_string(),
+            });
+        }
+        Ok(state
+            .commands
+            .get(&(CommandRealm::Global, name.to_string()))
+            .map(|entry| entry.handler.clone()))
+    }
+
+    pub(crate) fn register_command_fallback_block(
+        &self,
+        scope: ScopeId,
+        realm: CommandRealm,
+        name: String,
+    ) -> Result<(), KernelError> {
+        let mut state = self.state();
+        if !state.scopes.contains_key(&scope) {
+            return Err(KernelError::Disposed);
+        }
+        let key = (realm, name);
+        state
+            .command_fallback_blocks
+            .entry(key.clone())
+            .or_default()
+            .insert(scope);
+        if let Some(entry) = state.scopes.get_mut(&scope) {
+            entry.command_fallback_blocks.push(key);
+        }
+        Ok(())
     }
 
     pub(crate) fn add_disposable(&self, scope: ScopeId, dispose: Box<dyn FnOnce() + Send>) {
@@ -409,18 +509,28 @@ impl Runtime {
     }
 
     pub(crate) fn add_listener(&self, type_id: TypeId, entry: ListenerEntry) {
-        self.state().listeners.entry(type_id).or_default().push(entry);
+        self.state()
+            .listeners
+            .entry(type_id)
+            .or_default()
+            .push(entry);
     }
 
     pub(crate) fn add_json_listener(&self, name: String, entry: JsonListenerEntry) {
-        self.state().json_listeners.entry(name).or_default().push(entry);
+        self.state()
+            .json_listeners
+            .entry(name)
+            .or_default()
+            .push(entry);
     }
 
     /// Snapshot the listeners for an event type. Dispatch happens with the lock released, so a
     /// listener is free to load plugins, provide services, or emit further events.
     pub(crate) fn listeners_for<E: crate::event::Event>(&self) -> Vec<crate::event::Handler<E>> {
         let state = self.state();
-        let Some(entries) = state.listeners.get(&TypeId::of::<E>()) else { return Vec::new() };
+        let Some(entries) = state.listeners.get(&TypeId::of::<E>()) else {
+            return Vec::new();
+        };
         let mut entries: Vec<_> = entries.iter().collect();
         entries.sort_by_key(|entry| entry.seq);
         entries
@@ -432,7 +542,9 @@ impl Runtime {
 
     pub(crate) fn json_listeners_for(&self, name: &str) -> Vec<crate::event::JsonHandler> {
         let state = self.state();
-        let Some(entries) = state.json_listeners.get(name) else { return Vec::new() };
+        let Some(entries) = state.json_listeners.get(name) else {
+            return Vec::new();
+        };
         let mut entries: Vec<_> = entries.iter().collect();
         entries.sort_by_key(|entry| entry.seq);
         entries.iter().map(|entry| entry.handler.clone()).collect()
@@ -474,7 +586,9 @@ fn missing_injections(state: &State, scope: &ScopeState) -> Vec<String> {
 }
 
 fn is_ready(state: &State, id: ScopeId) -> bool {
-    let Some(scope) = state.scopes.get(&id) else { return false };
+    let Some(scope) = state.scopes.get(&id) else {
+        return false;
+    };
     missing_injections(state, scope).is_empty()
 }
 
@@ -492,7 +606,9 @@ impl Runtime {
         let mut out = Vec::new();
         let mut stack = vec![root];
         while let Some(id) = stack.pop() {
-            let Some(scope) = state.scopes.get(&id) else { continue };
+            let Some(scope) = state.scopes.get(&id) else {
+                continue;
+            };
             out.push(id);
             stack.extend(scope.children.iter().copied());
         }
@@ -503,20 +619,35 @@ impl Runtime {
     /// Strip one scope back to empty. `remove` also forgets it and unlinks it from its parent.
     fn strip(&self, id: ScopeId, remove: bool) -> Option<Teardown> {
         let mut state = self.state();
-        let Some(scope) = state.scopes.get_mut(&id) else { return None };
+        let Some(scope) = state.scopes.get_mut(&id) else {
+            return None;
+        };
         scope.generation += 1;
         let disposables = std::mem::take(&mut scope.disposables);
         let services = std::mem::take(&mut scope.services);
         let commands = std::mem::take(&mut scope.commands);
+        let command_fallback_blocks = std::mem::take(&mut scope.command_fallback_blocks);
         scope.error = None;
-        scope.status = if remove { Status::Disposed } else { Status::Pending };
+        scope.status = if remove {
+            Status::Disposed
+        } else {
+            Status::Pending
+        };
         let parent = scope.parent;
 
         for (name, realm) in &services {
             state.services.remove(&(name.clone(), *realm));
         }
-        for name in &commands {
-            state.commands.remove(name);
+        for key in &commands {
+            state.commands.remove(key);
+        }
+        for key in &command_fallback_blocks {
+            if let Some(owners) = state.command_fallback_blocks.get_mut(key) {
+                owners.remove(&id);
+                if owners.is_empty() {
+                    state.command_fallback_blocks.remove(key);
+                }
+            }
         }
         for entries in state.listeners.values_mut() {
             entries.retain(|entry| entry.scope != id);
@@ -530,7 +661,11 @@ impl Runtime {
                 parent.children.retain(|child| *child != id);
             }
         }
-        Some(Teardown { disposables, services, scope: id })
+        Some(Teardown {
+            disposables,
+            services,
+            scope: id,
+        })
     }
 
     /// Everything that has to come down with `root`, in the order it has to come down in:
@@ -550,7 +685,9 @@ impl Runtime {
                 order.iter().map(|(id, _)| *id).collect();
             let mut added: Vec<ScopeId> = Vec::new();
             for id in &frontier {
-                let Some(scope) = state.scopes.get(id) else { continue };
+                let Some(scope) = state.scopes.get(id) else {
+                    continue;
+                };
                 for (name, realm) in &scope.services {
                     for other in state.scopes.values() {
                         if known.contains(&other.id) || added.contains(&other.id) {
@@ -603,7 +740,12 @@ impl Runtime {
         let mut withdrawn = Vec::new();
         for teardown in &mut teardowns {
             for dispose in std::mem::take(&mut teardown.disposables).into_iter().rev() {
-                dispose();
+                // Cleanup is third-party lifecycle code just as much as `Plugin::apply`. One
+                // panicking undo callback must not kill the single graph driver, strand future
+                // `flush()` calls, or prevent the remaining resources from being withdrawn.
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(dispose)).is_err() {
+                    tracing::error!(scope = %teardown.scope, "plugin cleanup panicked");
+                }
             }
             for (name, realm) in std::mem::take(&mut teardown.services) {
                 withdrawn.push((name, realm, teardown.scope));
@@ -613,8 +755,12 @@ impl Runtime {
         drop(teardowns);
         for (name, realm, scope) in withdrawn {
             self.notify_service_change(&name, realm, scope);
-            let ctx = crate::Context::for_scope(self.clone(), ROOT_SCOPE);
-            ctx.emit(crate::events::ServiceChanged { name, realm, active: false }).await;
+            self.emit_driver_event(crate::events::ServiceChanged {
+                name,
+                realm,
+                active: false,
+            })
+            .await;
         }
     }
 
@@ -637,7 +783,9 @@ impl Runtime {
     async fn refresh_scope(self: &Arc<Self>, id: ScopeId) {
         let (status, ready) = {
             let state = self.state();
-            let Some(scope) = state.scopes.get(&id) else { return };
+            let Some(scope) = state.scopes.get(&id) else {
+                return;
+            };
             (scope.status, is_ready(&state, id))
         };
         match status {
@@ -659,23 +807,35 @@ impl Runtime {
     }
 
     async fn load(self: &Arc<Self>, id: ScopeId) {
-        let (plugin, config, isolate, generation, name) = {
+        let (plugin, config, isolate, command_realm, generation, name) = {
             let mut state = self.state();
-            let Some(scope) = state.scopes.get_mut(&id) else { return };
-            let Some(plugin) = scope.plugin.clone() else { return };
+            let Some(scope) = state.scopes.get_mut(&id) else {
+                return;
+            };
+            let Some(plugin) = scope.plugin.clone() else {
+                return;
+            };
             scope.status = Status::Loading;
             (
                 plugin,
                 scope.config.clone(),
                 scope.isolate.clone(),
+                scope.command_realm.clone(),
                 scope.generation,
                 scope.name.clone(),
             )
         };
-        self.emit_status(id, name.clone(), Status::Loading, None).await;
+        self.emit_status(id, name.clone(), Status::Loading, None)
+            .await;
 
-        let ctx = crate::Context::with_isolate(self.clone(), id, isolate);
-        let result = plugin.apply(ctx, config).await;
+        let ctx = crate::Context::with_isolate(self.clone(), id, isolate, command_realm);
+        // A third-party or host plugin panic is a failed scope, not permission to kill the single
+        // graph driver and leave every future `flush()` waiting forever. A nested Tokio task gives
+        // us a panic boundary while preserving the driver's strictly serial lifecycle ordering.
+        let result = match tokio::spawn(async move { plugin.apply(ctx, config).await }).await {
+            Ok(result) => result,
+            Err(error) => Err(PluginError(format!("plugin lifecycle panicked: {error}"))),
+        };
 
         // The scope may have been reset or disposed while `apply` was running. If so, whatever it
         // registered belongs to a generation nobody wants — strip it and let the queued refresh win.
@@ -707,14 +867,20 @@ impl Runtime {
         }
         let services = {
             let mut state = self.state();
-            let Some(scope) = state.scopes.get_mut(&id) else { return };
+            let Some(scope) = state.scopes.get_mut(&id) else {
+                return;
+            };
             scope.status = status;
             scope.error = error.clone();
             scope.services.clone()
         };
         for (service, realm) in services {
-            let ctx = crate::Context::for_scope(self.clone(), ROOT_SCOPE);
-            ctx.emit(crate::events::ServiceChanged { name: service, realm, active: true }).await;
+            self.emit_driver_event(crate::events::ServiceChanged {
+                name: service,
+                realm,
+                active: true,
+            })
+            .await;
         }
         self.emit_status(id, name, status, error).await;
     }
@@ -726,8 +892,23 @@ impl Runtime {
         status: Status,
         error: Option<String>,
     ) {
+        self.emit_driver_event(crate::events::StatusChanged {
+            scope,
+            plugin,
+            status,
+            error,
+        })
+        .await;
+    }
+
+    /// Kernel lifecycle notifications execute plugin listeners. Isolate their panics from the
+    /// single graph driver just like plugin apply and dispose callbacks, otherwise one observer can
+    /// permanently strand every later lifecycle job and `flush()` waiter.
+    async fn emit_driver_event<E: Event>(self: &Arc<Self>, event: E) {
         let ctx = crate::Context::for_scope(self.clone(), ROOT_SCOPE);
-        ctx.emit(crate::events::StatusChanged { scope, plugin, status, error }).await;
+        if let Err(error) = tokio::spawn(async move { ctx.emit(event).await }).await {
+            tracing::error!(event = E::NAME, %error, "plugin lifecycle listener panicked");
+        }
     }
 }
 
@@ -759,8 +940,7 @@ async fn drive(runtime: Weak<Runtime>) {
             first
         };
         if first_idle {
-            let ctx = crate::Context::for_scope(rt.clone(), ROOT_SCOPE);
-            ctx.emit(crate::events::Ready).await;
+            rt.emit_driver_event(crate::events::Ready).await;
             continue;
         }
 

@@ -11,7 +11,8 @@
 
 use crate::app::events::{EngineEvent, ScenesChanged, SkillsChanged};
 use crate::app::service::{
-    EngineService, EventBus, ProviderService, SceneService, SkillService, StoreService,
+    EngineService, EventBus, MemoryService, ProviderService, SceneService, SkillService,
+    StoreService,
 };
 use crate::app::{json, take_args};
 use crate::engine::Engine;
@@ -31,6 +32,7 @@ pub struct EngineInputs {
     pub providers: Vec<crate::provider::Provider>,
     pub skills: crate::skill::SkillLibrary,
     pub store: Arc<crate::store::Store>,
+    pub memory: Option<crate::memory::MemoryCapability>,
 }
 
 /// Replaces how the engine is constructed, without replacing what it is wired to.
@@ -91,8 +93,8 @@ impl Plugin for EnginePlugin {
     }
 
     fn inject(&self) -> Injection {
-        let mut injection =
-            Injection::required(["store", "providers", "skills", "bus"]).with_optional(["scenes"]);
+        let mut injection = Injection::required(["store", "providers", "skills", "bus"])
+            .with_optional(["scenes", "memory"]);
         injection
             .required
             .extend(self.extra_required.iter().cloned());
@@ -109,10 +111,16 @@ impl Plugin for EnginePlugin {
             providers: providers.providers.clone(),
             skills: skills.library(),
             store: store.0.clone(),
+            memory: ctx.get::<MemoryService>().map(|memory| memory.0.clone()),
         };
         let (engine, mut rx) = match &self.builder {
             Some(build) => build(inputs),
-            None => Engine::with_store(inputs.providers, inputs.skills, inputs.store),
+            None => Engine::with_store_and_memory(
+                inputs.providers,
+                inputs.skills,
+                inputs.store,
+                inputs.memory,
+            ),
         };
         let engine = Arc::new(engine);
 
@@ -156,7 +164,8 @@ impl Plugin for EnginePlugin {
         }
 
         ctx.provide(Arc::new(EngineService(engine.clone())))?;
-        register_commands(&ctx, engine, store)?;
+        register_commands(&ctx, engine.clone(), store)?;
+        ctx.effect(move || engine.shutdown());
         Ok(())
     }
 }

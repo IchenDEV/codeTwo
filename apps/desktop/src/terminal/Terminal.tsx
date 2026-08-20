@@ -61,11 +61,14 @@ function terminalTheme(): ITheme {
 export function TerminalPanel({
   id,
   cwd,
+  projectPath,
   tmux = false,
 }: {
   /** Stable across remounts — see above. */
   id: string;
   cwd: string | null;
+  /** Command realm owning this terminal; null denotes the global user graph. */
+  projectPath: string | null;
   tmux?: boolean;
 }) {
   const t = useT();
@@ -152,12 +155,14 @@ export function TerminalPanel({
       let pending: string[] | null = [];
 
       stopOutput = await onPtyOutput((p) => {
-        if (p.id !== id) return;
+        if (p.id !== id || p.project_path !== projectPath) return;
         if (pending) pending.push(p.data);
         else term.write(p.data);
       });
       stopExit = await onPtyExit((exited) => {
-        if (exited === id) term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
+        if (exited.id === id && exited.project_path === projectPath) {
+          term.write(`\r\n\x1b[2m${t("terminal.exited")}\x1b[0m\r\n`);
+        }
       });
       if (disposed) return;
 
@@ -201,7 +206,7 @@ export function TerminalPanel({
     };
     // `t` is deliberately absent: re-attaching the terminal to restate one label would be absurd.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, cwd, tmux, refit]);
+  }, [id, cwd, projectPath, tmux, refit]);
 
   // Appearance changes apply to the live terminal — no reason to lose the session over a font.
   useEffect(() => {

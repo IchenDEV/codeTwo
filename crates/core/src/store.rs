@@ -683,15 +683,12 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
-        let store = Self {
+        Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: Path::new(path)
                 .parent()
                 .map(|parent| parent.join("artifacts")),
-        };
-        // A delayed candidate may have become eligible while C2 was closed.
-        store.run_memory_maintenance()?;
-        Ok(store)
+        })
     }
 
     /// In-memory store, used by tests.
@@ -702,12 +699,10 @@ impl Store {
         crate::memory::install(&conn)?;
         crate::canvas::install(&conn)?;
         crate::automation::install(&conn)?;
-        let store = Self {
+        Ok(Self {
             conn: Mutex::new(conn),
             artifact_root: None,
-        };
-        store.run_memory_maintenance()?;
-        Ok(store)
+        })
     }
 
     /// App-private root for opaque tool artifacts. In-memory stores deliberately have none.

@@ -92,14 +92,17 @@ mod service;
 
 pub use async_trait::async_trait;
 
-pub use command::{CommandHandler, CommandInfo};
+pub use command::{CommandHandler, CommandInfo, CommandRealm};
 pub use context::{App, Context, Fork, WeakContext};
 pub use error::{KernelError, PluginError, PluginResult};
 pub use event::{Event, JsonEvent};
 pub use loader::{
-    Loader, LoaderConfig, LoaderEntryInfo, PluginEntry, PluginFactory, PluginRegistry,
+    Loader, LoaderConfig, LoaderEntryInfo, LoaderReconcileResult, PluginEntry, PluginFactory,
+    PluginRegistry,
 };
-pub use plugin::{FnPlugin, Injection, Plugin};
+pub use plugin::{
+    FnPlugin, Injection, Plugin, PluginCategory, PluginMetadata, PluginOrigin, PluginScopeSupport,
+};
 pub use runtime::{Runtime, ScopeId, ScopeInfo, Status, GLOBAL_REALM, ROOT_SCOPE};
 pub use service::{Service, ServiceInfo};
 

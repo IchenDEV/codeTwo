@@ -51,6 +51,10 @@ providers ─→ engine       skills ─→ (engine, market, document)
 The arrows are `inject` declarations, not a sequence. `engine` listed first in the config loads
 exactly as well as `engine` listed last.
 
+`engine` also watches the optional `memory` service. Unloading `memory` revokes recall, receipts,
+capture, and delayed maintenance immediately while leaving session persistence and the engine
+online; unloading `engine` cancels live provider work and terminates its owned processes.
+
 | plugin | provides | contributes |
 |---|---|---|
 | `paths` | `paths` | — |
@@ -62,7 +66,7 @@ exactly as well as `engine` listed last.
 | `scenes` | `scenes` | scene-library and pipeline-library commands |
 | `engine` | `engine` | `engine.*`, `sessions.*`, `worktrees.*` |
 | `git` | — | `git.*` |
-| `memory` | — | `memory.*` |
+| `memory` | `memory` | `memory.*` |
 | `market` | — | `market.*` |
 | `workspace` | — | filesystem, project rules, scripts, and worktree baselines |
 | `projects` | — | `projects.*` |
@@ -78,11 +82,13 @@ exactly as well as `engine` listed last.
 | `terminal` | `terminal` | `terminal.*` |
 | `cost` | `cost` | `cost.session` |
 | `keymap` | `keymap` | `keymap.get`, `keymap.set` |
-| `kernel` | — | `kernel.scopes`, `kernel.services`, `kernel.commands`, `kernel.plugins`, `kernel.set_enabled`, `kernel.configure` |
-| `extensions` | — | `extensions.list` — runs installed bundles that ship a process, over the [plugin protocol](plugin-protocol.md) |
+| `kernel` | — | graph inspection plus `plugins.catalog`, `plugins.plan_change`, `plugins.apply_change`, and `plugins.reset` |
+| `extensions` | `extensions-runtime` | `extensions.list`, the public JSON event bridge, and lifecycle ownership for installed process bundles |
 
-`kernel` is the reflexive one: the plugin manager is not privileged infrastructure, it is a plugin
-that injects `loader` like anything else, and it can be turned off.
+`kernel` is the reflexive one: its commands are contributed through an ordinary plugin scope, but
+its factory is marked `essential`. The loader rejects attempts to turn off this final recovery
+surface. The durable policy store and `PluginManager` service live at the root for the same reason:
+disabling `paths` or another foundation plugin cannot strand the user without a way back.
 
 ## Booting
 
@@ -174,6 +180,74 @@ const graph = await kernelScopes();       // what is loaded, and why something i
 `call` is the extension surface. A plugin that registers `foo.bar` is callable the moment it loads
 — no `#[tauri::command]`, no entry in `generate_handler!`, no new function in `bridge.ts`.
 
+## The unified plugin manager
+
+Every registered factory has catalog metadata: provenance (`built_in`, `host`, or `third_party`),
+category, supported configuration scopes, default state, and whether it is essential. Existing
+plugins that do not declare metadata keep backwards-compatible defaults. Hosts may classify a
+factory centrally with `PluginRegistry::set_metadata`; this keeps reusable plugin implementations
+free of desktop product policy.
+
+The desktop's Plugins page is a data-only view over that catalog. It can show built-in plugins,
+desktop host plugins, installed bundles, C2-owned UI contributions, and marketplace entries in one
+place. Bundle code never supplies a React renderer. Third-party contributions are descriptors that
+C2 renders with its own components, which preserves the webview's trust boundary and design
+system.
+
+State changes use a two-step protocol:
+
+1. `plugins.plan_change` validates the target, scope and JSON Schema, binds the request to the
+   current graph/config revisions, and reports affected dependents and active resources.
+2. After confirmation, `plugins.apply_change` consumes that exact plan. A stale or already-used
+   plan is rejected. The loader unloads or reloads the relevant scopes immediately; no application
+   restart is involved.
+
+`kernel.set_enabled` and `kernel.configure` remain compatibility commands, but they route through
+the same durable manager rather than mutating an unrelated in-memory switch.
+
+An installed bundle with a `runtime` block joins this same catalog as a dynamically registered
+third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
+`plugins.plan_change`, and `plugins.apply_change` for user or project policy just as compiled
+factories do; they do not maintain a second process-lifecycle state machine. Importing, installing,
+removing, changing trust, or replacing the installed record reconciles the dynamic factory set
+immediately. A removed runtime is unloaded and its commands disappear; a changed runtime is
+rebuilt even when its stable `bundle:<id>` name did not change.
+
+That unification currently applies to the bundle's **process runtime**. Skills and other data-only
+extension components shipped in the same bundle remain user-wide contributions. The unified page
+may list them for visibility, but they are read-only there and their install-wide enabled state is
+still managed by Bundle Tools. That install-wide switch also remains a compatibility/default input
+for a process runtime, while explicit managed runtime policy belongs to the unified manager.
+Project policy for `bundle:<id>` must not be presented as if it isolated those data contributions.
+
+### User and project policy
+
+Plugin intent is stored as a versioned `plugin-config.json` beside the rest of C2's private app
+data. The user scope has `enabled` or `disabled`; a project may explicitly enable/disable a plugin
+or inherit the user state. Project paths are normalized before they become configuration keys or
+command realms.
+
+Project-capable factories run in a real child graph, not just a filtered catalog. C2 creates that
+graph lazily on the first project call, registers its commands in `CommandRealm::Project(path)`,
+and falls back to the global command only for factories that do not support project scope. If a
+project-owned plugin is disabled, pending, or failed, its commands stay blocked instead of silently
+running the global implementation. A user change reconciles every live project graph; a project
+change touches only that project. Idle child graphs are reclaimed after their lease window, and
+unloading removes their commands, services and tasks through the same `Context` undo log. A
+background reaper handles genuinely idle graphs; an in-flight project command or live terminal
+holds an activity lease so it cannot be collected mid-use.
+
+### Recovery
+
+Runtime policy is recorded as last-known-good only after the affected scope actually reaches the
+requested state. If an asynchronous plugin apply fails or remains pending, C2 rolls the runtime and
+primary policy back together and preserves the previous snapshot. Boot likewise never replaces a
+good snapshot with a graph whose enabled plugins failed to become active. If the primary document
+is corrupt, boot uses the snapshot without overwriting the bad file; if neither document can be
+read, C2 starts in safe mode with only essential management-plane plugins. The catalog reports the
+recovery state, and `plugins.reset` rewrites a valid primary document even when resetting safe mode
+to an otherwise identical default policy.
+
 ## Plugins that are not Rust
 
 A Rust host can only load Rust plugins it was compiled with. If that were the end of it, "plugin"
@@ -187,6 +261,13 @@ declares `inject` in its manifest and gets the same reactive contract. It is not
 A bundle opts in with a `runtime` block in `plugin.json`, and the process starts only once the user
 marks the bundle **trusted** — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
+
+The runtime appears in the managed catalog as `bundle:<id>`. Existing manifests are user-only:
+omitting `runtime.scopeSupport` is equivalent to `["user"]`. A bundle must explicitly declare
+`["user", "project"]` before the manager will create project-scoped process instances. Those
+instances use the ordinary project child graph, command realm, policy inheritance, lifecycle, and
+idle reclamation described above. Trust remains a hard execution gate in every scope; neither an
+enabled policy nor a project override can start an untrusted runtime.
 
 That leaves exactly one thing compile-time: native code. The graph, the wiring, the lifecycle, the
 config surface, and the whole command API are decided at runtime, and a host can register plugins

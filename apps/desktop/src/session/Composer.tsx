@@ -99,6 +99,8 @@ interface ComposerProps {
   onNewSkill: () => void;
   canvasEnabled: boolean;
   onInsertCanvas: () => void;
+  /** Component-policy gate; false means the voice plugin may already be unloaded. */
+  voiceEnabled: boolean;
   onVoiceText: (text: string) => void;
   /** R11: present only when the active scene has a brief — voice then structures into it. */
   onVoiceTranscript?: (full: string) => Promise<void>;
@@ -836,6 +838,7 @@ export function Composer({
   onNewSkill,
   canvasEnabled,
   onInsertCanvas,
+  voiceEnabled,
   onVoiceText,
   onVoiceTranscript,
   runHint,
@@ -1002,7 +1005,9 @@ export function Composer({
         <TooltipContent>{docMode ? t("composer.collapse") : t("composer.expand")}</TooltipContent>
       </Tooltip>
 
-      <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
+      {voiceEnabled ? (
+        <VoiceButton onText={onVoiceText} onTranscript={onVoiceTranscript} />
+      ) : null}
 
       {/* Required slot fields still empty — a hint beside Run, never a gate on it. */}
       {unfilledRequired.length > 0 && (

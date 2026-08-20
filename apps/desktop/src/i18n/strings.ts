@@ -547,6 +547,7 @@ export const en = {
 
   // config popover
   "config.provider": "Provider",
+  "config.session": "Session configuration",
   "config.mode": "Mode",
   "config.memory": "Session memory",
   "config.worktree": "Isolate in a git worktree",
@@ -1593,6 +1594,7 @@ export const zhCN: Record<StringKey, string> = {
   "memory.preset.learn_onlyHint": "不回忆已有记忆，但从完成的轮次中学习。",
 
   "config.provider": "供应商",
+  "config.session": "会话配置",
   "config.mode": "模式",
   "config.memory": "会话记忆",
   "config.worktree": "在 Git worktree 中隔离",

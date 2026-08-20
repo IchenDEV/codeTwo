@@ -7,9 +7,12 @@
 //! injected as untrusted recalled data rather than higher-priority instructions.
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
 use crate::session::{now_millis, MemoryAccess, Part, Role};
 use crate::skill::DocBlock;
@@ -191,6 +194,193 @@ pub struct MemoryContext {
     pub block: String,
     pub estimated_tokens: u64,
     pub items: Vec<MemoryReceiptItem>,
+}
+
+/// The live memory capability owned by the `memory` plugin.
+///
+/// Keeping this separate from [`Store`] is what makes memory genuinely unloadable: the database
+/// remains available to sessions and artifacts, while recall, receipts, capture, and delayed
+/// maintenance all stop at the same revocable boundary.
+#[derive(Clone)]
+pub struct MemoryCapability {
+    inner: Arc<MemoryCapabilityInner>,
+}
+
+struct MemoryCapabilityInner {
+    store: Arc<Store>,
+    lifecycle: RwLock<MemoryLifecycle>,
+    shutdown: watch::Sender<u64>,
+    settle_delay: Duration,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MemoryLifecycle {
+    active: bool,
+    generation: u64,
+}
+
+/// Recall result bound to the capability generation that produced it.
+///
+/// Receipts and completed-turn capture must present this token. If the memory plugin is unloaded
+/// before either operation, the old generation becomes inert even when an in-flight engine task
+/// still holds an `Arc` to it.
+#[derive(Debug, Clone)]
+pub struct MemoryTurn {
+    generation: u64,
+    context: MemoryContext,
+}
+
+impl MemoryTurn {
+    pub fn context(&self) -> &MemoryContext {
+        &self.context
+    }
+}
+
+impl MemoryCapability {
+    pub fn new(store: Arc<Store>) -> Self {
+        Self::with_settle_delay(store, Duration::from_secs(MEMORY_SETTLE_DELAY_SECS))
+    }
+
+    fn with_settle_delay(store: Arc<Store>, settle_delay: Duration) -> Self {
+        let (shutdown, _) = watch::channel(1);
+        Self {
+            inner: Arc::new(MemoryCapabilityInner {
+                store,
+                lifecycle: RwLock::new(MemoryLifecycle {
+                    active: true,
+                    generation: 1,
+                }),
+                shutdown,
+                settle_delay,
+            }),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_test_settle_delay(store: Arc<Store>, settle_delay: Duration) -> Self {
+        Self::with_settle_delay(store, settle_delay)
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.inner.lifecycle.read().unwrap().active
+    }
+
+    /// Promote candidates that became due while the capability was not loaded.
+    pub fn catch_up(&self) -> Result<usize, StoreError> {
+        let lifecycle = self.inner.lifecycle.read().unwrap();
+        if !lifecycle.active {
+            return Ok(0);
+        }
+        self.inner.store.run_memory_maintenance()
+    }
+
+    /// Revoke every token produced by this capability and wake delayed maintenance immediately.
+    pub fn deactivate(&self) {
+        let generation = {
+            let mut lifecycle = self.inner.lifecycle.write().unwrap();
+            if !lifecycle.active {
+                return;
+            }
+            lifecycle.active = false;
+            lifecycle.generation = lifecycle.generation.saturating_add(1);
+            lifecycle.generation
+        };
+        let _ = self.inner.shutdown.send(generation);
+    }
+
+    /// Recall memory for one turn and bind the result to the current capability generation.
+    pub fn recall(
+        &self,
+        project_path: &str,
+        current_session: &str,
+        query: &str,
+    ) -> Result<Option<MemoryTurn>, StoreError> {
+        let lifecycle = self.inner.lifecycle.read().unwrap();
+        if !lifecycle.active {
+            return Ok(None);
+        }
+        let context =
+            self.inner
+                .store
+                .memory_context_with_receipt(project_path, current_session, query)?;
+        Ok(Some(MemoryTurn {
+            generation: lifecycle.generation,
+            context,
+        }))
+    }
+
+    /// Persist the transparent recall receipt only while its originating generation is active.
+    pub fn receipt(
+        &self,
+        turn: &MemoryTurn,
+        project_path: &str,
+        session_id: &str,
+        user_part_seq: i64,
+        query: &str,
+    ) -> Result<Option<MemoryReceipt>, StoreError> {
+        let lifecycle = self.inner.lifecycle.read().unwrap();
+        if !lifecycle.active || lifecycle.generation != turn.generation {
+            return Ok(None);
+        }
+        self.inner.store.save_memory_receipt(
+            project_path,
+            session_id,
+            user_part_seq,
+            query,
+            &turn.context,
+        )
+    }
+
+    /// Capture one completed turn and schedule a cancellable maintenance pass.
+    pub fn complete_turn(
+        &self,
+        turn: &MemoryTurn,
+        project_path: &str,
+        session_id: &str,
+        prompt_source: &str,
+        user_part_seq: i64,
+        provenance: MemoryTurnProvenance,
+    ) -> Result<usize, StoreError> {
+        // Subscribe before validating/capturing. Once the read guard confirms this generation,
+        // `deactivate` cannot publish its shutdown signal until the capture finishes, so the
+        // receiver can never miss the cancellation between capture and task spawn.
+        let shutdown = self.inner.shutdown.subscribe();
+        let queued = {
+            let lifecycle = self.inner.lifecycle.read().unwrap();
+            if !lifecycle.active || lifecycle.generation != turn.generation {
+                return Ok(0);
+            }
+            self.inner.store.capture_completed_turn_with_provenance(
+                project_path,
+                session_id,
+                prompt_source,
+                user_part_seq,
+                provenance,
+            )?
+        };
+        self.schedule_maintenance(turn.generation, shutdown);
+        Ok(queued)
+    }
+
+    fn schedule_maintenance(&self, generation: u64, mut shutdown: watch::Receiver<u64>) {
+        let capability = self.clone();
+        let settle_delay = self.inner.settle_delay;
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = tokio::time::sleep(settle_delay) => {
+                    let lifecycle = capability.inner.lifecycle.read().unwrap();
+                    if lifecycle.active && lifecycle.generation == generation {
+                        if let Err(error) = capability.inner.store.run_memory_maintenance() {
+                            tracing::warn!("memory maintenance failed: {error}");
+                        }
+                    }
+                }
+                changed = shutdown.changed() => {
+                    let _ = changed;
+                }
+            }
+        });
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1641,6 +1831,126 @@ mod tests {
         session.id = uuid::Uuid::new_v4().to_string();
         store.upsert_session(&session).unwrap();
         session
+    }
+
+    fn completed_turn(store: &Store, session: &Session, prompt: &str) -> i64 {
+        let seq = store
+            .append_part(
+                &session.id,
+                Role::User,
+                &Part::Text {
+                    text: prompt.into(),
+                },
+            )
+            .unwrap();
+        store
+            .append_part(
+                &session.id,
+                Role::Agent,
+                &Part::Text {
+                    text: "Done and verified.".into(),
+                },
+            )
+            .unwrap();
+        seq
+    }
+
+    #[test]
+    fn capability_catches_up_candidates_that_became_due_while_unloaded() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let session = session(&store, "/work");
+        let prompt = "Always run the targeted memory tests.";
+        let seq = completed_turn(&store, &session, prompt);
+        store
+            .capture_completed_turn("/work", &session.id, prompt, seq)
+            .unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE memory_candidates SET eligible_at=0", [])
+            .unwrap();
+
+        let memory = MemoryCapability::new(store.clone());
+        assert_eq!(memory.catch_up().unwrap(), 1);
+        assert_eq!(store.memory_stats("/work").unwrap().pending, 0);
+        assert_eq!(store.memory_stats("/work").unwrap().l1, 1);
+    }
+
+    #[test]
+    fn deactivated_generation_cannot_write_receipts_or_capture() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let session = session(&store, "/work");
+        store
+            .add_memory("/work", "constraint", "Always use frobnicator", true)
+            .unwrap();
+        let memory = MemoryCapability::new(store.clone());
+        let turn = memory
+            .recall("/work", &session.id, "frobnicator")
+            .unwrap()
+            .unwrap();
+        assert!(!turn.context().items.is_empty());
+        let prompt = "I prefer compact status updates.";
+        let seq = completed_turn(&store, &session, prompt);
+
+        memory.deactivate();
+        assert!(!memory.is_active());
+        assert!(memory
+            .receipt(&turn, "/work", &session.id, seq, prompt)
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            memory
+                .complete_turn(
+                    &turn,
+                    "/work",
+                    &session.id,
+                    prompt,
+                    seq,
+                    MemoryTurnProvenance::default(),
+                )
+                .unwrap(),
+            0
+        );
+        assert!(store.list_memory_receipts(&session.id).unwrap().is_empty());
+        assert!(store.memory_turn_audit(&session.id, seq).unwrap().is_none());
+        assert_eq!(store.memory_stats("/work").unwrap().l2, 0);
+    }
+
+    #[tokio::test]
+    async fn deactivation_cancels_delayed_maintenance() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let session = session(&store, "/work");
+        let memory =
+            MemoryCapability::with_test_settle_delay(store.clone(), Duration::from_millis(50));
+        let prompt = "Always run the targeted memory tests.";
+        let turn = memory
+            .recall("/work", &session.id, prompt)
+            .unwrap()
+            .unwrap();
+        let seq = completed_turn(&store, &session, prompt);
+        memory
+            .complete_turn(
+                &turn,
+                "/work",
+                &session.id,
+                prompt,
+                seq,
+                MemoryTurnProvenance::default(),
+            )
+            .unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute("UPDATE memory_candidates SET eligible_at=0", [])
+            .unwrap();
+
+        memory.deactivate();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        assert_eq!(store.memory_stats("/work").unwrap().pending, 1);
+        assert_eq!(store.memory_stats("/work").unwrap().l1, 0);
     }
 
     #[test]

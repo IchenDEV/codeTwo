@@ -5,13 +5,14 @@
 //! unavailable" — which is what the old wrappers had to say, nine times, because nothing in the
 //! type system stopped them from being called without one.
 
-use crate::app::service::StoreService;
+use crate::app::service::{MemoryService, StoreService};
 use crate::app::{json, take_args};
-use crate::memory::MemorySettings;
+use crate::memory::{MemoryCapability, MemorySettings};
 use crate::session::MemoryAccess;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
 use serde_json::Value;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 struct ProjectArgs {
@@ -38,6 +39,10 @@ impl Plugin for MemoryPlugin {
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let store = ctx.expect::<StoreService>()?;
+        let memory = MemoryCapability::new(store.0.clone());
+        memory.catch_up().map_err(PluginError::new)?;
+        ctx.provide(Arc::new(MemoryService(memory.clone())))?;
+        ctx.effect(move || memory.deactivate());
 
         let read = store.clone();
         ctx.command("memory.settings", move |_| {

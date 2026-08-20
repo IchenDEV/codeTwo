@@ -185,6 +185,14 @@ pub struct PluginRuntimeSpec {
     /// Services the plugin can use if present; their arrival or departure restarts it.
     #[serde(default, rename = "optionalInject")]
     pub optional_inject: Vec<String>,
+    /// Configuration scopes this process supports. Existing manifests remain user-only; project
+    /// instances are created only when the bundle opts in explicitly.
+    #[serde(default = "default_runtime_scope_support", rename = "scopeSupport")]
+    pub scope_support: Vec<codetwo_kernel::PluginScopeSupport>,
+}
+
+fn default_runtime_scope_support() -> Vec<codetwo_kernel::PluginScopeSupport> {
+    vec![codetwo_kernel::PluginScopeSupport::User]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3036,6 +3044,33 @@ fn title_case(value: &str) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn runtime_scope_support_defaults_to_user_and_accepts_explicit_project() {
+        let default: PluginRuntimeSpec =
+            serde_json::from_value(serde_json::json!({ "command": "server" })).unwrap();
+        assert_eq!(
+            default.scope_support,
+            [codetwo_kernel::PluginScopeSupport::User]
+        );
+
+        let project: PluginRuntimeSpec = serde_json::from_value(serde_json::json!({
+            "command": "server",
+            "scopeSupport": ["user", "project"]
+        }))
+        .unwrap();
+        assert_eq!(
+            project.scope_support,
+            [
+                codetwo_kernel::PluginScopeSupport::User,
+                codetwo_kernel::PluginScopeSupport::Project,
+            ]
+        );
+        assert_eq!(
+            serde_json::to_value(project).unwrap()["scopeSupport"],
+            serde_json::json!(["user", "project"])
+        );
+    }
+
     fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
@@ -3539,7 +3574,10 @@ mod tests {
         );
 
         let bundle = from_github(&checkout(root.clone())).unwrap();
-        assert_eq!(bundle.plugin.counts.scenes, 1, "invalid scene must be skipped");
+        assert_eq!(
+            bundle.plugin.counts.scenes, 1,
+            "invalid scene must be skipped"
+        );
         assert_eq!(bundle.plugin.counts.pipelines, 1);
         // A scenes-only pack has no other components: scenes must keep it installable.
         assert_eq!(bundle.plugin.counts.total(), 2);
@@ -3553,10 +3591,9 @@ mod tests {
         assert!(scenes_dir.join("valid.scene.json").is_file());
 
         // Old records without the new count fields must keep deserializing (serde defaults).
-        let legacy: PluginCounts = serde_json::from_str(
-            r#"{"skills":1,"subagents":0,"mcp_servers":0,"scaffolds":0}"#,
-        )
-        .unwrap();
+        let legacy: PluginCounts =
+            serde_json::from_str(r#"{"skills":1,"subagents":0,"mcp_servers":0,"scaffolds":0}"#)
+                .unwrap();
         assert_eq!(legacy.scenes, 0);
         assert_eq!(legacy.pipelines, 0);
 

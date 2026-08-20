@@ -21,6 +21,49 @@ impl Service for Cache {
     const NAME: &'static str = "cache";
 }
 
+struct PanickingPlugin;
+
+#[async_trait]
+impl Plugin for PanickingPlugin {
+    fn name(&self) -> &str {
+        "panicking"
+    }
+
+    async fn apply(&self, _ctx: Context, _config: Value) -> PluginResult {
+        panic!("fixture panic during apply")
+    }
+}
+
+struct PanickingDisposePlugin;
+
+#[async_trait]
+impl Plugin for PanickingDisposePlugin {
+    fn name(&self) -> &str {
+        "panicking-dispose"
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.effect(|| panic!("fixture panic during dispose"));
+        Ok(())
+    }
+}
+
+struct PanickingListenerPlugin;
+
+#[async_trait]
+impl Plugin for PanickingListenerPlugin {
+    fn name(&self) -> &str {
+        "panicking-listener"
+    }
+
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        ctx.on::<codetwo_kernel::events::StatusChanged, _>(|_| {
+            panic!("fixture panic during lifecycle event")
+        });
+        Ok(())
+    }
+}
+
 type Log = Arc<Mutex<Vec<String>>>;
 
 fn log_of(log: &Log) -> Vec<String> {
@@ -29,6 +72,57 @@ fn log_of(log: &Log) -> Vec<String> {
 
 fn push(log: &Log, line: impl Into<String>) {
     log.lock().unwrap().push(line.into());
+}
+
+#[tokio::test]
+async fn a_panicking_plugin_fails_without_killing_the_graph_driver() {
+    let app = App::new();
+    let fork = app.ctx().plugin(PanickingPlugin, Value::Null);
+    app.ctx().plugin(DbPlugin(Default::default()), Value::Null);
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.flush())
+        .await
+        .expect("the graph driver must still settle after a plugin panic");
+
+    assert_eq!(fork.status(), Status::Failed);
+    assert!(app.ctx().has("db"), "unrelated plugins still load");
+    let scope = app
+        .runtime()
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.plugin == "panicking")
+        .unwrap();
+    assert!(scope.error.unwrap().contains("plugin lifecycle panicked"));
+}
+
+#[tokio::test]
+async fn a_panicking_cleanup_does_not_kill_the_graph_driver() {
+    let app = App::new();
+    let fork = app.ctx().plugin(PanickingDisposePlugin, Value::Null);
+    app.flush().await;
+
+    fork.dispose();
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.flush())
+        .await
+        .expect("the graph driver must settle after a cleanup panic");
+
+    app.ctx().plugin(DbPlugin(Default::default()), Value::Null);
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.flush())
+        .await
+        .expect("the graph driver must accept later work");
+    assert!(app.ctx().has("db"));
+}
+
+#[tokio::test]
+async fn a_panicking_lifecycle_listener_does_not_kill_the_graph_driver() {
+    let app = App::new();
+    app.ctx().plugin(PanickingListenerPlugin, Value::Null);
+    app.ctx().plugin(DbPlugin(Default::default()), Value::Null);
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), app.flush())
+        .await
+        .expect("the graph driver must settle after a lifecycle listener panic");
+    assert!(app.ctx().has("db"));
 }
 
 /// Provides `db`, with the DSN taken from config so we can watch reconfiguration.

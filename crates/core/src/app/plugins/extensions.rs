@@ -9,13 +9,15 @@
 //! process cannot listen for a Rust type. That republication is deliberately explicit and small:
 //! it is the app's public event surface, and it should be chosen rather than leaked.
 
+use crate::app::bundle_runtime::ExtensionRuntimeHost;
 use crate::app::events::{EngineEvent, PluginsChanged, ScenesChanged, SkillsChanged};
 use crate::app::json;
-use crate::app::protocol::ProtocolPlugin;
 use crate::app::service::PluginHub;
+use crate::app::PluginManager;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginResult};
 use serde::Deserialize;
 use serde_json::{json as jval, Value};
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -46,7 +48,7 @@ impl Plugin for ExtensionsPlugin {
     }
 
     fn inject(&self) -> Injection {
-        Injection::required(["plugin-hub"])
+        Injection::required(["plugin-hub", "plugin-manager"])
     }
 
     fn schema(&self) -> Option<Value> {
@@ -66,58 +68,67 @@ impl Plugin for ExtensionsPlugin {
     async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
         let config: Config = serde_json::from_value(config).unwrap_or_default();
         let hub = ctx.expect::<PluginHub>()?;
+        let manager = ctx.expect::<PluginManager>()?;
 
+        ctx.provide(Arc::new(ExtensionRuntimeHost))?;
         publish_host_events(&ctx);
-
-        let mut started = Vec::new();
-        let mut skipped = Vec::new();
-        for installed in hub.installed() {
-            let Some(spec) = installed.runtime.clone() else {
-                continue;
-            };
-            if !installed.enabled {
-                continue;
-            }
-            if !installed.trusted && !config.allow_untrusted {
-                // Not an error: this is the system working. Say it out loud so the UI can offer
-                // the one action that changes it.
-                skipped.push(installed.id.clone());
-                tracing::info!(
-                    plugin = %installed.id,
-                    "ships a process but is not trusted — not started"
-                );
-                continue;
-            }
-            let bundle_dir = hub.dir.join(&installed.id).join("bundle");
-            let data_dir = hub.dir.join(".data").join(&installed.id);
-            // Loaded as a *child* of this scope, so unloading `extensions` — or losing the hub —
-            // stops every third-party process with it.
-            ctx.plugin(
-                ProtocolPlugin::from_spec(&installed.id, &spec, bundle_dir, data_dir)
-                    .with_description(installed.description.clone()),
-                Value::Null,
+        if config.allow_untrusted {
+            tracing::warn!(
+                "extensions.allow_untrusted is deprecated; trust remains a hard execution gate"
             );
-            started.push(installed.id);
+        }
+        {
+            let _inventory = hub.inventory.lock().await;
+            manager
+                .sync_installed_bundles(&hub.dir)
+                .map_err(codetwo_kernel::PluginError::new)?;
         }
 
-        let report_started = started.clone();
-        let report_skipped = skipped.clone();
+        let runtime = ctx.runtime().clone();
+        let listed_hub = hub.clone();
         ctx.command_described(
             "extensions.list",
             Some("Bundles that ship a process: which are running, which are waiting for trust."),
             move |_| {
-                let started = report_started.clone();
-                let skipped = report_skipped.clone();
-                async move { json(jval!({ "running": started, "untrusted": skipped })) }
+                let runtime = runtime.clone();
+                let hub = listed_hub.clone();
+                async move {
+                    let installed = hub.installed();
+                    let running = runtime
+                        .scopes()
+                        .into_iter()
+                        .filter(|scope| {
+                            scope.status == codetwo_kernel::Status::Active
+                                && scope.command_realm == codetwo_kernel::CommandRealm::Global
+                                && scope.plugin.starts_with("bundle:")
+                        })
+                        .filter_map(|scope| {
+                            scope.plugin.strip_prefix("bundle:").map(str::to_string)
+                        })
+                        .collect::<Vec<_>>();
+                    let untrusted = installed
+                        .into_iter()
+                        .filter(|plugin| plugin.runtime.is_some() && !plugin.trusted)
+                        .map(|plugin| plugin.id)
+                        .collect::<Vec<_>>();
+                    json(jval!({ "running": running, "untrusted": untrusted }))
+                }
             },
         )?;
 
-        // Installing, removing, enabling or trusting a bundle changes what should be running.
-        // Rather than reconciling by hand, ask for the rebuild the kernel already knows how to do.
-        let weak = ctx.weak();
+        // The installed directory is an external desired set. Reconcile it into ordinary loader
+        // factories so plans, project realms, fallback blockers and teardown all use one path.
+        let manager = manager.clone();
+        let hub = hub.clone();
         ctx.on::<PluginsChanged, _>(move |_| {
-            if let Some(ctx) = weak.upgrade() {
-                ctx.reload();
+            // Hub mutations hold this lock through their own reconcile and flush, so their
+            // notification is already current. An independently emitted notification acquires
+            // the lock here and reconciles one stable filesystem snapshot.
+            let Ok(_inventory) = hub.inventory.try_lock() else {
+                return None;
+            };
+            if let Err(error) = manager.sync_installed_bundles(&hub.dir) {
+                tracing::error!(%error, "could not reconcile installed plugin runtimes");
             }
             None
         });

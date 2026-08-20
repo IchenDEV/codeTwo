@@ -5,11 +5,13 @@
 //! whoever held the struct. Now each is a [`Service`] published by the plugin that owns it, and
 //! reached by anything that declares it in `inject`. The wiring is no longer a place in the code.
 
+use crate::app::PluginConfigStore;
 use crate::canvas::CanvasFeatureGate;
 use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::engine::Engine;
 use crate::event::Event;
 use crate::keymap::Keymap;
+use crate::memory::MemoryCapability;
 use crate::models::available_models;
 use crate::provider::{Provider, ProviderCapability};
 use crate::scene::SceneLibrary;
@@ -21,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
 /// The loader itself, published as a service so a plugin can manage the plugin graph.
 ///
@@ -32,6 +34,16 @@ pub struct LoaderService(pub Arc<Mutex<codetwo_kernel::Loader>>);
 
 impl Service for LoaderService {
     const NAME: &'static str = "loader";
+}
+
+/// Durable user and project policy for the running plugin graph.
+///
+/// This is rooted beside the loader, not provided by `paths`: disabling the paths plugin must not
+/// remove the one interface capable of recovering the graph.
+pub struct PluginConfigService(pub Arc<Mutex<PluginConfigStore>>);
+
+impl Service for PluginConfigService {
+    const NAME: &'static str = "plugin-config";
 }
 
 /// Where everything lives on disk. Every other plugin asks this instead of recomputing paths.
@@ -93,6 +105,24 @@ impl Service for CanvasService {
 impl std::ops::Deref for StoreService {
     type Target = Store;
     fn deref(&self) -> &Store {
+        &self.0
+    }
+}
+
+/// Revocable provider-neutral recall and learning capability.
+///
+/// The store deliberately stays online when this disappears. Consumers that optionally inject
+/// `memory` therefore keep running without recalling or capturing anything.
+pub struct MemoryService(pub MemoryCapability);
+
+impl Service for MemoryService {
+    const NAME: &'static str = "memory";
+}
+
+impl std::ops::Deref for MemoryService {
+    type Target = MemoryCapability;
+
+    fn deref(&self) -> &MemoryCapability {
         &self.0
     }
 }
@@ -405,6 +435,8 @@ impl KeymapService {
 /// the bridge — a kernel plugin whose job is managing the other kind.
 pub struct PluginHub {
     pub dir: PathBuf,
+    /// Serializes installed-bundle mutations with the runtime factory snapshot they publish.
+    pub(crate) inventory: AsyncMutex<()>,
 }
 
 impl Service for PluginHub {

@@ -17,6 +17,37 @@ use crate::runtime::ScopeId;
 use serde_json::Value;
 use std::sync::Arc;
 
+/// The command namespace a [`Context`](crate::Context) dispatches through.
+///
+/// Project identifiers are deliberately opaque to the kernel. Hosts should pass their stable,
+/// normalized project identity (normally a canonical absolute path).
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandRealm {
+    /// Commands available application-wide and used as the fallback for project contexts.
+    #[default]
+    Global,
+    /// Commands contributed by one project instance.
+    Project(String),
+}
+
+impl CommandRealm {
+    pub fn project(project_id: impl Into<String>) -> Self {
+        CommandRealm::Project(project_id.into())
+    }
+}
+
 #[allow(clippy::type_complexity)]
 pub type CommandHandler =
     Arc<dyn Fn(Value) -> BoxFuture<'static, Result<Value, PluginError>> + Send + Sync>;
@@ -31,6 +62,8 @@ pub(crate) struct CommandEntry {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CommandInfo {
     pub name: String,
+    /// The command namespace this contribution belongs to.
+    pub realm: CommandRealm,
     /// The plugin that contributed it.
     pub plugin: String,
     pub scope: ScopeId,

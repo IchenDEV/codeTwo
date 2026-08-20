@@ -45,10 +45,10 @@ pub use wire::{
 
 use crate::plugin::PluginRuntimeSpec;
 use codetwo_kernel::{
-    async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
 };
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -56,7 +56,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 pub struct Channel {
     pub reader: Box<dyn AsyncRead + Unpin + Send>,
     pub writer: Box<dyn AsyncWrite + Unpin + Send>,
-    /// Called when the plugin's scope unloads. Must be idempotent.
+    /// Called when the plugin's scope unloads. It must not return until owned resources have
+    /// stopped; kernel `flush()` waits for this callback to finish.
     pub shutdown: Box<dyn FnOnce() + Send>,
 }
 
@@ -81,8 +82,17 @@ pub struct ProcessTransport {
 impl ProcessTransport {
     /// Build from an installed bundle's `runtime` block, rooted at that bundle's directory.
     pub fn from_spec(spec: &PluginRuntimeSpec, cwd: PathBuf, label: String) -> ProcessTransport {
+        let command_path = PathBuf::from(&spec.command);
+        let bundled_command = cwd.join(&command_path);
+        let command = if command_path.components().count() == 1
+            && is_executable_bundle_command(&bundled_command)
+        {
+            bundled_command.to_string_lossy().into_owned()
+        } else {
+            spec.command.clone()
+        };
         ProcessTransport {
-            command: spec.command.clone(),
+            command,
             args: spec.args.clone(),
             env: spec
                 .env
@@ -92,6 +102,24 @@ impl ProcessTransport {
             cwd: Some(cwd),
             label,
         }
+    }
+}
+
+fn is_executable_bundle_command(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
     }
 }
 
@@ -113,6 +141,11 @@ impl Transport for ProcessTransport {
         if let Some(cwd) = &self.cwd {
             command.current_dir(cwd);
         }
+        // A separate group lets teardown signal the plugin and ordinary descendants together.
+        // Windows still gets direct-child kill-and-wait below; process-tree ownership there needs
+        // a Job Object and is intentionally not claimed by this Unix mechanism.
+        #[cfg(unix)]
+        command.process_group(0);
 
         let mut child = command.spawn().map_err(|error| {
             PluginError::new(format!("couldn't start `{}`: {error}", self.command))
@@ -139,20 +172,81 @@ impl Transport for ProcessTransport {
             });
         }
 
-        let child = Arc::new(Mutex::new(Some(child)));
-        let shutdown = {
-            let child = child.clone();
-            Box::new(move || {
-                if let Some(mut child) = child.lock().unwrap().take() {
-                    let _ = child.start_kill();
-                }
-            }) as Box<dyn FnOnce() + Send>
-        };
+        let label = self.label.clone();
+        let shutdown =
+            Box::new(move || terminate_child_process(child, &label)) as Box<dyn FnOnce() + Send>;
         Ok(Channel {
             reader: Box::new(stdout),
             writer: Box::new(stdin),
             shutdown,
         })
+    }
+}
+
+/// Force a process down and synchronously reap the direct child. Scope disposal runs this callback
+/// on the kernel driver; returning only after `try_wait` observes an exit makes the following
+/// `flush()` a real lifecycle barrier instead of merely a signal-delivery barrier.
+fn terminate_child_process(mut child: tokio::process::Child, label: &str) {
+    #[cfg(unix)]
+    let process_group = child.id().and_then(|pid| i32::try_from(pid).ok());
+
+    #[cfg(unix)]
+    if let Some(process_group) = process_group {
+        if let Err(error) = unix_process_group::kill(process_group) {
+            if !unix_process_group::is_missing(&error) {
+                tracing::warn!(plugin = %label, %error, "could not kill plugin process group");
+            }
+        }
+    }
+
+    if let Err(error) = child.start_kill() {
+        tracing::warn!(plugin = %label, %error, "could not kill plugin process");
+    }
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                tracing::debug!(plugin = %label, %status, "plugin process exited");
+                break;
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(1)),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => {
+                tracing::error!(plugin = %label, %error, "could not wait for plugin process exit");
+                break;
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+mod unix_process_group {
+    use std::io;
+
+    const SIGKILL: i32 = 9;
+    const ESRCH: i32 = 3;
+
+    unsafe extern "C" {
+        fn killpg(process_group: i32, signal: i32) -> i32;
+    }
+
+    pub(super) fn kill(process_group: i32) -> io::Result<()> {
+        signal(process_group, SIGKILL).map(|_| ())
+    }
+
+    pub(super) fn is_missing(error: &io::Error) -> bool {
+        error.raw_os_error() == Some(ESRCH)
+    }
+
+    fn signal(process_group: i32, signal: i32) -> io::Result<bool> {
+        if unsafe { killpg(process_group, signal) } == 0 {
+            return Ok(true);
+        }
+        let error = io::Error::last_os_error();
+        if is_missing(&error) {
+            Ok(false)
+        } else {
+            Err(error)
+        }
     }
 }
 
@@ -240,6 +334,11 @@ impl Plugin for ProtocolPlugin {
     }
 
     async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
+        let command_realm = ctx.command_realm().clone();
+        let project_path = match &command_realm {
+            CommandRealm::Global => None,
+            CommandRealm::Project(path) => Some(path.clone()),
+        };
         let channel = self.transport.start().await?;
 
         // Registered before the handshake on purpose: a plugin that never answers `initialize`
@@ -270,6 +369,15 @@ impl Plugin for ProtocolPlugin {
                     .runtime()
                     .commands()
                     .into_iter()
+                    .filter(|command| match (&command_realm, &command.realm) {
+                        (CommandRealm::Global, CommandRealm::Global) => true,
+                        (CommandRealm::Project(_), CommandRealm::Global) => true,
+                        (
+                            CommandRealm::Project(project),
+                            CommandRealm::Project(command_project),
+                        ) => project == command_project,
+                        (CommandRealm::Global, CommandRealm::Project(_)) => false,
+                    })
                     .map(|c| c.name)
                     .collect(),
             },
@@ -278,6 +386,7 @@ impl Plugin for ProtocolPlugin {
                 .data_dir
                 .as_ref()
                 .map(|dir| dir.to_string_lossy().into_owned()),
+            project_path,
         };
         let result: InitializeResult =
             tokio::time::timeout(self.handshake_timeout, peer.request("initialize", params))
@@ -377,5 +486,36 @@ impl HostHandler for KernelHost {
             "debug" | "trace" => tracing::debug!(plugin = %self.plugin, "{message}"),
             _ => tracing::info!(plugin = %self.plugin, "{message}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn process_transport_prefers_a_bundle_local_bare_command_then_falls_back_to_path() {
+        let bundle = tempfile::tempdir().unwrap();
+        let spec: PluginRuntimeSpec =
+            serde_json::from_value(serde_json::json!({ "command": "fixture-server" })).unwrap();
+
+        let path_fallback =
+            ProcessTransport::from_spec(&spec, bundle.path().to_path_buf(), "fixture".into());
+        assert_eq!(path_fallback.command, "fixture-server");
+
+        let local = bundle.path().join("fixture-server");
+        std::fs::write(&local, "fixture").unwrap();
+        #[cfg(unix)]
+        {
+            let non_executable =
+                ProcessTransport::from_spec(&spec, bundle.path().to_path_buf(), "fixture".into());
+            assert_eq!(non_executable.command, "fixture-server");
+
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&local, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let local_transport =
+            ProcessTransport::from_spec(&spec, bundle.path().to_path_buf(), "fixture".into());
+        assert_eq!(local_transport.command, local.to_string_lossy());
     }
 }

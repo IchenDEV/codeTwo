@@ -50,24 +50,38 @@
 //! # }
 //! ```
 
+mod bundle_runtime;
 pub mod events;
+mod plugin_config;
+mod plugin_manager;
 pub mod plugins;
 pub mod protocol;
 mod service;
 
+pub use events::TerminalOutputEvent;
+pub use plugin_config::{
+    normalize_project_path, PluginConfigDocument, PluginConfigError, PluginConfigStore,
+    PluginOverride, PluginPolicy, PluginRecoveryState, PluginScope,
+};
+pub use plugin_manager::{
+    PluginActiveResource, PluginCatalog, PluginCatalogEntry, PluginChangePlan, PluginChangeRequest,
+    PluginChangeResult, PluginManager, PluginManagerError, ProjectActivityLease,
+};
+
 pub use service::{
-    CanvasService, CostService, EngineService, EventBus, KeymapService, LoaderService, Paths,
-    PluginHub, ProviderService, ProviderSummary, SceneRuntimeService, SceneService, SkillService,
-    StoreService, TerminalEvent, TerminalService,
+    CanvasService, CostService, EngineService, EventBus, KeymapService, LoaderService,
+    MemoryService, Paths, PluginConfigService, PluginHub, ProviderService, ProviderSummary,
+    SceneRuntimeService, SceneService, SkillService, StoreService, TerminalEvent, TerminalService,
 };
 
 use codetwo_kernel::{
-    App, CommandInfo, Context, KernelError, Loader, LoaderConfig, PluginEntry, PluginError,
-    ScopeInfo, ServiceInfo,
+    App, CommandInfo, CommandRealm, Context, KernelError, Loader, LoaderConfig, PluginEntry,
+    PluginError, ScopeInfo, ServiceInfo, Status,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -92,6 +106,7 @@ pub(crate) fn json<T: Serialize>(value: T) -> Result<Value, PluginError> {
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub plugins: LoaderConfig,
+    data_dir: Option<PathBuf>,
 }
 
 impl AppConfig {
@@ -106,7 +121,10 @@ impl AppConfig {
                     serde_json::json!({ "data_dir": data_dir.to_string_lossy() }),
                 ),
             );
-        AppConfig { plugins }
+        AppConfig {
+            plugins,
+            data_dir: Some(data_dir),
+        }
     }
 
     /// The same graph over an ephemeral database.
@@ -129,6 +147,16 @@ impl AppConfig {
     pub fn bare() -> AppConfig {
         AppConfig {
             plugins: LoaderConfig::default(),
+            data_dir: None,
+        }
+    }
+
+    /// Start from an empty graph while keeping durable app configuration under `data_dir`.
+    /// Useful for small hosts that still want plugin policy to survive restarts.
+    pub fn bare_in(data_dir: impl Into<PathBuf>) -> AppConfig {
+        AppConfig {
+            plugins: LoaderConfig::default(),
+            data_dir: Some(data_dir.into()),
         }
     }
 
@@ -151,6 +179,8 @@ impl AppConfig {
 pub struct CoreApp {
     app: App,
     loader: Arc<Mutex<Loader>>,
+    plugin_config: Arc<Mutex<PluginConfigStore>>,
+    plugin_manager: Arc<PluginManager>,
 }
 
 impl CoreApp {
@@ -165,12 +195,52 @@ impl CoreApp {
     /// Boot with a customized registry — a host replaces a built-in by registering its own plugin
     /// under the same name, or adds plugins of its own that the config can then enable.
     pub async fn boot_with(
-        config: AppConfig,
+        mut config: AppConfig,
         registry: codetwo_kernel::PluginRegistry,
     ) -> Result<CoreApp, KernelError> {
         let app = App::new();
+        let plugin_config = Arc::new(Mutex::new(match &config.data_dir {
+            Some(data_dir) => {
+                PluginConfigStore::open(data_dir).map_err(|error| KernelError::Config {
+                    name: "plugin-manager".into(),
+                    message: error.to_string(),
+                })?
+            }
+            None => PluginConfigStore::ephemeral(),
+        }));
+
+        let default_plugins = config.plugins.clone();
+        let essential = safe_mode_entries(&registry, &default_plugins);
+        apply_persisted_user_policy(
+            &mut config.plugins,
+            &registry,
+            &plugin_config.lock().unwrap(),
+        );
+        if matches!(
+            plugin_config.lock().unwrap().recovery(),
+            PluginRecoveryState::SafeMode { .. }
+        ) {
+            config
+                .plugins
+                .plugins
+                .retain(|name, _| essential.iter().any(|(essential, _)| essential == name));
+            for (name, entry) in &essential {
+                config.plugins.plugins.insert(name.clone(), entry.clone());
+            }
+        }
+
         let loader = Arc::new(Mutex::new(Loader::new(app.ctx(), registry)));
         app.ctx().provide(Arc::new(LoaderService(loader.clone())))?;
+        app.ctx()
+            .provide(Arc::new(PluginConfigService(plugin_config.clone())))?;
+        let plugin_manager = Arc::new(PluginManager::new(
+            loader.clone(),
+            plugin_config.clone(),
+            default_plugins,
+            app.ctx().weak(),
+        ));
+        plugin_manager.start_reaper();
+        app.ctx().provide(plugin_manager.clone())?;
 
         let errors = loader.lock().unwrap().apply(config.plugins);
         for error in errors {
@@ -183,7 +253,52 @@ impl CoreApp {
                 tracing::warn!(plugin = %scope.plugin, "plugin failed: {error}");
             }
         }
-        Ok(CoreApp { app, loader })
+        let scopes = app.runtime().scopes();
+        let configured = loader.lock().unwrap().config().clone();
+        let unhealthy = configured
+            .plugins
+            .iter()
+            .filter(|(_, entry)| entry.enabled)
+            .filter_map(|(name, _)| {
+                let instance = scopes.iter().find(|scope| {
+                    scope.plugin == *name && scope.command_realm == CommandRealm::Global
+                });
+                (!instance.is_some_and(|scope| scope.status == Status::Active)).then(|| {
+                    let detail = instance
+                        .and_then(|scope| scope.error.clone())
+                        .unwrap_or_else(|| {
+                            instance
+                                .map(|scope| format!("status is {:?}", scope.status))
+                                .unwrap_or_else(|| "no runtime instance was created".into())
+                        });
+                    (name.clone(), detail)
+                })
+            })
+            .collect::<Vec<_>>();
+        let recovery = plugin_config.lock().unwrap().recovery().clone();
+        if unhealthy.is_empty() && matches!(recovery, PluginRecoveryState::Normal) {
+            if let Err(error) = plugin_config.lock().unwrap().mark_last_good() {
+                tracing::warn!("could not save last known-good plugin config: {error}");
+            }
+        } else if unhealthy.is_empty() {
+            tracing::warn!(
+                recovery = ?recovery,
+                "plugin config is still in recovery mode; preserving the existing last-known-good snapshot until an explicit reset"
+            );
+        } else {
+            for (plugin, error) in unhealthy {
+                tracing::warn!(
+                    plugin = %plugin,
+                    "plugin did not become active at startup; preserving the previous last-known-good config: {error}"
+                );
+            }
+        }
+        Ok(CoreApp {
+            app,
+            loader,
+            plugin_config,
+            plugin_manager,
+        })
     }
 
     /// The root context — load your own plugins into this.
@@ -199,9 +314,42 @@ impl CoreApp {
         &self.loader
     }
 
+    pub fn plugin_config(&self) -> &Arc<Mutex<PluginConfigStore>> {
+        &self.plugin_config
+    }
+
+    pub fn plugin_manager(&self) -> &Arc<PluginManager> {
+        &self.plugin_manager
+    }
+
     /// Invoke a plugin-contributed command. This is the whole app surface.
     pub async fn call(&self, name: &str, args: Value) -> Result<Value, KernelError> {
         self.app.ctx().call(name, args).await
+    }
+
+    /// Invoke through one project's command realm, falling back to global commands when the
+    /// project has no override. Project child loaders populate the realm lazily.
+    pub async fn call_in_project(
+        &self,
+        project_path: impl AsRef<std::path::Path>,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        let (project_path, _activity) = self
+            .plugin_manager
+            .lease_project_command(project_path)
+            .map_err(|error| KernelError::Config {
+                name: "plugin-manager".into(),
+                message: error.to_string(),
+            })?;
+        // Child-loader reconciliation is synchronous, while plugin application runs on the
+        // shared kernel driver. Settle it before dispatch so the first project call is real.
+        self.app.flush().await;
+        self.app
+            .ctx()
+            .with_command_realm(CommandRealm::project(project_path))
+            .call(name, args)
+            .await
     }
 
     /// Look a service up by type — for in-process callers (the TUI, tests) that would rather have
@@ -232,6 +380,74 @@ impl CoreApp {
 
     /// Unload everything, in reverse.
     pub async fn stop(&self) {
+        self.plugin_manager.shutdown_projects();
         self.app.stop().await;
+    }
+}
+
+/// The smallest graph that can keep every management-plane plugin alive in safe mode.
+///
+/// Required injection names that also name a registered factory are plugin dependencies and are
+/// followed transitively. Names with no factory are root/host-provided services. Optional
+/// injections and unrelated default-enabled plugins deliberately stay outside safe mode.
+fn safe_mode_entries(
+    registry: &codetwo_kernel::PluginRegistry,
+    defaults: &LoaderConfig,
+) -> Vec<(String, PluginEntry)> {
+    let mut included = registry
+        .factories()
+        .filter(|factory| factory.metadata.essential || factory.name == "kernel")
+        .map(|factory| factory.name.clone())
+        .collect::<BTreeSet<_>>();
+
+    loop {
+        let required = included
+            .iter()
+            .filter_map(|name| registry.get(name))
+            .flat_map(|factory| factory.dependencies.required.iter())
+            .filter(|name| registry.get(name).is_some())
+            .cloned()
+            .collect::<Vec<_>>();
+        let before = included.len();
+        included.extend(required);
+        if included.len() == before {
+            break;
+        }
+    }
+
+    included
+        .into_iter()
+        .map(|name| {
+            let mut entry = defaults.plugins.get(&name).cloned().unwrap_or_default();
+            entry.enabled = true;
+            (name, entry)
+        })
+        .collect()
+}
+
+fn apply_persisted_user_policy(
+    config: &mut LoaderConfig,
+    registry: &codetwo_kernel::PluginRegistry,
+    store: &PluginConfigStore,
+) {
+    for factory in registry.factories() {
+        let base = config
+            .plugins
+            .get(&factory.name)
+            .map(|entry| entry.enabled)
+            .unwrap_or(false);
+        let policy = store.policy(&PluginScope::User, &factory.name);
+        let enabled = policy.state.resolve(base);
+        if base || policy.state != PluginOverride::Inherit || policy.config.is_some() {
+            let entry = config.plugins.entry(factory.name.clone()).or_default();
+            entry.enabled = if factory.metadata.essential {
+                true
+            } else {
+                enabled
+            };
+            if let Some(plugin_config) = policy.config {
+                entry.config = plugin_config;
+            }
+        }
     }
 }

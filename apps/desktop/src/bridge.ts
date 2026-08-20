@@ -553,12 +553,19 @@ export type CoreEvent =
 export interface PtyOutput {
   id: string;
   data: string;
+  project_path: string | null;
 }
 
 /** The title the child set (OSC 0/2), or its working directory (OSC 7). */
 export interface PtyTitle {
   id: string;
   title: string;
+  project_path: string | null;
+}
+
+export interface PtyExit {
+  id: string;
+  project_path: string | null;
 }
 
 export interface PtyAttach {
@@ -632,6 +639,13 @@ const inTauri = typeof (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI
 /** False when the UI runs in a plain browser (`bun run dev`), where no native commands exist. */
 export const isDesktop = inTauri;
 
+let callProjectPath: string | null = null;
+
+/** Route subsequent extension calls through the active project's command realm. */
+export function setCallProjectPath(path: string | null): void {
+  callProjectPath = path;
+}
+
 // ---- the plugin graph -------------------------------------------------------------------------
 
 /**
@@ -641,9 +655,17 @@ export const isDesktop = inTauri;
  * moment it loads, with no `#[tauri::command]`, no entry in `generate_handler!`, and no new
  * function in this file. The named wrappers below predate it and are being migrated onto it.
  */
-export async function call<T = unknown>(name: string, args?: unknown): Promise<T> {
+export async function call<T = unknown>(
+  name: string,
+  args?: unknown,
+  projectPath: string | null = callProjectPath,
+): Promise<T> {
   if (!inTauri) throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
-  return (await invoke<T>("call", { name, args: args ?? null })) as T;
+  return (await invoke<T>("call", {
+    name,
+    args: args ?? null,
+    projectPath,
+  })) as T;
 }
 
 /** Lifecycle state of one plugin instance, as the kernel reports it. */
@@ -706,6 +728,171 @@ export async function setCorePluginEnabled(name: string, value: boolean): Promis
 /** Replace one plugin's config; it reloads, nothing else does. */
 export async function configureCorePlugin(name: string, config: unknown): Promise<void> {
   await call("kernel.configure", { name, config });
+}
+
+// ---- unified plugin management ---------------------------------------------------------------
+
+/** Configuration scope exposed to renderer code. Rust receives the same tagged enum in snake_case. */
+export type ManagedPluginScope =
+  | { kind: "user" }
+  | { kind: "project"; projectPath: string };
+
+export type ManagedPluginOverride = "inherit" | "enabled" | "disabled";
+export type ManagedPluginOrigin = "built_in" | "host" | "third_party";
+export type ManagedPluginCategory =
+  | "foundation"
+  | "workspace"
+  | "automation"
+  | "developer_tools"
+  | "interface"
+  | "integration"
+  | "other";
+export type ManagedPluginScopeSupport = "user" | "project";
+
+export interface ManagedPluginMetadata {
+  origin: ManagedPluginOrigin;
+  category: ManagedPluginCategory;
+  scope_support: ManagedPluginScopeSupport[];
+  essential: boolean;
+  default_enabled: boolean;
+}
+
+export interface ManagedPluginDependencies {
+  required: string[];
+  optional: string[];
+}
+
+export interface ManagedPluginCatalogEntry {
+  id: string;
+  description: string | null;
+  metadata: ManagedPluginMetadata;
+  dependencies: ManagedPluginDependencies;
+  /** Current scope policy. Older hosts omit this, so adapters must tolerate undefined. */
+  state?: ManagedPluginOverride;
+  enabled: boolean;
+  running: boolean;
+  status: PluginStatus | null;
+  missing: string[];
+  error: string | null;
+  config: unknown;
+  schema: unknown | null;
+  available: boolean;
+  components: Record<string, ManagedPluginOverride>;
+  commands?: string[];
+  services?: string[];
+}
+
+export type ManagedPluginRecovery =
+  | { kind: "normal" }
+  | { kind: "restored_last_good"; error: string }
+  | { kind: "safe_mode"; error: string };
+
+export interface ManagedPluginCatalog {
+  graph_revision: number;
+  config_revision: number;
+  recovery: ManagedPluginRecovery;
+  plugins: ManagedPluginCatalogEntry[];
+}
+
+export interface ManagedPluginChangeRequest {
+  plugin: string;
+  scope: ManagedPluginScope;
+  state?: ManagedPluginOverride;
+  config?: unknown;
+  component?: string;
+}
+
+export interface ManagedPluginActiveResource {
+  plugin: string;
+  kind: string;
+  id: string;
+  label: string;
+}
+
+export interface ManagedPluginChangePlan {
+  id: string;
+  graph_revision: number;
+  config_revision: number;
+  request: ManagedPluginChangeRequest;
+  affected: string[];
+  active_resources: ManagedPluginActiveResource[];
+  requires_confirmation: boolean;
+}
+
+export interface ManagedPluginChangeResult {
+  graph_revision: number;
+  config_revision: number;
+  affected: string[];
+}
+
+type ManagedPluginScopeWire =
+  | { kind: "user" }
+  | { kind: "project"; project_path: string };
+
+type ManagedPluginChangePlanWire = Omit<ManagedPluginChangePlan, "request"> & {
+  request: Omit<ManagedPluginChangeRequest, "scope"> & { scope: ManagedPluginScopeWire };
+};
+
+/** Kept public for adapter/contract tests and to make the camelCase-to-serde boundary explicit. */
+export function managedPluginScopeToWire(scope: ManagedPluginScope): ManagedPluginScopeWire {
+  return scope.kind === "user"
+    ? { kind: "user" }
+    : { kind: "project", project_path: scope.projectPath };
+}
+
+function managedPluginScopeFromWire(scope: ManagedPluginScopeWire): ManagedPluginScope {
+  return scope.kind === "user"
+    ? { kind: "user" }
+    : { kind: "project", projectPath: scope.project_path };
+}
+
+function managedPluginPlanFromWire(plan: ManagedPluginChangePlanWire): ManagedPluginChangePlan {
+  return {
+    ...plan,
+    request: { ...plan.request, scope: managedPluginScopeFromWire(plan.request.scope) },
+  };
+}
+
+const EMPTY_MANAGED_PLUGIN_CATALOG: ManagedPluginCatalog = {
+  graph_revision: 0,
+  config_revision: 0,
+  recovery: { kind: "normal" },
+  plugins: [],
+};
+
+/** Read the effective catalog for one user or project scope. */
+export async function pluginCatalog(scope: ManagedPluginScope): Promise<ManagedPluginCatalog> {
+  if (!inTauri) return EMPTY_MANAGED_PLUGIN_CATALOG;
+  return call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null);
+}
+
+/** Stage a revision-bound change. The returned id is the only value accepted by apply. */
+export async function planPluginChange(
+  request: ManagedPluginChangeRequest,
+): Promise<ManagedPluginChangePlan> {
+  const wire = await call<ManagedPluginChangePlanWire>(
+    "plugins.plan_change",
+    { ...request, scope: managedPluginScopeToWire(request.scope) },
+    null,
+  );
+  return managedPluginPlanFromWire(wire);
+}
+
+/** Apply exactly one previously planned change and wait for the graph to settle. */
+export async function applyPluginChange(id: string): Promise<ManagedPluginChangeResult> {
+  return call<ManagedPluginChangeResult>("plugins.apply_change", { id }, null);
+}
+
+/** Clear a plugin's state, configuration, and component overrides in one scope. */
+export async function resetManagedPlugin(
+  plugin: string,
+  scope: ManagedPluginScope,
+): Promise<ManagedPluginChangeResult> {
+  return call<ManagedPluginChangeResult>(
+    "plugins.reset",
+    { plugin, scope: managedPluginScopeToWire(scope) },
+    null,
+  );
 }
 
 /**
@@ -1301,6 +1488,14 @@ export async function lspSend(key: string, payload: string): Promise<void> {
   if (inTauri) await call("lsp.send", { key, payload });
 }
 
+/** Suspend or resume language servers in one explicit project realm without unloading the plugin. */
+export async function lspSetRuntimeEnabled(
+  enabled: boolean,
+  projectPath: string | null,
+): Promise<void> {
+  if (inTauri) await call("lsp.set_runtime_enabled", { enabled }, projectPath);
+}
+
 export interface LspMessage {
   key: string;
   payload: string;
@@ -1828,7 +2023,7 @@ export interface ScaffoldInstallResult {
 
 export async function listPlugins(): Promise<PluginInfo[]> {
   return inTauri
-    ? call<PluginInfo[]>("plugins.list")
+    ? call<PluginInfo[]>("plugins.list", undefined, null)
     : [
         {
           id: "developer-toolkit-demo",
@@ -1887,7 +2082,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
 /** Install a complete plugin from a GitHub repository or a selected /tree/ path. */
 export async function githubImportPlugin(repository: string): Promise<GitHubImportResult> {
   if (!inTauri) throw new Error("Plugin installation requires the C2 desktop app.");
-  return call<GitHubImportResult>("plugins.import_github", { repository });
+  return call<GitHubImportResult>("plugins.import_github", { repository }, null);
 }
 
 export async function pickPluginMarketplace(): Promise<PluginMarketplace | null> {
@@ -1901,7 +2096,7 @@ export async function pickPluginMarketplace(): Promise<PluginMarketplace | null>
   if (typeof selected !== "string") return null;
   return call<PluginMarketplace>("plugins.read_marketplace", {
     path: selected,
-  });
+  }, null);
 }
 
 export async function installMarketplacePlugin(
@@ -1912,21 +2107,21 @@ export async function installMarketplacePlugin(
   return call<GitHubImportResult>("plugins.install_marketplace", {
     marketplace_path: marketplacePath,
     plugin_name: pluginName,
-  });
+  }, null);
 }
 
 export async function uninstallPlugin(id: string, keepData = false): Promise<void> {
-  if (inTauri) await call("plugins.uninstall", { id, keep_data: keepData });
+  if (inTauri) await call("plugins.uninstall", { id, keep_data: keepData }, null);
 }
 
 export async function setPluginEnabled(id: string, enabled: boolean): Promise<PluginInfo> {
   if (!inTauri) throw new Error("Plugin state changes require the C2 desktop app.");
-  return call<PluginInfo>("plugins.set_enabled", { id, value: enabled });
+  return call<PluginInfo>("plugins.set_enabled", { id, value: enabled }, null);
 }
 
 export async function setPluginTrusted(id: string, trusted: boolean): Promise<PluginInfo> {
   if (!inTauri) throw new Error("Plugin trust changes require the C2 desktop app.");
-  return call<PluginInfo>("plugins.set_trusted", { id, value: trusted });
+  return call<PluginInfo>("plugins.set_trusted", { id, value: trusted }, null);
 }
 
 export async function applyPluginScaffold(
@@ -1939,7 +2134,7 @@ export async function applyPluginScaffold(
     plugin_id: pluginId,
     scaffold_id: scaffoldId,
     cwd,
-  });
+  }, null);
 }
 
 // ---- remote control (F10) --------------------------------------------------------------------
@@ -2630,9 +2825,9 @@ export async function onPtyTitle(cb: (p: PtyTitle) => void): Promise<() => void>
 }
 
 /** Fires when a terminal's child process exits. */
-export async function onPtyExit(cb: (id: string) => void): Promise<() => void> {
+export async function onPtyExit(cb: (event: PtyExit) => void): Promise<() => void> {
   if (!inTauri) return () => {};
-  return listen<string>("pty-exit", (e) => cb(e.payload));
+  return listen<PtyExit>("pty-exit", (e) => cb(e.payload));
 }
 
 export function providerLabel(p: string | { custom: string }): string {

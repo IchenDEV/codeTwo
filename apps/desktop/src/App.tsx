@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
@@ -16,6 +16,7 @@ import {
   answerElicitation,
   answerPermission,
   applyPluginScaffold,
+  applyPluginChange,
   archiveSession,
   browserContext,
   canvasCreateDraft,
@@ -51,6 +52,7 @@ import {
   issueContext,
   listArchivedSessions,
   listMemoryReceipts,
+  lspSetRuntimeEnabled,
   listPlugins,
   listProjectScripts,
   listProjects,
@@ -60,6 +62,8 @@ import {
   listWorktreeBaselines,
   marketCatalog,
   marketInstall,
+  planPluginChange,
+  pluginCatalog,
   newSession,
   onBrowserAgentActivity,
   onBrowserDownloadBlocked,
@@ -72,6 +76,7 @@ import {
   providerQuota,
   providerLabel,
   removeProject,
+  resetManagedPlugin,
   renameProject,
   renameSession,
   runProjectScript,
@@ -79,6 +84,7 @@ import {
   searchSessions,
   sessionPreviews,
   setConfigOption,
+  setCallProjectPath,
   setKeymap,
   setModel,
   setPluginEnabled,
@@ -111,6 +117,7 @@ import {
   type MemoryReceipt,
   type ModelChoice,
   type PluginInfo,
+  type ManagedPluginCatalog,
   type Project,
   type ProjectScript,
   type ProjectWorktreeMode,
@@ -150,6 +157,18 @@ import {
 } from "./bridge";
 import { makeTranscriptHandler } from "./voice/VoiceButton";
 import { PluginHub } from "./market/Market";
+import {
+  PluginManagerPage,
+  buildPluginManagerCatalog,
+  normalizePluginProjectPath,
+  pluginManagerComponentEnabled,
+  toManagedPluginScope,
+  type BuiltinUiComponentId,
+  type PluginManagerChangePlan,
+  type PluginManagerChangeRequest,
+  type PluginManagerScope,
+} from "./plugins";
+import { applyPluginManagerChange, planPluginManagerChange } from "./plugins/lifecycle";
 import { SettingsPage, type SettingsTab } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
 import { workspaceStateForCwd, type WorkspaceLoadState } from "./git/state";
@@ -161,6 +180,7 @@ import { FileBrowserModal } from "./files/FileBrowser";
 import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
 import type { FileRevealTarget } from "./files/FileViewer";
 import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
+import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
 import { AutomationsPage } from "./automation/AutomationsPage";
 import type { SessionConfig } from "./session/config";
@@ -403,10 +423,21 @@ function selectedExcerptMarkdown(text: string): string {
     .join("\n");
 }
 
+const EMPTY_MANAGED_CATALOG: ManagedPluginCatalog = {
+  graph_revision: 0,
+  config_revision: 0,
+  recovery: { kind: "normal" },
+  plugins: [],
+};
+const EMPTY_SCENE_BY_SESSION = new Map<string, string>();
+
 export default function App() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [managedUserCatalog, setManagedUserCatalog] = useState<ManagedPluginCatalog | null>(null);
+  const [managedProjectCatalogs, setManagedProjectCatalogs] = useState<Record<string, ManagedPluginCatalog>>({});
+  const [pluginManagerScope, setPluginManagerScope] = useState<PluginManagerScope>({ kind: "user" });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [archivedSessions, setArchivedSessions] = useState<SessionInfo[]>([]);
   // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
@@ -458,6 +489,7 @@ export default function App() {
   const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showPluginHub, setShowPluginHub] = useState(false);
+  const [showBundlePluginTools, setShowBundlePluginTools] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [showSourceControl, setShowSourceControl] = useState(false);
   const [checkpointWorkspace, setCheckpointWorkspace] = useState<
@@ -605,6 +637,10 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const [projectBootstrapComplete, setProjectBootstrapComplete] = useState(false);
+  useEffect(() => {
+    setCallProjectPath(activeProject ? normalizePluginProjectPath(activeProject) : null);
+  }, [activeProject]);
   const workspaceCwd = cwd || ".";
   const currentGitWorkspace = workspaceStateForCwd(
     gitWorkspace,
@@ -730,6 +766,10 @@ export default function App() {
     { issue: Issue; context: string; delegatedScene: string } | null
   >(null);
   const activeSessionRef = useRef<string | null>(null);
+  // Event handlers and async continuations above the catalog projection need the same live policy
+  // as rendered controls. Bootstrap closed: calling an unloadable command before the catalog and
+  // active project realm agree is less safe than waiting one render for the policy snapshot.
+  const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(() => false);
   // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
   // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
   const [planDocPending, setPlanDocPending] = useState<string | null>(null);
@@ -758,6 +798,7 @@ export default function App() {
   );
   const pinPlanArtifact = useCallback(
     (markdown: string) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const session = activeSessionRef.current;
       if (!session) return;
       void recordSceneArtifact(session, "plan", markdown).then((record) => {
@@ -799,6 +840,18 @@ export default function App() {
   const memoryReadRef = useRef<MemoryAccess>("inherit");
   const memoryWriteRef = useRef<MemoryAccess>("inherit");
   const memoryReceiptsRef = useRef<MemoryReceipt[]>([]);
+  const initializePluginSessionState = useCallback(async (session: string) => {
+    const updates: Promise<unknown>[] = [];
+    if (componentEnabledRef.current("memory.settings")) {
+      updates.push(
+        setSessionMemoryPolicy(session, memoryReadRef.current, memoryWriteRef.current),
+      );
+    }
+    if (componentEnabledRef.current("scenes.surface")) {
+      updates.push(setSessionAutoScene(session, autoSceneRef.current));
+    }
+    await Promise.all(updates);
+  }, []);
   const pendingCreationRef = useRef<PendingCreation | null>(null);
   // A picker change is provisional until the core publishes its durable correlated receipt.
   const pendingPolicyRequestsRef = useRef<Map<string, PendingPolicyRequest>>(new Map());
@@ -1165,6 +1218,7 @@ export default function App() {
       // Re-clicking the current project is still an explicit navigation choice: a late creation
       // request must not take focus or submit the draft it captured before that choice.
       invalidatePendingCreation();
+      setCallProjectPath(normalizePluginProjectPath(path));
       setActiveProject(path);
       setCwd(path);
       const project = projects.find((item) => item.path === path);
@@ -1361,12 +1415,20 @@ export default function App() {
             const bind = pendingPipelineBindRef.current;
             if (bind) {
               pendingPipelineBindRef.current = null;
-              void bindPipelineSession(bind.instanceId, bind.stageId, ev.session).then(
-                async () => {
-                  const detail = await getPipelineInstance(bind.instanceId);
-                  if (activeSessionRef.current === ev.session) setPipelineDetail(detail);
-                },
-              );
+              if (componentEnabledRef.current("scenes.surface")) {
+                void bindPipelineSession(bind.instanceId, bind.stageId, ev.session).then(
+                  async () => {
+                    if (!componentEnabledRef.current("scenes.surface")) return;
+                    const detail = await getPipelineInstance(bind.instanceId);
+                    if (
+                      componentEnabledRef.current("scenes.surface") &&
+                      activeSessionRef.current === ev.session
+                    ) {
+                      setPipelineDetail(detail);
+                    }
+                  },
+                );
+              }
             }
           }
           {
@@ -1374,18 +1436,23 @@ export default function App() {
             const pendingScene = pendingSceneRef.current;
             if (pendingScene) {
               pendingSceneRef.current = null;
-              sceneBySessionRef.current.set(ev.session, pendingScene);
-              void setSessionScene(ev.session, pendingScene, false);
-              const scene = scenesRef.current.find((s) => s.reference === pendingScene);
-              if (scene?.execution?.model) {
-                void setSessionModel(ev.session, scene.execution.model);
+              if (!componentEnabledRef.current("scenes.surface")) {
+                setActiveSceneName(null);
+                setScenePendingFields([]);
+              } else {
+                sceneBySessionRef.current.set(ev.session, pendingScene);
+                void setSessionScene(ev.session, pendingScene, false);
+                const scene = scenesRef.current.find((s) => s.reference === pendingScene);
+                if (scene?.execution?.model) {
+                  void setSessionModel(ev.session, scene.execution.model);
+                }
+                setActiveSceneName(pendingScene);
+                // Reasoning effort has no provider-stable config id before the session reports
+                // its options, so it stays pending even after a full apply.
+                setScenePendingFields(
+                  scene?.execution?.reasoning_effort ? ["reasoning_effort"] : [],
+                );
               }
-              setActiveSceneName(pendingScene);
-              // Reasoning effort has no provider-stable config id before the session reports
-              // its options, so it stays pending even after a full apply.
-              setScenePendingFields(
-                scene?.execution?.reasoning_effort ? ["reasoning_effort"] : [],
-              );
             } else {
               setActiveSceneName(sceneBySessionRef.current.get(ev.session) ?? null);
               setScenePendingFields([]);
@@ -1423,14 +1490,7 @@ export default function App() {
                 ? [{ id: block.id, revision: block.frozen_revision }]
                 : []),
             });
-            void Promise.all([
-              setSessionMemoryPolicy(
-                ev.session,
-                memoryReadRef.current,
-                memoryWriteRef.current,
-              ),
-              setSessionAutoScene(ev.session, autoSceneRef.current),
-            ])
+            void initializePluginSessionState(ev.session)
               .then(() => submitPrompt(ev.session, pending.doc, pending.promptRequestId))
               .then(() => {
                 refreshSessions();
@@ -1466,14 +1526,7 @@ export default function App() {
                 }
               });
           } else {
-            void Promise.all([
-              setSessionMemoryPolicy(
-                ev.session,
-                memoryReadRef.current,
-                memoryWriteRef.current,
-              ),
-              setSessionAutoScene(ev.session, autoSceneRef.current),
-            ])
+            void initializePluginSessionState(ev.session)
               .then(refreshSessions)
               .catch((error) => toast(String(error), "error"));
           }
@@ -1557,7 +1610,8 @@ export default function App() {
           // banner-worthy ones render; the rest are consumed by the core's SceneRuntime.
           if (
             (ev.event === "exit_criteria_met" || ev.event === "hook_suggestion") &&
-            ev.session === activeSessionRef.current
+            ev.session === activeSessionRef.current &&
+            componentEnabledRef.current("scenes.surface")
           ) {
             const banner = sceneBannerFromEvent(ev);
             if (banner) setSceneBanner(banner);
@@ -1763,6 +1817,7 @@ export default function App() {
     finishPolicyRequest,
     followDockEvent,
     handleDockFollow,
+    initializePluginSessionState,
     invalidatePendingCreation,
     markSessionStarted,
     markSessionStopped,
@@ -1777,6 +1832,7 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     void onAutoSceneChanged((event) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       sceneBySessionRef.current.set(event.session, event.reference);
       autoSceneBySessionRef.current.set(event.session, true);
       if (event.session !== activeSessionRef.current) return;
@@ -1910,11 +1966,13 @@ export default function App() {
     setTurns((prev) => [...prev, newTurn(summarizeDoc(doc), promptRequestId)]);
     try {
       if (targetSession) {
-        await setSessionMemoryPolicy(
-          targetSession,
-          memoryReadRef.current,
-          memoryWriteRef.current,
-        );
+        if (componentEnabledRef.current("memory.settings")) {
+          await setSessionMemoryPolicy(
+            targetSession,
+            memoryReadRef.current,
+            memoryWriteRef.current,
+          );
+        }
         await submitPrompt(targetSession, doc, promptRequestId);
         refreshSessions();
       } else {
@@ -2175,6 +2233,7 @@ export default function App() {
   );
 
   const onMemoryPolicyChange = useCallback((read: MemoryAccess, write: MemoryAccess) => {
+    if (!componentEnabledRef.current("memory.settings")) return;
     const previousRead = memoryReadRef.current;
     const previousWrite = memoryWriteRef.current;
     memoryReadRef.current = read;
@@ -2225,10 +2284,12 @@ export default function App() {
         : null;
       if (projectPath && projectPath !== activeProjectRef.current) {
         activeProjectRef.current = projectPath;
+        setCallProjectPath(normalizePluginProjectPath(projectPath));
         setActiveProject(projectPath);
         void openProject(projectPath).then(refreshProjects);
       } else if (stored && !projectPath) {
         activeProjectRef.current = null;
+        setCallProjectPath(null);
         setActiveProject(null);
       }
 
@@ -2254,17 +2315,24 @@ export default function App() {
         setActiveSceneName(remembered);
         setAutoScene(rememberedAuto);
         setScenePendingFields([]);
-        void Promise.all([getSessionScene(id), getSessionAutoScene(id)]).then(
-          ([state, enabled]) => {
-            if (activeSessionRef.current !== id) return;
-            autoSceneBySessionRef.current.set(id, enabled);
-            setAutoScene(enabled);
-            if (!state) return;
-            sceneBySessionRef.current.set(id, state.reference);
-            setActiveSceneName(state.reference);
-            if (!state.resolved) toast(t("scene.unresolved"), "error");
-          },
-        );
+        if (componentEnabledRef.current("scenes.surface")) {
+          void Promise.all([getSessionScene(id), getSessionAutoScene(id)]).then(
+            ([state, enabled]) => {
+              if (
+                !componentEnabledRef.current("scenes.surface") ||
+                activeSessionRef.current !== id
+              ) {
+                return;
+              }
+              autoSceneBySessionRef.current.set(id, enabled);
+              setAutoScene(enabled);
+              if (!state) return;
+              sceneBySessionRef.current.set(id, state.reference);
+              setActiveSceneName(state.reference);
+              if (!state.resolved) toast(t("scene.unresolved"), "error");
+            },
+          );
+        }
       }
       setSessionLoading(true);
       setTurns([]);
@@ -2288,7 +2356,9 @@ export default function App() {
       try {
         let [page, receipts] = await Promise.all([
           getTranscriptPage(id),
-          listMemoryReceipts(id),
+          componentEnabledRef.current("memory.settings")
+            ? listMemoryReceipts(id)
+            : Promise.resolve([]),
         ]);
         // The core persists the prompt before broadcasting TurnStarted. If that boundary arrived
         // during this read, fetch once more so the persisted tail and live event buffer share an
@@ -2433,26 +2503,187 @@ export default function App() {
     refreshSkills();
   }, [refreshSkills]);
 
+  const loadManagedCatalog = useCallback(async (scope: PluginManagerScope) => {
+    const normalizedScope: PluginManagerScope = scope.kind === "user"
+      ? scope
+      : { kind: "project", projectPath: normalizePluginProjectPath(scope.projectPath) };
+    const next = await pluginCatalog(toManagedPluginScope(normalizedScope));
+    if (normalizedScope.kind === "user") {
+      setManagedUserCatalog(next);
+    } else {
+      setManagedProjectCatalogs((current) => ({
+        ...current,
+        [normalizedScope.projectPath]: next,
+      }));
+    }
+    return next;
+  }, []);
+
+  const refreshManagedCatalogs = useCallback(async (scope: PluginManagerScope = pluginManagerScope) => {
+    const projectPaths = new Set<string>();
+    if (scope.kind === "project") projectPaths.add(normalizePluginProjectPath(scope.projectPath));
+    if (activeProject) projectPaths.add(normalizePluginProjectPath(activeProject));
+    await Promise.all([
+      loadManagedCatalog({ kind: "user" }),
+      ...Array.from(projectPaths, (projectPath) =>
+        loadManagedCatalog({ kind: "project", projectPath }),
+      ),
+    ]);
+  }, [activeProject, loadManagedCatalog, pluginManagerScope]);
+
+  // Component policy is runtime state, not merely data for the management page. Keep the user
+  // graph and the active project's inherited graph warm even while the page is closed.
+  useEffect(() => {
+    void refreshManagedCatalogs().catch((error) => {
+      console.warn("Could not load plugin catalog", error);
+    });
+  }, [refreshManagedCatalogs]);
+
+  const pluginManagerProjects = useMemo(() => {
+    const seen = new Set<string>();
+    return projects.flatMap((project) => {
+      const path = normalizePluginProjectPath(project.path);
+      if (seen.has(path)) return [];
+      seen.add(path);
+      return [{ path, label: project.name }];
+    });
+  }, [projects]);
+
+  const selectedManagedCatalog = pluginManagerScope.kind === "user"
+    ? managedUserCatalog
+    : managedProjectCatalogs[normalizePluginProjectPath(pluginManagerScope.projectPath)];
+  const activeProjectCatalog = activeProject
+    ? managedProjectCatalogs[normalizePluginProjectPath(activeProject)]
+    : undefined;
+  const activeManagedCatalog = activeProject
+    ? activeProjectCatalog ?? managedUserCatalog
+    : managedUserCatalog;
+  const activeComponentPolicyReady = projectBootstrapComplete && managedUserCatalog !== null &&
+    (activeProject === null || activeProjectCatalog !== undefined);
+  const pluginManagerModel = useMemo(
+    () => buildPluginManagerCatalog({
+      catalog: selectedManagedCatalog ?? managedUserCatalog ?? EMPTY_MANAGED_CATALOG,
+      userCatalog: managedUserCatalog ?? undefined,
+      bundles: plugins,
+      skills,
+      market,
+      scope: pluginManagerScope,
+    }),
+    [managedUserCatalog, market, pluginManagerScope, plugins, selectedManagedCatalog, skills],
+  );
+  const activePluginModel = useMemo(
+    () => buildPluginManagerCatalog({
+      catalog: activeManagedCatalog ?? EMPTY_MANAGED_CATALOG,
+      userCatalog: managedUserCatalog ?? undefined,
+      bundles: plugins,
+      skills,
+      market,
+      scope: activeProject
+        ? { kind: "project", projectPath: normalizePluginProjectPath(activeProject) }
+        : { kind: "user" },
+    }),
+    [activeManagedCatalog, activeProject, managedUserCatalog, market, plugins, skills],
+  );
+  const componentEnabled = useCallback(
+    (id: BuiltinUiComponentId) =>
+      pluginManagerComponentEnabled(activePluginModel.components, id, activeComponentPolicyReady),
+    [activeComponentPolicyReady, activePluginModel.components],
+  );
+  componentEnabledRef.current = componentEnabled;
+  const voiceComposerEnabled = componentEnabled("voice.composer");
+  const memorySettingsEnabled = componentEnabled("memory.settings");
+  const scenesSurfaceEnabled = componentEnabled("scenes.surface");
+  const lspRuntimeEnabled = componentEnabled("lsp.runtime");
+  const lspPluginEnabled = activeComponentPolicyReady &&
+    (activePluginModel.plugins.find((plugin) => plugin.id === "lsp")?.state.effectiveEnabled ?? false);
+  const lspProjectPath = activeProject ? normalizePluginProjectPath(activeProject) : null;
+  // Close the renderer gate synchronously, then reopen it only after this project's backend has
+  // resumed. This keeps mounted editor effects from racing a suspended project realm.
+  useLayoutEffect(() => {
+    let current = true;
+    void synchronizeLspRuntimePolicy(
+      {
+        catalogReady: activeComponentPolicyReady,
+        pluginEnabled: lspPluginEnabled,
+        componentEnabled: lspRuntimeEnabled,
+        projectPath: lspProjectPath,
+        workspace: workspaceCwd,
+      },
+      (enabled) => lspSetRuntimeEnabled(enabled, lspProjectPath),
+      () => current && componentEnabledRef.current("lsp.runtime"),
+    ).catch((error) => console.warn("Could not update language-server runtime policy", error));
+    return () => {
+      current = false;
+    };
+  }, [activeComponentPolicyReady, lspPluginEnabled, lspProjectPath, lspRuntimeEnabled]);
+  const availableDockSurfaces = useMemo<DockSurface[]>(
+    () => [
+      ...(componentEnabled("browser.dock") ? ["browser" as const] : []),
+      ...(componentEnabled("terminal.dock") ? ["terminal" as const] : []),
+      ...(componentEnabled("files.surface") ? ["files" as const] : []),
+      ...(componentEnabled("git.surface") ? ["git" as const] : []),
+    ],
+    [componentEnabled],
+  );
+
+  // A live disable removes the surface immediately, including already-open dialogs. Runtime
+  // cleanup is owned by the plugin scope; this closes only renderer projections of that scope.
+  useEffect(() => {
+    if (dockTab && dockTab !== "home" && !availableDockSurfaces.includes(dockTab)) {
+      manualDockTab(null);
+    }
+    if (!componentEnabled("files.surface")) setShowFiles(false);
+    if (!componentEnabled("search.modal")) setShowWorkspaceSearch(false);
+    if (!componentEnabled("issues.modal")) setShowIssues(false);
+    if (!componentEnabled("git.surface")) setShowSourceControl(false);
+    if (!componentEnabled("remote.modal")) setShowRemote(false);
+    if (!componentEnabled("automation.page")) setShowAutomations(false);
+    if (!scenesSurfaceEnabled) {
+      setShowScenePicker(false);
+      setShowSceneStudio(false);
+      setSceneEditorRequest(null);
+      setSceneEscalation(null);
+      setSceneBanner(null);
+      setPipelineDetail(null);
+      pendingSceneRef.current = null;
+      pendingPipelineBindRef.current = null;
+      pendingDelegationRef.current = null;
+      pendingIssueInsertRef.current = null;
+    }
+  }, [availableDockSurfaces, componentEnabled, dockTab, manualDockTab, scenesSurfaceEnabled]);
+
   const refreshScenes = useCallback(async () => {
+    if (!scenesSurfaceEnabled) {
+      scenesRef.current = [];
+      setScenes([]);
+      return [];
+    }
     const next = await listScenes(cwd || ".");
+    if (!componentEnabledRef.current("scenes.surface")) return [];
     scenesRef.current = next;
     setScenes(next);
     return next;
-  }, [cwd]);
+  }, [cwd, scenesSurfaceEnabled]);
 
   // Scenes rescan with the workspace, same contract as skills. Degrades to [] on an older core.
   useEffect(() => {
+    if (!scenesSurfaceEnabled) {
+      setPipelines([]);
+      return;
+    }
     void refreshScenes();
     // Pipelines resolve from the same library; the palette's "start pipeline" commands feed here.
-    void listPipelines().then(setPipelines);
-  }, [refreshScenes]);
+    void listPipelines().then((next) => {
+      if (componentEnabledRef.current("scenes.surface")) setPipelines(next);
+    });
+  }, [refreshScenes, scenesSurfaceEnabled]);
 
   // The stage track follows the active session's pipeline binding (R9). Refetched at turn
   // boundaries and on banner changes — auto advances, loop re-entries, and artifact captures all
   // land there. Degrades to hidden (null) on an older core or an unbound session.
   useEffect(() => {
     const session = activeSession;
-    if (!session) {
+    if (!session || !scenesSurfaceEnabled) {
       setPipelineDetail(null);
       return;
     }
@@ -2470,7 +2701,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeSession, turns.length, sceneBanner]);
+  }, [activeSession, turns.length, sceneBanner, scenesSurfaceEnabled]);
 
   const saveDraft = useCallback(async () => {
     if (!skillDraft || skillDraft.name.trim().length === 0) return;
@@ -2566,25 +2797,95 @@ export default function App() {
   }, [cwd]);
 
   const openPluginHub = useCallback(() => {
+    const scope: PluginManagerScope = activeProject
+      ? { kind: "project", projectPath: normalizePluginProjectPath(activeProject) }
+      : { kind: "user" };
+    setPluginManagerScope(scope);
+    setShowBundlePluginTools(false);
     marketCatalog().then(setMarket).catch(() => {});
     listPlugins().then(setPlugins).catch(() => {});
+    void refreshManagedCatalogs(scope).catch(() => {});
     refreshSkills();
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPluginHub(true);
-  }, [refreshSkills]);
+  }, [activeProject, refreshManagedCatalogs, refreshSkills]);
+
+  const refreshPluginManagerData = useCallback(async (scope: PluginManagerScope = pluginManagerScope) => {
+    const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
+      marketCatalog(),
+      listPlugins(),
+      refreshSkills(),
+      refreshManagedCatalogs(scope),
+    ]);
+    setMarket(nextMarket);
+    setPlugins(nextPlugins);
+    setSkills(nextSkills);
+  }, [pluginManagerScope, refreshManagedCatalogs, refreshSkills]);
+
+  const planManagerChange = useCallback(async (
+    request: PluginManagerChangeRequest,
+  ): Promise<PluginManagerChangePlan> =>
+    planPluginManagerChange({
+      request,
+      plugins: pluginManagerModel.plugins,
+      components: pluginManagerModel.components,
+      planChange: planPluginChange,
+    }), [pluginManagerModel.components, pluginManagerModel.plugins]);
+
+  const applyManagerChange = useCallback(async (plan: PluginManagerChangePlan) => {
+    await applyPluginManagerChange(plan, applyPluginChange);
+    await refreshPluginManagerData(plan.request.scope);
+    toast(
+      plan.request.desiredState === "disabled"
+        ? `${plan.request.targetName} unloaded.`
+        : `${plan.request.targetName} loaded.`,
+      "success",
+    );
+  }, [refreshPluginManagerData, toast]);
+
+  const saveManagerConfig = useCallback(async ({
+    pluginId,
+    scope,
+    config,
+  }: {
+    pluginId: string;
+    scope: PluginManagerScope;
+    config: unknown;
+  }) => {
+    const plugin = pluginManagerModel.plugins.find((item) => item.id === pluginId);
+    if (!plugin || plugin.source === "bundle") {
+      throw new Error("This bundle does not expose a host-validated configuration schema.");
+    }
+    const plan = await planPluginChange({
+      plugin: plugin.id,
+      scope: toManagedPluginScope(scope),
+      config,
+    });
+    await applyPluginChange(plan.id);
+    await refreshPluginManagerData(scope);
+    toast(`${plugin.name} configuration saved and reloaded.`, "success");
+  }, [pluginManagerModel.plugins, refreshPluginManagerData, toast]);
 
   const openAutomations = useCallback(() => {
+    if (!componentEnabled("automation.page")) {
+      toast("Automations are disabled in Plugins.", "info");
+      return;
+    }
     setShowTaskBoard(false);
     setShowPluginHub(false);
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
+  }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
 
   const openSourceControl = useCallback(() => {
+    if (!componentEnabled("git.surface")) {
+      toast("Source control is disabled in Plugins.", "info");
+      return;
+    }
     setShowSourceControl(true);
-  }, []);
+  }, [componentEnabled, toast]);
 
   const doCheckpoint = useCallback(async () => {
     try {
@@ -2624,10 +2925,20 @@ export default function App() {
   }, []);
 
   const toggleDock = useCallback((t: DockSurface) => {
+    const component: Record<DockSurface, BuiltinUiComponentId> = {
+      browser: "browser.dock",
+      terminal: "terminal.dock",
+      files: "files.surface",
+      git: "git.surface",
+    };
+    if (!componentEnabled(component[t])) {
+      toast(`${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`, "info");
+      return;
+    }
     // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
     manualDockTab(dockTabRef.current === t ? null : t);
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-  }, [manualDockTab]);
+  }, [componentEnabled, manualDockTab, toast]);
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
@@ -2769,8 +3080,9 @@ export default function App() {
     void purgeCanvasHead(canvasId).catch(() => {});
   }, [purgeCanvasHead]);
 
+  const canvasUiEnabled = canvasFeature.enabled && componentEnabled("canvas.editor");
   const canvasRuntime = useMemo<CanvasBlockRuntime | null>(() => ({
-    enabled: canvasFeature.enabled,
+    enabled: canvasUiEnabled,
     normalizeMedia: normalizeCanvasMedia,
     resolveAsset: resolveCanvasAsset,
     getAssets: getCanvasAssets,
@@ -2788,25 +3100,25 @@ export default function App() {
     onCanvasFrozen: (canvasId) => canvasFrozenRef.current.add(canvasId),
     onCanvasDeliveryError: (_canvasId, message) => toast(message, "error"),
     register: () => () => {},
-  }), [canvasFeature.enabled, freezeCanvasDraft, getCanvasAssets, normalizeCanvasMedia, purgeCanvasOnUnmount, removeCanvasDraft, resolveCanvasAsset, restoreCanvasDraft, saveCanvasDraft, toast]);
+  }), [canvasUiEnabled, freezeCanvasDraft, getCanvasAssets, normalizeCanvasMedia, purgeCanvasOnUnmount, removeCanvasDraft, resolveCanvasAsset, restoreCanvasDraft, saveCanvasDraft, toast]);
 
   const createCanvas = useCallback(async () => {
-    if (!canvasFeature.enabled) {
-      const error = new Error(canvasFeature.status);
+    if (!canvasUiEnabled) {
+      const error = new Error(componentEnabled("canvas.editor") ? canvasFeature.status : "Canvas is disabled in Plugins.");
       toast(error.message, "error");
       throw error;
     }
     const draft = await canvasCreateDraft("Canvas");
     rememberCanvasDraft(draft);
     return draft;
-  }, [canvasFeature.enabled, canvasFeature.status, rememberCanvasDraft, toast]);
+  }, [canvasFeature.status, canvasUiEnabled, componentEnabled, rememberCanvasDraft, toast]);
 
   useEffect(() => {
     const onDuplicate = (event: Event) => {
       const detail = (event as CustomEvent<{ id?: string; revision?: number }>).detail;
       if (!detail?.id || !Number.isFinite(detail.revision)) return;
-      if (!canvasFeature.enabled) {
-        toast(canvasFeature.status, "error");
+      if (!canvasUiEnabled) {
+        toast(componentEnabled("canvas.editor") ? canvasFeature.status : "Canvas is disabled in Plugins.", "error");
         return;
       }
       void canvasDuplicate(detail.id, Number(detail.revision))
@@ -2818,11 +3130,15 @@ export default function App() {
     };
     window.addEventListener("codetwo-canvas-duplicate", onDuplicate);
     return () => window.removeEventListener("codetwo-canvas-duplicate", onDuplicate);
-  }, [canvasFeature.enabled, canvasFeature.status, rememberCanvasDraft, toast]);
+  }, [canvasFeature.status, canvasUiEnabled, componentEnabled, rememberCanvasDraft, toast]);
 
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
     (p: string, position?: Pick<WorkspaceContentMatch, "line" | "column">) => {
+      if (!componentEnabled("files.surface")) {
+        toast("Files are disabled in Plugins.", "info");
+        return;
+      }
       setOpenFiles((prev) => (prev.includes(p) ? prev : [...prev, p]));
       setActiveFile(p);
       setFileReveal(
@@ -2841,7 +3157,7 @@ export default function App() {
       if (dockWidth < 640) setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [dockWidth, setDockWidth],
+    [componentEnabled, dockWidth, setDockWidth, toast],
   );
 
   const closeFileTab = useCallback(
@@ -2883,6 +3199,7 @@ export default function App() {
    */
   const applySceneChoice = useCallback(
     (reference: string | null, opts?: { confirmed?: boolean }) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const session = activeSessionRef.current;
       autoSceneRef.current = false;
       setAutoScene(false);
@@ -2928,6 +3245,7 @@ export default function App() {
       if (session) {
         sceneBySessionRef.current.set(session, reference);
         void applySceneToSession(session, reference, confirmed).then((outcome) => {
+          if (!componentEnabledRef.current("scenes.surface")) return;
           // The core re-checks against the persisted policy; if it disagrees, nothing was
           // applied there — surface the same dialog instead of drifting.
           if (outcome?.escalation) {
@@ -2960,6 +3278,7 @@ export default function App() {
   );
 
   const setAutoSceneChoice = useCallback((enabled: boolean) => {
+    if (!componentEnabledRef.current("scenes.surface")) return;
     const session = activeSessionRef.current;
     autoSceneRef.current = enabled;
     setAutoScene(enabled);
@@ -2972,10 +3291,11 @@ export default function App() {
   /** Full-apply: a fresh session in the active scene, closing the soft-apply gap. */
   const restartInScene = useCallback(
     async (confirmed = false) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const reference = activeSceneNameRef.current;
       if (!reference) return;
       const plan = await sceneSessionPlan(reference, confirmed);
-      if (!plan) return;
+      if (!componentEnabledRef.current("scenes.surface") || !plan) return;
       if (plan.escalation) {
         setSceneEscalation({
           reference,
@@ -3008,8 +3328,9 @@ export default function App() {
 
   /** Refresh the local scene chip state after the core soft-applied a stage's scene (R9). */
   const syncSessionScene = useCallback(async (session: string) => {
+    if (!componentEnabledRef.current("scenes.surface")) return;
     const state = await getSessionScene(session);
-    if (!state) return;
+    if (!componentEnabledRef.current("scenes.surface") || !state) return;
     sceneBySessionRef.current.set(session, state.reference);
     setActiveSceneName(state.reference);
     setScenePendingFields([]);
@@ -3022,9 +3343,10 @@ export default function App() {
    */
   const advancePipelineChoice = useCallback(
     async (instanceId: string, toStage: string, confirmed = false) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const session = activeSessionRef.current;
       const outcome = await advancePipeline(instanceId, toStage, session, confirmed);
-      if (!outcome) return;
+      if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       const escalation = outcome.escalation ?? outcome.applied_scene?.escalation ?? null;
       if (escalation) {
         const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
@@ -3038,7 +3360,9 @@ export default function App() {
         return;
       }
       if (session) await syncSessionScene(session);
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const detail = await getPipelineInstance(instanceId);
+      if (!componentEnabledRef.current("scenes.surface")) return;
       setPipelineDetail(detail);
       const stage = detail?.stages.find((s) => s.id === toStage);
       toast(t("stage.advanced", { stage: stage?.title ?? toStage }));
@@ -3053,8 +3377,9 @@ export default function App() {
    */
   const advancePipelineInNewSession = useCallback(
     async (instanceId: string, toStage: string, confirmed = false) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const outcome = await advancePipeline(instanceId, toStage, null, confirmed);
-      if (!outcome) return;
+      if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       if (outcome.escalation) {
         const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
         setSceneEscalation({
@@ -3067,6 +3392,7 @@ export default function App() {
         return;
       }
       const detail = await getPipelineInstance(instanceId);
+      if (!componentEnabledRef.current("scenes.surface")) return;
       setPipelineDetail(detail);
       const stage = detail?.stages.find((s) => s.id === toStage);
       const reference = resolveStageScene(stage?.scene_ref ?? toStage);
@@ -3087,11 +3413,13 @@ export default function App() {
   /** Start a pipeline in the current project, binding the active session to its entry stage. */
   const startPipelineChoice = useCallback(
     async (reference: string) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const session = activeSessionRef.current;
       const outcome = await startPipeline(reference, cwd || ".", session);
-      if (!outcome) return;
+      if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       setPipelineDetail(outcome.detail);
       if (session) await syncSessionScene(session);
+      if (!componentEnabledRef.current("scenes.surface")) return;
       // An entry scene looser than the session's posture applied nothing (refuse-and-report);
       // the binding landed, so confirming just soft-applies the entry scene.
       const escalation = outcome.applied_scene?.escalation;
@@ -3117,11 +3445,13 @@ export default function App() {
    */
   const onDelegateIssue = useCallback(
     async (issue: Issue, sceneReference: string) => {
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const scene = scenesRef.current.find((s) => s.reference === sceneReference);
       if (!scene) return;
       const ctx = await issueContext(issue);
+      if (!componentEnabledRef.current("scenes.surface")) return;
       const plan = await sceneSessionPlan(sceneReference, false);
-      if (!plan) return;
+      if (!componentEnabledRef.current("scenes.surface") || !plan) return;
       if (plan.escalation) {
         // Delegation never loosens the sandbox silently: same chokepoint dialog, same rule.
         // Confirming soft-applies the scene; delegation itself stays a deliberate re-run.
@@ -3133,8 +3463,6 @@ export default function App() {
         });
         return;
       }
-      pendingSceneRef.current = sceneReference;
-      pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
       // Accountability trail: record the delegation now (session id lands on session_created).
       const delegationId = await recordIssueDelegation(
         issue.source,
@@ -3143,6 +3471,9 @@ export default function App() {
         sceneReference,
         scene.title,
       );
+      if (!componentEnabledRef.current("scenes.surface")) return;
+      pendingSceneRef.current = sceneReference;
+      pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
       if (delegationId !== null) pendingDelegationRef.current = delegationId;
       createSession();
       const params = plan.params;
@@ -3233,6 +3564,10 @@ export default function App() {
           openPluginHub();
           break;
         case "open_usage":
+          if (!componentEnabled("usage.settings")) {
+            toast("Usage is disabled in Plugins.", "info");
+            break;
+          }
           setShowTaskBoard(false);
           setShowPluginHub(false);
           setShowAutomations(false);
@@ -3240,13 +3575,16 @@ export default function App() {
           setShowSettings(true);
           break;
         case "open_files":
-          setShowFiles(true);
+          if (componentEnabled("files.surface")) setShowFiles(true);
+          else toast("Files are disabled in Plugins.", "info");
           break;
         case "search_workspace":
-          setShowWorkspaceSearch(true);
+          if (componentEnabled("search.modal")) setShowWorkspaceSearch(true);
+          else toast("Workspace search is disabled in Plugins.", "info");
           break;
         case "open_issues":
-          setShowIssues(true);
+          if (componentEnabled("issues.modal")) setShowIssues(true);
+          else toast("Issues are disabled in Plugins.", "info");
           break;
         case "prev_session":
           stepSession(-1);
@@ -3266,12 +3604,17 @@ export default function App() {
           refreshGit();
           break;
         case "cycle_scene": {
+          if (!componentEnabled("scenes.surface")) {
+            toast("Scenes are disabled in Plugins.", "info");
+            break;
+          }
           const next = nextSceneInRing([], scenesRef.current, activeSceneNameRef.current);
           if (next) applySceneChoice(next);
           break;
         }
         case "open_scene_picker":
-          setShowScenePicker(true);
+          if (componentEnabled("scenes.surface")) setShowScenePicker(true);
+          else toast("Scenes are disabled in Plugins.", "info");
           break;
         case "open_mission_control":
           setShowMissionControl(true);
@@ -3301,6 +3644,7 @@ export default function App() {
       stepSession,
       toast,
       applySceneChoice,
+      componentEnabled,
     ],
   );
 
@@ -3407,7 +3751,23 @@ export default function App() {
       hint: displayProvider(s.provider),
       run: () => void selectSession(s.id),
     })),
-  ];
+  ].filter((command) => {
+    if (["sc", "checkpoint", "gitpanel", "git"].includes(command.id)) {
+      return componentEnabled("git.surface");
+    }
+    if (command.id === "automations") return componentEnabled("automation.page");
+    if (command.id === "issues") return componentEnabled("issues.modal");
+    if (["files", "filespanel"].includes(command.id)) return componentEnabled("files.surface");
+    if (command.id === "search") return componentEnabled("search.modal");
+    if (command.id === "usage") return componentEnabled("usage.settings");
+    if (command.id === "remote") return componentEnabled("remote.modal");
+    if (command.id === "terminal") return componentEnabled("terminal.dock");
+    if (command.id === "browser") return componentEnabled("browser.dock");
+    if (command.id === "scene" || command.id === "scene-studio" || command.id.startsWith("scene-") || command.id.startsWith("pipeline-")) {
+      return componentEnabled("scenes.surface");
+    }
+    return true;
+  });
 
   useEffect(() => {
     canvasFeatureState()
@@ -3422,6 +3782,7 @@ export default function App() {
     getKeymap().then(setBindings).catch(() => {});
     // Open on the project used last. Failing that, register the directory the app started in, so
     // the picker is never empty and the first session has somewhere real to run.
+    setCallProjectPath(null);
     listProjects()
       .then(async (list) => {
         setProjects(list);
@@ -3430,9 +3791,11 @@ export default function App() {
           // position — read it off `last_opened_at` rather than taking the first one.
           const last = list.reduce((a, b) => (b.last_opened_at > a.last_opened_at ? b : a));
           activeProjectRef.current = last.path;
+          setCallProjectPath(normalizePluginProjectPath(last.path));
           setActiveProject(last.path);
           setCwd(last.path);
           setWorktreeBase(projectSwitchWorktreeBaseline(last.default_worktree_mode));
+          setProjectBootstrapComplete(true);
           return;
         }
         const here = await defaultCwd();
@@ -3440,11 +3803,14 @@ export default function App() {
         const resolved = await addProject(here).catch(() => null);
         if (resolved) {
           activeProjectRef.current = resolved;
+          setCallProjectPath(normalizePluginProjectPath(resolved));
           setActiveProject(resolved);
           listProjects().then(setProjects).catch(() => {});
         }
+        setProjectBootstrapComplete(true);
       })
       .catch(() => {
+        setProjectBootstrapComplete(true);
         defaultCwd().then(setCwd).catch(() => {});
       });
     // The app opens on a blank page, so put the caret in it. Deferred one tick: the editor installs
@@ -3576,11 +3942,15 @@ export default function App() {
     onPlan: setPlanMode,
     memoryRead,
     memoryWrite,
+    memoryEnabled: memorySettingsEnabled,
     onMemoryPolicy: onMemoryPolicyChange,
     hasSession: activeSession !== null,
-    scenes,
-    activeScene: scenes.find((s) => s.reference === activeSceneName) ?? null,
-    autoScene,
+    scenesEnabled: scenesSurfaceEnabled,
+    scenes: scenesSurfaceEnabled ? scenes : [],
+    activeScene: scenesSurfaceEnabled
+      ? scenes.find((s) => s.reference === activeSceneName) ?? null
+      : null,
+    autoScene: scenesSurfaceEnabled && autoScene,
     onAutoScene: setAutoSceneChoice,
     onScene: (reference, strength) => {
       if (strength === "full") {
@@ -3596,7 +3966,7 @@ export default function App() {
       setSceneEditorRequest(null);
       setShowSceneStudio(true);
     },
-    sceneCustomized: (() => {
+    sceneCustomized: scenesSurfaceEnabled && (() => {
       const scene = scenes.find((s) => s.reference === activeSceneName);
       if (!scene) return false;
       return sceneCustomized(scene, {
@@ -3608,11 +3978,12 @@ export default function App() {
         model: currentModel,
       });
     })(),
-    scenePendingFields,
+    scenePendingFields: scenesSurfaceEnabled ? scenePendingFields : [],
     onRestartInScene: () => void restartInScene(),
   };
 
   const handleSceneSaved = (saved: SceneInfo) => {
+    if (!componentEnabledRef.current("scenes.surface")) return;
     const previous = sceneEditorRequest?.kind === "edit"
       ? sceneEditorRequest.scene.reference
       : null;
@@ -3629,6 +4000,7 @@ export default function App() {
   };
 
   const handleSceneDeleted = (reference: string) => {
+    if (!componentEnabledRef.current("scenes.surface")) return;
     if (reference === activeSceneNameRef.current) {
       activeSceneNameRef.current = null;
       setActiveSceneName(null);
@@ -3659,12 +4031,13 @@ export default function App() {
           projectPath={activeProject ?? cwd}
           project={projects.find((project) => project.path === activeProject) ?? null}
           onProjectWorktreeMode={updateProjectWorktreeMode}
+          memoryEnabled={memorySettingsEnabled}
           onClose={() => {
             setShowSettings(false);
             setCapturing(null);
           }}
         />
-      ) : showSceneStudio ? (
+      ) : showSceneStudio && scenesSurfaceEnabled ? (
         <SceneStudio
           scenes={scenes}
           active={scenes.find((scene) => scene.reference === activeSceneName) ?? null}
@@ -3721,6 +4094,7 @@ export default function App() {
                 if (next) selectProject(next.path);
                 else {
                   activeProjectRef.current = null;
+                  setCallProjectPath(null);
                   setActiveProject(null);
                 }
               }
@@ -3790,7 +4164,7 @@ export default function App() {
         />
 
         {showAutomations && (
-          <AutomationsPage
+          componentEnabled("automation.page") ? <AutomationsPage
             projects={projects}
             providers={providers}
             defaultProject={(activeProject ?? cwd) || "."}
@@ -3799,7 +4173,7 @@ export default function App() {
               setShowAutomations(false);
               void selectSession(session);
             }}
-          />
+          /> : null
         )}
 
         {showTaskBoard && (
@@ -3812,7 +4186,48 @@ export default function App() {
           />
         )}
 
-        {showPluginHub && (
+        {showPluginHub && !showBundlePluginTools && (
+          <PluginManagerPage
+            plugins={pluginManagerModel.plugins}
+            components={pluginManagerModel.components}
+            marketplaceItems={pluginManagerModel.marketplaceItems}
+            scope={pluginManagerScope}
+            projects={pluginManagerProjects}
+            recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
+            onScopeChange={(scope) => {
+              const normalized = scope.kind === "user"
+                ? scope
+                : { kind: "project" as const, projectPath: normalizePluginProjectPath(scope.projectPath) };
+              setPluginManagerScope(normalized);
+              void loadManagedCatalog(normalized).catch((error) => {
+                toast(`Could not load plugin scope: ${error}`, "error");
+              });
+            }}
+            onPlanChange={planManagerChange}
+            onApplyChange={applyManagerChange}
+            onSaveConfig={saveManagerConfig}
+            onResetPlugin={async (pluginId, scope) => {
+              await resetManagedPlugin(pluginId, toManagedPluginScope(scope));
+              await refreshPluginManagerData(scope);
+              toast(`${pluginManagerModel.plugins.find((plugin) => plugin.id === pluginId)?.name ?? pluginId} reset to defaults.`, "success");
+            }}
+            onInstallMarketplaceItem={async ({ itemId, scope }) => {
+              if (scope.kind !== "user") {
+                throw new Error("Component marketplace installs are user-scoped.");
+              }
+              const id = itemId.replace(/^market:/, "");
+              await marketInstall(id);
+              await refreshPluginManagerData(scope);
+              toast(t("pluginHub.componentInstalledToast"), "success");
+            }}
+            onRefreshMarketplace={async () => {
+              await refreshPluginManagerData(pluginManagerScope);
+            }}
+            onOpenBundleTools={() => setShowBundlePluginTools(true)}
+          />
+        )}
+
+        {showPluginHub && showBundlePluginTools && (
           <PluginHub
             plugins={plugins}
             skills={skills}
@@ -3907,7 +4322,7 @@ export default function App() {
               }
             }}
             onNew={() => setSkillDraft({ name: "", text: "" })}
-            onClose={() => setShowPluginHub(false)}
+            onClose={() => setShowBundlePluginTools(false)}
           />
         )}
 
@@ -3982,10 +4397,15 @@ export default function App() {
               onAddProject={() => void addProjectFolder()}
               onCheckpoint={() => void doCheckpoint()}
               onOpenSourceControl={openSourceControl}
-              onOpenIssues={() => setShowIssues(true)}
+              onOpenIssues={() => {
+                if (componentEnabled("issues.modal")) setShowIssues(true);
+                else toast("Issues are disabled in Plugins.", "info");
+              }}
               onOpenUsage={() => {
-                setSettingsInitialTab("usage");
-                setShowSettings(true);
+                if (componentEnabled("usage.settings")) {
+                  setSettingsInitialTab("usage");
+                  setShowSettings(true);
+                } else toast("Usage is disabled in Plugins.", "info");
               }}
               onOpenMarket={openPluginHub}
               onOpenSettings={() => {
@@ -4009,7 +4429,7 @@ export default function App() {
 
           {/* Horizontal stage track (R9): rendered above the transcript only while the active
               session is bound to a pipeline instance. */}
-          {pipelineDetail && activeSession && (
+          {scenesSurfaceEnabled && pipelineDetail && activeSession && (
             <StageTrack
               detail={pipelineDetail}
               onSelectSession={(id) => void selectSession(id)}
@@ -4031,9 +4451,10 @@ export default function App() {
                 scroll={transcriptScroll}
                 onOpenPlanAsDocument={openPlanAsDocument}
                 onPinPlanArtifact={pinPlanArtifact}
-                canPinPlan={canPinPlan}
+                canPinPlan={scenesSurfaceEnabled && canPinPlan}
                 onSaveTemplate={openTemplateDraft}
                 petAnimation={petAnimation}
+                voiceEnabled={voiceComposerEnabled}
                 onVoiceText={(text) => insertTextRef.current?.(text)}
                 onAddSelection={addSelectedText}
                 onExplainSelection={explainSelectedText}
@@ -4092,7 +4513,7 @@ export default function App() {
               )}
               {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
                   session, rendered above the composer. Dismissal is remembered by the core. */}
-              {sceneBanner && sceneBanner.session === activeSession && !activeArchived && (
+              {scenesSurfaceEnabled && sceneBanner && sceneBanner.session === activeSession && !activeArchived && (
                 <SceneBanner
                   banner={sceneBanner}
                   scenes={scenes}
@@ -4184,24 +4605,33 @@ export default function App() {
                   docEmpty={docEmpty}
                   onRun={() => void run()}
                   onStop={() => activeSession && void cancelTurn(activeSession)}
-                  onAttachFile={() => setShowFiles(true)}
+                  onAttachFile={() => {
+                    if (componentEnabled("files.surface")) setShowFiles(true);
+                    else toast("Files are disabled in Plugins.", "info");
+                  }}
                   onInsertSkill={() => openSkillPickerRef.current?.()}
-                  onInsertIssue={() => setShowIssues(true)}
+                  onInsertIssue={() => {
+                    if (componentEnabled("issues.modal")) setShowIssues(true);
+                    else toast("Issues are disabled in Plugins.", "info");
+                  }}
                   onOpenMarket={openPluginHub}
                   onNewSkill={() => setSkillDraft({ name: "", text: "" })}
-                  canvasEnabled={canvasFeature.enabled}
+                  canvasEnabled={canvasUiEnabled}
                   onInsertCanvas={() => void insertCanvasRef.current?.()}
+                  voiceEnabled={voiceComposerEnabled}
                   onVoiceText={(t) => insertTextRef.current?.(t)}
                   // R11: with an active-scene brief, a finished dictation is structured into a
                   // pre-filled brief card; any failure degrades to the raw-text insert above.
                   // No brief → the handler is undefined and voice behaves exactly as before.
-                  onVoiceTranscript={makeTranscriptHandler({
-                    scene: scenes.find((s) => s.reference === activeSceneName) ?? null,
-                    structureBrief,
-                    insertBrief: (scene, values) => insertBriefRef.current?.(scene, values),
-                    insertText: (text) => insertTextRef.current?.(text),
-                    onDegrade: () => toast(t("voice.structureFailed"), "error"),
-                  })}
+                  onVoiceTranscript={voiceComposerEnabled && scenesSurfaceEnabled
+                    ? makeTranscriptHandler({
+                        scene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+                        structureBrief,
+                        insertBrief: (scene, values) => insertBriefRef.current?.(scene, values),
+                        insertText: (text) => insertTextRef.current?.(text),
+                        onDegrade: () => toast(t("voice.structureFailed"), "error"),
+                      })
+                    : undefined}
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}
@@ -4233,7 +4663,7 @@ export default function App() {
                     insertSkillRef={insertSkillRef}
                     insertBriefRef={insertBriefRef}
                     insertIssueRef={insertIssueRef}
-                    canvasEnabled={canvasFeature.enabled}
+                    canvasEnabled={canvasUiEnabled}
                     canvasRuntime={canvasRuntime}
                     createCanvas={createCanvas}
                     insertCanvasRef={insertCanvasRef}
@@ -4255,12 +4685,13 @@ export default function App() {
             <Dock
               open={dockTab !== null}
               tab={dockTab}
+              availableSurfaces={availableDockSurfaces}
               onTab={manualDockTab}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
               highlightFile={dockAutoHint?.file ?? null}
               cwd={cwd || null}
-              projectPath={activeProject ?? cwd ?? null}
+              projectPath={activeProject ? normalizePluginProjectPath(activeProject) : null}
               sessionKey={activeSession ?? "main"}
               git={git}
               onRefreshGit={refreshGit}
@@ -4287,7 +4718,7 @@ export default function App() {
       )}
 
       {/* ---------------- dialogs ---------------- */}
-      {showSourceControl && (
+      {showSourceControl && componentEnabled("git.surface") && (
         <SourceControlModal
           key={cwd || "."}
           cwd={cwd || "."}
@@ -4336,11 +4767,11 @@ export default function App() {
           onClose={() => setShowPalette(false)}
         />
       )}
-      {showRemote && <RemoteModal onClose={() => setShowRemote(false)} />}
-      {showIssues && (
+      {showRemote && componentEnabled("remote.modal") && <RemoteModal onClose={() => setShowRemote(false)} />}
+      {showIssues && componentEnabled("issues.modal") && (
         <IssuesModal
           cwd={cwd || "."}
-          scenes={scenes}
+          scenes={scenesSurfaceEnabled ? scenes : []}
           onInsert={(i) => void insertIssue(i)}
           onDelegate={(i, sceneReference) => void onDelegateIssue(i, sceneReference)}
           onOpenSession={(session) => {
@@ -4356,13 +4787,13 @@ export default function App() {
           sessions={sessions}
           runningSessions={runningSessions}
           contextWindows={contextWindows}
-          sceneBySession={sceneBySessionRef.current}
+          sceneBySession={scenesSurfaceEnabled ? sceneBySessionRef.current : EMPTY_SCENE_BY_SESSION}
           onSelect={(id) => void selectSession(id)}
           onReview={openSourceControl}
           onClose={() => setShowMissionControl(false)}
         />
       )}
-      {showScenePicker && (
+      {showScenePicker && scenesSurfaceEnabled && (
         <ScenePicker
           scenes={scenes}
           active={scenes.find((s) => s.reference === activeSceneName) ?? null}
@@ -4387,7 +4818,7 @@ export default function App() {
           onClose={() => setShowScenePicker(false)}
         />
       )}
-      {sceneEscalation && (
+      {sceneEscalation && scenesSurfaceEnabled && (
         <SceneEscalationDialog
           sceneLabel={
             scenes.find((s) => s.reference === sceneEscalation.reference)?.title ??
@@ -4416,7 +4847,7 @@ export default function App() {
           onCancel={() => setSceneEscalation(null)}
         />
       )}
-      {showFiles && (
+      {showFiles && componentEnabled("files.surface") && (
         <FileBrowserModal
           cwd={cwd || "."}
           onInsert={(p) => {
@@ -4426,7 +4857,7 @@ export default function App() {
           onClose={() => setShowFiles(false)}
         />
       )}
-      {showWorkspaceSearch && (
+      {showWorkspaceSearch && componentEnabled("search.modal") && (
         <WorkspaceSearchModal
           cwd={cwd || "."}
           onOpen={(match) => openFileTab(match.path, match)}

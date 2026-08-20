@@ -2,6 +2,7 @@
 //! [`PluginError`] is what a *plugin* failed at. A failed plugin is a normal, recoverable state —
 //! its scope goes [`crate::Status::Failed`] and the rest of the graph keeps running.
 
+use crate::command::CommandRealm;
 use std::fmt;
 
 /// Something the kernel itself rejected.
@@ -16,6 +17,10 @@ pub enum KernelError {
     CommandConflict(String),
     #[error("no command named `{0}`")]
     UnknownCommand(String),
+    /// A project scope deliberately disabled the plugin that owns the global implementation.
+    /// This is distinct from an unknown command so hosts can explain why inheritance stopped.
+    #[error("command `{name}` is disabled in command realm {realm:?}")]
+    CommandFallbackBlocked { realm: CommandRealm, name: String },
     /// The command ran and refused. `message` is the plugin's own wording.
     #[error("{name}: {message}")]
     Command { name: String, message: String },
@@ -24,6 +29,8 @@ pub enum KernelError {
     Disposed,
     #[error("no plugin named `{0}` is registered")]
     UnknownPlugin(String),
+    #[error("essential plugin `{0}` cannot be disabled")]
+    EssentialPlugin(String),
     #[error("plugin `{name}` failed: {message}")]
     PluginFailed { name: String, message: String },
     /// Config did not match what the plugin expects.
@@ -33,7 +40,10 @@ pub enum KernelError {
 
 impl KernelError {
     pub fn command(name: impl Into<String>, message: impl fmt::Display) -> Self {
-        KernelError::Command { name: name.into(), message: message.to_string() }
+        KernelError::Command {
+            name: name.into(),
+            message: message.to_string(),
+        }
     }
 }
 

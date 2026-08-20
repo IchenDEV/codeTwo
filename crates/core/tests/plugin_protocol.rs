@@ -6,7 +6,7 @@
 
 use codetwo_core::app::protocol::{Channel, ProtocolPlugin, Transport, PROTOCOL_VERSION};
 use codetwo_core::app::{AppConfig, CoreApp};
-use codetwo_kernel::{async_trait, FnPlugin, PluginError, Status};
+use codetwo_kernel::{async_trait, CommandRealm, FnPlugin, PluginError, Status};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -25,7 +25,10 @@ struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
-        Behaviour { protocol_version: PROTOCOL_VERSION.to_string(), silent: false }
+        Behaviour {
+            protocol_version: PROTOCOL_VERSION.to_string(),
+            silent: false,
+        }
     }
 }
 
@@ -33,6 +36,7 @@ impl Default for Behaviour {
 #[derive(Default)]
 struct Observed {
     events: Mutex<Vec<(String, Value)>>,
+    initialize_params: Mutex<Vec<Value>>,
     initialized: AtomicBool,
 }
 
@@ -78,12 +82,21 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
             Ok(value) => value,
             Err(_) => continue,
         };
-        let method = message.get("method").and_then(Value::as_str).unwrap_or_default().to_string();
+        let method = message
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         let id = message.get("id").cloned();
         let params = message.get("params").cloned().unwrap_or(Value::Null);
 
         match method.as_str() {
             "initialize" => {
+                observed
+                    .initialize_params
+                    .lock()
+                    .unwrap()
+                    .push(params.clone());
                 observed.initialized.store(true, Ordering::SeqCst);
                 if behaviour.silent {
                     continue;
@@ -98,15 +111,25 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                     ],
                     "events": ["skills/changed"]
                 });
-                send(&mut writer, json!({ "jsonrpc": "2.0", "id": id, "result": result })).await;
+                send(
+                    &mut writer,
+                    json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+                )
+                .await;
             }
             "command/invoke" => {
-                let name = params.get("name").and_then(Value::as_str).unwrap_or_default();
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 let args = params.get("args").cloned().unwrap_or(Value::Null);
                 match name {
                     "mock.echo" => {
-                        send(&mut writer, json!({ "jsonrpc": "2.0", "id": id, "result": args }))
-                            .await;
+                        send(
+                            &mut writer,
+                            json!({ "jsonrpc": "2.0", "id": id, "result": args }),
+                        )
+                        .await;
                     }
                     // Call back into the host, and answer with what the host said.
                     "mock.viaHost" => {
@@ -116,7 +139,9 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                         });
                         writer.write_all(format!("{call}\n").as_bytes()).await.ok();
                         // The host's response arrives on the same stream.
-                        let Ok(Some(line)) = lines.next_line().await else { return };
+                        let Ok(Some(line)) = lines.next_line().await else {
+                            return;
+                        };
                         let response: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
                         let host_said = response.get("result").cloned().unwrap_or(Value::Null);
                         send(
@@ -136,8 +161,11 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                 }
             }
             "event/emit" => {
-                let name =
-                    params.get("name").and_then(Value::as_str).unwrap_or_default().to_string();
+                let name = params
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
                 let payload = params.get("payload").cloned().unwrap_or(Value::Null);
                 observed.events.lock().unwrap().push((name, payload));
             }
@@ -156,6 +184,13 @@ struct Fixture {
 }
 
 async fn load(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
+    load_in_realm(behaviour, CommandRealm::Global).await
+}
+
+async fn load_in_realm(
+    behaviour: Behaviour,
+    realm: CommandRealm,
+) -> (Fixture, codetwo_kernel::Fork) {
     let dir = tempfile::tempdir().unwrap();
     // A bare host: this test is about the protocol, not about the rest of the app.
     let app = CoreApp::boot(AppConfig::bare()).await.unwrap();
@@ -168,6 +203,30 @@ async fn load(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
         }),
         Value::Null,
     );
+    app.ctx()
+        .with_command_realm(CommandRealm::project("project-a"))
+        .plugin(
+            FnPlugin::new(
+                "project-a-plugin",
+                |ctx: codetwo_kernel::Context, _| async move {
+                    ctx.command("project-a.only", |_| async move { Ok(Value::Null) })?;
+                    Ok(())
+                },
+            ),
+            Value::Null,
+        );
+    app.ctx()
+        .with_command_realm(CommandRealm::project("project-b"))
+        .plugin(
+            FnPlugin::new(
+                "project-b-plugin",
+                |ctx: codetwo_kernel::Context, _| async move {
+                    ctx.command("project-b.only", |_| async move { Ok(Value::Null) })?;
+                    Ok(())
+                },
+            ),
+            Value::Null,
+        );
     app.flush().await;
 
     let observed = Arc::new(Observed::default());
@@ -177,14 +236,22 @@ async fn load(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
         observed: observed.clone(),
         shutdown_called: shutdown_called.clone(),
     };
-    let fork = app.ctx().plugin(
+    let fork = app.ctx().with_command_realm(realm).plugin(
         ProtocolPlugin::new("mock", Arc::new(transport))
             .with_handshake_timeout(Duration::from_millis(200)),
         json!({ "greeting": "hi" }),
     );
     app.flush().await;
 
-    (Fixture { app, observed, shutdown_called, _dir: dir }, fork)
+    (
+        Fixture {
+            app,
+            observed,
+            shutdown_called,
+            _dir: dir,
+        },
+        fork,
+    )
 }
 
 // ---- tests -------------------------------------------------------------------------------------
@@ -193,16 +260,74 @@ async fn load(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
 async fn a_plugin_in_another_process_contributes_ordinary_commands() {
     let (fixture, fork) = load(Behaviour::default()).await;
     assert_eq!(fork.status(), Status::Active);
-    assert!(fixture.observed.initialized.load(Ordering::SeqCst), "the handshake happened");
+    assert!(
+        fixture.observed.initialized.load(Ordering::SeqCst),
+        "the handshake happened"
+    );
 
     // Indistinguishable from a built-in, which is the whole claim.
-    let echoed = fixture.app.call("mock.echo", json!({ "hello": "world" })).await.unwrap();
+    let echoed = fixture
+        .app
+        .call("mock.echo", json!({ "hello": "world" }))
+        .await
+        .unwrap();
     assert_eq!(echoed, json!({ "hello": "world" }));
 
     let registered = fixture.app.commands();
-    let echo = registered.iter().find(|command| command.name == "mock.echo").unwrap();
+    let echo = registered
+        .iter()
+        .find(|command| command.name == "mock.echo")
+        .unwrap();
     assert_eq!(echo.plugin, "mock");
-    assert_eq!(echo.description.as_deref(), Some("Echo the arguments back."));
+    assert_eq!(
+        echo.description.as_deref(),
+        Some("Echo the arguments back.")
+    );
+}
+
+#[tokio::test]
+async fn initialize_identifies_only_project_scoped_instances() {
+    let (global, _fork) = load(Behaviour::default()).await;
+    let global_params = global.observed.initialize_params.lock().unwrap()[0].clone();
+    assert!(
+        global_params.get("projectPath").is_none(),
+        "global instances must not masquerade as a project"
+    );
+
+    let project = tempfile::tempdir().unwrap();
+    let normalized = project
+        .path()
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let (local, _fork) = load_in_realm(
+        Behaviour::default(),
+        CommandRealm::project(normalized.clone()),
+    )
+    .await;
+    let local_params = local.observed.initialize_params.lock().unwrap()[0].clone();
+    assert_eq!(local_params["projectPath"], normalized);
+}
+
+#[tokio::test]
+async fn initialize_exposes_commands_from_only_the_instance_realm_and_global_fallback() {
+    let (global, _fork) = load(Behaviour::default()).await;
+    let global_params = global.observed.initialize_params.lock().unwrap()[0].clone();
+    let global_commands: Vec<String> =
+        serde_json::from_value(global_params["host"]["commands"].clone()).unwrap();
+    assert!(global_commands.contains(&"demo.answer".into()));
+    assert!(!global_commands.contains(&"project-a.only".into()));
+    assert!(!global_commands.contains(&"project-b.only".into()));
+
+    let (project, _fork) =
+        load_in_realm(Behaviour::default(), CommandRealm::project("project-a")).await;
+    let project_params = project.observed.initialize_params.lock().unwrap()[0].clone();
+    let project_commands: Vec<String> =
+        serde_json::from_value(project_params["host"]["commands"].clone()).unwrap();
+    assert!(project_commands.contains(&"demo.answer".into()));
+    assert!(project_commands.contains(&"project-a.only".into()));
+    assert!(!project_commands.contains(&"project-b.only".into()));
 }
 
 #[tokio::test]
@@ -220,8 +345,16 @@ async fn a_plugin_can_call_back_into_the_host() {
 async fn a_plugin_receives_the_host_events_it_subscribed_to() {
     let (fixture, _fork) = load(Behaviour::default()).await;
 
-    fixture.app.ctx().emit_json("skills/changed", json!({ "count": 3 })).await;
-    fixture.app.ctx().emit_json("nobody/listens", json!({})).await;
+    fixture
+        .app
+        .ctx()
+        .emit_json("skills/changed", json!({ "count": 3 }))
+        .await;
+    fixture
+        .app
+        .ctx()
+        .emit_json("nobody/listens", json!({}))
+        .await;
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let events = fixture.observed.events.lock().unwrap().clone();
@@ -238,37 +371,66 @@ async fn unloading_stops_the_process_and_takes_its_commands_with_it() {
     fork.dispose();
     fixture.app.flush().await;
 
-    assert!(fixture.shutdown_called.load(Ordering::SeqCst), "the process was stopped");
+    assert!(
+        fixture.shutdown_called.load(Ordering::SeqCst),
+        "the process was stopped"
+    );
     assert!(
         fixture.app.call("mock.echo", Value::Null).await.is_err(),
         "an unloaded plugin leaves no surface behind"
     );
-    assert!(!fixture.app.commands().iter().any(|command| command.plugin == "mock"));
+    assert!(!fixture
+        .app
+        .commands()
+        .iter()
+        .any(|command| command.plugin == "mock"));
 }
 
 #[tokio::test]
 async fn a_plugin_speaking_a_different_protocol_is_refused_and_stopped() {
-    let behaviour = Behaviour { protocol_version: "2.0.0".into(), ..Behaviour::default() };
+    let behaviour = Behaviour {
+        protocol_version: "2.0.0".into(),
+        ..Behaviour::default()
+    };
     let (fixture, fork) = load(behaviour).await;
 
     assert_eq!(fork.status(), Status::Failed);
-    let scope = fixture.app.scopes().into_iter().find(|scope| scope.id == fork.id()).unwrap();
+    let scope = fixture
+        .app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.id == fork.id())
+        .unwrap();
     assert!(scope.error.unwrap().contains("2.0.0"));
-    assert!(fixture.shutdown_called.load(Ordering::SeqCst), "a refused plugin is not left running");
+    assert!(
+        fixture.shutdown_called.load(Ordering::SeqCst),
+        "a refused plugin is not left running"
+    );
 }
 
 #[tokio::test]
 async fn a_plugin_that_never_answers_fails_instead_of_hanging_the_graph() {
-    let behaviour = Behaviour { silent: true, ..Behaviour::default() };
+    let behaviour = Behaviour {
+        silent: true,
+        ..Behaviour::default()
+    };
     let (fixture, fork) = load(behaviour).await;
 
     assert_eq!(fork.status(), Status::Failed);
-    let scope = fixture.app.scopes().into_iter().find(|scope| scope.id == fork.id()).unwrap();
+    let scope = fixture
+        .app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.id == fork.id())
+        .unwrap();
     assert!(scope.error.unwrap().contains("initialize"));
     assert!(fixture.shutdown_called.load(Ordering::SeqCst));
 
     // The rest of the graph is untouched — the point of bounding the wait.
-    assert_eq!(fixture.app.call("demo.answer", Value::Null).await.unwrap(), 42);
+    assert_eq!(
+        fixture.app.call("demo.answer", Value::Null).await.unwrap(),
+        42
+    );
 }
 
 // ---- trust -------------------------------------------------------------------------------------
@@ -318,16 +480,28 @@ async fn an_untrusted_bundle_that_ships_a_process_is_not_started() {
     install_record(&plugins_dir, "trusted-one", true);
 
     // Exactly what installing one does: announce it, and let the plugin rebuild itself.
-    app.ctx().emit(codetwo_core::app::events::PluginsChanged).await;
+    app.ctx()
+        .emit(codetwo_core::app::events::PluginsChanged)
+        .await;
     app.flush().await;
 
     let listed = app.call("extensions.list", Value::Null).await.unwrap();
     let untrusted: Vec<String> = serde_json::from_value(listed["untrusted"].clone()).unwrap();
-    assert_eq!(untrusted, ["untrusted-one"], "trust is what gates execution, not installation");
+    assert_eq!(
+        untrusted,
+        ["untrusted-one"],
+        "trust is what gates execution, not installation"
+    );
 
     // The trusted one *was* attempted — and failed honestly, because its command does not exist.
-    let trusted_scope = app.scopes().into_iter().find(|scope| scope.plugin == "trusted-one");
+    let trusted_scope = app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.plugin == "bundle:trusted-one");
     let trusted_scope = trusted_scope.expect("the trusted plugin was loaded into the graph");
     assert_eq!(trusted_scope.status, Status::Failed);
-    assert!(trusted_scope.error.unwrap().contains("definitely-not-a-real-binary"));
+    assert!(trusted_scope
+        .error
+        .unwrap()
+        .contains("definitely-not-a-real-binary"));
 }
