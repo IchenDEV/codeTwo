@@ -40,6 +40,7 @@ pub mod keymap;
 pub mod market;
 pub mod memory;
 pub mod models;
+pub mod orchestrator;
 pub mod permission;
 pub mod plugin;
 pub mod plugin_marketplace;
@@ -99,6 +100,9 @@ pub use memory::{
     MemorySourceRef, MemoryStats, MemoryTurnAudit, MemoryTurnProvenance,
 };
 pub use models::builtin_models;
+pub use orchestrator::{
+    apply_orchestration_patch, GraphOperation, OrchestrationPatch, OrchestrationValidationError,
+};
 pub use permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, Rule, SandboxPolicy,
