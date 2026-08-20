@@ -90,10 +90,13 @@ because C2 discovered them from the local OpenAI runtime:
 
 ### Configure Cua or another computer-use MCP
 
-C2 reads `host-tools.json` from its data directory at startup. TUI/server use
+C2 reads `host-tools.json` from its data directory. TUI/server use
 `~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
-`CODETWO_DATA_DIR` when that environment variable is set. Backends are never started merely because
-their executable is installed: each entry requires `enabled: true`.
+`CODETWO_DATA_DIR` when that environment variable is set. In **Settings → Computer Use**, choose
+Automatic, no external backend, or one compatible backend for each provider. Cua Driver is shown as
+a built-in catalog option and becomes selectable when `cua-driver` is on `PATH`; other brands appear
+after their MCP definition is added to this file. Selecting an entry activates it for that provider
+even when its legacy `enabled` flag is false.
 
 For [Cua Driver](https://cua.ai/docs/reference/cua-driver/cli-reference), whose binary exposes a
 stdio MCP server with `cua-driver mcp`:
@@ -101,6 +104,10 @@ stdio MCP server with `cua-driver mcp`:
 ```json
 {
   "schema_version": 1,
+  "computer_use_selection": {
+    "claude_code": "cua",
+    "codex": "automatic"
+  },
   "computer_use": [
     {
       "id": "cua",
@@ -119,7 +126,15 @@ stdio MCP server with `cua-driver mcp`:
 Omitting `providers` attaches the backend to every provider. Use `providers: ["claude_code"]` to
 allow only named providers, or `exclude_providers: ["codex"]` to retain Codex's native tool. Any
 other stdio MCP driver uses the same shape and can supply `env` as a string map and an optional
-`cwd`. A remote MCP computer server uses this `server` shape instead:
+`cwd`.
+
+`computer_use_selection` is normally written by Settings. `automatic` prefers the provider/native
+OpenAI bridge and falls back to the first compatible configured backend whose legacy `enabled` flag
+is true; choosing a backend by name activates that backend even when the flag is false. `disabled`
+prevents C2 from attaching an external bridge. Provider-native tools can still remain available
+because C2 does not control tools implemented inside the provider itself.
+
+A remote MCP computer server uses this `server` shape instead:
 
 ```json
 {
@@ -150,9 +165,9 @@ implement the same logical provider-toolset interface as separate adapters:
   active macOS GUI session; configured Cua/cross-OS/remote MCP backends follow their own runtime
   requirements.
 
-After enabling or repairing a host tool, restart C2 or open a new session. A saved session receives
-the bridge when C2 reattaches it with `session/load`; an already-live ACP session cannot add MCP
-servers in place.
+After changing the selection, open a new session. The desktop and Rust hosts refresh their discovery
+state after the Settings save, but an already-live ACP session cannot add or replace MCP servers in
+place.
 
 ## The ACP loop
 

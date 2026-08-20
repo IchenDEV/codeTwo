@@ -215,15 +215,41 @@ impl Plugin for ProvidersPlugin {
         let paths = ctx.expect::<Paths>()?;
         let host_tools = HostToolDiscovery::detect(&paths.data_dir);
         let providers = registry_with_codex_runtime(host_tools.codex());
-        let service = Arc::new(ProviderService {
-            providers,
-            host_tools,
-        });
+        let service = Arc::new(ProviderService::new(providers, host_tools));
 
         let listed = service.clone();
         ctx.command("providers.list", move |_| {
             let service = listed.clone();
             async move { json(service.summaries().await) }
+        })?;
+
+        let settings = service.clone();
+        ctx.command("computer_use.settings", move |_| {
+            let settings = settings.clone();
+            async move { json(settings.computer_use_settings()) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ComputerUseSelectionArgs {
+            provider: String,
+            backend: String,
+        }
+        let selection_path = paths.data_dir.clone();
+        let selected = service.clone();
+        ctx.command("computer_use.select", move |args| {
+            let path = selection_path.clone();
+            let selected = selected.clone();
+            async move {
+                let args: ComputerUseSelectionArgs = take_args(args)?;
+                HostToolDiscovery::select_computer_use_backend(
+                    &path,
+                    &args.provider,
+                    &args.backend,
+                )
+                .map_err(PluginError::new)?;
+                selected.refresh_host_tools(HostToolDiscovery::detect(&path));
+                json(selected.computer_use_settings())
+            }
         })?;
 
         ctx.provide(service)?;

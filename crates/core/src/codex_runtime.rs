@@ -120,6 +120,46 @@ impl CodexRuntimeDiscovery {
             instructions,
         }
     }
+
+    /// Project the provider toolset without C2's portable OpenAI Computer Use MCP bridge.
+    ///
+    /// Codex-native tools remain provider-owned and cannot be disabled by the host. Other
+    /// providers use this projection when the user explicitly selects a different external
+    /// computer-use backend in C2 settings.
+    pub(crate) fn toolset_without_portable_computer_use(
+        &self,
+        provider: &ProviderId,
+    ) -> ProviderToolset {
+        let mut toolset = self.toolset(provider);
+        if provider == &ProviderId::Codex {
+            return toolset;
+        }
+
+        let computer_bridges = self
+            .portable_mcp
+            .iter()
+            .filter(|bridge| bridge.id == ProviderCapabilityId::ComputerUse)
+            .collect::<Vec<_>>();
+        toolset.mcp_servers.retain(|server| {
+            !computer_bridges
+                .iter()
+                .any(|bridge| bridge.server == *server)
+        });
+        toolset.instructions.retain(|instruction| {
+            !computer_bridges
+                .iter()
+                .any(|bridge| bridge.instruction.as_deref() == Some(instruction.as_str()))
+        });
+        update_capability(
+            &mut toolset.capabilities,
+            ProviderCapabilityId::ComputerUse,
+            CapabilityState::Unavailable,
+            None,
+            "No external Computer Use backend is selected for this provider.",
+            Some("Choose Automatic or an available backend in Settings → Computer Use."),
+        );
+        toolset
+    }
 }
 
 #[derive(Debug, Clone)]

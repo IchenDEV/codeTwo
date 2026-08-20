@@ -22,7 +22,7 @@ use codetwo_kernel::Service;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
 /// The loader itself, published as a service so a plugin can manage the plugin graph.
@@ -196,10 +196,11 @@ pub struct ProviderSummary {
     pub capabilities: Vec<ProviderCapability>,
 }
 
-/// The provider registry plus the one-shot host-tool probe it was built from.
+/// The provider registry plus the live host-tool projection shared with the engine.
 pub struct ProviderService {
     pub providers: Vec<Provider>,
-    pub host_tools: HostToolDiscovery,
+    host_tools: RwLock<HostToolDiscovery>,
+    provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
 }
 
 impl Service for ProviderService {
@@ -207,19 +208,52 @@ impl Service for ProviderService {
 }
 
 impl ProviderService {
-    pub fn toolsets(&self) -> HashMap<String, ProviderToolset> {
-        self.providers
+    pub fn new(providers: Vec<Provider>, host_tools: HostToolDiscovery) -> Self {
+        let provider_tools = providers
             .iter()
             .map(|provider| {
                 (
                     provider.id.as_str().to_string(),
-                    self.host_tools.toolset(&provider.id),
+                    host_tools.toolset(&provider.id),
                 )
             })
-            .collect()
+            .collect();
+        Self {
+            providers,
+            host_tools: RwLock::new(host_tools),
+            provider_tools: Arc::new(RwLock::new(provider_tools)),
+        }
+    }
+
+    pub fn toolsets(&self) -> HashMap<String, ProviderToolset> {
+        self.provider_tools.read().unwrap().clone()
+    }
+
+    pub fn shared_toolsets(&self) -> Arc<RwLock<HashMap<String, ProviderToolset>>> {
+        self.provider_tools.clone()
+    }
+
+    pub fn computer_use_settings(&self) -> crate::host_tools::ComputerUseSettings {
+        self.host_tools.read().unwrap().computer_use_settings()
+    }
+
+    pub fn refresh_host_tools(&self, host_tools: HostToolDiscovery) {
+        let provider_tools = self
+            .providers
+            .iter()
+            .map(|provider| {
+                (
+                    provider.id.as_str().to_string(),
+                    host_tools.toolset(&provider.id),
+                )
+            })
+            .collect();
+        *self.provider_tools.write().unwrap() = provider_tools;
+        *self.host_tools.write().unwrap() = host_tools;
     }
 
     pub async fn summaries(&self) -> Vec<ProviderSummary> {
+        let toolsets = self.toolsets();
         let mut summaries = Vec::with_capacity(self.providers.len());
         for provider in &self.providers {
             summaries.push(ProviderSummary {
@@ -228,7 +262,10 @@ impl ProviderService {
                 available: provider.is_available(),
                 needs_node: provider.needs_node,
                 models: available_models(provider).await,
-                capabilities: self.host_tools.toolset(&provider.id).capabilities,
+                capabilities: toolsets
+                    .get(provider.id.as_str())
+                    .map(|toolset| toolset.capabilities.clone())
+                    .unwrap_or_default(),
             });
         }
         summaries

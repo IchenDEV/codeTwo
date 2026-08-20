@@ -8,6 +8,7 @@ import { sessionRequestParams, validateMcpTransports } from "../src/electrobun/h
 import {
   loadConfiguredComputerUse,
   projectProviderToolset,
+  saveComputerUseSelection,
   stdioServer,
   withProviderToolInstructions,
   type AcpMcpServer,
@@ -45,6 +46,8 @@ const readyEvidence: HostToolEvidence = {
   sitesVersion: "0.1.34",
   configError: null,
   configuredComputerUse: [],
+  computerUseSelections: {},
+  computerUseBackends: [],
   hostToolsConfigErrors: [],
 };
 
@@ -160,6 +163,7 @@ describe("provider capability wire compatibility", () => {
       expect(configured.bridges).toHaveLength(1);
       const evidence = {
         ...readyEvidence,
+        hostPresent: false,
         configuredComputerUse: configured.bridges,
       };
       const claude = projectProviderToolset(evidence, "claude_code");
@@ -208,6 +212,66 @@ describe("provider capability wire compatibility", () => {
       const configured = loadConfiguredComputerUse(directory);
       expect(configured.bridges).toEqual([]);
       expect(configured.errors.join("\n")).toContain("definitely-not-a-real-c2-test-command");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("persists a provider choice and attaches only the selected backend", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-selection-"));
+    try {
+      writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
+        schema_version: 1,
+        computer_use: [
+          {
+            id: "first",
+            enabled: true,
+            server: { name: "first-computer", command: process.execPath },
+          },
+          {
+            id: "second",
+            enabled: false,
+            server: { name: "second-computer", command: process.execPath },
+          },
+        ],
+      }));
+
+      const configured = loadConfiguredComputerUse(directory);
+      const evidence = {
+        ...readyEvidence,
+        configuredComputerUse: configured.bridges,
+        computerUseSelections: configured.selections,
+        computerUseBackends: configured.backends,
+      };
+      const grokServers = projectProviderToolset(evidence, "grok").mcpServers.map((server) => server.name);
+      expect(grokServers).not.toContain("second-computer");
+      saveComputerUseSelection(directory, "claude_code", "second", evidence);
+      const selected = loadConfiguredComputerUse(directory);
+      const toolset = projectProviderToolset({
+        ...evidence,
+        configuredComputerUse: selected.bridges,
+        computerUseSelections: selected.selections,
+        computerUseBackends: selected.backends,
+      }, "claude_code");
+
+      expect(selected.selections.claude_code).toBe("second");
+      expect(toolset.mcpServers.map((server) => server.name)).toEqual(["node_repl", "second-computer"]);
+
+      saveComputerUseSelection(directory, "claude_code", "automatic", {
+        ...evidence,
+        configuredComputerUse: selected.bridges,
+        computerUseSelections: selected.selections,
+        computerUseBackends: selected.backends,
+      });
+      const automatic = loadConfiguredComputerUse(directory);
+      const automaticToolset = projectProviderToolset({
+        ...readyEvidence,
+        hostPresent: false,
+        configuredComputerUse: automatic.bridges,
+        computerUseSelections: automatic.selections,
+        computerUseBackends: automatic.backends,
+      }, "claude_code");
+      expect(automaticToolset.mcpServers.map((server) => server.name)).toEqual(["first-computer"]);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

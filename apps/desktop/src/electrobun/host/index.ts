@@ -12,8 +12,10 @@ import {
 } from "./acp";
 import { BunDatabase } from "./database";
 import {
+  computerUseSettings,
   detectHostToolEvidence,
   projectProviderToolset,
+  saveComputerUseSelection,
   withProviderToolInstructions,
   type HostToolEvidence,
   type ProviderToolset,
@@ -152,7 +154,7 @@ function textContent(value: unknown): string | null {
 
 export class PureBunHost {
   private readonly database: BunDatabase;
-  private readonly hostTools: HostToolEvidence;
+  private hostTools: HostToolEvidence;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
   private readonly handlers = new Map<string, Handler>();
@@ -218,6 +220,14 @@ export class PureBunHost {
 
   private registerCommands(dataDir: string): void {
     this.register("providers.list", () => providerSummaries(this.hostTools));
+    this.register("computer_use.settings", () => computerUseSettings(this.hostTools));
+    this.register("computer_use.select", (args) => {
+      const provider = string(args.provider, "provider");
+      const backend = string(args.backend, "backend");
+      saveComputerUseSelection(dataDir, provider, backend, this.hostTools);
+      this.hostTools = detectHostToolEvidence(process.env, dataDir);
+      return computerUseSettings(this.hostTools);
+    });
     this.register("projects.list", () => this.database.listProjects());
     this.register("projects.add", (args) => {
       const path = string(args.path, "path");

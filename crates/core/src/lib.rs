@@ -101,7 +101,10 @@ pub use engine::{
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
-pub use host_tools::{HostToolDiscovery, HOST_TOOLS_CONFIG_FILE};
+pub use host_tools::{
+    ComputerUseBackendOption, ComputerUseSettings, HostToolDiscovery, COMPUTER_USE_AUTOMATIC,
+    COMPUTER_USE_DISABLED, HOST_TOOLS_CONFIG_FILE,
+};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;

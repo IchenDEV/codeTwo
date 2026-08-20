@@ -6,6 +6,7 @@ import {
   Folder,
   Globe,
   Keyboard,
+  MousePointer2,
   Package,
   Palette,
   RotateCcw,
@@ -17,11 +18,15 @@ import {
   browserPermissions,
   browserRevokePermission,
   checkForAppUpdates,
+  getComputerUseSettings,
   confirmNative,
   discardOrphanWorktree,
   discardSessionWorktree,
   getAppUpdateStatus,
   listProjectWorktrees,
+  selectComputerUseBackend,
+  type ComputerUseBackendOption,
+  type ComputerUseSettings,
   type AppUpdateStatus,
   type KeymapEntry,
   type Project,
@@ -65,6 +70,7 @@ export type SettingsTab =
   | "memory"
   | "keybindings"
   | "providers"
+  | "computer-use"
   | "usage"
   | "browser";
 
@@ -75,6 +81,7 @@ const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
+  { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
   { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
   { id: "browser", icon: Globe, label: "Browser" },
 ];
@@ -98,6 +105,13 @@ const CAPABILITY_LABELS = {
   codetwo_browser: "C2 Browser",
   sites: "Sites",
 } as const;
+
+function computerUseBackendMatches(backend: ComputerUseBackendOption, provider: string): boolean {
+  const excluded = backend.exclude_providers.some((candidate) => candidate === "*" || candidate === provider);
+  const included = backend.providers.length === 0
+    || backend.providers.some((candidate) => candidate === "*" || candidate === provider);
+  return !excluded && included;
+}
 
 // Actions grouped by what they touch — a flat list of twenty-two is hard to scan. Anything not
 // listed still shows under "Other", so a new binding is never hidden.
@@ -204,6 +218,8 @@ export function SettingsPage({
   onClose,
   updateStatusLoader = getAppUpdateStatus,
   updateCheckStarter = checkForAppUpdates,
+  computerUseSettingsLoader = getComputerUseSettings,
+  computerUseSelectionSaver = selectComputerUseBackend,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -223,6 +239,8 @@ export function SettingsPage({
   onClose: () => void;
   updateStatusLoader?: () => Promise<AppUpdateStatus>;
   updateCheckStarter?: () => Promise<AppUpdateStatus>;
+  computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
+  computerUseSelectionSaver?: (provider: string, backend: string) => Promise<ComputerUseSettings>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -234,6 +252,9 @@ export function SettingsPage({
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null);
+  const [computerUseSettings, setComputerUseSettings] = useState<ComputerUseSettings | null>(null);
+  const [computerUseSaving, setComputerUseSaving] = useState<string | null>(null);
+  const [computerUseError, setComputerUseError] = useState<string | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -271,6 +292,21 @@ export function SettingsPage({
       window.clearInterval(timer);
     };
   }, [tab, appUpdate?.state, updateStatusLoader]);
+  useEffect(() => {
+    if (tab !== "computer-use") return;
+    let active = true;
+    setComputerUseError(null);
+    void computerUseSettingsLoader()
+      .then((settings) => {
+        if (active) setComputerUseSettings(settings);
+      })
+      .catch((error) => {
+        if (active) setComputerUseError(t("settings.computerUseLoadFailed", { error: String(error) }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, computerUseSettingsLoader, t]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -391,6 +427,18 @@ export function SettingsPage({
       setAppUpdate(await updateCheckStarter());
     } catch (error) {
       setAppUpdate({ state: "unavailable", message: String(error) });
+    }
+  };
+
+  const saveComputerUseSelection = async (providerId: string, backendId: string) => {
+    setComputerUseSaving(providerId);
+    setComputerUseError(null);
+    try {
+      setComputerUseSettings(await computerUseSelectionSaver(providerId, backendId));
+    } catch (error) {
+      setComputerUseError(t("settings.computerUseLoadFailed", { error: String(error) }));
+    } finally {
+      setComputerUseSaving(null);
     }
   };
 
@@ -708,6 +756,92 @@ export function SettingsPage({
                 providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
                 providerNames={providerNames}
               />
+            )}
+
+            {tab === "computer-use" && (
+              <Page title={t("settings.computerUse")} description={t("settings.computerUseHint")}>
+                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
+                  {t("settings.computerUseNewSession")}
+                </p>
+                {computerUseError && (
+                  <p data-computer-use-error className="pb-2 text-hint leading-relaxed text-destructive">
+                    {computerUseError}
+                  </p>
+                )}
+                {computerUseSettings?.errors.map((error) => (
+                  <p key={error} className="pb-2 text-hint leading-relaxed text-destructive">
+                    {error}
+                  </p>
+                ))}
+                {!computerUseSettings ? (
+                  <p className="py-5 text-ui text-muted-foreground">{t("settings.computerUseLoading")}</p>
+                ) : (
+                  <>
+                    {providers.map((candidate) => {
+                      const selected = computerUseSettings.selections[candidate.id] ?? "automatic";
+                      const backends = computerUseSettings.backends.filter((backend) =>
+                        computerUseBackendMatches(backend, candidate.id)
+                      );
+                      const selectedLabel = selected === "automatic"
+                        ? t("settings.computerUseAutomatic")
+                        : selected === "disabled"
+                          ? t("settings.computerUseDisabled")
+                          : backends.find((backend) => backend.id === selected)?.display_name ?? selected;
+                      return (
+                        <Row
+                          key={candidate.id}
+                          icon={<ProviderIcon provider={candidate.id} className="size-5 shrink-0 opacity-80" />}
+                          label={candidate.display_name}
+                          hint={<span className="font-mono">{candidate.id}</span>}
+                        >
+                          <Select
+                            value={selected}
+                            disabled={computerUseSaving !== null}
+                            onValueChange={(backend) => {
+                              if (backend) void saveComputerUseSelection(candidate.id, backend);
+                            }}
+                          >
+                            <SelectTrigger
+                              data-computer-use-provider={candidate.id}
+                              aria-label={`${candidate.display_name}: ${t("settings.computerUse")}`}
+                              size="sm"
+                              className="w-52 justify-between"
+                            >
+                              <SelectValue>{selectedLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="end">
+                              <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
+                              <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
+                              {backends.map((backend) => (
+                                <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                                  {backend.display_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Row>
+                      );
+                    })}
+
+                    <GroupHeading>{t("settings.computerUseBackends")}</GroupHeading>
+                    {computerUseSettings.backends.map((backend) => (
+                      <Row
+                        key={backend.id}
+                        compact
+                        label={backend.display_name}
+                        hint={backend.reason ?? <span className="font-mono">{backend.id}</span>}
+                      >
+                        <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+                          <span className={cn("size-1.5 rounded-full", backend.available ? "bg-success" : "bg-border")} />
+                          {backend.available
+                            ? t("settings.computerUseAvailable")
+                            : t("settings.computerUseUnavailable")}
+                        </span>
+                      </Row>
+                    ))}
+                  </>
+                )}
+              </Page>
             )}
 
             {tab === "providers" && (

@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
@@ -1481,6 +1481,9 @@ impl ClientHandler for SessionHandler {
 
 struct SessionRuntime {
     session: Session,
+    /// Host tools are fixed when C2 creates or revives the session. Settings changes therefore
+    /// affect subsequent sessions without mutating an ACP session's already-attached MCP set.
+    provider_toolset: ProviderToolset,
     client: Arc<AcpClient>,
     /// `None` until the first prompt creates the ACP session (so MCP servers from the document
     /// attach at `session/new`).
@@ -1535,9 +1538,9 @@ struct EngineState {
     memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
     desktop_mcp: Option<DesktopMcpConfig>,
-    /// Host-backed special tools keyed by provider id. Discovery and native-vs-MCP decisions stay
-    /// outside the engine; this map is the engine's only interface to either host adapter.
-    provider_tools: HashMap<String, ProviderToolset>,
+    /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
+    /// entry on creation because ACP accepts MCP servers only at session creation/load.
+    provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
 }
 
 /// Desktop-only bootstrap material for C2's authenticated browser MCP sidecar. The master
@@ -1599,7 +1602,7 @@ impl Engine {
             None,
             CanvasFeatureGate::default(),
             None,
-            HashMap::new(),
+            Arc::new(RwLock::new(HashMap::new())),
         )
     }
 
@@ -1617,7 +1620,7 @@ impl Engine {
             Some(memory),
             CanvasFeatureGate::default(),
             None,
-            HashMap::new(),
+            Arc::new(RwLock::new(HashMap::new())),
         )
     }
 
@@ -1636,7 +1639,7 @@ impl Engine {
             memory,
             CanvasFeatureGate::default(),
             None,
-            HashMap::new(),
+            Arc::new(RwLock::new(HashMap::new())),
         )
     }
 
@@ -1647,6 +1650,26 @@ impl Engine {
         store: Arc<Store>,
         memory: Option<MemoryCapability>,
         provider_tools: HashMap<String, ProviderToolset>,
+    ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
+        Self::build(
+            providers,
+            skills,
+            Some(store),
+            memory,
+            CanvasFeatureGate::default(),
+            None,
+            Arc::new(RwLock::new(provider_tools)),
+        )
+    }
+
+    /// Plugin construction path backed by the provider service's live tool projection. Existing
+    /// sessions retain their snapshot while newly created sessions see settings changes.
+    pub fn with_store_memory_and_shared_provider_tools(
+        providers: Vec<Provider>,
+        skills: SkillLibrary,
+        store: Arc<Store>,
+        memory: Option<MemoryCapability>,
+        provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         Self::build(
             providers,
@@ -1676,7 +1699,7 @@ impl Engine {
             Some(memory),
             canvas_gate,
             None,
-            HashMap::new(),
+            Arc::new(RwLock::new(HashMap::new())),
         )
     }
 
@@ -1698,7 +1721,7 @@ impl Engine {
             memory,
             canvas_gate,
             Some(desktop_mcp),
-            HashMap::new(),
+            Arc::new(RwLock::new(HashMap::new())),
         )
     }
 
@@ -1717,7 +1740,7 @@ impl Engine {
         memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: Option<DesktopMcpConfig>,
-        provider_tools: HashMap<String, ProviderToolset>,
+        provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         let (events, rx) = mpsc::unbounded_channel();
         if let Some(store) = &store {
@@ -1749,6 +1772,16 @@ impl Engine {
 
     pub fn router(&self) -> &PermissionRouter {
         &self.state.router
+    }
+
+    fn provider_toolset(&self, provider: &ProviderId) -> ProviderToolset {
+        self.state
+            .provider_tools
+            .read()
+            .unwrap()
+            .get(provider.as_str())
+            .cloned()
+            .unwrap_or_default()
     }
 
     fn track_starting_client(&self, client: &Arc<AcpClient>) -> bool {
@@ -2498,6 +2531,7 @@ impl Engine {
         let cwd = sess.cwd.clone();
         let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
+        let provider_toolset = self.provider_toolset(&sess.provider);
         let mut sessions = self.state.sessions.lock().unwrap();
         if self.state.shutting_down.load(Ordering::Acquire) {
             drop(sessions);
@@ -2510,6 +2544,7 @@ impl Engine {
             id.to_string(),
             SessionRuntime {
                 session: sess,
+                provider_toolset,
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: resume,
@@ -2794,6 +2829,7 @@ impl Engine {
                 // Offer the provider's built-in models straight away. Keep the client tracked
                 // while this async probe runs so plugin unload can still terminate it.
                 let models = available_models(&prov).await;
+                let provider_toolset = self.provider_toolset(&sess.provider);
 
                 // Moving a starting client into the live session map is atomic with shutdown:
                 // shutdown sets the flag before taking this same lock, so it either sees the new
@@ -2860,6 +2896,7 @@ impl Engine {
                     session_id.clone(),
                     SessionRuntime {
                         session: sess,
+                        provider_toolset,
                         client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
@@ -3166,20 +3203,24 @@ impl Engine {
                         compiled.prompt = format!("{preamble}\n\n{}", compiled.prompt);
                     }
                 }
-                let current_provider = {
+                let (current_provider, provider_toolset) = {
                     let sessions = self.state.sessions.lock().unwrap();
                     sessions
                         .get(&session)
-                        .map(|runtime| runtime.session.provider.clone())
-                        .unwrap_or_else(|| ProviderId::Custom("unknown".into()))
+                        .map(|runtime| {
+                            (
+                                runtime.session.provider.clone(),
+                                runtime.provider_toolset.clone(),
+                            )
+                        })
+                        .unwrap_or_else(|| {
+                            (
+                                ProviderId::Custom("unknown".into()),
+                                ProviderToolset::default(),
+                            )
+                        })
                 };
                 let is_codex = current_provider == ProviderId::Codex;
-                let provider_toolset = self
-                    .state
-                    .provider_tools
-                    .get(current_provider.as_str())
-                    .cloned()
-                    .unwrap_or_default();
                 attach_host_mcp_servers(
                     &mut compiled.mcp_servers,
                     provider_toolset.mcp_servers.iter().cloned(),

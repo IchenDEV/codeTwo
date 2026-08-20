@@ -117,12 +117,12 @@ impl Plugin for EnginePlugin {
         };
         let (engine, mut rx) = match &self.builder {
             Some(build) => build(inputs),
-            None => Engine::with_store_memory_and_provider_tools(
+            None => Engine::with_store_memory_and_shared_provider_tools(
                 inputs.providers,
                 inputs.skills,
                 inputs.store,
                 inputs.memory,
-                inputs.provider_tools,
+                providers.shared_toolsets(),
             ),
         };
         let engine = Arc::new(engine);

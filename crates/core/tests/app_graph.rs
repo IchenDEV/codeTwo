@@ -75,6 +75,8 @@ async fn plugins_contribute_the_app_surface() {
         "memory.list",
         "pipelines.start",
         "projects.list",
+        "computer_use.settings",
+        "computer_use.select",
         "providers.list",
         "scenes.apply",
         "sessions.list",

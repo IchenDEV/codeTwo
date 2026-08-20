@@ -4,7 +4,7 @@
 //! `session/load`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use codetwo_core::event::Event;
 use codetwo_core::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
@@ -151,4 +151,67 @@ async fn projected_tools_reach_session_load_and_the_prompt() {
 
     let texts = run_turn(&engine, &mut events, id).await;
     assert_eq!(texts, ["mcp=computer-use;instructions=true"]);
+}
+
+#[tokio::test]
+async fn live_tool_changes_only_affect_sessions_created_after_the_change() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let shared = Arc::new(RwLock::new(provider_toolsets()));
+    let (engine, mut events) = Engine::with_store_memory_and_shared_provider_tools(
+        vec![mock_provider()],
+        SkillLibrary::default(),
+        store,
+        None,
+        shared.clone(),
+    );
+
+    engine
+        .submit(Op::NewSession {
+            provider: ProviderId::Grok,
+            cwd: std::env::temp_dir().to_string_lossy().to_string(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("before-tool-change".into()),
+            initial_policy: None,
+        })
+        .await
+        .unwrap();
+    let before = loop {
+        match events.recv().await.expect("session event") {
+            Event::SessionCreated { session, .. } => break session,
+            Event::Error { message, .. } => panic!("unexpected session error: {message}"),
+            _ => {}
+        }
+    };
+
+    shared.write().unwrap().clear();
+    let before_texts = run_turn(&engine, &mut events, before).await;
+    assert_eq!(
+        before_texts,
+        ["mcp=computer-use;instructions=true"],
+        "the running session keeps its creation-time tool snapshot"
+    );
+
+    engine
+        .submit(Op::NewSession {
+            provider: ProviderId::Grok,
+            cwd: std::env::temp_dir().to_string_lossy().to_string(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("after-tool-change".into()),
+            initial_policy: None,
+        })
+        .await
+        .unwrap();
+    let after = loop {
+        match events.recv().await.expect("session event") {
+            Event::SessionCreated { session, .. } => break session,
+            Event::Error { message, .. } => panic!("unexpected session error: {message}"),
+            _ => {}
+        }
+    };
+    let after_texts = run_turn(&engine, &mut events, after).await;
+    assert_eq!(after_texts, ["mcp=;instructions=false"]);
 }
