@@ -7,6 +7,10 @@ use std::collections::BTreeSet;
 
 use rusqlite::OptionalExtension;
 
+use crate::capability_v2::ConcreteEffect;
+use crate::risk_v2::{
+    effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision,
+};
 use crate::store::{Store, StoreError};
 use crate::task::{
     AgentAssignment, AgentId, AgentRole, AgentStatus, ArtifactProvenance, LoopGuardState,
@@ -145,6 +149,17 @@ CREATE TABLE IF NOT EXISTS task_cache_receipts_v2 (
 );
 CREATE INDEX IF NOT EXISTS task_cache_receipts_v2_order
   ON task_cache_receipts_v2(task_id, recorded_at_ms, work_item_id, attempt);
+CREATE TABLE IF NOT EXISTS task_risk_gates_v2 (
+  request_id    TEXT PRIMARY KEY,
+  task_id       TEXT NOT NULL,
+  work_item_id  TEXT NOT NULL,
+  receipt_json  TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL,
+  decided_at_ms INTEGER,
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
+);
+CREATE INDEX IF NOT EXISTS task_risk_gates_v2_order
+  ON task_risk_gates_v2(task_id, created_at_ms, request_id);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -307,6 +322,7 @@ impl Store {
         let session_leases = self.list_task_session_leases(task_id)?;
         let artifacts = self.list_task_artifacts(task_id)?;
         let cache_receipts = self.list_task_cache_receipts(task_id)?;
+        let risk_gates = self.list_task_risk_gates(task_id)?;
         let budget_state = self.task_budget_state(task_id)?;
         let loop_guard = self.task_loop_guard(task_id)?;
         let agents = self.task_agents(task_id, &session_leases)?;
@@ -319,6 +335,21 @@ impl Store {
         );
         blockers.extend(loop_guard.pause_reason.iter().cloned());
         blockers.extend(budget_state.hard_limit_reason.iter().cloned());
+        blockers.extend(
+            risk_gates
+                .iter()
+                .filter_map(|receipt| match &receipt.decision {
+                    RiskGateDecision::Pending => Some(format!(
+                        "risk decision pending: {} -> {} ({})",
+                        receipt.action, receipt.target, receipt.scope
+                    )),
+                    RiskGateDecision::Refused { reason } => Some(format!(
+                        "risk effect refused: {} -> {} ({reason})",
+                        receipt.action, receipt.target
+                    )),
+                    RiskGateDecision::Approved { .. } => None,
+                }),
+        );
         Ok(RunSnapshot {
             task_id: task_id.clone(),
             revision: task_graph.revision,
@@ -331,6 +362,7 @@ impl Store {
             session_leases,
             artifacts,
             cache_receipts,
+            risk_gates,
             blockers: blockers.into_iter().collect(),
             budget: record.task.budget,
             budget_state,
@@ -1201,6 +1233,161 @@ impl Store {
         Ok(receipts)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn request_risk_gate(
+        &self,
+        task_id: &TaskId,
+        work_item_id: &WorkItemId,
+        action: &str,
+        target: &str,
+        scope: &str,
+        effect: ConcreteEffect,
+        now_ms: i64,
+    ) -> Result<RiskGateReceipt, StoreError> {
+        validate_risk_text("action", action)?;
+        validate_risk_text("target", target)?;
+        validate_risk_text("scope", scope)?;
+        if !effect_requires_risk_gate(effect) {
+            return Err(StoreError::InvalidRiskGate(
+                "read and local preparation effects do not require a Risk Gate".into(),
+            ));
+        }
+        let identity = serde_json::to_vec(&(
+            task_id,
+            work_item_id,
+            action.trim(),
+            target.trim(),
+            scope.trim(),
+            effect,
+            now_ms,
+        ))?;
+        let receipt = RiskGateReceipt {
+            request_id: blake3::hash(&identity).to_hex().to_string(),
+            task_id: task_id.clone(),
+            work_item_id: work_item_id.clone(),
+            action: action.trim().to_string(),
+            target: target.trim().to_string(),
+            scope: scope.trim().to_string(),
+            effect,
+            decision: RiskGateDecision::Pending,
+            created_at_ms: now_ms,
+            decided_at_ms: None,
+        };
+        let conn = self.conn.lock().unwrap();
+        let work_item_exists: bool = conn.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM task_work_items_v2 wi
+               JOIN task_graph_revisions_v2 gr
+                 ON gr.task_id=wi.task_id AND gr.revision=wi.graph_revision
+               WHERE wi.task_id=?1 AND wi.work_item_id=?2
+             )",
+            rusqlite::params![task_id.as_str(), work_item_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if !work_item_exists {
+            return Err(StoreError::WorkItemNotFound {
+                task_id: task_id.as_str().to_string(),
+                work_item_id: work_item_id.as_str().to_string(),
+            });
+        }
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT receipt_json FROM task_risk_gates_v2 WHERE request_id=?1",
+                [receipt.request_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            return Ok(serde_json::from_str(&existing)?);
+        }
+        conn.execute(
+            "INSERT INTO task_risk_gates_v2
+               (request_id,task_id,work_item_id,receipt_json,created_at_ms)
+            VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                receipt.request_id.as_str(),
+                task_id.as_str(),
+                work_item_id.as_str(),
+                serde_json::to_string(&receipt)?,
+                now_ms,
+            ],
+        )?;
+        Ok(receipt)
+    }
+
+    pub fn record_user_risk_decision(
+        &self,
+        request_id: &str,
+        decision: UserRiskDecision,
+        reason: &str,
+        now_ms: i64,
+    ) -> Result<RiskGateReceipt, StoreError> {
+        validate_risk_text("decision reason", reason)?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let receipt_json: Option<String> = tx
+            .query_row(
+                "SELECT receipt_json FROM task_risk_gates_v2 WHERE request_id=?1",
+                [request_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(receipt_json) = receipt_json else {
+            return Err(StoreError::InvalidRiskGate(format!(
+                "unknown request `{request_id}`"
+            )));
+        };
+        let mut receipt: RiskGateReceipt = serde_json::from_str(&receipt_json)?;
+        if receipt.decision != RiskGateDecision::Pending {
+            return Err(StoreError::InvalidRiskGate(
+                "a decided Risk Gate cannot be overwritten".into(),
+            ));
+        }
+        receipt.decision = match decision {
+            UserRiskDecision::Approve => RiskGateDecision::Approved {
+                reason: reason.trim().to_string(),
+            },
+            UserRiskDecision::Refuse => RiskGateDecision::Refused {
+                reason: reason.trim().to_string(),
+            },
+        };
+        receipt.decided_at_ms = Some(now_ms);
+        tx.execute(
+            "UPDATE task_risk_gates_v2
+             SET receipt_json=?2,decided_at_ms=?3 WHERE request_id=?1",
+            rusqlite::params![request_id, serde_json::to_string(&receipt)?, now_ms],
+        )?;
+        tx.commit()?;
+        Ok(receipt)
+    }
+
+    pub fn list_task_risk_gates(
+        &self,
+        task_id: &TaskId,
+    ) -> Result<Vec<RiskGateReceipt>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let task_exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks_v2 WHERE id=?1)",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if !task_exists {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        let mut statement = conn.prepare(
+            "SELECT receipt_json FROM task_risk_gates_v2
+             WHERE task_id=?1 ORDER BY created_at_ms ASC,request_id ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], |row| row.get::<_, String>(0))?;
+        let mut receipts = Vec::new();
+        for row in rows {
+            receipts.push(serde_json::from_str(&row?)?);
+        }
+        Ok(receipts)
+    }
+
     pub fn task_budget_state(&self, task_id: &TaskId) -> Result<TaskBudgetState, StoreError> {
         let conn = self.conn.lock().unwrap();
         let state: Option<String> = conn
@@ -1847,6 +2034,16 @@ fn validate_control_reason(reason: &str) -> Result<(), StoreError> {
         return Err(StoreError::InvalidTaskControl(
             "reason must contain between 1 and 2048 characters".into(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_risk_text(field: &str, value: &str) -> Result<(), StoreError> {
+    let length = value.trim().chars().count();
+    if length == 0 || length > 2_048 {
+        return Err(StoreError::InvalidRiskGate(format!(
+            "{field} must contain between 1 and 2048 characters"
+        )));
     }
     Ok(())
 }

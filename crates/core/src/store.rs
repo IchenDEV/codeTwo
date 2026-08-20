@@ -92,6 +92,8 @@ pub enum StoreError {
     InvalidTaskArtifact(String),
     #[error("invalid Task cache receipt: {0}")]
     InvalidTaskCacheReceipt(String),
+    #[error("invalid Risk Gate: {0}")]
+    InvalidRiskGate(String),
 }
 
 const SCHEMA: &str = "

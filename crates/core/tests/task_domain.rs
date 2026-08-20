@@ -29,6 +29,7 @@ fn task_snapshot_round_trips_through_the_public_domain_model() {
         "session_leases": [],
         "artifacts": [],
         "cache_receipts": [],
+        "risk_gates": [],
         "blockers": [],
         "budget": {
             "max_cost_microusd": null,

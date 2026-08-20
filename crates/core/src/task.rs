@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::provider::ProviderId;
+use crate::risk_v2::RiskGateReceipt;
 use crate::session::SessionId;
 
 macro_rules! string_id {
@@ -490,6 +491,7 @@ pub struct RunSnapshot {
     pub session_leases: Vec<TaskSessionLease>,
     pub artifacts: Vec<ArtifactProvenance>,
     pub cache_receipts: Vec<TaskCacheReceipt>,
+    pub risk_gates: Vec<RiskGateReceipt>,
     pub blockers: Vec<String>,
     pub budget: TaskBudget,
     pub budget_state: TaskBudgetState,

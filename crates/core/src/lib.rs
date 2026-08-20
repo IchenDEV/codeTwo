@@ -49,6 +49,7 @@ pub mod project;
 pub mod provider;
 pub mod pty;
 pub mod rules;
+pub mod risk_v2;
 pub mod scene;
 pub mod scene_artifact;
 pub mod scene_runtime;
@@ -123,6 +124,9 @@ pub use provider::{
     ProviderCapability, ProviderCapabilityId, ProviderId,
 };
 pub use pty::PtySession;
+pub use risk_v2::{
+    effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision,
+};
 pub use scene::{
     apply_execution, is_artifact_id, is_slug, memory_preset_policy, outgoing_edges, plan_apply,
     policy_session_mode, prompt_preamble, session_mode_policy, validate_pipeline, validate_scene,
