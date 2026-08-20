@@ -15,7 +15,8 @@ use crate::agent_skill_v2::AgentSkillResolver;
 use crate::scene_v2::{SceneCatalogV2, SceneV2Origin};
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, OrchestrationEvent, Task, TaskId, WorkItemAttempt, WorkItemAttemptStatus,
+    AgentId, LoopCeilings, LoopGuardState, OrchestrationEvent, Task, TaskId, TaskStatus,
+    WorkItemAttempt, WorkItemAttemptStatus,
 };
 use crate::task::{SceneOrigin, TaskGraph, WorkItem, WorkItemEdge, WorkItemId, WorkItemStatus};
 
@@ -158,6 +159,10 @@ pub enum OrchestratorError {
     Planner(String),
     #[error("executor: {0}")]
     Executor(String),
+    #[error("task is paused: {reason}")]
+    TaskPaused { reason: String },
+    #[error("task is not active: {status:?}")]
+    TaskNotActive { status: TaskStatus },
     #[error("task has no executable Work Item")]
     NoExecutableWork,
 }
@@ -175,6 +180,7 @@ pub struct Orchestrator {
     executor: Arc<dyn ExecutorPort>,
     scenes: Arc<SceneCatalogV2>,
     skills: Arc<AgentSkillResolver>,
+    loop_ceilings: LoopCeilings,
 }
 
 impl Orchestrator {
@@ -191,7 +197,13 @@ impl Orchestrator {
             executor,
             scenes,
             skills,
+            loop_ceilings: LoopCeilings::default(),
         }
+    }
+
+    pub fn with_loop_ceilings(mut self, loop_ceilings: LoopCeilings) -> Self {
+        self.loop_ceilings = loop_ceilings;
+        self
     }
 
     pub async fn plan_once(
@@ -207,6 +219,7 @@ impl Orchestrator {
             })?;
         let graph = self.store.get_task_graph(task_id)?;
         let task = record.task;
+        self.require_active(&task)?;
         let patch = self
             .planner
             .propose(PlannerInput {
@@ -224,6 +237,11 @@ impl Orchestrator {
             now_ms,
         )?;
         self.ensure_manager_if_needed(&task, &next, now_ms).await?;
+        let progress_identity = self.progress_identity(task_id, &next)?;
+        let state = self
+            .store
+            .record_replan_progress(task_id, &progress_identity, now_ms)?;
+        self.pause_if_ceiling_reached(task_id, &state, now_ms)?;
         Ok(event)
     }
 
@@ -238,6 +256,7 @@ impl Orchestrator {
             .ok_or_else(|| StoreError::TaskNotFound {
                 task_id: task_id.as_str().to_string(),
             })?;
+        self.require_active(&record.task)?;
         let graph = self.store.get_task_graph(task_id)?;
         let work_item = next_executable_work_item(&graph)
             .cloned()
@@ -287,11 +306,111 @@ impl Orchestrator {
             &patch.reason,
             now_ms,
         )?;
+        let skill_set_identity = agent_skill_set_identity(&work_item);
+        let state = self.store.record_work_item_outcome(
+            task_id,
+            &work_item.id,
+            &skill_set_identity,
+            matches!(outcome, ExecutorOutcome::Succeeded { .. }),
+            now_ms,
+        )?;
+        self.pause_if_ceiling_reached(task_id, &state, now_ms)?;
         Ok(ExecutionStep {
             attempt: completed_attempt,
             outcome,
             event,
         })
+    }
+
+    fn require_active(&self, task: &Task) -> Result<(), OrchestratorError> {
+        match task.status {
+            TaskStatus::Active => Ok(()),
+            TaskStatus::Paused => {
+                let state = self.store.task_loop_guard(&task.id)?;
+                Err(OrchestratorError::TaskPaused {
+                    reason: state
+                        .pause_reason
+                        .unwrap_or_else(|| "paused by user or runtime policy".into()),
+                })
+            }
+            status => Err(OrchestratorError::TaskNotActive { status }),
+        }
+    }
+
+    fn progress_identity(
+        &self,
+        task_id: &TaskId,
+        graph: &TaskGraph,
+    ) -> Result<String, OrchestratorError> {
+        let mut completion_evidence: Vec<_> = graph
+            .work_items
+            .iter()
+            .filter(|item| item.status == WorkItemStatus::Succeeded)
+            .map(|item| {
+                (
+                    item.id.as_str().to_string(),
+                    item.completion_evidence.clone(),
+                )
+            })
+            .collect();
+        completion_evidence.sort();
+        let mut artifacts: Vec<_> = self
+            .store
+            .list_task_artifacts(task_id)?
+            .into_iter()
+            .map(|artifact| {
+                (
+                    artifact.artifact_key,
+                    artifact.version,
+                    artifact.content_identity,
+                    artifact.status,
+                )
+            })
+            .collect();
+        artifacts
+            .sort_by(|left, right| (&left.0, left.1, &left.2).cmp(&(&right.0, right.1, &right.2)));
+        let payload = serde_json::to_vec(&(completion_evidence, artifacts))
+            .expect("progress identity serialization cannot fail");
+        Ok(blake3::hash(&payload).to_hex().to_string())
+    }
+
+    fn pause_if_ceiling_reached(
+        &self,
+        task_id: &TaskId,
+        state: &LoopGuardState,
+        now_ms: i64,
+    ) -> Result<(), OrchestratorError> {
+        let reason = if state.consecutive_failures >= self.loop_ceilings.consecutive_failures {
+            Some(format!(
+                "paused after {} consecutive unsuccessful attempts",
+                state.consecutive_failures
+            ))
+        } else if state.repeated_work_item_attempts
+            >= self.loop_ceilings.repeated_work_item_attempts
+        {
+            Some(format!(
+                "paused after attempting the same Work Item {} times",
+                state.repeated_work_item_attempts
+            ))
+        } else if state.repeated_agent_skill_set_attempts
+            >= self.loop_ceilings.repeated_agent_skill_set_attempts
+        {
+            Some(format!(
+                "paused after using the same Agent Skill set {} times",
+                state.repeated_agent_skill_set_attempts
+            ))
+        } else if state.replans_without_progress >= self.loop_ceilings.replans_without_progress {
+            Some(format!(
+                "paused after {} replans without new completion evidence",
+                state.replans_without_progress
+            ))
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            self.store.pause_task(task_id, &reason, now_ms)?;
+        }
+        Ok(())
     }
 
     async fn ensure_manager_if_needed(
@@ -336,6 +455,25 @@ impl Orchestrator {
         )?;
         Ok(())
     }
+}
+
+fn agent_skill_set_identity(work_item: &WorkItem) -> String {
+    let mut skills: Vec<_> = work_item
+        .agent_skills
+        .iter()
+        .map(|skill| {
+            (
+                skill.id.as_str(),
+                skill.version.as_deref(),
+                skill.content_identity.as_str(),
+                &skill.source,
+            )
+        })
+        .collect();
+    skills.sort_by(|left, right| left.0.cmp(right.0).then(left.2.cmp(right.2)));
+    let payload =
+        serde_json::to_vec(&skills).expect("Agent Skill identity serialization cannot fail");
+    blake3::hash(&payload).to_hex().to_string()
 }
 
 fn manager_required(graph: &TaskGraph) -> bool {

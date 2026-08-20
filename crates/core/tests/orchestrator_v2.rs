@@ -263,3 +263,99 @@ async fn orchestrator_executes_dependent_work_items_serially() {
         .iter()
         .all(|item| item.status == WorkItemStatus::Succeeded));
 }
+
+#[tokio::test]
+async fn consecutive_failures_pause_the_task_before_a_fourth_execution() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let task = Task {
+        id: TaskId::new("task-loop-guard"),
+        status: TaskStatus::Active,
+        result_contract: ResultContract {
+            goal: "Complete bounded work".into(),
+            required_deliverables: vec!["Result".into()],
+            completion_conditions: vec!["done".into()],
+            boundaries: Vec::new(),
+            known_risks: Vec::new(),
+            unresolved_facts: Vec::new(),
+        },
+        provider_configuration: ProviderConfiguration {
+            provider: ProviderId::Codex,
+            model: None,
+            reasoning_effort: None,
+        },
+        budget: TaskBudget {
+            max_cost_microusd: None,
+            max_tokens: None,
+            max_duration_seconds: None,
+        },
+    };
+    store.create_task(&task, 100).unwrap();
+    let session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&session).unwrap();
+    let scenes = Arc::new(SceneCatalogV2::builtin());
+    let skills = Arc::new(authentic_skill_resolver());
+    let skill = skills.resolve("review").unwrap().reference.clone();
+    let planner = Arc::new(InMemoryPlanner::new([
+        OrchestrationPatch {
+            expected_revision: 0,
+            reason: "Initial bounded attempt".into(),
+            operations: vec![GraphOperation::Add {
+                work_item: work_item("official:software-development", skill),
+                depends_on: Vec::new(),
+            }],
+        },
+        OrchestrationPatch {
+            expected_revision: 2,
+            reason: "Retry after first failure".into(),
+            operations: vec![GraphOperation::Retry {
+                work_item_id: WorkItemId::new("work-1"),
+                reason: "Retry after first failure".into(),
+            }],
+        },
+        OrchestrationPatch {
+            expected_revision: 4,
+            reason: "Retry after second failure".into(),
+            operations: vec![GraphOperation::Retry {
+                work_item_id: WorkItemId::new("work-1"),
+                reason: "Retry after second failure".into(),
+            }],
+        },
+    ]));
+    let executor = Arc::new(InMemoryExecutor::new(
+        ExecutorAssignment {
+            agent_id: "agent-1".into(),
+            session_id: session.id,
+        },
+        [
+            ExecutorOutcome::Failed {
+                message: "failure one".into(),
+            },
+            ExecutorOutcome::Failed {
+                message: "failure two".into(),
+            },
+            ExecutorOutcome::Failed {
+                message: "failure three".into(),
+            },
+            ExecutorOutcome::Succeeded {
+                evidence: vec!["must not run".into()],
+            },
+        ],
+    ));
+    let orchestrator = Orchestrator::new(store.clone(), planner, executor, scenes, skills);
+
+    orchestrator.plan_once(&task.id, 200).await.unwrap();
+    orchestrator.execute_next(&task.id, 300).await.unwrap();
+    orchestrator.plan_once(&task.id, 400).await.unwrap();
+    orchestrator.execute_next(&task.id, 500).await.unwrap();
+    orchestrator.plan_once(&task.id, 600).await.unwrap();
+    orchestrator.execute_next(&task.id, 700).await.unwrap();
+
+    assert_eq!(
+        store.get_task(&task.id).unwrap().unwrap().task.status,
+        TaskStatus::Paused
+    );
+    assert!(matches!(
+        orchestrator.execute_next(&task.id, 800).await,
+        Err(codetwo_core::OrchestratorError::TaskPaused { .. })
+    ));
+}

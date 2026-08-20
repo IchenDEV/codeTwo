@@ -190,6 +190,7 @@ pub struct TaskGraph {
 pub enum OrchestrationEventKind {
     TaskCreated,
     TaskGraphChanged { reason: String },
+    TaskPaused { reason: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,6 +201,55 @@ pub struct OrchestrationEvent {
     pub graph_revision: u64,
     pub kind: OrchestrationEventKind,
     pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoopGuardState {
+    pub total_attempts: u64,
+    pub consecutive_failures: u64,
+    pub repeated_work_item_attempts: u64,
+    pub repeated_agent_skill_set_attempts: u64,
+    pub replans_without_progress: u64,
+    pub last_work_item_id: Option<WorkItemId>,
+    pub last_agent_skill_set_identity: Option<String>,
+    pub last_progress_identity: Option<String>,
+    pub pause_reason: Option<String>,
+}
+
+impl Default for LoopGuardState {
+    fn default() -> Self {
+        Self {
+            total_attempts: 0,
+            consecutive_failures: 0,
+            repeated_work_item_attempts: 0,
+            repeated_agent_skill_set_attempts: 0,
+            replans_without_progress: 0,
+            last_work_item_id: None,
+            last_agent_skill_set_identity: None,
+            last_progress_identity: None,
+            pause_reason: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoopCeilings {
+    pub consecutive_failures: u64,
+    pub repeated_work_item_attempts: u64,
+    pub repeated_agent_skill_set_attempts: u64,
+    pub replans_without_progress: u64,
+}
+
+impl Default for LoopCeilings {
+    fn default() -> Self {
+        Self {
+            consecutive_failures: 3,
+            repeated_work_item_attempts: 5,
+            repeated_agent_skill_set_attempts: 6,
+            replans_without_progress: 4,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

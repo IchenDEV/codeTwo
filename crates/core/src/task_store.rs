@@ -9,9 +9,9 @@ use rusqlite::OptionalExtension;
 
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, AgentRole, ArtifactProvenance, OrchestrationEvent, OrchestrationEventKind, Task,
-    TaskGraph, TaskId, TaskSessionLease, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
-    WorkItemId,
+    AgentId, AgentRole, ArtifactProvenance, LoopGuardState, OrchestrationEvent,
+    OrchestrationEventKind, Task, TaskGraph, TaskId, TaskSessionLease, TaskStatus, WorkItemAttempt,
+    WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -119,6 +119,12 @@ CREATE TABLE IF NOT EXISTS task_artifacts_v2 (
 );
 CREATE INDEX IF NOT EXISTS task_artifacts_v2_history
   ON task_artifacts_v2(task_id, created_at_ms, work_item_id, artifact_key, version);
+CREATE TABLE IF NOT EXISTS task_loop_guard_v2 (
+  task_id                         TEXT PRIMARY KEY,
+  state_json                      TEXT NOT NULL,
+  updated_at_ms                   INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id)
+);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -135,6 +141,12 @@ pub(crate) fn install(conn: &rusqlite::Connection) -> Result<(), StoreError> {
         "INSERT OR IGNORE INTO task_graph_revisions_v2(task_id,revision,updated_at_ms)
          SELECT id,0,created_at_ms FROM tasks_v2",
         [],
+    )?;
+    let loop_guard = serde_json::to_string(&LoopGuardState::default())?;
+    conn.execute(
+        "INSERT OR IGNORE INTO task_loop_guard_v2(task_id,state_json,updated_at_ms)
+         SELECT id,?1,created_at_ms FROM tasks_v2",
+        [loop_guard],
     )?;
     let created = serde_json::to_string(&OrchestrationEventKind::TaskCreated)?;
     conn.execute(
@@ -164,6 +176,15 @@ impl Store {
                 status,
                 provider_configuration,
                 budget,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_loop_guard_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&LoopGuardState::default())?,
                 now_ms,
             ],
         )?;
@@ -798,6 +819,161 @@ impl Store {
             artifacts.push(serde_json::from_str(&row?)?);
         }
         Ok(artifacts)
+    }
+
+    pub fn task_loop_guard(&self, task_id: &TaskId) -> Result<LoopGuardState, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let state: Option<String> = conn
+            .query_row(
+                "SELECT state_json FROM task_loop_guard_v2 WHERE task_id=?1",
+                [task_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(state) = state else {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        };
+        Ok(serde_json::from_str(&state)?)
+    }
+
+    pub fn record_work_item_outcome(
+        &self,
+        task_id: &TaskId,
+        work_item_id: &WorkItemId,
+        agent_skill_set_identity: &str,
+        succeeded: bool,
+        now_ms: i64,
+    ) -> Result<LoopGuardState, StoreError> {
+        let mut state = self.task_loop_guard(task_id)?;
+        state.total_attempts = state.total_attempts.saturating_add(1);
+        state.consecutive_failures = if succeeded {
+            0
+        } else {
+            state.consecutive_failures.saturating_add(1)
+        };
+        state.repeated_work_item_attempts =
+            if state.last_work_item_id.as_ref() == Some(work_item_id) {
+                state.repeated_work_item_attempts.saturating_add(1)
+            } else {
+                1
+            };
+        state.repeated_agent_skill_set_attempts =
+            if state.last_agent_skill_set_identity.as_deref() == Some(agent_skill_set_identity) {
+                state.repeated_agent_skill_set_attempts.saturating_add(1)
+            } else {
+                1
+            };
+        state.last_work_item_id = Some(work_item_id.clone());
+        state.last_agent_skill_set_identity = Some(agent_skill_set_identity.to_string());
+        self.write_loop_guard(task_id, &state, now_ms)?;
+        Ok(state)
+    }
+
+    pub fn record_replan_progress(
+        &self,
+        task_id: &TaskId,
+        progress_identity: &str,
+        now_ms: i64,
+    ) -> Result<LoopGuardState, StoreError> {
+        let mut state = self.task_loop_guard(task_id)?;
+        state.replans_without_progress = match state.last_progress_identity.as_deref() {
+            None => 0,
+            Some(previous) if previous == progress_identity => {
+                state.replans_without_progress.saturating_add(1)
+            }
+            Some(_) => 0,
+        };
+        state.last_progress_identity = Some(progress_identity.to_string());
+        self.write_loop_guard(task_id, &state, now_ms)?;
+        Ok(state)
+    }
+
+    pub fn pause_task(
+        &self,
+        task_id: &TaskId,
+        reason: &str,
+        now_ms: i64,
+    ) -> Result<OrchestrationEvent, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let changed = tx.execute(
+            "UPDATE tasks_v2 SET status_json=?2,updated_at_ms=?3 WHERE id=?1",
+            rusqlite::params![
+                task_id.as_str(),
+                serde_json::to_string(&TaskStatus::Paused)?,
+                now_ms,
+            ],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        let mut state: LoopGuardState = serde_json::from_str(&tx.query_row(
+            "SELECT state_json FROM task_loop_guard_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get::<_, String>(0),
+        )?)?;
+        state.pause_reason = Some(reason.to_string());
+        tx.execute(
+            "UPDATE task_loop_guard_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), serde_json::to_string(&state)?, now_ms],
+        )?;
+        let graph_revision: i64 = tx.query_row(
+            "SELECT revision FROM task_graph_revisions_v2 WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let sequence: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(sequence),0)+1 FROM task_orchestration_events_v2
+             WHERE task_id=?1",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        let kind = OrchestrationEventKind::TaskPaused {
+            reason: reason.to_string(),
+        };
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5)",
+            rusqlite::params![
+                task_id.as_str(),
+                sequence,
+                graph_revision,
+                serde_json::to_string(&kind)?,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(OrchestrationEvent {
+            task_id: task_id.clone(),
+            sequence: sequence as u64,
+            graph_revision: graph_revision as u64,
+            kind,
+            created_at_ms: now_ms,
+        })
+    }
+
+    fn write_loop_guard(
+        &self,
+        task_id: &TaskId,
+        state: &LoopGuardState,
+        now_ms: i64,
+    ) -> Result<(), StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let changed = conn.execute(
+            "UPDATE task_loop_guard_v2 SET state_json=?2,updated_at_ms=?3 WHERE task_id=?1",
+            rusqlite::params![task_id.as_str(), serde_json::to_string(state)?, now_ms],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        Ok(())
     }
 }
 
