@@ -1,8 +1,10 @@
 use codetwo_core::{
-    AgentId, OrchestrationEventKind, ProviderConfiguration, ProviderId, ResultContract, Store,
-    StoreError, Task, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemAttemptStatus,
+    AgentId, AgentRole, ArtifactProvenance, ArtifactStore, OrchestrationEventKind,
+    ProviderConfiguration, ProviderId, ResultContract, Session, Store, StoreError, Task,
+    TaskArtifactStatus, TaskBudget, TaskGraph, TaskId, TaskStatus, WorkItem, WorkItemAttemptStatus,
     WorkItemEdge, WorkItemId, WorkItemStatus,
 };
+use std::sync::Arc;
 
 fn task() -> Task {
     Task {
@@ -237,4 +239,168 @@ fn stale_graph_patch_is_rejected_and_does_not_append_an_event() {
             reason: "Initial graph".into()
         }
     );
+}
+
+#[test]
+fn compatible_session_lease_is_reused_and_incompatible_rebind_is_rejected() {
+    let store = Store::open_in_memory().unwrap();
+    let task = task();
+    store.create_task(&task, 100).unwrap();
+    let session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&session).unwrap();
+
+    let first = store
+        .lease_task_session(
+            &task.id,
+            &session.id,
+            &AgentId::new("agent-1"),
+            AgentRole::Executor,
+            "compatibility-a",
+            200,
+        )
+        .unwrap();
+    let reused = store
+        .lease_task_session(
+            &task.id,
+            &session.id,
+            &AgentId::new("agent-1"),
+            AgentRole::Executor,
+            "compatibility-a",
+            300,
+        )
+        .unwrap();
+    let incompatible = store.lease_task_session(
+        &task.id,
+        &session.id,
+        &AgentId::new("agent-1"),
+        AgentRole::Executor,
+        "compatibility-b",
+        400,
+    );
+
+    assert_eq!(reused, first);
+    assert!(matches!(
+        incompatible,
+        Err(StoreError::SessionLeaseConflict { .. })
+    ));
+}
+
+#[test]
+fn task_artifact_versions_keep_attempt_and_content_provenance() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = dir.path().join("codetwo.db");
+    let store = Arc::new(Store::open(database.to_str().unwrap()).unwrap());
+    let artifacts = ArtifactStore::from_store(store.clone()).unwrap();
+    let task = task();
+    store.create_task(&task, 100).unwrap();
+    store
+        .apply_task_graph(
+            &task.id,
+            0,
+            &TaskGraph {
+                revision: 1,
+                work_items: vec![work_item("work-1", "Produce report")],
+                edges: Vec::new(),
+            },
+            "Initial graph",
+            200,
+        )
+        .unwrap();
+    let session = Session::new(ProviderId::Codex, "/work/project");
+    store.upsert_session(&session).unwrap();
+    let agent = AgentId::new("agent-1");
+    let first_attempt = store
+        .start_work_item_attempt(
+            &task.id,
+            &WorkItemId::new("work-1"),
+            &agent,
+            &session.id,
+            300,
+        )
+        .unwrap();
+    let first_content = "first report";
+    let first = artifacts
+        .save_document(
+            first_content,
+            "text/markdown",
+            Some("report.md"),
+            &session.id,
+            "task:work-1:1",
+        )
+        .unwrap();
+    store
+        .record_task_artifact(&ArtifactProvenance {
+            artifact_id: first.id.clone(),
+            artifact_key: "report".into(),
+            task_id: task.id.clone(),
+            work_item_id: first_attempt.work_item_id.clone(),
+            attempt: first_attempt.attempt,
+            version: 1,
+            agent_id: agent.clone(),
+            session_id: session.id.clone(),
+            scenes: Vec::new(),
+            agent_skills: Vec::new(),
+            provider_configuration: task.provider_configuration.clone(),
+            content_identity: blake3::hash(first_content.as_bytes()).to_hex().to_string(),
+            storage_reference: first.id,
+            created_at_ms: 310,
+            status: TaskArtifactStatus::Candidate,
+        })
+        .unwrap();
+    store
+        .finish_work_item_attempt(
+            &task.id,
+            &first_attempt.work_item_id,
+            first_attempt.attempt,
+            WorkItemAttemptStatus::Failed,
+            320,
+        )
+        .unwrap();
+    let second_attempt = store
+        .start_work_item_attempt(
+            &task.id,
+            &WorkItemId::new("work-1"),
+            &agent,
+            &session.id,
+            400,
+        )
+        .unwrap();
+    let second_content = "corrected report";
+    let second = artifacts
+        .save_document(
+            second_content,
+            "text/markdown",
+            Some("report.md"),
+            &session.id,
+            "task:work-1:2",
+        )
+        .unwrap();
+    store
+        .record_task_artifact(&ArtifactProvenance {
+            artifact_id: second.id.clone(),
+            artifact_key: "report".into(),
+            task_id: task.id.clone(),
+            work_item_id: second_attempt.work_item_id,
+            attempt: second_attempt.attempt,
+            version: 2,
+            agent_id: agent,
+            session_id: session.id,
+            scenes: Vec::new(),
+            agent_skills: Vec::new(),
+            provider_configuration: task.provider_configuration,
+            content_identity: blake3::hash(second_content.as_bytes()).to_hex().to_string(),
+            storage_reference: second.id,
+            created_at_ms: 410,
+            status: TaskArtifactStatus::Candidate,
+        })
+        .unwrap();
+
+    let history = store.list_task_artifacts(&task.id).unwrap();
+
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].version, 1);
+    assert_eq!(history[0].attempt, 1);
+    assert_eq!(history[1].version, 2);
+    assert_eq!(history[1].attempt, 2);
+    assert_ne!(history[0].content_identity, history[1].content_identity);
 }

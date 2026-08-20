@@ -9,8 +9,9 @@ use rusqlite::OptionalExtension;
 
 use crate::store::{Store, StoreError};
 use crate::task::{
-    AgentId, OrchestrationEvent, OrchestrationEventKind, Task, TaskGraph, TaskId, WorkItemAttempt,
-    WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
+    AgentId, AgentRole, ArtifactProvenance, OrchestrationEvent, OrchestrationEventKind, Task,
+    TaskGraph, TaskId, TaskSessionLease, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
+    WorkItemId,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -87,6 +88,37 @@ CREATE TABLE IF NOT EXISTS task_orchestration_events_v2 (
 );
 CREATE INDEX IF NOT EXISTS task_orchestration_events_v2_order
   ON task_orchestration_events_v2(task_id, sequence);
+CREATE TABLE IF NOT EXISTS task_session_leases_v2 (
+  lease_id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id                TEXT NOT NULL,
+  session_id             TEXT NOT NULL,
+  agent_id               TEXT NOT NULL,
+  role                   TEXT NOT NULL,
+  compatibility_identity TEXT NOT NULL,
+  leased_at_ms           INTEGER NOT NULL,
+  released_at_ms         INTEGER,
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id),
+  FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS task_active_session_lease_v2
+  ON task_session_leases_v2(session_id) WHERE released_at_ms IS NULL;
+CREATE INDEX IF NOT EXISTS task_session_leases_v2_task
+  ON task_session_leases_v2(task_id, lease_id);
+CREATE TABLE IF NOT EXISTS task_artifacts_v2 (
+  task_id         TEXT NOT NULL,
+  work_item_id    TEXT NOT NULL,
+  artifact_key    TEXT NOT NULL,
+  version         INTEGER NOT NULL,
+  attempt         INTEGER NOT NULL,
+  artifact_id     TEXT NOT NULL,
+  provenance_json TEXT NOT NULL,
+  created_at_ms   INTEGER NOT NULL,
+  PRIMARY KEY (task_id, work_item_id, artifact_key, version),
+  FOREIGN KEY (task_id) REFERENCES tasks_v2(id),
+  FOREIGN KEY (artifact_id) REFERENCES artifacts(id)
+);
+CREATE INDEX IF NOT EXISTS task_artifacts_v2_history
+  ON task_artifacts_v2(task_id, created_at_ms, work_item_id, artifact_key, version);
 ";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -555,6 +587,188 @@ impl Store {
         }
         Ok(events)
     }
+
+    pub fn lease_task_session(
+        &self,
+        task_id: &TaskId,
+        session_id: &str,
+        agent_id: &AgentId,
+        role: AgentRole,
+        compatibility_identity: &str,
+        now_ms: i64,
+    ) -> Result<TaskSessionLease, StoreError> {
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let task_exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tasks_v2 WHERE id=?1)",
+            [task_id.as_str()],
+            |row| row.get(0),
+        )?;
+        if !task_exists {
+            return Err(StoreError::TaskNotFound {
+                task_id: task_id.as_str().to_string(),
+            });
+        }
+        let session_exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1)",
+            [session_id],
+            |row| row.get(0),
+        )?;
+        if !session_exists {
+            return Err(StoreError::SessionLeaseConflict {
+                session_id: session_id.to_string(),
+                reason: "session does not exist".into(),
+            });
+        }
+        let existing: Option<TaskSessionLease> = tx
+            .query_row(
+                "SELECT lease_id,task_id,session_id,agent_id,role,compatibility_identity,
+                        leased_at_ms,released_at_ms
+                 FROM task_session_leases_v2
+                 WHERE session_id=?1 AND released_at_ms IS NULL",
+                [session_id],
+                task_session_lease_row,
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            if existing.task_id == *task_id
+                && existing.agent_id == *agent_id
+                && existing.role == role
+                && existing.compatibility_identity == compatibility_identity
+            {
+                return Ok(existing);
+            }
+            return Err(StoreError::SessionLeaseConflict {
+                session_id: session_id.to_string(),
+                reason: "active lease has a different Task, Agent, role, or compatibility identity"
+                    .into(),
+            });
+        }
+        tx.execute(
+            "INSERT INTO task_session_leases_v2
+               (task_id,session_id,agent_id,role,compatibility_identity,leased_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            rusqlite::params![
+                task_id.as_str(),
+                session_id,
+                agent_id.as_str(),
+                agent_role_db(role),
+                compatibility_identity,
+                now_ms,
+            ],
+        )?;
+        let lease = TaskSessionLease {
+            lease_id: tx.last_insert_rowid(),
+            task_id: task_id.clone(),
+            session_id: session_id.to_string(),
+            agent_id: agent_id.clone(),
+            role,
+            compatibility_identity: compatibility_identity.to_string(),
+            leased_at_ms: now_ms,
+            released_at_ms: None,
+        };
+        tx.commit()?;
+        Ok(lease)
+    }
+
+    pub fn record_task_artifact(&self, provenance: &ArtifactProvenance) -> Result<(), StoreError> {
+        if provenance.artifact_key.is_empty() || provenance.artifact_key.len() > 128 {
+            return Err(StoreError::InvalidTaskArtifact(
+                "artifact_key must contain between 1 and 128 bytes".into(),
+            ));
+        }
+        if provenance.storage_reference != provenance.artifact_id {
+            return Err(StoreError::InvalidTaskArtifact(
+                "storage_reference must be the opaque Artifact id".into(),
+            ));
+        }
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        let attempt_exists: bool = tx.query_row(
+            "SELECT EXISTS(
+                   SELECT 1 FROM task_work_item_attempts_v2
+                   WHERE task_id=?1 AND work_item_id=?2 AND attempt=?3
+                     AND agent_id=?4 AND session_id=?5
+                 )",
+            rusqlite::params![
+                provenance.task_id.as_str(),
+                provenance.work_item_id.as_str(),
+                provenance.attempt,
+                provenance.agent_id.as_str(),
+                provenance.session_id,
+            ],
+            |row| row.get(0),
+        )?;
+        if !attempt_exists {
+            return Err(StoreError::InvalidTaskArtifact(
+                "producing Work Item attempt, Agent, or Session does not match".into(),
+            ));
+        }
+        let stored_digest: Option<String> = tx
+            .query_row(
+                "SELECT digest FROM artifacts WHERE id=?1",
+                [provenance.artifact_id.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if stored_digest.as_deref() != Some(provenance.content_identity.as_str()) {
+            return Err(StoreError::InvalidTaskArtifact(
+                "content identity does not match content-addressed Artifact storage".into(),
+            ));
+        }
+        let expected_version: i64 = tx.query_row(
+            "SELECT COALESCE(MAX(version),0)+1 FROM task_artifacts_v2
+             WHERE task_id=?1 AND work_item_id=?2 AND artifact_key=?3",
+            rusqlite::params![
+                provenance.task_id.as_str(),
+                provenance.work_item_id.as_str(),
+                provenance.artifact_key,
+            ],
+            |row| row.get(0),
+        )?;
+        if provenance.version as i64 != expected_version {
+            return Err(StoreError::InvalidTaskArtifact(format!(
+                "expected version {expected_version}, got {}",
+                provenance.version
+            )));
+        }
+        tx.execute(
+            "INSERT INTO task_artifacts_v2
+               (task_id,work_item_id,artifact_key,version,attempt,artifact_id,
+                provenance_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            rusqlite::params![
+                provenance.task_id.as_str(),
+                provenance.work_item_id.as_str(),
+                provenance.artifact_key,
+                provenance.version,
+                provenance.attempt,
+                provenance.artifact_id,
+                serde_json::to_string(provenance)?,
+                provenance.created_at_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn list_task_artifacts(
+        &self,
+        task_id: &TaskId,
+    ) -> Result<Vec<ArtifactProvenance>, StoreError> {
+        let conn = self.conn.lock().unwrap();
+        let mut statement = conn.prepare(
+            "SELECT provenance_json FROM task_artifacts_v2
+             WHERE task_id=?1
+             ORDER BY created_at_ms ASC, work_item_id ASC, artifact_key ASC, version ASC",
+        )?;
+        let rows = statement.query_map([task_id.as_str()], |row| row.get::<_, String>(0))?;
+        let mut artifacts = Vec::new();
+        for row in rows {
+            artifacts.push(serde_json::from_str(&row?)?);
+        }
+        Ok(artifacts)
+    }
 }
 
 fn validate_graph(graph: &TaskGraph) -> Result<(), StoreError> {
@@ -605,4 +819,36 @@ fn invalid_attempt(
         attempt,
         reason: reason.into(),
     }
+}
+
+fn agent_role_db(role: AgentRole) -> &'static str {
+    match role {
+        AgentRole::Manager => "manager",
+        AgentRole::Executor => "executor",
+    }
+}
+
+fn task_session_lease_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskSessionLease> {
+    let role: String = row.get(4)?;
+    let role = match role.as_str() {
+        "manager" => AgentRole::Manager,
+        "executor" => AgentRole::Executor,
+        other => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                4,
+                rusqlite::types::Type::Text,
+                format!("unknown Agent role `{other}`").into(),
+            ))
+        }
+    };
+    Ok(TaskSessionLease {
+        lease_id: row.get(0)?,
+        task_id: TaskId::new(row.get::<_, String>(1)?),
+        session_id: row.get(2)?,
+        agent_id: AgentId::new(row.get::<_, String>(3)?),
+        role,
+        compatibility_identity: row.get(5)?,
+        leased_at_ms: row.get(6)?,
+        released_at_ms: row.get(7)?,
+    })
 }

@@ -219,6 +219,19 @@ pub struct AgentAssignment {
     pub work_item_id: Option<WorkItemId>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskSessionLease {
+    pub lease_id: i64,
+    pub task_id: TaskId,
+    pub session_id: SessionId,
+    pub agent_id: AgentId,
+    pub role: AgentRole,
+    pub compatibility_identity: String,
+    pub leased_at_ms: i64,
+    pub released_at_ms: Option<i64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskArtifactStatus {
@@ -231,6 +244,8 @@ pub enum TaskArtifactStatus {
 #[serde(deny_unknown_fields)]
 pub struct ArtifactProvenance {
     pub artifact_id: String,
+    pub artifact_key: String,
+    pub task_id: TaskId,
     pub work_item_id: WorkItemId,
     pub attempt: u32,
     pub version: u32,

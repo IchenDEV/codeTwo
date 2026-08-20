@@ -74,6 +74,10 @@ pub enum StoreError {
         expected: u64,
         actual: u64,
     },
+    #[error("session lease conflict for {session_id}: {reason}")]
+    SessionLeaseConflict { session_id: String, reason: String },
+    #[error("invalid Task Artifact: {0}")]
+    InvalidTaskArtifact(String),
 }
 
 const SCHEMA: &str = "
