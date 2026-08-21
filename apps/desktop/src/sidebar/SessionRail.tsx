@@ -29,6 +29,7 @@ import {
 import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -521,7 +522,7 @@ export function SessionRail({
                     ) : isFailed ? (
                       <CircleAlert className="size-3" />
                     ) : isRunning ? (
-                      <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                      <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
                     ) : (
                       <Check className="size-3" />
                     )}
@@ -737,7 +738,9 @@ export function SessionRail({
             </span>
           ) : (
             <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
-              {quickQuotaLoading ? "…" : "—"}
+              {quickQuotaLoading ? (
+                <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
+              ) : "—"}
             </span>
           )}
         </button>

@@ -7,7 +7,21 @@ const { I18nProvider } = await import("../src/i18n");
 const { SessionRail } = await import("../src/sidebar/SessionRail");
 const { ToastProvider } = await import("../src/ui/toast");
 
+let restoreCanvasContext: (() => void) | null = null;
+
+function disableCanvasDrawing(): void {
+  // Other canvas suites install purpose-specific partial contexts. The activity-orb contract tests
+  // only need the canvas element and state metadata, so keep this suite on the supported no-context path.
+  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  dom.HTMLCanvasElement.prototype.getContext = () => null;
+  restoreCanvasContext = () => {
+    dom.HTMLCanvasElement.prototype.getContext = getContext;
+  };
+}
+
 afterEach(() => {
+  restoreCanvasContext?.();
+  restoreCanvasContext = null;
   dom.document.body.replaceChildren();
   dom.window.localStorage.clear();
   delete dom.window.navigator.clipboard;
@@ -144,6 +158,31 @@ describe("SessionRail row layout", () => {
     for (const row of [punctuation, meaningful]) {
       expect(row?.querySelector('[data-session-line="status"]')?.textContent).toContain("Completed");
     }
+
+    view.unmount();
+  });
+
+  test("uses semantic activity orbs for running sessions and sidebar loading", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const view = renderRail({
+      runningSessions: new Set(["meaningful"]),
+      quickQuota: null,
+      quickQuotaLoading: true,
+    });
+    const running = view.container.querySelector('[data-session-id="meaningful"]');
+    const runningOrb = running?.querySelector('[data-session-line="status"] canvas');
+    const quotaOrb = view.container.querySelector(
+      '[data-rail-feature="usage"] canvas[data-activity-state="searching"]',
+    );
+
+    expect(runningOrb?.getAttribute("data-activity-state")).toBe("working");
+    expect(runningOrb?.style.width).toBe("14px");
+    expect(running?.querySelector('[data-session-line="status"]')?.getAttribute("aria-label"))
+      .toBe("Working");
+    expect(quotaOrb?.style.width).toBe("14px");
+    expect(view.container.querySelector('[data-rail-feature="usage"]')?.getAttribute("aria-busy"))
+      .toBe("true");
 
     view.unmount();
   });

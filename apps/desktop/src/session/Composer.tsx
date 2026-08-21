@@ -10,7 +10,6 @@ import {
   ListChecks,
   Lock,
   LockOpen,
-  Loader2,
   Maximize2,
   Minimize2,
   Plus,
@@ -37,6 +36,7 @@ import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
 import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1063,7 +1063,11 @@ export function Composer({
               disabled={loading}
               aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
             >
-              {loading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+              {loading ? (
+                <ActivityOrb state="connecting" aria-hidden="true" />
+              ) : (
+                <ArrowUp className="size-4" />
+              )}
             </Button>
             }
           />

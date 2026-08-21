@@ -37,6 +37,18 @@ dom.window.SpeechRecognition = FakeRecognition;
 const { VoiceButton, makeTranscriptHandler } = await import("../src/voice/VoiceButton");
 const { TooltipProvider } = await import("../src/components/ui/tooltip");
 
+let restoreCanvasContext: (() => void) | null = null;
+
+function disableCanvasDrawing(): void {
+  // The orb's DOM/state is under test, not its third-party painter. Some sibling canvas suites
+  // leave partial contexts installed, so force the renderer's supported no-context path here.
+  const getContext = dom.HTMLCanvasElement.prototype.getContext;
+  dom.HTMLCanvasElement.prototype.getContext = () => null;
+  restoreCanvasContext = () => {
+    dom.HTMLCanvasElement.prototype.getContext = getContext;
+  };
+}
+
 function mountButton(element) {
   return mount(<TooltipProvider>{element}</TooltipProvider>);
 }
@@ -58,10 +70,13 @@ function lastRec() {
 
 beforeEach(() => {
   activateDom();
+  disableCanvasDrawing();
   FakeRecognition.instances = [];
 });
 
 afterEach(() => {
+  restoreCanvasContext?.();
+  restoreCanvasContext = null;
   dom.document.body.replaceChildren();
   restoreDom();
 });
@@ -77,6 +92,9 @@ describe("VoiceButton hold-to-talk", () => {
     await flush();
     const recognition = lastRec();
     recognition.emitFinal("must not reach an unloaded plugin");
+
+    expect(btn.getAttribute("data-voice-mode")).toBe("listening");
+    expect(btn.querySelector("canvas")?.getAttribute("data-activity-state")).toBe("listening");
 
     rendered.unmount();
     await flush();
@@ -122,11 +140,14 @@ describe("VoiceButton hold-to-talk", () => {
     // While the handler runs the button shows the structuring spinner state.
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute("aria-label")).toBe("voice.structuring");
+    expect(btn.getAttribute("data-voice-mode")).toBe("structuring");
+    expect(btn.querySelector("canvas")?.getAttribute("data-activity-state")).toBe("shaping");
 
     release();
     await flush();
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute("aria-label")).toBe("voice.hold");
+    expect(btn.getAttribute("data-voice-mode")).toBe("idle");
   });
 
   test("a short press falls through to click-to-toggle", async () => {

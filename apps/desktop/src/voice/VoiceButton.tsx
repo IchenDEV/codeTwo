@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { Mic } from "lucide-react";
 import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { preferredRecordingType, toWav16kMono } from "./wav";
 import { shouldUseWebSpeech } from "./platform";
 import { Button } from "@/components/ui/button";
+import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "../ui/toast";
 import { useT } from "../i18n";
-import { cn } from "@/lib/utils";
 import type { SceneInfo, SceneSlotDef } from "../session/scene";
 
 type Mode = "idle" | "listening" | "transcribing" | "structuring";
@@ -306,7 +306,6 @@ export function VoiceButton({
     void toggle();
   };
 
-  const Icon = mode === "listening" ? MicOff : Mic;
   const label =
     mode === "listening"
       ? t("voice.stop")
@@ -321,19 +320,29 @@ export function VoiceButton({
           size="icon"
           aria-label={label}
           aria-pressed={mode === "listening"}
-          className={cn("size-8 shrink-0", mode === "listening" && "animate-pulse")}
+          data-voice-mode={mode}
+          className="size-8 shrink-0"
           onPointerDown={onPointerDown}
           onPointerUp={() => endPress(true)}
           onPointerLeave={() => endPress(false)}
           onClick={onClick}
           disabled={mode === "transcribing" || mode === "structuring"}
         >
-          <Icon
-            className={cn(
-              "size-4",
-              (mode === "transcribing" || mode === "structuring") && "animate-spin",
-            )}
-          />
+          {mode === "idle" ? (
+            <Mic className="size-4" />
+          ) : (
+            <ActivityOrb
+              state={
+                mode === "listening"
+                  ? "listening"
+                  : mode === "transcribing"
+                    ? "composing"
+                    : "shaping"
+              }
+              theme={mode === "listening" ? "dark" : "auto"}
+              aria-hidden="true"
+            />
+          )}
         </Button>}
       />
       <TooltipContent>
