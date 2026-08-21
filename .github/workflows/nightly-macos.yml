@@ -44,7 +44,7 @@ jobs:
           ELECTROBUN_CREATE_DMG: "1"
           ELECTROBUN_DEVELOPER_ID: "-"
           NODE_OPTIONS: --max-old-space-size=4096
-        run: bun run build:app
+        run: bun run build:nightly
 
       - name: Verify and stage nightly package
         shell: bash
@@ -70,13 +70,15 @@ jobs:
             | awk '/Apple_HFS|Apple_APFS/ { print $1; exit }')"
           test -n "$device"
 
-          app="$mount_dir/C2.app"
+          app="$mount_dir/C2 Nightly.app"
           executable="$app/Contents/MacOS/launcher"
           test -d "$app"
           test -L "$mount_dir/Applications"
-          test "$(plutil -extract CFBundleName raw -- "$app/Contents/Info.plist")" = "C2"
-          test "$(plutil -extract CFBundleDisplayName raw -- "$app/Contents/Info.plist")" = "C2"
-          test "$(plutil -extract CFBundleIdentifier raw -- "$app/Contents/Info.plist")" = "dev.codetwo.app"
+          test "$(plutil -extract CFBundleName raw -- "$app/Contents/Info.plist")" = "C2 Nightly"
+          test "$(plutil -extract CFBundleDisplayName raw -- "$app/Contents/Info.plist")" = "C2 Nightly"
+          test "$(plutil -extract CFBundleIdentifier raw -- "$app/Contents/Info.plist")" = "dev.codetwo.app.nightly"
+          test ! -e "$app/Contents/Helpers/CodeTwoUpdateHelper"
+          ! plutil -extract SUFeedURL raw -- "$app/Contents/Info.plist" >/dev/null 2>&1
           codesign --verify --deep --strict "$app"
           test "$(lipo -archs "$executable")" = "arm64"
 

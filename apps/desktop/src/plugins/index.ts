@@ -1,6 +1,13 @@
 export { PluginManagerPage } from "./PluginManagerPage";
+export {
+  createPluginManagerLabels,
+  localizePluginManagerCatalog,
+} from "./localization";
 export { PluginUiSlot } from "./PluginUiSlot";
-export { activePluginLanguageServers, activePluginUiContributions } from "./contributions";
+export {
+  activePluginLanguageServers,
+  activePluginUiContributions,
+} from "./contributions";
 export type {
   ActivePluginLanguageServer,
   ActivePluginUiContribution,

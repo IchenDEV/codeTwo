@@ -8,9 +8,10 @@ const electrobunHost = readFileSync(
 const dockSource = readFileSync(new URL("../src/dock/Dock.tsx", import.meta.url), "utf8");
 
 describe("macOS window chrome contract", () => {
-  test("keeps the traffic lights lowered on the 48px titlebar", () => {
+  test("centers the traffic lights on the 48px titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
-    expect(electrobunHost).toContain("trafficLightOffset: { x: 14, y: 27 }");
+    expect(electrobunHost).not.toContain("trafficLightOffset:");
+    expect(electrobunHost).toContain("mainWindow.setWindowButtonPosition(24, 17)");
   });
 
   test("keeps the native macOS window shadow", () => {

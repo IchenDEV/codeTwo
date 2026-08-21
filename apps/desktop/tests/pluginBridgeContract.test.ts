@@ -23,7 +23,8 @@ describe("plugin bridge contract", () => {
       'call<ManagedPluginCatalog>("plugins.catalog", { scope: managedPluginScopeToWire(scope) }, null)',
     );
     expect(bridge).toContain('call("lsp.set_runtime_enabled", { enabled }, projectPath)');
-    expect(client).toContain("rpc.request.call({ name, args, projectPath })");
+    expect(client).toContain('rpc.request("call", { name, args, projectPath })');
+    expect(client).not.toContain("rpc.request.call(");
     expect(main).toContain("new PureBunHost(dataDir");
     expect(main).toContain("host.call(name, args, projectPath)");
     expect(`${main}\n${config}\n${prepare}`).not.toContain("codetwo-desktop-host");

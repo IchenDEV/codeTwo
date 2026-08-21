@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export type PluginManagerTab = "plugins" | "components" | "marketplace";
 
 export type PluginManagerSource = "builtin" | "host" | "bundle";
@@ -5,8 +7,7 @@ export type PluginManagerSource = "builtin" | "host" | "bundle";
 export type PluginManagerScopeKind = "user" | "project";
 
 export type PluginManagerScope =
-  | { kind: "user" }
-  | { kind: "project"; projectPath: string };
+  { kind: "user" } | { kind: "project"; projectPath: string };
 
 export interface PluginManagerProject {
   path: string;
@@ -16,12 +17,7 @@ export interface PluginManagerProject {
 export type PluginManagerOverride = "inherit" | "enabled" | "disabled";
 
 export type PluginManagerStatus =
-  | "disabled"
-  | "pending"
-  | "loading"
-  | "active"
-  | "failed"
-  | "disposed";
+  "disabled" | "pending" | "loading" | "active" | "failed" | "disposed";
 
 export interface PluginManagerActiveResource {
   id: string;
@@ -137,7 +133,11 @@ export interface PluginManagerChangePlan {
   request: PluginManagerChangeRequest;
   summary: string;
   requiresConfirmation: boolean;
-  affectedPlugins?: Array<{ id: string; name: string; desiredState?: PluginManagerDesiredState }>;
+  affectedPlugins?: Array<{
+    id: string;
+    name: string;
+    desiredState?: PluginManagerDesiredState;
+  }>;
   activeResources?: PluginManagerActiveResource[];
   warnings?: string[];
 }
@@ -219,6 +219,36 @@ export interface PluginManagerLabels {
   commands: string;
   services: string;
   activeResources: string;
+  scope: string;
+  pluginList: string;
+  componentList: string;
+  projectState: (name: string) => string;
+  noDescription: string;
+  configurationHint: string;
+  plugin: string;
+  source: string;
+  uiSlot: string;
+  affectedPlugins: string;
+  missingCount: (count: number) => string;
+  status: Record<PluginManagerStatus, string>;
+  sourceNames: Record<PluginManagerSource, string>;
+  contribution: (id: string, fallback: string) => string;
+  componentKind: (kind: string) => string;
+  installedBundle: string;
+  dataOnly: string;
+  invalidConfigurationObject: string;
+  githubRepositoryRequired: string;
+  changeApplied: (name: string, state: PluginManagerDesiredState) => string;
+  changeSummary: (
+    kind: "plugin" | "component",
+    name: string,
+    state: PluginManagerDesiredState,
+  ) => string;
+  marketplaceInstalled: string;
+  settingsReset: string;
+  bundleEnabled: (name: string, enabled: boolean) => string;
+  bundleTrusted: (name: string, trusted: boolean) => string;
+  bundleUninstalled: (name: string, keepData: boolean) => string;
   confirmTitle: string;
   confirm: string;
   cancel: string;
@@ -228,22 +258,32 @@ export interface PluginManagerPageProps {
   plugins: PluginManagerPlugin[];
   components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
+  headerLeadingAction?: ReactNode;
   scope: PluginManagerScope;
   projects?: PluginManagerProject[];
   initialTab?: PluginManagerTab;
   recovery?: PluginManagerRecovery;
   labels?: Partial<PluginManagerLabels>;
   onScopeChange: (scope: PluginManagerScope) => void;
-  onPlanChange: (request: PluginManagerChangeRequest) => Promise<PluginManagerChangePlan>;
+  onPlanChange: (
+    request: PluginManagerChangeRequest,
+  ) => Promise<PluginManagerChangePlan>;
   onApplyChange: (plan: PluginManagerChangePlan) => Promise<void>;
   onSaveConfig: (request: PluginManagerConfigRequest) => Promise<void>;
-  onInstallMarketplaceItem: (request: PluginManagerInstallRequest) => Promise<void>;
+  onInstallMarketplaceItem: (
+    request: PluginManagerInstallRequest,
+  ) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
-  onImportGithub?: (repository: string) => Promise<PluginManagerBundleInstallResult>;
+  onImportGithub?: (
+    repository: string,
+  ) => Promise<PluginManagerBundleInstallResult>;
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
   /** Advanced compatibility tools for local marketplace manifests and scaffolds. */
   onOpenBundleTools?: () => void;
-  onResetPlugin?: (pluginId: string, scope: PluginManagerScope) => Promise<void>;
+  onResetPlugin?: (
+    pluginId: string,
+    scope: PluginManagerScope,
+  ) => Promise<void>;
 }

@@ -2,9 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Archive, CircleAlert, Folder, Keyboard, PanelLeft } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
-import {
-  type CanvasBlockRuntime,
-} from "./skillInline";
+import { type CanvasBlockRuntime } from "./skillInline";
 import { deriveCanvasManifest } from "./canvas/manifest";
 import type { CanvasEnvelope as LocalCanvasEnvelope } from "./canvas/types";
 import {
@@ -38,6 +36,7 @@ import {
   deleteSkill,
   describeBlock,
   discardSessionWorktree,
+  fallbackProviders,
   getKeymap,
   getTranscriptPage,
   gitCheckpoint,
@@ -161,6 +160,7 @@ import {
   structureBrief,
   usageBySession,
 } from "./bridge";
+import { loadProviderRegistry } from "./providers/registry";
 import { makeTranscriptHandler } from "./voice/VoiceButton";
 import { PluginHub } from "./market/Market";
 import {
@@ -169,6 +169,8 @@ import {
   activePluginLanguageServers,
   activePluginUiContributions,
   buildPluginManagerCatalog,
+  createPluginManagerLabels,
+  localizePluginManagerCatalog,
   normalizePluginProjectPath,
   pluginManagerComponentEnabled,
   toManagedPluginScope,
@@ -178,7 +180,10 @@ import {
   type PluginManagerChangeRequest,
   type PluginManagerScope,
 } from "./plugins";
-import { applyPluginManagerChange, planPluginManagerChange } from "./plugins/lifecycle";
+import {
+  applyPluginManagerChange,
+  planPluginManagerChange,
+} from "./plugins/lifecycle";
 import { SettingsPage, type SettingsTab } from "./settings/SettingsPage";
 import { SourceControlModal } from "./git/SourceControl";
 import { workspaceStateForCwd, type WorkspaceLoadState } from "./git/state";
@@ -216,7 +221,11 @@ import {
 import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
 import type { SceneEditorRequest } from "./session/SceneEditor";
 import { SceneStudio } from "./session/SceneStudio";
-import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
+import {
+  SceneBanner,
+  sceneBannerFromEvent,
+  type SceneBannerState,
+} from "./session/SceneBanner";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
 import { ProjectActionDialog } from "./session/ProjectActionDialog";
 import { projectActionBindings } from "./session/projectActions";
@@ -292,14 +301,29 @@ import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 
-import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
+import {
+  actionForEvent,
+  comboFromEvent,
+  isModifierOnly,
+  keyHint,
+} from "./keys";
 import { useToast } from "./ui/toast";
 import { useLanguage, useT } from "./i18n";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { usePersistedNumber } from "@/lib/persist";
 import { cn } from "@/lib/utils";
 
@@ -334,7 +358,9 @@ interface PendingPolicyRequest {
   authoritative: ExecutionPolicy;
 }
 
-function localCanvasManifest(envelope: LocalCanvasEnvelope): import("./bridge").CanvasManifest {
+function localCanvasManifest(
+  envelope: LocalCanvasEnvelope,
+): import("./bridge").CanvasManifest {
   const manifest = deriveCanvasManifest(envelope.elements);
   return {
     objects: manifest.objects.map((object) => ({
@@ -345,17 +371,30 @@ function localCanvasManifest(envelope: LocalCanvasEnvelope): import("./bridge").
       layer: object.layer,
       arrowStart: object.arrowStart,
       arrowEnd: object.arrowEnd,
-      assetId: object.type === "image"
+      assetId:
+        object.type === "image"
         ? (() => {
-            const fileId = (envelope.elements.find((element) => element.id === object.id) as { fileId?: string } | undefined)?.fileId;
-            return envelope.assetRefs.find((asset) => asset.fileId === fileId)?.ref ?? fileId ?? null;
+              const fileId = (
+                envelope.elements.find(
+                  (element) => element.id === object.id,
+                ) as { fileId?: string } | undefined
+              )?.fileId;
+              return (
+                envelope.assetRefs.find((asset) => asset.fileId === fileId)
+                  ?.ref ??
+                fileId ??
+                null
+              );
           })()
         : null,
     })),
   };
 }
 
-function localCanvasScene(envelope: LocalCanvasEnvelope, assets: readonly CanvasStaticAsset[]): CanvasSceneEnvelope {
+function localCanvasScene(
+  envelope: LocalCanvasEnvelope,
+  assets: readonly CanvasStaticAsset[],
+): CanvasSceneEnvelope {
   return {
     engine: envelope.engine,
     engineVersion: envelope.engineVersion,
@@ -389,7 +428,10 @@ const EMPTY_GIT_WORKSPACE: GitWorkspaceData = {
 const EMPTY_CHECKPOINTS: Checkpoint[] = [];
 
 function slug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 /** A header icon with a tooltip — the always-visible way into a dock surface. */
@@ -410,7 +452,8 @@ function IconAction({
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<Button
+        render={
+          <Button
           variant={active ? "secondary" : "ghost"}
           size="icon"
           aria-label={label}
@@ -418,7 +461,8 @@ function IconAction({
           onClick={onClick}
         >
           <Icon className="size-4" />
-        </Button>}
+          </Button>
+        }
       />
       <TooltipContent>
         {label}
@@ -445,12 +489,20 @@ const EMPTY_MANAGED_CATALOG: ManagedPluginCatalog = {
 const EMPTY_SCENE_BY_SESSION = new Map<string, string>();
 
 export default function App() {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providers, setProviders] = useState<ProviderInfo[]>(fallbackProviders);
+  const [providersStatus, setProvidersStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const providerRegistryRequestRef = useRef(0);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [managedUserCatalog, setManagedUserCatalog] = useState<ManagedPluginCatalog | null>(null);
-  const [managedProjectCatalogs, setManagedProjectCatalogs] = useState<Record<string, ManagedPluginCatalog>>({});
-  const [pluginManagerScope, setPluginManagerScope] = useState<PluginManagerScope>({ kind: "user" });
+  const [managedUserCatalog, setManagedUserCatalog] =
+    useState<ManagedPluginCatalog | null>(null);
+  const [managedProjectCatalogs, setManagedProjectCatalogs] = useState<
+    Record<string, ManagedPluginCatalog>
+  >({});
+  const [pluginManagerScope, setPluginManagerScope] =
+    useState<PluginManagerScope>({ kind: "user" });
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [archivedSessions, setArchivedSessions] = useState<SessionInfo[]>([]);
   // Row 2 of every rail entry. Refreshed when a turn ends rather than per streamed chunk — the
@@ -460,11 +512,15 @@ export default function App() {
   const [cwd, setCwd] = useState(".");
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [sandbox, setSandboxState] = useState<Sandbox>("workspace_write");
-  const [pendingPolicySessions, setPendingPolicySessions] = useState<Set<string>>(
-    () => new Set(),
+  const [pendingPolicySessions, setPendingPolicySessions] = useState<
+    Set<string>
+  >(() => new Set());
+  const [worktreeBase, setWorktreeBase] = useState<WorktreeBaselineKind | null>(
+    null,
   );
-  const [worktreeBase, setWorktreeBase] = useState<WorktreeBaselineKind | null>(null);
-  const [worktreeOptions, setWorktreeOptions] = useState<WorktreeBaselineOption[]>([]);
+  const [worktreeOptions, setWorktreeOptions] = useState<
+    WorktreeBaselineOption[]
+  >([]);
   const [worktreeOptionsLoading, setWorktreeOptionsLoading] = useState(false);
   const worktreeOptionsRequestRef = useRef(0);
   const [planMode, setPlanMode] = useState(false);
@@ -476,19 +532,30 @@ export default function App() {
     shell: SessionCreationShell;
   } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>([]);
-  const [runningSessions, setRunningSessions] = useState<Set<string>>(() => new Set());
+  const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>(
+    [],
+  );
+  const [runningSessions, setRunningSessions] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [transcriptNextBefore, setTranscriptNextBefore] = useState<number | null>(null);
+  const [transcriptNextBefore, setTranscriptNextBefore] = useState<
+    number | null
+  >(null);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const transcriptScroll = useTranscriptScroll(activeSession, turns);
   const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
   const permission = permissionQueue[0] ?? null;
-  const [skillDraft, setSkillDraft] = useState<{ name: string; text: string } | null>(null);
+  const [skillDraft, setSkillDraft] = useState<{
+    name: string;
+    text: string;
+  } | null>(null);
   /** R2 "save as template": the prompt text the TemplateDialog opens over. */
   const [templateDraft, setTemplateDraft] = useState<string | null>(null);
-  const [gitWorkspace, setGitWorkspace] = useState<WorkspaceLoadState<GitWorkspaceData>>({
+  const [gitWorkspace, setGitWorkspace] = useState<
+    WorkspaceLoadState<GitWorkspaceData>
+  >({
     cwd: ".",
     loading: true,
     value: EMPTY_GIT_WORKSPACE,
@@ -498,7 +565,8 @@ export default function App() {
   // type in.
   const [browserUrl, setBrowserUrl] = useState("about:blank");
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("general");
+  const [settingsInitialTab, setSettingsInitialTab] =
+    useState<SettingsTab>("general");
   const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showPluginHub, setShowPluginHub] = useState(false);
@@ -516,7 +584,8 @@ export default function App() {
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
   const [showFiles, setShowFiles] = useState(false);
   const [showWorkspaceSearch, setShowWorkspaceSearch] = useState(false);
-  const [quickQuotaReport, setQuickQuotaReport] = useState<ProviderQuotaReport | null>(null);
+  const [quickQuotaReport, setQuickQuotaReport] =
+    useState<ProviderQuotaReport | null>(null);
   const [quickQuotaLoading, setQuickQuotaLoading] = useState(true);
   const quickQuotaRequestRef = useRef(0);
   const [showMissionControl, setShowMissionControl] = useState(false);
@@ -527,7 +596,9 @@ export default function App() {
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
   const dockTabRef = useRef<DockTab | null>(null);
   const dockFollowRef = useRef<FollowState>(initialFollowState);
-  const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(null);
+  const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(
+    null,
+  );
   const [docEmpty, setDocEmpty] = useState(true);
   // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
@@ -537,7 +608,8 @@ export default function App() {
   const [scenePendingFields, setScenePendingFields] = useState<string[]>([]);
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [showSceneStudio, setShowSceneStudio] = useState(false);
-  const [sceneEditorRequest, setSceneEditorRequest] = useState<SceneEditorRequest | null>(null);
+  const [sceneEditorRequest, setSceneEditorRequest] =
+    useState<SceneEditorRequest | null>(null);
   const [sceneEscalation, setSceneEscalation] = useState<{
     reference: string;
     kind: "soft" | "restart" | "pipeline" | "pipeline_new";
@@ -551,7 +623,8 @@ export default function App() {
   // ---- R9 pipeline instances (docs/scenes.md §Pipelines) ----
   const [pipelines, setPipelines] = useState<PipelineInfo[]>([]);
   /** The active session's instance projection; the stage track renders only while this is set. */
-  const [pipelineDetail, setPipelineDetail] = useState<PipelineInstanceDetail | null>(null);
+  const [pipelineDetail, setPipelineDetail] =
+    useState<PipelineInstanceDetail | null>(null);
   /** Scene to bind to the next created session (full-apply handshake). */
   const pendingSceneRef = useRef<string | null>(null);
   /** Per-session scene memory so switching sessions restores each one's scene. */
@@ -563,7 +636,10 @@ export default function App() {
   /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
   const sceneEffortAppliedRef = useRef(new Set<string>());
   /** Stage binding for the next created session (advance-in-new-session handshake). */
-  const pendingPipelineBindRef = useRef<{ instanceId: string; stageId: string } | null>(null);
+  const pendingPipelineBindRef = useRef<{
+    instanceId: string;
+    stageId: string;
+  } | null>(null);
   /** Delegation row awaiting its session id (issue delegated → session created on first Run). */
   const pendingDelegationRef = useRef<number | null>(null);
   useEffect(() => {
@@ -578,20 +654,26 @@ export default function App() {
     status: "not production-enabled",
   });
   const canvasDraftsRef = useRef(new Map<string, CanvasDraft>());
-  const canvasAssetsRef = useRef(new Map<string, Map<string, CanvasStaticAsset>>());
+  const canvasAssetsRef = useRef(
+    new Map<string, Map<string, CanvasStaticAsset>>(),
+  );
   const canvasTombstonesRef = useRef(new Set<string>());
   const canvasPurgeRequestedRef = useRef(new Set<string>());
   const canvasFrozenRef = useRef(new Set<string>());
   const insertCanvasRef = useRef<(() => Promise<void>) | null>(null);
-  const insertCanvasDraftRef = useRef<((
+  const insertCanvasDraftRef = useRef<
+    | ((
     draft: CanvasDraft,
     options?: {
       pixelPolicy?: CanvasPixelPolicy;
       deliveryError?: string;
       deliveryErrorKind?: "provider_image" | "other";
     },
-  ) => void) | null>(null);
-  const restoreCanvasDocumentRef = useRef<((
+      ) => void)
+    | null
+  >(null);
+  const restoreCanvasDocumentRef = useRef<
+    | ((
     doc: readonly DocBlock[],
     drafts: ReadonlyMap<string, CanvasDraft>,
     options?: {
@@ -599,10 +681,19 @@ export default function App() {
       deliveryError?: string;
       deliveryErrorKind?: "provider_image" | "other";
     },
-  ) => void) | null>(null);
-  const freezeCanvasesRef = useRef<((doc: readonly DocBlock[]) => Promise<DocBlock[]>) | null>(null);
+      ) => void)
+    | null
+  >(null);
+  const freezeCanvasesRef = useRef<
+    ((doc: readonly DocBlock[]) => Promise<DocBlock[]>) | null
+  >(null);
   const canvasDeliveryErrorRef = useRef<
-    ((doc: readonly DocBlock[], message: string, kind: "provider_image" | "other") => void) | null
+    | ((
+        doc: readonly DocBlock[],
+        message: string,
+        kind: "provider_image" | "other",
+      ) => void)
+    | null
   >(null);
   // Models are reported by the agent at session/new, so they arrive as an event rather than a call.
   const [models, setModels] = useState<ModelChoice[]>([]);
@@ -614,7 +705,9 @@ export default function App() {
   const [configOptions, setConfigOptions] = useState<ConfigOptionInfo[]>([]);
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
-  const [contextWindows, setContextWindows] = useState<ContextWindowBySession>({});
+  const [contextWindows, setContextWindows] = useState<ContextWindowBySession>(
+    {},
+  );
   // Per-session cost/burn for the Composer statusline (R7). The core's `usage_by_session`
   // command lands in a later wave; until then the bridge feature-detects and this stays null,
   // which hides the cost segment entirely.
@@ -636,9 +729,16 @@ export default function App() {
         setSessionUsage(null);
         return;
       }
-      samples.push({ at: Date.now(), input: usage.input_tokens, output: usage.output_tokens });
+      samples.push({
+        at: Date.now(),
+        input: usage.input_tokens,
+        output: usage.output_tokens,
+      });
       if (samples.length > 16) samples.shift();
-      setSessionUsage({ costUsd: usage.cost_usd, burnRate: deriveBurnRate(samples) });
+      setSessionUsage({
+        costUsd: usage.cost_usd,
+        burnRate: deriveBurnRate(samples),
+      });
     };
     void poll();
     const timer = setInterval(() => void poll(), 30_000);
@@ -651,9 +751,12 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
-  const [projectBootstrapComplete, setProjectBootstrapComplete] = useState(false);
+  const [projectBootstrapComplete, setProjectBootstrapComplete] =
+    useState(false);
   useEffect(() => {
-    setCallProjectPath(activeProject ? normalizePluginProjectPath(activeProject) : null);
+    setCallProjectPath(
+      activeProject ? normalizePluginProjectPath(activeProject) : null,
+    );
   }, [activeProject]);
   const workspaceCwd = cwd || ".";
   const currentGitWorkspace = workspaceStateForCwd(
@@ -700,16 +803,30 @@ export default function App() {
   const fileRevealRequestRef = useRef(0);
   // Composer geometry: how tall the document area may grow before it scrolls, and whether it has
   // taken over the whole column for long-form authoring.
-  const [composerH, setComposerH] = usePersistedNumber("codetwo.composerHeight", 190);
-  const [dockWidth, setDockWidth] = usePersistedNumber("codetwo.dockWidth", 440);
-  const [railWidth, setRailWidth] = usePersistedNumber("codetwo.railWidth", 288);
-  const [railCollapsedRaw, setRailCollapsedRaw] = usePersistedNumber("codetwo.railCollapsed", 0);
+  const [composerH, setComposerH] = usePersistedNumber(
+    "codetwo.composerHeight",
+    190,
+  );
+  const [dockWidth, setDockWidth] = usePersistedNumber(
+    "codetwo.dockWidth",
+    440,
+  );
+  const [railWidth, setRailWidth] = usePersistedNumber(
+    "codetwo.railWidth",
+    288,
+  );
+  const [railCollapsedRaw, setRailCollapsedRaw] = usePersistedNumber(
+    "codetwo.railCollapsed",
+    0,
+  );
   const railCollapsed = railCollapsedRaw !== 0;
   const toggleRail = useCallback(
     () => setRailCollapsedRaw(railCollapsed ? 0 : 1),
     [railCollapsed, setRailCollapsedRaw],
   );
-  const [narrowLayout, setNarrowLayout] = useState(() => window.innerWidth < 720);
+  const [narrowLayout, setNarrowLayout] = useState(
+    () => window.innerWidth < 720,
+  );
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
   useEffect(() => {
@@ -740,7 +857,10 @@ export default function App() {
   // and the choice persists.
   const [docModeRaw, setDocModeRaw] = usePersistedNumber("codetwo.docMode", 1);
   const docMode = docModeRaw !== 0;
-  const setDocMode = useCallback((v: boolean) => setDocModeRaw(v ? 1 : 0), [setDocModeRaw]);
+  const setDocMode = useCallback(
+    (v: boolean) => setDocModeRaw(v ? 1 : 0),
+    [setDocModeRaw],
+  );
   const mainRef = useRef<HTMLElement | null>(null);
   const sessionWorkspaceRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -756,7 +876,9 @@ export default function App() {
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const editorRevisionRef = useRef(0);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
-  const insertAnnotationRef = useRef<((a: Annotation, context: string) => void) | null>(null);
+  const insertAnnotationRef = useRef<
+    ((a: Annotation, context: string) => void) | null
+  >(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
@@ -765,7 +887,9 @@ export default function App() {
   >(null);
   const openSkillPickerRef = useRef<(() => void) | null>(null);
   const insertSkillRef = useRef<((skill: SkillInfo) => void) | null>(null);
-  const insertBriefRef = useRef<((scene: SceneInfo, values?: Record<string, string>) => void) | null>(null);
+  const insertBriefRef = useRef<
+    ((scene: SceneInfo, values?: Record<string, string>) => void) | null
+  >(null);
   // R12: issue references insert as dedicated provenance-carrying blocks, not plain text.
   const insertIssueRef = useRef<
     ((issue: Issue, context: string, delegatedScene?: string) => void) | null
@@ -775,14 +899,18 @@ export default function App() {
    * synchronous reset (mirror of `pendingSceneRef`; the editor itself survives New — only a
    * locale change remounts it — so the next tick is the "editor ready" point).
    */
-  const pendingIssueInsertRef = useRef<
-    { issue: Issue; context: string; delegatedScene: string } | null
-  >(null);
+  const pendingIssueInsertRef = useRef<{
+    issue: Issue;
+    context: string;
+    delegatedScene: string;
+  } | null>(null);
   const activeSessionRef = useRef<string | null>(null);
   // Event handlers and async continuations above the catalog projection need the same live policy
   // as rendered controls. Bootstrap closed: calling an unloadable command before the catalog and
   // active project realm agree is less safe than waiting one render for the policy snapshot.
-  const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(() => false);
+  const componentEnabledRef = useRef<(id: BuiltinUiComponentId) => boolean>(
+    () => false,
+  );
   // ---- R4 plan-as-document (docs/design/scenes-impl-frontend.md Item 3) ----
   // Plan markdown waiting on the Replace/Append/Cancel decision because the composer isn't empty.
   const [planDocPending, setPlanDocPending] = useState<string | null>(null);
@@ -857,7 +985,11 @@ export default function App() {
     const updates: Promise<unknown>[] = [];
     if (componentEnabledRef.current("memory.settings")) {
       updates.push(
-        setSessionMemoryPolicy(session, memoryReadRef.current, memoryWriteRef.current),
+        setSessionMemoryPolicy(
+          session,
+          memoryReadRef.current,
+          memoryWriteRef.current,
+        ),
       );
     }
     if (componentEnabledRef.current("scenes.surface")) {
@@ -867,19 +999,27 @@ export default function App() {
   }, []);
   const pendingCreationRef = useRef<PendingCreation | null>(null);
   // A picker change is provisional until the core publishes its durable correlated receipt.
-  const pendingPolicyRequestsRef = useRef<Map<string, PendingPolicyRequest>>(new Map());
+  const pendingPolicyRequestsRef = useRef<Map<string, PendingPolicyRequest>>(
+    new Map(),
+  );
   const pendingPolicyBySessionRef = useRef<Map<string, string>>(new Map());
   // Preserve a policy event that races a list refresh; the event is newer than that request's
   // snapshot and must remain the authoritative rail/session projection.
-  const authoritativePoliciesRef = useRef<Map<string, ExecutionPolicy>>(new Map());
+  const authoritativePoliciesRef = useRef<Map<string, ExecutionPolicy>>(
+    new Map(),
+  );
   const policyVersionsRef = useRef<Map<string, number>>(new Map());
   // Prompt acknowledgements are broadcast to every client. Only the exact request initiated by
   // this window may clear its editor draft.
-  const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(new Map());
+  const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(
+    new Map(),
+  );
   // TurnStarted consumes the pending entry, but a provider may reject images asynchronously after
   // the Composer has already cleared. Keep immutable refs until the terminal event so retry can
   // duplicate them without recovering a mutable draft.
-  const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(new Map());
+  const acceptedCanvasRequestsRef = useRef<Map<string, PendingPromptRequest>>(
+    new Map(),
+  );
   // A provider picker selection after an asynchronous Canvas image rejection stages the retry in
   // a fresh session; an existing ACP session keeps its original provider for its lifetime.
   const canvasProviderRetrySessionRef = useRef<string | null>(null);
@@ -897,17 +1037,22 @@ export default function App() {
   const sessionActivitiesRef = useRef<Map<string, SessionActivity>>(new Map());
   // A null value means an authoritative TurnStarted arrived without a correlation id. Presence in
   // the map still matters: a later rejection for some local request must not stop that foreign turn.
-  const runningPromptRequestsRef = useRef<Map<string, string | null>>(new Map());
+  const runningPromptRequestsRef = useRef<Map<string, string | null>>(
+    new Map(),
+  );
   const latestTurnRequestIdsRef = useRef<Map<string, string>>(new Map());
   const turnStartVersionsRef = useRef<Map<string, number>>(new Map());
   const gitRefreshSeq = useRef(0);
   const checkpointRefreshSeq = useRef(0);
 
-  const finishPolicyRequest = useCallback((requestId: string): PendingPolicyRequest | null => {
+  const finishPolicyRequest = useCallback(
+    (requestId: string): PendingPolicyRequest | null => {
     const pending = pendingPolicyRequestsRef.current.get(requestId);
     if (!pending) return null;
     pendingPolicyRequestsRef.current.delete(requestId);
-    if (pendingPolicyBySessionRef.current.get(pending.session) === requestId) {
+      if (
+        pendingPolicyBySessionRef.current.get(pending.session) === requestId
+      ) {
       pendingPolicyBySessionRef.current.delete(pending.session);
       setPendingPolicySessions((current) => {
         if (!current.has(pending.session)) return current;
@@ -917,19 +1062,28 @@ export default function App() {
       });
     }
     return pending;
-  }, []);
+    },
+    [],
+  );
 
   const applyAuthoritativeExecutionPolicy = useCallback(
     (session: string, policy: ExecutionPolicy) => {
       authoritativePoliciesRef.current.set(session, policy);
-      policyVersionsRef.current.set(session, (policyVersionsRef.current.get(session) ?? 0) + 1);
+      policyVersionsRef.current.set(
+        session,
+        (policyVersionsRef.current.get(session) ?? 0) + 1,
+      );
       // If another client wins while our request is in flight, a later local rejection restores
       // this newest acknowledged value, not the value that preceded the remote change.
       for (const pending of pendingPolicyRequestsRef.current.values()) {
         if (pending.session === session) pending.authoritative = policy;
       }
-      setSessions((current) => withSessionExecutionPolicy(current, session, policy));
-      setArchivedSessions((current) => withSessionExecutionPolicy(current, session, policy));
+      setSessions((current) =>
+        withSessionExecutionPolicy(current, session, policy),
+      );
+      setArchivedSessions((current) =>
+        withSessionExecutionPolicy(current, session, policy),
+      );
       if (activeSessionRef.current === session) {
         setMode(policy.mode);
         setSandboxState(policy.sandbox);
@@ -938,19 +1092,29 @@ export default function App() {
     [],
   );
 
-  const restoreRejectedExecutionPolicy = useCallback((pending: PendingPolicyRequest) => {
+  const restoreRejectedExecutionPolicy = useCallback(
+    (pending: PendingPolicyRequest) => {
     if (activeSessionRef.current !== pending.session) return;
     setMode(pending.authoritative.mode);
     setSandboxState(pending.authoritative.sandbox);
-  }, []);
+    },
+    [],
+  );
 
   // Refs are updated before React schedules the render so transcript promises always see the same
   // running truth as the event handler that just mutated it.
-  const updateRunningSession = useCallback((session: string, isRunning: boolean) => {
-    const next = withRunningSession(runningSessionsRef.current, session, isRunning);
+  const updateRunningSession = useCallback(
+    (session: string, isRunning: boolean) => {
+      const next = withRunningSession(
+        runningSessionsRef.current,
+        session,
+        isRunning,
+      );
     runningSessionsRef.current = next;
     setRunningSessions(next);
-  }, []);
+    },
+    [],
+  );
 
   const updateTranscriptCursor = useCallback((nextBefore: number | null) => {
     transcriptNextBeforeRef.current = nextBefore;
@@ -1006,7 +1170,10 @@ export default function App() {
         state.autoTab
           ? {
               surface: state.autoTab,
-              file: state.autoTab === event.hint.surface ? event.hint.file : undefined,
+              file:
+                state.autoTab === event.hint.surface
+                  ? event.hint.file
+                  : undefined,
             }
           : null,
       );
@@ -1049,14 +1216,19 @@ export default function App() {
    * id and an explicit error affordance; choosing structure-only remains a user action. */
   const restoreAcceptedCanvasForProviderError = useCallback(
     async (session: string, request: PendingPromptRequest, message: string) => {
-      const refs = canvasRetryRefsForTerminal("error", message, request.canvasRefs);
+      const refs = canvasRetryRefsForTerminal(
+        "error",
+        message,
+        request.canvasRefs,
+      );
       if (refs.length === 0) return;
       if (!restoreCanvasDocumentRef.current) {
         throw new Error("Composer retry surface is unavailable");
       }
       const restored: CanvasDraft[] = [];
       try {
-        for (const ref of refs) restored.push(await canvasDuplicate(ref.id, ref.revision));
+        for (const ref of refs)
+          restored.push(await canvasDuplicate(ref.id, ref.revision));
       } catch (error) {
         // A failed duplicate must not leave an invisible mutable head behind. Immutable history
         // remains owned by core; only the newly created retry heads are tombstoned and purged.
@@ -1072,15 +1244,22 @@ export default function App() {
         );
         throw error;
       }
-      const replacements = new Map(refs.map((ref, index) => [
+      const replacements = new Map(
+        refs.map((ref, index) => [
         ref.id,
         { id: restored[index]!.id, revision: restored[index]!.revision },
-      ]));
+        ]),
+      );
       const retryDoc = canvasRetryDocument(request.submittedDoc, replacements);
-      const restoredDrafts = new Map(restored.map((draft) => [draft.id, draft]));
+      const restoredDrafts = new Map(
+        restored.map((draft) => [draft.id, draft]),
+      );
       for (const draft of restored) {
         canvasDraftsRef.current.set(draft.id, draft);
-        canvasAssetsRef.current.set(draft.id, new Map(draft.assets.map((asset) => [asset.id, asset])));
+        canvasAssetsRef.current.set(
+          draft.id,
+          new Map(draft.assets.map((asset) => [asset.id, asset])),
+        );
       }
       restoreCanvasDocumentRef.current(retryDoc, restoredDrafts, {
         deliveryError: message,
@@ -1101,7 +1280,9 @@ export default function App() {
     pendingCreationRef.current = null;
     setPendingSessionRunning(false);
     if (pending) {
-      setTurns((turns) => withoutUnacceptedTurn(turns, pending.promptRequestId));
+      setTurns((turns) =>
+        withoutUnacceptedTurn(turns, pending.promptRequestId),
+      );
     }
   }, []);
 
@@ -1131,7 +1312,9 @@ export default function App() {
         sessionPreviews(),
       ]);
       const allIncoming = [...active, ...archived];
-      const hasAuthoritativeActivity = allIncoming.some((session) => session.activity !== undefined);
+      const hasAuthoritativeActivity = allIncoming.some(
+        (session) => session.activity !== undefined,
+      );
       const merge = (items: SessionInfo[]) =>
         items.map((session) => {
           let next = session;
@@ -1169,11 +1352,14 @@ export default function App() {
       const all = [...nextActive, ...nextArchived];
       if (hasAuthoritativeActivity) {
         const busy = new Set(
-          all.filter((session) => activityIsBusy(session.activity)).map((session) => session.id),
+          all
+            .filter((session) => activityIsBusy(session.activity))
+            .map((session) => session.id),
         );
         // A locally submitted draft remains optimistic until the core publishes its first
         // activity revision / TurnStarted; a concurrent stale list read cannot undo that shell.
-        for (const session of pendingPromptRequestsRef.current.keys()) busy.add(session);
+        for (const session of pendingPromptRequestsRef.current.keys())
+          busy.add(session);
         runningSessionsRef.current = busy;
         setRunningSessions(busy);
         setPermissionQueue(permissionsFromSessions(all));
@@ -1205,9 +1391,12 @@ export default function App() {
 
   const updateProjectWorktreeMode = useCallback(
     async (path: string, nextMode: ProjectWorktreeMode | null) => {
-      const patchMode = (mode: ProjectWorktreeMode | null) => (items: Project[]) =>
+      const patchMode =
+        (mode: ProjectWorktreeMode | null) => (items: Project[]) =>
         items.map((project) =>
-          project.path === path ? { ...project, default_worktree_mode: mode } : project,
+            project.path === path
+              ? { ...project, default_worktree_mode: mode }
+              : project,
         );
 
       projectMutationVersionRef.current += 1;
@@ -1219,7 +1408,10 @@ export default function App() {
         setProjects(patchMode(nextMode));
       } catch (error) {
         projectMutationVersionRef.current += 1;
-        toast(t("toast.projectDefaultFailed", { error: String(error) }), "error");
+        toast(
+          t("toast.projectDefaultFailed", { error: String(error) }),
+          "error",
+        );
       }
     },
     [t, toast],
@@ -1235,7 +1427,9 @@ export default function App() {
       setActiveProject(path);
       setCwd(path);
       const project = projects.find((item) => item.path === path);
-      setWorktreeBase(projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null));
+      setWorktreeBase(
+        projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null),
+      );
       // Selecting a project always opens a blank source-checkout draft, including a re-click of the
       // current project. Keeping an active worktree session while `cwd` switches to the source would
       // make file/Git/terminal surfaces show one checkout while the agent keeps editing another.
@@ -1275,8 +1469,10 @@ export default function App() {
 
   const activeTitle = useMemo(
     () =>
-      (sessions.find((s) => s.id === activeSession) ??
-        archivedSessions.find((s) => s.id === activeSession))?.title ?? "New session",
+      (
+        sessions.find((s) => s.id === activeSession) ??
+        archivedSessions.find((s) => s.id === activeSession)
+      )?.title ?? "New session",
     [sessions, archivedSessions, activeSession],
   );
 
@@ -1287,15 +1483,16 @@ export default function App() {
     [archivedSessions, activeSession],
   );
 
-  const activeWorktreeState = useMemo(
-    () => {
+  const activeWorktreeState = useMemo(() => {
       const stored =
         sessions.find((session) => session.id === activeSession) ??
         archivedSessions.find((session) => session.id === activeSession);
-      return activeSessionWorktreeState(activeSession, stored, activeSessionReceipt);
-    },
-    [sessions, archivedSessions, activeSession, activeSessionReceipt],
+    return activeSessionWorktreeState(
+      activeSession,
+      stored,
+      activeSessionReceipt,
   );
+  }, [sessions, archivedSessions, activeSession, activeSessionReceipt]);
   const activeWorktreeBaseline = activeWorktreeState.baseline;
   const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
 
@@ -1315,29 +1512,37 @@ export default function App() {
   );
 
   const quickQuotaProvider = useMemo(() => {
-    const focused = [...sessions, ...archivedSessions].find((session) => session.id === activeSession);
+    const focused = [...sessions, ...archivedSessions].find(
+      (session) => session.id === activeSession,
+    );
     return quickQuotaProviderFor(
       providerLabel(provider),
       focused ? providerLabel(focused.provider) : null,
       sessions.map((session) => providerLabel(session.provider)),
     );
   }, [activeSession, archivedSessions, provider, sessions]);
-  const quickQuotaProviderName = providers.find((candidate) => candidate.id === quickQuotaProvider)?.display_name
-    ?? quickQuotaProvider;
-  const railQuickQuota = useMemo(() => quickQuotaSummary(quickQuotaReport), [quickQuotaReport]);
+  const quickQuotaProviderName =
+    providers.find((candidate) => candidate.id === quickQuotaProvider)
+      ?.display_name ?? quickQuotaProvider;
+  const railQuickQuota = useMemo(
+    () => quickQuotaSummary(quickQuotaReport),
+    [quickQuotaReport],
+  );
 
   const refreshQuickQuota = useCallback(() => {
     const request = ++quickQuotaRequestRef.current;
     setQuickQuotaLoading(true);
     void providerQuota(quickQuotaProvider)
       .then((report) => {
-        if (request === quickQuotaRequestRef.current) setQuickQuotaReport(report);
+        if (request === quickQuotaRequestRef.current)
+          setQuickQuotaReport(report);
       })
       .catch(() => {
         if (request === quickQuotaRequestRef.current) setQuickQuotaReport(null);
       })
       .finally(() => {
-        if (request === quickQuotaRequestRef.current) setQuickQuotaLoading(false);
+        if (request === quickQuotaRequestRef.current)
+          setQuickQuotaLoading(false);
       });
   }, [quickQuotaProvider]);
 
@@ -1365,13 +1570,49 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
+  const refreshProviders = useCallback(() => {
+    const request = ++providerRegistryRequestRef.current;
+    setProvidersStatus("loading");
+    void loadProviderRegistry(listProviders)
+      .then((list) => {
+        if (request !== providerRegistryRequestRef.current) return;
+        setProviders(list);
+        setProvidersStatus("ready");
+        // Default to a provider whose CLI is actually installed. Shipping `grok` as the default
+        // meant a machine without it failed on the first session with a raw spawn error.
+        if (!providerPinned.current) {
+          setProvider((current) => {
+            const selected = list.find((candidate) => candidate.id === current);
+            return selected?.available
+              ? current
+              : (list.find((candidate) => candidate.available)?.id ?? current);
+          });
+        }
+      })
+      .catch((error) => {
+        if (request !== providerRegistryRequestRef.current) return;
+        console.error("Could not load the provider registry", error);
+        setProvidersStatus("error");
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshProviders();
+    return () => {
+      providerRegistryRequestRef.current += 1;
+    };
+  }, [refreshProviders]);
+
   useEffect(() => {
     const activity = onBrowserAgentActivity(() => {
       setDockTab("browser");
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     });
     const downloads = onBrowserDownloadBlocked(() => {
-      toast("Download blocked. Approve it from the agent request or take control of the tab.", "error");
+      toast(
+        "Download blocked. Approve it from the agent request or take control of the tab.",
+        "error",
+      );
     });
     return () => {
       void activity.then((unlisten) => unlisten());
@@ -1380,20 +1621,6 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    listProviders()
-      .then((list) => {
-        setProviders(list);
-        // Default to a provider whose CLI is actually installed. Shipping `grok` as the default
-        // meant a machine without it failed on the first session with a raw spawn error.
-        if (!providerPinned.current) {
-          const cur = list.find((p) => p.id === provider);
-          if (!cur?.available) {
-            const firstAvailable = list.find((p) => p.available);
-            if (firstAvailable) setProvider(firstAvailable.id);
-          }
-        }
-      })
-      .catch(() => {});
     refreshSessions();
 
     let unlisten: (() => void) | null = null;
@@ -1429,8 +1656,11 @@ export default function App() {
             if (bind) {
               pendingPipelineBindRef.current = null;
               if (componentEnabledRef.current("scenes.surface")) {
-                void bindPipelineSession(bind.instanceId, bind.stageId, ev.session).then(
-                  async () => {
+                void bindPipelineSession(
+                  bind.instanceId,
+                  bind.stageId,
+                  ev.session,
+                ).then(async () => {
                     if (!componentEnabledRef.current("scenes.surface")) return;
                     const detail = await getPipelineInstance(bind.instanceId);
                     if (
@@ -1439,8 +1669,7 @@ export default function App() {
                     ) {
                       setPipelineDetail(detail);
                     }
-                  },
-                );
+                });
               }
             }
           }
@@ -1455,7 +1684,9 @@ export default function App() {
               } else {
                 sceneBySessionRef.current.set(ev.session, pendingScene);
                 void setSessionScene(ev.session, pendingScene, false);
-                const scene = scenesRef.current.find((s) => s.reference === pendingScene);
+                const scene = scenesRef.current.find(
+                  (s) => s.reference === pendingScene,
+                );
                 if (scene?.execution?.model) {
                   void setSessionModel(ev.session, scene.execution.model);
                 }
@@ -1463,11 +1694,15 @@ export default function App() {
                 // Reasoning effort has no provider-stable config id before the session reports
                 // its options, so it stays pending even after a full apply.
                 setScenePendingFields(
-                  scene?.execution?.reasoning_effort ? ["reasoning_effort"] : [],
+                  scene?.execution?.reasoning_effort
+                    ? ["reasoning_effort"]
+                    : [],
                 );
               }
             } else {
-              setActiveSceneName(sceneBySessionRef.current.get(ev.session) ?? null);
+              setActiveSceneName(
+                sceneBySessionRef.current.get(ev.session) ?? null,
+              );
               setScenePendingFields([]);
             }
           }
@@ -1498,20 +1733,26 @@ export default function App() {
               editorSnapshot: pending.editorSnapshot,
               editorRevision: pending.editorRevision,
               submittedDoc: pending.canvasRetryDoc,
-              canvasIds: pending.doc.flatMap((block) => block.type === "canvas" ? [block.id] : []),
-              canvasRefs: pending.doc.flatMap((block) => block.type === "canvas"
+              canvasIds: pending.doc.flatMap((block) =>
+                block.type === "canvas" ? [block.id] : [],
+              ),
+              canvasRefs: pending.doc.flatMap((block) =>
+                block.type === "canvas"
                 ? [{ id: block.id, revision: block.frozen_revision }]
-                : []),
+                  : [],
+              ),
             });
             void initializePluginSessionState(ev.session)
-              .then(() => submitPrompt(ev.session, pending.doc, pending.promptRequestId))
+              .then(() =>
+                submitPrompt(ev.session, pending.doc, pending.promptRequestId),
+              )
               .then(() => {
                 refreshSessions();
               })
               .catch((error) => {
                 if (
-                  pendingPromptRequestsRef.current.get(ev.session)?.requestId ===
-                  pending.promptRequestId
+                  pendingPromptRequestsRef.current.get(ev.session)
+                    ?.requestId === pending.promptRequestId
                 ) {
                   pendingPromptRequestsRef.current.delete(ev.session);
                 }
@@ -1529,7 +1770,11 @@ export default function App() {
                   );
                 }
                 if (isCanvasProviderImageError(message)) {
-                  canvasDeliveryErrorRef.current?.(pending.doc, message, "provider_image");
+                  canvasDeliveryErrorRef.current?.(
+                    pending.doc,
+                    message,
+                    "provider_image",
+                  );
                   toast(
                     "Canvas images are unsupported by this provider. Choose Send structure only in each Canvas or switch provider, then retry.",
                     "error",
@@ -1549,7 +1794,11 @@ export default function App() {
           const rename = (items: SessionInfo[]) =>
             items.map((session) =>
               session.id === ev.session
-                ? { ...session, title: ev.title, title_origin: "automatic" as const }
+                ? {
+                    ...session,
+                    title: ev.title,
+                    title_origin: "automatic" as const,
+                  }
                 : session,
             );
           setSessions(rename);
@@ -1561,7 +1810,9 @@ export default function App() {
           // reconcile whatever else the discard changed (a deleted branch, a dropped stale row).
           const markDiscarded = (items: SessionInfo[]) =>
             items.map((session) =>
-              session.id === ev.session ? { ...session, worktree_discarded: true } : session,
+              session.id === ev.session
+                ? { ...session, worktree_discarded: true }
+                : session,
             );
           setSessions(markDiscarded);
           setArchivedSessions(markDiscarded);
@@ -1575,19 +1826,25 @@ export default function App() {
           sessionActivitiesRef.current.set(ev.session, ev.activity);
           const applyActivity = (items: SessionInfo[]) =>
             items.map((session) =>
-              session.id === ev.session ? { ...session, activity: ev.activity } : session,
+              session.id === ev.session
+                ? { ...session, activity: ev.activity }
+                : session,
             );
           setSessions(applyActivity);
           setArchivedSessions(applyActivity);
           updateRunningSession(ev.session, activityIsBusy(ev.activity));
           // R10: only a finished run (idle | failed) releases the manual dock latch —
           // `awaiting_input` counts as busy, so it deliberately keeps it.
-          if (ev.session === activeSessionRef.current && !activityIsBusy(ev.activity)) {
+          if (
+            ev.session === activeSessionRef.current &&
+            !activityIsBusy(ev.activity)
+          ) {
             followDockEvent({ kind: "run_ended" });
           }
 
           const state = ev.activity.state;
-          const pending = state.kind === "awaiting_input"
+          const pending =
+            state.kind === "awaiting_input"
             ? state.pending.map((input) => ({
                 session: ev.session,
                 requestId: input.input_id,
@@ -1600,7 +1857,9 @@ export default function App() {
             [
               ...previous.filter((request) => request.session !== ev.session),
               ...pending,
-            ].sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0)),
+            ].sort(
+              (left, right) => (left.sequence ?? 0) - (right.sequence ?? 0),
+            ),
           );
           return;
         }
@@ -1622,7 +1881,8 @@ export default function App() {
           // Scene-layer facts (R8) are session state, never transcript parts. Only the two
           // banner-worthy ones render; the rest are consumed by the core's SceneRuntime.
           if (
-            (ev.event === "exit_criteria_met" || ev.event === "hook_suggestion") &&
+            (ev.event === "exit_criteria_met" ||
+              ev.event === "hook_suggestion") &&
             ev.session === activeSessionRef.current &&
             componentEnabledRef.current("scenes.surface")
           ) {
@@ -1634,8 +1894,13 @@ export default function App() {
         if (ev.event === "models") {
           const known = knownModelsRef.current.get(ev.session);
           const pending = pendingModelChangesRef.current.has(ev.session);
-          if (ev.current && (pending || (known !== undefined && ev.current !== known))) {
-            setContextWindows((previous) => clearContextWindow(previous, ev.session));
+          if (
+            ev.current &&
+            (pending || (known !== undefined && ev.current !== known))
+          ) {
+            setContextWindows((previous) =>
+              clearContextWindow(previous, ev.session),
+            );
           }
           if (ev.current) {
             knownModelsRef.current.set(ev.session, ev.current);
@@ -1649,12 +1914,16 @@ export default function App() {
           return;
         }
         if (ev.event === "config_options") {
-          const model = ev.options.find((o) => o.category === "model" || o.id === "model");
+          const model = ev.options.find(
+            (o) => o.category === "model" || o.id === "model",
+          );
           if (model?.current) {
             const known = knownModelsRef.current.get(ev.session);
             const pending = pendingModelChangesRef.current.has(ev.session);
             if (pending || (known !== undefined && model.current !== known)) {
-              setContextWindows((previous) => clearContextWindow(previous, ev.session));
+              setContextWindows((previous) =>
+                clearContextWindow(previous, ev.session),
+              );
             }
             knownModelsRef.current.set(ev.session, model.current);
             pendingModelChangesRef.current.delete(ev.session);
@@ -1713,7 +1982,9 @@ export default function App() {
             options: ev.options,
             context: ev.context,
           };
-          setPermissionQueue((previous) => enqueuePermission(previous, request));
+          setPermissionQueue((previous) =>
+            enqueuePermission(previous, request),
+          );
           return;
         }
         if (ev.event === "elicitation_request") {
@@ -1732,7 +2003,9 @@ export default function App() {
         }
         if (ev.event === "turn_started") {
           markSessionStarted(ev.session, ev.request_id);
-          const pendingRequest = pendingPromptRequestsRef.current.get(ev.session);
+          const pendingRequest = pendingPromptRequestsRef.current.get(
+            ev.session,
+          );
           if (pendingRequest && ev.request_id === pendingRequest.requestId) {
             pendingPromptRequestsRef.current.delete(ev.session);
             if (canvasProviderRetrySessionRef.current === ev.session) {
@@ -1741,7 +2014,10 @@ export default function App() {
               canvasProviderRetrySessionRef.current = null;
             }
             if (pendingRequest.canvasRefs.length > 0) {
-              acceptedCanvasRequestsRef.current.set(`${ev.session}:${pendingRequest.requestId}`, pendingRequest);
+              acceptedCanvasRequestsRef.current.set(
+                `${ev.session}:${pendingRequest.requestId}`,
+                pendingRequest,
+              );
             }
             const currentEditor = getBlocksRef.current?.();
             if (
@@ -1756,7 +2032,10 @@ export default function App() {
               // Core acceptance makes the frozen revision immutable history. Mark the mutable
               // Composer heads only when the submitted editor is still unchanged and we are
               // about to clear it; otherwise a later ordinary delete must remain undoable.
-              for (const id of canvasIdsToPurgeAfterTurnStart(true, pendingRequest.canvasIds)) {
+              for (const id of canvasIdsToPurgeAfterTurnStart(
+                true,
+                pendingRequest.canvasIds,
+              )) {
                 canvasPurgeRequestedRef.current.add(id);
               }
               clearEditorRef.current?.();
@@ -1775,7 +2054,8 @@ export default function App() {
           ev.event === "error" &&
           eventSession &&
           ev.request_id != null &&
-          pendingPromptRequestsRef.current.get(eventSession)?.requestId === ev.request_id
+          pendingPromptRequestsRef.current.get(eventSession)?.requestId ===
+            ev.request_id
         ) {
           // No matching TurnStarted arrived, so the core did not durably accept this draft.
           pendingPromptRequestsRef.current.delete(eventSession);
@@ -1783,21 +2063,32 @@ export default function App() {
         const ended = isTerminalSessionEvent(ev);
         if (ended) {
           if (eventSession) {
-            const terminalRequestId = ev.event === "error"
+            const terminalRequestId =
+              ev.event === "error"
               ? (ev.request_id ?? activeTurnRequestId)
               : activeTurnRequestId;
             if (terminalRequestId) {
-              const acceptedKey = canvasAcceptedRequestKey(eventSession, terminalRequestId);
-              const acceptedCanvasRequest = acceptedCanvasRequestsRef.current.get(acceptedKey);
+              const acceptedKey = canvasAcceptedRequestKey(
+                eventSession,
+                terminalRequestId,
+              );
+              const acceptedCanvasRequest =
+                acceptedCanvasRequestsRef.current.get(acceptedKey);
               if (acceptedCanvasRequest) {
                 acceptedCanvasRequestsRef.current.delete(acceptedKey);
-                if (ev.event === "error" && isCanvasProviderImageError(ev.message)) {
+                if (
+                  ev.event === "error" &&
+                  isCanvasProviderImageError(ev.message)
+                ) {
                   void restoreAcceptedCanvasForProviderError(
                     eventSession,
                     acceptedCanvasRequest,
                     ev.message,
                   ).catch((error) => {
-                    toast(`Canvas retry could not be staged: ${String(error)}`, "error");
+                    toast(
+                      `Canvas retry could not be staged: ${String(error)}`,
+                      "error",
+                    );
                   });
                 }
               }
@@ -1816,9 +2107,18 @@ export default function App() {
           }
           refreshSessions();
         }
-        if (!shouldRenderSessionEvent(ev, activeSessionRef.current, awaitingCreationRequest)) return;
+        if (
+          !shouldRenderSessionEvent(
+            ev,
+            activeSessionRef.current,
+            awaitingCreationRequest,
+          )
+        )
+          return;
         if (ev.event === "tool_call") handleDockFollow(ev);
-        setTurns((prev) => applyEvent(prev, ev, activeTurnRequestId ?? undefined));
+        setTurns((prev) =>
+          applyEvent(prev, ev, activeTurnRequestId ?? undefined),
+        );
       });
     })();
 
@@ -1930,10 +2230,18 @@ export default function App() {
     );
     const worktreeBaseSha = targetSession
       ? null
-      : sessionCreationBaselineSha(worktreeBase, worktreeOptions, worktreeOptionsLoading);
+      : sessionCreationBaselineSha(
+          worktreeBase,
+          worktreeOptions,
+          worktreeOptionsLoading,
+        );
     if (worktreeBaseSha === undefined) {
       toast(
-        t(worktreeOptionsLoading ? "worktree.resolving" : "worktree.unavailable"),
+        t(
+          worktreeOptionsLoading
+            ? "worktree.resolving"
+            : "worktree.unavailable",
+        ),
         "error",
       );
       return;
@@ -1944,15 +2252,23 @@ export default function App() {
     try {
       if (freezeCanvasesRef.current) doc = await freezeCanvasesRef.current(doc);
     } catch (error) {
-      toast(`Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`, "error");
+      toast(
+        `Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       return;
     }
     const canvasRetryDoc = doc;
-    const canvasIds = doc.flatMap((block) => block.type === "canvas" ? [block.id] : []);
-    const canvasRefs = doc.flatMap((block) => block.type === "canvas"
+    const canvasIds = doc.flatMap((block) =>
+      block.type === "canvas" ? [block.id] : [],
+    );
+    const canvasRefs = doc.flatMap((block) =>
+      block.type === "canvas"
       ? [{ id: block.id, revision: block.frozen_revision }]
-      : []);
-    if (planMode) doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
+        : [],
+    );
+    if (planMode)
+      doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     const promptRequestId = globalThis.crypto.randomUUID();
     const creationRequestId = targetSession ? null : promptRequestId;
     if (targetSession) {
@@ -2001,7 +2317,10 @@ export default function App() {
     } catch (e) {
       const message = String(e);
       if (targetSession) {
-        if (pendingPromptRequestsRef.current.get(targetSession)?.requestId === promptRequestId) {
+        if (
+          pendingPromptRequestsRef.current.get(targetSession)?.requestId ===
+          promptRequestId
+        ) {
           pendingPromptRequestsRef.current.delete(targetSession);
         }
         markSessionStopped(targetSession, promptRequestId);
@@ -2112,9 +2431,9 @@ export default function App() {
     // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
     // and seeds that draft from the project preference or the prior session's baseline kind.
     if (currentSessionId !== null) {
-      const projectMode = projects.find(
-        (project) => project.path === activeProjectRef.current,
-      )?.default_worktree_mode ?? null;
+      const projectMode =
+        projects.find((project) => project.path === activeProjectRef.current)
+          ?.default_worktree_mode ?? null;
       const baseline = nextSessionWorktreeBaseline(
         projectMode,
         sessionCreationBaseline(currentSession),
@@ -2150,7 +2469,10 @@ export default function App() {
   const explainSelectedText = useCallback(
     (text: string) => {
       const markdown = `${t("selection.moreDetailsPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
-      void insertMarkdownRef.current?.(markdown, docEmpty ? "replace" : "append");
+      void insertMarkdownRef.current?.(
+        markdown,
+        docEmpty ? "replace" : "append",
+      );
       setDocMode(true);
       setTimeout(() => focusEditorRef.current?.(), 0);
     },
@@ -2173,18 +2495,26 @@ export default function App() {
     [createSession, setDocMode, t],
   );
 
-  const dequeuePermission = useCallback((session: string, requestId: string) => {
+  const dequeuePermission = useCallback(
+    (session: string, requestId: string) => {
     setPermissionQueue((previous) =>
       previous.filter(
-        (request) => request.session !== session || request.requestId !== requestId,
+          (request) =>
+            request.session !== session || request.requestId !== requestId,
       ),
     );
-  }, []);
+    },
+    [],
+  );
 
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
-      await answerPermission(permission.session, permission.requestId, optionId);
+      await answerPermission(
+        permission.session,
+        permission.requestId,
+        optionId,
+      );
       dequeuePermission(permission.session, permission.requestId);
     },
     [dequeuePermission, permission],
@@ -2215,14 +2545,21 @@ export default function App() {
           session,
           pendingPolicyBySessionRef.current,
         )
-      ) return false;
+      )
+        return false;
       const preset = SESSION_MODES.find((item) => item.id === id);
       if (!preset) return false;
 
       if (session) {
         const requestId = globalThis.crypto.randomUUID();
-        const authoritative = authoritativePoliciesRef.current.get(session) ?? { mode, sandbox };
-        pendingPolicyRequestsRef.current.set(requestId, { session, authoritative });
+        const authoritative = authoritativePoliciesRef.current.get(session) ?? {
+          mode,
+          sandbox,
+        };
+        pendingPolicyRequestsRef.current.set(requestId, {
+          session,
+          authoritative,
+        });
         pendingPolicyBySessionRef.current.set(session, requestId);
         setPendingPolicySessions((current) => {
           if (current.has(session)) return current;
@@ -2230,7 +2567,12 @@ export default function App() {
           next.add(session);
           return next;
         });
-        void setExecutionPolicy(session, preset.mode, preset.sandbox, requestId).catch((error) => {
+        void setExecutionPolicy(
+          session,
+          preset.mode,
+          preset.sandbox,
+          requestId,
+        ).catch((error) => {
           const rejected = finishPolicyRequest(requestId);
           if (!rejected) return;
           restoreRejectedExecutionPolicy(rejected);
@@ -2245,7 +2587,8 @@ export default function App() {
     [finishPolicyRequest, mode, restoreRejectedExecutionPolicy, sandbox, toast],
   );
 
-  const onMemoryPolicyChange = useCallback((read: MemoryAccess, write: MemoryAccess) => {
+  const onMemoryPolicyChange = useCallback(
+    (read: MemoryAccess, write: MemoryAccess) => {
     if (!componentEnabledRef.current("memory.settings")) return;
     const previousRead = memoryReadRef.current;
     const previousWrite = memoryWriteRef.current;
@@ -2255,7 +2598,9 @@ export default function App() {
     setMemoryWrite(write);
     const session = activeSessionRef.current;
     if (session) {
-      const update = (nextRead: MemoryAccess, nextWrite: MemoryAccess) => (items: SessionInfo[]) =>
+        const update =
+          (nextRead: MemoryAccess, nextWrite: MemoryAccess) =>
+          (items: SessionInfo[]) =>
         items.map((item) =>
           item.id === session
             ? { ...item, memory_read: nextRead, memory_write: nextWrite }
@@ -2273,7 +2618,9 @@ export default function App() {
         toast(String(error), "error");
       });
     }
-  }, [toast]);
+    },
+    [toast],
+  );
 
   const selectSession = useCallback(
     async (id: string) => {
@@ -2282,7 +2629,8 @@ export default function App() {
       setShowTaskBoard(false);
       invalidatePendingCreation();
       const stored =
-        sessions.find((s) => s.id === id) ?? archivedSessions.find((s) => s.id === id);
+        sessions.find((s) => s.id === id) ??
+        archivedSessions.find((s) => s.id === id);
       if (stored) {
         setCwd(stored.cwd);
         const policy = sessionExecutionPolicy(stored);
@@ -2293,7 +2641,8 @@ export default function App() {
       }
       const storedProjectPath = stored ? sessionProjectPath(stored) : null;
       const projectPath = storedProjectPath
-        ? projects.find((project) => project.path === storedProjectPath)?.path ?? null
+        ? (projects.find((project) => project.path === storedProjectPath)
+            ?.path ?? null)
         : null;
       if (projectPath && projectPath !== activeProjectRef.current) {
         activeProjectRef.current = projectPath;
@@ -2353,7 +2702,9 @@ export default function App() {
       // a session resumed from the store hasn't happened again yet — so start from the provider's
       // built-in list and let the agent's own options replace it when the next turn revives the
       // session.
-      const forProvider = providers.find((p) => p.id === providerLabel(stored?.provider ?? ""));
+      const forProvider = providers.find(
+        (p) => p.id === providerLabel(stored?.provider ?? ""),
+      );
       setModels(forProvider?.models ?? []);
       setConfigOptions([]);
       setCurrentModel(stored?.model ?? null);
@@ -2404,7 +2755,8 @@ export default function App() {
           mergeLoadedTurns(
             loaded,
             live,
-            runningSessionsRef.current.has(id) && runningPromptRequestsRef.current.has(id),
+            runningSessionsRef.current.has(id) &&
+              runningPromptRequestsRef.current.has(id),
           ),
         );
       } catch (error) {
@@ -2467,7 +2819,10 @@ export default function App() {
         sessionGeneration === sessionLoadSeq.current &&
         loadGeneration === earlierLoadSeqRef.current
       ) {
-        toast(t("toast.transcriptEarlierFailed", { error: String(error) }), "error");
+        toast(
+          t("toast.transcriptEarlierFailed", { error: String(error) }),
+          "error",
+        );
       }
     } finally {
       if (loadGeneration === earlierLoadSeqRef.current) {
@@ -2475,7 +2830,13 @@ export default function App() {
         setLoadingEarlier(false);
       }
     }
-  }, [capturePrependAnchor, prepareForPrepend, t, toast, updateTranscriptCursor]);
+  }, [
+    capturePrependAnchor,
+    prepareForPrepend,
+    t,
+    toast,
+    updateTranscriptCursor,
+  ]);
 
   const searchPaletteCommands = useCallback(
     async (query: string): Promise<Command[]> => {
@@ -2484,8 +2845,11 @@ export default function App() {
         const stored =
           sessions.find((session) => session.id === hit.session_id) ??
           archivedSessions.find((session) => session.id === hit.session_id);
-        const sourcePath = stored ? sessionProjectPath(stored) ?? hit.cwd : hit.cwd;
-        const project = projects.find((item) => item.path === sourcePath)?.name ?? sourcePath;
+        const sourcePath = stored
+          ? (sessionProjectPath(stored) ?? hit.cwd)
+          : hit.cwd;
+        const project =
+          projects.find((item) => item.path === sourcePath)?.name ?? sourcePath;
         return {
           id: `conversation-${hit.session_id}-${hit.seq}`,
           identity: `session-${hit.session_id}`,
@@ -2517,9 +2881,13 @@ export default function App() {
   }, [refreshSkills]);
 
   const loadManagedCatalog = useCallback(async (scope: PluginManagerScope) => {
-    const normalizedScope: PluginManagerScope = scope.kind === "user"
+    const normalizedScope: PluginManagerScope =
+      scope.kind === "user"
       ? scope
-      : { kind: "project", projectPath: normalizePluginProjectPath(scope.projectPath) };
+        : {
+            kind: "project",
+            projectPath: normalizePluginProjectPath(scope.projectPath),
+          };
     const next = await pluginCatalog(toManagedPluginScope(normalizedScope));
     if (normalizedScope.kind === "user") {
       setManagedUserCatalog(next);
@@ -2532,17 +2900,22 @@ export default function App() {
     return next;
   }, []);
 
-  const refreshManagedCatalogs = useCallback(async (scope: PluginManagerScope = pluginManagerScope) => {
+  const refreshManagedCatalogs = useCallback(
+    async (scope: PluginManagerScope = pluginManagerScope) => {
     const projectPaths = new Set<string>();
-    if (scope.kind === "project") projectPaths.add(normalizePluginProjectPath(scope.projectPath));
-    if (activeProject) projectPaths.add(normalizePluginProjectPath(activeProject));
+      if (scope.kind === "project")
+        projectPaths.add(normalizePluginProjectPath(scope.projectPath));
+      if (activeProject)
+        projectPaths.add(normalizePluginProjectPath(activeProject));
     await Promise.all([
       loadManagedCatalog({ kind: "user" }),
       ...Array.from(projectPaths, (projectPath) =>
         loadManagedCatalog({ kind: "project", projectPath }),
       ),
     ]);
-  }, [activeProject, loadManagedCatalog, pluginManagerScope]);
+    },
+    [activeProject, loadManagedCatalog, pluginManagerScope],
+  );
 
   // Component policy is runtime state, not merely data for the management page. Keep the user
   // graph and the active project's inherited graph warm even while the page is closed.
@@ -2555,7 +2928,8 @@ export default function App() {
   useEffect(() => {
     let disposed = false;
     let unsubscribe = () => {};
-    const refreshBundles = () => listPlugins()
+    const refreshBundles = () =>
+      listPlugins()
       .then((next) => {
         if (!disposed) setPlugins(next);
       })
@@ -2586,40 +2960,70 @@ export default function App() {
     });
   }, [projects]);
 
-  const selectedManagedCatalog = pluginManagerScope.kind === "user"
+  const selectedManagedCatalog =
+    pluginManagerScope.kind === "user"
     ? managedUserCatalog
-    : managedProjectCatalogs[normalizePluginProjectPath(pluginManagerScope.projectPath)];
+      : managedProjectCatalogs[
+          normalizePluginProjectPath(pluginManagerScope.projectPath)
+        ];
   const activeProjectCatalog = activeProject
     ? managedProjectCatalogs[normalizePluginProjectPath(activeProject)]
     : undefined;
   const activeManagedCatalog = activeProject
-    ? activeProjectCatalog ?? managedUserCatalog
+    ? (activeProjectCatalog ?? managedUserCatalog)
     : managedUserCatalog;
-  const activeComponentPolicyReady = projectBootstrapComplete && managedUserCatalog !== null &&
+  const activeComponentPolicyReady =
+    projectBootstrapComplete &&
+    managedUserCatalog !== null &&
     (activeProject === null || activeProjectCatalog !== undefined);
   const pluginManagerModel = useMemo(
-    () => buildPluginManagerCatalog({
-      catalog: selectedManagedCatalog ?? managedUserCatalog ?? EMPTY_MANAGED_CATALOG,
+    () =>
+      buildPluginManagerCatalog({
+        catalog:
+          selectedManagedCatalog ?? managedUserCatalog ?? EMPTY_MANAGED_CATALOG,
       userCatalog: managedUserCatalog ?? undefined,
       bundles: plugins,
       skills,
       market,
       scope: pluginManagerScope,
     }),
-    [managedUserCatalog, market, pluginManagerScope, plugins, selectedManagedCatalog, skills],
+    [
+      managedUserCatalog,
+      market,
+      pluginManagerScope,
+      plugins,
+      selectedManagedCatalog,
+      skills,
+    ],
+  );
+  const pluginManagerLabels = useMemo(() => createPluginManagerLabels(t), [t]);
+  const localizedPluginManagerModel = useMemo(
+    () => localizePluginManagerCatalog(pluginManagerModel, t),
+    [pluginManagerModel, t],
   );
   const activePluginModel = useMemo(
-    () => buildPluginManagerCatalog({
+    () =>
+      buildPluginManagerCatalog({
       catalog: activeManagedCatalog ?? EMPTY_MANAGED_CATALOG,
       userCatalog: managedUserCatalog ?? undefined,
       bundles: plugins,
       skills,
       market,
       scope: activeProject
-        ? { kind: "project", projectPath: normalizePluginProjectPath(activeProject) }
+          ? {
+              kind: "project",
+              projectPath: normalizePluginProjectPath(activeProject),
+            }
         : { kind: "user" },
     }),
-    [activeManagedCatalog, activeProject, managedUserCatalog, market, plugins, skills],
+    [
+      activeManagedCatalog,
+      activeProject,
+      managedUserCatalog,
+      market,
+      plugins,
+      skills,
+    ],
   );
   const componentEnabled = useCallback(
     (id: BuiltinUiComponentId) =>
@@ -2631,17 +3035,24 @@ export default function App() {
   const memorySettingsEnabled = componentEnabled("memory.settings");
   const scenesSurfaceEnabled = componentEnabled("scenes.surface");
   const lspRuntimeEnabled = componentEnabled("lsp.runtime");
-  const lspPluginEnabled = activeComponentPolicyReady &&
-    (activePluginModel.plugins.find((plugin) => plugin.id === "lsp")?.state.effectiveEnabled ?? false);
-  const lspProjectPath = activeProject ? normalizePluginProjectPath(activeProject) : null;
+  const lspPluginEnabled =
+    activeComponentPolicyReady &&
+    (activePluginModel.plugins.find((plugin) => plugin.id === "lsp")?.state
+      .effectiveEnabled ??
+      false);
+  const lspProjectPath = activeProject
+    ? normalizePluginProjectPath(activeProject)
+    : null;
   const pluginUiActions = useMemo(
-    () => activeComponentPolicyReady
+    () =>
+      activeComponentPolicyReady
       ? activePluginUiContributions(plugins, activePluginModel.plugins)
       : activePluginUiContributions([], []),
     [activeComponentPolicyReady, activePluginModel.plugins, plugins],
   );
   const pluginLanguageServers = useMemo(
-    () => activeComponentPolicyReady
+    () =>
+      activeComponentPolicyReady
       ? activePluginLanguageServers(plugins, activePluginModel.plugins)
       : [],
     [activeComponentPolicyReady, activePluginModel.plugins, plugins],
@@ -2649,7 +3060,8 @@ export default function App() {
   useLayoutEffect(() => {
     configurePluginLanguageServers(pluginLanguageServers);
   }, [pluginLanguageServers]);
-  const invokePluginAction = useCallback(async (contribution: ActivePluginUiContribution) => {
+  const invokePluginAction = useCallback(
+    async (contribution: ActivePluginUiContribution) => {
     try {
       const result = await invokePluginUi(
         contribution.pluginId,
@@ -2661,16 +3073,22 @@ export default function App() {
         },
         lspProjectPath,
       );
-      const message = typeof result === "string"
+        const message =
+          typeof result === "string"
         ? result
-        : result && typeof result === "object" && "message" in result && typeof result.message === "string"
+            : result &&
+                typeof result === "object" &&
+                "message" in result &&
+                typeof result.message === "string"
           ? result.message
           : `${contribution.label} completed.`;
       toast(message, "success");
     } catch (error) {
       toast(`${contribution.label} failed: ${String(error)}`, "error");
     }
-  }, [activeSession, lspProjectPath, toast, workspaceCwd]);
+    },
+    [activeSession, lspProjectPath, toast, workspaceCwd],
+  );
   // Close the renderer gate synchronously, then reopen it only after this project's backend has
   // resumed. This keeps mounted editor effects from racing a suspended project realm.
   useLayoutEffect(() => {
@@ -2685,7 +3103,9 @@ export default function App() {
       },
       (enabled) => lspSetRuntimeEnabled(enabled, lspProjectPath),
       () => current && componentEnabledRef.current("lsp.runtime"),
-    ).catch((error) => console.warn("Could not update language-server runtime policy", error));
+    ).catch((error) =>
+      console.warn("Could not update language-server runtime policy", error),
+    );
     return () => {
       current = false;
     };
@@ -2703,7 +3123,11 @@ export default function App() {
   // A live disable removes the surface immediately, including already-open dialogs. Runtime
   // cleanup is owned by the plugin scope; this closes only renderer projections of that scope.
   useEffect(() => {
-    if (dockTab && dockTab !== "home" && !availableDockSurfaces.includes(dockTab)) {
+    if (
+      dockTab &&
+      dockTab !== "home" &&
+      !availableDockSurfaces.includes(dockTab)
+    ) {
       manualDockTab(null);
     }
     if (!componentEnabled("files.surface")) setShowFiles(false);
@@ -2724,7 +3148,13 @@ export default function App() {
       pendingDelegationRef.current = null;
       pendingIssueInsertRef.current = null;
     }
-  }, [availableDockSurfaces, componentEnabled, dockTab, manualDockTab, scenesSurfaceEnabled]);
+  }, [
+    availableDockSurfaces,
+    componentEnabled,
+    dockTab,
+    manualDockTab,
+    scenesSurfaceEnabled,
+  ]);
 
   const refreshScenes = useCallback(async () => {
     if (!scenesSurfaceEnabled) {
@@ -2840,7 +3270,11 @@ export default function App() {
       })
       .catch(() => {
         if (fresh()) {
-          setGitWorkspace({ cwd: target, loading: false, value: EMPTY_GIT_WORKSPACE });
+          setGitWorkspace({
+            cwd: target,
+            loading: false,
+            value: EMPTY_GIT_WORKSPACE,
+          });
         }
       });
   }, [cwd]);
@@ -2850,7 +3284,11 @@ export default function App() {
     // A callback captured before a project switch must not invalidate the current project's load.
     if ((cwdRef.current || ".") !== target) return;
     const request = ++checkpointRefreshSeq.current;
-    setCheckpointWorkspace({ cwd: target, loading: true, value: EMPTY_CHECKPOINTS });
+    setCheckpointWorkspace({
+      cwd: target,
+      loading: true,
+      value: EMPTY_CHECKPOINTS,
+    });
     gitCheckpoints(target)
       .then((next) => {
         if (
@@ -2865,29 +3303,48 @@ export default function App() {
           checkpointRefreshSeq.current === request &&
           (cwdRef.current || ".") === target
         ) {
-          setCheckpointWorkspace({ cwd: target, loading: false, value: EMPTY_CHECKPOINTS });
+          setCheckpointWorkspace({
+            cwd: target,
+            loading: false,
+            value: EMPTY_CHECKPOINTS,
+          });
         }
       });
   }, [cwd]);
 
   const openPluginHub = useCallback(() => {
-    const normalizedActiveProject = activeProject ? normalizePluginProjectPath(activeProject) : null;
-    const scope: PluginManagerScope = normalizedActiveProject &&
-      pluginManagerProjects.some((project) => project.path === normalizedActiveProject)
-      ? { kind: "project", projectPath: normalizedActiveProject }
+    const normalizedActiveProject = activeProject
+      ? normalizePluginProjectPath(activeProject)
+      : null;
+    const scope: PluginManagerScope =
+      normalizedActiveProject &&
+      pluginManagerProjects.some(
+        (project) => project.path === normalizedActiveProject,
+      )
+        ? { kind: "project", projectPath: normalizedActiveProject }
       : { kind: "user" };
     setPluginManagerScope(scope);
     setShowBundlePluginTools(false);
-    marketCatalog().then(setMarket).catch(() => {});
-    listPlugins().then(setPlugins).catch(() => {});
+    marketCatalog()
+      .then(setMarket)
+      .catch(() => {});
+    listPlugins()
+      .then(setPlugins)
+      .catch(() => {});
     void refreshManagedCatalogs(scope).catch(() => {});
     refreshSkills();
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPluginHub(true);
-  }, [activeProject, pluginManagerProjects, refreshManagedCatalogs, refreshSkills]);
+  }, [
+    activeProject,
+    pluginManagerProjects,
+    refreshManagedCatalogs,
+    refreshSkills,
+  ]);
 
-  const refreshPluginManagerData = useCallback(async (scope: PluginManagerScope = pluginManagerScope) => {
+  const refreshPluginManagerData = useCallback(
+    async (scope: PluginManagerScope = pluginManagerScope) => {
     const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
       marketCatalog(),
       listPlugins(),
@@ -2897,30 +3354,53 @@ export default function App() {
     setMarket(nextMarket);
     setPlugins(nextPlugins);
     setSkills(nextSkills);
-  }, [pluginManagerScope, refreshManagedCatalogs, refreshSkills]);
+    },
+    [pluginManagerScope, refreshManagedCatalogs, refreshSkills],
+  );
 
-  const planManagerChange = useCallback(async (
+  const planManagerChange = useCallback(
+    async (
     request: PluginManagerChangeRequest,
-  ): Promise<PluginManagerChangePlan> =>
-    planPluginManagerChange({
+    ): Promise<PluginManagerChangePlan> => {
+      const plan = await planPluginManagerChange({
       request,
-      plugins: pluginManagerModel.plugins,
-      components: pluginManagerModel.components,
+        plugins: localizedPluginManagerModel.plugins,
+        components: localizedPluginManagerModel.components,
       planChange: planPluginChange,
-    }), [pluginManagerModel.components, pluginManagerModel.plugins]);
+      });
+      return {
+        ...plan,
+        summary: pluginManagerLabels.changeSummary(
+          request.targetKind,
+          request.targetName,
+          request.desiredState,
+        ),
+      };
+    },
+    [
+      localizedPluginManagerModel.components,
+      localizedPluginManagerModel.plugins,
+      pluginManagerLabels,
+    ],
+  );
 
-  const applyManagerChange = useCallback(async (plan: PluginManagerChangePlan) => {
+  const applyManagerChange = useCallback(
+    async (plan: PluginManagerChangePlan) => {
     await applyPluginManagerChange(plan, applyPluginChange);
     await refreshPluginManagerData(plan.request.scope);
     toast(
-      plan.request.desiredState === "disabled"
-        ? `${plan.request.targetName} unloaded.`
-        : `${plan.request.targetName} loaded.`,
+        pluginManagerLabels.changeApplied(
+          plan.request.targetName,
+          plan.request.desiredState,
+        ),
       "success",
     );
-  }, [refreshPluginManagerData, toast]);
+    },
+    [pluginManagerLabels, refreshPluginManagerData, toast],
+  );
 
-  const saveManagerConfig = useCallback(async ({
+  const saveManagerConfig = useCallback(
+    async ({
     pluginId,
     scope,
     config,
@@ -2929,9 +3409,13 @@ export default function App() {
     scope: PluginManagerScope;
     config: unknown;
   }) => {
-    const plugin = pluginManagerModel.plugins.find((item) => item.id === pluginId);
+      const plugin = pluginManagerModel.plugins.find(
+        (item) => item.id === pluginId,
+      );
     if (!plugin || plugin.source === "bundle") {
-      throw new Error("This bundle does not expose a host-validated configuration schema.");
+        throw new Error(
+          "This bundle does not expose a host-validated configuration schema.",
+        );
     }
     const plan = await planPluginChange({
       plugin: plugin.id,
@@ -2941,7 +3425,9 @@ export default function App() {
     await applyPluginChange(plan.id);
     await refreshPluginManagerData(scope);
     toast(`${plugin.name} configuration saved and reloaded.`, "success");
-  }, [pluginManagerModel.plugins, refreshPluginManagerData, toast]);
+    },
+    [pluginManagerModel.plugins, refreshPluginManagerData, toast],
+  );
 
   const openAutomations = useCallback(() => {
     if (!componentEnabled("automation.page")) {
@@ -2953,7 +3439,13 @@ export default function App() {
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
+  }, [
+    componentEnabled,
+    narrowLayout,
+    railCollapsed,
+    setRailCollapsedRaw,
+    toast,
+  ]);
 
   const openSourceControl = useCallback(() => {
     if (!componentEnabled("git.surface")) {
@@ -2982,7 +3474,10 @@ export default function App() {
   const doCheckpoint = useCallback(async () => {
     try {
       const cp = await gitCheckpoint(cwd || ".", "manual checkpoint");
-      toast(cp ? "Checkpoint saved." : "Nothing to checkpoint.", cp ? "success" : "info");
+      toast(
+        cp ? "Checkpoint saved." : "Nothing to checkpoint.",
+        cp ? "success" : "info",
+      );
     } catch (e) {
       toast(`Checkpoint failed: ${e}`, "error");
     }
@@ -3006,7 +3501,9 @@ export default function App() {
     if (!getBlocks) return;
     try {
       const current = getBlocks();
-      const frozen = freezeCanvasesRef.current ? await freezeCanvasesRef.current(current) : current;
+      const frozen = freezeCanvasesRef.current
+        ? await freezeCanvasesRef.current(current)
+        : current;
       setPreview(await compileDoc(frozen, cwd || "."));
     } catch (e) {
       toast(`Could not compile the document: ${e}`, "error");
@@ -3028,7 +3525,8 @@ export default function App() {
     setShowIssues(false);
   }, []);
 
-  const toggleDock = useCallback((t: DockSurface) => {
+  const toggleDock = useCallback(
+    (t: DockSurface) => {
     const component: Record<DockSurface, BuiltinUiComponentId> = {
       browser: "browser.dock",
       terminal: "terminal.dock",
@@ -3036,13 +3534,18 @@ export default function App() {
       git: "git.surface",
     };
     if (!componentEnabled(component[t])) {
-      toast(`${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`, "info");
+        toast(
+          `${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`,
+          "info",
+        );
       return;
     }
     // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
     manualDockTab(dockTabRef.current === t ? null : t);
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
-  }, [componentEnabled, manualDockTab, toast]);
+    },
+    [componentEnabled, manualDockTab, toast],
+  );
 
   const runProjectAction = useCallback((script: ProjectScript) => {
     const name = script.name || script.id;
@@ -3085,12 +3588,15 @@ export default function App() {
     if (v) setTimeout(() => focusEditorRef.current?.(), 0);
   }, []);
 
-  const getCanvasAssets = useCallback((id: string): readonly CanvasStaticAsset[] => {
+  const getCanvasAssets = useCallback(
+    (id: string): readonly CanvasStaticAsset[] => {
     const current = canvasAssetsRef.current.get(id);
     if (current) return Array.from(current.values());
     const draft = canvasDraftsRef.current.get(id);
     return draft?.assets ?? [];
-  }, []);
+    },
+    [],
+  );
 
   const rememberCanvasDraft = useCallback((draft: CanvasDraft) => {
     canvasDraftsRef.current.set(draft.id, draft);
@@ -3098,8 +3604,13 @@ export default function App() {
     canvasAssetsRef.current.set(draft.id, assets);
   }, []);
 
-  const normalizeCanvasMedia = useCallback(async (canvasId: string, input: import("./canvas/media").CanvasMediaInput) => {
-    const bytes = input.bytes instanceof Uint8Array
+  const normalizeCanvasMedia = useCallback(
+    async (
+      canvasId: string,
+      input: import("./canvas/media").CanvasMediaInput,
+    ) => {
+      const bytes =
+        input.bytes instanceof Uint8Array
       ? input.bytes
       : input.bytes instanceof ArrayBuffer
         ? new Uint8Array(input.bytes)
@@ -3113,14 +3624,28 @@ export default function App() {
       width: normalized.width,
       height: normalized.height,
     } as const;
-    const existing = canvasAssetsRef.current.get(canvasId) ?? new Map<string, CanvasStaticAsset>();
+      const existing =
+        canvasAssetsRef.current.get(canvasId) ??
+        new Map<string, CanvasStaticAsset>();
     existing.set(normalized.id, normalized);
     canvasAssetsRef.current.set(canvasId, existing);
     return media;
-  }, []);
+    },
+    [],
+  );
 
-  const resolveCanvasAsset = useCallback(async (canvasId: string, asset: { ref: string; fileId: string; mimeType: "image/png" | "image/webp" }) => {
-    const stored = canvasAssetsRef.current.get(canvasId)?.get(asset.ref) ?? canvasAssetsRef.current.get(canvasId)?.get(asset.fileId);
+  const resolveCanvasAsset = useCallback(
+    async (
+      canvasId: string,
+      asset: {
+        ref: string;
+        fileId: string;
+        mimeType: "image/png" | "image/webp";
+      },
+    ) => {
+      const stored =
+        canvasAssetsRef.current.get(canvasId)?.get(asset.ref) ??
+        canvasAssetsRef.current.get(canvasId)?.get(asset.fileId);
     if (stored) {
       return {
         ref: stored.id,
@@ -3130,9 +3655,16 @@ export default function App() {
       };
     }
     return null;
-  }, []);
+    },
+    [],
+  );
 
-  const saveCanvasDraft = useCallback(async (canvasId: string, envelope: LocalCanvasEnvelope, assets: readonly CanvasStaticAsset[]) => {
+  const saveCanvasDraft = useCallback(
+    async (
+      canvasId: string,
+      envelope: LocalCanvasEnvelope,
+      assets: readonly CanvasStaticAsset[],
+    ) => {
     const current = canvasDraftsRef.current.get(canvasId);
     const update = {
       title: current?.title ?? "Canvas",
@@ -3141,12 +3673,19 @@ export default function App() {
       manifest: localCanvasManifest(envelope),
       assets: Array.from(assets),
     };
-    const saved = await canvasUpdateDraft(canvasId, envelope.revision, update);
+      const saved = await canvasUpdateDraft(
+        canvasId,
+        envelope.revision,
+        update,
+      );
     rememberCanvasDraft(saved);
     return saved;
-  }, [rememberCanvasDraft]);
+    },
+    [rememberCanvasDraft],
+  );
 
-  const freezeCanvasDraft = useCallback(async (
+  const freezeCanvasDraft = useCallback(
+    async (
     canvasId: string,
     envelope: LocalCanvasEnvelope,
     assets: readonly CanvasStaticAsset[],
@@ -3165,7 +3704,9 @@ export default function App() {
       exports: Array.from(exports),
     });
     return frozen;
-  }, []);
+    },
+    [],
+  );
 
   const forgetCanvasHead = useCallback((canvasId: string) => {
     canvasDraftsRef.current.delete(canvasId);
@@ -3173,9 +3714,15 @@ export default function App() {
     canvasFrozenRef.current.delete(canvasId);
   }, []);
 
-  const purgeCanvasHead = useCallback(async (canvasId: string) => {
-    const hasMutableHead = canvasDraftsRef.current.has(canvasId) || canvasAssetsRef.current.has(canvasId);
-    const plan = canvasUnmountPlan(hasMutableHead, canvasTombstonesRef.current.has(canvasId));
+  const purgeCanvasHead = useCallback(
+    async (canvasId: string) => {
+      const hasMutableHead =
+        canvasDraftsRef.current.has(canvasId) ||
+        canvasAssetsRef.current.has(canvasId);
+      const plan = canvasUnmountPlan(
+        hasMutableHead,
+        canvasTombstonesRef.current.has(canvasId),
+      );
     if (!plan.purge) return;
     canvasPurgeRequestedRef.current.add(canvasId);
     if (plan.tombstone) {
@@ -3186,9 +3733,12 @@ export default function App() {
     canvasTombstonesRef.current.delete(canvasId);
     canvasPurgeRequestedRef.current.delete(canvasId);
     forgetCanvasHead(canvasId);
-  }, [forgetCanvasHead]);
+    },
+    [forgetCanvasHead],
+  );
 
-  const removeCanvasDraft = useCallback((canvasId: string, nonEmpty: boolean) => {
+  const removeCanvasDraft = useCallback(
+    (canvasId: string, nonEmpty: boolean) => {
     canvasTombstonesRef.current.add(canvasId);
     if (!nonEmpty) {
       canvasPurgeRequestedRef.current.delete(canvasId);
@@ -3203,30 +3753,45 @@ export default function App() {
         return purgeCanvasHead(canvasId);
       })
       .catch((error) => {
-        toast(`Canvas removal could not be recorded: ${String(error)}`, "error");
+          toast(
+            `Canvas removal could not be recorded: ${String(error)}`,
+            "error",
+          );
       });
-  }, [forgetCanvasHead, purgeCanvasHead, toast]);
+    },
+    [forgetCanvasHead, purgeCanvasHead, toast],
+  );
 
-  const restoreCanvasDraft = useCallback((canvasId: string) => {
+  const restoreCanvasDraft = useCallback(
+    (canvasId: string) => {
     if (!canvasTombstonesRef.current.has(canvasId)) return;
     canvasTombstonesRef.current.delete(canvasId);
     void canvasRestore(canvasId).catch((error) => {
       toast(`Canvas restore failed: ${String(error)}`, "error");
     });
-  }, [toast]);
+    },
+    [toast],
+  );
 
-  const purgeCanvasOnUnmount = useCallback((canvasId: string) => {
+  const purgeCanvasOnUnmount = useCallback(
+    (canvasId: string) => {
     void purgeCanvasHead(canvasId).catch(() => {});
-  }, [purgeCanvasHead]);
+    },
+    [purgeCanvasHead],
+  );
 
-  const canvasUiEnabled = canvasFeature.enabled && componentEnabled("canvas.editor");
-  const canvasRuntime = useMemo<CanvasBlockRuntime | null>(() => ({
+  const canvasUiEnabled =
+    canvasFeature.enabled && componentEnabled("canvas.editor");
+  const canvasRuntime = useMemo<CanvasBlockRuntime | null>(
+    () => ({
     enabled: canvasUiEnabled,
     normalizeMedia: normalizeCanvasMedia,
     resolveAsset: resolveCanvasAsset,
     getAssets: getCanvasAssets,
     onAsset: (canvasId, asset) => {
-      const assets = canvasAssetsRef.current.get(canvasId) ?? new Map<string, CanvasStaticAsset>();
+        const assets =
+          canvasAssetsRef.current.get(canvasId) ??
+          new Map<string, CanvasStaticAsset>();
       assets.set(asset.id, asset);
       canvasAssetsRef.current.set(canvasId, assets);
     },
@@ -3239,25 +3804,54 @@ export default function App() {
     onCanvasFrozen: (canvasId) => canvasFrozenRef.current.add(canvasId),
     onCanvasDeliveryError: (_canvasId, message) => toast(message, "error"),
     register: () => () => {},
-  }), [canvasUiEnabled, freezeCanvasDraft, getCanvasAssets, normalizeCanvasMedia, purgeCanvasOnUnmount, removeCanvasDraft, resolveCanvasAsset, restoreCanvasDraft, saveCanvasDraft, toast]);
+    }),
+    [
+      canvasUiEnabled,
+      freezeCanvasDraft,
+      getCanvasAssets,
+      normalizeCanvasMedia,
+      purgeCanvasOnUnmount,
+      removeCanvasDraft,
+      resolveCanvasAsset,
+      restoreCanvasDraft,
+      saveCanvasDraft,
+      toast,
+    ],
+  );
 
   const createCanvas = useCallback(async () => {
     if (!canvasUiEnabled) {
-      const error = new Error(componentEnabled("canvas.editor") ? canvasFeature.status : "Canvas is disabled in Plugins.");
+      const error = new Error(
+        componentEnabled("canvas.editor")
+          ? canvasFeature.status
+          : "Canvas is disabled in Plugins.",
+      );
       toast(error.message, "error");
       throw error;
     }
     const draft = await canvasCreateDraft("Canvas");
     rememberCanvasDraft(draft);
     return draft;
-  }, [canvasFeature.status, canvasUiEnabled, componentEnabled, rememberCanvasDraft, toast]);
+  }, [
+    canvasFeature.status,
+    canvasUiEnabled,
+    componentEnabled,
+    rememberCanvasDraft,
+    toast,
+  ]);
 
   useEffect(() => {
     const onDuplicate = (event: Event) => {
-      const detail = (event as CustomEvent<{ id?: string; revision?: number }>).detail;
+      const detail = (event as CustomEvent<{ id?: string; revision?: number }>)
+        .detail;
       if (!detail?.id || !Number.isFinite(detail.revision)) return;
       if (!canvasUiEnabled) {
-        toast(componentEnabled("canvas.editor") ? canvasFeature.status : "Canvas is disabled in Plugins.", "error");
+        toast(
+          componentEnabled("canvas.editor")
+            ? canvasFeature.status
+            : "Canvas is disabled in Plugins.",
+          "error",
+        );
         return;
       }
       void canvasDuplicate(detail.id, Number(detail.revision))
@@ -3265,11 +3859,20 @@ export default function App() {
           rememberCanvasDraft(draft);
           insertCanvasDraftRef.current?.(draft);
         })
-        .catch((error) => toast(`Canvas duplicate failed: ${String(error)}`, "error"));
+        .catch((error) =>
+          toast(`Canvas duplicate failed: ${String(error)}`, "error"),
+        );
     };
     window.addEventListener("codetwo-canvas-duplicate", onDuplicate);
-    return () => window.removeEventListener("codetwo-canvas-duplicate", onDuplicate);
-  }, [canvasFeature.status, canvasUiEnabled, componentEnabled, rememberCanvasDraft, toast]);
+    return () =>
+      window.removeEventListener("codetwo-canvas-duplicate", onDuplicate);
+  }, [
+    canvasFeature.status,
+    canvasUiEnabled,
+    componentEnabled,
+    rememberCanvasDraft,
+    toast,
+  ]);
 
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
@@ -3293,7 +3896,8 @@ export default function App() {
       setDockTab("files");
       // The files surface is an editor *and* a tree; at the dock's chat-sized default the code
       // column is a sliver. Take the room the document can spare, up to a readable measure.
-      if (dockWidth < 640) setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
+      if (dockWidth < 640)
+        setDockWidth(Math.min(Math.max(300, window.innerWidth - 620), 800));
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
     [componentEnabled, dockWidth, setDockWidth, toast],
@@ -3378,12 +3982,14 @@ export default function App() {
         const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
         onMemoryPolicyChange(preset.read, preset.write);
       }
-      if (execution?.plan_first !== undefined) setPlanMode(execution.plan_first);
+      if (execution?.plan_first !== undefined)
+        setPlanMode(execution.plan_first);
       setActiveSceneName(reference);
       setScenePendingFields(softApplyPending(scene, live));
       if (session) {
         sceneBySessionRef.current.set(session, reference);
-        void applySceneToSession(session, reference, confirmed).then((outcome) => {
+        void applySceneToSession(session, reference, confirmed).then(
+          (outcome) => {
           if (!componentEnabledRef.current("scenes.surface")) return;
           // The core re-checks against the persisted policy; if it disagrees, nothing was
           // applied there — surface the same dialog instead of drifting.
@@ -3395,7 +4001,8 @@ export default function App() {
               to: outcome.escalation.to as SessionMode,
             });
           }
-        });
+          },
+        );
       } else {
         pendingSceneRef.current = reference;
       }
@@ -3460,8 +4067,8 @@ export default function App() {
   /** The pinned scene reference a pipeline stage's bare scene name resolves to, when installed. */
   const resolveStageScene = useCallback((target: string) => {
     return (
-      scenesRef.current.find((s) => s.reference === target || s.name === target)?.reference ??
-      target
+      scenesRef.current.find((s) => s.reference === target || s.name === target)
+        ?.reference ?? target
     );
   }, []);
 
@@ -3484,9 +4091,15 @@ export default function App() {
     async (instanceId: string, toStage: string, confirmed = false) => {
       if (!componentEnabledRef.current("scenes.surface")) return;
       const session = activeSessionRef.current;
-      const outcome = await advancePipeline(instanceId, toStage, session, confirmed);
+      const outcome = await advancePipeline(
+        instanceId,
+        toStage,
+        session,
+        confirmed,
+      );
       if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
-      const escalation = outcome.escalation ?? outcome.applied_scene?.escalation ?? null;
+      const escalation =
+        outcome.escalation ?? outcome.applied_scene?.escalation ?? null;
       if (escalation) {
         const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
         setSceneEscalation({
@@ -3517,7 +4130,12 @@ export default function App() {
   const advancePipelineInNewSession = useCallback(
     async (instanceId: string, toStage: string, confirmed = false) => {
       if (!componentEnabledRef.current("scenes.surface")) return;
-      const outcome = await advancePipeline(instanceId, toStage, null, confirmed);
+      const outcome = await advancePipeline(
+        instanceId,
+        toStage,
+        null,
+        confirmed,
+      );
       if (!componentEnabledRef.current("scenes.surface") || !outcome) return;
       if (outcome.escalation) {
         const stage = pipelineDetail?.stages.find((s) => s.id === toStage);
@@ -3546,7 +4164,14 @@ export default function App() {
       pendingSceneRef.current = reference;
       toast(t("stage.advancedNew", { stage: stage?.title ?? toStage }));
     },
-    [applySceneChoice, createSession, pipelineDetail, resolveStageScene, toast, t],
+    [
+      applySceneChoice,
+      createSession,
+      pipelineDetail,
+      resolveStageScene,
+      toast,
+      t,
+    ],
   );
 
   /** Start a pipeline in the current project, binding the active session to its entry stage. */
@@ -3571,7 +4196,8 @@ export default function App() {
           to: escalation.to as SessionMode,
         });
       }
-      const title = pipelines.find((p) => p.reference === reference)?.title ?? reference;
+      const title =
+        pipelines.find((p) => p.reference === reference)?.title ?? reference;
       toast(t("stage.started", { pipeline: title }));
     },
     [cwd, pipelines, resolveStageScene, syncSessionScene, toast, t],
@@ -3585,7 +4211,9 @@ export default function App() {
   const onDelegateIssue = useCallback(
     async (issue: Issue, sceneReference: string) => {
       if (!componentEnabledRef.current("scenes.surface")) return;
-      const scene = scenesRef.current.find((s) => s.reference === sceneReference);
+      const scene = scenesRef.current.find(
+        (s) => s.reference === sceneReference,
+      );
       if (!scene) return;
       const ctx = await issueContext(issue);
       if (!componentEnabledRef.current("scenes.surface")) return;
@@ -3612,7 +4240,11 @@ export default function App() {
       );
       if (!componentEnabledRef.current("scenes.surface")) return;
       pendingSceneRef.current = sceneReference;
-      pendingIssueInsertRef.current = { issue, context: ctx, delegatedScene: scene.title };
+      pendingIssueInsertRef.current = {
+        issue,
+        context: ctx,
+        delegatedScene: scene.title,
+      };
       if (delegationId !== null) pendingDelegationRef.current = delegationId;
       createSession();
       const params = plan.params;
@@ -3627,11 +4259,18 @@ export default function App() {
         const pending = pendingIssueInsertRef.current;
         pendingIssueInsertRef.current = null;
         if (pending) {
-          insertIssueRef.current?.(pending.issue, pending.context, pending.delegatedScene);
+          insertIssueRef.current?.(
+            pending.issue,
+            pending.context,
+            pending.delegatedScene,
+          );
         }
       }, 0);
       setShowIssues(false);
-      toast(t("issueDeleg.toast", { id: issue.id, scene: scene.title }), "success");
+      toast(
+        t("issueDeleg.toast", { id: issue.id, scene: scene.title }),
+        "success",
+      );
       // Best-effort attribution on the tracker, fire-and-forget. GitHub only: Linear's comment
       // call needs the caller-held API token `listLinearIssues` uses, which this surface does
       // not hold — skipped rather than failing.
@@ -3642,7 +4281,8 @@ export default function App() {
           issue.id,
           t("issueDeleg.commentBody", { scene: scene.title }),
         ).then((url) => {
-          if (url && delegationId !== null) void setIssueDelegationComment(delegationId, url);
+          if (url && delegationId !== null)
+            void setIssueDelegationComment(delegationId, url);
         });
       }
     },
@@ -3662,7 +4302,8 @@ export default function App() {
           void createSession();
           break;
         case "cancel":
-          if (activeSessionRef.current && running) void cancelTurn(activeSessionRef.current);
+          if (activeSessionRef.current && running)
+            void cancelTurn(activeSessionRef.current);
           else toast(t("toast.nothingRunning"));
           break;
         case "toggle_terminal":
@@ -3750,7 +4391,11 @@ export default function App() {
             toast("Scenes are disabled in Plugins.", "info");
             break;
           }
-          const next = nextSceneInRing([], scenesRef.current, activeSceneNameRef.current);
+          const next = nextSceneInRing(
+            [],
+            scenesRef.current,
+            activeSceneNameRef.current,
+          );
           if (next) applySceneChoice(next);
           break;
         }
@@ -3799,22 +4444,66 @@ export default function App() {
   );
 
   const paletteCommands: Command[] = [
-    { id: "run", label: "Run prompt", hint: hint("run"), run: () => void run() },
-    { id: "new", label: "New session", hint: hint("new_session"), run: () => {
+    {
+      id: "run",
+      label: "Run prompt",
+      hint: hint("run"),
+      run: () => void run(),
+    },
+    {
+      id: "new",
+      label: "New session",
+      hint: hint("new_session"),
+      run: () => {
       setShowTaskBoard(false);
       setShowPluginHub(false);
       setShowAutomations(false);
       void createSession();
-    } },
-    { id: "sc", label: "Source control", hint: hint("open_source_control"), run: openSourceControl },
-    { id: "checkpoint", label: "Checkpoint now", run: () => void doCheckpoint() },
-    { id: "market", label: "Open Plugin Hub", hint: hint("open_market"), run: openPluginHub },
+      },
+    },
+    {
+      id: "sc",
+      label: "Source control",
+      hint: hint("open_source_control"),
+      run: openSourceControl,
+    },
+    {
+      id: "checkpoint",
+      label: "Checkpoint now",
+      run: () => void doCheckpoint(),
+    },
+    {
+      id: "market",
+      label: "Open Plugin Hub",
+      hint: hint("open_market"),
+      run: openPluginHub,
+    },
     { id: "automations", label: t("automations.title"), run: openAutomations },
     { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
-    { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
-    { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
-    { id: "finder", label: t("action.open_finder"), hint: hint("open_finder"), run: () => void openWorkingDirectory("finder") },
-    { id: "search", label: "Search workspace contents", hint: hint("search_workspace"), run: () => setShowWorkspaceSearch(true) },
+    {
+      id: "issues",
+      label: "GitHub / Linear issues",
+      hint: hint("open_issues"),
+      run: () => setShowIssues(true),
+    },
+    {
+      id: "files",
+      label: "Browse workspace files",
+      hint: hint("open_files"),
+      run: () => setShowFiles(true),
+    },
+    {
+      id: "finder",
+      label: t("action.open_finder"),
+      hint: hint("open_finder"),
+      run: () => void openWorkingDirectory("finder"),
+    },
+    {
+      id: "search",
+      label: "Search workspace contents",
+      hint: hint("search_workspace"),
+      run: () => setShowWorkspaceSearch(true),
+    },
     {
       id: "usage",
       label: "Usage (5h / week / month)",
@@ -3827,26 +4516,41 @@ export default function App() {
         setShowSettings(true);
       },
     },
-    { id: "preview", label: "Preview compiled prompt", run: () => void doPreview() },
+    {
+      id: "preview",
+      label: "Preview compiled prompt",
+      run: () => void doPreview(),
+    },
     {
       id: "docmode",
-      label: docMode ? "Collapse the document" : "Expand the document to full height",
+      label: docMode
+        ? "Collapse the document"
+        : "Expand the document to full height",
       hint: hint("toggle_doc_mode"),
       run: () => toggleDocMode(!docMode),
     },
-    { id: "skills", label: "Insert a skill", hint: hint("open_skill_picker"), run: () => openSkillPickerRef.current?.() },
+    {
+      id: "skills",
+      label: "Insert a skill",
+      hint: hint("open_skill_picker"),
+      run: () => openSkillPickerRef.current?.(),
+    },
     {
       id: "template-from-last",
       label: t("templateFrom.palette"),
       // No-op with no history: the most recent user turn's prompt is the source.
       run: () => {
-        const last = [...turns].reverse().find((turn) => turn.prompt.trim().length > 0);
+        const last = [...turns]
+          .reverse()
+          .find((turn) => turn.prompt.trim().length > 0);
         if (last) setTemplateDraft(last.prompt);
       },
     },
     {
       id: "rail",
-      label: displayedRailCollapsed ? "Expand the sidebar" : "Collapse the sidebar",
+      label: displayedRailCollapsed
+        ? "Expand the sidebar"
+        : "Collapse the sidebar",
       run: toggleDisplayedRail,
     },
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
@@ -3859,18 +4563,61 @@ export default function App() {
         setShowSettings(true);
       },
     },
-    { id: "terminal", label: "Toggle terminal", hint: hint("toggle_terminal"), run: () => toggleDock("terminal") },
-    { id: "browser", label: "Toggle browser", hint: hint("toggle_browser"), run: () => toggleDock("browser") },
-    { id: "filespanel", label: "Toggle file tree", run: () => toggleDock("files") },
-    { id: "gitpanel", label: "Toggle git panel", hint: hint("toggle_git"), run: () => toggleDock("git") },
-    { id: "git", label: "Refresh git status", hint: hint("refresh_git"), run: refreshGit },
-    { id: "perm", label: "Cycle approval mode", hint: hint("cycle_permission_mode"), run: () => dispatchAction("cycle_permission_mode") },
-    { id: "scene", label: t("scene.pickerTitle"), hint: hint("cycle_scene"), run: () => setShowScenePicker(true) },
-    { id: "scene-studio", label: t("sceneEditor.manage"), run: () => {
+    {
+      id: "terminal",
+      label: "Toggle terminal",
+      hint: hint("toggle_terminal"),
+      run: () => toggleDock("terminal"),
+    },
+    {
+      id: "browser",
+      label: "Toggle browser",
+      hint: hint("toggle_browser"),
+      run: () => toggleDock("browser"),
+    },
+    {
+      id: "filespanel",
+      label: "Toggle file tree",
+      run: () => toggleDock("files"),
+    },
+    {
+      id: "gitpanel",
+      label: "Toggle git panel",
+      hint: hint("toggle_git"),
+      run: () => toggleDock("git"),
+    },
+    {
+      id: "git",
+      label: "Refresh git status",
+      hint: hint("refresh_git"),
+      run: refreshGit,
+    },
+    {
+      id: "perm",
+      label: "Cycle approval mode",
+      hint: hint("cycle_permission_mode"),
+      run: () => dispatchAction("cycle_permission_mode"),
+    },
+    {
+      id: "scene",
+      label: t("scene.pickerTitle"),
+      hint: hint("cycle_scene"),
+      run: () => setShowScenePicker(true),
+    },
+    {
+      id: "scene-studio",
+      label: t("sceneEditor.manage"),
+      run: () => {
       setSceneEditorRequest(null);
       setShowSceneStudio(true);
-    } },
-    { id: "mission", label: t("action.open_mission_control"), hint: hint("open_mission_control"), run: () => setShowMissionControl(true) },
+      },
+    },
+    {
+      id: "mission",
+      label: t("action.open_mission_control"),
+      hint: hint("open_mission_control"),
+      run: () => setShowMissionControl(true),
+    },
     ...scenes.map((s) => ({
       id: `scene-${s.reference}`,
       label: `${t("scene.chip")}: ${s.title}`,
@@ -3898,15 +4645,22 @@ export default function App() {
     if (["sc", "checkpoint", "gitpanel", "git"].includes(command.id)) {
       return componentEnabled("git.surface");
     }
-    if (command.id === "automations") return componentEnabled("automation.page");
+    if (command.id === "automations")
+      return componentEnabled("automation.page");
     if (command.id === "issues") return componentEnabled("issues.modal");
-    if (["files", "filespanel"].includes(command.id)) return componentEnabled("files.surface");
+    if (["files", "filespanel"].includes(command.id))
+      return componentEnabled("files.surface");
     if (command.id === "search") return componentEnabled("search.modal");
     if (command.id === "usage") return componentEnabled("usage.settings");
     if (command.id === "remote") return componentEnabled("remote.modal");
     if (command.id === "terminal") return componentEnabled("terminal.dock");
     if (command.id === "browser") return componentEnabled("browser.dock");
-    if (command.id === "scene" || command.id === "scene-studio" || command.id.startsWith("scene-") || command.id.startsWith("pipeline-")) {
+    if (
+      command.id === "scene" ||
+      command.id === "scene-studio" ||
+      command.id.startsWith("scene-") ||
+      command.id.startsWith("pipeline-")
+    ) {
       return componentEnabled("scenes.surface");
     }
     return true;
@@ -3922,7 +4676,9 @@ export default function App() {
           status: "not production-enabled",
         });
       });
-    getKeymap().then(setBindings).catch(() => {});
+    getKeymap()
+      .then(setBindings)
+      .catch(() => {});
     // Open on the project used last. Failing that, register the directory the app started in, so
     // the picker is never empty and the first session has somewhere real to run.
     setCallProjectPath(null);
@@ -3932,12 +4688,16 @@ export default function App() {
         if (list.length > 0) {
           // The list is in a fixed order, so "used last" is a property of the rows, not their
           // position — read it off `last_opened_at` rather than taking the first one.
-          const last = list.reduce((a, b) => (b.last_opened_at > a.last_opened_at ? b : a));
+          const last = list.reduce((a, b) =>
+            b.last_opened_at > a.last_opened_at ? b : a,
+          );
           activeProjectRef.current = last.path;
           setCallProjectPath(normalizePluginProjectPath(last.path));
           setActiveProject(last.path);
           setCwd(last.path);
-          setWorktreeBase(projectSwitchWorktreeBaseline(last.default_worktree_mode));
+          setWorktreeBase(
+            projectSwitchWorktreeBaseline(last.default_worktree_mode),
+          );
           setProjectBootstrapComplete(true);
           return;
         }
@@ -3948,13 +4708,17 @@ export default function App() {
           activeProjectRef.current = resolved;
           setCallProjectPath(normalizePluginProjectPath(resolved));
           setActiveProject(resolved);
-          listProjects().then(setProjects).catch(() => {});
+          listProjects()
+            .then(setProjects)
+            .catch(() => {});
         }
         setProjectBootstrapComplete(true);
       })
       .catch(() => {
         setProjectBootstrapComplete(true);
-        defaultCwd().then(setCwd).catch(() => {});
+        defaultCwd()
+          .then(setCwd)
+          .catch(() => {});
       });
     // The app opens on a blank page, so put the caret in it. Deferred one tick: the editor installs
     // its focus handle in its own mount effect.
@@ -3967,7 +4731,9 @@ export default function App() {
   }, [refreshGit, refreshCheckpoints, activeSession, showSourceControl]);
 
   useEffect(() => {
-    listProjectScripts(cwd || ".").then(setScripts).catch(() => setScripts([]));
+    listProjectScripts(cwd || ".")
+      .then(setScripts)
+      .catch(() => setScripts([]));
   }, [cwd]);
 
   useEffect(() => {
@@ -3977,13 +4743,16 @@ export default function App() {
     setWorktreeOptionsLoading(true);
     void listWorktreeBaselines(source)
       .then((options) => {
-        if (request === worktreeOptionsRequestRef.current) setWorktreeOptions(options);
+        if (request === worktreeOptionsRequestRef.current)
+          setWorktreeOptions(options);
       })
       .catch(() => {
-        if (request === worktreeOptionsRequestRef.current) setWorktreeOptions([]);
+        if (request === worktreeOptionsRequestRef.current)
+          setWorktreeOptions([]);
       })
       .finally(() => {
-        if (request === worktreeOptionsRequestRef.current) setWorktreeOptionsLoading(false);
+        if (request === worktreeOptionsRequestRef.current)
+          setWorktreeOptionsLoading(false);
       });
   }, [activeProject, cwd]);
 
@@ -4006,7 +4775,11 @@ export default function App() {
       const action = actionForEvent(e, effectiveBindings);
       if (!action) return;
       // Escape is also how dialogs and the suggestion menu close; let those win when one is open.
-      if (e.key === "Escape" && document.querySelector('[role="dialog"],.bn-suggestion-menu')) return;
+      if (
+        e.key === "Escape" &&
+        document.querySelector('[role="dialog"],.bn-suggestion-menu')
+      )
+        return;
       e.preventDefault();
       if (action.startsWith("project_action:")) {
         const script = scripts.find((candidate) => `project_action:${candidate.id}` === action);
@@ -4044,7 +4817,8 @@ export default function App() {
     async (session: SessionInfo) => {
       const path = session.worktree_path;
       if (!path || session.worktree_discarded) return;
-      if (!(await confirmNative(t("worktree.discardConfirm", { path })))) return;
+      if (!(await confirmNative(t("worktree.discardConfirm", { path }))))
+        return;
       try {
         await discardSessionWorktree(session.id);
         refreshSessions();
@@ -4057,6 +4831,7 @@ export default function App() {
 
   const sessionConfig: SessionConfig = {
     providers,
+    providersStatus,
     provider,
     onProvider: (p) => {
       providerPinned.current = true;
@@ -4076,6 +4851,7 @@ export default function App() {
         setDefaultModel(null);
       }
     },
+    onReloadProviders: refreshProviders,
     mode,
     sandbox,
     modeChangeDisabled: policyChangeDisabled,
@@ -4096,7 +4872,7 @@ export default function App() {
     scenesEnabled: scenesSurfaceEnabled,
     scenes: scenesSurfaceEnabled ? scenes : [],
     activeScene: scenesSurfaceEnabled
-      ? scenes.find((s) => s.reference === activeSceneName) ?? null
+      ? (scenes.find((s) => s.reference === activeSceneName) ?? null)
       : null,
     autoScene: scenesSurfaceEnabled && autoScene,
     onAutoScene: setAutoSceneChoice,
@@ -4114,7 +4890,9 @@ export default function App() {
       setSceneEditorRequest(null);
       setShowSceneStudio(true);
     },
-    sceneCustomized: scenesSurfaceEnabled && (() => {
+    sceneCustomized:
+      scenesSurfaceEnabled &&
+      (() => {
       const scene = scenes.find((s) => s.reference === activeSceneName);
       if (!scene) return false;
       return sceneCustomized(scene, {
@@ -4132,10 +4910,15 @@ export default function App() {
 
   const handleSceneSaved = (saved: SceneInfo) => {
     if (!componentEnabledRef.current("scenes.surface")) return;
-    const previous = sceneEditorRequest?.kind === "edit"
+    const previous =
+      sceneEditorRequest?.kind === "edit"
       ? sceneEditorRequest.scene.reference
       : null;
-    if (previous && previous === activeSceneNameRef.current && previous !== saved.reference) {
+    if (
+      previous &&
+      previous === activeSceneNameRef.current &&
+      previous !== saved.reference
+    ) {
       activeSceneNameRef.current = saved.reference;
       setActiveSceneName(saved.reference);
       if (activeSession) {
@@ -4177,7 +4960,9 @@ export default function App() {
           providers={providers}
           provider={provider}
           projectPath={activeProject ?? cwd}
-          project={projects.find((project) => project.path === activeProject) ?? null}
+          project={
+            projects.find((project) => project.path === activeProject) ?? null
+          }
           projects={projects}
           onProjectWorktreeMode={updateProjectWorktreeMode}
           onOpenSession={(id) => {
@@ -4193,7 +4978,9 @@ export default function App() {
       ) : showSceneStudio && scenesSurfaceEnabled ? (
         <SceneStudio
           scenes={scenes}
-          active={scenes.find((scene) => scene.reference === activeSceneName) ?? null}
+          active={
+            scenes.find((scene) => scene.reference === activeSceneName) ?? null
+          }
           request={sceneEditorRequest}
           providers={providers}
           skills={skills}
@@ -4230,12 +5017,17 @@ export default function App() {
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onAddProject={() => void addProjectFolder()}
-          onRenameProject={(p, name) => void renameProject(p, name).then(refreshProjects)}
+            onRenameProject={(p, name) =>
+              void renameProject(p, name).then(refreshProjects)
+            }
           onRemoveProject={(p) => {
             void removeProject(p).then(() => {
               try {
                 const history = loadBrowserHistory(window.localStorage);
-                saveBrowserHistory(window.localStorage, removeBrowserProject(history, p));
+                  saveBrowserHistory(
+                    window.localStorage,
+                    removeBrowserProject(history, p),
+                  );
               } catch {
                 // Browser history is a convenience; a blocked local store must not block removal.
               }
@@ -4272,9 +5064,15 @@ export default function App() {
             void createSession();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
-          onRename={(id, title) => void renameSession(id, title).then(refreshSessions)}
-          onPin={(id, pinned) => void pinSession(id, pinned).then(refreshSessions)}
-          onArchive={(id, archived) => void archiveSession(id, archived).then(refreshSessions)}
+            onRename={(id, title) =>
+              void renameSession(id, title).then(refreshSessions)
+            }
+            onPin={(id, pinned) =>
+              void pinSession(id, pinned).then(refreshSessions)
+            }
+            onArchive={(id, archived) =>
+              void archiveSession(id, archived).then(refreshSessions)
+            }
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
           onOpenMarket={() => {
@@ -4314,7 +5112,7 @@ export default function App() {
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
-          pluginActions={(
+            pluginActions={
             <PluginUiSlot
               slot="rail.features"
               contributions={pluginUiActions["rail.features"]}
@@ -4323,11 +5121,12 @@ export default function App() {
                 if (narrowLayout) setNarrowRailOpen(false);
               }}
             />
-          )}
+            }
         />
 
-        {showAutomations && (
-          componentEnabled("automation.page") ? <AutomationsPage
+          {showAutomations && (
+            componentEnabled("automation.page") ? (
+              <AutomationsPage
             projects={projects}
             providers={providers}
             defaultProject={(activeProject ?? cwd) || "."}
@@ -4336,8 +5135,9 @@ export default function App() {
               setShowAutomations(false);
               void selectSession(session);
             }}
-          /> : null
-        )}
+              />
+            ) : null
+          )}
 
         {showTaskBoard && (
           <TaskBoardPage
@@ -4351,19 +5151,42 @@ export default function App() {
 
         {showPluginHub && !showBundlePluginTools && (
           <PluginManagerPage
-            plugins={pluginManagerModel.plugins}
-            components={pluginManagerModel.components}
-            marketplaceItems={pluginManagerModel.marketplaceItems}
+              plugins={localizedPluginManagerModel.plugins}
+              components={localizedPluginManagerModel.components}
+              marketplaceItems={localizedPluginManagerModel.marketplaceItems}
+              headerLeadingAction={
+                displayedRailCollapsed ? (
+                  <IconAction
+                    icon={PanelLeft}
+                    label={t("rail.expand")}
+                    onClick={toggleDisplayedRail}
+                  />
+                ) : undefined
+              }
+              labels={pluginManagerLabels}
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
-            recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
+              recovery={
+                (selectedManagedCatalog ?? managedUserCatalog)?.recovery
+              }
             onScopeChange={(scope) => {
-              const normalized = scope.kind === "user"
+                const normalized =
+                  scope.kind === "user"
                 ? scope
-                : { kind: "project" as const, projectPath: normalizePluginProjectPath(scope.projectPath) };
+                    : {
+                        kind: "project" as const,
+                        projectPath: normalizePluginProjectPath(
+                          scope.projectPath,
+                        ),
+                      };
               setPluginManagerScope(normalized);
               void loadManagedCatalog(normalized).catch((error) => {
-                toast(`Could not load plugin scope: ${error}`, "error");
+                  toast(
+                    t("pluginManager.scopeLoadFailed", {
+                      error: String(error),
+                    }),
+                    "error",
+                  );
               });
             }}
             onPlanChange={planManagerChange}
@@ -4372,11 +5195,11 @@ export default function App() {
             onResetPlugin={async (pluginId, scope) => {
               await resetManagedPlugin(pluginId, toManagedPluginScope(scope));
               await refreshPluginManagerData(scope);
-              toast(`${pluginManagerModel.plugins.find((plugin) => plugin.id === pluginId)?.name ?? pluginId} reset to defaults.`, "success");
+                toast(pluginManagerLabels.settingsReset, "success");
             }}
             onInstallMarketplaceItem={async ({ itemId, scope }) => {
               if (scope.kind !== "user") {
-                throw new Error("Component marketplace installs are user-scoped.");
+                  throw new Error(t("pluginManager.marketplaceUserOnly"));
               }
               const id = itemId.replace(/^market:/, "");
               await marketInstall(id);
@@ -4389,7 +5212,12 @@ export default function App() {
             onImportGithub={async (repository) => {
               const result = await githubImportPlugin(repository);
               await refreshPluginManagerData(pluginManagerScope);
-              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+                toast(
+                  t("pluginHub.pluginInstalledToast", {
+                    name: result.plugin.name,
+                  }),
+                  "success",
+                );
               return {
                 pluginId: result.plugin.id,
                 name: result.plugin.name,
@@ -4399,12 +5227,26 @@ export default function App() {
             onSetBundleEnabled={async (pluginId, enabled) => {
               await setPluginEnabled(pluginId, enabled);
               await refreshPluginManagerData(pluginManagerScope);
-              toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
+                toast(
+                  t(
+                    enabled
+                      ? "pluginHub.pluginEnabledToast"
+                      : "pluginHub.pluginDisabledToast",
+                  ),
+                  "success",
+                );
             }}
             onSetBundleTrusted={async (pluginId, trusted) => {
               await setPluginTrusted(pluginId, trusted);
               await refreshPluginManagerData(pluginManagerScope);
-              toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
+                toast(
+                  t(
+                    trusted
+                      ? "pluginHub.pluginTrustedToast"
+                      : "pluginHub.pluginUntrustedToast",
+                  ),
+                  "success",
+                );
             }}
             onUninstallBundle={async (pluginId, keepData) => {
               await uninstallPlugin(pluginId, keepData);
@@ -4432,7 +5274,10 @@ export default function App() {
                 await refreshSkills();
                 toast(t("pluginHub.componentInstalledToast"), "success");
               } catch (error) {
-                toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.installFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4443,7 +5288,10 @@ export default function App() {
                 await refreshSkills();
                 toast(t("pluginHub.componentUninstalledToast"), "success");
               } catch (error) {
-                toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.uninstallFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4451,19 +5299,38 @@ export default function App() {
               const result = await githubImportPlugin(repository);
               setPlugins(await listPlugins());
               await refreshSkills();
-              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+                toast(
+                  t("pluginHub.pluginInstalledToast", {
+                    name: result.plugin.name,
+                  }),
+                  "success",
+                );
               return result;
             }}
             onOpenMarketplace={pickPluginMarketplace}
-            onInstallMarketplacePlugin={async (marketplacePath, pluginName) => {
+              onInstallMarketplacePlugin={async (
+                marketplacePath,
+                pluginName,
+              ) => {
               try {
-                const result = await installMarketplacePlugin(marketplacePath, pluginName);
+                  const result = await installMarketplacePlugin(
+                    marketplacePath,
+                    pluginName,
+                  );
                 setPlugins(await listPlugins());
                 await refreshSkills();
-                toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+                  toast(
+                    t("pluginHub.pluginInstalledToast", {
+                      name: result.plugin.name,
+                    }),
+                    "success",
+                  );
                 return result;
               } catch (error) {
-                toast(t("pluginHub.installFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.installFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4474,7 +5341,10 @@ export default function App() {
                 await refreshSkills();
                 toast(t("pluginHub.pluginUninstalledToast"), "success");
               } catch (error) {
-                toast(t("pluginHub.uninstallFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.uninstallFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4483,9 +5353,19 @@ export default function App() {
                 await setPluginEnabled(id, enabled);
                 setPlugins(await listPlugins());
                 await refreshSkills();
-                toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
+                  toast(
+                    t(
+                      enabled
+                        ? "pluginHub.pluginEnabledToast"
+                        : "pluginHub.pluginDisabledToast",
+                    ),
+                    "success",
+                  );
               } catch (error) {
-                toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.stateFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4493,19 +5373,41 @@ export default function App() {
               try {
                 await setPluginTrusted(id, trusted);
                 setPlugins(await listPlugins());
-                toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
+                  toast(
+                    t(
+                      trusted
+                        ? "pluginHub.pluginTrustedToast"
+                        : "pluginHub.pluginUntrustedToast",
+                    ),
+                    "success",
+                  );
               } catch (error) {
-                toast(t("pluginHub.stateFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.stateFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
             onApplyScaffold={async (pluginId, scaffoldId) => {
               try {
-                const result = await applyPluginScaffold(pluginId, scaffoldId, cwd || ".");
-                toast(t("pluginHub.scaffoldInstalledToast", { count: result.files }), "success");
+                  const result = await applyPluginScaffold(
+                    pluginId,
+                    scaffoldId,
+                    cwd || ".",
+                  );
+                  toast(
+                    t("pluginHub.scaffoldInstalledToast", {
+                      count: result.files,
+                    }),
+                    "success",
+                  );
                 return result;
               } catch (error) {
-                toast(t("pluginHub.scaffoldFailed", { error: String(error) }), "error");
+                  toast(
+                    t("pluginHub.scaffoldFailed", { error: String(error) }),
+                    "error",
+                  );
                 throw error;
               }
             }}
@@ -4516,11 +5418,20 @@ export default function App() {
 
         <div
           ref={sessionWorkspaceRef}
-          aria-hidden={showTaskBoard || showPluginHub || showAutomations || undefined}
-          className={showTaskBoard || showPluginHub || showAutomations ? "hidden" : "contents"}
+            aria-hidden={
+              showTaskBoard || showPluginHub || showAutomations || undefined
+            }
+            className={
+              showTaskBoard || showPluginHub || showAutomations
+                ? "hidden"
+                : "contents"
+            }
         >
             {/* ---------------- the session column ---------------- */}
-            <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background" ref={mainRef}>
+            <main
+              className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
+              ref={mainRef}
+            >
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
           {/* Symmetric block padding keeps the 28px controls optically centred on the 48px title
@@ -4533,7 +5444,11 @@ export default function App() {
             )}
           >
             {displayedRailCollapsed && (
-              <IconAction icon={PanelLeft} label={t("rail.expand")} onClick={toggleDisplayedRail} />
+                  <IconAction
+                    icon={PanelLeft}
+                    label={t("rail.expand")}
+                    onClick={toggleDisplayedRail}
+                  />
             )}
             {/* Breadcrumb, reference-style: project / thread. */}
             <Folder className="size-3.5 shrink-0 text-muted-foreground" />
@@ -4542,7 +5457,9 @@ export default function App() {
                 <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
                   {activeProjectName}
                 </span>
-                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                    <span className="shrink-0 text-ui text-muted-foreground/50">
+                      /
+                    </span>
               </>
             )}
             <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
@@ -4613,7 +5530,12 @@ export default function App() {
           {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
-          <div className={cn("flex min-h-0 flex-1", docMode ? "flex-row" : "flex-col")}>
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1",
+                  docMode ? "flex-row" : "flex-col",
+                )}
+              >
             {(turns.length > 0 || running || sessionLoading) && (
               <TranscriptPane
                 variant={docMode ? "side" : "main"}
@@ -4633,13 +5555,13 @@ export default function App() {
                 onAddSelection={addSelectedText}
                 onExplainSelection={explainSelectedText}
                 onAskSelectionInSideChat={askSelectedTextInSideChat}
-                before={(
+                    before={
                   <PluginUiSlot
                     slot="transcript.before"
                     contributions={pluginUiActions["transcript.before"]}
                     onInvoke={invokePluginAction}
                   />
-                )}
+                    }
               />
             )}
 
@@ -4684,7 +5606,9 @@ export default function App() {
                       className="shrink-0"
                       onClick={() =>
                         activeSession &&
-                        void archiveSession(activeSession, false).then(refreshSessions)
+                            void archiveSession(activeSession, false).then(
+                              refreshSessions,
+                            )
                       }
                     >
                       {t("archived.restore")}
@@ -4694,7 +5618,10 @@ export default function App() {
               )}
               {/* Quiet scene banner (R8): stage completion / hook suggestions for the focused
                   session, rendered above the composer. Dismissal is remembered by the core. */}
-              {scenesSurfaceEnabled && sceneBanner && sceneBanner.session === activeSession && !activeArchived && (
+                  {scenesSurfaceEnabled &&
+                    sceneBanner &&
+                    sceneBanner.session === activeSession &&
+                    !activeArchived && (
                 <SceneBanner
                   banner={sceneBanner}
                   scenes={scenes}
@@ -4711,7 +5638,10 @@ export default function App() {
                     setSceneBanner(null);
                   }}
                   onDismiss={() => {
-                    void dismissSceneBanner(sceneBanner.session, sceneBanner.stateKey);
+                          void dismissSceneBanner(
+                            sceneBanner.session,
+                            sceneBanner.stateKey,
+                          );
                     setSceneBanner(null);
                   }}
                 />
@@ -4741,7 +5671,10 @@ export default function App() {
                   models={models}
                   currentModel={currentModel}
                   defaultModel={defaultModel}
-                  contextWindow={activeContextWindow(contextWindows, activeSession)}
+                      contextWindow={activeContextWindow(
+                        contextWindows,
+                        activeSession,
+                      )}
                   usage={sessionUsage}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
@@ -4758,16 +5691,22 @@ export default function App() {
                     setCurrentModel(id);
                     void setModel(session, id).catch((e) => {
                       pendingModelChangesRef.current.delete(session);
-                      toast(t("toast.modelFailed", { error: String(e) }), "error");
+                          toast(
+                            t("toast.modelFailed", { error: String(e) }),
+                            "error",
+                          );
                     });
                   }}
                   configOptions={configOptions}
                   onConfigOption={(configId, value) => {
                     const session = activeSessionRef.current;
                     if (!session) return;
-                    const option = configOptions.find((item) => item.id === configId);
+                        const option = configOptions.find(
+                          (item) => item.id === configId,
+                        );
                     if (
-                      (option?.category === "model" || configId === "model") &&
+                          (option?.category === "model" ||
+                            configId === "model") &&
                       value !== currentModelRef.current
                     ) {
                       pendingModelChangesRef.current.add(session);
@@ -4779,27 +5718,41 @@ export default function App() {
                     // Optimistic: the engine echoes the agent's authoritative `config_options` set, or
                     // an `error` event if the option isn't supported — either replaces this state.
                     setConfigOptions((prev) =>
-                      prev.map((o) => (o.id === configId ? { ...o, current: value } : o)),
+                          prev.map((o) =>
+                            o.id === configId ? { ...o, current: value } : o,
+                          ),
                     );
-                    void setConfigOption(session, configId, value).catch((e) => {
-                      if (option?.category === "model" || configId === "model") {
+                        void setConfigOption(session, configId, value).catch(
+                          (e) => {
+                            if (
+                              option?.category === "model" ||
+                              configId === "model"
+                            ) {
                         pendingModelChangesRef.current.delete(session);
                       }
-                      toast(t("toast.modelFailed", { error: String(e) }), "error");
-                    });
+                            toast(
+                              t("toast.modelFailed", { error: String(e) }),
+                              "error",
+                            );
+                          },
+                        );
                   }}
                   running={running}
                   loading={sessionLoading}
                   docEmpty={docEmpty}
                   onRun={() => void run()}
-                  onStop={() => activeSession && void cancelTurn(activeSession)}
+                      onStop={() =>
+                        activeSession && void cancelTurn(activeSession)
+                      }
                   onAttachFile={() => {
-                    if (componentEnabled("files.surface")) setShowFiles(true);
+                        if (componentEnabled("files.surface"))
+                          setShowFiles(true);
                     else toast("Files are disabled in Plugins.", "info");
                   }}
                   onInsertSkill={() => openSkillPickerRef.current?.()}
                   onInsertIssue={() => {
-                    if (componentEnabled("issues.modal")) setShowIssues(true);
+                        if (componentEnabled("issues.modal"))
+                          setShowIssues(true);
                     else toast("Issues are disabled in Plugins.", "info");
                   }}
                   onOpenMarket={openPluginHub}
@@ -4811,25 +5764,33 @@ export default function App() {
                   // R11: with an active-scene brief, a finished dictation is structured into a
                   // pre-filled brief card; any failure degrades to the raw-text insert above.
                   // No brief → the handler is undefined and voice behaves exactly as before.
-                  onVoiceTranscript={voiceComposerEnabled && scenesSurfaceEnabled
+                      onVoiceTranscript={
+                        voiceComposerEnabled && scenesSurfaceEnabled
                     ? makeTranscriptHandler({
-                        scene: scenes.find((s) => s.reference === activeSceneName) ?? null,
+                              scene:
+                                scenes.find(
+                                  (s) => s.reference === activeSceneName,
+                                ) ?? null,
                         structureBrief,
-                        insertBrief: (scene, values) => insertBriefRef.current?.(scene, values),
-                        insertText: (text) => insertTextRef.current?.(text),
-                        onDegrade: () => toast(t("voice.structureFailed"), "error"),
+                              insertBrief: (scene, values) =>
+                                insertBriefRef.current?.(scene, values),
+                              insertText: (text) =>
+                                insertTextRef.current?.(text),
+                              onDegrade: () =>
+                                toast(t("voice.structureFailed"), "error"),
                       })
-                    : undefined}
+                          : undefined
+                      }
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}
-                  pluginActions={(
+                      pluginActions={
                     <PluginUiSlot
                       slot="composer.toolbar"
                       contributions={pluginUiActions["composer.toolbar"]}
                       onInvoke={invokePluginAction}
                     />
-                  )}
+                      }
                   sessionId={activeSession}
                   insertBriefRef={insertBriefRef}
                 >
@@ -4847,11 +5808,14 @@ export default function App() {
                     insertMarkdownRef={insertMarkdownRef}
                     openSkillPickerRef={openSkillPickerRef}
                     sceneSkills={(() => {
-                      const scene = scenes.find((s) => s.reference === activeSceneName);
+                          const scene = scenes.find(
+                            (s) => s.reference === activeSceneName,
+                          );
                       return scene?.skills
                         ? {
                             pinned: scene.skills.pinned ?? [],
-                            suppressUnpinned: scene.skills.suppress_unpinned ?? false,
+                                suppressUnpinned:
+                                  scene.skills.suppress_unpinned ?? false,
                           }
                         : null;
                     })()}
@@ -4886,7 +5850,9 @@ export default function App() {
               autoTab={dockAutoHint?.surface ?? null}
               highlightFile={dockAutoHint?.file ?? null}
               cwd={cwd || null}
-              projectPath={activeProject ? normalizePluginProjectPath(activeProject) : null}
+              projectPath={
+                activeProject ? normalizePluginProjectPath(activeProject) : null
+              }
               sessionKey={activeSession ?? "main"}
               git={git}
               onRefreshGit={refreshGit}
@@ -4959,13 +5925,17 @@ export default function App() {
         onOpenChange={setShowActionDialog}
         onSave={saveProjectAction}
       />
-      {showRemote && componentEnabled("remote.modal") && <RemoteModal onClose={() => setShowRemote(false)} />}
+      {showRemote && componentEnabled("remote.modal") && (
+        <RemoteModal onClose={() => setShowRemote(false)} />
+      )}
       {showIssues && componentEnabled("issues.modal") && (
         <IssuesModal
           cwd={cwd || "."}
           scenes={scenesSurfaceEnabled ? scenes : []}
           onInsert={(i) => void insertIssue(i)}
-          onDelegate={(i, sceneReference) => void onDelegateIssue(i, sceneReference)}
+          onDelegate={(i, sceneReference) =>
+            void onDelegateIssue(i, sceneReference)
+          }
           onOpenSession={(session) => {
             setShowIssues(false);
             void selectSession(session);
@@ -4973,13 +5943,19 @@ export default function App() {
           onClose={() => setShowIssues(false)}
         />
       )}
-      {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
+      {preview && (
+        <PreviewModal preview={preview} onClose={() => setPreview(null)} />
+      )}
       {showMissionControl && (
         <MissionControlDialog
           sessions={sessions}
           runningSessions={runningSessions}
           contextWindows={contextWindows}
-          sceneBySession={scenesSurfaceEnabled ? sceneBySessionRef.current : EMPTY_SCENE_BY_SESSION}
+          sceneBySession={
+            scenesSurfaceEnabled
+              ? sceneBySessionRef.current
+              : EMPTY_SCENE_BY_SESSION
+          }
           onSelect={(id) => void selectSession(id)}
           onReview={openSourceControl}
           onClose={() => setShowMissionControl(false)}
@@ -5013,15 +5989,16 @@ export default function App() {
       {sceneEscalation && scenesSurfaceEnabled && (
         <SceneEscalationDialog
           sceneLabel={
-            scenes.find((s) => s.reference === sceneEscalation.reference)?.title ??
-            sceneEscalation.reference
+            scenes.find((s) => s.reference === sceneEscalation.reference)
+              ?.title ?? sceneEscalation.reference
           }
           from={sceneEscalation.from}
           to={sceneEscalation.to}
           onConfirm={() => {
             const pending = sceneEscalation;
             setSceneEscalation(null);
-            if (pending.kind === "soft") applySceneChoice(pending.reference, { confirmed: true });
+            if (pending.kind === "soft")
+              applySceneChoice(pending.reference, { confirmed: true });
             else if (pending.kind === "pipeline" && pending.pipeline)
               void advancePipelineChoice(
                 pending.pipeline.instanceId,
@@ -5063,12 +6040,20 @@ export default function App() {
             <DialogHeader>
               <DialogTitle>{t("planDoc.title")}</DialogTitle>
             </DialogHeader>
-            <p className="text-ui text-muted-foreground">{t("planDoc.confirm")}</p>
+            <p className="text-ui text-muted-foreground">
+              {t("planDoc.confirm")}
+            </p>
             <DialogFooter>
-              <Button variant="outline" onClick={() => resolvePlanDocPending(null)}>
+              <Button
+                variant="outline"
+                onClick={() => resolvePlanDocPending(null)}
+              >
                 {t("planDoc.cancel")}
               </Button>
-              <Button variant="secondary" onClick={() => resolvePlanDocPending("append")}>
+              <Button
+                variant="secondary"
+                onClick={() => resolvePlanDocPending("append")}
+              >
                 {t("planDoc.append")}
               </Button>
               <Button onClick={() => resolvePlanDocPending("replace")}>
@@ -5088,13 +6073,17 @@ export default function App() {
             <Input
               placeholder="Skill name"
               value={skillDraft.name}
-              onChange={(e) => setSkillDraft({ ...skillDraft, name: e.target.value })}
+              onChange={(e) =>
+                setSkillDraft({ ...skillDraft, name: e.target.value })
+              }
             />
             <textarea
               className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-ui outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               placeholder="Prompt fragment inserted when this skill is picked"
               value={skillDraft.text}
-              onChange={(e) => setSkillDraft({ ...skillDraft, text: e.target.value })}
+              onChange={(e) =>
+                setSkillDraft({ ...skillDraft, text: e.target.value })
+              }
             />
             <DialogFooter>
               <Button variant="outline" onClick={() => setSkillDraft(null)}>
@@ -5131,20 +6120,33 @@ export default function App() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CircleAlert className="size-4 text-warning" /> Permission requested
+                <CircleAlert className="size-4 text-warning" /> Permission
+                requested
               </DialogTitle>
             </DialogHeader>
-            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">{permission.title}</p>
+            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">
+              {permission.title}
+            </p>
             {permission.context && permission.context.kind !== "acp" && (
               <div className="space-y-1 text-hint text-muted-foreground">
                 <p className="font-medium capitalize text-foreground">
                   {permission.context.kind.replaceAll("_", " ")}
                 </p>
-                {permission.context.server && <p>Server: {permission.context.server}</p>}
-                {permission.context.tool && <p>Tool: {permission.context.tool}</p>}
-                {permission.context.origin && <p>Site: {permission.context.origin}</p>}
-                {permission.context.application && <p>Application: {permission.context.application}</p>}
-                {permission.context.risk && <p>Risk: {permission.context.risk}</p>}
+                {permission.context.server && (
+                  <p>Server: {permission.context.server}</p>
+                )}
+                {permission.context.tool && (
+                  <p>Tool: {permission.context.tool}</p>
+                )}
+                {permission.context.origin && (
+                  <p>Site: {permission.context.origin}</p>
+                )}
+                {permission.context.application && (
+                  <p>Application: {permission.context.application}</p>
+                )}
+                {permission.context.risk && (
+                  <p>Risk: {permission.context.risk}</p>
+                )}
                 <p>This approval is required even in Full Access.</p>
               </div>
             )}

@@ -49,7 +49,10 @@ export async function desktopCall<T>(
   projectPath: string | null,
 ): Promise<T> {
   const rpc = await client();
-  return (await rpc.request.call({ name, args, projectPath })) as T;
+  // `request` is itself a function. Property access for a command named `call` resolves to
+  // Function.prototype.call instead of Electrobun's proxy method, which sends an undefined RPC
+  // method. Use the explicit function form for this one intentionally generic command.
+  return (await rpc.request("call", { name, args, projectPath })) as T;
 }
 
 export function listenDesktop<T>(name: string, listener: (payload: T) => void): () => void {

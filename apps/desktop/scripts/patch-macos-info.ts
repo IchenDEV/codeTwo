@@ -1,10 +1,20 @@
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  DESKTOP_CHANNELS,
+  desktopChannelForIdentifier,
+  resolveDesktopChannel,
+} from "./desktop-channel";
+
 if (process.platform !== "darwin") process.exit(0);
 
 const wrapperBundle = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
+const channelName =
+  desktopChannelForIdentifier(process.env.ELECTROBUN_APP_IDENTIFIER) ??
+  resolveDesktopChannel(process.env.CODETWO_CHANNEL);
+const channel = DESKTOP_CHANNELS[channelName];
 const bundles = wrapperBundle
   ? [wrapperBundle]
   : buildDirectory
@@ -106,7 +116,7 @@ function signUpdateComponents(bundle: string): void {
   }
 }
 
-function configureUpdater(plist: string): void {
+function configureBundleVersion(plist: string): void {
   const appVersion = process.env.ELECTROBUN_APP_VERSION ?? "0.0.0";
   const buildVersion = process.env.CODETWO_BUILD_VERSION ?? appVersion;
   if (!/^\d+(?:\.\d+){0,2}$/.test(buildVersion)) {
@@ -114,6 +124,9 @@ function configureUpdater(plist: string): void {
   }
 
   setPlistString(plist, "CFBundleVersion", buildVersion);
+}
+
+function configureUpdater(plist: string): void {
   setPlistBoolean(plist, "SUEnableAutomaticChecks", false);
   setPlistBoolean(plist, "SUAllowsAutomaticUpdates", false);
   setPlistBoolean(plist, "SUAutomaticallyUpdate", false);
@@ -154,14 +167,18 @@ function configureUpdater(plist: string): void {
 
 for (const bundle of bundles) {
   const plist = join(bundle, "Contents", "Info.plist");
-  setPlistString(plist, "CFBundleDisplayName", process.env.ELECTROBUN_APP_NAME ?? "C2");
+  setPlistString(plist, "CFBundleDisplayName", channel.displayName);
   setPlistString(plist, "CFBundleShortVersionString", process.env.ELECTROBUN_APP_VERSION ?? "0.0.0");
+  configureBundleVersion(plist);
   for (const [key, value] of Object.entries(descriptions)) {
     setPlistString(plist, key, value);
   }
-  if (!wrapperBundle) {
+  if (!wrapperBundle && channel.updatesEnabled) {
     configureUpdater(plist);
     embedUpdateHelper(bundle);
     signUpdateComponents(bundle);
+  } else if (!channel.updatesEnabled) {
+    removePlistKey(plist, "SUFeedURL");
+    removePlistKey(plist, "SUPublicEDKey");
   }
 }

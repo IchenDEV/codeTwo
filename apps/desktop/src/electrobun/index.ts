@@ -97,7 +97,10 @@ async function openWorkspace(path: string, target: WorkspaceOpenTarget): Promise
 const queuedEvents: DesktopEvent[] = [];
 let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
-const dataDir = process.env.CODETWO_DATA_DIR ?? join(Utils.paths.appData, "dev.codetwo.app");
+const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
+const dataDir =
+  process.env.CODETWO_DATA_DIR ??
+  join(Utils.paths.appData, process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev");
 const host = new PureBunHost(dataDir, (event) => {
   if (rendererReady) rpc.send.event(event);
   else queuedEvents.push(event);
@@ -121,7 +124,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
       confirm: async ({ message, title }) => {
         const result = await Utils.showMessageBox({
           type: "warning",
-          title: title ?? "C2",
+          title: title ?? applicationName,
           message,
           buttons: ["Cancel", "Continue"],
           defaultId: 0,
@@ -151,7 +154,7 @@ const display = Screen.getPrimaryDisplay().workArea;
 const width = 1200;
 const height = 800;
 const mainWindow = new BrowserWindow({
-  title: "C2",
+  title: applicationName,
   frame: {
     x: Math.max(display.x, display.x + Math.round((display.width - width) / 2)),
     y: Math.max(display.y, display.y + Math.round((display.height - height) / 2)),
@@ -162,11 +165,11 @@ const mainWindow = new BrowserWindow({
   renderer: "native",
   rpc,
   titleBarStyle: "hiddenInset",
-  trafficLightOffset: { x: 14, y: 27 },
   sandbox: false,
 });
 
 mainWindow.webview.on("dom-ready", () => {
+  mainWindow.setWindowButtonPosition(24, 17);
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });
   for (const event of queuedEvents.splice(0)) rpc.send.event(event);

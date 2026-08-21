@@ -31,7 +31,12 @@ import { worktreeGatingReason } from "./sessionEvents";
 import { familyOf, groupModels, pickVariant, variantOf, type Effort } from "./models";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { VoiceButton } from "../voice/VoiceButton";
-import type { ConfigOptionInfo, ModelChoice } from "../bridge";
+import {
+  fallbackProviders,
+  providerDisplayName,
+  type ConfigOptionInfo,
+  type ModelChoice,
+} from "../bridge";
 import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
 import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
@@ -500,7 +505,10 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const active = config.providers.find((p) => p.id === config.provider);
+  const providers = config.providers.length > 0 ? config.providers : fallbackProviders();
+  const active = providers.find((p) => p.id === config.provider);
+  const activeLabel = active?.display_name ?? providerDisplayName(config.provider);
+  const registryReady = config.providersStatus === "ready";
 
   useEffect(() => {
     const openProviderPicker = () => {
@@ -516,21 +524,41 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
       <PopoverTrigger
         render={<Chip
           ref={triggerRef}
-          title={t("config.provider")}
-          aria-label={`${t("config.provider")}: ${active?.display_name ?? config.provider}`}
+          title={config.providersStatus === "error" ? t("config.providersLoadFailed") : t("config.provider")}
+          aria-label={`${t("config.provider")}: ${activeLabel}`}
+          aria-busy={config.providersStatus === "loading"}
         >
-          {active && !active.available && (
+          {registryReady && active && !active.available && (
             <span className="size-1.5 shrink-0 rounded-full bg-warning" title={t("composer.cliNotFound")} />
           )}
           <span className="max-w-40 truncate text-foreground/80">
-            {active?.display_name ?? config.provider}
+            {activeLabel}
           </span>
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>}
       />
       <PopoverContent align="start" side="top" className="w-64 p-1.5">
         <MenuSection>{t("config.provider")}</MenuSection>
-        {config.providers.map((p) => (
+        {config.providersStatus === "loading" && (
+          <p role="status" className="px-2.5 pb-2 text-fine text-muted-foreground">
+            {t("config.providersLoading")}
+          </p>
+        )}
+        {config.providersStatus === "error" && (
+          <div className="mb-1 flex items-center gap-2 rounded-(--ds-radius-control) bg-muted/60 px-2.5 py-2 text-fine">
+            <span role="alert" className="min-w-0 flex-1 text-muted-foreground">
+              {t("config.providersLoadFailed")}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 font-medium text-foreground hover:underline"
+              onClick={config.onReloadProviders}
+            >
+              {t("config.retryProviders")}
+            </button>
+          </div>
+        )}
+        {providers.map((p) => (
           <MenuRow
             key={p.id}
             selected={p.id === config.provider}
@@ -538,16 +566,21 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
             label={p.display_name}
             // The dot says installed; the line under it says what's missing, so the list itself
             // answers "why can't I use that one?" without a paragraph of warning text.
-            detail={p.available ? null : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")}
+            detail={registryReady && !p.available
+              ? p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
+              : null}
             leading={
               <>
                 <span
-                  className={cn("size-1.5 shrink-0 rounded-full", p.available ? "bg-success" : "bg-border")}
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    registryReady && p.available ? "bg-success" : "bg-border",
+                  )}
                 />
                 {/* The brand mark; dimmed when the CLI isn't installed, like the row's text. */}
                 <ProviderIcon
                   provider={p.id}
-                  className={cn("size-3.5 shrink-0", !p.available && "opacity-40")}
+                  className={cn("size-3.5 shrink-0", registryReady && !p.available && "opacity-40")}
                 />
               </>
             }
@@ -1197,7 +1230,7 @@ export function Composer({
         {!docMode && checkout && (
           <button
             onClick={checkout.onOpen}
-            className="mt-3 flex h-8 items-center gap-1.5 rounded-lg bg-muted/30 px-3 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07] transition-colors hover:bg-accent hover:text-foreground"
+            className="mt-3 flex h-8 items-center gap-1.5 rounded-(--ds-radius-control) bg-muted/30 px-3 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07] transition-colors hover:bg-accent hover:text-foreground"
           >
             {/* Squeezed, the row keeps what identifies the checkout (project, dirty count) and
                 sheds the caption and branch name — both one click away. */}

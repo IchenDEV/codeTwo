@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-BUNDLE_ID="dev.codetwo.app"
+BUNDLE_ID="dev.codetwo.app.dev"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DESKTOP_DIR="$ROOT_DIR/apps/desktop"
 case "$(uname -m)" in
@@ -86,10 +86,16 @@ build_app() {
     exit 1
   fi
 
+  actual_bundle_id="$(/usr/bin/plutil -extract CFBundleIdentifier raw -- "$APP_BUNDLE/Contents/Info.plist")"
+  if [[ "$actual_bundle_id" != "$BUNDLE_ID" ]]; then
+    echo "C2-dev.app has bundle identifier $actual_bundle_id; expected $BUNDLE_ID." >&2
+    exit 1
+  fi
+
   for privacy_key in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription; do
     privacy_value="$(/usr/bin/plutil -extract "$privacy_key" raw -- "$APP_BUNDLE/Contents/Info.plist")"
     if [[ -z "$privacy_value" ]]; then
-      echo "C2.app has an empty $privacy_key value." >&2
+      echo "C2-dev.app has an empty $privacy_key value." >&2
       exit 1
     fi
   done

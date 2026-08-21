@@ -82,7 +82,7 @@ jobs:
           ELECTROBUN_DEVELOPER_ID: "-"
           NODE_OPTIONS: --max-old-space-size=4096
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
-        run: bun run build:app
+        run: bun run build:release
 
       - name: Verify and stage release package
         shell: bash

@@ -1,9 +1,13 @@
 import type { ElectrobunConfig } from "electrobun";
 
+import { DESKTOP_CHANNELS, resolveDesktopChannel } from "./scripts/desktop-channel";
+
+const channel = DESKTOP_CHANNELS[resolveDesktopChannel(process.env.CODETWO_CHANNEL, process.argv)];
+
 export default {
   app: {
-    name: "C2",
-    identifier: "dev.codetwo.app",
+    name: channel.appName,
+    identifier: channel.identifier,
     version: process.env.RELEASE_VERSION ?? "0.0.0",
     description: "Document-first coding agent",
   },
@@ -13,6 +17,10 @@ export default {
       entrypoint: "src/electrobun/index.ts",
       minify: false,
       sourcemap: "external",
+      define: {
+        "process.env.CODETWO_APP_IDENTIFIER": JSON.stringify(channel.identifier),
+        "process.env.CODETWO_APP_NAME": JSON.stringify(channel.displayName),
+      },
     },
     copy: {
       dist: "views/main",
@@ -25,7 +33,7 @@ export default {
       notarize: process.env.ELECTROBUN_NOTARIZE === "1",
       bundleCEF: false,
       defaultRenderer: "native",
-      icons: "assets/codeTwo.iconset",
+      icons: "assets/codeTwo.icon",
       entitlements: {
         "com.apple.security.device.audio-input": true,
         "com.apple.security.personal-information.speech-recognition": true,

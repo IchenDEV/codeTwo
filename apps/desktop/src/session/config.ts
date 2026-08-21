@@ -19,8 +19,10 @@ import type { SceneInfo } from "./scene";
  */
 export interface SessionConfig {
   providers: ProviderInfo[];
+  providersStatus: "loading" | "ready" | "error";
   provider: string;
   onProvider: (v: string) => void;
+  onReloadProviders: () => void;
   /** The engine's two permission axes. Read here, but set only as a pair — see `onSessionMode`. */
   mode: PermissionMode;
   sandbox: Sandbox;
