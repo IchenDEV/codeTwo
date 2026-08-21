@@ -487,7 +487,7 @@ export function SessionRail({
                   </div>
                 )}
 
-                {/* 3 — assigned agent; the icon slot matches the title and status rows exactly. */}
+                {/* 3 — assigned agent on the left, current state in the free space on the right. */}
                 <div
                   data-session-line="provider"
                   className="mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground"
@@ -501,36 +501,33 @@ export function SessionRail({
                       className="size-3 opacity-70"
                     />
                   </span>
-                  <span className="min-w-0 truncate">{displayProvider(s.provider)}</span>
-                </div>
-
-                {/* 4 — state gets its own row instead of competing with the provider label. */}
-                <div
-                  data-session-line="status"
-                  aria-label={statusLabel}
-                  title={isFailed ? activity.message : undefined}
-                  className={cn(
-                    "mt-1 flex h-4 items-center gap-1.5 text-fine leading-4 text-muted-foreground",
-                    isAwaitingInput && "text-warning",
-                    isFailed && "text-destructive",
-                    isRunning && "text-primary",
-                  )}
-                >
-                  <span
-                    data-session-icon-column
-                    className="flex h-4 w-6 shrink-0 items-center justify-center"
-                  >
-                    {isAwaitingInput ? (
-                      <span className="size-1.5 animate-pulse rounded-full bg-warning" />
-                    ) : isFailed ? (
-                      <CircleAlert className="size-3" />
-                    ) : isRunning ? (
-                      <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
-                    ) : (
-                      <Check className="size-3" />
-                    )}
+                  <span className="min-w-0 flex-1 truncate">
+                    {displayProvider(s.provider)}
                   </span>
-                  <span className="min-w-0 truncate">{statusLabel}</span>
+                  <span
+                    data-session-line="status"
+                    aria-label={statusLabel}
+                    title={isFailed ? activity.message : undefined}
+                    className={cn(
+                      "ml-auto flex h-4 shrink-0 items-center gap-1.5 pl-2 text-fine leading-4 text-muted-foreground",
+                      isAwaitingInput && "text-warning",
+                      isFailed && "text-destructive",
+                      isRunning && "text-primary",
+                    )}
+                  >
+                    <span className="flex size-4 shrink-0 items-center justify-center">
+                      {isAwaitingInput ? (
+                        <span className="size-1.5 animate-pulse rounded-full bg-warning" />
+                      ) : isFailed ? (
+                        <CircleAlert className="size-3" />
+                      ) : isRunning ? (
+                        <ActivityOrb state="working" visualSize={14} aria-hidden="true" />
+                      ) : (
+                        <Check className="size-3" />
+                      )}
+                    </span>
+                    <span className="min-w-0 truncate">{statusLabel}</span>
+                  </span>
                 </div>
               </div>
             </div>

@@ -1350,28 +1350,34 @@ export async function onAutomationChanged(
   return listenDesktop<string>("automation-changed", cb);
 }
 
-export async function answerPermission(session: string, requestId: string, optionId: string | null): Promise<void> {
+export async function answerPermission(
+  session: string,
+  requestId: string,
+  optionId: string | null,
+): Promise<boolean> {
   if (inDesktop) {
-    await call("engine.answer_permission", {
+    return call<boolean>("engine.answer_permission", {
       session,
       request_id: requestId,
       option_id: optionId,
     });
   }
+  return false;
 }
 
 export async function answerElicitation(
   session: string,
   requestId: string,
   answer: ElicitationAnswer,
-): Promise<void> {
+): Promise<boolean> {
   if (inDesktop) {
-    await call("engine.answer_elicitation", {
+    return call<boolean>("engine.answer_elicitation", {
       session,
       request_id: requestId,
       answer,
     });
   }
+  return false;
 }
 
 export async function setPermissionMode(session: string, mode: string): Promise<void> {

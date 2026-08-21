@@ -15,6 +15,8 @@ import {
   isTerminalSessionEvent,
   latestActivity,
   matchesSessionCreation,
+  permissionQueueAfterAnswer,
+  permissionQueueAfterActivity,
   permissionsFromSessions,
   sessionCreationBaseline,
   sessionCreationBaselineSha,
@@ -166,6 +168,84 @@ describe("session event isolation", () => {
       "permission-first",
       "permission-later",
     ]);
+  });
+
+  test("an activity update keeps an elicitation renderable as a question", () => {
+    const form = {
+      message: "Allow Browser use to access http://127.0.0.1:4173?",
+      tool_call_id: "browser-call",
+      fields: [
+        {
+          key: "persist",
+          kind: "text" as const,
+          title: "Approval scope",
+          required: true,
+          options: [],
+        },
+      ],
+    };
+    const activity: SessionActivity = {
+      revision: 10,
+      state: {
+        kind: "awaiting_input",
+        turn_id: "turn-a",
+        pending: [
+          {
+            input_id: "question-1",
+            kind: "elicitation",
+            title: form.message,
+            options: [],
+            sequence: 10,
+            context: { kind: "acp" },
+            form,
+          },
+        ],
+      },
+    };
+
+    const queue = permissionQueueAfterActivity(
+      [
+        {
+          session: "session-b",
+          requestId: "permission-b",
+          title: "Other session",
+          options: [],
+          sequence: 20,
+        },
+      ],
+      "session-a",
+      activity,
+    );
+
+    expect(queue[0]).toMatchObject({
+      session: "session-a",
+      requestId: "question-1",
+      context: { kind: "acp" },
+      form,
+    });
+    expect(queue[1]?.session).toBe("session-b");
+  });
+
+  test("keeps a pending input when the host rejects its answer", () => {
+    const pending = {
+      session: "session-a",
+      requestId: "question-1",
+      title: "Question",
+      options: [],
+    };
+    const other = {
+      session: "session-b",
+      requestId: "permission-2",
+      title: "Permission",
+      options: [],
+    };
+
+    expect(
+      permissionQueueAfterAnswer([pending, other], "session-a", "question-1", false),
+    ).toEqual([pending, other]);
+    expect(
+      permissionQueueAfterAnswer([pending, other], "session-a", "question-1", true),
+    ).toEqual([other]);
   });
 
   test("tracks a remotely started turn without creating an idle warning turn", () => {
