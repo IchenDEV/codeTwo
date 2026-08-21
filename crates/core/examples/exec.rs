@@ -76,6 +76,7 @@ fn parse_provider(s: &str) -> ProviderId {
         "grok" => ProviderId::Grok,
         "cursor" => ProviderId::Cursor,
         "opencode" => ProviderId::OpenCode,
+        "opencode2" => ProviderId::OpenCode2,
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,
@@ -89,7 +90,7 @@ codetwo-exec — run one prompt headlessly
 USAGE:
   exec [--provider <id>] [--cwd <dir>] [--yolo] [--json] [--timeout <secs>] <prompt...>
 
-PROVIDERS: claude_code | codex | grok | cursor | opencode | pi | kimi | zcode | <custom>
+PROVIDERS: claude_code | codex | grok | cursor | opencode | opencode2 | pi | kimi | zcode | <custom>
 ";
 
 #[tokio::main]

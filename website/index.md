@@ -51,7 +51,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
         </h1>
         <p>
           Compose structured prompts, weave in reusable skills, and run Claude
-          Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi, or GLM through one
+          Code, Codex, Grok, Cursor, OpenCode 1 or 2, Pi, Kimi, or GLM through one
           local interface.
         </p>
         <div class="actions">
@@ -185,7 +185,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
           <article class="provider-entry">
             <span class="provider-index">05</span>
             <div>
-              <h3>OpenCode</h3>
+              <h3>OpenCode 1</h3>
               <p>Built-in ACP mode</p>
               <code>opencode acp</code>
             </div>
@@ -193,13 +193,21 @@ description: Compose structured prompts, weave in reusable skills, and run your 
           <article class="provider-entry">
             <span class="provider-index">06</span>
             <div>
+              <h3>OpenCode 2</h3>
+              <p>Built-in ACP mode · Beta</p>
+              <code>opencode2 acp</code>
+            </div>
+          </article>
+          <article class="provider-entry">
+            <span class="provider-index">07</span>
+            <div>
               <h3>Pi</h3>
               <p>Community adapter · Node required</p>
               <code>pi-acp</code>
             </div>
           </article>
           <article class="provider-entry">
-            <span class="provider-index">07</span>
+            <span class="provider-index">08</span>
             <div>
               <h3>Kimi</h3>
               <p>Native ACP</p>
@@ -207,7 +215,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             </div>
           </article>
           <article class="provider-entry">
-            <span class="provider-index">08</span>
+            <span class="provider-index">09</span>
             <div>
               <h3>ZCode (GLM)</h3>
               <p>GLM ACP agent · Node required</p>

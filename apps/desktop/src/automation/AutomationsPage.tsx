@@ -79,6 +79,7 @@ const BUILTIN_PROVIDERS = new Set([
   "grok",
   "cursor",
   "opencode",
+  "opencode2",
   "pi",
   "kimi",
   "zcode",

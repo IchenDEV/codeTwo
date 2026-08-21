@@ -1038,6 +1038,7 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [], capabilities: [] },
   { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [], capabilities: [] },
   { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [], capabilities: [] },
+  { id: "opencode2", display_name: "OpenCode 2 (Beta)", available: false, needs_node: false, models: [], capabilities: [] },
   { id: "pi", display_name: "Pi", available: false, needs_node: true, models: [], capabilities: [] },
   { id: "kimi", display_name: "Kimi", available: false, needs_node: false, models: [], capabilities: [] },
   { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [], capabilities: [] },

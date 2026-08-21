@@ -16,7 +16,7 @@ C2 不会重新实现智能体，也不代理模型访问；它只在本机启�
 
 “支持”不代表所有 Provider 都暴露完全相同的模型和 ACP 能力。C2 只显示当前 ACP 端点真实上报的内容，不会伪造能力一致性。
 
-## 八个内置 Provider
+## 九个内置 Provider
 
 | Provider | 接入方式 | C2 启动命令 | 前置要求 |
 | --- | --- | --- | --- |
@@ -24,7 +24,8 @@ C2 不会重新实现智能体，也不代理模型访问；它只在本机启�
 | **OpenAI Codex** | App Server ACP 适配器 | `npx -y @agentclientprotocol/codex-acp@1.1.14` | Node，以及本地 Codex runtime/登录状态 |
 | **Grok** | 原生 ACP | `grok agent stdio` | 已登录的 `grok` CLI，并位于 `PATH` 中 |
 | **Cursor** | CLI 内置 ACP 模式 | `cursor-agent --acp` | 已登录的 `cursor-agent`，并位于 `PATH` 中 |
-| **OpenCode** | CLI 内置 ACP 模式 | `opencode acp` | 已登录的 `opencode`，并位于 `PATH` 中 |
+| **OpenCode 1** | CLI 内置 ACP 模式 | `opencode acp` | 已登录的 `opencode`，并位于 `PATH` 中 |
+| **OpenCode 2（Beta）** | CLI 内置 ACP 模式 | `opencode2 acp` | 已登录的 `opencode2` beta，并位于 `PATH` 中 |
 | **Pi** | 社区 ACP 适配器 | `npx -y pi-acp` | Node；`pi` 位于 `PATH` 中以读取配置和凭据 |
 | **Kimi** | 原生 ACP | `kimi acp` | 已登录的 `kimi` CLI，并位于 `PATH` 中 |
 | **ZCode（GLM）** | GLM ACP 智能体 | `npx -y glm-acp-agent` | Node，加 `Z_AI_API_KEY` 或一次性 `--setup` |
@@ -35,7 +36,9 @@ C2 不会重新实现智能体，也不代理模型访问；它只在本机启�
 
 ### CLI 内置 ACP 模式
 
-**Cursor** 和 **OpenCode** 通过自身 CLI 的 ACP 模式接入。不同 CLI 版本的参数可能变化；如果默认启动配置失效，应以已安装版本的官方说明为准。
+**Cursor** 和两个 **OpenCode** 版本都通过自身 CLI 的 ACP 模式接入。OpenCode 2 使用独立的
+`opencode2` 二进制与 V1 并存，不会替换 `opencode`，因此 C2 也把二者作为独立 Provider。
+Beta 的安装与迁移边界见 [OpenCode 2 官方文档](https://opencode.ai/v2/docs)。
 
 ### 适配器接入
 
@@ -61,11 +64,14 @@ C2 会为每个内置 Provider 显示健康状态：
 
 如果 ACP 端点在 `session/new` 阶段上报模型，C2 会显示模型控件，并在切换时发送 `session/set_model`。如果端点没有上报模型列表，模型仍由 Provider 自己的 CLI 配置决定。
 
+OpenCode 2 会通过 ACP 配置项上报当前项目/账户的模型目录与模型专属 variant。C2 直接使用这些
+实时值（包括 `thought_level`），不会假定固定的思考等级。
+
 计划、斜杠命令、MCP 工具、图片、浏览器/计算机控制等能力也遵循相同边界：是否可用取决于 Provider、适配器版本和宿主运行时。出现在上表中，不代表它自动拥有所有可选能力。
 
 ## 统一的 ACP 循环
 
-八个 Provider 最终都会进入同一条核心链路：
+九个 Provider 最终都会进入同一条核心链路：
 
 ```text
 initialize → session/new → session/prompt → stream session/update

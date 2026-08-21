@@ -78,6 +78,7 @@ impl Plugin for UsagePlugin {
                 "grok" => crate::provider::ProviderId::Grok,
                 "cursor" => crate::provider::ProviderId::Cursor,
                 "opencode" => crate::provider::ProviderId::OpenCode,
+                "opencode2" => crate::provider::ProviderId::OpenCode2,
                 "pi" => crate::provider::ProviderId::Pi,
                 "kimi" => crate::provider::ProviderId::Kimi,
                 "zcode" => crate::provider::ProviderId::ZCode,

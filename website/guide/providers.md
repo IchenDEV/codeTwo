@@ -21,7 +21,7 @@ When you choose that provider for a session, C2:
 Support does **not** mean every provider exposes identical models or ACP features. C2 displays
 what the active ACP endpoint actually reports rather than inventing parity.
 
-## Eight built-in providers
+## Nine built-in providers
 
 | Provider | Connection | C2 launches | Prerequisite |
 | --- | --- | --- | --- |
@@ -29,7 +29,8 @@ what the active ACP endpoint actually reports rather than inventing parity.
 | **OpenAI Codex** | App Server ACP adapter | `npx -y @agentclientprotocol/codex-acp@1.1.14` | Node and a local Codex runtime/login |
 | **Grok** | Native ACP | `grok agent stdio` | Authenticated `grok` CLI on `PATH` |
 | **Cursor** | CLI ACP mode | `cursor-agent --acp` | Authenticated `cursor-agent` on `PATH` |
-| **OpenCode** | CLI ACP mode | `opencode acp` | Authenticated `opencode` on `PATH` |
+| **OpenCode 1** | CLI ACP mode | `opencode acp` | Authenticated `opencode` on `PATH` |
+| **OpenCode 2 (Beta)** | CLI ACP mode | `opencode2 acp` | Authenticated `opencode2` beta on `PATH` |
 | **Pi** | Community ACP adapter | `npx -y pi-acp` | Node; `pi` on `PATH` for its config and credentials |
 | **Kimi** | Native ACP | `kimi acp` | Authenticated `kimi` CLI on `PATH` |
 | **ZCode (GLM)** | GLM ACP agent | `npx -y glm-acp-agent` | Node plus `Z_AI_API_KEY`, or one-time `--setup` |
@@ -40,9 +41,10 @@ what the active ACP endpoint actually reports rather than inventing parity.
 
 ### Built-in CLI ACP modes
 
-**Cursor** and **OpenCode** expose ACP modes in their CLIs. Their flags can change between CLI
-versions, so check the installed CLI's documentation if its default launch specification stops
-working.
+**Cursor** and both **OpenCode** generations expose ACP modes in their CLIs. OpenCode 2 installs as
+`opencode2` beside V1 rather than replacing `opencode`, so C2 exposes them as separate providers.
+See the [OpenCode 2 documentation](https://opencode.ai/v2/docs) for the beta install and migration
+boundary.
 
 ### Adapter-backed providers
 
@@ -73,6 +75,10 @@ green dot primarily confirms that `npx` is available.
 If the ACP endpoint reports models during `session/new`, C2 shows a model control and sends
 `session/set_model` when you switch. If it reports no model list, C2 leaves model selection to
 the provider's own CLI configuration.
+
+OpenCode 2 reports its current project/account model catalogue and model-specific variants as ACP
+configuration options. C2 uses those live values—including `thought_level`—instead of assuming a
+fixed effort ladder.
 
 Provider-native features still depend on the chosen provider and adapter version. C2 projects only
 tools with a real portable MCP boundary across providers; private provider runtimes stay native:
@@ -246,7 +252,7 @@ place.
 
 ## The ACP loop
 
-All eight providers enter the same core loop:
+All nine providers enter the same core loop:
 
 ```text
 initialize → session/new → session/prompt → stream session/update

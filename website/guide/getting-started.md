@@ -31,7 +31,8 @@ To run a real turn you need one agent CLI on your `PATH`:
 - **Claude Code** — Node/npx (C2 launches `npx @agentclientprotocol/claude-agent-acp`).
 - **Codex** — Node/npx (`npx -y @agentclientprotocol/codex-acp@1.1.14`).
 - **Cursor** — `cursor-agent`.
-- **OpenCode** — `opencode`.
+- **OpenCode 1** — `opencode`.
+- **OpenCode 2 (Beta)** — `opencode2`; V1 and V2 can be installed side by side.
 - **Pi** — Node/npx (`npx -y pi-acp`, with `pi` on your `PATH` for its own config).
 - **Kimi** — `kimi` (speaks ACP natively).
 - **ZCode (GLM)** — Node/npx (`npx -y glm-acp-agent`) plus a `Z_AI_API_KEY`.

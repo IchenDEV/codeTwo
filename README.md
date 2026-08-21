@@ -31,8 +31,8 @@ whole turn, and only then send it to the agent you choose.
 
 - **Document-first prompts.** Compose in a BlockNote editor instead of squeezing a specification
   into a single-line input.
-- **Eight coding CLIs, one protocol.** Drive Claude Code, Codex, Grok, Cursor, OpenCode, Pi, Kimi,
-  and ZCode/GLM through the [Agent Client Protocol](https://agentclientprotocol.com/).
+- **Nine coding CLIs, one protocol.** Drive Claude Code, Codex, Grok, Cursor, OpenCode 1 or 2,
+  Pi, Kimi, and ZCode/GLM through the [Agent Client Protocol](https://agentclientprotocol.com/).
 - **Skills and complete plugins.** Insert reusable skills inline, or install GitHub packages that
   can include skills, subagents, MCP servers, and project scaffolds.
 - **Local, inspectable continuity.** Sessions and project memory live in the shared Rust core;
@@ -46,7 +46,7 @@ whole turn, and only then send it to the agent you choose.
 ## How it fits together
 
 ```text
-Claude Code · Codex · Grok · Cursor · OpenCode · Pi · Kimi · GLM
+Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi · GLM
                               │
                          ACP over stdio
                               │

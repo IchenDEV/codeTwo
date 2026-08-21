@@ -68,6 +68,8 @@ pub enum ProviderId {
     Grok,
     Cursor,
     OpenCode,
+    #[serde(rename = "opencode2")]
+    OpenCode2,
     Pi,
     Kimi,
     ZCode,
@@ -82,6 +84,7 @@ impl ProviderId {
             ProviderId::Grok => "grok",
             ProviderId::Cursor => "cursor",
             ProviderId::OpenCode => "opencode",
+            ProviderId::OpenCode2 => "opencode2",
             ProviderId::Pi => "pi",
             ProviderId::Kimi => "kimi",
             ProviderId::ZCode => "zcode",
@@ -170,8 +173,9 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
             launch: LaunchSpec::new("grok", ["agent", "stdio"]),
             needs_node: false,
         },
-        // Cursor & OpenCode also speak ACP (as in t3code). Exact adapter flags may need tuning per
-        // install; both are user-overridable in config.
+        // Cursor and both OpenCode generations speak ACP natively. OpenCode 2 installs beside V1
+        // under a different binary name, so keep separate provider ids rather than silently
+        // changing which runtime an existing `opencode` session resumes with.
         Provider {
             id: ProviderId::Cursor,
             display_name: "Cursor".into(),
@@ -182,6 +186,12 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
             id: ProviderId::OpenCode,
             display_name: "OpenCode".into(),
             launch: LaunchSpec::new("opencode", ["acp"]),
+            needs_node: false,
+        },
+        Provider {
+            id: ProviderId::OpenCode2,
+            display_name: "OpenCode 2 (Beta)".into(),
+            launch: LaunchSpec::new("opencode2", ["acp"]),
             needs_node: false,
         },
         // Pi has no ACP mode of its own yet, so we go through the community adapter, which embeds
@@ -214,12 +224,13 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
 /// Directories a login shell puts on `PATH` but a GUI-launched app doesn't. macOS hands a bundle
 /// started from Finder or Spotlight the bare `/usr/bin:/bin:/usr/sbin:/sbin`, so Homebrew, cargo,
 /// and friends are invisible — every CLI we shell out to looks "not installed".
-const GUI_PATH_FALLBACKS: [&str; 5] = [
+const GUI_PATH_FALLBACKS: [&str; 6] = [
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/opt/local/bin",
     "~/.local/bin",
     "~/.cargo/bin",
+    "~/.opencode/bin",
 ];
 
 /// Append the directories above to this process's `PATH`, once, if they exist and aren't already
@@ -288,7 +299,7 @@ mod tests {
     #[test]
     fn registry_has_all_providers() {
         let reg = default_registry();
-        assert_eq!(reg.len(), 8);
+        assert_eq!(reg.len(), 9);
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::Grok && !p.needs_node));
@@ -297,6 +308,7 @@ mod tests {
             .any(|p| p.id == ProviderId::ClaudeCode && p.needs_node));
         assert!(reg.iter().any(|p| p.id == ProviderId::Cursor));
         assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode));
+        assert!(reg.iter().any(|p| p.id == ProviderId::OpenCode2));
         assert!(reg.iter().any(|p| p.id == ProviderId::Pi && p.needs_node));
         assert!(reg
             .iter()
@@ -330,6 +342,25 @@ mod tests {
         let kimi = reg.iter().find(|p| p.id == ProviderId::Kimi).unwrap();
         assert_eq!(kimi.launch.command, "kimi");
         assert_eq!(kimi.launch.args, vec!["acp"]);
+    }
+
+    #[test]
+    fn opencode_generations_have_distinct_native_acp_launches() {
+        let reg = default_registry();
+        let v1 = reg.iter().find(|p| p.id == ProviderId::OpenCode).unwrap();
+        let v2 = reg.iter().find(|p| p.id == ProviderId::OpenCode2).unwrap();
+        assert_eq!(v1.launch.command, "opencode");
+        assert_eq!(v1.launch.args, vec!["acp"]);
+        assert_eq!(v2.launch.command, "opencode2");
+        assert_eq!(v2.launch.args, vec!["acp"]);
+        assert_eq!(
+            serde_json::to_string(&ProviderId::OpenCode2).unwrap(),
+            "\"opencode2\""
+        );
+        assert_eq!(
+            serde_json::from_str::<ProviderId>("\"opencode2\"").unwrap(),
+            ProviderId::OpenCode2
+        );
     }
 
     #[test]

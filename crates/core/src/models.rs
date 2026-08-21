@@ -25,6 +25,7 @@ static CODEX_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
 static GROK_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
 static CURSOR_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
 static OPENCODE_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
+static OPENCODE2_MODELS: OnceLock<Vec<ModelChoice>> = OnceLock::new();
 
 fn choice(id: &str, name: &str, description: Option<&str>) -> ModelChoice {
     ModelChoice {
@@ -154,8 +155,8 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
         )],
         // OpenCode and Pi catalogues are entirely account/configuration-owned. Inventing a global
         // fallback here is worse than showing the honest “start a session / configure the CLI”
-        // state; both ACP adapters report the real list once a session exists.
-        ProviderId::OpenCode | ProviderId::Pi => Vec::new(),
+        // state; these ACP endpoints report the real list once a session exists.
+        ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi => Vec::new(),
         ProviderId::Kimi => vec![
             choice("kimi-code/k3", "Kimi K3", Some("Managed Kimi Code alias")),
             choice(
@@ -211,6 +212,9 @@ pub async fn available_models(provider: &Provider) -> Vec<ModelChoice> {
         ProviderId::OpenCode => query_cli_catalog(provider, &["models"], parse_opencode_models)
             .await
             .map(|models| (models, &OPENCODE_MODELS)),
+        ProviderId::OpenCode2 => query_cli_catalog(provider, &["models"], parse_opencode_models)
+            .await
+            .map(|models| (models, &OPENCODE2_MODELS)),
         _ => return builtin_models(&provider.id),
     };
 
@@ -232,6 +236,7 @@ async fn query_cli_catalog(
         ProviderId::Grok => GROK_MODELS.get(),
         ProviderId::Cursor => CURSOR_MODELS.get(),
         ProviderId::OpenCode => OPENCODE_MODELS.get(),
+        ProviderId::OpenCode2 => OPENCODE2_MODELS.get(),
         _ => None,
     };
     if let Some(models) = cache {
@@ -429,7 +434,8 @@ mod tests {
     #[test]
     fn only_account_owned_catalogues_have_no_static_list() {
         for p in crate::provider::default_registry() {
-            let empty_is_expected = matches!(p.id, ProviderId::OpenCode | ProviderId::Pi);
+            let empty_is_expected =
+                matches!(p.id, ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi);
             assert_eq!(
                 builtin_models(&p.id).is_empty(),
                 empty_is_expected,

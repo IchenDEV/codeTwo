@@ -75,6 +75,13 @@ pub const PRICES: &[ModelPrice] = &[
 
 /// The price row for `model` under `provider`: prefix-matched, longest prefix wins, `None` on miss.
 pub fn price_for(provider: &str, model: &str) -> Option<&'static ModelPrice> {
+    // Both OpenCode generations route the same provider/model ids. Keep one price table so adding
+    // V2 cannot let the two entries drift apart.
+    let provider = if provider == "opencode2" {
+        "opencode"
+    } else {
+        provider
+    };
     PRICES
         .iter()
         .filter(|p| p.provider == provider && model.starts_with(p.model_prefix))
@@ -306,6 +313,12 @@ mod tests {
         // Longer id under Pi picks the more specific row.
         let gpt51 = price_for("pi", "openai/gpt-5.1").unwrap();
         assert_eq!(gpt51.model_prefix, "openai/gpt-5.1");
+        assert_eq!(
+            price_for("opencode2", "openai/gpt-5")
+                .unwrap()
+                .model_prefix,
+            "openai/gpt-5"
+        );
         // Misses: unpriced provider, wrong provider for a known model, unknown id.
         assert!(price_for("kimi", "k3").is_none());
         assert!(price_for("zcode", "glm-5.2").is_none());

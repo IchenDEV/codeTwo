@@ -2276,6 +2276,7 @@ fn provider_slug(provider: &ProviderId) -> String {
         ProviderId::Grok => "grok".into(),
         ProviderId::Cursor => "cursor".into(),
         ProviderId::OpenCode => "opencode".into(),
+        ProviderId::OpenCode2 => "opencode2".into(),
         ProviderId::Pi => "pi".into(),
         ProviderId::Kimi => "kimi".into(),
         ProviderId::ZCode => "zcode".into(),
@@ -2290,6 +2291,7 @@ fn provider_from_slug(value: &str) -> ProviderId {
         "grok" => ProviderId::Grok,
         "cursor" => ProviderId::Cursor,
         "opencode" => ProviderId::OpenCode,
+        "opencode2" => ProviderId::OpenCode2,
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,
@@ -2417,6 +2419,8 @@ mod tests {
     #[test]
     fn provider_and_runtime_mappings_match_t3_contract_values() {
         assert_eq!(provider_slug(&ProviderId::ClaudeCode), "claudeAgent");
+        assert_eq!(provider_slug(&ProviderId::OpenCode2), "opencode2");
+        assert_eq!(provider_from_slug("opencode2"), ProviderId::OpenCode2);
         assert_eq!(
             provider_slug(&ProviderId::Custom("9 odd/provider".into())),
             "p9-odd-provider"
