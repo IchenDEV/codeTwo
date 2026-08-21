@@ -41,8 +41,10 @@ pub const HARNESSES: [HarnessSpec; 4] = [
     HarnessSpec {
         id: "opencode",
         label: "OpenCode",
-        user_roots: &[".config/opencode/skill"],
-        project_roots: &[".opencode/skill"],
+        // OpenCode 2 prefers the plural directory but continues to read the V1-compatible
+        // singular form. Scan the preferred form first so it wins on duplicate skill ids.
+        user_roots: &[".config/opencode/skills", ".config/opencode/skill"],
+        project_roots: &[".opencode/skills", ".opencode/skill"],
     },
     HarnessSpec {
         id: "cursor",
@@ -255,6 +257,31 @@ mod tests {
         let skills = discover_in(Some(&home), Some(&cwd));
         assert_eq!(skills.len(), 1);
         assert_eq!(skills[0].description, "project copy");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn opencode_v2_plural_skill_root_shadows_legacy_singular_root() {
+        let tmp = std::env::temp_dir().join(format!(
+            "codetwo-opencode2-skills-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let cwd = tmp.join("proj");
+        write_skill(
+            &cwd.join(".opencode/skills"),
+            "review",
+            "---\ndescription: V2 copy\n---\n",
+        );
+        write_skill(
+            &cwd.join(".opencode/skill"),
+            "review",
+            "---\ndescription: V1 copy\n---\n",
+        );
+
+        let skills = discover_in(None, Some(&cwd));
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].description, "V2 copy");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

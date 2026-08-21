@@ -77,6 +77,14 @@ export const PROVIDERS: ProviderDefinition[] = [
     models: [],
   },
   {
+    id: "opencode2",
+    displayName: "OpenCode 2 (Beta)",
+    command: "opencode2",
+    args: ["acp"],
+    needsNode: false,
+    models: [],
+  },
+  {
     id: "pi",
     displayName: "Pi",
     command: "npx",

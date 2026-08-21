@@ -50,7 +50,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
           编程智能体<span class="terminal-period">。</span>
         </h1>
         <p>
-          编写结构化提示词，组合可复用技能，并在一个本地界面中运行 Claude Code、Codex、Grok、Cursor、OpenCode、Pi、Kimi 或 GLM。
+          编写结构化提示词，组合可复用技能，并在一个本地界面中运行 Claude Code、Codex、Grok、Cursor、OpenCode 1 或 2、Pi、Kimi 或 GLM。
         </p>
         <div class="actions">
           <a class="button button-primary" href="./guide/getting-started">
@@ -175,7 +175,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
           <article class="provider-entry">
             <span class="provider-index">05</span>
             <div>
-              <h3>OpenCode</h3>
+              <h3>OpenCode 1</h3>
               <p>内置 ACP 模式</p>
               <code>opencode acp</code>
             </div>
@@ -183,13 +183,21 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
           <article class="provider-entry">
             <span class="provider-index">06</span>
             <div>
+              <h3>OpenCode 2</h3>
+              <p>内置 ACP 模式 · Beta</p>
+              <code>opencode2 acp</code>
+            </div>
+          </article>
+          <article class="provider-entry">
+            <span class="provider-index">07</span>
+            <div>
               <h3>Pi</h3>
               <p>社区适配器 · 需要 Node</p>
               <code>pi-acp</code>
             </div>
           </article>
           <article class="provider-entry">
-            <span class="provider-index">07</span>
+            <span class="provider-index">08</span>
             <div>
               <h3>Kimi</h3>
               <p>原生 ACP</p>
@@ -197,7 +205,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
             </div>
           </article>
           <article class="provider-entry">
-            <span class="provider-index">08</span>
+            <span class="provider-index">09</span>
             <div>
               <h3>ZCode（GLM）</h3>
               <p>GLM ACP 智能体 · 需要 Node</p>

@@ -20,8 +20,8 @@ Tagged by `op`:
 | `set_model` | `session`, `model` | set the session model |
 | `set_config_option` | `session`, `config_id`, `value` | set an agent-reported session config option |
 
-`provider` is one of `claude_code`, `codex`, `grok`, `cursor`, `opencode`, `pi`, `kimi`, `zcode`, or
-`{"custom":"…"}`.
+`provider` is one of `claude_code`, `codex`, `grok`, `cursor`, `opencode`, `opencode2`, `pi`, `kimi`,
+`zcode`, or `{"custom":"…"}`.
 `doc` is an array of blocks: `{"type":"text","text":"…"}` or
 `{"type":"skill","skill_id":"…","params":{}}`.
 

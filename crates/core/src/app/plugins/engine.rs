@@ -616,6 +616,7 @@ fn parse_provider(value: &str) -> ProviderId {
         "grok" => ProviderId::Grok,
         "cursor" => ProviderId::Cursor,
         "opencode" => ProviderId::OpenCode,
+        "opencode2" => ProviderId::OpenCode2,
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,

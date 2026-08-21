@@ -1,0 +1,46 @@
+import { describe, expect, test } from "bun:test";
+
+import { providerById, reportedConfigOptions } from "../src/electrobun/host/acp";
+
+describe("Electrobun provider registry", () => {
+  test("keeps OpenCode V1 and V2 as distinct native ACP providers", () => {
+    expect(providerById("opencode")).toMatchObject({ command: "opencode", args: ["acp"] });
+    expect(providerById("opencode2")).toMatchObject({ command: "opencode2", args: ["acp"] });
+  });
+
+  test("normalizes the model-specific options reported by OpenCode 2", () => {
+    expect(reportedConfigOptions({
+      configOptions: [
+        {
+          id: "model",
+          name: "Model",
+          category: "model",
+          currentValue: "opencode/big-pickle",
+          options: [{ value: "opencode/big-pickle", name: "opencode/Big Pickle" }],
+        },
+        {
+          id: "effort",
+          name: "Effort",
+          category: "thought_level",
+          currentValue: "high",
+          options: [{ value: "high", name: "High" }],
+        },
+      ],
+    })).toEqual([
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        current: "opencode/big-pickle",
+        choices: [{ id: "opencode/big-pickle", name: "opencode/Big Pickle", description: null }],
+      },
+      {
+        id: "effort",
+        name: "Effort",
+        category: "thought_level",
+        current: "high",
+        choices: [{ id: "high", name: "High", description: null }],
+      },
+    ]);
+  });
+});

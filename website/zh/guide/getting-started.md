@@ -29,7 +29,8 @@ brew link --force zig@0.15
 - **Claude Code** — Node/npx；C2 会运行 `npx @agentclientprotocol/claude-agent-acp`。
 - **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.1.14`。
 - **Cursor** — `cursor-agent`。
-- **OpenCode** — `opencode`。
+- **OpenCode 1** — `opencode`。
+- **OpenCode 2（Beta）** — `opencode2`；可与 V1 并存安装。
 - **Pi** — Node/npx；运行 `npx -y pi-acp`，并需要在 `PATH` 中提供 `pi` 以读取自身配置。
 - **Kimi** — `kimi`，原生支持 ACP。
 - **ZCode（GLM）** — Node/npx；运行 `npx -y glm-acp-agent`，并设置 `Z_AI_API_KEY`。

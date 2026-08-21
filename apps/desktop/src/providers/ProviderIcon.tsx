@@ -89,6 +89,7 @@ export const PROVIDER_MARKS: Record<string, (p: IconProps) => ReactNode> = {
   grok: GrokMark,
   cursor: CursorMark,
   opencode: OpenCodeMark,
+  opencode2: OpenCodeMark,
   pi: PiMark,
   kimi: KimiMark,
   zcode: ZCodeMark,
