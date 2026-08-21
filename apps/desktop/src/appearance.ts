@@ -418,6 +418,7 @@ export function applyAppearanceSettings(
     "--ds-type-body-size": `${settings.uiFontSize}px`,
     "--appearance-code-size": `${settings.codeFontSize}px`,
     "--appearance-sidebar-opacity": `${settings.sidebarOpacity}%`,
+    "--appearance-macos-panel-tint-opacity": `${Math.round(settings.sidebarOpacity * 0.45)}%`,
   };
   for (const [name, value] of Object.entries(properties)) root.style.setProperty(name, value);
 }

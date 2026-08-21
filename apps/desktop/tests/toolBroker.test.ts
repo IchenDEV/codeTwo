@@ -37,7 +37,7 @@ const context: BrokerContext = {
       excludeProviders: [],
       server: { name: "cua-driver", command: "/usr/local/bin/cua-driver", args: ["mcp"], env: [] },
     }],
-    computerUseSelections: { claude_code: "cua" },
+    computerUseSelections: { "*": "cua" },
     computerUseBackends: [{
       id: "cua",
       displayName: "Cua Driver",

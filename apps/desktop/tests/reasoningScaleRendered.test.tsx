@@ -58,7 +58,7 @@ describe("ReasoningScale", () => {
     rendered.unmount();
   });
 
-  test("uses a provider effort option even when the model arrives through legacy ACP models", () => {
+  test("uses the compact nested selector when provider effort is shown in scene configuration", () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
@@ -82,6 +82,7 @@ describe("ReasoningScale", () => {
           }]}
           onConfigOption={() => {}}
           hasSession
+          compact
         />
       </I18nProvider>,
     );
@@ -89,6 +90,52 @@ describe("ReasoningScale", () => {
     const trigger = rendered.container.querySelector(".reasoning-selector-trigger");
     expect(trigger?.textContent).toContain("Grok 4.6");
     expect(trigger?.textContent).toContain("Extra High Effort");
+    expect(trigger?.classList.contains("reasoning-selector-trigger--compact")).toBe(true);
+    rendered.unmount();
+  });
+
+  test("shows provider model choices before the first session is created", () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <ModelPicker
+          models={[{ id: "grok-4.6", name: "Grok 4.6", description: null }]}
+          current={null}
+          defaultModel={null}
+          provider="grok"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+          hasSession={false}
+          compact
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = rendered.container.querySelector('button[title="Model"]');
+    expect(trigger?.textContent).toContain("Default model");
+    rendered.unmount();
+  });
+
+  test("keeps model selection hidden for providers without an advertised model list", () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <ModelPicker
+          models={[]}
+          current={null}
+          defaultModel={null}
+          provider="opencode"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+          hasSession={false}
+          compact
+        />
+      </I18nProvider>,
+    );
+
+    expect(rendered.container.querySelector('button[title="Model"]')).toBeNull();
     rendered.unmount();
   });
 });

@@ -32,7 +32,7 @@ const providers = [
 ];
 
 const initialSettings = {
-  selections: { claude_code: "automatic" },
+  selections: { "*": "automatic" },
   backends: [
     {
       id: "cua",
@@ -109,13 +109,13 @@ async function selectItem(item) {
 }
 
 describe("Computer Use settings", () => {
-  test("lets the user choose one backend per provider and explains session scope", async () => {
+  test("lets the user choose one global backend and explains session scope", async () => {
     const saved = [];
     const view = mount(settings(
       async () => initialSettings,
-      async (provider, backend) => {
-        saved.push([provider, backend]);
-        return { ...initialSettings, selections: { ...initialSettings.selections, [provider]: backend } };
+      async (backend) => {
+        saved.push(backend);
+        return { ...initialSettings, selections: { "*": backend } };
       },
     ));
 
@@ -125,7 +125,10 @@ describe("Computer Use settings", () => {
       expect(view.container.textContent).toContain("Remote Lab is not running");
     });
 
-    const trigger = view.container.querySelector('[data-computer-use-provider="claude_code"]');
+    expect(view.container.querySelectorAll("[data-computer-use-selection]")).toHaveLength(1);
+    expect(view.container.textContent).not.toContain("Claude Code");
+    expect(view.container.textContent).not.toContain("OpenAI Codex");
+    const trigger = view.container.querySelector("[data-computer-use-selection]");
     expect(trigger?.textContent).toContain("Automatic");
     await openSelect(trigger);
     const remote = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
@@ -135,7 +138,7 @@ describe("Computer Use settings", () => {
       .find((item) => item.textContent?.trim() === "Cua Driver");
     await selectItem(cua);
 
-    expect(saved).toEqual([["claude_code", "cua"]]);
+    expect(saved).toEqual(["cua"]);
     expect(trigger?.textContent).toContain("Cua Driver");
     view.unmount();
   });

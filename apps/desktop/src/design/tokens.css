@@ -239,9 +239,11 @@
   --ds-card-radius: var(--ds-radius-module);
   --ds-dialog-radius: var(--ds-radius-modal);
 
-  /* Reasoning selector — fidelity-locked to the accepted desktop reference. */
+  /* Reasoning selector — reference presentation plus a nested desktop-density variant. */
   --ds-reasoning-selector-width: 450px;
+  --ds-reasoning-selector-compact-width: 320px;
   --ds-reasoning-selector-panel-height: 170px;
+  --ds-reasoning-selector-compact-panel-height: 104px;
   --ds-reasoning-selector-panel-radius: 24px;
   --ds-reasoning-selector-panel-inset: 25px;
   --ds-reasoning-selector-header-height: 32px;

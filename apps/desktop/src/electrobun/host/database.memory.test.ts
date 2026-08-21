@@ -22,6 +22,7 @@ describe("memory management database", () => {
     const projectPath = "/work";
     const session = database.createSession({
       provider: "codex",
+      model: null,
       cwd: projectPath,
       permissionMode: "ask",
       sandboxPolicy: "workspace_write",

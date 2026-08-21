@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
@@ -15,6 +16,24 @@ function run(command: string[], cwd: string): void {
 run(["bun", "run", "build:renderer"], desktopRoot);
 
 if (process.platform === "darwin") {
+  const windowEffectsRoot = resolve(desktopRoot, "native", "window-effects");
+  const windowEffectsBuild = resolve(windowEffectsRoot, ".build");
+  mkdirSync(windowEffectsBuild, { recursive: true });
+  run(
+    [
+      "/usr/bin/clang",
+      "-dynamiclib",
+      "-fobjc-arc",
+      "-fblocks",
+      "-mmacosx-version-min=14.0",
+      "-framework",
+      "AppKit",
+      resolve(windowEffectsRoot, "CodeTwoWindowEffects.m"),
+      "-o",
+      resolve(windowEffectsBuild, "libCodeTwoWindowEffects.dylib"),
+    ],
+    desktopRoot,
+  );
   run(
     [
       "/usr/bin/swift",

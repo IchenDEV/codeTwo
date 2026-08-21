@@ -34,6 +34,13 @@ const desktopRoot = join(import.meta.dir, "..");
 const updateHelperBuild = join(desktopRoot, "native", "update-helper", ".build", "release");
 const updateHelperExecutable = join(updateHelperBuild, "CodeTwoUpdateHelper");
 const sparkleFramework = join(updateHelperBuild, "Sparkle.framework");
+const windowEffectsLibrary = join(
+  desktopRoot,
+  "native",
+  "window-effects",
+  ".build",
+  "libCodeTwoWindowEffects.dylib",
+);
 
 function setPlistString(plist: string, key: string, value: string): void {
   const replace = Bun.spawnSync(["/usr/bin/plutil", "-replace", key, "-string", value, plist]);
@@ -76,6 +83,15 @@ function embedUpdateHelper(bundle: string): void {
   chmodSync(helperDestination, 0o755);
   rmSync(frameworkDestination, { force: true, recursive: true });
   cpSync(sparkleFramework, frameworkDestination, { recursive: true });
+}
+
+function embedWindowEffects(bundle: string): void {
+  if (!existsSync(windowEffectsLibrary)) {
+    throw new Error(`Required window effects library is missing: ${windowEffectsLibrary}`);
+  }
+  const destination = join(bundle, "Contents", "MacOS", "libCodeTwoWindowEffects.dylib");
+  copyFileSync(windowEffectsLibrary, destination);
+  chmodSync(destination, 0o755);
 }
 
 function signUpdateComponents(bundle: string): void {
@@ -166,6 +182,7 @@ function configureUpdater(plist: string): void {
 }
 
 for (const bundle of bundles) {
+  embedWindowEffects(bundle);
   const plist = join(bundle, "Contents", "Info.plist");
   setPlistString(plist, "CFBundleDisplayName", channel.displayName);
   setPlistString(plist, "CFBundleShortVersionString", process.env.ELECTROBUN_APP_VERSION ?? "0.0.0");

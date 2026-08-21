@@ -241,6 +241,7 @@ describe("provider capability wire compatibility", () => {
     try {
       writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
         schema_version: 1,
+        computer_use_selection: { claude_code: "second" },
         computer_use: [
           {
             id: "otherwise-valid",
@@ -263,11 +264,12 @@ describe("provider capability wire compatibility", () => {
     }
   });
 
-  test("persists a provider choice and attaches only the selected backend", () => {
+  test("persists one global choice and attaches the selected backend across providers", () => {
     const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-selection-"));
     try {
       writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
         schema_version: 1,
+        computer_use_selection: { claude_code: "second" },
         computer_use: [
           {
             id: "first",
@@ -283,6 +285,7 @@ describe("provider capability wire compatibility", () => {
       }));
 
       const configured = loadConfiguredComputerUse(directory);
+      expect(configured.selections).toEqual({});
       const evidence = {
         ...readyEvidence,
         configuredComputerUse: configured.bridges,
@@ -291,19 +294,22 @@ describe("provider capability wire compatibility", () => {
       };
       const grokServers = projectProviderToolset(evidence, "grok").mcpServers.map((server) => server.name);
       expect(grokServers).not.toContain("second-computer");
-      saveComputerUseSelection(directory, "claude_code", "second", evidence);
+      saveComputerUseSelection(directory, "second", evidence);
       const selected = loadConfiguredComputerUse(directory);
-      const toolset = projectProviderToolset({
+      const selectedEvidence = {
         ...evidence,
         configuredComputerUse: selected.bridges,
         computerUseSelections: selected.selections,
         computerUseBackends: selected.backends,
-      }, "claude_code");
+      };
+      const claudeToolset = projectProviderToolset(selectedEvidence, "claude_code");
+      const grokToolset = projectProviderToolset(selectedEvidence, "grok");
 
-      expect(selected.selections.claude_code).toBe("second");
-      expect(toolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
+      expect(selected.selections).toEqual({ "*": "second" });
+      expect(claudeToolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
+      expect(grokToolset.mcpServers.map((server) => server.name)).toEqual(["second-computer"]);
 
-      saveComputerUseSelection(directory, "claude_code", "automatic", {
+      saveComputerUseSelection(directory, "automatic", {
         ...evidence,
         configuredComputerUse: selected.bridges,
         computerUseSelections: selected.selections,

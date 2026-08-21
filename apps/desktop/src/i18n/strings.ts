@@ -747,7 +747,8 @@ export const en = {
     "The agent CLIs C2 can drive. Anything installed on your PATH shows a green dot.",
   "settings.computerUse": "Computer Use",
   "settings.computerUseHint":
-    "Choose the external computer-control backend attached to each provider. Provider-native tools remain owned by that provider.",
+    "Choose one external computer-control backend for new sessions. Provider-native tools remain owned by each provider.",
+  "settings.computerUseBackend": "External backend",
   "settings.computerUseAutomatic": "Automatic",
   "settings.computerUseDisabled": "No external backend",
   "settings.computerUseNewSession":
@@ -819,9 +820,9 @@ export const en = {
   "settings.pet": "Session pet",
   "settings.petHint":
     "Shows a small animated companion below the latest turn. Click it to say hello.",
-  "settings.sidebarOpacity": "Sidebar opacity",
+  "settings.sidebarOpacity": "Panel opacity",
   "settings.sidebarOpacityHint":
-    "Controls how strongly the sidebar is tinted against the window.",
+    "Controls the tint strength of sidebars and dock panels against the window.",
   "settings.contrast": "Contrast",
   "settings.contrastHint": "Strengthens surface separation and secondary text.",
   "pet.label": "C2 session pet",
@@ -2292,7 +2293,8 @@ export const zhCN: Record<StringKey, string> = {
     "C2 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
   "settings.computerUse": "Computer Use",
   "settings.computerUseHint":
-    "为每个供应商选择要挂载的外部电脑控制后端。供应商原生工具仍由供应商自身管理。",
+    "为新会话选择一套外部电脑控制后端。供应商原生工具仍由供应商自身管理。",
+  "settings.computerUseBackend": "外部后端",
   "settings.computerUseAutomatic": "自动",
   "settings.computerUseDisabled": "不挂载外部后端",
   "settings.computerUseNewSession":
@@ -2358,8 +2360,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.surfaces": "表面",
   "settings.pet": "会话宠物",
   "settings.petHint": "在最新回合下方显示一只小伙伴；点击它可以打招呼。",
-  "settings.sidebarOpacity": "侧边栏透明度",
-  "settings.sidebarOpacityHint": "控制侧边栏相对窗口背景的着色强度。",
+  "settings.sidebarOpacity": "面板透明度",
+  "settings.sidebarOpacityHint": "控制侧边栏和停靠面板相对窗口背景的着色强度。",
   "settings.contrast": "对比度",
   "settings.contrastHint": "增强表面层级与次要文字的区分。",
   "pet.label": "C2 会话宠物",

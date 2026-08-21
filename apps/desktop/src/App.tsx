@@ -590,10 +590,12 @@ export default function App() {
   const quickQuotaRequestRef = useRef(0);
   const [showMissionControl, setShowMissionControl] = useState(false);
   const [showTaskBoard, setShowTaskBoard] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
+  const terminalOpenRef = useRef(false);
   const dockTabRef = useRef<DockTab | null>(null);
   const dockFollowRef = useRef<FollowState>(initialFollowState);
   const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(
@@ -810,6 +812,10 @@ export default function App() {
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440,
+  );
+  const [dockHeight, setDockHeight] = usePersistedNumber(
+    "codetwo.dockHeight",
+    280,
   );
   const [railWidth, setRailWidth] = usePersistedNumber(
     "codetwo.railWidth",
@@ -1160,11 +1166,20 @@ export default function App() {
     dockTabRef.current = dockTab;
   }, [dockTab]);
 
+  useEffect(() => {
+    terminalOpenRef.current = terminalOpen;
+  }, [terminalOpen]);
+
   /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
   const followDockEvent = useCallback((event: FollowEvent) => {
     const { state, setTab } = followReduce(dockFollowRef.current, event);
     dockFollowRef.current = state;
-    if (setTab) setDockTab(setTab);
+    if (setTab === "terminal") {
+      terminalOpenRef.current = true;
+      setTerminalOpen(true);
+    } else if (setTab) {
+      setDockTab(setTab);
+    }
     if (event.kind === "tool") {
       setDockAutoHint(
         state.autoTab
@@ -1196,7 +1211,7 @@ export default function App() {
         kind: "tool",
         hint,
         now: Date.now(),
-        dockOpen: dockTabRef.current !== null,
+        dockOpen: dockTabRef.current !== null || terminalOpenRef.current,
       });
     },
     [followDockEvent],
@@ -1207,6 +1222,15 @@ export default function App() {
     (tab: DockTab | null) => {
       followDockEvent({ kind: "manual", tab });
       setDockTab(tab);
+    },
+    [followDockEvent],
+  );
+
+  const manualTerminalOpen = useCallback(
+    (open: boolean) => {
+      followDockEvent({ kind: "manual", tab: open ? "terminal" : null });
+      terminalOpenRef.current = open;
+      setTerminalOpen(open);
     },
     [followDockEvent],
   );
@@ -2312,6 +2336,7 @@ export default function App() {
           creationRequestId!,
           worktreeBaseSha,
           { mode, sandbox },
+          currentModel,
         );
       }
     } catch (e) {
@@ -2367,6 +2392,7 @@ export default function App() {
     worktreeOptionsLoading,
     mode,
     sandbox,
+    currentModel,
     planMode,
     freezeCanvasesRef,
     running,
@@ -3119,6 +3145,10 @@ export default function App() {
     ],
     [componentEnabled],
   );
+  const availableSideDockSurfaces = useMemo(
+    () => availableDockSurfaces.filter((surface) => surface !== "terminal"),
+    [availableDockSurfaces],
+  );
 
   // A live disable removes the surface immediately, including already-open dialogs. Runtime
   // cleanup is owned by the plugin scope; this closes only renderer projections of that scope.
@@ -3129,6 +3159,9 @@ export default function App() {
       !availableDockSurfaces.includes(dockTab)
     ) {
       manualDockTab(null);
+    }
+    if (terminalOpen && !availableDockSurfaces.includes("terminal")) {
+      manualTerminalOpen(false);
     }
     if (!componentEnabled("files.surface")) setShowFiles(false);
     if (!componentEnabled("search.modal")) setShowWorkspaceSearch(false);
@@ -3153,7 +3186,9 @@ export default function App() {
     componentEnabled,
     dockTab,
     manualDockTab,
+    manualTerminalOpen,
     scenesSurfaceEnabled,
+    terminalOpen,
   ]);
 
   const refreshScenes = useCallback(async () => {
@@ -3527,24 +3562,28 @@ export default function App() {
 
   const toggleDock = useCallback(
     (t: DockSurface) => {
-    const component: Record<DockSurface, BuiltinUiComponentId> = {
-      browser: "browser.dock",
-      terminal: "terminal.dock",
-      files: "files.surface",
-      git: "git.surface",
-    };
-    if (!componentEnabled(component[t])) {
+      const component: Record<DockSurface, BuiltinUiComponentId> = {
+        browser: "browser.dock",
+        terminal: "terminal.dock",
+        files: "files.surface",
+        git: "git.surface",
+      };
+      if (!componentEnabled(component[t])) {
         toast(
           `${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`,
           "info",
         );
-      return;
-    }
-    // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
-    manualDockTab(dockTabRef.current === t ? null : t);
-    setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+        return;
+      }
+      // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
+      if (t === "terminal") {
+        manualTerminalOpen(!terminalOpenRef.current);
+      } else {
+        manualDockTab(dockTabRef.current === t ? null : t);
+      }
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, manualDockTab, toast],
+    [componentEnabled, manualDockTab, manualTerminalOpen, toast],
   );
 
   const runProjectAction = useCallback((script: ProjectScript) => {
@@ -4836,6 +4875,11 @@ export default function App() {
     onProvider: (p) => {
       providerPinned.current = true;
       setProvider(p);
+      if (activeSessionRef.current === null) {
+        setCurrentModel(null);
+        setDefaultModel(null);
+        setConfigOptions([]);
+      }
       if (canvasProviderRetrySessionRef.current !== null) {
         // ACP sessions keep their provider. Switching after an asynchronous Canvas image failure
         // therefore stages a fresh session instead of silently resubmitting to the failed one.
@@ -5427,9 +5471,13 @@ export default function App() {
                 : "contents"
             }
         >
+          <div
+            data-workspace-stack
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+          >
             {/* ---------------- the session column ---------------- */}
             <main
-              className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background"
+              className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
               ref={mainRef}
             >
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
@@ -5497,8 +5545,8 @@ export default function App() {
 
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
-              terminalActive={dockTab === "terminal"}
-              panelActive={dockTab !== null && dockTab !== "terminal"}
+              terminalActive={terminalOpen}
+              panelActive={dockTab !== null}
               actions={scripts}
               onRunAction={runProjectAction}
               onAddAction={() => setShowActionDialog(true)}
@@ -5512,7 +5560,7 @@ export default function App() {
               onPush={() => void doPush().catch(() => {})}
               onToggleTerminal={() => toggleDock("terminal")}
               onTogglePanel={() => {
-                manualDockTab(dockTab && dockTab !== "terminal" ? null : "home");
+                manualDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
@@ -5576,7 +5624,7 @@ export default function App() {
                 docMode
                   ? "order-1 min-h-0 min-w-0 flex-1"
                   : turns.length === 0 && !sessionLoading
-                    ? "order-2 min-h-0 flex-1 flex-col justify-center pb-16"
+                    ? "order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
                     : "order-2 shrink-0 flex-col",
               )}
             >
@@ -5668,7 +5716,9 @@ export default function App() {
                   height={composerH}
                   onHeight={setComposerH}
                   boundsRef={mainRef}
-                  models={models}
+                  models={activeSession === null
+                    ? providers.find((candidate) => candidate.id === provider)?.models ?? []
+                    : models}
                   currentModel={currentModel}
                   defaultModel={defaultModel}
                       contextWindow={activeContextWindow(
@@ -5678,7 +5728,10 @@ export default function App() {
                   usage={sessionUsage}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
-                    if (!session) return;
+                    if (!session) {
+                      setCurrentModel(id);
+                      return;
+                    }
                     // Optimistic: the engine answers with a `models` event, or an `error` if the provider
                     // doesn't implement the switch.
                     if (id !== currentModelRef.current) {
@@ -5838,13 +5891,56 @@ export default function App() {
           </div>
             </main>
 
+            {/* ---------------- bottom terminal panel ---------------- */}
+            {/* Always mounted so its shell and PTY survive close/open. Height collapses to zero. */}
+            <Dock
+              placement="bottom"
+              open={terminalOpen}
+              tab={terminalOpen ? "terminal" : null}
+              availableSurfaces={
+                availableDockSurfaces.includes("terminal") ? ["terminal"] : []
+              }
+              onTab={() => manualTerminalOpen(true)}
+              onClose={() => manualTerminalOpen(false)}
+              autoTab={dockAutoHint?.surface ?? null}
+              highlightFile={dockAutoHint?.file ?? null}
+              cwd={cwd || null}
+              projectPath={
+                activeProject ? normalizePluginProjectPath(activeProject) : null
+              }
+              sessionKey={activeSession ?? "main"}
+              git={git}
+              onRefreshGit={refreshGit}
+              onOpenSourceControl={openSourceControl}
+              browserUrl={browserUrl}
+              onNavigate={setBrowserUrl}
+              onAnnotate={(n) => void annotate(n)}
+              onInsertFile={(p) => insertFileRef.current?.(p)}
+              onSendText={(text) => insertTextRef.current?.(text)}
+              onOpenFile={openFileTab}
+              openFiles={openFiles}
+              activeFile={activeFile}
+              fileReveal={fileReveal}
+              onActiveFile={(path) => {
+                setActiveFile(path);
+                setFileReveal(null);
+              }}
+              onCloseFile={closeFileTab}
+              width={dockWidth}
+              onWidth={setDockWidth}
+              height={dockHeight}
+              onHeight={setDockHeight}
+            />
+          </div>
+
             {/* ---------------- side dock ---------------- */}
             {/* Always mounted: closing animates the width to zero instead of unmounting, which both
                 plays the full collapse and keeps shells alive across close/open. */}
             <Dock
+              placement="right"
               open={dockTab !== null}
               tab={dockTab}
-              availableSurfaces={availableDockSurfaces}
+              availableSurfaces={availableSideDockSurfaces}
               onTab={manualDockTab}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
@@ -5873,6 +5969,8 @@ export default function App() {
               onCloseFile={closeFileTab}
               width={dockWidth}
               onWidth={setDockWidth}
+              height={dockHeight}
+              onHeight={setDockHeight}
             />
         </div>
       </div>

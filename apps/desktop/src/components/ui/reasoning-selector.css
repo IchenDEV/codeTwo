@@ -208,3 +208,113 @@
   border-radius: 50%;
   background: var(--ds-reasoning-selector-thumb);
 }
+
+/* Nested scene configuration uses the app's compact desktop density and must coexist with panels. */
+.reasoning-selector-trigger--compact {
+  width: auto;
+  min-width: 0;
+  max-width: min(
+    var(--ds-reasoning-selector-compact-width),
+    calc(100vw - 2 * var(--ds-space-section))
+  );
+  height: var(--ds-control-normal);
+  justify-content: flex-start;
+  gap: var(--ds-space-control-group);
+  padding: 0 calc(var(--ds-space-module-inset) + var(--ds-space-section)) 0 var(--ds-space-module-inset);
+  border-radius: var(--ds-radius-control);
+  font-size: var(--ds-type-body-size);
+  line-height: var(--ds-type-body-leading);
+}
+
+.reasoning-selector-trigger--compact .reasoning-selector-trigger-model {
+  flex: 1 1 auto;
+}
+
+.reasoning-selector-trigger--compact .reasoning-selector-trigger-effort {
+  max-width: 48%;
+  flex: 0 1 auto;
+}
+
+.reasoning-selector-trigger--compact .reasoning-selector-trigger-chevron {
+  right: var(--ds-space-module-inset);
+  width: var(--ds-space-section);
+  height: var(--ds-space-section);
+}
+
+.reasoning-selector-popup--compact.glass-raised {
+  width: min(var(--ds-reasoning-selector-compact-width), var(--available-width));
+  height: var(--ds-reasoning-selector-compact-panel-height);
+  max-height: var(--available-height);
+  overflow-y: auto;
+  padding: var(--ds-space-surface-inset);
+  border-radius: var(--ds-radius-module);
+}
+
+.reasoning-selector-popup--compact.reasoning-selector-popup--menu.glass-raised {
+  height: auto;
+  padding: var(--ds-space-module-inset);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-header {
+  height: var(--ds-control-mini);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-header-button {
+  font-size: var(--ds-type-body-size);
+  line-height: var(--ds-type-body-leading);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-header-button svg,
+.reasoning-selector-popup--compact .reasoning-selector-header-icon {
+  width: var(--ds-space-section);
+  height: var(--ds-space-section);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-scale {
+  height: var(--ds-control-normal);
+  margin-top: var(--ds-space-surface-inset);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-track,
+.reasoning-selector-popup--compact .reasoning-selector-fill {
+  border-radius: var(--ds-radius-control);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-track {
+  height: var(--ds-control-normal);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-range::-webkit-slider-runnable-track {
+  height: var(--ds-control-normal);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-range::-moz-range-track {
+  height: var(--ds-control-normal);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-dots {
+  inset-inline: var(--ds-space-section);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-dot {
+  width: var(--ds-space-control-group);
+  height: var(--ds-space-control-group);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-range {
+  top: calc((var(--ds-control-normal) - var(--ds-control-field)) / 2);
+  left: calc(-1 * var(--ds-space-optical));
+  width: calc(100% + 2 * var(--ds-space-optical));
+  height: var(--ds-control-field);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-range::-webkit-slider-thumb {
+  width: var(--ds-control-field);
+  height: var(--ds-control-field);
+  margin-top: calc((var(--ds-control-normal) - var(--ds-control-field)) / 2);
+}
+
+.reasoning-selector-popup--compact .reasoning-selector-range::-moz-range-thumb {
+  width: var(--ds-control-field);
+  height: var(--ds-control-field);
+}

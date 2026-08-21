@@ -184,6 +184,7 @@ CREATE TABLE IF NOT EXISTS automation_runs (
 
 export interface NewSessionInput {
   provider: string;
+  model: string | null;
   cwd: string;
   permissionMode: string;
   sandboxPolicy: string;
@@ -314,16 +315,17 @@ export class BunDatabase {
     this.db
       .query(
         `INSERT INTO sessions(
-           id,title,title_origin,pinned,archived,activity_json,provider,model,cwd,project_path,
+         id,title,title_origin,pinned,archived,activity_json,provider,model,cwd,project_path,
            worktree_path,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
            memory_read,memory_write,created_at
-         ) VALUES(?,?,'default',0,0,?,?,NULL,?,?,NULL,0,?,?,NULL,'inherit','inherit',?)`,
+         ) VALUES(?,?,'default',0,0,?,?,?,?,?,NULL,0,?,?,NULL,'inherit','inherit',?)`,
       )
       .run(
         id,
         "Untitled session",
         JSON.stringify(activity),
         JSON.stringify(input.provider),
+        input.model,
         input.cwd,
         input.cwd,
         JSON.stringify(input.permissionMode),
@@ -347,6 +349,15 @@ export class BunDatabase {
     this.db
       .query("UPDATE sessions SET permission_mode=?,sandbox_policy=? WHERE id=?")
       .run(JSON.stringify(mode), JSON.stringify(sandbox), id);
+  }
+
+  setSessionMemoryPolicy(id: string, read: string, write: string): void {
+    const allowed = new Set(["inherit", "allow", "deny"]);
+    if (!allowed.has(read)) throw new Error("read must be inherit, allow, or deny");
+    if (!allowed.has(write)) throw new Error("write must be inherit, allow, or deny");
+    this.db
+      .query("UPDATE sessions SET memory_read=?,memory_write=? WHERE id=?")
+      .run(read, write, id);
   }
 
   updateActivity(id: string, activity: unknown): void {

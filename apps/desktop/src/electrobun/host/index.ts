@@ -255,9 +255,8 @@ export class PureBunHost {
     this.register("providers.list", () => providerSummaries(this.hostTools));
     this.register("computer_use.settings", () => computerUseSettings(this.hostTools));
     this.register("computer_use.select", (args) => {
-      const provider = string(args.provider, "provider");
       const backend = string(args.backend, "backend");
-      saveComputerUseSelection(dataDir, provider, backend, this.hostTools);
+      saveComputerUseSelection(dataDir, backend, this.hostTools);
       this.hostTools = detectHostToolEvidence(process.env, dataDir);
       return computerUseSettings(this.hostTools);
     });
@@ -441,7 +440,14 @@ export class PureBunHost {
     this.register("memory.delete", (args) => this.database.deleteMemory(string(args.id, "id")));
     this.register("memory.evidence", (args) => this.database.memoryEvidence(string(args.id, "id"), boolean(args.reveal)));
     this.register("memory.usages", (args) => this.database.memoryUsages(string(args.id, "id")));
-    this.register("memory.set_session_policy", () => this.unsupported("memory.set_session_policy", "per-session memory policy"));
+    this.register("memory.set_session_policy", (args) => {
+      this.database.setSessionMemoryPolicy(
+        string(args.session, "session"),
+        string(args.read, "read"),
+        string(args.write, "write"),
+      );
+      return true;
+    });
     this.register("memory.receipts", (args) => this.database.memoryReceipts(string(args.session, "session")));
 
     this.register("automation.list", () => this.database.listAutomations());
@@ -593,8 +599,10 @@ export class PureBunHost {
     if (!provider) throw new Error(`unknown Pure Bun provider: ${providerId(args.provider)}`);
     const cwd = workspacePath(string(args.cwd, "cwd"), ".");
     const policy = object(args.initial_policy);
+    const model = optionalString(args.model);
     const session = this.database.createSession({
       provider: provider.id,
+      model,
       cwd,
       permissionMode: optionalString(policy.mode) ?? "ask",
       sandboxPolicy: optionalString(policy.sandbox) ?? "workspace_write",
@@ -610,7 +618,7 @@ export class PureBunHost {
       worktree_baseline: null,
       request_id: optionalString(args.request_id),
     });
-    this.emitEngine({ event: "models", session: id, available: provider.models, current: "" });
+    this.emitEngine({ event: "models", session: id, available: provider.models, current: model ?? "" });
     return true;
   }
 

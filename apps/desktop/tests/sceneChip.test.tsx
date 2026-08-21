@@ -164,10 +164,56 @@ describe("SceneChip", () => {
     expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
       "w-2xl",
     );
+    expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
+      "max-h-(--available-height)",
+    );
     const detail = Array.from(dom.document.body.querySelectorAll("span")).find(
       (node) => node.textContent === "Plan-first implementation",
     );
     expect(detail?.classList.contains("whitespace-normal")).toBe(true);
+    rendered.unmount();
+  });
+
+  test("keeps the model and reasoning selector compact inside the scene popover", async () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <SceneChip
+          config={config({ hasSession: true, provider: "grok" })}
+          models={[{ id: "grok-4.6", name: "Grok 4.6", description: null }]}
+          currentModel="grok-4.6"
+          defaultModel="grok-4.6"
+          onModel={() => {}}
+          configOptions={[{
+            id: "reasoning_effort",
+            name: "Reasoning Effort",
+            category: "thought_level",
+            current: "xhigh",
+            choices: [
+              { id: "low", name: "Low Effort", description: null },
+              { id: "medium", name: "Medium Effort", description: null },
+              { id: "high", name: "High Effort", description: null },
+              { id: "xhigh", name: "Extra High Effort", description: null },
+            ],
+          }]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
+    );
+    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+
+    await reactAct(async () => {
+      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      }));
+      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    expect(dom.document.body.querySelector(".reasoning-selector-trigger--compact")).toBeTruthy();
     rendered.unmount();
   });
 

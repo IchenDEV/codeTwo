@@ -1101,13 +1101,12 @@ export async function getComputerUseSettings(): Promise<ComputerUseSettings> {
 }
 
 export async function selectComputerUseBackend(
-  provider: string,
   backend: string,
 ): Promise<ComputerUseSettings> {
   if (!inDesktop) return getComputerUseSettings();
   return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
     "computer_use.select",
-    { provider, backend },
+    { backend },
   ));
 }
 
@@ -1258,6 +1257,7 @@ export async function newSession(
   requestId: string,
   worktreeBaseSha?: string | null,
   initialPolicy?: ExecutionPolicy | null,
+  initialModel?: string | null,
 ): Promise<void> {
   if (inDesktop) {
     await call("engine.new_session", {
@@ -1268,6 +1268,7 @@ export async function newSession(
       worktree_base_sha: worktreeBaseSha ?? null,
       request_id: requestId,
       initial_policy: initialPolicy ?? null,
+      model: initialModel ?? null,
     });
   }
 }

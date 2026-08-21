@@ -111,7 +111,7 @@ export function SceneChip({
         align="start"
         side="top"
         size="wide"
-        className="p-2"
+        className="max-h-(--available-height) overflow-y-auto p-2"
       >
         <div className="@container/composer">
           <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
@@ -199,6 +199,7 @@ export function SceneChip({
               configOptions={configOptions}
               onConfigOption={onConfigOption}
               hasSession={config.hasSession}
+              compact
             />
             <ModePicker config={config} />
             {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
