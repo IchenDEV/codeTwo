@@ -43,13 +43,16 @@ import {
   gitUnstage,
   listDir,
   listFiles,
+  listProjectScripts,
   readBinary,
   readText,
   renamePath,
+  runProjectScript,
   runProcess,
   which,
   workspacePath,
   worktreeBaselines,
+  saveProjectScript,
   writeText,
 } from "./system";
 
@@ -114,6 +117,7 @@ const DEFAULT_KEYMAP: [string, string, string][] = [
   ["open_source_control", "Mod+Shift+G", "Source control"],
   ["open_market", "Mod+Shift+M", "Open Plugin Hub"],
   ["open_files", "Mod+P", "Browse workspace files"],
+  ["open_finder", "Mod+O", "Open in Finder"],
   ["search_workspace", "Mod+Shift+F", "Search workspace contents"],
   ["open_issues", "Mod+Shift+I", "Open issues"],
   ["open_usage", "Mod+Shift+U", "Open usage"],
@@ -338,8 +342,23 @@ export class PureBunHost {
     this.register("workspace.source_control", (args) => gitSourceControl(string(args.cwd, "cwd")));
     this.register("workspace.search", (args) => this.searchWorkspace(args));
     this.register("workspace.cancel_search", () => false);
-    this.register("workspace.scripts", () => []);
-    this.register("workspace.run_script", () => this.unsupported("workspace.run_script", "project script execution"));
+    this.register("workspace.scripts", (args) => listProjectScripts(string(args.cwd, "cwd")));
+    this.register("workspace.save_script", (args) => saveProjectScript(
+      string(args.cwd, "cwd"),
+      {
+        id: string(args.id, "id"),
+        name: string(args.name, "name"),
+        command: string(args.command, "command"),
+        keybinding: optionalString(args.keybinding) ?? "",
+        preview_url: optionalString(args.preview_url) ?? "",
+        run_on_worktree_create: boolean(args.run_on_worktree_create),
+        open_preview: boolean(args.open_preview),
+      },
+    ));
+    this.register("workspace.run_script", (args) => runProjectScript(
+      string(args.cwd, "cwd"),
+      string(args.id, "id"),
+    ));
 
     this.register("worktrees.baselines", (args) => worktreeBaselines(string(args.cwd, "cwd")));
     this.register("worktrees.list", () => []);

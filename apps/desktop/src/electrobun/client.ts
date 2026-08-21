@@ -4,6 +4,7 @@ import type {
   DesktopEvent,
   OpenDialogOptions,
   SaveDialogOptions,
+  WorkspaceOpenTarget,
 } from "./rpc";
 
 type EventListener = (payload: unknown) => void;
@@ -81,6 +82,13 @@ export async function desktopOpenExternal(url: string): Promise<boolean> {
 
 export async function desktopOpenPath(path: string): Promise<boolean> {
   return (await client()).request.openPath({ path });
+}
+
+export async function desktopOpenWorkspace(
+  path: string,
+  target: WorkspaceOpenTarget,
+): Promise<boolean> {
+  return (await client()).request.openWorkspace({ path, target });
 }
 
 export async function desktopShowItemInFolder(path: string): Promise<boolean> {

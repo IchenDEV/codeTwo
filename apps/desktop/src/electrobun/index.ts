@@ -7,9 +7,11 @@ import type {
   DialogFilter,
   OpenDialogOptions,
   SaveDialogOptions,
+  WorkspaceOpenTarget,
 } from "./rpc";
 import { PureBunHost } from "./host";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
+import { workspaceOpenCommand } from "./workspaceOpen";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -79,6 +81,19 @@ async function saveDialog(options: SaveDialogOptions): Promise<string | null> {
   ]);
 }
 
+async function openWorkspace(path: string, target: WorkspaceOpenTarget): Promise<boolean> {
+  if (target === "finder") return Utils.openPath(path);
+  const command = workspaceOpenCommand(path, target);
+  if (!command) return false;
+
+  try {
+    const child = Bun.spawn(command, { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+    return (await child.exited) === 0;
+  } catch {
+    return false;
+  }
+}
+
 const queuedEvents: DesktopEvent[] = [];
 let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
@@ -116,6 +131,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
       },
       openExternal: ({ url }) => Utils.openExternal(url),
       openPath: ({ path }) => Utils.openPath(path),
+      openWorkspace: ({ path, target }) => openWorkspace(path, target),
       showItemInFolder: ({ path }) => {
         Utils.showItemInFolder(path);
         return true;

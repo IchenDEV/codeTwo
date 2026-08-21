@@ -19,6 +19,17 @@ import type { DesktopEvent } from "../rpc";
 const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 const MAX_BINARY_BYTES = 24 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 2 * 1024 * 1024;
+const PROJECT_CONFIG_FILES = [".codetwo.json", "codetwo.json"] as const;
+
+export interface ProjectScriptRecord {
+  id: string;
+  name: string;
+  command: string;
+  keybinding: string;
+  preview_url: string;
+  run_on_worktree_create: boolean;
+  open_preview: boolean;
+}
 
 function pathInside(root: string, candidate: string): boolean {
   const rel = relative(root, candidate);
@@ -165,6 +176,110 @@ export function writeText(cwd: string, path: string, content: string): void {
   const target = workspacePath(cwd, path, true);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, content, "utf8");
+}
+
+function projectScript(value: unknown): ProjectScriptRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const script = value as Record<string, unknown>;
+  if (typeof script.id !== "string" || typeof script.command !== "string") return null;
+  return {
+    id: script.id,
+    name: typeof script.name === "string" ? script.name : "",
+    command: script.command,
+    keybinding: typeof script.keybinding === "string" ? script.keybinding : "",
+    preview_url: typeof script.preview_url === "string" ? script.preview_url : "",
+    run_on_worktree_create: script.run_on_worktree_create === true,
+    open_preview: script.open_preview === true,
+  };
+}
+
+function validateProjectScript(script: ProjectScriptRecord): ProjectScriptRecord {
+  const normalized = {
+    ...script,
+    id: script.id.trim(),
+    name: script.name.trim(),
+    command: script.command.trim(),
+    keybinding: script.keybinding.trim(),
+    preview_url: script.preview_url.trim(),
+  };
+  if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized.id)) {
+    throw new Error("action id must use lowercase letters, numbers, dash, or underscore");
+  }
+  if (!normalized.name || normalized.name.length > 80) {
+    throw new Error("action name must be between 1 and 80 characters");
+  }
+  if (!normalized.command || normalized.command.length > 32_768) {
+    throw new Error("action command must be between 1 and 32768 characters");
+  }
+  if (normalized.keybinding.length > 128) throw new Error("action keybinding is too long");
+  if (normalized.preview_url) {
+    let url: URL;
+    try {
+      url = new URL(normalized.preview_url);
+    } catch {
+      throw new Error("action preview URL is invalid");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error("action preview URL must use http or https");
+    }
+  }
+  if (!normalized.preview_url) normalized.open_preview = false;
+  return normalized;
+}
+
+function projectConfigDocument(cwd: string, forWrite = false): {
+  path: string;
+  document: Record<string, unknown>;
+} {
+  for (const name of PROJECT_CONFIG_FILES) {
+    const path = workspacePath(cwd, name, true);
+    if (!exists(path)) continue;
+    try {
+      const parsed = JSON.parse(readText(cwd, name)) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`project config ${name} must contain a JSON object`);
+      }
+      return { path: name, document: parsed as Record<string, unknown> };
+    } catch (error) {
+      if (!forWrite) return { path: name, document: {} };
+      throw error;
+    }
+  }
+  return { path: PROJECT_CONFIG_FILES[0], document: {} };
+}
+
+export function listProjectScripts(cwd: string): ProjectScriptRecord[] {
+  const { document } = projectConfigDocument(cwd);
+  if (!Array.isArray(document.scripts)) return [];
+  return document.scripts.flatMap((value) => {
+    const script = projectScript(value);
+    return script ? [script] : [];
+  });
+}
+
+export function saveProjectScript(cwd: string, input: ProjectScriptRecord): ProjectScriptRecord {
+  const script = validateProjectScript(input);
+  const { path, document } = projectConfigDocument(cwd, true);
+  const scripts = Array.isArray(document.scripts) ? [...document.scripts] : [];
+  const index = scripts.findIndex(
+    (value) => value && typeof value === "object" && (value as { id?: unknown }).id === script.id,
+  );
+  if (index >= 0) scripts[index] = script;
+  else scripts.push(script);
+  writeText(cwd, path, `${JSON.stringify({ ...document, scripts }, null, 2)}\n`);
+  return script;
+}
+
+export async function runProjectScript(cwd: string, id: string): Promise<string> {
+  const script = listProjectScripts(cwd).find((candidate) => candidate.id === id);
+  if (!script) throw new Error(`unknown action: ${id}`);
+  const shell = process.platform === "win32"
+    ? ["cmd.exe", "/d", "/s", "/c", script.command]
+    : ["/bin/sh", "-c", script.command];
+  const result = await runProcess(shell, workspacePath(cwd, "."), 120_000);
+  const output = `${result.stdout}${result.stderr}`;
+  if (result.exitCode !== 0) throw new Error(output.trim() || `action exited with ${result.exitCode}`);
+  return output;
 }
 
 export function renamePath(cwd: string, from: string, to: string): void {

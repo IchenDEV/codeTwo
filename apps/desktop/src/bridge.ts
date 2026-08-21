@@ -5,13 +5,14 @@ import {
   desktopOpenDialog,
   desktopOpenExternal,
   desktopOpenPath,
+  desktopOpenWorkspace,
   desktopSaveDialog,
   desktopCheckForUpdates,
   desktopUpdateStatus,
   isElectrobun,
   listenDesktop,
 } from "./electrobun/client";
-import type { AppUpdateStatus } from "./electrobun/rpc";
+import type { AppUpdateStatus, WorkspaceOpenTarget } from "./electrobun/rpc";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -36,7 +37,7 @@ import {
 
 // Typed renderer bridge to Electrobun's in-process Bun desktop host.
 
-export type { AppUpdateStatus };
+export type { AppUpdateStatus, WorkspaceOpenTarget };
 
 export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
   return desktopUpdateStatus();
@@ -1686,6 +1687,15 @@ export async function openNativePath(path: string): Promise<boolean> {
   return desktopOpenPath(path);
 }
 
+/** Open a workspace in one of the desktop destinations offered by the session header. */
+export async function openWorkspace(
+  path: string,
+  target: WorkspaceOpenTarget,
+): Promise<boolean> {
+  if (!inDesktop) return false;
+  return desktopOpenWorkspace(path, target);
+}
+
 // ---- LSP bridge --------------------------------------------------------------------------------
 // The Rust side spawns real language servers (rust-analyzer, pyright, gopls, …) as children and
 // frames their stdio JSON-RPC; the frontend LSP client in src/lsp speaks the protocol. One server
@@ -2006,6 +2016,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["open_source_control", "Mod+Shift+G", "Source control"],
   ["open_market", "Mod+Shift+M", "Open Plugin Hub"],
   ["open_files", "Mod+P", "Browse workspace files"],
+  ["open_finder", "Mod+O", "Open in Finder"],
   ["search_workspace", "Mod+Shift+F", "Search workspace contents"],
   ["open_issues", "Mod+Shift+I", "Open issues"],
   ["open_usage", "Mod+Shift+U", "Open usage"],
@@ -2932,11 +2943,18 @@ export interface ProjectScript {
   id: string;
   name: string;
   command: string;
+  keybinding: string;
+  preview_url: string;
   run_on_worktree_create: boolean;
+  open_preview: boolean;
 }
 
 export async function listProjectScripts(cwd: string): Promise<ProjectScript[]> {
   return inDesktop ? call<ProjectScript[]>("workspace.scripts", { cwd }) : [];
+}
+
+export async function saveProjectScript(cwd: string, script: ProjectScript): Promise<ProjectScript> {
+  return inDesktop ? call<ProjectScript>("workspace.save_script", { cwd, ...script }) : script;
 }
 
 export async function runProjectScript(cwd: string, id: string): Promise<string> {

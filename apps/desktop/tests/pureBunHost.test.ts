@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -104,6 +104,47 @@ describe("pure Bun desktop host", () => {
         { id: "trial", rows: 36, cols: 100 },
         value.workspace,
       );
+    } finally {
+      await dispose(value);
+    }
+  });
+
+  test("persists, lists, validates, and runs project actions", async () => {
+    const value = fixture();
+    try {
+      writeFileSync(
+        join(value.workspace, ".codetwo.json"),
+        `${JSON.stringify({ future: { keep: true }, scripts: [] })}\n`,
+      );
+      const action = {
+        cwd: value.workspace,
+        id: "test",
+        name: "Test",
+        command: "echo C2_ACTION_OK",
+        keybinding: "Mod+Shift+T",
+        preview_url: "http://localhost:5173",
+        run_on_worktree_create: true,
+        open_preview: true,
+      };
+      expect(await value.host.call("workspace.save_script", action, value.workspace)).toMatchObject({
+        id: "test",
+        keybinding: "Mod+Shift+T",
+        open_preview: true,
+      });
+      const document = JSON.parse(readFileSync(join(value.workspace, ".codetwo.json"), "utf8"));
+      expect(document.future).toEqual({ keep: true });
+      expect(await value.host.call("workspace.scripts", { cwd: value.workspace }, value.workspace))
+        .toEqual([expect.objectContaining({ id: "test", preview_url: "http://localhost:5173" })]);
+      expect(await value.host.call(
+        "workspace.run_script",
+        { cwd: value.workspace, id: "test" },
+        value.workspace,
+      )).toContain("C2_ACTION_OK");
+      await expect(value.host.call(
+        "workspace.save_script",
+        { ...action, id: "unsafe", preview_url: "javascript:alert(1)" },
+        value.workspace,
+      )).rejects.toThrow("http or https");
     } finally {
       await dispose(value);
     }

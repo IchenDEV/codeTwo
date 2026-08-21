@@ -29,6 +29,7 @@ pub enum Action {
     OpenMarket,
     OpenUsage,
     OpenFiles,
+    OpenFinder,
     SearchWorkspace,
     OpenIssues,
     ClosePanel,
@@ -39,7 +40,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 24] = [
+    pub const ALL: [Action; 25] = [
         Action::Run,
         Action::NewSession,
         Action::Cancel,
@@ -54,6 +55,7 @@ impl Action {
         Action::OpenSourceControl,
         Action::OpenMarket,
         Action::OpenFiles,
+        Action::OpenFinder,
         Action::SearchWorkspace,
         Action::OpenIssues,
         Action::OpenUsage,
@@ -85,6 +87,7 @@ impl Action {
             Action::OpenMarket => "open_market",
             Action::OpenUsage => "open_usage",
             Action::OpenFiles => "open_files",
+            Action::OpenFinder => "open_finder",
             Action::SearchWorkspace => "search_workspace",
             Action::OpenIssues => "open_issues",
             Action::ClosePanel => "close_panel",
@@ -114,6 +117,7 @@ impl Action {
             Action::OpenMarket => "Open Plugin Hub",
             Action::OpenUsage => "Open usage",
             Action::OpenFiles => "Browse workspace files",
+            Action::OpenFinder => "Open in Finder",
             Action::SearchWorkspace => "Search workspace contents",
             Action::OpenIssues => "Open issues",
             Action::ClosePanel => "Close side panel",
@@ -143,6 +147,7 @@ impl Action {
             Action::OpenMarket => "Mod+Shift+M",
             Action::OpenUsage => "Mod+Shift+U",
             Action::OpenFiles => "Mod+P",
+            Action::OpenFinder => "Mod+O",
             Action::SearchWorkspace => "Mod+Shift+F",
             Action::OpenIssues => "Mod+Shift+I",
             Action::ClosePanel => "Escape",
@@ -222,6 +227,7 @@ mod tests {
         let km = Keymap::default();
         assert_eq!(km.entries().len(), Action::ALL.len());
         assert_eq!(km.key(Action::Run), "Mod+Enter");
+        assert_eq!(km.key(Action::OpenFinder), "Mod+O");
     }
 
     #[test]
