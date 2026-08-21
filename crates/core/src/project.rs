@@ -3,7 +3,7 @@
 //! A repo can declare scripts the app surfaces as one-click actions, and mark some to run
 //! automatically when a new worktree is created (install deps, copy `.env`, etc.).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
@@ -50,9 +50,18 @@ pub struct ProjectScript {
     pub name: String,
     /// Shell command, run with `sh -c` in the project directory.
     pub command: String,
+    /// Optional project-local shortcut in the shared canonical key syntax (`Mod+Shift+T`).
+    #[serde(default)]
+    pub keybinding: String,
+    /// Optional HTTP(S) page to surface in C2's preview dock when this action runs.
+    #[serde(default)]
+    pub preview_url: String,
     /// Run automatically after `git worktree add` for a new session.
     #[serde(default)]
     pub run_on_worktree_create: bool,
+    /// Open `preview_url` automatically when the action starts.
+    #[serde(default)]
+    pub open_preview: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +82,97 @@ pub fn load(cwd: &Path) -> ProjectConfig {
         }
     }
     ProjectConfig::default()
+}
+
+fn config_path(cwd: &Path) -> PathBuf {
+    CONFIG_FILES
+        .iter()
+        .map(|name| cwd.join(name))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| cwd.join(CONFIG_FILES[0]))
+}
+
+fn invalid(message: impl Into<String>) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidInput, message.into())
+}
+
+fn normalized_script(script: &ProjectScript) -> std::io::Result<ProjectScript> {
+    let mut script = script.clone();
+    script.id = script.id.trim().to_string();
+    script.name = script.name.trim().to_string();
+    script.command = script.command.trim().to_string();
+    script.keybinding = script.keybinding.trim().to_string();
+    script.preview_url = script.preview_url.trim().to_string();
+    let valid_id = !script.id.is_empty()
+        && script.id.len() <= 64
+        && script.id.bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || (index > 0 && (byte == b'-' || byte == b'_'))
+        });
+    if !valid_id {
+        return Err(invalid(
+            "action id must use lowercase letters, numbers, dash, or underscore",
+        ));
+    }
+    if script.name.is_empty() || script.name.chars().count() > 80 {
+        return Err(invalid("action name must be between 1 and 80 characters"));
+    }
+    if script.command.is_empty() || script.command.len() > 32_768 {
+        return Err(invalid(
+            "action command must be between 1 and 32768 characters",
+        ));
+    }
+    if script.keybinding.len() > 128 {
+        return Err(invalid("action keybinding is too long"));
+    }
+    if !script.preview_url.is_empty() {
+        let url = url::Url::parse(&script.preview_url)
+            .map_err(|_| invalid("action preview URL is invalid"))?;
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(invalid("action preview URL must use http or https"));
+        }
+    } else {
+        script.open_preview = false;
+    }
+    Ok(script)
+}
+
+/// Add or update one project action while preserving unrelated top-level configuration keys.
+pub fn save_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<ProjectScript> {
+    let script = normalized_script(script)?;
+    let path = config_path(cwd);
+    let mut document = if path.is_file() {
+        let text = std::fs::read_to_string(&path)?;
+        let value: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|error| invalid(format!("invalid project config: {error}")))?;
+        if !value.is_object() {
+            return Err(invalid("project config must contain a JSON object"));
+        }
+        value
+    } else {
+        serde_json::json!({})
+    };
+    let mut scripts = document
+        .get("scripts")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let encoded = serde_json::to_value(&script).map_err(std::io::Error::other)?;
+    if let Some(existing) = scripts.iter_mut().find(|value| {
+        value.get("id").and_then(serde_json::Value::as_str) == Some(script.id.as_str())
+    }) {
+        *existing = encoded;
+    } else {
+        scripts.push(encoded);
+    }
+    document
+        .as_object_mut()
+        .expect("object checked above")
+        .insert("scripts".into(), serde_json::Value::Array(scripts));
+    let json = serde_json::to_string_pretty(&document).map_err(std::io::Error::other)?;
+    std::fs::write(path, format!("{json}\n"))?;
+    Ok(script)
 }
 
 /// Run one script in `cwd`, returning its combined output.
@@ -176,10 +276,49 @@ mod tests {
             id: "bad".into(),
             name: String::new(),
             command: "exit 3".into(),
+            keybinding: String::new(),
+            preview_url: String::new(),
             run_on_worktree_create: false,
+            open_preview: false,
         };
         assert!(run_script(&dir, &bad).await.is_err());
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saves_action_fields_without_dropping_unrelated_config() {
+        let dir = std::env::temp_dir().join(format!("codetwo-proj-save-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_cfg(&dir, r#"{"future":{"keep":true},"scripts":[]}"#);
+        let saved = save_script(
+            &dir,
+            &ProjectScript {
+                id: "test".into(),
+                name: " Test ".into(),
+                command: " bun test ".into(),
+                keybinding: "Mod+Shift+T".into(),
+                preview_url: "http://localhost:5173".into(),
+                run_on_worktree_create: true,
+                open_preview: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.name, "Test");
+        let document: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join(".codetwo.json")).unwrap())
+                .unwrap();
+        assert_eq!(document["future"]["keep"], true);
+        assert_eq!(document["scripts"][0]["keybinding"], "Mod+Shift+T");
+        assert_eq!(document["scripts"][0]["open_preview"], true);
+        assert!(save_script(
+            &dir,
+            &ProjectScript {
+                preview_url: "javascript:alert(1)".into(),
+                ..saved
+            }
+        )
+        .is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

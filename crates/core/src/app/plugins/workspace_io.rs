@@ -139,6 +139,37 @@ impl Plugin for WorkspacePlugin {
         })?;
 
         #[derive(Deserialize)]
+        struct SaveScriptArgs {
+            cwd: String,
+            id: String,
+            name: String,
+            command: String,
+            #[serde(default)]
+            keybinding: String,
+            #[serde(default)]
+            preview_url: String,
+            #[serde(default)]
+            run_on_worktree_create: bool,
+            #[serde(default)]
+            open_preview: bool,
+        }
+        ctx.command("workspace.save_script", |args| async move {
+            let args: SaveScriptArgs = take_args(args)?;
+            json(project::save_script(
+                Path::new(&args.cwd),
+                &crate::project::ProjectScript {
+                    id: args.id,
+                    name: args.name,
+                    command: args.command,
+                    keybinding: args.keybinding,
+                    preview_url: args.preview_url,
+                    run_on_worktree_create: args.run_on_worktree_create,
+                    open_preview: args.open_preview,
+                },
+            )?)
+        })?;
+
+        #[derive(Deserialize)]
         struct ScriptArgs {
             cwd: String,
             id: String,

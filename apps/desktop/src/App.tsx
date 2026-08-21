@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, CircleAlert, Folder, Keyboard, PanelLeft, PanelRight } from "lucide-react";
+import { Archive, CircleAlert, Folder, Keyboard, PanelLeft } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import {
@@ -18,6 +18,7 @@ import {
   applyPluginScaffold,
   applyPluginChange,
   archiveSession,
+  browserRegistryCreate,
   browserContext,
   canvasCreateDraft,
   canvasDuplicate,
@@ -72,6 +73,7 @@ import {
   onPluginsChanged,
   onEngineEvent,
   openProject,
+  openWorkspace,
   pickPluginMarketplace,
   pinSession,
   pickDirectory,
@@ -82,6 +84,7 @@ import {
   renameProject,
   renameSession,
   runProjectScript,
+  saveProjectScript,
   saveSkill,
   searchSessions,
   sessionPreviews,
@@ -92,6 +95,7 @@ import {
   setPluginEnabled,
   setPluginTrusted,
   setProjectWorktreeMode,
+  type WorkspaceOpenTarget,
   setSessionMemoryPolicy,
   setExecutionPolicy,
   submitPrompt,
@@ -213,6 +217,9 @@ import { SceneEscalationDialog, ScenePicker } from "./session/SceneChip";
 import type { SceneEditorRequest } from "./session/SceneEditor";
 import { SceneStudio } from "./session/SceneStudio";
 import { SceneBanner, sceneBannerFromEvent, type SceneBannerState } from "./session/SceneBanner";
+import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { ProjectActionDialog } from "./session/ProjectActionDialog";
+import { projectActionBindings } from "./session/projectActions";
 import { StageTrack } from "./session/StageTrack";
 import { Composer } from "./session/Composer";
 import {
@@ -284,7 +291,6 @@ import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
-import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 
 import { actionForEvent, comboFromEvent, isModifierOnly, keyHint } from "./keys";
 import { useToast } from "./ui/toast";
@@ -503,6 +509,7 @@ export default function App() {
     WorkspaceLoadState<Checkpoint[]>
   >({ cwd: ".", loading: true, value: EMPTY_CHECKPOINTS });
   const [showPalette, setShowPalette] = useState(false);
+  const [showActionDialog, setShowActionDialog] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
@@ -655,7 +662,6 @@ export default function App() {
     EMPTY_GIT_WORKSPACE,
   );
   const git = currentGitWorkspace.value.status;
-  const diffStat = currentGitWorkspace.value.diffStat;
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
@@ -2957,6 +2963,22 @@ export default function App() {
     setShowSourceControl(true);
   }, [componentEnabled, toast]);
 
+  const openWorkingDirectory = useCallback(async (target: WorkspaceOpenTarget) => {
+    const application =
+      target === "cursor"
+        ? t("header.cursor")
+        : target === "antigravity"
+          ? t("header.antigravity")
+          : t("header.finder");
+    try {
+      if (!(await openWorkspace(cwd || ".", target))) {
+        throw new Error("Workspace launcher unavailable");
+      }
+    } catch {
+      toast(t("header.openFailed", { application }), "error");
+    }
+  }, [cwd, t, toast]);
+
   const doCheckpoint = useCallback(async () => {
     try {
       const cp = await gitCheckpoint(cwd || ".", "manual checkpoint");
@@ -2966,6 +2988,18 @@ export default function App() {
     }
     refreshCheckpoints();
   }, [cwd, refreshCheckpoints, toast]);
+
+  const doPush = useCallback(async () => {
+    try {
+      await gitPush(cwd || ".");
+      toast("Pushed.", "success");
+    } catch (e) {
+      toast(`Push failed: ${e}`, "error");
+      throw e;
+    } finally {
+      refreshGit();
+    }
+  }, [cwd, refreshGit, toast]);
 
   const doPreview = useCallback(async () => {
     const getBlocks = getBlocksRef.current;
@@ -3009,6 +3043,41 @@ export default function App() {
     manualDockTab(dockTabRef.current === t ? null : t);
     setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
   }, [componentEnabled, manualDockTab, toast]);
+
+  const runProjectAction = useCallback((script: ProjectScript) => {
+    const name = script.name || script.id;
+    if (script.preview_url && script.open_preview) {
+      if (componentEnabled("browser.dock")) {
+        setBrowserUrl(script.preview_url);
+        void browserRegistryCreate(script.preview_url).catch((error) => {
+          toast(t("actionDialog.failed", { error: String(error) }), "error");
+        });
+        manualDockTab("browser");
+        setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+      } else {
+        toast("Browser preview is disabled in Plugins.", "info");
+      }
+    }
+    toast(t("actionDialog.running", { name }));
+    void runProjectScript(cwd || ".", script.id)
+      .then((output) => {
+        const message = output.trim()
+          ? output.trim().slice(-300)
+          : t("actionDialog.finished", { name });
+        toast(message, "success");
+      })
+      .catch((error) => toast(t("actionDialog.failed", { error: String(error) }), "error"));
+  }, [componentEnabled, cwd, manualDockTab, t, toast]);
+
+  const saveProjectAction = useCallback(async (script: ProjectScript) => {
+    const saved = await saveProjectScript(cwd || ".", script);
+    setScripts((current) => {
+      const index = current.findIndex((candidate) => candidate.id === saved.id);
+      if (index < 0) return [...current, saved];
+      return current.map((candidate, candidateIndex) => candidateIndex === index ? saved : candidate);
+    });
+    toast(t("actionDialog.saved", { name: saved.name || saved.id }), "success");
+  }, [cwd, t, toast]);
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
@@ -3648,6 +3717,9 @@ export default function App() {
           if (componentEnabled("files.surface")) setShowFiles(true);
           else toast("Files are disabled in Plugins.", "info");
           break;
+        case "open_finder":
+          void openWorkingDirectory("finder");
+          break;
         case "search_workspace":
           if (componentEnabled("search.modal")) setShowWorkspaceSearch(true);
           else toast("Workspace search is disabled in Plugins.", "info");
@@ -3707,6 +3779,7 @@ export default function App() {
       refreshGit,
       openSourceControl,
       openPluginHub,
+      openWorkingDirectory,
       toggleDock,
       manualDockTab,
       toggleDocMode,
@@ -3720,6 +3793,10 @@ export default function App() {
 
   // Hints come from the live keymap, so a rebind is reflected everywhere without touching labels.
   const hint = useCallback((action: string) => keyHint(bindings, action), [bindings]);
+  const effectiveBindings = useMemo(
+    () => [...bindings, ...projectActionBindings(scripts)],
+    [bindings, scripts],
+  );
 
   const paletteCommands: Command[] = [
     { id: "run", label: "Run prompt", hint: hint("run"), run: () => void run() },
@@ -3736,6 +3813,7 @@ export default function App() {
     { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
     { id: "issues", label: "GitHub / Linear issues", hint: hint("open_issues"), run: () => setShowIssues(true) },
     { id: "files", label: "Browse workspace files", hint: hint("open_files"), run: () => setShowFiles(true) },
+    { id: "finder", label: t("action.open_finder"), hint: hint("open_finder"), run: () => void openWorkingDirectory("finder") },
     { id: "search", label: "Search workspace contents", hint: hint("search_workspace"), run: () => setShowWorkspaceSearch(true) },
     {
       id: "usage",
@@ -3807,12 +3885,7 @@ export default function App() {
       id: `script-${s.id}`,
       label: `Run script: ${s.name || s.id}`,
       hint: s.command,
-      run: () => {
-        toast(`Running “${s.name || s.id}”…`);
-        void runProjectScript(cwd || ".", s.id)
-          .then((out) => toast(out.trim() ? out.trim().slice(-300) : `“${s.name || s.id}” finished.`, "success"))
-          .catch((e) => toast(`Script failed: ${e}`, "error"));
-      },
+      run: () => runProjectAction(s),
     })),
     ...sessions.map((s) => ({
       id: `sess-${s.id}`,
@@ -3930,16 +4003,21 @@ export default function App() {
         setCapturing(null);
         return;
       }
-      const action = actionForEvent(e, bindings);
+      const action = actionForEvent(e, effectiveBindings);
       if (!action) return;
       // Escape is also how dialogs and the suggestion menu close; let those win when one is open.
       if (e.key === "Escape" && document.querySelector('[role="dialog"],.bn-suggestion-menu')) return;
       e.preventDefault();
+      if (action.startsWith("project_action:")) {
+        const script = scripts.find((candidate) => `project_action:${candidate.id}` === action);
+        if (script) runProjectAction(script);
+        return;
+      }
       dispatchAction(action);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [bindings, capturing, dispatchAction, toast]);
+  }, [capturing, dispatchAction, effectiveBindings, runProjectAction, scripts, toast]);
 
   // Restore one shortcut to its shipped default.
   const resetBinding = useCallback(
@@ -4500,43 +4578,24 @@ export default function App() {
               </button>
             )}
 
-            <EnvironmentPopover
-              suppressed={showTaskBoard}
-              project={activeProjectName}
-              projectPath={activeProjectName ? activeProject : null}
-              projects={projects}
-              git={git}
-              diffStat={diffStat}
-              onRefresh={refreshGit}
-              onSelectProject={selectProject}
-              onAddProject={() => void addProjectFolder()}
+            <SessionHeaderActions
+              canCommit={git?.is_repo === true}
+              terminalActive={dockTab === "terminal"}
+              panelActive={dockTab !== null && dockTab !== "terminal"}
+              actions={scripts}
+              onRunAction={runProjectAction}
+              onAddAction={() => setShowActionDialog(true)}
+              onOpen={() => void openWorkingDirectory("cursor")}
+              onOpenCursor={() => void openWorkingDirectory("cursor")}
+              onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
+              onOpenFinder={() => void openWorkingDirectory("finder")}
+              finderHint={hint("open_finder")}
+              onCommit={openSourceControl}
               onCheckpoint={() => void doCheckpoint()}
-              onOpenSourceControl={openSourceControl}
-              onOpenIssues={() => {
-                if (componentEnabled("issues.modal")) setShowIssues(true);
-                else toast("Issues are disabled in Plugins.", "info");
-              }}
-              onOpenUsage={() => {
-                if (componentEnabled("usage.settings")) {
-                  setSettingsInitialTab("usage");
-                  setShowSettings(true);
-                } else toast("Usage is disabled in Plugins.", "info");
-              }}
-              onOpenMarket={openPluginHub}
-              onOpenSettings={() => {
-                setSettingsInitialTab("general");
-                setShowSettings(true);
-              }}
-            />
-
-            {/* One control, not a toolbar: the panel toggle. Opening lands on the surface picker;
-                the dock's own tabs and the keyboard shortcuts pick specific surfaces. */}
-            <IconAction
-              icon={PanelRight}
-              label={t("header.panel")}
-              active={dockTab !== null}
-              onClick={() => {
-                manualDockTab(dockTab ? null : "home");
+              onPush={() => void doPush().catch(() => {})}
+              onToggleTerminal={() => toggleDock("terminal")}
+              onTogglePanel={() => {
+                manualDockTab(dockTab && dockTab !== "terminal" ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
             />
@@ -4873,17 +4932,7 @@ export default function App() {
               refreshGit();
             }
           }}
-          onPush={async () => {
-            try {
-              await gitPush(cwd || ".");
-              toast("Pushed.", "success");
-            } catch (e) {
-              toast(`Push failed: ${e}`, "error");
-              throw e;
-            } finally {
-              refreshGit();
-            }
-          }}
+          onPush={doPush}
           onCheckpoint={doCheckpoint}
           onRevert={async (c) => {
             await gitRevert(cwd || ".", c);
@@ -4903,6 +4952,13 @@ export default function App() {
           onClose={() => setShowPalette(false)}
         />
       )}
+      <ProjectActionDialog
+        open={showActionDialog}
+        actions={scripts}
+        bindings={bindings}
+        onOpenChange={setShowActionDialog}
+        onSave={saveProjectAction}
+      />
       {showRemote && componentEnabled("remote.modal") && <RemoteModal onClose={() => setShowRemote(false)} />}
       {showIssues && componentEnabled("issues.modal") && (
         <IssuesModal

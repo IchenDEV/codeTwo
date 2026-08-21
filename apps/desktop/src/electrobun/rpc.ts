@@ -23,6 +23,8 @@ export interface SaveDialogOptions {
   filters?: DialogFilter[];
 }
 
+export type WorkspaceOpenTarget = "cursor" | "antigravity" | "finder";
+
 export type AppUpdateState =
   | "unsupported"
   | "unavailable"
@@ -48,6 +50,10 @@ export type CodeTwoRPC = {
       confirm: { params: { message: string; title?: string }; response: boolean };
       openExternal: { params: { url: string }; response: boolean };
       openPath: { params: { path: string }; response: boolean };
+      openWorkspace: {
+        params: { path: string; target: WorkspaceOpenTarget };
+        response: boolean;
+      };
       showItemInFolder: { params: { path: string }; response: boolean };
       browserZoom: { params: { webviewId: number; factor: number }; response: void };
       openDevtools: { params: undefined; response: void };
