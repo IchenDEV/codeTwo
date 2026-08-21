@@ -12,6 +12,8 @@ describe("plugin bridge contract", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
     const client = readFileSync(resolve(desktop, "src/electrobun/client.ts"), "utf8");
     const main = readFileSync(resolve(desktop, "src/electrobun/index.ts"), "utf8");
+    const acp = readFileSync(resolve(desktop, "src/electrobun/host/acp.ts"), "utf8");
+    const host = readFileSync(resolve(desktop, "src/electrobun/host/index.ts"), "utf8");
     const config = readFileSync(resolve(desktop, "electrobun.config.ts"), "utf8");
     const prepare = readFileSync(resolve(desktop, "scripts/prepare-electrobun.ts"), "utf8");
 
@@ -27,6 +29,9 @@ describe("plugin bridge contract", () => {
     expect(`${main}\n${config}\n${prepare}`).not.toContain("codetwo-desktop-host");
     expect(`${config}\n${prepare}`).not.toContain("cargo");
     expect(`${bridge}\n${client}\n${main}`).not.toContain("@tauri-apps");
+    expect(acp).not.toContain("mcpServers: []");
+    expect(acp).toContain("sessionRequestParams(cwd, this.mcpServers)");
+    expect(host).toContain("runtime.toolset.mcpServers");
   });
 
   test("registers every static command used by the bridge", async () => {

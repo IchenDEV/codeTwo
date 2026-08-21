@@ -88,6 +88,59 @@ value the agent never offered; a single-question form also projects onto permiss
 so clients that only render approvals can still answer it. See
 `crates/core/tests/engine_elicitation.rs`.
 
+## Provider-neutral host tools
+
+Special tools have one policy owner: the Bun `ToolBroker` under `packages/tool-broker`. Adapters
+produce evidence; the broker exposes only `catalog(context)` and `resolve(request) -> ToolPlan`.
+`ToolPlan` is deeply frozen and contains native capability ids, portable MCP server specs, and
+short routing/safety instructions. It never contains a provider-private endpoint.
+
+```text
+ Codex native adapter              Configured MCP adapters
+ (Computer/Browser/Image/Sites)    (Cua/Browser Use/Playwright/DevTools/custom)
+              │ evidence                         │ evidence
+              └──────────────┬───────────────────┘
+                             ▼
+                    packages/tool-broker
+              catalog(context) │ resolve(request)
+                             ▼
+                  immutable ToolPlan + catalog
+                     ┌─────────┴─────────┐
+            in-process adapter       JSON-RPC adapter
+                     │                   │
+             ElectronBun desktop   Rust CoreApp only
+                                   ├─ ratatui TUI
+                                   └─ Axum server
+
+ SelectionStore ── host-tools.json
+       ▲                    │
+       └── settings commands┘
+```
+
+The desktop calls the broker in-process and passes its MCP specs directly to the ACP peer. TUI and
+server launch the compiled `codetwo-tool-broker` beside their Rust executable and deserialize the
+same wire plan through `crates/core/src/host_tools.rs`; that Rust file contains process and wire
+adaptation only. `script/build_rust_hosts.sh` builds the three sibling executables. During source
+development the adapter can fall back to `bun toolBrokerRpc.ts`; installed hosts can also use
+`CODETWO_TOOL_BROKER` or a broker on `PATH`.
+
+`computer_use.select` and `browser_use.select` write one provider choice through the broker's
+selection seam and refresh future plans. Each session snapshots its MCP set when created or
+revived, so a settings change does not interrupt an existing session.
+
+The signed OpenAI Computer Use adapter remains a built-in portable fallback. OpenAI Browser/Chrome
+stays Codex-native because its runtime requires the active Codex turn and session; C2 never exports
+its private `node_repl` endpoint to another provider. Entries in `host-tools.json` can attach Cua
+Driver, Browser Use, Playwright, Chrome DevTools, or another standard MCP computer/browser-control
+backend to compatible providers. Settings offers Automatic, no external backend, and every
+compatible configured backend.
+An explicit selection replaces C2's portable OpenAI fallback. Provider-native tools remain owned
+and enforced by their provider; a ToolPlan can select and advertise them but cannot export their
+private transport or rewrite provider policy. Image Generation
+and Sites remain unavailable outside Codex until their host exposes a portable MCP surface; C2 does
+not claim parity based only on an installed plugin. Independently configured remote or cross-OS MCP
+backends remain usable when their own runtime and the selected ACP transport support them.
+
 ## Context sync: whose memory is it?
 
 Two transcripts and one recall layer can participate in a turn. They are not the same thing:

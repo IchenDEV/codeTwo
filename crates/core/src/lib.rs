@@ -36,6 +36,7 @@ pub mod event;
 pub mod git;
 pub mod github_skills;
 pub mod harness;
+pub mod host_tools;
 pub mod issues;
 pub mod keymap;
 pub mod market;
@@ -100,6 +101,10 @@ pub use engine::{
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
+pub use host_tools::{
+    BrowserUseBackendOption, BrowserUseSettings, ComputerUseBackendOption, ComputerUseSettings,
+    HostToolDiscovery,
+};
 pub use issues::Issue;
 pub use keymap::{Action as KeyAction, Keymap};
 pub use market::MarketEntry;
@@ -121,7 +126,7 @@ pub use permission::{
 pub use project::{ProjectConfig, ProjectScript};
 pub use provider::{
     default_registry, registry_with_codex_runtime, CapabilityState, LaunchSpec, Provider,
-    ProviderCapability, ProviderCapabilityId, ProviderId,
+    ProviderCapability, ProviderCapabilityId, ProviderId, ProviderToolset,
 };
 pub use pty::PtySession;
 pub use risk_v2::{

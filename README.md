@@ -115,11 +115,14 @@ and notarization.
 From the repository root:
 
 ```sh
+# Build the TUI, server, and their sibling Bun Tool Broker
+./script/build_rust_hosts.sh release
+
 # Terminal interface
-cargo run -p codetwo-tui
+./target/release/codetwo-tui
 
 # Paired remote web client
-cargo run -p codetwo-server
+./target/release/codetwo-server
 
 # Self-contained turn demo using a stub ACP agent (requires Node)
 cargo run -p codetwo-core --example live_demo
@@ -137,6 +140,7 @@ tailnet; C2 does not provide a hosted relay.
 | [`crates/tui`](crates/tui)       | ratatui frontend                                                            |
 | [`crates/server`](crates/server) | Headless server, pairing, WebSocket protocol, and remote client             |
 | [`apps/desktop`](apps/desktop)   | Electrobun + React + BlockNote desktop app                                  |
+| [`packages/tool-broker`](packages/tool-broker) | Provider-neutral special-tool catalog and immutable routing plans |
 | [`website`](website)             | VitePress documentation and GitHub Pages site                               |
 | [`docs`](docs)                   | Architecture, design laws, roadmap, and protocol notes                      |
 
@@ -147,6 +151,7 @@ Run Rust checks from the repository root:
 ```sh
 cargo check --workspace --all-targets
 cargo test --workspace
+./script/build_rust_hosts.sh debug
 ```
 
 Run desktop checks from `apps/desktop`:

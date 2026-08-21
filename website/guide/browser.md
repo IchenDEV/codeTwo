@@ -22,13 +22,16 @@ A rendered context block looks like:
 
 ## Giving the agent its own browser
 
-Beyond passing context, you can give the *agent* a browser tool: install **Browser Tool (MCP)** from
-the [Plugin Hub market](/guide/market) and add it to your prompt. That attaches a browser MCP server to
-the session so the agent can drive a browser itself (the MCP server binary must be installed).
+Beyond passing context, you can give the *agent* a browser tool in **Settings → Browser Use**. Codex
+can use the discovered **OpenAI Browser / Chrome** runtime. Any compatible provider can instead use
+a Browser Use, Playwright, Chrome DevTools, or other standard MCP backend registered in
+`host-tools.json`. The choice is per provider and is attached when a new session starts; see
+[Providers → Configure Browser Use](/guide/providers#configure-browser-use-or-another-browser-mcp).
 
 ::: info Limits
 Embedded tabs are for manual browsing and annotation. Electrobun's stable BrowserView surface does
 not yet provide the screenshot and evaluated-result primitives C2's former authenticated
-agent-browser adapter required, so agents cannot take over these tabs. A separately installed
-browser MCP still runs as its own tool.
+agent-browser adapter required, so agents cannot take over these tabs through C2's embedded panel.
+The Codex-native OpenAI Browser plugin and separately configured browser MCPs run as independent
+tools. OpenAI's private `node_repl` runtime is not exported to other providers.
 :::

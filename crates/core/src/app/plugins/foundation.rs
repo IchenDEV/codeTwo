@@ -7,8 +7,8 @@
 
 use crate::app::service::{EventBus, Paths, ProviderService, StoreService};
 use crate::app::{json, take_args};
-use crate::codex_runtime::CodexRuntimeDiscovery;
-use crate::provider::registry_with_codex_runtime;
+use crate::host_tools::HostToolDiscovery;
+use crate::provider::default_registry;
 use crate::store::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -207,15 +207,69 @@ impl Plugin for ProvidersPlugin {
         Some("Which coding CLIs can be launched, and what they can do.")
     }
 
+    fn inject(&self) -> Injection {
+        Injection::required(["paths"])
+    }
+
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        let codex = CodexRuntimeDiscovery::detect();
-        let providers = registry_with_codex_runtime(&codex);
-        let service = Arc::new(ProviderService { providers, codex });
+        let paths = ctx.expect::<Paths>()?;
+        let host_tools = HostToolDiscovery::detect(&paths.data_dir);
+        let providers = default_registry();
+        let service = Arc::new(ProviderService::new(providers, host_tools));
 
         let listed = service.clone();
         ctx.command("providers.list", move |_| {
             let service = listed.clone();
             async move { json(service.summaries().await) }
+        })?;
+
+        let settings = service.clone();
+        ctx.command("computer_use.settings", move |_| {
+            let settings = settings.clone();
+            async move { json(settings.computer_use_settings()) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ComputerUseSelectionArgs {
+            provider: String,
+            backend: String,
+        }
+        let selection_path = paths.data_dir.clone();
+        let selected = service.clone();
+        ctx.command("computer_use.select", move |args| {
+            let path = selection_path.clone();
+            let selected = selected.clone();
+            async move {
+                let args: ComputerUseSelectionArgs = take_args(args)?;
+                HostToolDiscovery::select_computer_use_backend(
+                    &path,
+                    &args.provider,
+                    &args.backend,
+                )
+                .map_err(PluginError::new)?;
+                selected.refresh_host_tools(HostToolDiscovery::detect(&path));
+                json(selected.computer_use_settings())
+            }
+        })?;
+
+        let browser_settings = service.clone();
+        ctx.command("browser_use.settings", move |_| {
+            let settings = browser_settings.clone();
+            async move { json(settings.browser_use_settings()) }
+        })?;
+
+        let browser_selection_path = paths.data_dir.clone();
+        let browser_selected = service.clone();
+        ctx.command("browser_use.select", move |args| {
+            let path = browser_selection_path.clone();
+            let selected = browser_selected.clone();
+            async move {
+                let args: ComputerUseSelectionArgs = take_args(args)?;
+                HostToolDiscovery::select_browser_use_backend(&path, &args.provider, &args.backend)
+                    .map_err(PluginError::new)?;
+                selected.refresh_host_tools(HostToolDiscovery::detect(&path));
+                json(selected.browser_use_settings())
+            }
         })?;
 
         ctx.provide(service)?;

@@ -6,6 +6,7 @@ import {
   Folder,
   Globe,
   Keyboard,
+  MousePointer2,
   Package,
   Palette,
   RotateCcw,
@@ -17,11 +18,18 @@ import {
   browserPermissions,
   browserRevokePermission,
   checkForAppUpdates,
+  getBrowserUseSettings,
+  getComputerUseSettings,
   confirmNative,
   discardOrphanWorktree,
   discardSessionWorktree,
   getAppUpdateStatus,
   listProjectWorktrees,
+  selectComputerUseBackend,
+  selectBrowserUseBackend,
+  type BrowserUseSettings,
+  type ComputerUseBackendOption,
+  type ComputerUseSettings,
   type AppUpdateStatus,
   type KeymapEntry,
   type Project,
@@ -65,6 +73,8 @@ export type SettingsTab =
   | "memory"
   | "keybindings"
   | "providers"
+  | "computer-use"
+  | "browser-use"
   | "usage"
   | "browser";
 
@@ -75,6 +85,8 @@ const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label
   { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
   { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
   { id: "providers", icon: Package, labelKey: "settings.providers" },
+  { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
+  { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
   { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
   { id: "browser", icon: Globe, label: "Browser" },
 ];
@@ -94,10 +106,17 @@ const WORKTREE_BADGE_LABELS: Record<WorktreeStatusBadge, StringKey> = {
 const CAPABILITY_LABELS = {
   image_generation: "Image generation",
   computer_use: "Computer Use",
-  chrome_browser: "Chrome Browser",
+  chrome_browser: "Browser Use",
   codetwo_browser: "C2 Browser",
   sites: "Sites",
 } as const;
+
+function computerUseBackendMatches(backend: ComputerUseBackendOption, provider: string): boolean {
+  const excluded = backend.exclude_providers.some((candidate) => candidate === "*" || candidate === provider);
+  const included = backend.providers.length === 0
+    || backend.providers.some((candidate) => candidate === "*" || candidate === provider);
+  return !excluded && included;
+}
 
 // Actions grouped by what they touch — a flat list of twenty-two is hard to scan. Anything not
 // listed still shows under "Other", so a new binding is never hidden.
@@ -204,6 +223,10 @@ export function SettingsPage({
   onClose,
   updateStatusLoader = getAppUpdateStatus,
   updateCheckStarter = checkForAppUpdates,
+  computerUseSettingsLoader = getComputerUseSettings,
+  computerUseSelectionSaver = selectComputerUseBackend,
+  browserUseSettingsLoader = getBrowserUseSettings,
+  browserUseSelectionSaver = selectBrowserUseBackend,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -223,6 +246,10 @@ export function SettingsPage({
   onClose: () => void;
   updateStatusLoader?: () => Promise<AppUpdateStatus>;
   updateCheckStarter?: () => Promise<AppUpdateStatus>;
+  computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
+  computerUseSelectionSaver?: (provider: string, backend: string) => Promise<ComputerUseSettings>;
+  browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
+  browserUseSelectionSaver?: (provider: string, backend: string) => Promise<BrowserUseSettings>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -234,6 +261,12 @@ export function SettingsPage({
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null);
+  const [computerUseSettings, setComputerUseSettings] = useState<ComputerUseSettings | null>(null);
+  const [computerUseSaving, setComputerUseSaving] = useState<string | null>(null);
+  const [computerUseError, setComputerUseError] = useState<string | null>(null);
+  const [browserUseSettings, setBrowserUseSettings] = useState<BrowserUseSettings | null>(null);
+  const [browserUseSaving, setBrowserUseSaving] = useState<string | null>(null);
+  const [browserUseError, setBrowserUseError] = useState<string | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -271,6 +304,36 @@ export function SettingsPage({
       window.clearInterval(timer);
     };
   }, [tab, appUpdate?.state, updateStatusLoader]);
+  useEffect(() => {
+    if (tab !== "computer-use") return;
+    let active = true;
+    setComputerUseError(null);
+    void computerUseSettingsLoader()
+      .then((settings) => {
+        if (active) setComputerUseSettings(settings);
+      })
+      .catch((error) => {
+        if (active) setComputerUseError(t("settings.computerUseLoadFailed", { error: String(error) }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, computerUseSettingsLoader, t]);
+  useEffect(() => {
+    if (tab !== "browser-use") return;
+    let active = true;
+    setBrowserUseError(null);
+    void browserUseSettingsLoader()
+      .then((settings) => {
+        if (active) setBrowserUseSettings(settings);
+      })
+      .catch((error) => {
+        if (active) setBrowserUseError(t("settings.browserUseLoadFailed", { error: String(error) }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, browserUseSettingsLoader, t]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   // Scene `schedule` hooks are off by default per project (docs/scenes.md §Security).
   const [schedulingEnabled, setSchedulingEnabled] = useState(false);
@@ -391,6 +454,30 @@ export function SettingsPage({
       setAppUpdate(await updateCheckStarter());
     } catch (error) {
       setAppUpdate({ state: "unavailable", message: String(error) });
+    }
+  };
+
+  const saveComputerUseSelection = async (providerId: string, backendId: string) => {
+    setComputerUseSaving(providerId);
+    setComputerUseError(null);
+    try {
+      setComputerUseSettings(await computerUseSelectionSaver(providerId, backendId));
+    } catch (error) {
+      setComputerUseError(t("settings.computerUseLoadFailed", { error: String(error) }));
+    } finally {
+      setComputerUseSaving(null);
+    }
+  };
+
+  const saveBrowserUseSelection = async (providerId: string, backendId: string) => {
+    setBrowserUseSaving(providerId);
+    setBrowserUseError(null);
+    try {
+      setBrowserUseSettings(await browserUseSelectionSaver(providerId, backendId));
+    } catch (error) {
+      setBrowserUseError(t("settings.browserUseLoadFailed", { error: String(error) }));
+    } finally {
+      setBrowserUseSaving(null);
     }
   };
 
@@ -708,6 +795,178 @@ export function SettingsPage({
                 providerName={providers.find((candidate) => candidate.id === provider)?.display_name ?? provider}
                 providerNames={providerNames}
               />
+            )}
+
+            {tab === "computer-use" && (
+              <Page title={t("settings.computerUse")} description={t("settings.computerUseHint")}>
+                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
+                  {t("settings.computerUseNewSession")}
+                </p>
+                {computerUseError && (
+                  <p data-computer-use-error className="pb-2 text-hint leading-relaxed text-destructive">
+                    {computerUseError}
+                  </p>
+                )}
+                {computerUseSettings?.errors.map((error) => (
+                  <p key={error} className="pb-2 text-hint leading-relaxed text-destructive">
+                    {error}
+                  </p>
+                ))}
+                {!computerUseSettings ? (
+                  <p className="py-5 text-ui text-muted-foreground">{t("settings.computerUseLoading")}</p>
+                ) : (
+                  <>
+                    {providers.map((candidate) => {
+                      const selected = computerUseSettings.selections[candidate.id] ?? "automatic";
+                      const backends = computerUseSettings.backends.filter((backend) =>
+                        computerUseBackendMatches(backend, candidate.id)
+                      );
+                      const selectedLabel = selected === "automatic"
+                        ? t("settings.computerUseAutomatic")
+                        : selected === "disabled"
+                          ? t("settings.computerUseDisabled")
+                          : backends.find((backend) => backend.id === selected)?.display_name ?? selected;
+                      return (
+                        <Row
+                          key={candidate.id}
+                          icon={<ProviderIcon provider={candidate.id} className="size-5 shrink-0 opacity-80" />}
+                          label={candidate.display_name}
+                          hint={<span className="font-mono">{candidate.id}</span>}
+                        >
+                          <Select
+                            value={selected}
+                            disabled={computerUseSaving !== null}
+                            onValueChange={(backend) => {
+                              if (backend) void saveComputerUseSelection(candidate.id, backend);
+                            }}
+                          >
+                            <SelectTrigger
+                              data-computer-use-provider={candidate.id}
+                              aria-label={`${candidate.display_name}: ${t("settings.computerUse")}`}
+                              size="sm"
+                              className="w-52 justify-between"
+                            >
+                              <SelectValue>{selectedLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="end">
+                              <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
+                              <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
+                              {backends.map((backend) => (
+                                <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                                  {backend.display_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Row>
+                      );
+                    })}
+
+                    <GroupHeading>{t("settings.computerUseBackends")}</GroupHeading>
+                    {computerUseSettings.backends.map((backend) => (
+                      <Row
+                        key={backend.id}
+                        compact
+                        label={backend.display_name}
+                        hint={backend.reason ?? <span className="font-mono">{backend.id}</span>}
+                      >
+                        <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+                          <span className={cn("size-1.5 rounded-full", backend.available ? "bg-success" : "bg-border")} />
+                          {backend.available
+                            ? t("settings.computerUseAvailable")
+                            : t("settings.computerUseUnavailable")}
+                        </span>
+                      </Row>
+                    ))}
+                  </>
+                )}
+              </Page>
+            )}
+
+            {tab === "browser-use" && (
+              <Page title={t("settings.browserUse")} description={t("settings.browserUseHint")}>
+                <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
+                  {t("settings.browserUseNewSession")}
+                </p>
+                {browserUseError && (
+                  <p data-browser-use-error className="pb-2 text-hint leading-relaxed text-destructive">
+                    {browserUseError}
+                  </p>
+                )}
+                {browserUseSettings?.errors.map((error) => (
+                  <p key={error} className="pb-2 text-hint leading-relaxed text-destructive">
+                    {error}
+                  </p>
+                ))}
+                {!browserUseSettings ? (
+                  <p className="py-5 text-ui text-muted-foreground">{t("settings.browserUseLoading")}</p>
+                ) : (
+                  <>
+                    {providers.map((candidate) => {
+                      const selected = browserUseSettings.selections[candidate.id] ?? "automatic";
+                      const backends = browserUseSettings.backends.filter((backend) =>
+                        computerUseBackendMatches(backend, candidate.id)
+                      );
+                      const selectedLabel = selected === "automatic"
+                        ? t("settings.browserUseAutomatic")
+                        : selected === "disabled"
+                          ? t("settings.browserUseDisabled")
+                          : backends.find((backend) => backend.id === selected)?.display_name ?? selected;
+                      return (
+                        <Row
+                          key={candidate.id}
+                          icon={<ProviderIcon provider={candidate.id} className="size-5 shrink-0 opacity-80" />}
+                          label={candidate.display_name}
+                          hint={<span className="font-mono">{candidate.id}</span>}
+                        >
+                          <Select
+                            value={selected}
+                            disabled={browserUseSaving !== null}
+                            onValueChange={(backend) => {
+                              if (backend) void saveBrowserUseSelection(candidate.id, backend);
+                            }}
+                          >
+                            <SelectTrigger
+                              data-browser-use-provider={candidate.id}
+                              aria-label={`${candidate.display_name}: ${t("settings.browserUse")}`}
+                              size="sm"
+                              className="w-52 justify-between"
+                            >
+                              <SelectValue>{selectedLabel}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent position="popper" align="end">
+                              <SelectItem value="automatic">{t("settings.browserUseAutomatic")}</SelectItem>
+                              <SelectItem value="disabled">{t("settings.browserUseDisabled")}</SelectItem>
+                              {backends.map((backend) => (
+                                <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                                  {backend.display_name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </Row>
+                      );
+                    })}
+
+                    <GroupHeading>{t("settings.browserUseBackends")}</GroupHeading>
+                    {browserUseSettings.backends.map((backend) => (
+                      <Row
+                        key={backend.id}
+                        compact
+                        label={backend.display_name}
+                        hint={backend.reason ?? <span className="font-mono">{backend.id}</span>}
+                      >
+                        <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
+                          <span className={cn("size-1.5 rounded-full", backend.available ? "bg-success" : "bg-border")} />
+                          {backend.available
+                            ? t("settings.browserUseAvailable")
+                            : t("settings.browserUseUnavailable")}
+                        </span>
+                      </Row>
+                    ))}
+                  </>
+                )}
+              </Page>
             )}
 
             {tab === "providers" && (

@@ -1,6 +1,11 @@
 import type { Subprocess } from "bun";
 
 import { which } from "./system";
+import {
+  projectProviderToolset,
+  type AcpMcpServer,
+  type HostToolEvidence,
+} from "./providerTools";
 
 export interface ProviderDefinition {
   id: string;
@@ -101,14 +106,14 @@ export const PROVIDERS: ProviderDefinition[] = [
   },
 ];
 
-export function providerSummaries(): unknown[] {
+export function providerSummaries(hostTools: HostToolEvidence): unknown[] {
   return PROVIDERS.map((provider) => ({
     id: provider.id,
     display_name: provider.displayName,
     available: which(provider.command) !== null,
     needs_node: provider.needsNode,
     models: provider.models,
-    capabilities: [],
+    capabilities: projectProviderToolset(hostTools, provider.id).capabilities,
   }));
 }
 
@@ -128,10 +133,40 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
+function object(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+export function validateMcpTransports(
+  servers: AcpMcpServer[],
+  initialized: Record<string, unknown>,
+): void {
+  const mcp = object(object(initialized.agentCapabilities).mcpCapabilities);
+  for (const server of servers) {
+    if (!("type" in server)) continue;
+    const supported = server.type === "http" ? mcp.http === true : mcp.sse === true;
+    if (!supported) {
+      throw new Error(
+        `MCP server ${JSON.stringify(server.name)} needs ${server.type.toUpperCase()} transport, but this provider did not advertise that ACP capability`,
+      );
+    }
+  }
+}
+
 export interface AcpCallbacks {
   notification(method: string, params: unknown): void | Promise<void>;
   request(method: string, params: unknown): Promise<unknown>;
   closed(error: Error): void;
+}
+
+export function sessionRequestParams(
+  cwd: string,
+  mcpServers: AcpMcpServer[],
+  sessionId?: string,
+): { cwd: string; mcpServers: AcpMcpServer[]; sessionId?: string } {
+  return { ...(sessionId ? { sessionId } : {}), cwd, mcpServers };
 }
 
 export class AcpPeer {
@@ -140,7 +175,12 @@ export class AcpPeer {
   private nextId = 1;
   private closed = false;
 
-  constructor(provider: ProviderDefinition, cwd: string, private readonly callbacks: AcpCallbacks) {
+  constructor(
+    provider: ProviderDefinition,
+    cwd: string,
+    private readonly callbacks: AcpCallbacks,
+    private readonly mcpServers: AcpMcpServer[],
+  ) {
     const executable = which(provider.command);
     if (!executable) throw new Error(`${provider.displayName} is not installed (${provider.command})`);
     this.child = Bun.spawn([executable, ...provider.args], {
@@ -155,18 +195,28 @@ export class AcpPeer {
   }
 
   async initialize(): Promise<Record<string, unknown>> {
-    return this.request("initialize", {
+    const initialized = await this.request("initialize", {
       protocolVersion: 1,
       clientCapabilities: { elicitation: { form: {} } },
-    }) as Promise<Record<string, unknown>>;
+    }) as Record<string, unknown>;
+    try {
+      validateMcpTransports(this.mcpServers, initialized);
+    } catch (error) {
+      this.shutdown();
+      throw error;
+    }
+    return initialized;
   }
 
   async newSession(cwd: string): Promise<Record<string, unknown>> {
-    return this.request("session/new", { cwd, mcpServers: [] }) as Promise<Record<string, unknown>>;
+    return this.request("session/new", sessionRequestParams(cwd, this.mcpServers)) as Promise<Record<string, unknown>>;
   }
 
   async loadSession(sessionId: string, cwd: string): Promise<Record<string, unknown>> {
-    return this.request("session/load", { sessionId, cwd, mcpServers: [] }) as Promise<Record<string, unknown>>;
+    return this.request(
+      "session/load",
+      sessionRequestParams(cwd, this.mcpServers, sessionId),
+    ) as Promise<Record<string, unknown>>;
   }
 
   async prompt(sessionId: string, prompt: unknown[]): Promise<Record<string, unknown>> {

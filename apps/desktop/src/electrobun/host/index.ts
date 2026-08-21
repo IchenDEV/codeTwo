@@ -12,6 +12,17 @@ import {
 } from "./acp";
 import { BunDatabase } from "./database";
 import {
+  browserUseSettings,
+  computerUseSettings,
+  detectHostToolEvidence,
+  projectProviderToolset,
+  saveComputerUseSelection,
+  saveBrowserUseSelection,
+  withProviderToolInstructions,
+  type HostToolEvidence,
+  type ProviderToolset,
+} from "./providerTools";
+import {
   LspManager,
   TerminalManager,
   augmentGuiPath,
@@ -47,6 +58,7 @@ interface SessionRuntime {
   id: string;
   cwd: string;
   provider: ProviderDefinition;
+  toolset: ProviderToolset;
   model: string | null;
   permissionMode: string;
   sandboxPolicy: string;
@@ -144,6 +156,7 @@ function textContent(value: unknown): string | null {
 
 export class PureBunHost {
   private readonly database: BunDatabase;
+  private hostTools: HostToolEvidence;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
   private readonly handlers = new Map<string, Handler>();
@@ -155,6 +168,7 @@ export class PureBunHost {
 
   constructor(dataDir: string, private readonly onEvent: (event: DesktopEvent) => void) {
     augmentGuiPath();
+    this.hostTools = detectHostToolEvidence(process.env, dataDir);
     this.database = new BunDatabase(dataDir);
     this.terminal = new TerminalManager(onEvent);
     this.lsp = new LspManager(onEvent);
@@ -207,7 +221,23 @@ export class PureBunHost {
   }
 
   private registerCommands(dataDir: string): void {
-    this.register("providers.list", () => providerSummaries());
+    this.register("providers.list", () => providerSummaries(this.hostTools));
+    this.register("computer_use.settings", () => computerUseSettings(this.hostTools));
+    this.register("computer_use.select", (args) => {
+      const provider = string(args.provider, "provider");
+      const backend = string(args.backend, "backend");
+      saveComputerUseSelection(dataDir, provider, backend, this.hostTools);
+      this.hostTools = detectHostToolEvidence(process.env, dataDir);
+      return computerUseSettings(this.hostTools);
+    });
+    this.register("browser_use.settings", () => browserUseSettings(this.hostTools));
+    this.register("browser_use.select", (args) => {
+      const provider = string(args.provider, "provider");
+      const backend = string(args.backend, "backend");
+      saveBrowserUseSelection(dataDir, provider, backend, this.hostTools);
+      this.hostTools = detectHostToolEvidence(process.env, dataDir);
+      return browserUseSettings(this.hostTools);
+    });
     this.register("projects.list", () => this.database.listProjects());
     this.register("projects.add", (args) => {
       const path = string(args.path, "path");
@@ -565,7 +595,10 @@ export class PureBunHost {
     try {
       const peer = await this.connect(runtime);
       if (!runtime.acpSessionId) throw new Error("ACP session was not created");
-      const response = object(await peer.prompt(runtime.acpSessionId, blocks));
+      const response = object(await peer.prompt(
+        runtime.acpSessionId,
+        withProviderToolInstructions(blocks, runtime.toolset.instructions),
+      ));
       const stopReason = optionalString(response.stopReason) ?? "end_turn";
       runtime.busy = false;
       runtime.turnId = null;
@@ -596,7 +629,7 @@ export class PureBunHost {
         notification: (method, params) => this.onAcpNotification(runtime, method, params),
         request: (method, params) => this.onAcpRequest(runtime, method, params),
         closed: (error) => this.onAcpClosed(runtime, error),
-      });
+      }, runtime.toolset.mcpServers);
       runtime.peer = peer;
       const initialized = object(await peer.initialize());
       const capabilities = object(initialized.agentCapabilities);
@@ -907,6 +940,7 @@ export class PureBunHost {
       id,
       cwd: string(session.cwd, "cwd"),
       provider,
+      toolset: projectProviderToolset(this.hostTools, provider.id),
       model: optionalString(session.model),
       permissionMode: optionalString(session.permission_mode) ?? "ask",
       sandboxPolicy: optionalString(session.sandbox_policy) ?? "workspace_write",

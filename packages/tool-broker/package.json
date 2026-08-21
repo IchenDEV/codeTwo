@@ -1,0 +1,6 @@
+{
+  "name": "@codetwo/tool-broker",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts"
+}

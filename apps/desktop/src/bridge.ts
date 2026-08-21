@@ -74,6 +74,56 @@ export interface ProviderCapability {
   fix?: string | null;
 }
 
+export interface ComputerUseBackendOption {
+  id: string;
+  display_name: string;
+  available: boolean;
+  reason: string | null;
+  providers: string[];
+  exclude_providers: string[];
+}
+
+export interface ComputerUseSettings {
+  selections: Record<string, string>;
+  backends: ComputerUseBackendOption[];
+  errors: string[];
+}
+
+export type BrowserUseBackendOption = ComputerUseBackendOption;
+export type BrowserUseSettings = ComputerUseSettings;
+
+interface ComputerUseBackendWire {
+  id: string;
+  display_name?: string;
+  displayName?: string;
+  available: boolean;
+  reason?: string | null;
+  providers?: string[];
+  exclude_providers?: string[];
+  excludeProviders?: string[];
+}
+
+interface ComputerUseSettingsWire {
+  selections?: Record<string, string>;
+  backends?: ComputerUseBackendWire[];
+  errors?: string[];
+}
+
+function normalizeComputerUseSettings(settings: ComputerUseSettingsWire): ComputerUseSettings {
+  return {
+    selections: settings.selections ?? {},
+    backends: (settings.backends ?? []).map((backend) => ({
+      id: backend.id,
+      display_name: backend.display_name ?? backend.displayName ?? backend.id,
+      available: backend.available,
+      reason: backend.reason ?? null,
+      providers: backend.providers ?? [],
+      exclude_providers: backend.exclude_providers ?? backend.excludeProviders ?? [],
+    })),
+    errors: settings.errors ?? [],
+  };
+}
+
 type ProviderInfoWire = Omit<ProviderInfo, "capabilities"> & {
   capabilities?: ProviderCapability[] | null;
 };
@@ -1015,6 +1065,64 @@ export async function listProviders(): Promise<ProviderInfo[]> {
     ? await call<ProviderInfoWire[]>("providers.list")
     : FALLBACK_PROVIDERS;
   return providers.map(normalizeProviderInfo);
+}
+
+export async function getComputerUseSettings(): Promise<ComputerUseSettings> {
+  if (!inDesktop) {
+    return {
+      selections: {},
+      backends: [{
+        id: "cua",
+        display_name: "Cua Driver",
+        available: false,
+        reason: "Computer Use backends are discovered by the desktop host.",
+        providers: [],
+        exclude_providers: [],
+      }],
+      errors: [],
+    };
+  }
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>("computer_use.settings"));
+}
+
+export async function selectComputerUseBackend(
+  provider: string,
+  backend: string,
+): Promise<ComputerUseSettings> {
+  if (!inDesktop) return getComputerUseSettings();
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
+    "computer_use.select",
+    { provider, backend },
+  ));
+}
+
+export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
+  if (!inDesktop) {
+    return {
+      selections: {},
+      backends: [{
+        id: "openai-browser",
+        display_name: "OpenAI Browser / Chrome",
+        available: false,
+        reason: "Browser Use backends are discovered by the desktop host.",
+        providers: ["codex"],
+        exclude_providers: [],
+      }],
+      errors: [],
+    };
+  }
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>("browser_use.settings"));
+}
+
+export async function selectBrowserUseBackend(
+  provider: string,
+  backend: string,
+): Promise<BrowserUseSettings> {
+  if (!inDesktop) return getBrowserUseSettings();
+  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
+    "browser_use.select",
+    { provider, backend },
+  ));
 }
 
 /// Passing a cwd makes the core rescan that workspace's harness skill directories

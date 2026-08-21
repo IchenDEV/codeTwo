@@ -68,15 +68,181 @@ The health check is intentionally narrow. It does not prove that credentials are
 account has quota, or an adapter package can finish downloading. For an adapter-backed provider, a
 green dot primarily confirms that `npx` is available.
 
-## Models and provider-specific capabilities
+## Models and special-tool capabilities
 
 If the ACP endpoint reports models during `session/new`, C2 shows a model control and sends
 `session/set_model` when you switch. If it reports no model list, C2 leaves model selection to
 the provider's own CLI configuration.
 
-The same rule applies to plans, slash commands, MCP tools, images, browser/computer use, and other
-capabilities: availability depends on the chosen provider, adapter version, and host runtime. A
-provider being listed above does not imply that every optional capability is available.
+Provider-native features still depend on the chosen provider and adapter version. C2 projects only
+tools with a real portable MCP boundary across providers; private provider runtimes stay native:
+
+- **Computer Use** can come from the verified OpenAI fallback or an explicitly configured Cua/other
+  MCP backend. A configured backend can target every provider or a named subset.
+- **Browser Use** keeps the installed OpenAI Browser/Chrome runtime native to Codex because
+  `node_repl` requires the active Codex turn and session. Browser Use, Playwright MCP, Chrome
+  DevTools MCP, and other stdio/HTTP/SSE implementations can be registered in `host-tools.json`
+  for compatible non-Codex providers.
+- **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
+  BrowserView UI is separate from an ACP/MCP tool surface, so C2 reports this capability as
+  unavailable instead of silently routing through the removed Rust sidecar.
+- **Image Generation** and **Sites** remain provider-native until the host exposes a real portable
+  MCP adapter. C2 reports them as unavailable for other providers instead of claiming false parity.
+
+### Configure Cua or another computer-use MCP
+
+C2 reads `host-tools.json` from its data directory. TUI/server use
+`~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
+`CODETWO_DATA_DIR` when that environment variable is set. In **Settings → Computer Use**, choose
+Automatic, no external backend, or one compatible backend for each provider. Cua Driver is shown as
+a built-in catalog option and becomes selectable when `cua-driver` is on `PATH`; other brands appear
+after their MCP definition is added to this file. Selecting an entry activates it for that provider
+even when its legacy `enabled` flag is false.
+
+For [Cua Driver](https://cua.ai/docs/reference/cua-driver/cli-reference), whose binary exposes a
+stdio MCP server with `cua-driver mcp`:
+
+```json
+{
+  "schema_version": 1,
+  "computer_use_selection": {
+    "claude_code": "cua",
+    "codex": "automatic"
+  },
+  "computer_use": [
+    {
+      "id": "cua",
+      "enabled": true,
+      "display_name": "Cua Driver",
+      "server": {
+        "name": "cua-driver",
+        "command": "cua-driver",
+        "args": ["mcp"]
+      }
+    }
+  ]
+}
+```
+
+Omitting `providers` attaches the backend to every provider. Use `providers: ["claude_code"]` to
+allow only named providers, or `exclude_providers: ["codex"]` to retain Codex's native tool. Any
+other stdio MCP driver uses the same shape and can supply `env` as a string map and an optional
+`cwd`.
+
+`computer_use_selection` is normally written by Settings. `automatic` prefers the provider/native
+OpenAI bridge and falls back to the first compatible configured backend whose legacy `enabled` flag
+is true; choosing a backend by name activates that backend even when the flag is false. `disabled`
+prevents C2 from attaching an external bridge. Provider-native tools can still remain available
+because C2 does not control tools implemented inside the provider itself.
+
+A remote MCP computer server uses this `server` shape instead:
+
+```json
+{
+  "name": "remote-computer",
+  "type": "http",
+  "url": "http://127.0.0.1:8000/mcp",
+  "headers": {}
+}
+```
+
+HTTP and SSE entries fail before session creation if the selected ACP provider did not advertise
+that transport. A resolved stdio command or configured URL is reported as **unverified** until its
+first real MCP call succeeds. Duplicate server names and invalid commands fail closed and appear in
+the provider capability reason.
+
+OpenAI Responses CUA, Anthropic's versioned `computer` tool, and Gemini Computer Use are
+model-API-native action loops, not interchangeable MCP servers. Their provider adapter may expose
+them natively; C2 only shares them across providers when a real MCP driver or gateway is configured.
+
+### Configure Browser Use or another browser MCP
+
+In **Settings → Browser Use**, each provider can choose Automatic, no external backend, or any
+compatible configured browser MCP. Codex can additionally choose **OpenAI Browser / Chrome** when
+C2 verifies its installed native Browser runtime. Other brands use the `browser_use` array in the
+same `host-tools.json` file:
+
+```json
+{
+  "schema_version": 1,
+  "browser_use_selection": {
+    "claude_code": "browser-use",
+    "codex": "openai-browser"
+  },
+  "browser_use": [
+    {
+      "id": "browser-use",
+      "enabled": false,
+      "display_name": "Browser Use",
+      "server": {
+        "command": "uvx",
+        "args": ["--from", "browser-use[cli]", "browser-use", "--mcp"]
+      }
+    },
+    {
+      "id": "playwright",
+      "enabled": false,
+      "display_name": "Playwright MCP",
+      "server": {
+        "command": "npx",
+        "args": ["-y", "@playwright/mcp@latest"]
+      }
+    },
+    {
+      "id": "chrome-devtools",
+      "enabled": false,
+      "display_name": "Chrome DevTools MCP",
+      "server": {
+        "command": "npx",
+        "args": ["-y", "chrome-devtools-mcp@latest"]
+      }
+    }
+  ]
+}
+```
+
+These commands follow the official [Browser Use MCP](https://docs.browser-use.com/open-source/customize/integrations/mcp-server),
+[Playwright MCP](https://github.com/microsoft/playwright-mcp), and
+[Chrome DevTools MCP](https://github.com/ChromeDevTools/chrome-devtools-mcp) launch forms. C2 only
+resolves the configured executable while loading settings; package download, browser permissions,
+and MCP connectivity are verified when a new session first calls the backend. Pin package versions
+instead of `@latest` when reproducible deployments matter.
+
+A hosted browser MCP uses the normal remote transport shape. Keep the app-data file out of version
+control and materialize credentials at deploy time instead of committing them:
+
+```json
+{
+  "id": "browser-use-cloud",
+  "display_name": "Browser Use Cloud",
+  "server": {
+    "name": "browser-use-cloud",
+    "type": "http",
+    "url": "https://api.browser-use.com/mcp",
+    "headers": { "x-browser-use-api-key": "replace-at-deploy-time" }
+  }
+}
+```
+
+`browser_use_selection` has the same per-provider and `"*"` fallback semantics as Computer Use.
+Configured MCP backends are portable; provider-native tools remain provider-owned. Existing
+sessions keep their startup MCP snapshot, so start a new session after changing a Browser Use
+backend.
+
+MCP servers are fixed when an ACP session starts. Every surface resolves them through the same Bun
+Tool Broker:
+
+- packaged Electrobun desktop calls the broker in-process and does not launch a Rust sidecar;
+- TUI and server call the compiled `codetwo-tool-broker` over JSON-RPC, then the Rust core injects
+  that returned plan for both `session/new` and `session/load`;
+- the broker returns only native capability ids and standard MCP specs. OpenAI's private
+  `node_repl` endpoint never crosses the Codex adapter boundary;
+- configured Cua, Browser Use, Playwright, Chrome DevTools, cross-OS, and remote MCP backends follow
+  their own runtime requirements.
+
+After changing the selection, open a new session. The desktop and Rust hosts refresh their broker
+plan after the Settings save, but an already-live ACP session cannot add or replace MCP servers in
+place.
 
 ## The ACP loop
 
@@ -90,6 +256,7 @@ initialize → session/new → session/prompt → stream session/update
 This common transport is what lets the desktop app, TUI, and remote client share one provider-neutral
 session and event model.
 
-Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers
-come from **MCP skills**—see [Skills](/guide/editor#skill-kinds) and the
-[market](/guide/market)'s Browser Tool and Filesystem Tool entries.
+Providers that expose MCP support can receive extra tools at session start. In C2, MCP servers can
+come from the provider-neutral host-tool layer described above or from **MCP skills**—see
+[Skills](/guide/editor#skill-kinds) and the [market](/guide/market)'s Browser Tool and Filesystem
+Tool entries.

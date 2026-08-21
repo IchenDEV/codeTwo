@@ -64,7 +64,7 @@ online; unloading `engine` cancels live provider work and terminates its owned p
 | `paths` | `paths` | — |
 | `store` | `store` | `store.sessions`, `store.session` |
 | `bus` | `bus` | — |
-| `providers` | `providers` | `providers.list` |
+| `providers` | `providers` | `providers.list`, `computer_use.*`, `browser_use.*` |
 | `plugin-hub` | `plugin-hub` | install, import, trust, enable, uninstall, scaffold, and discovery commands |
 | `skills` | `skills` | `skills.*` |
 | `scenes` | `scenes` | scene-library and pipeline-library commands |
