@@ -11,6 +11,7 @@ interface HelperEvent {
 }
 
 let runningCheck: Promise<number> | null = null;
+const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 
 export function enclosingAppBundle(executablePath: string): string | null {
   let candidate = resolve(executablePath);
@@ -50,7 +51,7 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
 
   const paths = updatePaths();
   if (!paths) {
-    return { state: "unavailable", message: "Run the packaged C2.app to check for updates." };
+    return { state: "unavailable", message: `Run the packaged ${applicationName}.app to check for updates.` };
   }
   if (!existsSync(paths.helper)) {
     return { state: "unavailable", message: "The Sparkle update helper is not embedded in this app." };
@@ -85,7 +86,7 @@ export async function startAppUpdateCheck(): Promise<AppUpdateStatus> {
   if (status.state !== "ready") return status;
 
   const paths = updatePaths();
-  if (!paths) return { state: "unavailable", message: "C2.app could not be located." };
+  if (!paths) return { state: "unavailable", message: `${applicationName}.app could not be located.` };
 
   const helper = Bun.spawn([paths.helper, "check", "--application", paths.application], {
     stdin: "ignore",

@@ -1045,6 +1045,19 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [], capabilities: [] },
 ];
 
+/** Stable provider identity while the desktop host is still starting or temporarily unavailable. */
+export function fallbackProviders(): ProviderInfo[] {
+  return FALLBACK_PROVIDERS.map((provider) => ({
+    ...provider,
+    models: [...provider.models],
+    capabilities: [...provider.capabilities],
+  }));
+}
+
+export function providerDisplayName(providerId: string): string {
+  return FALLBACK_PROVIDERS.find((provider) => provider.id === providerId)?.display_name ?? providerId;
+}
+
 const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "reviewer", name: "Code Reviewer", description: "Meticulous reviewer", icon: "🔍", kind: "fragment", source: null },
   { id: "test-writer", name: "Test Writer", description: "Thorough tests", icon: "🧪", kind: "fragment", source: null },
@@ -1065,7 +1078,7 @@ const FALLBACK_SKILLS: SkillInfo[] = [
 export async function listProviders(): Promise<ProviderInfo[]> {
   const providers = inDesktop
     ? await call<ProviderInfoWire[]>("providers.list")
-    : FALLBACK_PROVIDERS;
+    : fallbackProviders();
   return providers.map(normalizeProviderInfo);
 }
 

@@ -5,6 +5,7 @@ import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHar
 
 activateDom();
 const { SceneChip, ScenePicker, SourceBadge } = await import("../src/session/SceneChip");
+const { ProviderPicker } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -32,8 +33,10 @@ function sceneInfo(overrides = {}) {
 function config(overrides = {}) {
   return {
     providers: [],
+    providersStatus: "ready",
     provider: "claude_code",
     onProvider: () => {},
+    onReloadProviders: () => {},
     mode: "ask",
     sandbox: "workspace_write",
     modeChangeDisabled: false,
@@ -80,6 +83,49 @@ function renderChip(cfg) {
     </I18nProvider>,
   );
 }
+
+describe("ProviderPicker", () => {
+  test("keeps known providers selectable and offers retry when desktop detection fails", async () => {
+    activateDom();
+    let retries = 0;
+    const rendered = mount(
+      <I18nProvider>
+        <ProviderPicker
+          config={config({
+            providers: [],
+            providersStatus: "error",
+            provider: "grok",
+            onReloadProviders: () => { retries += 1; },
+          })}
+        />
+      </I18nProvider>,
+    );
+    const trigger = rendered.container.querySelector("button");
+
+    await reactAct(async () => {
+      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+      }));
+      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+
+    try {
+      const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
+      expect(trigger?.textContent?.trim()).toBe("Grok");
+      expect(popup?.textContent).toContain("Grok");
+      expect(popup?.textContent).toContain("OpenAI Codex");
+      button(popup, "Retry").click();
+      expect(retries).toBe(1);
+    } finally {
+      rendered.unmount();
+      await flush();
+    }
+  });
+});
 
 describe("SceneChip", () => {
   test("shows the active scene's title on the chip", () => {

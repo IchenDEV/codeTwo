@@ -99,6 +99,18 @@ Silicon DMG in the [Nightly macOS package](.github/workflows/nightly-macos.yml) 
 `C2-nightly-macos-arm64-<commit>` from that run's artifacts. Nightly packages are ad-hoc signed but
 not Apple-notarized, so they are for testing rather than general distribution.
 
+Development, nightly, and release builds can be installed together. Their macOS identities and
+default data directories are isolated:
+
+| Channel | Application | Bundle identifier | Application Support directory |
+| --- | --- | --- | --- |
+| Development | `C2-dev.app` | `dev.codetwo.app.dev` | `dev.codetwo.app.dev` |
+| Nightly | `C2 Nightly.app` | `dev.codetwo.app.nightly` | `dev.codetwo.app.nightly` |
+| Release | `C2.app` | `dev.codetwo.app` | `dev.codetwo.app` |
+
+Only release builds embed the Sparkle update helper. Development and nightly builds stay on their
+explicit build channel and cannot replace a release through the in-app updater.
+
 ### Versioned release
 
 Run the [Release macOS](.github/workflows/release-macos.yml) workflow, enter a semantic version such

@@ -12,7 +12,8 @@ export const en = {
 
   // rail — projects
   "rail.noProject": "No project selected",
-  "rail.projectsEmpty": "No projects yet. Add a directory to work in — sessions and git status follow it.",
+  "rail.projectsEmpty":
+    "No projects yet. Add a directory to work in — sessions and git status follow it.",
   "rail.addProject": "Add a project…",
   "rail.renameProject": "Rename",
   "rail.removeProject": "Remove from list (sessions are kept)",
@@ -49,7 +50,8 @@ export const en = {
   "rail.showArchived": "Show archived sessions",
   "rail.hideArchived": "Hide archived sessions",
   "rail.unarchive": "Restore from archive",
-  "archived.notice": "This chat is archived — restore it to continue the conversation.",
+  "archived.notice":
+    "This chat is archived — restore it to continue the conversation.",
   "archived.restore": "Unarchive",
   "rail.branch": "Branch",
   "rail.changes": "Changes",
@@ -67,7 +69,8 @@ export const en = {
 
   // automations
   "automations.title": "Automations",
-  "automations.subtitle": "Run repeatable work on a schedule and review every result.",
+  "automations.subtitle":
+    "Run repeatable work on a schedule and review every result.",
   "automations.back": "Back to sessions",
   "automations.new": "New automation",
   "automations.tasks": "Scheduled tasks",
@@ -79,11 +82,13 @@ export const en = {
   "automations.filter.paused": "Paused",
   "automations.loading": "Loading automations…",
   "automations.empty": "No automations yet",
-  "automations.emptyHint": "Schedule a recurring review, report, cleanup, or repository check.",
+  "automations.emptyHint":
+    "Schedule a recurring review, report, cleanup, or repository check.",
   "automations.noMatches": "No matching automations",
   "automations.noMatchesHint": "Try another search or status filter.",
   "automations.select": "Select an automation",
-  "automations.selectHint": "Its instructions, next run, workspace policy, and run history will appear here.",
+  "automations.selectHint":
+    "Its instructions, next run, workspace policy, and run history will appear here.",
   "automations.active": "Active",
   "automations.paused": "Paused",
   "automations.pausedHint": "This task will not run until you resume it.",
@@ -96,7 +101,8 @@ export const en = {
   "automations.isolated": "New isolated worktree each run",
   "automations.local": "Current project checkout",
   "automations.history": "Recent runs",
-  "automations.noRuns": "No runs yet. Start one now or wait for the next scheduled time.",
+  "automations.noRuns":
+    "No runs yet. Start one now or wait for the next scheduled time.",
   "automations.openRun": "Open session",
   "automations.runNow": "Run now",
   "automations.inProgress": "In progress",
@@ -106,11 +112,13 @@ export const en = {
   "automations.delete": "Delete automation",
   "automations.createTitle": "Create automation",
   "automations.editTitle": "Edit automation",
-  "automations.formHint": "Each run starts a reviewable session using these saved instructions.",
+  "automations.formHint":
+    "Each run starts a reviewable session using these saved instructions.",
   "automations.name": "Name",
   "automations.namePlaceholder": "Daily issue triage",
   "automations.prompt": "Instructions",
-  "automations.promptPlaceholder": "Review new issues, prioritize them, and summarize what needs attention…",
+  "automations.promptPlaceholder":
+    "Review new issues, prioritize them, and summarize what needs attention…",
   "automations.cadence": "Repeats",
   "automations.cadence.hourly": "Every hour",
   "automations.cadence.daily": "Every day",
@@ -128,13 +136,15 @@ export const en = {
   "automations.weekday.4": "Thursday",
   "automations.weekday.5": "Friday",
   "automations.weekday.6": "Saturday",
-  "automations.timezone": "Runs in {timezone}. Keep C2 open and the computer awake for local projects.",
+  "automations.timezone":
+    "Runs in {timezone}. Keep C2 open and the computer awake for local projects.",
   "automations.permissions": "Permissions",
   "automations.permissions.auto": "Auto-approve standard tools",
   "automations.permissions.ask": "Ask before tools",
   "automations.permissions.readOnly": "Read only",
   "automations.useWorktree": "Use an isolated worktree",
-  "automations.useWorktreeHint": "Keeps scheduled changes separate from unfinished local work.",
+  "automations.useWorktreeHint":
+    "Keeps scheduled changes separate from unfinished local work.",
   "automations.cancel": "Cancel",
   "automations.save": "Save automation",
   "automations.saving": "Saving…",
@@ -211,7 +221,8 @@ export const en = {
   "selection.moreDetails": "More details",
   "selection.askInSideChat": "Ask in side chat",
   "selection.moreDetailsPrompt": "Please explain this excerpt in more detail:",
-  "selection.askInSideChatPrompt": "Please help me with this excerpt in a separate chat:",
+  "selection.askInSideChatPrompt":
+    "Please help me with this excerpt in a separate chat:",
 
   // project environment popover
   "environment.title": "Environment",
@@ -227,15 +238,18 @@ export const en = {
 
   // usage panel
   "usage.title": "Usage",
-  "usage.description": "See current provider quota, remaining capacity, and local model activity.",
+  "usage.description":
+    "See current provider quota, remaining capacity, and local model activity.",
   "usage.rescan": "Rescan",
   "usage.scanning": "Scanning local transcripts…",
   "usage.localTitle": "Local activity",
-  "usage.localDescription": "Transcript totals are local estimates and are separate from provider quota.",
+  "usage.localDescription":
+    "Transcript totals are local estimates and are separate from provider quota.",
   "usage.localRemaining": "{percent}% left · {tokens}",
   "usage.localUsed": "{tokens} used",
   "usage.localRemainingLabel": "Local capacity remaining in {window}",
-  "usage.localLimitUnknown": "Remaining amount unknown — no local limit is configured.",
+  "usage.localLimitUnknown":
+    "Remaining amount unknown — no local limit is configured.",
   "usage.window5h": "5h session",
   "usage.windowWeek": "Week",
   "usage.windowMonth": "Month",
@@ -248,9 +262,11 @@ export const en = {
   "usage.tokensDetail": "in {input} · out {output} · cache-read {cached}",
   "usage.costUnknown": "cost unknown",
   "usage.unpricedNote": "≈ excludes {tokens} tokens with an unknown model",
-  "usage.noTranscripts": "No local transcripts found (looked in ~/.codex/sessions and ~/.claude/projects).",
+  "usage.noTranscripts":
+    "No local transcripts found (looked in ~/.codex/sessions and ~/.claude/projects).",
   "usage.scannedTranscripts": "Scanned {count} transcripts.",
-  "usage.estimateNote": "$ figures are local estimates (≈) based on public per-token prices.",
+  "usage.estimateNote":
+    "$ figures are local estimates (≈) based on public per-token prices.",
   "usage.done": "Done",
 
   // provider quota
@@ -279,16 +295,21 @@ export const en = {
   "quota.creditBalance": "{balance} left",
   "quota.sourceCodex": "Live from Codex CLI",
   "quota.updated": "Updated {time}",
-  "quota.noWindows": "The provider returned no rate-limit windows for this account.",
+  "quota.noWindows":
+    "The provider returned no rate-limit windows for this account.",
   "quota.unsupportedTitle": "Quota is not supported yet",
   "quota.unavailableTitle": "Quota is temporarily unavailable",
-  "quota.unsupported": "{provider} does not expose a safe machine-readable quota interface that C2 supports yet.",
-  "quota.cliNotFound": "The {provider} CLI is not installed or is not visible to C2.",
-  "quota.queryFailed": "C2 could not read {provider}'s quota. Check that the provider is signed in, then refresh.",
+  "quota.unsupported":
+    "{provider} does not expose a safe machine-readable quota interface that C2 supports yet.",
+  "quota.cliNotFound":
+    "The {provider} CLI is not installed or is not visible to C2.",
+  "quota.queryFailed":
+    "C2 could not read {provider}'s quota. Check that the provider is signed in, then refresh.",
 
   // command palette
   "palette.title": "Command palette",
-  "palette.description": "Search actions, sessions, scripts, and conversation text",
+  "palette.description":
+    "Search actions, sessions, scripts, and conversation text",
   "palette.placeholder": "Search commands and conversations…",
   "palette.empty": "No matches.",
   "palette.searching": "Searching conversations…",
@@ -307,7 +328,8 @@ export const en = {
   "composer.pullIssue": "Pull in an issue",
   "composer.market": "Plugin Hub",
   "composer.newSkill": "New skill",
-  "composer.contextWindowExact": "Context window: {used} of {capacity} tokens ({percentage})",
+  "composer.contextWindowExact":
+    "Context window: {used} of {capacity} tokens ({percentage})",
 
   // plugin hub
   "pluginHub.title": "Plugin Hub",
@@ -367,16 +389,279 @@ export const en = {
   "pluginHub.componentUninstalledToast": "Component uninstalled.",
   "pluginHub.pluginInstalledToast": "{name} installed.",
   "pluginHub.pluginUninstalledToast": "Plugin uninstalled.",
-  "pluginHub.pluginEnabledToast": "Plugin enabled. New sessions can use its components.",
+  "pluginHub.pluginEnabledToast":
+    "Plugin enabled. New sessions can use its components.",
   "pluginHub.pluginDisabledToast": "Plugin disabled.",
   "pluginHub.pluginTrustedToast": "Executable plugin components trusted.",
   "pluginHub.pluginUntrustedToast": "Plugin trust revoked.",
   "pluginHub.stateFailed": "Could not change plugin state: {error}",
-  "pluginHub.scaffoldInstalledToast": "Added {count} scaffold files to the project.",
+  "pluginHub.scaffoldInstalledToast":
+    "Added {count} scaffold files to the project.",
   "pluginHub.installFailed": "Installation failed: {error}",
   "pluginHub.uninstallFailed": "Uninstall failed: {error}",
   "pluginHub.scaffoldFailed": "Could not add the scaffold: {error}",
-  "composer.addHint": "Or type / for skills and @ for files, right in the document.",
+
+  // unified plugin manager
+  "pluginManager.title": "Plugins",
+  "pluginManager.description":
+    "Manage built-in features, desktop host integrations, and installed bundles in one place.",
+  "pluginManager.plugins": "Plugins",
+  "pluginManager.components": "Components",
+  "pluginManager.marketplace": "Marketplace",
+  "pluginManager.userScope": "User",
+  "pluginManager.search": "Search plugins, components, and marketplace…",
+  "pluginManager.noResults": "No matching items.",
+  "pluginManager.enabled": "Enabled",
+  "pluginManager.disabled": "Disabled",
+  "pluginManager.inherit": "Inherit",
+  "pluginManager.required": "Required",
+  "pluginManager.userOnly": "User scope only",
+  "pluginManager.projectOnly": "Project scope only",
+  "pluginManager.configuration": "Configuration",
+  "pluginManager.form": "Form",
+  "pluginManager.advancedJson": "Advanced JSON",
+  "pluginManager.saveConfiguration": "Save configuration",
+  "pluginManager.saving": "Saving…",
+  "pluginManager.install": "Install",
+  "pluginManager.installed": "Installed",
+  "pluginManager.unavailable": "Unavailable",
+  "pluginManager.refresh": "Refresh",
+  "pluginManager.bundleTools": "Bundle tools",
+  "pluginManager.advancedBundleTools": "Advanced tools",
+  "pluginManager.installFromGithub": "Install from GitHub",
+  "pluginManager.githubRepository": "GitHub repository",
+  "pluginManager.githubHint":
+    "Use owner/repository or a GitHub /tree/ URL. Installation never executes plugin code; trust is granted separately.",
+  "pluginManager.closeInstaller": "Close GitHub installer",
+  "pluginManager.installingPlugin": "Installing…",
+  "pluginManager.bundleInstalled":
+    "{name}{version} installed. Review its source and trust requirements before enabling code.",
+  "pluginManager.managedInBundleTools": "Managed at bundle level",
+  "pluginManager.bundleManagement": "Bundle management",
+  "pluginManager.bundleManagementUserOnly":
+    "Installation, trust, and removal are managed in User scope.",
+  "pluginManager.trustRequired":
+    "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
+  "pluginManager.trusted": "Trusted",
+  "pluginManager.notTrusted": "Not trusted",
+  "pluginManager.trustPlugin": "Trust plugin",
+  "pluginManager.revokeTrust": "Revoke trust",
+  "pluginManager.contributions": "Contributions",
+  "pluginManager.diagnostics": "Diagnostics",
+  "pluginManager.uninstall": "Uninstall",
+  "pluginManager.uninstallTitle": "Uninstall {name}?",
+  "pluginManager.uninstallDescription":
+    "The plugin will stop and its installed files will be removed. Keeping data makes a later reinstall recoverable.",
+  "pluginManager.keepPluginData": "Keep plugin data for reinstall",
+  "pluginManager.resetDefaults": "Reset to defaults",
+  "pluginManager.restoredLastGood":
+    "Invalid plugin settings were replaced with the last known-good configuration.",
+  "pluginManager.safeMode":
+    "Plugin safe mode is active. Only the management plane is guaranteed to be available.",
+  "pluginManager.dependencies": "Dependencies",
+  "pluginManager.missingDependencies": "Missing dependencies",
+  "pluginManager.commands": "Commands",
+  "pluginManager.services": "Services",
+  "pluginManager.activeResources": "Active resources",
+  "pluginManager.scope": "Scope",
+  "pluginManager.pluginList": "Plugin list",
+  "pluginManager.componentList": "Component list",
+  "pluginManager.projectState": "{name} project state",
+  "pluginManager.noDescription": "No description provided.",
+  "pluginManager.configurationHint":
+    "Changes are validated by the host before the plugin reloads.",
+  "pluginManager.plugin": "Plugin",
+  "pluginManager.source": "Source",
+  "pluginManager.uiSlot": "UI slot",
+  "pluginManager.affectedPlugins": "Affected plugins",
+  "pluginManager.missingCount": "{count} missing",
+  "pluginManager.installedBundle": "Installed bundle",
+  "pluginManager.dataOnly": "Data only",
+  "pluginManager.invalidConfigurationObject":
+    "Configuration must be a JSON object.",
+  "pluginManager.githubRepositoryRequired":
+    "Enter an owner/repository name or GitHub URL.",
+  "pluginManager.changeApplied": "{name} is now {state}.",
+  "pluginManager.pluginChangeSummary.enabled":
+    "Load {name} in the selected scope.",
+  "pluginManager.pluginChangeSummary.disabled":
+    "Unload {name} in the selected scope.",
+  "pluginManager.componentChangeSummary.enabled":
+    "Enable {name} and reconcile its owning plugin.",
+  "pluginManager.componentChangeSummary.disabled":
+    "Hide {name} and reconcile its owning plugin.",
+  "pluginManager.marketplaceInstalled": "Marketplace item installed.",
+  "pluginManager.settingsReset": "Plugin settings reset to defaults.",
+  "pluginManager.scopeLoadFailed": "Could not load plugin scope: {error}",
+  "pluginManager.marketplaceUserOnly":
+    "Marketplace components can only be installed in User scope.",
+  "pluginManager.bundleEnabled": "{name} enabled.",
+  "pluginManager.bundleDisabled": "{name} disabled.",
+  "pluginManager.bundleTrusted": "{name} trusted.",
+  "pluginManager.bundleTrustRevoked": "{name} trust revoked.",
+  "pluginManager.bundleUninstalled": "{name} uninstalled.",
+  "pluginManager.bundleUninstalledDataKept":
+    "{name} uninstalled; plugin data was kept.",
+  "pluginManager.confirmTitle": "Apply plugin change?",
+  "pluginManager.confirm": "Apply change",
+  "pluginManager.cancel": "Cancel",
+  "pluginManager.optionalDependency": "{id} (optional)",
+  "pluginManager.status.disabled": "Disabled",
+  "pluginManager.status.pending": "Pending",
+  "pluginManager.status.loading": "Loading",
+  "pluginManager.status.active": "Active",
+  "pluginManager.status.failed": "Failed",
+  "pluginManager.status.disposed": "Unloaded",
+  "pluginManager.source.builtin": "Built-in",
+  "pluginManager.source.host": "Desktop host",
+  "pluginManager.source.bundle": "Bundle",
+  "pluginManager.contribution.runtime": "Process runtime",
+  "pluginManager.contribution.skills": "Skills",
+  "pluginManager.contribution.subagents": "Subagents",
+  "pluginManager.contribution.mcpServers": "MCP servers",
+  "pluginManager.contribution.commands": "Commands",
+  "pluginManager.contribution.hooks": "Hooks",
+  "pluginManager.contribution.languageServers": "Language servers",
+  "pluginManager.contribution.scaffolds": "Scaffolds",
+  "pluginManager.contribution.monitors": "Monitors",
+  "pluginManager.contribution.apps": "Apps",
+  "pluginManager.contribution.uiActions": "UI actions",
+  "pluginManager.contribution.scenes": "Scenes",
+  "pluginManager.contribution.pipelines": "Pipelines",
+  "pluginManager.kind.page": "Page",
+  "pluginManager.kind.dockSurface": "Dock surface",
+  "pluginManager.kind.modal": "Dialog",
+  "pluginManager.kind.composerAction": "Composer action",
+  "pluginManager.kind.settingsSection": "Settings section",
+  "pluginManager.kind.sessionSurface": "Session surface",
+  "pluginManager.kind.editorBlock": "Editor block",
+  "pluginManager.kind.runtime": "Runtime",
+  "pluginManager.kind.skill": "Skill",
+  "pluginManager.category.foundation": "Foundation",
+  "pluginManager.category.workspace": "Workspace",
+  "pluginManager.category.automation": "Automation",
+  "pluginManager.category.developerTools": "Developer tools",
+  "pluginManager.category.interface": "Interface",
+  "pluginManager.category.integration": "Integration",
+  "pluginManager.category.other": "Other",
+  "pluginManager.plugin.core.name": "Core",
+  "pluginManager.plugin.core.description":
+    "Bun runtime, persistence, providers, sessions, and agent execution.",
+  "pluginManager.plugin.kernel.name": "Kernel",
+  "pluginManager.plugin.kernel.description":
+    "Plugin policy, recovery, bundle management, and runtime inspection.",
+  "pluginManager.plugin.workspace.name": "Workspace",
+  "pluginManager.plugin.workspace.description":
+    "Workspace files, project rules, and project scripts.",
+  "pluginManager.plugin.workspaceSearch.name": "Workspace search",
+  "pluginManager.plugin.workspaceSearch.description":
+    "Project-wide content search.",
+  "pluginManager.plugin.git.name": "Git",
+  "pluginManager.plugin.git.description":
+    "Source control, checkpoints, commits, pushes, and pull requests.",
+  "pluginManager.plugin.terminal.name": "Terminal",
+  "pluginManager.plugin.terminal.description":
+    "Persistent project terminal sessions.",
+  "pluginManager.plugin.lsp.name": "Language servers",
+  "pluginManager.plugin.lsp.description":
+    "Language-server discovery and project lifecycle.",
+  "pluginManager.plugin.automation.name": "Automation",
+  "pluginManager.plugin.automation.description":
+    "Scheduled work and automation history.",
+  "pluginManager.plugin.artifacts.name": "Artifacts",
+  "pluginManager.plugin.artifacts.description":
+    "Session artifact persistence and export.",
+  "pluginManager.plugin.browser.name": "Browser",
+  "pluginManager.plugin.browser.description":
+    "Authenticated in-app browser tools and dock surface.",
+  "pluginManager.plugin.browserUse.name": "Browser Use",
+  "pluginManager.plugin.browserUse.description":
+    "Provider-neutral browser automation backend selection.",
+  "pluginManager.plugin.canvas.name": "Canvas",
+  "pluginManager.plugin.canvas.description":
+    "Structured visual drafts, snapshots, and exports.",
+  "pluginManager.plugin.document.name": "Document",
+  "pluginManager.plugin.document.description":
+    "Document compilation for structured canvas content.",
+  "pluginManager.plugin.issues.name": "Issues",
+  "pluginManager.plugin.issues.description":
+    "Issue browsing, context, and delegation records.",
+  "pluginManager.plugin.keymap.name": "Keymap",
+  "pluginManager.plugin.keymap.description":
+    "Desktop keyboard shortcuts and overrides.",
+  "pluginManager.plugin.market.name": "Market",
+  "pluginManager.plugin.market.description":
+    "Plugin Hub discovery and installation surfaces.",
+  "pluginManager.plugin.memory.name": "Memory",
+  "pluginManager.plugin.memory.description":
+    "Project memory, recall policy, and receipts.",
+  "pluginManager.plugin.remote.name": "Remote",
+  "pluginManager.plugin.remote.description":
+    "Remote-device pairing and connection management.",
+  "pluginManager.plugin.scenes.name": "Scenes",
+  "pluginManager.plugin.scenes.description":
+    "Agent scenes, pipelines, scheduling, and scene artifacts.",
+  "pluginManager.plugin.skills.name": "Skills",
+  "pluginManager.plugin.skills.description":
+    "Installed skill discovery and skill-library operations.",
+  "pluginManager.plugin.usage.name": "Usage",
+  "pluginManager.plugin.usage.description":
+    "Provider quota and usage reporting.",
+  "pluginManager.plugin.cost.name": "Cost",
+  "pluginManager.plugin.cost.description": "Per-session cost reporting.",
+  "pluginManager.plugin.computerUse.name": "Computer Use",
+  "pluginManager.plugin.computerUse.description":
+    "Provider-neutral computer-use backend selection.",
+  "pluginManager.plugin.voice.name": "Voice",
+  "pluginManager.plugin.voice.description":
+    "Native dictation and structured voice input.",
+  "pluginManager.component.manager.name": "Plugin manager",
+  "pluginManager.component.manager.description":
+    "The required management plane used to recover and re-enable other features.",
+  "pluginManager.component.automation.name": "Automations",
+  "pluginManager.component.automation.description":
+    "Scheduled-work page and automation entry points.",
+  "pluginManager.component.browserDock.name": "Browser dock",
+  "pluginManager.component.browserDock.description":
+    "Authenticated in-app browser surface and its dock opener.",
+  "pluginManager.component.terminalDock.name": "Terminal dock",
+  "pluginManager.component.terminalDock.description":
+    "Persistent terminal sessions in the side dock.",
+  "pluginManager.component.git.name": "Source control",
+  "pluginManager.component.git.description":
+    "Git dock, source-control dialog, and related commands.",
+  "pluginManager.component.files.name": "Files",
+  "pluginManager.component.files.description":
+    "Workspace file tree, viewer, and file browser.",
+  "pluginManager.component.search.name": "Workspace search",
+  "pluginManager.component.search.description":
+    "Project-wide content search and result opener.",
+  "pluginManager.component.issues.name": "Issues",
+  "pluginManager.component.issues.description":
+    "GitHub and Linear issue browser and delegation flow.",
+  "pluginManager.component.voice.name": "Voice input",
+  "pluginManager.component.voice.description":
+    "Composer dictation and structured voice input.",
+  "pluginManager.component.usage.name": "Usage",
+  "pluginManager.component.usage.description":
+    "Provider quota and usage settings surfaces.",
+  "pluginManager.component.memory.name": "Memory",
+  "pluginManager.component.memory.description":
+    "Memory policy controls and receipt surfaces.",
+  "pluginManager.component.scenes.name": "Agent scenes",
+  "pluginManager.component.scenes.description":
+    "Scene picker, studio, banners, and pipeline controls.",
+  "pluginManager.component.canvas.name": "Canvas editor",
+  "pluginManager.component.canvas.description":
+    "Structured visual canvas blocks. Component policy is separate from the Canvas safety feature gate; enabling this component does not open the production gate.",
+  "pluginManager.component.remote.name": "Remote control",
+  "pluginManager.component.remote.description":
+    "Remote-device pairing and connection management.",
+  "pluginManager.component.lsp.name": "Language servers",
+  "pluginManager.component.lsp.description":
+    "Project language-server discovery and lifecycle.",
+  "composer.addHint":
+    "Or type / for skills and @ for files, right in the document.",
   "composer.worktree": "Worktree",
   "composer.model": "Model",
   "composer.noModels":
@@ -413,8 +698,10 @@ export const en = {
   "transcript.greetingEnd": "?",
   "transcript.label": "Conversation transcript",
   "transcript.jumpLatest": "Jump to latest",
-  "transcript.hint": "Write a prompt below — type / for skills, @ to pull in a file.",
-  "transcript.hint2": "Send with {run}, or expand the document with {expand} for longer briefs.",
+  "transcript.hint":
+    "Write a prompt below — type / for skills, @ to pull in a file.",
+  "transcript.hint2":
+    "Send with {run}, or expand the document with {expand} for longer briefs.",
   "transcript.loadEarlier": "Load earlier turns",
   "transcript.loadingEarlier": "Loading earlier turns…",
   "turn.working": "Working…",
@@ -433,20 +720,25 @@ export const en = {
   "settings.title": "Settings",
   "settings.back": "Back",
   "settings.general": "General",
-  "settings.generalHint": "Language, software updates, and how the terminal renders.",
+  "settings.generalHint":
+    "Language, software updates, and how the terminal renders.",
   "settings.appearance": "Appearance",
-  "settings.appearanceHint": "Choose a scheme, tune a theme, and set the typography used across C2.",
+  "settings.appearanceHint":
+    "Choose a scheme, tune a theme, and set the typography used across C2.",
   "settings.colorScheme": "Color scheme",
   "settings.project": "Project",
-  "settings.projectHint": "Defaults for the project selected in the main sidebar.",
+  "settings.projectHint":
+    "Defaults for the project selected in the main sidebar.",
   "settings.projectWorkspace": "New session workspace",
-  "settings.projectWorkspaceHint": "Choose where new sessions start. Automatic follows the current draft or session, and starts in the project checkout for a freshly selected project. A Composer choice still wins for that draft.",
+  "settings.projectWorkspaceHint":
+    "Choose where new sessions start. Automatic follows the current draft or session, and starts in the project checkout for a freshly selected project. A Composer choice still wins for that draft.",
   "settings.projectWorkspaceInherit": "Automatic (follow context)",
   "settings.projectWorkspaceLocal": "Current project checkout",
   "settings.projectWorkspaceCurrent": "New worktree from HEAD",
   "settings.projectWorkspaceOrigin": "New worktree from local origin default",
   "settings.scheduling": "Scene schedules",
-  "settings.schedulingHint": "Allow scene `schedule` hooks to run for this project (off by default; runs land as attributed turns).",
+  "settings.schedulingHint":
+    "Allow scene `schedule` hooks to run for this project (off by default; runs land as attributed turns).",
   "settings.projectPath": "Project path",
   "settings.projectNone": "Select a project to configure its defaults.",
   "settings.providers": "Providers",
@@ -454,30 +746,37 @@ export const en = {
   "settings.providersHint":
     "The agent CLIs C2 can drive. Anything installed on your PATH shows a green dot.",
   "settings.computerUse": "Computer Use",
-  "settings.computerUseHint": "Choose the external computer-control backend attached to each provider. Provider-native tools remain owned by that provider.",
+  "settings.computerUseHint":
+    "Choose the external computer-control backend attached to each provider. Provider-native tools remain owned by that provider.",
   "settings.computerUseAutomatic": "Automatic",
   "settings.computerUseDisabled": "No external backend",
-  "settings.computerUseNewSession": "Changes apply to new sessions. Existing sessions keep the backend they started with.",
+  "settings.computerUseNewSession":
+    "Changes apply to new sessions. Existing sessions keep the backend they started with.",
   "settings.computerUseBackends": "Detected backends",
   "settings.computerUseLoading": "Loading Computer Use backends…",
-  "settings.computerUseLoadFailed": "Could not update Computer Use settings: {error}",
+  "settings.computerUseLoadFailed":
+    "Could not update Computer Use settings: {error}",
   "settings.computerUseAvailable": "Available",
   "settings.computerUseUnavailable": "Unavailable",
   "settings.browserUse": "Browser Use",
-  "settings.browserUseHint": "Choose the browser-control backend attached to each provider. OpenAI Browser / Chrome is Codex-only; portable MCP backends come from host-tools.json.",
+  "settings.browserUseHint":
+    "Choose the browser-control backend attached to each provider. OpenAI Browser / Chrome is Codex-only; portable MCP backends come from host-tools.json.",
   "settings.browserUseAutomatic": "Automatic",
   "settings.browserUseDisabled": "No external backend",
-  "settings.browserUseNewSession": "Changes apply to new sessions. Provider-native browser tools remain owned by that provider.",
+  "settings.browserUseNewSession":
+    "Changes apply to new sessions. Provider-native browser tools remain owned by that provider.",
   "settings.browserUseBackends": "Detected backends",
   "settings.browserUseLoading": "Loading Browser Use backends…",
-  "settings.browserUseLoadFailed": "Could not update Browser Use settings: {error}",
+  "settings.browserUseLoadFailed":
+    "Could not update Browser Use settings: {error}",
   "settings.browserUseAvailable": "Available",
   "settings.browserUseUnavailable": "Unavailable",
   "settings.installed": "Installed",
   "settings.notInstalled": "CLI not found",
   "settings.needsNode": "Needs Node",
   "settings.theme": "Theme",
-  "settings.themeHint": "System follows your macOS appearance and keeps following it.",
+  "settings.themeHint":
+    "System follows your macOS appearance and keeps following it.",
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
   "settings.themeSystem": "System",
@@ -494,8 +793,10 @@ export const en = {
   "settings.themeExported": "Exported {name}.",
   "settings.themeImportFailed": "This file is not a valid C2 theme.",
   "settings.themeEditor": "Theme editor",
-  "settings.builtinThemeHint": "Built-in themes are protected. Changing a color creates an editable copy.",
-  "settings.customThemeHint": "Changes are previewed immediately and saved on this device.",
+  "settings.builtinThemeHint":
+    "Built-in themes are protected. Changing a color creates an editable copy.",
+  "settings.customThemeHint":
+    "Changes are previewed immediately and saved on this device.",
   "settings.themeName": "Theme name",
   "settings.lightTheme": "Light theme",
   "settings.darkTheme": "Dark theme",
@@ -508,44 +809,53 @@ export const en = {
   "settings.interfaceFont": "Interface font",
   "settings.interfaceFontHint": "Used throughout C2 chrome and controls.",
   "settings.interfaceFontSize": "Interface size",
-  "settings.interfaceFontSizeHint": "Adjust compact UI text without scaling the window.",
+  "settings.interfaceFontSizeHint":
+    "Adjust compact UI text without scaling the window.",
   "settings.codeFont": "Code font",
   "settings.codeFontHint": "Used in code blocks, diffs, and the file editor.",
   "settings.codeFontSize": "Code size",
   "settings.codeFontSizeHint": "Applies to code surfaces and the file editor.",
   "settings.surfaces": "Surfaces",
   "settings.pet": "Session pet",
-  "settings.petHint": "Shows a small animated companion below the latest turn. Click it to say hello.",
+  "settings.petHint":
+    "Shows a small animated companion below the latest turn. Click it to say hello.",
   "settings.sidebarOpacity": "Sidebar opacity",
-  "settings.sidebarOpacityHint": "Controls how strongly the sidebar is tinted against the window.",
+  "settings.sidebarOpacityHint":
+    "Controls how strongly the sidebar is tinted against the window.",
   "settings.contrast": "Contrast",
   "settings.contrastHint": "Strengthens surface separation and secondary text.",
   "pet.label": "C2 session pet",
   "pet.wave": "Say hello to the pet",
   "pet.hide": "Hide session pet",
   "settings.language": "Language",
-  "settings.languageHint": "System uses your OS language when C2 has a translation for it.",
+  "settings.languageHint":
+    "System uses your OS language when C2 has a translation for it.",
   "settings.terminal": "Terminal",
   "settings.termFont": "Font",
   "settings.termFontHint": "Any monospaced family installed on this machine.",
   "settings.termFontDefault": "System mono",
   "settings.termFontSize": "Font size",
   "settings.termScrollback": "Scrollback",
-  "settings.termScrollbackHint": "Lines of history kept per terminal. Applies to terminals started from now on.",
+  "settings.termScrollbackHint":
+    "Lines of history kept per terminal. Applies to terminals started from now on.",
   "settings.languageSystem": "System",
   "settings.softwareUpdate": "Software update",
   "settings.checkForUpdates": "C2 updates",
   "settings.checkNow": "Check now",
   "settings.updateCheckingButton": "Checking…",
   "settings.updateLoading": "Reading the update configuration…",
-  "settings.updateReady": "Version {version}. Sparkle verifies the signed feed and archive before installing.",
+  "settings.updateReady":
+    "Version {version}. Sparkle verifies the signed feed and archive before installing.",
   "settings.updateChecking": "Sparkle is checking the signed update feed.",
-  "settings.updateNotConfigured": "Updates are disabled in this build because the signed feed or public key is not configured.",
+  "settings.updateNotConfigured":
+    "Updates are disabled in this build because the signed feed or public key is not configured.",
   "settings.updateUnsupported": "Sparkle updates are available on macOS only.",
-  "settings.updateUnavailable": "The update helper is unavailable in this build.",
+  "settings.updateUnavailable":
+    "The update helper is unavailable in this build.",
   "settings.updateUnknownVersion": "unknown",
   "settings.keybindings": "Keybindings",
-  "settings.keysHint": "{mod} is the modifier. Click a shortcut, then press the new chord. Esc while capturing cancels.",
+  "settings.keysHint":
+    "{mod} is the modifier. Click a shortcut, then press the new chord. Esc while capturing cancels.",
   "settings.capturing": "press keys…",
   "settings.conflict": "conflict",
   "settings.conflictHint": "Same shortcut is bound to another action",
@@ -560,24 +870,32 @@ export const en = {
 
   // memory
   "memory.title": "Memory",
-  "memory.hint": "Local, project-scoped recall that works across providers. Every derived item keeps evidence and can be forgotten.",
+  "memory.hint":
+    "Local, project-scoped recall that works across providers. Every derived item keeps evidence and can be forgotten.",
   "memory.enabled": "Enable memory",
   "memory.enabledHint": "Master switch for capture and prompt-time recall.",
   "memory.capture": "Learn from completed turns",
-  "memory.captureHint": "Write source-linked L2 episodes immediately; queue redacted L1 notes for background consolidation into L3.",
+  "memory.captureHint":
+    "Write source-linked L2 episodes immediately; queue redacted L1 notes for background consolidation into L3.",
   "memory.inject": "Recall into prompts",
-  "memory.injectHint": "Add only a small, relevant window. Current instructions and project rules always win.",
+  "memory.injectHint":
+    "Add only a small, relevant window. Current instructions and project rules always win.",
   "memory.external": "Learn from external context",
-  "memory.externalHint": "Allow turns using tools, files, MCP, browser context, referenced chats, images, or recalled memory to create durable memory.",
+  "memory.externalHint":
+    "Allow turns using tools, files, MCP, browser context, referenced chats, images, or recalled memory to create durable memory.",
   "memory.pending": "Pending candidates",
-  "memory.safety": "Memory is reference data, not authority. Expanded files, skills, and earlier memory blocks are excluded from direct capture.",
+  "memory.safety":
+    "Memory is reference data, not authority. Expanded files, skills, and earlier memory blocks are excluded from direct capture.",
   "memory.noProject": "Choose a project to inspect its memory.",
   "memory.search": "Search memory",
-  "memory.searchPlaceholder": "Search prior decisions, preferences, or outcomes…",
+  "memory.searchPlaceholder":
+    "Search prior decisions, preferences, or outcomes…",
   "memory.addHeading": "Pin a stable note",
-  "memory.addHint": "Manual notes enter L1 at high confidence and stay in the automatic pocket until forgotten.",
+  "memory.addHint":
+    "Manual notes enter L1 at high confidence and stay in the automatic pocket until forgotten.",
   "memory.content": "Memory text",
-  "memory.contentPlaceholder": "For example: Always run cargo fmt before tests.",
+  "memory.contentPlaceholder":
+    "For example: Always run cargo fmt before tests.",
   "memory.category": "Category",
   "memory.add": "Add memory",
   "memory.pin": "Pin",
@@ -603,20 +921,24 @@ export const en = {
   "memory.category.episode": "Episode",
   "memory.category.profile": "Profile",
   "memory.category.raw": "Raw",
-  "memory.consoleHint": "Inspect what CodeTwo remembers, correct it, and trace where it came from.",
+  "memory.consoleHint":
+    "Inspect what CodeTwo remembers, correct it, and trace where it came from.",
   "memory.project": "Project",
   "memory.new": "New memory",
   "memory.behavior": "Memory behavior",
   "memory.behavior.summary": "Learning {capture} · Recall {recall}",
   "memory.behavior.on": "on",
   "memory.behavior.offShort": "off",
-  "memory.behavior.off": "Globally off · Project and session overrides cannot enable memory.",
+  "memory.behavior.off":
+    "Globally off · Project and session overrides cannot enable memory.",
   "memory.globalDefaults": "Global defaults",
   "memory.projectOverrides": "Project overrides",
-  "memory.projectOverridesHint": "Inherit the global default or narrow behavior for this project. The global master switch is absolute.",
+  "memory.projectOverridesHint":
+    "Inherit the global default or narrow behavior for this project. The global master switch is absolute.",
   "memory.captureHintShort": "Create memories from completed work.",
   "memory.injectHintShort": "Use relevant memories in future prompts.",
-  "memory.externalHintShort": "Allow tool and file context to contribute memories.",
+  "memory.externalHintShort":
+    "Allow tool and file context to contribute memories.",
   "memory.policy.inherit": "Inherit",
   "memory.policy.allow": "Allow",
   "memory.policy.deny": "Disable",
@@ -668,20 +990,24 @@ export const en = {
   "memory.retentionRolling": "Rolling 300 episodes",
   "memory.retentionSummary": "Pinned stays · Episodes keep 300",
   "memory.needsAttention": "Needs attention",
-  "memory.conflict.autoVsCorrection": "A later automatic memory contradicts a user correction. It is inactive and will not be recalled.",
+  "memory.conflict.autoVsCorrection":
+    "A later automatic memory contradicts a user correction. It is inactive and will not be recalled.",
   "memory.edit": "Edit",
   "memory.correct": "Correct",
   "memory.restore": "Restore",
   "memory.restored": "Memory restored.",
   "memory.deletePermanently": "Delete permanently",
   "memory.deleted": "Memory permanently deleted. Source sessions were kept.",
-  "memory.confirmDelete": "Permanently delete this memory, its relations, and recall receipts? The source session will not be deleted.",
-  "memory.confirmForget": "Forget {count} selected memories? You can restore them later.",
+  "memory.confirmDelete":
+    "Permanently delete this memory, its relations, and recall receipts? The source session will not be deleted.",
+  "memory.confirmForget":
+    "Forget {count} selected memories? You can restore them later.",
   "memory.evidence": "Source evidence",
   "memory.revealSensitive": "Temporarily reveal",
   "memory.hideSensitive": "Hide sensitive text",
   "memory.noEvidence": "No source excerpt is available for this memory.",
-  "memory.sourceUnavailable": "The source excerpt is unavailable. The session itself was not deleted by memory management.",
+  "memory.sourceUnavailable":
+    "The source excerpt is unavailable. The session itself was not deleted by memory management.",
   "memory.usageHistory": "Usage history",
   "memory.noUsage": "This memory has not been recalled into a later prompt.",
   "memory.turnNumber": "Turn {number}",
@@ -689,41 +1015,54 @@ export const en = {
   "memory.editor.editTitle": "Edit memory",
   "memory.editor.correctTitle": "Correct automatic memory",
   "memory.editor.editHint": "Content changes are saved only when you confirm.",
-  "memory.editor.correctHint": "The original becomes inactive. A pinned user correction replaces it and keeps the lineage.",
+  "memory.editor.correctHint":
+    "The original becomes inactive. A pinned user correction replaces it and keeps the lineage.",
   "memory.keepPinned": "Keep this memory pinned",
   "memory.saving": "Saving…",
   "memory.saveAction": "Save",
   "memory.cancel": "Cancel",
   "memory.corrected": "Correction saved. The original memory was deactivated.",
   "memory.preset.standard": "Memory on",
-  "memory.preset.standardHint": "Recall relevant memory and learn from completed turns.",
+  "memory.preset.standardHint":
+    "Recall relevant memory and learn from completed turns.",
   "memory.preset.read_only": "Recall only",
-  "memory.preset.read_onlyHint": "Use existing memory, but do not learn from this session.",
+  "memory.preset.read_onlyHint":
+    "Use existing memory, but do not learn from this session.",
   "memory.preset.private": "Private session",
   "memory.preset.privateHint": "Do not recall memory or contribute new memory.",
   "memory.preset.learn_only": "Learn only",
-  "memory.preset.learn_onlyHint": "Do not recall existing memory, but learn from completed turns.",
+  "memory.preset.learn_onlyHint":
+    "Do not recall existing memory, but learn from completed turns.",
 
   // config popover
   "config.provider": "Provider",
+  "config.providersLoading": "Checking installed providers…",
+  "config.providersLoadFailed": "Couldn’t check installed providers.",
+  "config.retryProviders": "Retry",
   "config.session": "Session configuration",
   "config.mode": "Mode",
   "config.memory": "Session memory",
   "config.worktree": "Isolate in a git worktree",
-  "config.worktreeHint": "Choose the exact local commit baseline for a fresh branch + checkout.",
+  "config.worktreeHint":
+    "Choose the exact local commit baseline for a fresh branch + checkout.",
   "worktree.off": "No worktree",
   "worktree.offHint": "Run in the selected project checkout.",
   "worktree.current": "Current checkout",
   "worktree.origin_default": "Local origin default",
   "worktree.localOnly": "local ref",
-  "worktree.noFetch": "Uses refs already on this machine. C2 never fetches or guesses main/master.",
+  "worktree.noFetch":
+    "Uses refs already on this machine. C2 never fetches or guesses main/master.",
   "worktree.resolving": "Resolving local Git refs…",
-  "worktree.unavailable": "This baseline is unavailable in the selected project.",
-  "worktree.fixedForSession": "This session keeps the exact local ref and commit recorded when it was created.",
+  "worktree.unavailable":
+    "This baseline is unavailable in the selected project.",
+  "worktree.fixedForSession":
+    "This session keeps the exact local ref and commit recorded when it was created.",
   "worktree.legacyUnknown": "Legacy worktree · identity unverified",
-  "worktree.legacyUnknownHint": "This older session predates durable filesystem identity. Its checkout is validated with narrower legacy Git and path evidence.",
+  "worktree.legacyUnknownHint":
+    "This older session predates durable filesystem identity. Its checkout is validated with narrower legacy Git and path evidence.",
   "worktree.manage": "Worktrees",
-  "worktree.manageHint": "Isolated checkouts created under this project, including leftovers no session claims.",
+  "worktree.manageHint":
+    "Isolated checkouts created under this project, including leftovers no session claims.",
   "worktree.manageLoading": "Scanning worktrees…",
   "worktree.manageEmpty": "No worktrees.",
   "worktree.manageFailed": "Could not list worktrees: {error}",
@@ -735,7 +1074,8 @@ export const en = {
   "worktree.badgeCheckoutMissing": "Checkout missing",
   "worktree.discard": "Discard",
   "worktree.discardAction": "Discard worktree…",
-  "worktree.discardConfirm": "Discard the worktree at “{path}”? Uncommitted work in it is lost. This cannot be undone.",
+  "worktree.discardConfirm":
+    "Discard the worktree at “{path}”? Uncommitted work in it is lost. This cannot be undone.",
   "worktree.discardFailed": "Could not discard the worktree: {error}",
   "config.planFirst": "Plan first",
   "config.planFirstHint": "Propose a plan and wait before editing.",
@@ -747,7 +1087,8 @@ export const en = {
 
   // the one permission control: what it may do, and when it asks
   "mode.read_only": "Read-only",
-  "mode.read_onlyHint": "Only ACP requests classified as read, search, fetch, or think may continue.",
+  "mode.read_onlyHint":
+    "Only ACP requests classified as read, search, fetch, or think may continue.",
   "mode.ask": "Ask first",
   "mode.askHint": "Asks before each change.",
   "mode.auto_edit": "Auto-edit",
@@ -804,7 +1145,8 @@ export const en = {
   "browser.annotateMode": "Annotate elements",
   "browser.annotating": "Annotating",
   "browser.clearAnnotations": "Clear annotations",
-  "browser.desktopOnly": "The built-in browser needs the desktop app — it renders pages in a native webview.",
+  "browser.desktopOnly":
+    "The built-in browser needs the desktop app — it renders pages in a native webview.",
   "browser.annotateHint": "Click an element to annotate it",
   "browser.annotateCount": "{n} annotated",
   "browser.addToPrompt": "Add to prompt",
@@ -836,7 +1178,8 @@ export const en = {
   "files.duplicated": "Duplicated",
   "files.deleted": "Deleted {name}",
   "files.confirmDelete": "Delete “{name}”? This cannot be undone.",
-  "files.confirmDeleteFolder": "Delete “{name}” and everything inside it? This cannot be undone.",
+  "files.confirmDeleteFolder":
+    "Delete “{name}” and everything inside it? This cannot be undone.",
   "files.save": "Save",
   "files.cancel": "Cancel",
   "files.saved": "Saved {path}",
@@ -846,7 +1189,8 @@ export const en = {
   "files.createFailed": "Could not create the file: {error}",
   "files.commentTitle": "Line comment",
   "files.commentOn": "{range} — goes into your prompt",
-  "files.commentPlaceholder": "Request a change or leave a note about these lines…",
+  "files.commentPlaceholder":
+    "Request a change or leave a note about these lines…",
   "files.commentAdded": "Comment added to your prompt.",
   "files.comment": "Comment on the selected lines (⌘⇧C)",
   "files.imageFailed": "This image could not be decoded.",
@@ -871,7 +1215,8 @@ export const en = {
   "toast.sessionLoadFailed": "Could not load this conversation: {error}",
   "toast.transcriptEarlierFailed": "Could not load earlier turns: {error}",
   "toast.projectFailed": "Could not add that folder: {error}",
-  "toast.projectDefaultFailed": "Could not save the project workspace default: {error}",
+  "toast.projectDefaultFailed":
+    "Could not save the project workspace default: {error}",
   "toast.modelFailed": "Could not switch model: {error}",
   "toast.dismiss": "Dismiss",
 
@@ -905,7 +1250,8 @@ export const en = {
   "scene.noneHint": "Keep the current posture; nothing is loaded or unloaded.",
   "scene.auto": "Auto scene",
   "scene.autoActive": "Auto · {scene}",
-  "scene.autoHint": "Agent chooses and switches scenes as the task changes. Permission increases still ask first.",
+  "scene.autoHint":
+    "Agent chooses and switches scenes as the task changes. Permission increases still ask first.",
   "scene.autoSwitched": "Auto scene: {scene} — {reason}",
   "scene.customized": "Customized",
   "scene.partial": "Partially applied",
@@ -916,9 +1262,11 @@ export const en = {
   "scene.source.project": "Project",
   "scene.source.plugin": "Plugin",
   "scene.pickerTitle": "Switch scene",
-  "scene.pickerHint": "A scene sets permissions, memory, skills, and the task brief for one stage of work.",
+  "scene.pickerHint":
+    "A scene sets permissions, memory, skills, and the task brief for one stage of work.",
   "scene.escalationTitle": "Allow looser permissions?",
-  "scene.escalationBody": "Scene “{scene}” raises this session's permissions from {from} to {to}. A scene never does this silently.",
+  "scene.escalationBody":
+    "Scene “{scene}” raises this session's permissions from {from} to {to}. A scene never does this silently.",
   "scene.escalationConfirm": "Allow",
   "scene.escalationCancel": "Cancel",
   "scene.switched": "Scene: {scene}",
@@ -938,7 +1286,8 @@ export const en = {
   "brief.menuInsert": "Insert brief",
   "action.open_mission_control": "Open mission control",
   "mission.title": "Mission control",
-  "mission.hint": "Every session, what it needs from you, and one click into review.",
+  "mission.hint":
+    "Every session, what it needs from you, and one click into review.",
   "mission.open": "Open mission control",
   "mission.awaiting": "Waiting on your input",
   "mission.state.running": "Running",
@@ -955,7 +1304,8 @@ export const en = {
   "statusline.burn": "{rate} tok/min",
   "dockFollow.auto": "Following the agent — it is working on this surface",
   "question.other": "Other",
-  "question.otherPlaceholder": "Type your own answer instead of choosing an option",
+  "question.otherPlaceholder":
+    "Type your own answer instead of choosing an option",
   "question.skip": "Skip",
   "question.cancel": "Cancel",
   "question.submit": "Submit",
@@ -980,7 +1330,8 @@ export const en = {
     "Dictation isn't available: this webview has no speech API, and the system recognizer is " +
     "off or has no on-device model for your language. Allow it under Privacy & Security → " +
     "Speech Recognition, or point CODETWO_TRANSCRIBE_CMD at a local transcriber.",
-  "voice.structureFailed": "Couldn't structure the dictation into the brief — inserted the raw transcript instead.",
+  "voice.structureFailed":
+    "Couldn't structure the dictation into the brief — inserted the raw transcript instead.",
   "issueDeleg.activity": "Delegation history",
   "issueDeleg.none": "No delegations yet.",
   "issueDeleg.openSession": "Open session",
@@ -990,19 +1341,23 @@ export const en = {
   "issueDeleg.pill": "delegated to {scene}",
   "issueDeleg.remove": "Remove",
   "issueDeleg.toast": "Delegated #{id} → {scene} (you stay assignee)",
-  "issueDeleg.commentBody": "Delegated to scene \"{scene}\" via C2 — assignee unchanged.",
+  "issueDeleg.commentBody":
+    'Delegated to scene "{scene}" via C2 — assignee unchanged.',
 
-  "templateFrom.errSlug": "Slot {index}: id \"{id}\" is not a slug (lowercase letters, digits, - or _).",
-  "templateFrom.errDuplicate": "Slot {index}: duplicate id \"{id}\".",
-  "templateFrom.errNoToken": "Slot \"{id}\" never appears in the template as {token}.",
-  "templateFrom.errNoOptions": "Slot \"{id}\" is a select but lists no options.",
+  "templateFrom.errSlug":
+    'Slot {index}: id "{id}" is not a slug (lowercase letters, digits, - or _).',
+  "templateFrom.errDuplicate": 'Slot {index}: duplicate id "{id}".',
+  "templateFrom.errNoToken":
+    'Slot "{id}" never appears in the template as {token}.',
+  "templateFrom.errNoOptions": 'Slot "{id}" is a select but lists no options.',
   "templateFrom.errNoRow": "Template token {token} has no slot row.",
   "templateFrom.menu": "Turn actions",
   "templateFrom.saveAs": "Save as template…",
   "templateFrom.palette": "Save last prompt as template",
   "templateFrom.title": "Save as template",
   "templateFrom.proposing": "Detecting fill-in slots…",
-  "templateFrom.manualHint": "Slot detection is unavailable — edit the template and slots by hand.",
+  "templateFrom.manualHint":
+    "Slot detection is unavailable — edit the template and slots by hand.",
   "templateFrom.template": "Template",
   "templateFrom.slots": "Slots",
   "templateFrom.addSlot": "Add slot",
@@ -1027,7 +1382,8 @@ export const en = {
   "sceneBanner.carrying": "Carrying: {artifacts}",
   "sceneBanner.dismiss": "Dismiss",
   "sceneBanner.newSession": "Enter in a new session",
-  "sceneBanner.newSessionHint": "Advance the pipeline stage in a fresh session with the stage scene fully applied.",
+  "sceneBanner.newSessionHint":
+    "Advance the pipeline stage in a fresh session with the stage scene fully applied.",
   "stage.track": "Pipeline stages",
   "stage.state.done": "Done",
   "stage.state.current": "Current",
@@ -1047,13 +1403,16 @@ export const en = {
   "scene.exportSkillDone": "Exported {name}-SKILL.md",
 
   "sceneStudio.title": "Scenes",
-  "sceneStudio.description": "Build reusable working modes by combining execution posture, skills, instructions, task briefs, outputs, and automation.",
+  "sceneStudio.description":
+    "Build reusable working modes by combining execution posture, skills, instructions, task briefs, outputs, and automation.",
   "sceneStudio.back": "Back to session",
   "sceneStudio.backToLibrary": "Back to scene library",
   "sceneStudio.customTitle": "Your scenes",
-  "sceneStudio.customDescription": "User and project scenes are editable and can be shared across the places where they belong.",
+  "sceneStudio.customDescription":
+    "User and project scenes are editable and can be shared across the places where they belong.",
   "sceneStudio.providedTitle": "Provided scenes",
-  "sceneStudio.providedDescription": "Use a built-in scene as shipped, or duplicate it as a starting point for your own configuration.",
+  "sceneStudio.providedDescription":
+    "Use a built-in scene as shipped, or duplicate it as a starting point for your own configuration.",
   "sceneStudio.noDescription": "No description yet.",
   "sceneStudio.taskBrief": "Task brief",
   "sceneStudio.outputs": "{count} outputs",
@@ -1067,7 +1426,8 @@ export const en = {
   "sceneEditor.createTitle": "Create scene",
   "sceneEditor.editTitle": "Edit scene",
   "sceneEditor.duplicateTitle": "Duplicate scene",
-  "sceneEditor.description": "Compose a reusable work posture, instructions, brief, outputs, and completion behavior.",
+  "sceneEditor.description":
+    "Compose a reusable work posture, instructions, brief, outputs, and completion behavior.",
   "sceneEditor.loading": "Loading scene…",
   "sceneEditor.loadError": "This scene could not be loaded.",
   "sceneEditor.tab.identity": "Basics",
@@ -1078,20 +1438,25 @@ export const en = {
   "sceneEditor.tab.automation": "Automation",
   "sceneEditor.tab.json": "Full JSON",
   "sceneEditor.identityTitle": "Identity and ownership",
-  "sceneEditor.identityDescription": "Choose where this scene lives and how it appears throughout C2.",
+  "sceneEditor.identityDescription":
+    "Choose where this scene lives and how it appears throughout C2.",
   "sceneEditor.scope": "Save to",
-  "sceneEditor.scopeDescription": "User scenes are available everywhere; project scenes travel with this repository and take precedence.",
+  "sceneEditor.scopeDescription":
+    "User scenes are available everywhere; project scenes travel with this repository and take precedence.",
   "sceneEditor.scopeLocked": "Duplicate the scene to move it to another scope.",
   "sceneEditor.name": "Reference name",
   "sceneEditor.version": "Version",
   "sceneEditor.titleField": "Display title",
   "sceneEditor.descriptionField": "Description",
   "sceneEditor.keywords": "Keywords",
-  "sceneEditor.keywordsDescription": "Comma-separated terms used for discovery.",
+  "sceneEditor.keywordsDescription":
+    "Comma-separated terms used for discovery.",
   "sceneEditor.executionTitle": "Execution posture",
-  "sceneEditor.executionDescription": "Unset values inherit the live session. Provider, model, effort, and worktree fully apply when a new session starts.",
+  "sceneEditor.executionDescription":
+    "Unset values inherit the live session. Provider, model, effort, and worktree fully apply when a new session starts.",
   "sceneEditor.providers": "Provider preference",
-  "sceneEditor.providersDescription": "Comma-separated in priority order. Available: {providers}",
+  "sceneEditor.providersDescription":
+    "Comma-separated in priority order. Available: {providers}",
   "sceneEditor.model": "Model",
   "sceneEditor.reasoningEffort": "Reasoning effort",
   "sceneEditor.permissionMode": "Permission mode",
@@ -1111,24 +1476,30 @@ export const en = {
   "sceneEditor.worktree.current": "Current branch",
   "sceneEditor.worktree.origin_default": "Origin default branch",
   "sceneEditor.skillsTitle": "Skills, instructions, and constraints",
-  "sceneEditor.skillsDescription": "Pin reusable skills, add scene-only instructions, and describe the boundaries for this kind of work.",
+  "sceneEditor.skillsDescription":
+    "Pin reusable skills, add scene-only instructions, and describe the boundaries for this kind of work.",
   "sceneEditor.pinnedSkills": "Pinned skills",
-  "sceneEditor.pinnedSkillsDescription": "Comma-separated skill references. Examples: {skills}",
+  "sceneEditor.pinnedSkillsDescription":
+    "Comma-separated skill references. Examples: {skills}",
   "sceneEditor.suppressUnpinned": "Focus the skill picker on pinned skills",
   "sceneEditor.inlineInstructions": "Inline instructions",
   "sceneEditor.addInstruction": "Add instruction",
   "sceneEditor.removeInstruction": "Remove instruction",
   "sceneEditor.instructionName": "Instruction name",
-  "sceneEditor.instructionsEmpty": "No scene-only instructions. Project rules still apply.",
+  "sceneEditor.instructionsEmpty":
+    "No scene-only instructions. Project rules still apply.",
   "sceneEditor.guardrails": "Guardrails",
-  "sceneEditor.guardrailsDescription": "One prompt-level instruction per line. Permission mode remains the enforcement boundary.",
+  "sceneEditor.guardrailsDescription":
+    "One prompt-level instruction per line. Permission mode remains the enforcement boundary.",
   "sceneEditor.toolsAllow": "Preferred tools",
   "sceneEditor.toolsDeny": "Discouraged tools",
   "sceneEditor.briefTitle": "Task brief",
-  "sceneEditor.briefDescription": "Offer a reusable prompt skeleton with typed fill-in slots when the scene starts.",
+  "sceneEditor.briefDescription":
+    "Offer a reusable prompt skeleton with typed fill-in slots when the scene starts.",
   "sceneEditor.enableBrief": "Include a task brief",
   "sceneEditor.briefTemplate": "Brief template",
-  "sceneEditor.briefTemplateDescription": "Use {{slot-id}} where a typed field should appear.",
+  "sceneEditor.briefTemplateDescription":
+    "Use {{slot-id}} where a typed field should appear.",
   "sceneEditor.clarify": "Clarification style",
   "sceneEditor.clarify.multi_choice": "Structured choices",
   "sceneEditor.clarify.free_form": "Free-form questions",
@@ -1149,7 +1520,8 @@ export const en = {
   "sceneEditor.slotKind.file": "File",
   "sceneEditor.slotKind.artifact": "Carried artifact",
   "sceneEditor.outputsTitle": "Outputs and completion",
-  "sceneEditor.outputsDescription": "Declare what the agent should produce and when C2 may suggest that this stage is complete.",
+  "sceneEditor.outputsDescription":
+    "Declare what the agent should produce and when C2 may suggest that this stage is complete.",
   "sceneEditor.artifacts": "Artifacts",
   "sceneEditor.artifactsEmpty": "No declared outputs.",
   "sceneEditor.addArtifact": "Add artifact",
@@ -1166,7 +1538,8 @@ export const en = {
   "sceneEditor.artifactKind.link": "Link",
   "sceneEditor.artifactKind.custom": "Custom",
   "sceneEditor.criteria": "Completion criteria",
-  "sceneEditor.criteriaDefault": "Default: required artifacts, then user confirmation.",
+  "sceneEditor.criteriaDefault":
+    "Default: required artifacts, then user confirmation.",
   "sceneEditor.addCriterion": "Add criterion",
   "sceneEditor.removeCriterion": "Remove criterion",
   "sceneEditor.criterion.required_artifacts": "Required artifacts exist",
@@ -1176,11 +1549,14 @@ export const en = {
   "sceneEditor.criterion.custom": "Custom condition",
   "sceneEditor.criterionDescription": "Condition description",
   "sceneEditor.nextScenes": "Suggested next scenes",
-  "sceneEditor.nextScenesDescription": "Comma-separated scene references. Carry details remain editable in Full JSON.",
+  "sceneEditor.nextScenesDescription":
+    "Comma-separated scene references. Carry details remain editable in Full JSON.",
   "sceneEditor.automationTitle": "Declarative automation",
-  "sceneEditor.automationDescription": "Hooks can suggest, notify, or run an existing macro. They cannot execute arbitrary commands or loosen permissions.",
+  "sceneEditor.automationDescription":
+    "Hooks can suggest, notify, or run an existing macro. They cannot execute arbitrary commands or loosen permissions.",
   "sceneEditor.hooks": "Hooks",
-  "sceneEditor.hooksEmpty": "No hooks. The scene only changes configuration and prompt context.",
+  "sceneEditor.hooksEmpty":
+    "No hooks. The scene only changes configuration and prompt context.",
   "sceneEditor.addHook": "Add hook",
   "sceneEditor.removeHook": "Remove hook",
   "sceneEditor.hookEvent": "Event",
@@ -1200,7 +1576,8 @@ export const en = {
   "sceneEditor.macroReference": "Macro reference",
   "sceneEditor.message": "Notification message",
   "sceneEditor.jsonTitle": "Complete Agent Scenes document",
-  "sceneEditor.jsonDescription": "Edit every Agent Scenes 1.0 field, including metadata, localizations, carries, macro arguments, and vendor extensions. Apply JSON before saving.",
+  "sceneEditor.jsonDescription":
+    "Edit every Agent Scenes 1.0 field, including metadata, localizations, carries, macro arguments, and vendor extensions. Apply JSON before saving.",
   "sceneEditor.jsonDocument": "Scene JSON",
   "sceneEditor.applyJson": "Apply JSON",
   "sceneEditor.jsonInvalid": "The JSON document is invalid.",
@@ -1209,25 +1586,33 @@ export const en = {
   "sceneEditor.cancel": "Cancel",
   "sceneEditor.delete": "Delete scene",
   "sceneEditor.deleteTitle": "Delete this scene?",
-  "sceneEditor.deleteDescription": "{name} will be removed from its current scope. Existing sessions keep running, but the scene can no longer be selected.",
+  "sceneEditor.deleteDescription":
+    "{name} will be removed from its current scope. Existing sessions keep running, but the scene can no longer be selected.",
   "sceneEditor.saved": "Saved {name}",
   "sceneEditor.deleted": "Deleted {name}",
   "sceneEditor.validationSummary": "{count} issue(s): {error}",
-  "sceneEditor.errorSchema": "The document must use the Agent Scenes 1.0 schema.",
-  "sceneEditor.errorName": "Reference name must be a lowercase slug (letters, digits, dots, or single hyphens).",
+  "sceneEditor.errorSchema":
+    "The document must use the Agent Scenes 1.0 schema.",
+  "sceneEditor.errorName":
+    "Reference name must be a lowercase slug (letters, digits, dots, or single hyphens).",
   "sceneEditor.errorTitle": "Display title is required.",
-  "sceneEditor.errorTitleLength": "Display title must be 80 characters or fewer.",
+  "sceneEditor.errorTitleLength":
+    "Display title must be 80 characters or fewer.",
   "sceneEditor.errorBriefTemplate": "An enabled brief requires a template.",
   "sceneEditor.errorSlotId": "Slot {index} has an invalid id.",
   "sceneEditor.errorSlotDuplicate": "Slot id {id} is duplicated.",
   "sceneEditor.errorSlotLabel": "Slot {index} requires a label.",
-  "sceneEditor.errorSlotOptions": "Select slot {id} requires at least one option.",
+  "sceneEditor.errorSlotOptions":
+    "Select slot {id} requires at least one option.",
   "sceneEditor.errorArtifactId": "Artifact {index} has an invalid id.",
   "sceneEditor.errorArtifactDuplicate": "Artifact id {id} is duplicated.",
   "sceneEditor.errorArtifactTitle": "Artifact {index} requires a title.",
-  "sceneEditor.errorChecklistArtifact": "Checklist completion requires an artifact id.",
-  "sceneEditor.errorCustomCriterion": "A custom completion criterion requires a description.",
-  "sceneEditor.errorSchedule": "A scheduled hook requires a five-field cron expression.",
+  "sceneEditor.errorChecklistArtifact":
+    "Checklist completion requires an artifact id.",
+  "sceneEditor.errorCustomCriterion":
+    "A custom completion criterion requires a description.",
+  "sceneEditor.errorSchedule":
+    "A scheduled hook requires a five-field cron expression.",
   "sceneEditor.errorHookScene": "Suggest scene requires a scene reference.",
   "sceneEditor.errorHookMacro": "Run macro requires a macro reference.",
   "sceneEditor.errorHookMessage": "Notify requires a message.",
@@ -1239,7 +1624,8 @@ export type StringKey = keyof typeof en;
 export const zhCN: Record<StringKey, string> = {
   "app.name": "C2",
   "rail.noProject": "未选择项目",
-  "rail.projectsEmpty": "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
+  "rail.projectsEmpty":
+    "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
   "rail.addProject": "添加项目…",
   "rail.renameProject": "重命名",
   "rail.removeProject": "从列表移除（会话会保留）",
@@ -1305,7 +1691,8 @@ export const zhCN: Record<StringKey, string> = {
   "automations.noMatches": "没有匹配的自动化",
   "automations.noMatchesHint": "换个关键词或状态筛选试试。",
   "automations.select": "选择一个自动化",
-  "automations.selectHint": "这里会显示它的指令、下次运行、工作区策略和运行历史。",
+  "automations.selectHint":
+    "这里会显示它的指令、下次运行、工作区策略和运行历史。",
   "automations.active": "已启用",
   "automations.paused": "已暂停",
   "automations.pausedHint": "恢复之前，这项任务不会运行。",
@@ -1332,7 +1719,8 @@ export const zhCN: Record<StringKey, string> = {
   "automations.name": "名称",
   "automations.namePlaceholder": "每日 Issue 分拣",
   "automations.prompt": "任务指令",
-  "automations.promptPlaceholder": "检查新 Issue、排定优先级，并总结需要关注的事项…",
+  "automations.promptPlaceholder":
+    "检查新 Issue、排定优先级，并总结需要关注的事项…",
   "automations.cadence": "重复频率",
   "automations.cadence.hourly": "每小时",
   "automations.cadence.daily": "每天",
@@ -1350,7 +1738,8 @@ export const zhCN: Record<StringKey, string> = {
   "automations.weekday.4": "星期四",
   "automations.weekday.5": "星期五",
   "automations.weekday.6": "星期六",
-  "automations.timezone": "按 {timezone} 运行。本地项目运行时，请保持 C2 开启且电脑处于唤醒状态。",
+  "automations.timezone":
+    "按 {timezone} 运行。本地项目运行时，请保持 C2 开启且电脑处于唤醒状态。",
   "automations.permissions": "权限",
   "automations.permissions.auto": "自动批准标准工具",
   "automations.permissions.ask": "使用工具前询问",
@@ -1447,7 +1836,8 @@ export const zhCN: Record<StringKey, string> = {
   "usage.rescan": "重新扫描",
   "usage.scanning": "正在扫描本地会话记录…",
   "usage.localTitle": "本地活动",
-  "usage.localDescription": "会话记录统计为本地估算，与 Provider 官方额度分开显示。",
+  "usage.localDescription":
+    "会话记录统计为本地估算，与 Provider 官方额度分开显示。",
   "usage.localRemaining": "剩余 {percent}% · {tokens}",
   "usage.localUsed": "已使用 {tokens}",
   "usage.localRemainingLabel": "{window} 的本地剩余容量",
@@ -1464,7 +1854,8 @@ export const zhCN: Record<StringKey, string> = {
   "usage.tokensDetail": "输入 {input} · 输出 {output} · 缓存读 {cached}",
   "usage.costUnknown": "费用未知",
   "usage.unpricedNote": "另有 {tokens} tokens 模型未知，未计入估算",
-  "usage.noTranscripts": "未找到本地会话记录（已查找 ~/.codex/sessions 和 ~/.claude/projects）。",
+  "usage.noTranscripts":
+    "未找到本地会话记录（已查找 ~/.codex/sessions 和 ~/.claude/projects）。",
   "usage.scannedTranscripts": "已扫描 {count} 份会话记录。",
   "usage.estimateNote": "费用为按公开单价的本地估算（≈）。",
   "usage.done": "完成",
@@ -1499,7 +1890,8 @@ export const zhCN: Record<StringKey, string> = {
   "quota.unavailableTitle": "额度暂时不可用",
   "quota.unsupported": "{provider} 尚未提供 C2 可安全读取的机器接口。",
   "quota.cliNotFound": "未安装 {provider} CLI，或 C2 无法在 PATH 中找到它。",
-  "quota.queryFailed": "C2 无法读取 {provider} 的额度。请确认已登录该 Provider 后重试。",
+  "quota.queryFailed":
+    "C2 无法读取 {provider} 的额度。请确认已登录该 Provider 后重试。",
 
   "palette.title": "命令面板",
   "palette.description": "搜索操作、会话、脚本和对话正文",
@@ -1520,10 +1912,12 @@ export const zhCN: Record<StringKey, string> = {
   "composer.pullIssue": "引入 Issue",
   "composer.market": "Plugin Hub",
   "composer.newSkill": "新建技能",
-  "composer.contextWindowExact": "上下文窗口：已用 {used} / {capacity} 个 token（{percentage}）",
+  "composer.contextWindowExact":
+    "上下文窗口：已用 {used} / {capacity} 个 token（{percentage}）",
 
   "pluginHub.title": "Plugin Hub",
-  "pluginHub.description": "在同一个兼容性中心管理可移植 Agent Plugins，以及 Codex 与 Claude Code 原生扩展。",
+  "pluginHub.description":
+    "在同一个兼容性中心管理可移植 Agent Plugins，以及 Codex 与 Claude Code 原生扩展。",
   "pluginHub.newSkill": "新建技能",
   "pluginHub.github": "从 GitHub 安装",
   "pluginHub.openMarketplace": "打开插件市场",
@@ -1587,6 +1981,238 @@ export const zhCN: Record<StringKey, string> = {
   "pluginHub.installFailed": "安装失败：{error}",
   "pluginHub.uninstallFailed": "卸载失败：{error}",
   "pluginHub.scaffoldFailed": "无法添加脚手架：{error}",
+
+  "pluginManager.title": "插件",
+  "pluginManager.description":
+    "集中管理内置功能、桌面宿主集成与已安装的 Bundle。",
+  "pluginManager.plugins": "插件",
+  "pluginManager.components": "组件",
+  "pluginManager.marketplace": "市场",
+  "pluginManager.userScope": "用户",
+  "pluginManager.search": "搜索插件、组件和市场…",
+  "pluginManager.noResults": "没有匹配项。",
+  "pluginManager.enabled": "已启用",
+  "pluginManager.disabled": "已停用",
+  "pluginManager.inherit": "继承",
+  "pluginManager.required": "必需",
+  "pluginManager.userOnly": "仅限用户范围",
+  "pluginManager.projectOnly": "仅限项目范围",
+  "pluginManager.configuration": "配置",
+  "pluginManager.form": "表单",
+  "pluginManager.advancedJson": "高级 JSON",
+  "pluginManager.saveConfiguration": "保存配置",
+  "pluginManager.saving": "正在保存…",
+  "pluginManager.install": "安装",
+  "pluginManager.installed": "已安装",
+  "pluginManager.unavailable": "不可用",
+  "pluginManager.refresh": "刷新",
+  "pluginManager.bundleTools": "Bundle 工具",
+  "pluginManager.advancedBundleTools": "高级工具",
+  "pluginManager.installFromGithub": "从 GitHub 安装",
+  "pluginManager.githubRepository": "GitHub 仓库",
+  "pluginManager.githubHint":
+    "输入 owner/repository 或 GitHub /tree/ 链接。安装过程不会执行插件代码；信任权限需另行授予。",
+  "pluginManager.closeInstaller": "关闭 GitHub 安装器",
+  "pluginManager.installingPlugin": "正在安装…",
+  "pluginManager.bundleInstalled":
+    "已安装 {name}{version}。启用代码前请检查来源与信任要求。",
+  "pluginManager.managedInBundleTools": "由 Bundle 统一管理",
+  "pluginManager.bundleManagement": "Bundle 管理",
+  "pluginManager.bundleManagementUserOnly":
+    "安装、信任和移除操作需在用户范围内管理。",
+  "pluginManager.trustRequired":
+    "此 Bundle 含可执行内容。允许其使用你的用户权限运行前，请先检查来源。",
+  "pluginManager.trusted": "已信任",
+  "pluginManager.notTrusted": "未信任",
+  "pluginManager.trustPlugin": "信任插件",
+  "pluginManager.revokeTrust": "撤销信任",
+  "pluginManager.contributions": "包含内容",
+  "pluginManager.diagnostics": "诊断",
+  "pluginManager.uninstall": "卸载",
+  "pluginManager.uninstallTitle": "卸载 {name}？",
+  "pluginManager.uninstallDescription":
+    "插件将停止运行，已安装文件也会被移除。保留数据后，重新安装时可以恢复。",
+  "pluginManager.keepPluginData": "保留插件数据以便重新安装",
+  "pluginManager.resetDefaults": "恢复默认设置",
+  "pluginManager.restoredLastGood": "无效的插件设置已替换为上次有效配置。",
+  "pluginManager.safeMode": "插件安全模式已启用，目前仅保证管理功能可用。",
+  "pluginManager.dependencies": "依赖项",
+  "pluginManager.missingDependencies": "缺失的依赖项",
+  "pluginManager.commands": "命令",
+  "pluginManager.services": "服务",
+  "pluginManager.activeResources": "活动资源",
+  "pluginManager.scope": "范围",
+  "pluginManager.pluginList": "插件列表",
+  "pluginManager.componentList": "组件列表",
+  "pluginManager.projectState": "{name} 的项目状态",
+  "pluginManager.noDescription": "暂无说明。",
+  "pluginManager.configurationHint": "宿主会先验证改动，再重新加载插件。",
+  "pluginManager.plugin": "插件",
+  "pluginManager.source": "来源",
+  "pluginManager.uiSlot": "界面插槽",
+  "pluginManager.affectedPlugins": "受影响的插件",
+  "pluginManager.missingCount": "缺少 {count} 项",
+  "pluginManager.installedBundle": "已安装的 Bundle",
+  "pluginManager.dataOnly": "仅数据",
+  "pluginManager.invalidConfigurationObject": "配置必须是 JSON 对象。",
+  "pluginManager.githubRepositoryRequired":
+    "请输入 owner/repository 或 GitHub 链接。",
+  "pluginManager.changeApplied": "{name} 现已设为{state}。",
+  "pluginManager.pluginChangeSummary.enabled": "在当前范围内加载 {name}。",
+  "pluginManager.pluginChangeSummary.disabled": "在当前范围内卸载 {name}。",
+  "pluginManager.componentChangeSummary.enabled":
+    "启用 {name}，并同步调整所属插件。",
+  "pluginManager.componentChangeSummary.disabled":
+    "隐藏 {name}，并同步调整所属插件。",
+  "pluginManager.marketplaceInstalled": "已安装市场项目。",
+  "pluginManager.settingsReset": "插件设置已恢复为默认值。",
+  "pluginManager.scopeLoadFailed": "无法加载插件范围：{error}",
+  "pluginManager.marketplaceUserOnly": "市场组件只能安装到用户范围。",
+  "pluginManager.bundleEnabled": "已启用 {name}。",
+  "pluginManager.bundleDisabled": "已停用 {name}。",
+  "pluginManager.bundleTrusted": "已信任 {name}。",
+  "pluginManager.bundleTrustRevoked": "已撤销对 {name} 的信任。",
+  "pluginManager.bundleUninstalled": "已卸载 {name}。",
+  "pluginManager.bundleUninstalledDataKept": "已卸载 {name}，插件数据仍保留。",
+  "pluginManager.confirmTitle": "应用插件改动？",
+  "pluginManager.confirm": "应用改动",
+  "pluginManager.cancel": "取消",
+  "pluginManager.optionalDependency": "{id}（可选）",
+  "pluginManager.status.disabled": "已停用",
+  "pluginManager.status.pending": "等待中",
+  "pluginManager.status.loading": "加载中",
+  "pluginManager.status.active": "运行中",
+  "pluginManager.status.failed": "失败",
+  "pluginManager.status.disposed": "已卸载",
+  "pluginManager.source.builtin": "内置",
+  "pluginManager.source.host": "桌面宿主",
+  "pluginManager.source.bundle": "Bundle",
+  "pluginManager.contribution.runtime": "进程运行时",
+  "pluginManager.contribution.skills": "技能",
+  "pluginManager.contribution.subagents": "子代理",
+  "pluginManager.contribution.mcpServers": "MCP 服务器",
+  "pluginManager.contribution.commands": "命令",
+  "pluginManager.contribution.hooks": "Hooks",
+  "pluginManager.contribution.languageServers": "语言服务器",
+  "pluginManager.contribution.scaffolds": "脚手架",
+  "pluginManager.contribution.monitors": "监视器",
+  "pluginManager.contribution.apps": "应用",
+  "pluginManager.contribution.uiActions": "界面操作",
+  "pluginManager.contribution.scenes": "场景",
+  "pluginManager.contribution.pipelines": "流水线",
+  "pluginManager.kind.page": "页面",
+  "pluginManager.kind.dockSurface": "侧栏面板",
+  "pluginManager.kind.modal": "对话框",
+  "pluginManager.kind.composerAction": "输入区操作",
+  "pluginManager.kind.settingsSection": "设置分区",
+  "pluginManager.kind.sessionSurface": "会话界面",
+  "pluginManager.kind.editorBlock": "编辑器区块",
+  "pluginManager.kind.runtime": "运行时",
+  "pluginManager.kind.skill": "技能",
+  "pluginManager.category.foundation": "基础能力",
+  "pluginManager.category.workspace": "工作区",
+  "pluginManager.category.automation": "自动化",
+  "pluginManager.category.developerTools": "开发工具",
+  "pluginManager.category.interface": "界面",
+  "pluginManager.category.integration": "集成",
+  "pluginManager.category.other": "其他",
+  "pluginManager.plugin.core.name": "核心",
+  "pluginManager.plugin.core.description":
+    "提供 Bun 运行时、持久化、Provider、会话和代理执行能力。",
+  "pluginManager.plugin.kernel.name": "内核",
+  "pluginManager.plugin.kernel.description":
+    "管理插件策略、恢复、Bundle 和运行时检查。",
+  "pluginManager.plugin.workspace.name": "工作区",
+  "pluginManager.plugin.workspace.description":
+    "管理工作区文件、项目规则和项目脚本。",
+  "pluginManager.plugin.workspaceSearch.name": "工作区搜索",
+  "pluginManager.plugin.workspaceSearch.description": "搜索整个项目的内容。",
+  "pluginManager.plugin.git.name": "Git",
+  "pluginManager.plugin.git.description":
+    "管理源码、检查点、提交、推送和拉取请求。",
+  "pluginManager.plugin.terminal.name": "终端",
+  "pluginManager.plugin.terminal.description": "提供持久的项目终端会话。",
+  "pluginManager.plugin.lsp.name": "语言服务器",
+  "pluginManager.plugin.lsp.description": "发现语言服务器并管理项目生命周期。",
+  "pluginManager.plugin.automation.name": "自动化",
+  "pluginManager.plugin.automation.description": "管理定时工作和自动化历史。",
+  "pluginManager.plugin.artifacts.name": "产物",
+  "pluginManager.plugin.artifacts.description": "保存并导出会话产物。",
+  "pluginManager.plugin.browser.name": "浏览器",
+  "pluginManager.plugin.browser.description":
+    "提供已登录的应用内浏览器工具和侧栏面板。",
+  "pluginManager.plugin.browserUse.name": "浏览器操作",
+  "pluginManager.plugin.browserUse.description":
+    "选择不依赖 Provider 的浏览器自动化后端。",
+  "pluginManager.plugin.canvas.name": "画布",
+  "pluginManager.plugin.canvas.description": "创建结构化视觉草稿、快照和导出。",
+  "pluginManager.plugin.document.name": "文档",
+  "pluginManager.plugin.document.description": "将结构化画布内容编译为文档。",
+  "pluginManager.plugin.issues.name": "问题",
+  "pluginManager.plugin.issues.description":
+    "浏览 Issue、管理上下文和委派记录。",
+  "pluginManager.plugin.keymap.name": "快捷键",
+  "pluginManager.plugin.keymap.description": "管理桌面键盘快捷键和自定义覆盖。",
+  "pluginManager.plugin.market.name": "市场",
+  "pluginManager.plugin.market.description":
+    "提供 Plugin Hub 的发现和安装界面。",
+  "pluginManager.plugin.memory.name": "记忆",
+  "pluginManager.plugin.memory.description": "管理项目记忆、召回策略和凭据。",
+  "pluginManager.plugin.remote.name": "远程控制",
+  "pluginManager.plugin.remote.description": "管理远程设备配对和连接。",
+  "pluginManager.plugin.scenes.name": "场景",
+  "pluginManager.plugin.scenes.description":
+    "管理代理场景、流水线、调度和场景产物。",
+  "pluginManager.plugin.skills.name": "技能",
+  "pluginManager.plugin.skills.description": "发现已安装技能并操作技能库。",
+  "pluginManager.plugin.usage.name": "用量",
+  "pluginManager.plugin.usage.description": "报告 Provider 额度和用量。",
+  "pluginManager.plugin.cost.name": "成本",
+  "pluginManager.plugin.cost.description": "报告每个会话的成本。",
+  "pluginManager.plugin.computerUse.name": "电脑操作",
+  "pluginManager.plugin.computerUse.description":
+    "选择不依赖 Provider 的电脑操作后端。",
+  "pluginManager.plugin.voice.name": "语音",
+  "pluginManager.plugin.voice.description": "提供原生听写和结构化语音输入。",
+  "pluginManager.component.manager.name": "插件管理器",
+  "pluginManager.component.manager.description":
+    "用于恢复和重新启用其他功能的必需管理界面。",
+  "pluginManager.component.automation.name": "自动化",
+  "pluginManager.component.automation.description":
+    "定时工作页面和自动化入口。",
+  "pluginManager.component.browserDock.name": "浏览器侧栏",
+  "pluginManager.component.browserDock.description":
+    "已登录的应用内浏览器界面及其侧栏入口。",
+  "pluginManager.component.terminalDock.name": "终端侧栏",
+  "pluginManager.component.terminalDock.description": "侧栏中的持久终端会话。",
+  "pluginManager.component.git.name": "源码管理",
+  "pluginManager.component.git.description":
+    "Git 侧栏、源码管理对话框和相关命令。",
+  "pluginManager.component.files.name": "文件",
+  "pluginManager.component.files.description":
+    "工作区文件树、查看器和文件浏览器。",
+  "pluginManager.component.search.name": "工作区搜索",
+  "pluginManager.component.search.description": "全项目内容搜索和结果打开器。",
+  "pluginManager.component.issues.name": "问题",
+  "pluginManager.component.issues.description":
+    "GitHub 与 Linear Issue 浏览器及委派流程。",
+  "pluginManager.component.voice.name": "语音输入",
+  "pluginManager.component.voice.description": "输入区听写和结构化语音输入。",
+  "pluginManager.component.usage.name": "用量",
+  "pluginManager.component.usage.description": "Provider 额度和用量设置界面。",
+  "pluginManager.component.memory.name": "记忆",
+  "pluginManager.component.memory.description": "记忆策略控制和凭据界面。",
+  "pluginManager.component.scenes.name": "代理场景",
+  "pluginManager.component.scenes.description":
+    "场景选择器、工作室、横幅和流水线控制。",
+  "pluginManager.component.canvas.name": "画布编辑器",
+  "pluginManager.component.canvas.description":
+    "结构化视觉画布区块。组件策略与画布安全开关相互独立；启用此组件不会打开生产开关。",
+  "pluginManager.component.remote.name": "远程控制",
+  "pluginManager.component.remote.description": "远程设备配对和连接管理。",
+  "pluginManager.component.lsp.name": "语言服务器",
+  "pluginManager.component.lsp.description":
+    "发现项目语言服务器并管理其生命周期。",
   "composer.addHint": "也可以直接在文档里输入 / 插入技能、@ 引用文件。",
   "composer.worktree": "Worktree",
   "composer.model": "模型",
@@ -1643,38 +2269,46 @@ export const zhCN: Record<StringKey, string> = {
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
   "settings.appearance": "外观",
-  "settings.appearanceHint": "选择配色方案、调整主题，并设置 C2 全局使用的字体。",
+  "settings.appearanceHint":
+    "选择配色方案、调整主题，并设置 C2 全局使用的字体。",
   "settings.colorScheme": "配色方案",
   "settings.project": "项目",
   "settings.projectHint": "当前主侧边栏所选项目的默认设置。",
   "settings.projectWorkspace": "新会话工作区",
-  "settings.projectWorkspaceHint": "选择新会话从哪里开始。自动模式会沿用当前草稿或会话；刚切换到一个项目时则从项目检出开始。当前草稿里的编辑器选择仍然优先。",
+  "settings.projectWorkspaceHint":
+    "选择新会话从哪里开始。自动模式会沿用当前草稿或会话；刚切换到一个项目时则从项目检出开始。当前草稿里的编辑器选择仍然优先。",
   "settings.projectWorkspaceInherit": "自动（沿用当前上下文）",
   "settings.projectWorkspaceLocal": "当前项目检出",
   "settings.projectWorkspaceCurrent": "从 HEAD 新建 worktree",
   "settings.projectWorkspaceOrigin": "从本地 origin 默认分支新建 worktree",
   "settings.scheduling": "场景定时任务",
-  "settings.schedulingHint": "允许本项目运行场景的 schedule 钩子（默认关闭；运行以署名回合形式出现）。",
+  "settings.schedulingHint":
+    "允许本项目运行场景的 schedule 钩子（默认关闭；运行以署名回合形式出现）。",
   "settings.projectPath": "项目路径",
   "settings.projectNone": "请先选择一个项目，再配置它的默认值。",
   "settings.providers": "供应商",
   "settings.restoreDefaults": "恢复默认",
-  "settings.providersHint": "C2 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
+  "settings.providersHint":
+    "C2 可以驱动的智能体 CLI。已安装在 PATH 上的会显示绿点。",
   "settings.computerUse": "Computer Use",
-  "settings.computerUseHint": "为每个供应商选择要挂载的外部电脑控制后端。供应商原生工具仍由供应商自身管理。",
+  "settings.computerUseHint":
+    "为每个供应商选择要挂载的外部电脑控制后端。供应商原生工具仍由供应商自身管理。",
   "settings.computerUseAutomatic": "自动",
   "settings.computerUseDisabled": "不挂载外部后端",
-  "settings.computerUseNewSession": "更改会应用到新会话；已有会话继续使用启动时的后端。",
+  "settings.computerUseNewSession":
+    "更改会应用到新会话；已有会话继续使用启动时的后端。",
   "settings.computerUseBackends": "已检测后端",
   "settings.computerUseLoading": "正在载入 Computer Use 后端…",
   "settings.computerUseLoadFailed": "无法更新 Computer Use 设置：{error}",
   "settings.computerUseAvailable": "可用",
   "settings.computerUseUnavailable": "不可用",
   "settings.browserUse": "Browser Use",
-  "settings.browserUseHint": "为每个供应商选择要挂载的浏览器控制后端。OpenAI Browser / Chrome 仅供 Codex 使用；可移植 MCP 后端从 host-tools.json 读取。",
+  "settings.browserUseHint":
+    "为每个供应商选择要挂载的浏览器控制后端。OpenAI Browser / Chrome 仅供 Codex 使用；可移植 MCP 后端从 host-tools.json 读取。",
   "settings.browserUseAutomatic": "自动",
   "settings.browserUseDisabled": "不挂载外部后端",
-  "settings.browserUseNewSession": "更改会应用到新会话；供应商原生浏览器工具仍由供应商自身管理。",
+  "settings.browserUseNewSession":
+    "更改会应用到新会话；供应商原生浏览器工具仍由供应商自身管理。",
   "settings.browserUseBackends": "已检测后端",
   "settings.browserUseLoading": "正在载入 Browser Use 后端…",
   "settings.browserUseLoadFailed": "无法更新 Browser Use 设置：{error}",
@@ -1701,7 +2335,8 @@ export const zhCN: Record<StringKey, string> = {
   "settings.themeExported": "已导出 {name}。",
   "settings.themeImportFailed": "这个文件不是有效的 C2 主题。",
   "settings.themeEditor": "主题编辑器",
-  "settings.builtinThemeHint": "内置主题受保护；修改颜色时会自动创建一个可编辑副本。",
+  "settings.builtinThemeHint":
+    "内置主题受保护；修改颜色时会自动创建一个可编辑副本。",
   "settings.customThemeHint": "修改会立即预览，并保存在这台设备上。",
   "settings.themeName": "主题名称",
   "settings.lightTheme": "浅色主题",
@@ -1738,21 +2373,25 @@ export const zhCN: Record<StringKey, string> = {
   "settings.termFontDefault": "系统等宽字体",
   "settings.termFontSize": "字号",
   "settings.termScrollback": "回滚缓冲",
-  "settings.termScrollbackHint": "每个终端保留的历史行数。对之后新建的终端生效。",
+  "settings.termScrollbackHint":
+    "每个终端保留的历史行数。对之后新建的终端生效。",
   "settings.languageSystem": "跟随系统",
   "settings.softwareUpdate": "软件更新",
   "settings.checkForUpdates": "C2 更新",
   "settings.checkNow": "立即检查",
   "settings.updateCheckingButton": "正在检查…",
   "settings.updateLoading": "正在读取更新配置…",
-  "settings.updateReady": "当前版本 {version}。Sparkle 会先验证签名 feed 与更新包，再执行安装。",
+  "settings.updateReady":
+    "当前版本 {version}。Sparkle 会先验证签名 feed 与更新包，再执行安装。",
   "settings.updateChecking": "Sparkle 正在检查签名更新 feed。",
-  "settings.updateNotConfigured": "这个构建没有配置签名 feed 或公钥，更新功能已关闭。",
+  "settings.updateNotConfigured":
+    "这个构建没有配置签名 feed 或公钥，更新功能已关闭。",
   "settings.updateUnsupported": "Sparkle 更新仅支持 macOS。",
   "settings.updateUnavailable": "这个构建中没有可用的更新 helper。",
   "settings.updateUnknownVersion": "未知",
   "settings.keybindings": "快捷键",
-  "settings.keysHint": "{mod} 是修饰键。点击某个快捷键，然后按下新的组合。捕获时按 Esc 取消。",
+  "settings.keysHint":
+    "{mod} 是修饰键。点击某个快捷键，然后按下新的组合。捕获时按 Esc 取消。",
   "settings.capturing": "请按键…",
   "settings.conflict": "冲突",
   "settings.conflictHint": "同一组合键已绑定到另一个操作",
@@ -1766,22 +2405,27 @@ export const zhCN: Record<StringKey, string> = {
   "settings.groupOther": "其他",
 
   "memory.title": "记忆",
-  "memory.hint": "本地、按项目隔离、可跨供应商使用的记忆。每条派生记忆都有来源，也可以随时忘记。",
+  "memory.hint":
+    "本地、按项目隔离、可跨供应商使用的记忆。每条派生记忆都有来源，也可以随时忘记。",
   "memory.enabled": "启用记忆",
   "memory.enabledHint": "控制学习与提示词回忆的总开关。",
   "memory.capture": "从已完成的轮次学习",
-  "memory.captureHint": "立即写入带来源的 L2 工作事件；将已遮蔽敏感内容的 L1 笔记排队，并在后台归并为 L3。",
+  "memory.captureHint":
+    "立即写入带来源的 L2 工作事件；将已遮蔽敏感内容的 L1 笔记排队，并在后台归并为 L3。",
   "memory.inject": "在提示词中回忆",
   "memory.injectHint": "只加入少量、相关的记忆；当前要求与项目规则始终优先。",
   "memory.external": "从外部上下文中学习",
-  "memory.externalHint": "允许使用工具、文件、MCP、浏览器、引用会话、图片或旧记忆的轮次生成长期记忆。",
+  "memory.externalHint":
+    "允许使用工具、文件、MCP、浏览器、引用会话、图片或旧记忆的轮次生成长期记忆。",
   "memory.pending": "待确认候选",
-  "memory.safety": "记忆只是参考资料，不是更高优先级的指令。展开后的文件、技能和旧记忆块不会作为直接学习输入。",
+  "memory.safety":
+    "记忆只是参考资料，不是更高优先级的指令。展开后的文件、技能和旧记忆块不会作为直接学习输入。",
   "memory.noProject": "先选择一个项目再查看它的记忆。",
   "memory.search": "搜索记忆",
   "memory.searchPlaceholder": "搜索以前的决定、偏好或结果…",
   "memory.addHeading": "置顶一条稳定笔记",
-  "memory.addHint": "手工笔记会以高置信度进入 L1，并留在自动记忆口袋中，直到你让它忘记。",
+  "memory.addHint":
+    "手工笔记会以高置信度进入 L1，并留在自动记忆口袋中，直到你让它忘记。",
   "memory.content": "记忆内容",
   "memory.contentPlaceholder": "例如：测试前必须先运行 cargo fmt。",
   "memory.category": "类别",
@@ -1809,7 +2453,8 @@ export const zhCN: Record<StringKey, string> = {
   "memory.category.episode": "工作事件",
   "memory.category.profile": "画像",
   "memory.category.raw": "原始记录",
-  "memory.consoleHint": "查看 CodeTwo 记住了什么，纠正内容，并追溯每条记忆的来源。",
+  "memory.consoleHint":
+    "查看 CodeTwo 记住了什么，纠正内容，并追溯每条记忆的来源。",
   "memory.project": "项目",
   "memory.new": "新建记忆",
   "memory.behavior": "记忆行为",
@@ -1819,7 +2464,8 @@ export const zhCN: Record<StringKey, string> = {
   "memory.behavior.off": "全局已关闭 · 项目与会话覆盖不能重新启用记忆。",
   "memory.globalDefaults": "全局默认",
   "memory.projectOverrides": "项目覆盖",
-  "memory.projectOverridesHint": "继承全局默认，或只收紧当前项目的行为。全局总开关始终拥有最高优先级。",
+  "memory.projectOverridesHint":
+    "继承全局默认，或只收紧当前项目的行为。全局总开关始终拥有最高优先级。",
   "memory.captureHintShort": "从完成的工作中生成记忆。",
   "memory.injectHintShort": "在之后的提示词中使用相关记忆。",
   "memory.externalHintShort": "允许工具和文件上下文贡献记忆。",
@@ -1874,14 +2520,16 @@ export const zhCN: Record<StringKey, string> = {
   "memory.retentionRolling": "滚动保留 300 条工作事件",
   "memory.retentionSummary": "置顶长期保留 · 工作事件保留 300 条",
   "memory.needsAttention": "需要处理",
-  "memory.conflict.autoVsCorrection": "之后生成的自动记忆与用户纠正冲突；它已停用，也不会参与回忆。",
+  "memory.conflict.autoVsCorrection":
+    "之后生成的自动记忆与用户纠正冲突；它已停用，也不会参与回忆。",
   "memory.edit": "编辑",
   "memory.correct": "纠正",
   "memory.restore": "恢复",
   "memory.restored": "已恢复这条记忆。",
   "memory.deletePermanently": "永久删除",
   "memory.deleted": "已永久删除记忆，但保留了来源会话。",
-  "memory.confirmDelete": "永久删除这条记忆、关联与回忆凭据？来源会话不会被删除。",
+  "memory.confirmDelete":
+    "永久删除这条记忆、关联与回忆凭据？来源会话不会被删除。",
   "memory.confirmForget": "忘记选中的 {count} 条记忆？之后仍可恢复。",
   "memory.evidence": "来源证据",
   "memory.revealSensitive": "临时显示原文",
@@ -1895,7 +2543,8 @@ export const zhCN: Record<StringKey, string> = {
   "memory.editor.editTitle": "编辑记忆",
   "memory.editor.correctTitle": "纠正自动记忆",
   "memory.editor.editHint": "内容修改只会在你确认保存后生效。",
-  "memory.editor.correctHint": "原记录会停用；新的用户纠正将置顶并保留替代关系。",
+  "memory.editor.correctHint":
+    "原记录会停用；新的用户纠正将置顶并保留替代关系。",
   "memory.keepPinned": "置顶保留这条记忆",
   "memory.saving": "正在保存…",
   "memory.saveAction": "保存",
@@ -1911,6 +2560,9 @@ export const zhCN: Record<StringKey, string> = {
   "memory.preset.learn_onlyHint": "不回忆已有记忆，但从完成的轮次中学习。",
 
   "config.provider": "供应商",
+  "config.providersLoading": "正在检测已安装的供应商…",
+  "config.providersLoadFailed": "无法检测已安装的供应商。",
+  "config.retryProviders": "重试",
   "config.session": "会话配置",
   "config.mode": "模式",
   "config.memory": "会话记忆",
@@ -1921,12 +2573,14 @@ export const zhCN: Record<StringKey, string> = {
   "worktree.current": "当前检出",
   "worktree.origin_default": "本地 origin 默认分支",
   "worktree.localOnly": "本地 ref",
-  "worktree.noFetch": "只使用本机已有 ref；C2 不会 fetch，也不会猜测 main/master。",
+  "worktree.noFetch":
+    "只使用本机已有 ref；C2 不会 fetch，也不会猜测 main/master。",
   "worktree.resolving": "正在解析本地 Git ref…",
   "worktree.unavailable": "所选项目没有这个可用基线。",
   "worktree.fixedForSession": "该会话固定使用创建时记录的本地 ref 与 commit。",
   "worktree.legacyUnknown": "旧版 worktree · 目录身份未验证",
-  "worktree.legacyUnknownHint": "该旧会话早于持久化目录身份字段，只能使用较窄的旧版 Git 与路径证据校验。",
+  "worktree.legacyUnknownHint":
+    "该旧会话早于持久化目录身份字段，只能使用较窄的旧版 Git 与路径证据校验。",
   "worktree.manage": "Worktree 管理",
   "worktree.manageHint": "该项目下创建的隔离检出目录，包括没有会话认领的残留。",
   "worktree.manageLoading": "正在扫描 worktree…",
@@ -1940,7 +2594,8 @@ export const zhCN: Record<StringKey, string> = {
   "worktree.badgeCheckoutMissing": "检出缺失",
   "worktree.discard": "丢弃",
   "worktree.discardAction": "丢弃 worktree…",
-  "worktree.discardConfirm": "丢弃「{path}」的 worktree？其中未提交的改动会丢失，此操作无法撤销。",
+  "worktree.discardConfirm":
+    "丢弃「{path}」的 worktree？其中未提交的改动会丢失，此操作无法撤销。",
   "worktree.discardFailed": "无法丢弃 worktree：{error}",
   "config.planFirst": "先出方案",
   "config.planFirstHint": "先提出方案并等待确认，然后再改动。",
@@ -2063,7 +2718,8 @@ export const zhCN: Record<StringKey, string> = {
   "toast.nothingRunning": "当前没有在运行的任务。",
   "toast.turnFailed": "无法开始这一轮：{error}",
   "toast.sessionFailed": "无法创建会话：{error}",
-  "toast.worktreeSourceUnknown": "这个旧版 worktree 没有记录源项目；请先选择项目，再创建新会话。",
+  "toast.worktreeSourceUnknown":
+    "这个旧版 worktree 没有记录源项目；请先选择项目，再创建新会话。",
   "toast.worktreeDiscarded": "已丢弃 worktree。",
   "toast.sessionLoading": "这个对话仍在加载中。",
   "toast.sessionLoadFailed": "无法加载这个对话：{error}",
@@ -2101,7 +2757,8 @@ export const zhCN: Record<StringKey, string> = {
   "scene.noneHint": "保持当前姿态，不加载或卸载任何内容。",
   "scene.auto": "自动场景",
   "scene.autoActive": "自动 · {scene}",
-  "scene.autoHint": "Agent 会随任务变化选择并切换场景；提升权限时仍会先征求确认。",
+  "scene.autoHint":
+    "Agent 会随任务变化选择并切换场景；提升权限时仍会先征求确认。",
   "scene.autoSwitched": "自动场景：{scene} — {reason}",
   "scene.customized": "已自定义",
   "scene.partial": "部分生效",
@@ -2114,7 +2771,8 @@ export const zhCN: Record<StringKey, string> = {
   "scene.pickerTitle": "切换场景",
   "scene.pickerHint": "场景为一个工作阶段设定权限、记忆、技能与任务书。",
   "scene.escalationTitle": "允许放宽权限？",
-  "scene.escalationBody": "场景“{scene}”会把本会话权限从 {from} 放宽到 {to}。场景永远不会静默放宽权限。",
+  "scene.escalationBody":
+    "场景“{scene}”会把本会话权限从 {from} 放宽到 {to}。场景永远不会静默放宽权限。",
   "scene.escalationConfirm": "允许",
   "scene.escalationCancel": "取消",
   "scene.switched": "场景：{scene}",
@@ -2208,10 +2866,11 @@ export const zhCN: Record<StringKey, string> = {
   "templateFrom.description": "描述",
   "templateFrom.cancel": "取消",
   "templateFrom.save": "保存模板",
-  "templateFrom.errSlug": "槽位 {index}：id \"{id}\" 不是合法 slug（小写字母、数字、- 或 _）。",
-  "templateFrom.errDuplicate": "槽位 {index}：id \"{id}\" 重复。",
-  "templateFrom.errNoToken": "槽位 \"{id}\" 未以 {token} 形式出现在模板中。",
-  "templateFrom.errNoOptions": "槽位 \"{id}\" 是下拉选择但没有任何选项。",
+  "templateFrom.errSlug":
+    '槽位 {index}：id "{id}" 不是合法 slug（小写字母、数字、- 或 _）。',
+  "templateFrom.errDuplicate": '槽位 {index}：id "{id}" 重复。',
+  "templateFrom.errNoToken": '槽位 "{id}" 未以 {token} 形式出现在模板中。',
+  "templateFrom.errNoOptions": '槽位 "{id}" 是下拉选择但没有任何选项。',
   "templateFrom.errNoRow": "模板令牌 {token} 没有对应的槽位行。",
   "templateFrom.saved": "模板已保存",
   "sceneBanner.complete": "产出齐备 — 本阶段声明的工件已全部就绪。",
@@ -2241,13 +2900,16 @@ export const zhCN: Record<StringKey, string> = {
   "scene.exportSkillDone": "已导出 {name}-SKILL.md",
 
   "sceneStudio.title": "场景",
-  "sceneStudio.description": "把执行姿态、技能、指令、任务简报、产物和自动化组合成可复用的工作模式。",
+  "sceneStudio.description":
+    "把执行姿态、技能、指令、任务简报、产物和自动化组合成可复用的工作模式。",
   "sceneStudio.back": "返回会话",
   "sceneStudio.backToLibrary": "返回场景库",
   "sceneStudio.customTitle": "你的场景",
-  "sceneStudio.customDescription": "用户场景与项目场景可以直接编辑，并在各自适用的范围内复用。",
+  "sceneStudio.customDescription":
+    "用户场景与项目场景可以直接编辑，并在各自适用的范围内复用。",
   "sceneStudio.providedTitle": "预置场景",
-  "sceneStudio.providedDescription": "可以直接使用内置场景，也可以复制一份作为自定义配置的起点。",
+  "sceneStudio.providedDescription":
+    "可以直接使用内置场景，也可以复制一份作为自定义配置的起点。",
   "sceneStudio.noDescription": "暂无说明。",
   "sceneStudio.taskBrief": "任务简报",
   "sceneStudio.outputs": "{count} 个产物",
@@ -2261,7 +2923,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.createTitle": "创建场景",
   "sceneEditor.editTitle": "编辑场景",
   "sceneEditor.duplicateTitle": "复制场景",
-  "sceneEditor.description": "组合可复用的工作姿态、指令、任务简报、产物和完成规则。",
+  "sceneEditor.description":
+    "组合可复用的工作姿态、指令、任务简报、产物和完成规则。",
   "sceneEditor.loading": "正在加载场景…",
   "sceneEditor.loadError": "无法加载这个场景。",
   "sceneEditor.tab.identity": "基础",
@@ -2272,9 +2935,11 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.tab.automation": "自动化",
   "sceneEditor.tab.json": "完整 JSON",
   "sceneEditor.identityTitle": "标识与归属",
-  "sceneEditor.identityDescription": "决定场景保存在哪里，以及在 C2 中如何展示。",
+  "sceneEditor.identityDescription":
+    "决定场景保存在哪里，以及在 C2 中如何展示。",
   "sceneEditor.scope": "保存到",
-  "sceneEditor.scopeDescription": "用户场景在所有项目可用；项目场景会随仓库共享，并具有更高优先级。",
+  "sceneEditor.scopeDescription":
+    "用户场景在所有项目可用；项目场景会随仓库共享，并具有更高优先级。",
   "sceneEditor.scopeLocked": "如需移动到其他范围，请复制这个场景。",
   "sceneEditor.name": "引用名称",
   "sceneEditor.version": "版本",
@@ -2283,7 +2948,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.keywords": "关键词",
   "sceneEditor.keywordsDescription": "用于发现的关键词，以逗号分隔。",
   "sceneEditor.executionTitle": "执行姿态",
-  "sceneEditor.executionDescription": "未设置的值继承当前会话。Provider、模型、思考强度和 Worktree 会在新会话中完整生效。",
+  "sceneEditor.executionDescription":
+    "未设置的值继承当前会话。Provider、模型、思考强度和 Worktree 会在新会话中完整生效。",
   "sceneEditor.providers": "Provider 优先级",
   "sceneEditor.providersDescription": "按优先级用逗号分隔。可用项：{providers}",
   "sceneEditor.model": "模型",
@@ -2305,7 +2971,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.worktree.current": "当前分支",
   "sceneEditor.worktree.origin_default": "远端默认分支",
   "sceneEditor.skillsTitle": "技能、指令与约束",
-  "sceneEditor.skillsDescription": "固定复用技能、添加仅属于此场景的指令，并说明这类工作的边界。",
+  "sceneEditor.skillsDescription":
+    "固定复用技能、添加仅属于此场景的指令，并说明这类工作的边界。",
   "sceneEditor.pinnedSkills": "固定技能",
   "sceneEditor.pinnedSkillsDescription": "以逗号分隔技能引用。例如：{skills}",
   "sceneEditor.suppressUnpinned": "技能选择器默认聚焦于固定技能",
@@ -2315,14 +2982,17 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.instructionName": "指令名称",
   "sceneEditor.instructionsEmpty": "暂无场景专属指令；项目规则仍然生效。",
   "sceneEditor.guardrails": "行为边界",
-  "sceneEditor.guardrailsDescription": "每行一条提示词层面的约束；真正的执行边界仍由权限模式决定。",
+  "sceneEditor.guardrailsDescription":
+    "每行一条提示词层面的约束；真正的执行边界仍由权限模式决定。",
   "sceneEditor.toolsAllow": "优先工具",
   "sceneEditor.toolsDeny": "不建议使用的工具",
   "sceneEditor.briefTitle": "任务简报",
-  "sceneEditor.briefDescription": "场景开始时提供可复用的提示词骨架和带类型的填写槽位。",
+  "sceneEditor.briefDescription":
+    "场景开始时提供可复用的提示词骨架和带类型的填写槽位。",
   "sceneEditor.enableBrief": "包含任务简报",
   "sceneEditor.briefTemplate": "简报模板",
-  "sceneEditor.briefTemplateDescription": "在需要填写字段的位置使用 {{slot-id}}。",
+  "sceneEditor.briefTemplateDescription":
+    "在需要填写字段的位置使用 {{slot-id}}。",
   "sceneEditor.clarify": "澄清方式",
   "sceneEditor.clarify.multi_choice": "结构化选项",
   "sceneEditor.clarify.free_form": "自由提问",
@@ -2343,7 +3013,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.slotKind.file": "文件",
   "sceneEditor.slotKind.artifact": "携带产物",
   "sceneEditor.outputsTitle": "产物与完成条件",
-  "sceneEditor.outputsDescription": "声明智能体应该产出什么，以及 C2 何时可以建议本阶段已完成。",
+  "sceneEditor.outputsDescription":
+    "声明智能体应该产出什么，以及 C2 何时可以建议本阶段已完成。",
   "sceneEditor.artifacts": "产物",
   "sceneEditor.artifactsEmpty": "暂无声明产物。",
   "sceneEditor.addArtifact": "添加产物",
@@ -2370,9 +3041,11 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.criterion.custom": "自定义条件",
   "sceneEditor.criterionDescription": "条件说明",
   "sceneEditor.nextScenes": "建议的后续场景",
-  "sceneEditor.nextScenesDescription": "以逗号分隔场景引用；产物携带细节可在“完整 JSON”中编辑。",
+  "sceneEditor.nextScenesDescription":
+    "以逗号分隔场景引用；产物携带细节可在“完整 JSON”中编辑。",
   "sceneEditor.automationTitle": "声明式自动化",
-  "sceneEditor.automationDescription": "Hook 可以建议、通知或运行现有 Macro，但不能执行任意命令，也不能放宽权限。",
+  "sceneEditor.automationDescription":
+    "Hook 可以建议、通知或运行现有 Macro，但不能执行任意命令，也不能放宽权限。",
   "sceneEditor.hooks": "Hook",
   "sceneEditor.hooksEmpty": "暂无 Hook；场景只会改变配置和提示词上下文。",
   "sceneEditor.addHook": "添加 Hook",
@@ -2394,7 +3067,8 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.macroReference": "Macro 引用",
   "sceneEditor.message": "通知内容",
   "sceneEditor.jsonTitle": "完整 Agent Scenes 文档",
-  "sceneEditor.jsonDescription": "编辑 Agent Scenes 1.0 的全部字段，包括元数据、本地化、产物携带、Macro 参数与扩展。保存前请先应用 JSON。",
+  "sceneEditor.jsonDescription":
+    "编辑 Agent Scenes 1.0 的全部字段，包括元数据、本地化、产物携带、Macro 参数与扩展。保存前请先应用 JSON。",
   "sceneEditor.jsonDocument": "场景 JSON",
   "sceneEditor.applyJson": "应用 JSON",
   "sceneEditor.jsonInvalid": "JSON 文档无效。",
@@ -2403,12 +3077,14 @@ export const zhCN: Record<StringKey, string> = {
   "sceneEditor.cancel": "取消",
   "sceneEditor.delete": "删除场景",
   "sceneEditor.deleteTitle": "删除这个场景？",
-  "sceneEditor.deleteDescription": "将从当前范围移除「{name}」。已有会话会继续运行，但之后不能再选择这个场景。",
+  "sceneEditor.deleteDescription":
+    "将从当前范围移除「{name}」。已有会话会继续运行，但之后不能再选择这个场景。",
   "sceneEditor.saved": "已保存「{name}」",
   "sceneEditor.deleted": "已删除「{name}」",
   "sceneEditor.validationSummary": "{count} 个问题：{error}",
   "sceneEditor.errorSchema": "文档必须使用 Agent Scenes 1.0 Schema。",
-  "sceneEditor.errorName": "引用名称必须是小写 slug，只能包含字母、数字、点和单个连字符。",
+  "sceneEditor.errorName":
+    "引用名称必须是小写 slug，只能包含字母、数字、点和单个连字符。",
   "sceneEditor.errorTitle": "显示名称不能为空。",
   "sceneEditor.errorTitleLength": "显示名称不能超过 80 个字符。",
   "sceneEditor.errorBriefTemplate": "启用任务简报后必须填写模板。",

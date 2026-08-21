@@ -206,6 +206,27 @@ async function selectItem(item) {
 }
 
 describe("PluginManagerPage", () => {
+  test("keeps the sidebar expansion action available on the full-page plugin surface", async () => {
+    activateDom();
+    const expanded = [];
+    const { view } = renderManager({
+      headerLeadingAction: (
+        <button type="button" onClick={() => expanded.push(true)}>
+          Expand sidebar
+        </button>
+      ),
+    });
+    await flush();
+
+    const action = view.container.querySelector("[data-plugin-manager-leading-action]");
+    expect(action).not.toBeNull();
+    expect(action?.textContent).toContain("Expand sidebar");
+    click(action?.querySelector("button"));
+    expect(expanded).toEqual([true]);
+
+    view.unmount();
+  });
+
   test("renders a host-owned plugin action slot and invokes its declared action", async () => {
     activateDom();
     const invoked = [];
@@ -299,8 +320,11 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(3);
     expect(view.container.querySelector('[data-slot="tabs"]')?.classList.contains("flex-col")).toBe(true);
     expect(view.container.querySelector('[data-slot="tabs-list"]')?.classList.contains("w-full")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("lg:w-64")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("@3xl/plugin-manager:w-72")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-details]")?.parentElement?.classList.contains("@3xl/plugin-manager:sticky")).toBe(true);
+    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
     expect(view.container.textContent).toContain("Built-in");
     expect(view.container.textContent).toContain("Desktop host");
     expect(view.container.textContent).toContain("Bundle · Review Tools");

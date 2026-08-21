@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { resolveDesktopChannel } from "./desktop-channel";
+
 const desktopRoot = join(import.meta.dir, "..");
 const cliDirectory = join(desktopRoot, "node_modules", "electrobun", "bin");
 const cliWrapper = join(cliDirectory, "electrobun.cjs");
@@ -43,8 +45,14 @@ if (process.platform === "darwin") {
   }
 }
 
-const cli = Bun.spawn([cliBinary, ...process.argv.slice(2)], {
+const requestedArguments = process.argv.slice(2);
+const channelArgument = requestedArguments.find((argument) => argument.startsWith("--channel="));
+const channel = resolveDesktopChannel(channelArgument?.slice("--channel=".length), requestedArguments);
+const cliArguments = requestedArguments.filter((argument) => argument !== channelArgument);
+
+const cli = Bun.spawn([cliBinary, ...cliArguments], {
   cwd: desktopRoot,
+  env: { ...process.env, CODETWO_CHANNEL: channel },
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",
