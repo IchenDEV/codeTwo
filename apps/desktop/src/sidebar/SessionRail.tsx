@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -113,6 +113,7 @@ export function SessionRail({
   quickQuotaLoading,
   quickQuotaProviderName,
   onOpenUsage,
+  pluginActions,
 }: {
   projects: Project[];
   activeProject: string | null;
@@ -164,6 +165,8 @@ export function SessionRail({
   quickQuotaLoading: boolean;
   quickQuotaProviderName: string;
   onOpenUsage: () => void;
+  /** Host-rendered declarative plugin actions in the primary feature list. */
+  pluginActions?: ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -744,6 +747,7 @@ export function SessionRail({
             </span>
           )}
         </button>
+        {pluginActions}
         <button
           data-rail-feature="settings"
           className={featureRowClass}

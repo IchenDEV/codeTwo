@@ -94,7 +94,7 @@ describe("unified plugin catalog adapter", () => {
       enabled: true,
       trusted: true,
       scope: "user",
-      counts: {},
+      counts: { runtime: 1, skills: 2 },
       scaffolds: [],
       extension_components: [{ kind: "lsp", name: "rust", path: ".lsp.json", status: "ready" }],
       diagnostics: [],
@@ -112,6 +112,17 @@ describe("unified plugin catalog adapter", () => {
     expect(model.plugins.find((plugin) => plugin.id === "browser")).toMatchObject({
       commands: ["browser.navigate"],
       services: ["browser"],
+    });
+    expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.bundle).toMatchObject({
+      id: "review",
+      repository: "https://example.test/review",
+      trusted: true,
+      requiresTrust: true,
+      runtimeManaged: false,
+      contributions: [
+        { id: "runtime", label: "Process runtime", count: 1 },
+        { id: "skills", label: "Skills", count: 2 },
+      ],
     });
     expect(model.components.find((component) => component.id === "plugin-manager.page")?.required).toBe(true);
     expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe(".lsp.json");
@@ -166,7 +177,7 @@ describe("unified plugin catalog adapter", () => {
       enabled: true,
       trusted: true,
       scope: "local",
-      counts: {},
+        counts: {},
       scaffolds: [],
       extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "ready" }],
       diagnostics: [],
@@ -199,7 +210,7 @@ describe("unified plugin catalog adapter", () => {
       enabled: true,
       trusted: true,
       scope: "user",
-      counts: {},
+      counts: { runtime: 1 },
       scaffolds: [],
       extension_components: [{ kind: "lsp", name: "rust", path: ".lsp.json", status: "ready" }],
       diagnostics: [],
@@ -258,6 +269,7 @@ describe("unified plugin catalog adapter", () => {
       sourceLabel: "GitHub · c2/review",
       supportedScopes: ["user", "project"],
       state: { effectiveEnabled: false, override: "disabled", status: "disabled" },
+      bundle: { id: "review", requiresTrust: true, runtimeManaged: true },
     });
     expect(model.components.find((component) => component.id === extensionId)).toMatchObject({
       manageable: false,

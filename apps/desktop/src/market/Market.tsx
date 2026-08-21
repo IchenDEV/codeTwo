@@ -286,7 +286,7 @@ export function PluginHub({
         {githubOpen && (
           <form
             data-plugin-hub-github-form
-            className="mt-4 rounded-(--ds-radius-panel) bg-fill-quiet p-3"
+            className="mt-4 rounded-(--ds-radius-module) bg-fill-quiet p-3"
             onSubmit={(event) => {
               event.preventDefault();
               void importGithub();

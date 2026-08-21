@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   LspClient,
   clientForPath,
+  configurePluginLanguageServers,
   getClient,
   isLspLanguage,
   isLspRuntimeEnabled,
@@ -16,11 +17,23 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  configurePluginLanguageServers([]);
   setLspRuntimeEnabled(false);
   setLspRuntimeEnabled(true);
 });
 
 describe("LSP component policy", () => {
+  test("adds manifest languages and fails a conflicting provider closed", () => {
+    configurePluginLanguageServers([{ pluginId: "zig-tools", id: "zls", languages: ["zig"] }]);
+    expect(isLspLanguage("zig")).toBe(true);
+
+    configurePluginLanguageServers([
+      { pluginId: "zig-tools", id: "zls", languages: ["zig"] },
+      { pluginId: "other-zig", id: "zig-lsp", languages: ["zig"] },
+    ]);
+    expect(isLspLanguage("zig")).toBe(false);
+  });
+
   test("disposes live clients and removes language-server routing when disabled", async () => {
     const client = new LspClient("typescript-language-server:/workspace", "/workspace", [
       "typescript",

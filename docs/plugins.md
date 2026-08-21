@@ -194,9 +194,11 @@ free of desktop product policy.
 
 The desktop's Plugins page is a data-only view over that catalog. It can show built-in plugins,
 desktop host plugins, installed bundles, C2-owned UI contributions, and marketplace entries in one
-place. Bundle code never supplies a React renderer. Third-party contributions are descriptors that
-C2 renders with its own components, which preserves the webview's trust boundary and design
-system.
+place. Common bundle administration—GitHub import, source and trust review, install-wide enablement,
+diagnostics, and removal—also lives on this page; local marketplace files and scaffold generation
+remain available under Advanced tools. Bundle code never supplies a React renderer. Third-party
+contributions are descriptors that C2 renders with its own components, which preserves the
+webview's trust boundary and design system.
 
 State changes use a two-step protocol:
 
@@ -217,12 +219,21 @@ removing, changing trust, or replacing the installed record reconciles the dynam
 immediately. A removed runtime is unloaded and its commands disappear; a changed runtime is
 rebuilt even when its stable `bundle:<id>` name did not change.
 
+The same installed record may contribute safe UI actions and stdio language servers. UI actions
+render only in the C2-owned `rail.features`, `session.header`, `transcript.before`,
+`composer.above`, or `composer.toolbar` slots and route back to a command owned by the bundle's
+active process runtime; bundles never inject React or HTML into the renderer. LSP
+descriptors add language routing to the existing editor client, while the desktop host owns process
+startup, standard LSP framing, project cwd, conflict rejection, and teardown when bundle policy or
+trust changes.
+
 That unification currently applies to the bundle's **process runtime**. Skills and other data-only
 extension components shipped in the same bundle remain user-wide contributions. The unified page
-may list them for visibility, but they are read-only there and their install-wide enabled state is
-still managed by Bundle Tools. That install-wide switch also remains a compatibility/default input
-for a process runtime, while explicit managed runtime policy belongs to the unified manager.
-Project policy for `bundle:<id>` must not be presented as if it isolated those data contributions.
+lists their component descriptors as read-only and uses the existing bundle command for their
+install-wide enabled state; it does not route that switch through `plugins.plan_change`. That
+install-wide switch also remains a compatibility/default input for a process runtime, while
+explicit managed runtime policy belongs to the unified manager. Project policy for `bundle:<id>`
+must not be presented as if it isolated those data contributions.
 
 ### User and project policy
 
@@ -286,8 +297,8 @@ CoreApp::boot_with(config, registry).await?;
 
 A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
 remote modules; product commands remain behind the same command seam as the TUI and server. The
-current Pure Bun compatibility host implements that seam directly and reports its missing adapters
-explicitly rather than claiming the Rust graph is present.
+current Pure Bun compatibility host implements an equivalent in-process plugin graph over that seam
+and reports its missing adapters explicitly rather than claiming the Rust runtime is present.
 
 ## Two senses of "plugin"
 
@@ -315,10 +326,14 @@ The application migration is complete:
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
-- The experimental Electrobun desktop registers one in-process `pure-bun` compatibility host. It
-  preserves the renderer's typed command/event contract, but it is intentionally not full
-  plugin-graph parity. Its exact supported and fail-closed capabilities are recorded in the
-  [standard's host profiles](plugin-standard.md#7-host-capability-profiles).
+- The Electrobun desktop registers its in-process capabilities as individually owned plugins in the
+  same runtime manager used by process bundles. Only `core` and `kernel` are essential. Every
+  non-core built-in has catalog identity, command ownership, dependencies, services, components,
+  durable user/project policy, revision-bound plan/apply/reset, and host resource cleanup. The
+  manager also reads installed Bundle records, starts only trusted and enabled external runtimes,
+  registers their JSON-RPC commands into the typed command seam, and creates isolated child
+  processes and command realms for project-capable Bundles. Remaining supported and fail-closed
+  capabilities are recorded in the [standard's host profiles](plugin-standard.md#7-host-capability-profiles).
 - The renderer exposes one typed `call` request. Electrobun dispatches it directly to the Bun host;
   no Rust sidecar is built or bundled by the desktop package.
 

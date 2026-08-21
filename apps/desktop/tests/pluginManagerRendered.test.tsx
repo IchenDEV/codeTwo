@@ -5,7 +5,7 @@ import { act as reactAct } from "react";
 import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { PluginManagerPage, buildPluginManagerCatalog } = await import("../src/plugins");
+const { PluginManagerPage, PluginUiSlot, buildPluginManagerCatalog } = await import("../src/plugins");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -63,6 +63,20 @@ const plugins = [
       missingDependencies: ["git"],
       error: "Git service is unavailable.",
     },
+    bundle: {
+      id: "review-tools",
+      repository: "https://example.test/review-tools",
+      standards: ["agent_plugins"],
+      trusted: false,
+      enabled: true,
+      requiresTrust: true,
+      runtimeManaged: false,
+      contributions: [
+        { id: "runtime", label: "Process runtime", count: 1 },
+        { id: "skills", label: "Skills", count: 2 },
+      ],
+      diagnostics: [{ level: "warning", message: "Trust before running." }],
+    },
   },
 ];
 
@@ -103,6 +117,10 @@ function renderManager(overrides = {}) {
     applied: [],
     configs: [],
     installs: [],
+    imports: [],
+    bundleEnabled: [],
+    bundleTrust: [],
+    uninstalls: [],
   };
   const view = mount(
     <PluginManagerPage
@@ -126,6 +144,13 @@ function renderManager(overrides = {}) {
       onApplyChange={async (plan) => calls.applied.push(plan)}
       onSaveConfig={async (request) => calls.configs.push(request)}
       onInstallMarketplaceItem={async (request) => calls.installs.push(request)}
+      onImportGithub={async (repository) => {
+        calls.imports.push(repository);
+        return { pluginId: "review-tools", name: "Installed Tools", version: "2.0.0" };
+      }}
+      onSetBundleEnabled={async (pluginId, enabled) => calls.bundleEnabled.push({ pluginId, enabled })}
+      onSetBundleTrusted={async (pluginId, trusted) => calls.bundleTrust.push({ pluginId, trusted })}
+      onUninstallBundle={async (pluginId, keepData) => calls.uninstalls.push({ pluginId, keepData })}
       {...overrides}
     />,
   );
@@ -181,6 +206,90 @@ async function selectItem(item) {
 }
 
 describe("PluginManagerPage", () => {
+  test("renders a host-owned plugin action slot and invokes its declared action", async () => {
+    activateDom();
+    const invoked = [];
+    const contribution = {
+      id: "review",
+      pluginId: "review-tools",
+      pluginName: "Review Tools",
+      slot: "composer.above",
+      label: "Review workspace",
+      description: "Check the current changes before commit.",
+      command: "review.run",
+      input: null,
+      order: 10,
+    };
+    const view = mount(
+      <PluginUiSlot
+        slot="composer.above"
+        contributions={[contribution]}
+        onInvoke={async (value) => invoked.push(value)}
+      />,
+    );
+    await flush();
+
+    expect(view.container.querySelector('[data-plugin-ui-slot="composer.above"]')?.getAttribute("aria-label"))
+      .toBe("Plugin actions");
+    expect(view.container.textContent).toContain("Review workspace");
+    click(button(view.container, "Run"));
+    await flush();
+    expect(invoked).toEqual([contribution]);
+
+    view.unmount();
+  });
+
+  test("renders all supported plugin action slots with host-owned controls", async () => {
+    activateDom();
+    const invoked = [];
+    const slots = [
+      "rail.features",
+      "session.header",
+      "transcript.before",
+      "composer.above",
+      "composer.toolbar",
+    ];
+    const contributions = slots.map((slot, order) => ({
+      id: `action-${order}`,
+      pluginId: "review-tools",
+      pluginName: "Review Tools",
+      slot,
+      label: `Action ${order}`,
+      description: `Action ${order} description`,
+      command: "review.run",
+      input: null,
+      order,
+    }));
+    const view = mount(
+      <div>
+        {slots.map((slot, order) => (
+          <PluginUiSlot
+            key={slot}
+            slot={slot}
+            contributions={[contributions[order]]}
+            onInvoke={async (value) => invoked.push(value)}
+          />
+        ))}
+      </div>,
+    );
+    await flush();
+
+    for (const [order, slot] of slots.entries()) {
+      const region = view.container.querySelector(`[data-plugin-ui-slot="${slot}"]`);
+      expect(region).not.toBeNull();
+      const action = region.querySelector(`button[aria-label="Review Tools: Action ${order}"]`)
+        ?? button(region, order === 3 ? "Run" : `Action ${order}`);
+      expect(action).not.toBeNull();
+    }
+
+    const toolbar = view.container.querySelector('[data-plugin-ui-slot="composer.toolbar"]');
+    click(toolbar.querySelector('button[aria-label="Review Tools: Action 4"]'));
+    await flush();
+    expect(invoked).toEqual([contributions[4]]);
+
+    view.unmount();
+  });
+
   test("renders one scoped manager for built-in, host, bundle, component, and marketplace data", async () => {
     activateDom();
     const { view } = renderManager();
@@ -200,6 +309,7 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("#plugin-config-endpoint")).not.toBeNull();
     expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
     expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
+    expect(button(view.container, "Install from GitHub")).not.toBeNull();
 
     click(button(view.container, "Components 1"));
     await flush();
@@ -209,6 +319,96 @@ describe("PluginManagerPage", () => {
     await flush();
     expect(view.container.textContent).toContain("Release Review");
     expect(button(view.container, "Install")).not.toBeNull();
+
+    view.unmount();
+  });
+
+  test("shows inline GitHub bundle validation on the primary management page", async () => {
+    activateDom();
+    const { view } = renderManager();
+    await flush();
+
+    click(button(view.container, "Install from GitHub"));
+    await flush();
+    const installer = view.container.querySelector("[data-plugin-github-installer]");
+    expect(installer).not.toBeNull();
+
+    click(button(installer, "Install"));
+    await flush();
+    expect(installer.querySelector('[role="alert"]')?.textContent).toContain("owner/repository");
+    expect(installer.querySelector("#plugin-github-repository")?.getAttribute("aria-invalid")).toBe("true");
+
+    view.unmount();
+  });
+
+  test("manages bundle trust and confirms removal without discarding data by default", async () => {
+    activateDom();
+    const { view, calls } = renderManager();
+    await flush();
+
+    const bundleButton = Array.from(view.container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("Review Tools"),
+    );
+    click(bundleButton);
+    await flush();
+
+    const administration = view.container.querySelector("[data-bundle-administration]");
+    expect(administration?.textContent).toContain("Bundle management");
+    expect(administration?.textContent).toContain("1 Process runtime");
+    expect(administration?.textContent).toContain("Trust before running.");
+
+    click(button(administration, "Trust plugin"));
+    await flush();
+    expect(calls.bundleTrust).toEqual([{ pluginId: "review-tools", trusted: true }]);
+
+    click(button(administration, "Uninstall"));
+    await flush();
+    const dialog = dom.document.body.querySelector('[data-slot="alert-dialog-content"]');
+    expect(dialog?.textContent).toContain("Uninstall Review Tools?");
+    expect(dialog?.querySelector("#keep-plugin-data-review-tools")?.checked).toBe(true);
+
+    click(button(dialog, "Uninstall"));
+    await flush();
+    expect(calls.uninstalls).toEqual([{ pluginId: "review-tools", keepData: true }]);
+
+    view.unmount();
+  });
+
+  test("uses direct bundle lifecycle for data-only bundles instead of the managed runtime plan", async () => {
+    activateDom();
+    const dataOnly = {
+      ...plugins[2],
+      state: { effectiveEnabled: true, status: "active" },
+      bundle: {
+        ...plugins[2].bundle,
+        trusted: true,
+        requiresTrust: false,
+        runtimeManaged: false,
+        contributions: [{ id: "skills", label: "Skills", count: 2 }],
+        diagnostics: [],
+      },
+    };
+    const { view, calls } = renderManager({ plugins: [dataOnly] });
+    await flush();
+
+    click(view.container.querySelector("#plugin-state-review-tools"));
+    await flush();
+
+    expect(calls.bundleEnabled).toEqual([{ pluginId: "review-tools", enabled: false }]);
+    expect(calls.planned).toHaveLength(0);
+
+    view.unmount();
+  });
+
+  test("keeps an active project scope visible when it is not in the recent-project list", async () => {
+    activateDom();
+    const { view } = renderManager({
+      scope: { kind: "project", projectPath: "/tmp/unlisted" },
+      projects: [],
+    });
+    await flush();
+
+    expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("/tmp/unlisted");
 
     view.unmount();
   });
@@ -402,7 +602,7 @@ describe("PluginManagerPage", () => {
     click(button(view.container, "Components 1"));
     await flush();
     const details = view.container.querySelector("[data-component-details]");
-    expect(details?.textContent).toContain("Managed in Bundle Tools");
+    expect(details?.textContent).toContain("Managed at bundle level");
     expect(details?.querySelector('[data-slot="checkbox"]')).toBeNull();
     expect(details?.querySelector('[data-slot="select-trigger"]')).toBeNull();
 

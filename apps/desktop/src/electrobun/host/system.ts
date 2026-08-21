@@ -497,6 +497,14 @@ export class TerminalManager {
     session.terminal.close();
   }
 
+  setRuntimeEnabled(enabled: boolean, projectPath: string | null): void {
+    if (enabled) return;
+    for (const [id, session] of this.sessions) {
+      if (projectPath && session.projectPath !== projectPath) continue;
+      this.kill(id);
+    }
+  }
+
   shutdown(): void {
     for (const id of [...this.sessions.keys()]) this.kill(id);
   }
@@ -510,6 +518,7 @@ export class TerminalManager {
 interface LspSession {
   key: string;
   cwd: string;
+  pluginId: string | null;
   process: Bun.Subprocess<"pipe", "pipe", "ignore">;
 }
 
@@ -519,26 +528,41 @@ const LSP_COMMANDS: Record<string, string[]> = {
   typescript: ["typescript-language-server", "--stdio"],
   javascript: ["typescript-language-server", "--stdio"],
   go: ["gopls"],
+  c: ["clangd"],
+  cpp: ["clangd"],
+  vue: ["vue-language-server", "--stdio"],
+  svelte: ["svelteserver", "--stdio"],
+  ruby: ["ruby-lsp"],
+  php: ["intelephense", "--stdio"],
+  yaml: ["yaml-language-server", "--stdio"],
 };
+
+export interface LspServerLaunch {
+  id: string;
+  pluginId: string;
+  command: string[];
+  env: Record<string, string>;
+}
 
 export class LspManager {
   private readonly sessions = new Map<string, LspSession>();
 
   constructor(private readonly emit: (event: DesktopEvent) => void) {}
 
-  start(cwd: string, language: string): string | null {
-    const command = LSP_COMMANDS[language.toLocaleLowerCase()];
-    if (!command || !which(command[0])) return null;
-    const key = `${language.toLocaleLowerCase()}:${realpathSync(cwd)}`;
+  start(cwd: string, language: string, launch: LspServerLaunch | null = null): string | null {
+    const command = launch?.command ?? LSP_COMMANDS[language.toLocaleLowerCase()];
+    if (!command || command.length === 0 || (!launch && !which(command[0]))) return null;
+    const canonicalCwd = realpathSync(cwd);
+    const key = `${launch?.id ?? command[0]}:${canonicalCwd}`;
     if (this.sessions.has(key)) return key;
     const child = Bun.spawn(command, {
       cwd,
-      env: process.env,
+      env: { ...process.env, ...(launch?.env ?? {}) },
       stdin: "pipe",
       stdout: "pipe",
       stderr: "ignore",
     });
-    const session = { key, cwd: realpathSync(cwd), process: child };
+    const session = { key, cwd: canonicalCwd, pluginId: launch?.pluginId ?? null, process: child };
     this.sessions.set(key, session);
     void this.read(session, child.stdout);
     void child.exited.then(() => {
@@ -562,6 +586,13 @@ export class LspManager {
     if (enabled) return;
     for (const [key, session] of this.sessions) {
       if (projectPath && !pathInside(realpathSync(projectPath), session.cwd)) continue;
+      this.sessions.delete(key);
+      session.process.kill();
+    }
+  }
+
+  invalidateRouting(): void {
+    for (const [key, session] of this.sessions) {
       this.sessions.delete(key);
       session.process.kill();
     }

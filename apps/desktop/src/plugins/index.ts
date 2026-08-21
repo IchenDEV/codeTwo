@@ -1,4 +1,11 @@
 export { PluginManagerPage } from "./PluginManagerPage";
+export { PluginUiSlot } from "./PluginUiSlot";
+export { activePluginLanguageServers, activePluginUiContributions } from "./contributions";
+export type {
+  ActivePluginLanguageServer,
+  ActivePluginUiContribution,
+  ActivePluginUiContributionsBySlot,
+} from "./contributions";
 export {
   BUILTIN_UI_COMPONENTS,
   buildPluginManagerCatalog,
@@ -13,6 +20,10 @@ export type {
 } from "./catalog";
 export type {
   PluginManagerActiveResource,
+  PluginManagerBundle,
+  PluginManagerBundleContribution,
+  PluginManagerBundleDiagnostic,
+  PluginManagerBundleInstallResult,
   PluginManagerChangePlan,
   PluginManagerChangeRequest,
   PluginManagerComponent,

@@ -17,6 +17,22 @@ import type {
   PluginManagerStatus,
 } from "./types";
 
+const BUNDLE_CONTRIBUTIONS = [
+  ["runtime", "Process runtime"],
+  ["skills", "Skills"],
+  ["subagents", "Subagents"],
+  ["mcp_servers", "MCP servers"],
+  ["commands", "Commands"],
+  ["hooks", "Hooks"],
+  ["lsp_servers", "Language servers"],
+  ["scaffolds", "Scaffolds"],
+  ["monitors", "Monitors"],
+  ["apps", "Apps"],
+  ["ui", "UI actions"],
+  ["scenes", "Scenes"],
+  ["pipelines", "Pipelines"],
+] as const;
+
 export const BUILTIN_UI_COMPONENTS = [
   {
     id: "plugin-manager.page",
@@ -259,9 +275,11 @@ function bundleId(id: string): string {
 
 function bundleState(bundle: PluginInfo): PluginManagerScopedState {
   const effectiveEnabled = bundle.enabled;
+  const requiresTrust = (bundle.counts.runtime ?? 0) > 0 ||
+    bundle.extension_components.some((component) => component.status === "requires_trust");
   return {
     effectiveEnabled,
-    status: !effectiveEnabled ? "disabled" : bundle.trusted ? "active" : "pending",
+    status: !effectiveEnabled ? "disabled" : requiresTrust && !bundle.trusted ? "pending" : "active",
     error: bundle.diagnostics.find((diagnostic) => diagnostic.level === "error")?.message ?? null,
     missingDependencies: bundle.diagnostics
       .filter((diagnostic) => diagnostic.level === "warning")
@@ -322,6 +340,8 @@ export function buildPluginManagerCatalog({
   const bundlePlugins: PluginManagerPlugin[] = bundles.map((bundle) => {
     const id = bundleId(bundle.id);
     const policyEntry = entries.get(id);
+    const requiresTrust = (bundle.counts.runtime ?? 0) > 0 ||
+      bundle.extension_components.some((component) => component.status === "requires_trust");
     return {
       id,
       name: bundle.name,
@@ -352,6 +372,24 @@ export function buildPluginManagerCatalog({
           (typeof policyEntry.config === "object" &&
             policyEntry.config !== null &&
             Object.keys(policyEntry.config).length > 0)),
+      bundle: {
+        id: bundle.id,
+        repository: bundle.repository || null,
+        standards: bundle.standards,
+        trusted: bundle.trusted,
+        enabled: bundle.enabled,
+        requiresTrust,
+        runtimeManaged: policyEntry != null,
+        contributions: BUNDLE_CONTRIBUTIONS.flatMap(([key, label]) => {
+          const count = bundle.counts[key] ?? 0;
+          return count > 0 ? [{ id: key, label, count }] : [];
+        }),
+        diagnostics: bundle.diagnostics.map((diagnostic) => ({
+          level: diagnostic.level,
+          message: diagnostic.message,
+          component: diagnostic.component ?? null,
+        })),
+      },
     };
   });
 

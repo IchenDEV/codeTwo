@@ -26,7 +26,7 @@ let runtimeEnabled = false;
 let runtimeGeneration = 0;
 
 /** Languages served by an external LSP server rather than Monaco's built-in workers. */
-const SERVER_GROUPS: Record<string, string[]> = {
+const BUILTIN_SERVER_GROUPS: Record<string, string[]> = {
   rust: ["rust"],
   python: ["python"],
   go: ["go"],
@@ -39,8 +39,24 @@ const SERVER_GROUPS: Record<string, string[]> = {
   yaml: ["yaml"],
 };
 
+export interface PluginLanguageServerRegistration {
+  pluginId: string;
+  id: string;
+  languages: string[];
+}
+
+let pluginServerGroups: Record<string, string[]> = {};
+let pluginServerSignature = "[]";
+
+function serverGroups(): Record<string, string[]> {
+  return { ...BUILTIN_SERVER_GROUPS, ...pluginServerGroups };
+}
+
 function groupOf(lang: string): string | null {
-  for (const [group, langs] of Object.entries(SERVER_GROUPS)) {
+  for (const [group, langs] of [
+    ...Object.entries(pluginServerGroups),
+    ...Object.entries(BUILTIN_SERVER_GROUPS),
+  ]) {
     if (langs.includes(lang)) return group;
   }
   return null;
@@ -268,6 +284,35 @@ let listening = false;
 type RuntimeEnabledListener = (workspace: string | undefined) => void;
 const runtimeEnabledListeners = new Set<RuntimeEnabledListener>();
 
+/** Replace the manifest-provided language routing table and reconnect mounted editor models. */
+export function configurePluginLanguageServers(servers: PluginLanguageServerRegistration[]): void {
+  const normalized = servers
+    .map((server) => ({
+      pluginId: server.pluginId,
+      id: server.id,
+      languages: [...new Set(server.languages.map((language) => language.toLocaleLowerCase()))].sort(),
+    }))
+    .sort((left, right) =>
+      left.pluginId.localeCompare(right.pluginId) || left.id.localeCompare(right.id));
+  const signature = JSON.stringify(normalized);
+  if (signature === pluginServerSignature) return;
+  pluginServerSignature = signature;
+  const providers = new Map<string, number>();
+  for (const server of normalized) {
+    for (const language of server.languages) providers.set(language, (providers.get(language) ?? 0) + 1);
+  }
+  pluginServerGroups = Object.fromEntries(normalized.flatMap((server) => {
+    const languages = server.languages.filter((language) => providers.get(language) === 1);
+    return languages.length > 0 ? [[`plugin:${server.pluginId}:${server.id}`, languages]] : [];
+  }));
+  runtimeGeneration += 1;
+  acquisitions.clear();
+  for (const client of [...LspClient.clients.values()]) client.dispose();
+  if (runtimeEnabled) {
+    for (const listener of runtimeEnabledListeners) listener(undefined);
+  }
+}
+
 /** Apply the active project component policy without ever calling the unloadable LSP commands. */
 export function setLspRuntimeEnabled(enabled: boolean, workspace?: string): void {
   if (runtimeEnabled === enabled) return;
@@ -325,7 +370,7 @@ export async function getClient(cwd: string, lang: string): Promise<LspClient | 
         if (!runtimeEnabled || generation !== runtimeGeneration) return null;
         const key = await lspStart(cwd, lang);
         if (!key || !runtimeEnabled || generation !== runtimeGeneration) return null;
-        const client = LspClient.clients.get(key) ?? new LspClient(key, cwd, SERVER_GROUPS[group]);
+        const client = LspClient.clients.get(key) ?? new LspClient(key, cwd, serverGroups()[group]);
         return (await client.ready) ? client : null;
       } catch {
         return null;

@@ -77,8 +77,10 @@ rl.on("line", async (line) => {
       const { name, args } = message.params;
       try {
         if (name !== "hello.dirty") throw new Error(`no command ${name}`);
+        const cwd = args.cwd ?? args.context?.cwd;
+        if (!cwd) throw new Error("cwd is required");
         // Reach a host command by name — the same registry a Rust plugin uses.
-        const status = await callHost("git.status", { cwd: args.cwd });
+        const status = await callHost("git.status", { cwd });
         send({
           jsonrpc: "2.0",
           id: message.id,
