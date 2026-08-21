@@ -1,7 +1,6 @@
-//! The Rust host adapter used by TUI/server must reach the real ACP session seam. Unit tests in
-//! `codex_runtime` cover discovery and provider projection; these tests prove the projected MCP
-//! servers and instructions survive engine compilation into both `session/new` and
-//! `session/load`.
+//! The Rust host adapter used by TUI/server must reach the real ACP session seam. Tool Broker
+//! conformance is covered by `tool_broker_adapter`; these tests prove the returned MCP servers and
+//! instructions survive engine compilation into both `session/new` and `session/load`.
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -50,6 +49,7 @@ fn provider_toolsets() -> HashMap<String, ProviderToolset> {
         ProviderId::Grok.as_str().to_string(),
         ProviderToolset {
             capabilities: Vec::new(),
+            native_capabilities: Vec::new(),
             mcp_servers: vec![McpServer {
                 name: "computer-use".into(),
                 cwd: Some("/verified/computer-use".into()),

@@ -229,19 +229,19 @@ Configured MCP backends are portable; provider-native tools remain provider-owne
 sessions keep their startup MCP snapshot, so start a new session after changing a Browser Use
 backend.
 
-MCP servers are fixed when an ACP session starts. The Pure Bun desktop host and Rust CoreApp host
-implement the same logical provider-toolset interface as separate adapters:
+MCP servers are fixed when an ACP session starts. Every surface resolves them through the same Bun
+Tool Broker:
 
-- packaged Electrobun desktop performs discovery and ACP injection in TypeScript/Bun and does not
-  launch the legacy Rust desktop sidecar;
-- TUI and server perform discovery and ACP injection in the Rust core for both `session/new` and
-  `session/load`;
-- the built-in OpenAI interactive bridge requires the process to run as the logged-in user with an
-  active macOS GUI session; configured Cua/cross-OS/remote MCP backends follow their own runtime
-  requirements.
+- packaged Electrobun desktop calls the broker in-process and does not launch a Rust sidecar;
+- TUI and server call the compiled `codetwo-tool-broker` over JSON-RPC, then the Rust core injects
+  that returned plan for both `session/new` and `session/load`;
+- the broker returns only native capability ids and standard MCP specs. OpenAI's private
+  `node_repl` endpoint never crosses the Codex adapter boundary;
+- configured Cua, Browser Use, Playwright, Chrome DevTools, cross-OS, and remote MCP backends follow
+  their own runtime requirements.
 
-After changing the selection, open a new session. The desktop and Rust hosts refresh their discovery
-state after the Settings save, but an already-live ACP session cannot add or replace MCP servers in
+After changing the selection, open a new session. The desktop and Rust hosts refresh their broker
+plan after the Settings save, but an already-live ACP session cannot add or replace MCP servers in
 place.
 
 ## The ACP loop

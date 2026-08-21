@@ -8,7 +8,7 @@
 use crate::app::service::{EventBus, Paths, ProviderService, StoreService};
 use crate::app::{json, take_args};
 use crate::host_tools::HostToolDiscovery;
-use crate::provider::registry_with_codex_runtime;
+use crate::provider::default_registry;
 use crate::store::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -214,7 +214,7 @@ impl Plugin for ProvidersPlugin {
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let paths = ctx.expect::<Paths>()?;
         let host_tools = HostToolDiscovery::detect(&paths.data_dir);
-        let providers = registry_with_codex_runtime(host_tools.codex());
+        let providers = default_registry();
         let service = Arc::new(ProviderService::new(providers, host_tools));
 
         let listed = service.clone();

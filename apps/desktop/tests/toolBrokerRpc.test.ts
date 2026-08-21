@@ -1,0 +1,47 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const entrypoint = new URL("../src/electrobun/toolBrokerRpc.ts", import.meta.url).pathname;
+
+describe("Tool Broker JSON-RPC adapter", () => {
+  test("resolves configured MCP backends through the real subprocess boundary", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-rpc-"));
+    try {
+      writeFileSync(join(dataDir, "host-tools.json"), JSON.stringify({
+        schema_version: 1,
+        computer_use_selection: { claude_code: "cua" },
+        computer_use: [{
+          id: "cua",
+          enabled: true,
+          server: { name: "cua-driver", command: process.execPath, env: { CUA_MODE: "mcp" } },
+        }],
+      }));
+      const request = {
+        jsonrpc: "2.0",
+        id: 7,
+        method: "tool.resolve",
+        params: { data_dir: dataDir, provider_id: "claude_code", environment: {} },
+      };
+      const child = Bun.spawnSync(["bun", entrypoint], {
+        stdin: new TextEncoder().encode(JSON.stringify(request)),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      expect(child.exitCode).toBe(0);
+      const response = JSON.parse(child.stdout.toString());
+      expect(response.id).toBe(7);
+      expect(response.result.native_capabilities).toEqual([]);
+      expect(response.result.mcp_servers).toEqual([{
+        name: "cua-driver",
+        command: process.execPath,
+        args: [],
+        env: [["CUA_MODE", "mcp"]],
+      }]);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+});

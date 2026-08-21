@@ -44,13 +44,18 @@ pub struct ProviderCapability {
 
 /// The complete host-tool projection for one provider.
 ///
-/// Callers do not need to know whether a capability is native to the provider or supplied by a
-/// host-backed MCP adapter. ACP session creation consumes `mcp_servers`; provider selectors and
-/// diagnostics consume `capabilities`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// ACP session creation consumes `mcp_servers`; provider selectors and diagnostics consume
+/// `capabilities`. `native_capabilities` carries identifiers only so no private provider transport
+/// can escape its adapter.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderToolset {
+    #[serde(default)]
     pub capabilities: Vec<ProviderCapability>,
+    #[serde(default)]
+    pub native_capabilities: Vec<ProviderCapabilityId>,
+    #[serde(default)]
     pub mcp_servers: Vec<McpServer>,
+    #[serde(default)]
     pub instructions: Vec<String>,
 }
 

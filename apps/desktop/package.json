@@ -8,6 +8,7 @@
     "dev:renderer": "vite",
     "build": "bun scripts/run-electrobun.ts build --env=dev",
     "build:app": "bun scripts/run-electrobun.ts build --env=stable",
+    "build:tool-broker": "bun build --compile src/electrobun/toolBrokerRpc.ts --outfile dist/tool-broker/codetwo-tool-broker",
     "build:renderer": "bun run check:design && tsc --noEmit && vite build",
     "build:canvas:remote": "vite build --config vite.canvas.config.ts",
     "check:design": "bun scripts/check-design-system.ts",
