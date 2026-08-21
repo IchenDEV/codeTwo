@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,7 +11,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
     try {
       writeFileSync(join(dataDir, "host-tools.json"), JSON.stringify({
         schema_version: 1,
-        computer_use_selection: { claude_code: "cua" },
+        computer_use_selection: { "*": "cua" },
         computer_use: [{
           id: "cua",
           enabled: true,
@@ -40,6 +40,35 @@ describe("Tool Broker JSON-RPC adapter", () => {
         args: [],
         env: [["CUA_MODE", "mcp"]],
       }]);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  test("persists Computer Use as one global selection without a provider id", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-global-selection-"));
+    try {
+      const request = {
+        jsonrpc: "2.0",
+        id: 8,
+        method: "selection.set",
+        params: {
+          data_dir: dataDir,
+          kind: "computer_use",
+          backend_id: "automatic",
+          environment: {},
+        },
+      };
+      const child = Bun.spawnSync(["bun", entrypoint], {
+        stdin: new TextEncoder().encode(JSON.stringify(request)),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      expect(child.exitCode).toBe(0);
+      expect(JSON.parse(child.stdout.toString()).result.computer_use.selections).toEqual({ "*": "automatic" });
+      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).computer_use_selection)
+        .toEqual({ "*": "automatic" });
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }

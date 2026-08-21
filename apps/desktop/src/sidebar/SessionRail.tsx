@@ -69,7 +69,7 @@ function shortAge(ts: number): string {
 /**
  * The rail, four zones top to bottom:
  *
- * 1. Title — wordmark on the traffic-light line, with search directly below it.
+ * 1. Title — sidebar controls on the traffic-light line, with search directly below it.
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
  * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
@@ -623,14 +623,11 @@ export function SessionRail({
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* Keep the wordmark and controls centred in the same 48px title row as the main header,
-          with enough clearance for the macOS traffic lights. */}
+      {/* Keep the controls centred in the same 48px title row as the main header, with enough
+          clearance for the macOS traffic lights. */}
       <div
         className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pl-24 pr-3"
       >
-        <span className="electrobun-webkit-app-region-drag min-w-0 truncate text-heading font-semibold">
-          {t("app.name")}
-        </span>
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
         <Tooltip>
           <TooltipTrigger

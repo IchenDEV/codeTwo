@@ -283,10 +283,13 @@ export function loadConfiguredComputerUse(
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
-  const selections = Object.fromEntries(
+  const persistedSelections = Object.fromEntries(
     Object.entries(table(document.computer_use_selection))
       .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+  const selections: Record<string, string> = typeof persistedSelections["*"] === "string"
+    ? { "*": persistedSelections["*"] }
+    : {};
   if (document.schema_version !== 1) {
     return {
       bridges: [],
@@ -565,21 +568,16 @@ export function computerUseSettings(evidence: HostToolEvidence): ComputerUseSett
 
 export function saveComputerUseSelection(
   dataDir: string,
-  providerId: string,
   backendId: string,
   evidence: HostToolEvidence,
 ): void {
-  if (!/^[A-Za-z0-9_.*-]+$/.test(providerId)) throw new Error(`invalid provider id ${JSON.stringify(providerId)}`);
   if (backendId !== COMPUTER_USE_AUTOMATIC && backendId !== COMPUTER_USE_DISABLED) {
     const backend = evidence.computerUseBackends.find((candidate) => candidate.id === backendId);
     if (!backend) throw new Error(`unknown computer-use backend ${JSON.stringify(backendId)}`);
     if (!backend.available) throw new Error(backend.reason ?? `computer-use backend ${JSON.stringify(backendId)} is unavailable`);
-    if (!matchesProvider(backend.providers, backend.excludeProviders, providerId)) {
-      throw new Error(`computer-use backend ${JSON.stringify(backendId)} is not configured for provider ${JSON.stringify(providerId)}`);
-    }
   }
 
-  new JsonSelectionStore(dataDir).set("computer_use", providerId, backendId);
+  new JsonSelectionStore(dataDir).setGlobal("computer_use", backendId);
 }
 
 export function browserUseSettings(evidence: HostToolEvidence): BrowserUseSettings {

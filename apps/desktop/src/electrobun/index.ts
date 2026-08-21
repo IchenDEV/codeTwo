@@ -11,6 +11,7 @@ import type {
 } from "./rpc";
 import { PureBunHost } from "./host";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
+import { configureMacOSWindowEffects } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
@@ -165,10 +166,25 @@ const mainWindow = new BrowserWindow({
   renderer: "native",
   rpc,
   titleBarStyle: "hiddenInset",
+  transparent: process.platform === "darwin",
   sandbox: false,
 });
+if (process.platform === "darwin") {
+  const windowEffectsStatus = configureMacOSWindowEffects(mainWindow.ptr);
+  if (!windowEffectsStatus.shadow) {
+    console.warn("The macOS system window shadow could not be restored");
+  }
+  if (!windowEffectsStatus.backdrop) {
+    console.warn("The macOS system backdrop could not be installed");
+  }
+}
 
 mainWindow.webview.on("dom-ready", () => {
+  if (process.platform === "darwin") {
+    mainWindow.webview.executeJavascript(
+      'document.documentElement.classList.add("macos-window-glass")',
+    );
+  }
   mainWindow.setWindowButtonPosition(24, 17);
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });

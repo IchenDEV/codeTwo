@@ -99,14 +99,19 @@ export class ToolBroker implements ToolBrokerPort {
   }
 
   resolve({ providerId, context: { evidence } }: ResolveRequest): ToolPlan {
-    const computerSelection = evidence.computerUseSelections[providerId]
-      ?? evidence.computerUseSelections["*"]
-      ?? null;
+    const computerSelection = evidence.computerUseSelections["*"] ?? null;
     const computerExplicitlySelected = computerSelection !== null
       && computerSelection !== COMPUTER_USE_AUTOMATIC
       && computerSelection !== COMPUTER_USE_DISABLED;
-    const nativeComputerAllowed = computerSelection === null || computerSelection === COMPUTER_USE_AUTOMATIC;
-    const portableComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED && !computerExplicitlySelected;
+    const selectedComputerBridge = computerExplicitlySelected
+      ? evidence.configuredComputerUse.find((bridge) => bridge.id === computerSelection) ?? null
+      : null;
+    const selectedComputerMatchesProvider = selectedComputerBridge !== null
+      && matchesProvider(selectedComputerBridge, providerId);
+    const nativeComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED
+      && !selectedComputerMatchesProvider;
+    const portableComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED
+      && !selectedComputerMatchesProvider;
     const browserSelection = evidence.browserUseSelections[providerId]
       ?? evidence.browserUseSelections["*"]
       ?? null;
@@ -256,7 +261,7 @@ export class ToolBroker implements ToolBrokerPort {
         "If the first call fails, verify the backend process, permissions, and MCP transport, then start a new C2 session.",
         configured.length === 1 ? configured[0].version : null,
       ));
-    } else if (computerExplicitlySelected) {
+    } else if (computerExplicitlySelected && !providerComputerReady) {
       replaceCapability(capabilities, capability(
         "computer_use",
         "unavailable",
@@ -267,7 +272,7 @@ export class ToolBroker implements ToolBrokerPort {
       replaceCapability(capabilities, capability(
         "computer_use",
         "unavailable",
-        "Computer Use is disabled for this provider.",
+        "Computer Use is disabled.",
         "Choose Automatic or an available backend in Settings → Computer Use.",
       ));
     } else if (evidence.hostToolsConfigErrors.length > 0) {

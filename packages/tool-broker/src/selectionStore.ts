@@ -7,6 +7,7 @@ export type SelectionKind = "computer_use" | "browser_use";
 
 export interface SelectionStorePort {
   set(kind: SelectionKind, providerId: string, backendId: string): void;
+  setGlobal(kind: SelectionKind, backendId: string): void;
 }
 
 type Document = Record<string, unknown>;
@@ -20,6 +21,14 @@ export class JsonSelectionStore implements SelectionStorePort {
   constructor(private readonly dataDir: string) {}
 
   set(kind: SelectionKind, providerId: string, backendId: string): void {
+    this.write(kind, (current) => ({ ...current, [providerId]: backendId }));
+  }
+
+  setGlobal(kind: SelectionKind, backendId: string): void {
+    this.write(kind, () => ({ "*": backendId }));
+  }
+
+  private write(kind: SelectionKind, update: (current: Document) => Document): void {
     mkdirSync(this.dataDir, { recursive: true });
     const path = join(this.dataDir, HOST_TOOLS_CONFIG_FILE);
     let document: Document = { schema_version: 1 };
@@ -29,10 +38,7 @@ export class JsonSelectionStore implements SelectionStorePort {
     }
     document.schema_version = 1;
     const field = `${kind}_selection`;
-    document[field] = {
-      ...table(document[field]),
-      [providerId]: backendId,
-    };
+    document[field] = update(table(document[field]));
     const temporary = join(
       this.dataDir,
       `.${HOST_TOOLS_CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`,

@@ -98,6 +98,16 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("omits the sidebar wordmark while keeping the collapse control", () => {
+    activateDom();
+    const view = renderRail();
+
+    expect(view.container.textContent).not.toContain("C2");
+    expect(view.container.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
+
+    view.unmount();
+  });
+
   test("groups primary features into compact labeled navigation rows", () => {
     activateDom();
     const opened = [];

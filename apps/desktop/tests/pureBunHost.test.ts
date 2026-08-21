@@ -31,6 +31,77 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 describe("pure Bun desktop host", () => {
+  test("persists a model chosen before session creation", async () => {
+    const value = fixture();
+    try {
+      await value.host.call(
+        "engine.new_session",
+        {
+          cwd: value.workspace,
+          provider: "codex",
+          model: "gpt-5.6-terra",
+          initial_policy: { mode: "ask", sandbox: "workspace_write" },
+        },
+        value.workspace,
+      );
+      const [session] = await value.host.call("sessions.list", null, null) as Array<{
+        id: string;
+        model: string | null;
+      }>;
+
+      expect(session.model).toBe("gpt-5.6-terra");
+      expect(value.events).toContainEqual({
+        name: "engine-event",
+        payload: expect.objectContaining({
+          event: "models",
+          session: session.id,
+          current: "gpt-5.6-terra",
+        }),
+      });
+    } finally {
+      await dispose(value);
+    }
+  });
+
+  test("persists per-session memory policy before prompt submission", async () => {
+    const value = fixture();
+    try {
+      await value.host.call(
+        "engine.new_session",
+        {
+          cwd: value.workspace,
+          provider: "codex",
+          initial_policy: { mode: "ask", sandbox: "workspace_write" },
+        },
+        value.workspace,
+      );
+      const [session] = await value.host.call("sessions.list", null, null) as Array<{
+        id: string;
+        memory_read: string;
+        memory_write: string;
+      }>;
+
+      expect(await value.host.call(
+        "memory.set_session_policy",
+        { session: session.id, read: "deny", write: "allow" },
+        value.workspace,
+      )).toBe(true);
+
+      const [updated] = await value.host.call("sessions.list", null, null) as Array<{
+        id: string;
+        memory_read: string;
+        memory_write: string;
+      }>;
+      expect(updated).toMatchObject({
+        id: session.id,
+        memory_read: "deny",
+        memory_write: "allow",
+      });
+    } finally {
+      await dispose(value);
+    }
+  });
+
   test("persists projects and sessions while confining filesystem access", async () => {
     const value = fixture();
     try {

@@ -247,7 +247,7 @@ export function SettingsPage({
   updateStatusLoader?: () => Promise<AppUpdateStatus>;
   updateCheckStarter?: () => Promise<AppUpdateStatus>;
   computerUseSettingsLoader?: () => Promise<ComputerUseSettings>;
-  computerUseSelectionSaver?: (provider: string, backend: string) => Promise<ComputerUseSettings>;
+  computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
   browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
   browserUseSelectionSaver?: (provider: string, backend: string) => Promise<BrowserUseSettings>;
 }) {
@@ -457,11 +457,11 @@ export function SettingsPage({
     }
   };
 
-  const saveComputerUseSelection = async (providerId: string, backendId: string) => {
-    setComputerUseSaving(providerId);
+  const saveComputerUseSelection = async (backendId: string) => {
+    setComputerUseSaving(backendId);
     setComputerUseError(null);
     try {
-      setComputerUseSettings(await computerUseSelectionSaver(providerId, backendId));
+      setComputerUseSettings(await computerUseSelectionSaver(backendId));
     } catch (error) {
       setComputerUseError(t("settings.computerUseLoadFailed", { error: String(error) }));
     } finally {
@@ -480,6 +480,14 @@ export function SettingsPage({
       setBrowserUseSaving(null);
     }
   };
+
+  const computerUseSelection = computerUseSettings?.selections["*"] ?? "automatic";
+  const computerUseSelectionLabel = computerUseSelection === "automatic"
+    ? t("settings.computerUseAutomatic")
+    : computerUseSelection === "disabled"
+      ? t("settings.computerUseDisabled")
+      : computerUseSettings?.backends.find((backend) => backend.id === computerUseSelection)?.display_name
+        ?? computerUseSelection;
 
   const keyRow = (action: string) => {
     const entry = byAction.get(action);
@@ -816,51 +824,33 @@ export function SettingsPage({
                   <p className="py-5 text-ui text-muted-foreground">{t("settings.computerUseLoading")}</p>
                 ) : (
                   <>
-                    {providers.map((candidate) => {
-                      const selected = computerUseSettings.selections[candidate.id] ?? "automatic";
-                      const backends = computerUseSettings.backends.filter((backend) =>
-                        computerUseBackendMatches(backend, candidate.id)
-                      );
-                      const selectedLabel = selected === "automatic"
-                        ? t("settings.computerUseAutomatic")
-                        : selected === "disabled"
-                          ? t("settings.computerUseDisabled")
-                          : backends.find((backend) => backend.id === selected)?.display_name ?? selected;
-                      return (
-                        <Row
-                          key={candidate.id}
-                          icon={<ProviderIcon provider={candidate.id} className="size-5 shrink-0 opacity-80" />}
-                          label={candidate.display_name}
-                          hint={<span className="font-mono">{candidate.id}</span>}
+                    <Row label={t("settings.computerUseBackend")}>
+                      <Select
+                        value={computerUseSelection}
+                        disabled={computerUseSaving !== null}
+                        onValueChange={(backend) => {
+                          if (backend) void saveComputerUseSelection(backend);
+                        }}
+                      >
+                        <SelectTrigger
+                          data-computer-use-selection
+                          aria-label={t("settings.computerUseBackend")}
+                          size="sm"
+                          className="w-52 justify-between"
                         >
-                          <Select
-                            value={selected}
-                            disabled={computerUseSaving !== null}
-                            onValueChange={(backend) => {
-                              if (backend) void saveComputerUseSelection(candidate.id, backend);
-                            }}
-                          >
-                            <SelectTrigger
-                              data-computer-use-provider={candidate.id}
-                              aria-label={`${candidate.display_name}: ${t("settings.computerUse")}`}
-                              size="sm"
-                              className="w-52 justify-between"
-                            >
-                              <SelectValue>{selectedLabel}</SelectValue>
-                            </SelectTrigger>
-                            <SelectContent position="popper" align="end">
-                              <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
-                              <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
-                              {backends.map((backend) => (
-                                <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
-                                  {backend.display_name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </Row>
-                      );
-                    })}
+                          <SelectValue>{computerUseSelectionLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent position="popper" align="end">
+                          <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
+                          <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
+                          {computerUseSettings.backends.map((backend) => (
+                            <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                              {backend.display_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Row>
 
                     <GroupHeading>{t("settings.computerUseBackends")}</GroupHeading>
                     {computerUseSettings.backends.map((backend) => (
@@ -990,45 +980,47 @@ export function SettingsPage({
                         {p.available ? t("settings.installed") : t("settings.notInstalled")}
                       </span>
                     </Row>
-                    {p.capabilities.map((capability) => (
-                      <div
-                        key={capability.id}
-                        className="ml-8 flex items-start justify-between gap-6 py-2.5"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
-                            {CAPABILITY_LABELS[capability.id]}
-                            {capability.experimental && <Badge variant="outline">Experimental</Badge>}
-                            {capability.version && (
-                              <span className="font-mono text-cap text-muted-foreground">
-                                {capability.version}
-                              </span>
+                    {p.capabilities
+                      .filter((capability) => capability.state !== "unavailable")
+                      .map((capability) => (
+                        <div
+                          key={capability.id}
+                          data-provider-capability={`${p.id}:${capability.id}`}
+                          className="ml-8 flex items-start justify-between gap-6 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
+                              {CAPABILITY_LABELS[capability.id]}
+                              {capability.experimental && <Badge variant="outline">Experimental</Badge>}
+                              {capability.version && (
+                                <span className="font-mono text-cap text-muted-foreground">
+                                  {capability.version}
+                                </span>
+                              )}
+                            </div>
+                            {capability.reason && (
+                              <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">
+                                {capability.reason}
+                              </p>
+                            )}
+                            {capability.fix && (
+                              <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">
+                                {capability.fix}
+                              </p>
                             )}
                           </div>
-                          {capability.reason && (
-                            <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">
-                              {capability.reason}
-                            </p>
-                          )}
-                          {capability.fix && (
-                            <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">
-                              {capability.fix}
-                            </p>
-                          )}
+                          <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
+                            <span
+                              className={cn(
+                                "size-1.5 rounded-full",
+                                capability.state === "ready" && "bg-success",
+                                capability.state === "unverified" && "bg-warning",
+                              )}
+                            />
+                            {capability.state}
+                          </span>
                         </div>
-                        <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
-                          <span
-                            className={cn(
-                              "size-1.5 rounded-full",
-                              capability.state === "ready" && "bg-success",
-                              capability.state === "unverified" && "bg-warning",
-                              capability.state === "unavailable" && "bg-border",
-                            )}
-                          />
-                          {capability.state}
-                        </span>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 ))}
               </Page>

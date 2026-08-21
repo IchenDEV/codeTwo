@@ -11,7 +11,7 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
-function renderDock(availableSurfaces, tab = "home") {
+function renderDock(availableSurfaces, tab = "home", placement = "right") {
   return mount(
     <I18nProvider>
       <Dock
@@ -37,14 +37,32 @@ function renderDock(availableSurfaces, tab = "home") {
         fileReveal={null}
         onActiveFile={() => {}}
         onCloseFile={() => {}}
+        placement={placement}
         width={440}
         onWidth={() => {}}
+        height={280}
+        onHeight={() => {}}
       />
     </I18nProvider>,
   );
 }
 
 describe("Dock plugin component gate", () => {
+  test("renders the terminal as a vertically resizable bottom panel", async () => {
+    activateDom();
+    const view = renderDock(["terminal"], "home", "bottom");
+    await flush();
+
+    const panel = view.container.querySelector('[data-dock-placement="bottom"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.classList.contains("dock-panel-bottom")).toBe(true);
+    expect(panel?.classList.contains("border-l")).toBe(false);
+    expect(panel?.getAttribute("style")).toContain("height: 280px");
+    expect(panel?.querySelector('[data-dock-resize="vertical"]')).not.toBeNull();
+
+    view.unmount();
+  });
+
   test("advertises only enabled surfaces and refuses to mount a disabled requested tab", async () => {
     activateDom();
     const view = renderDock(["files"], "terminal");

@@ -220,25 +220,29 @@ interface PickerRow {
 }
 
 const REASONING_STEP_INSET = 26;
+const COMPACT_REASONING_STEP_INSET = 16;
 
 /** Provider-owned discrete effort choices presented through the reference's continuous slider. */
 export function ReasoningScale({
   label,
   rows,
   onSelect,
+  compact = false,
 }: {
   label: string;
   rows: PickerRow[];
   onSelect: (row: PickerRow) => void;
+  compact?: boolean;
 }) {
   const selectedIndex = Math.max(0, rows.findIndex((row) => row.selected));
   const selected = rows[selectedIndex];
   const progress = rows.length > 1 ? selectedIndex / (rows.length - 1) : 0;
-  const fillAdjustment = REASONING_STEP_INSET * (1 - 2 * progress);
+  const stepInset = compact ? COMPACT_REASONING_STEP_INSET : REASONING_STEP_INSET;
+  const fillAdjustment = stepInset * (1 - 2 * progress);
   const fillWidth = `calc(${progress * 100}% + ${fillAdjustment}px)`;
 
   return (
-    <div className="reasoning-selector-scale">
+    <div className={cn("reasoning-selector-scale", compact && "reasoning-selector-scale--compact")}>
       <div className="reasoning-selector-track" aria-hidden>
         <span className="reasoning-selector-fill" style={{ width: fillWidth }} />
         <span className="reasoning-selector-dots">
@@ -613,8 +617,8 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
  * Both APIs are optional and many adapters skip both, in which case the flat list is the core's
  * built-in one for that provider rather than the agent's own — same shape either way. Only a
  * provider we have no list for (a custom one) falls through to the note explaining that its CLI
- * config decides. Everything is hidden until a session exists, because before that there's nothing
- * to ask.
+ * config decides. Before a session exists, only providers with an advertised model list show the
+ * picker; provider-owned config options still arrive after session creation.
  */
 export function ModelPicker({
   models,
@@ -625,6 +629,7 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
+  compact = false,
 }: {
   models: ModelChoice[];
   current: string | null;
@@ -634,12 +639,14 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
+  /** Scene configuration nests this picker inside another popover, so it uses desktop control density. */
+  compact?: boolean;
 }) {
   const t = useT();
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorPanel, setSelectorPanel] = useState<"reasoning" | "model">("reasoning");
   const families = useMemo(() => groupModels(models), [models]);
-  if (!hasSession) return null;
+  if (!hasSession && models.length === 0) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
 
@@ -720,7 +727,10 @@ export function ModelPicker({
           render={
             <button
               type="button"
-              className="reasoning-selector-trigger"
+              className={cn(
+                "reasoning-selector-trigger",
+                compact && "reasoning-selector-trigger--compact",
+              )}
               title={`${t("composer.model")}: ${modelLabel} · ${t("composer.reasoning")}: ${effortLabel}`}
               aria-label={`${modelLabel} ${effortLabel}`}
             >
@@ -733,10 +743,11 @@ export function ModelPicker({
         <PopoverContent
           align="center"
           side="top"
-          sideOffset={17}
+          sideOffset={compact ? 8 : 17}
           className={cn(
             "reasoning-selector-popup",
             selectorPanel === "model" && "reasoning-selector-popup--menu",
+            compact && "reasoning-selector-popup--compact",
           )}
         >
           {selectorPanel === "reasoning" ? (
@@ -756,6 +767,7 @@ export function ModelPicker({
                 label={t("composer.reasoning")}
                 rows={effortRows}
                 onSelect={(row) => row.select()}
+                compact={compact}
               />
             </>
           ) : (

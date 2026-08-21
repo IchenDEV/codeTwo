@@ -101,12 +101,12 @@ function handle(request: JsonRpcRequest): unknown {
       };
     }
     case "selection.set": {
-      const providerId = requiredString(params.provider_id, "params.provider_id");
       const backendId = requiredString(params.backend_id, "params.backend_id");
       const kind = requiredString(params.kind, "params.kind");
       if (kind === "computer_use") {
-        saveComputerUseSelection(dataDir, providerId, backendId, evidence);
+        saveComputerUseSelection(dataDir, backendId, evidence);
       } else if (kind === "browser_use") {
+        const providerId = requiredString(params.provider_id, "params.provider_id");
         saveBrowserUseSelection(dataDir, providerId, backendId, evidence);
       } else {
         throw new Error(`unsupported selection kind ${JSON.stringify(kind)}`);
