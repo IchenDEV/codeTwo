@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { ArrowDown, Loader2 } from "lucide-react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
@@ -33,6 +33,8 @@ interface TranscriptPaneProps {
   onAddSelection: (text: string) => void;
   onExplainSelection: (text: string) => void;
   onAskSelectionInSideChat: (text: string) => void;
+  /** Host-rendered declarative plugin actions above the transcript. */
+  before?: ReactNode;
 }
 
 /** One transcript renderer shared by the main column and document-mode side panel. */
@@ -54,6 +56,7 @@ export function TranscriptPane({
   onAddSelection,
   onExplainSelection,
   onAskSelectionInSideChat,
+  before,
 }: TranscriptPaneProps) {
   const t = useT();
   const appearance = useAppearanceSettings();
@@ -87,6 +90,7 @@ export function TranscriptPane({
             variant === "side" ? "px-4 pb-6 pt-4" : "max-w-3xl px-8 pb-8 pt-6",
           )}
         >
+          {before}
           {loading ? (
             <p
               role="status"

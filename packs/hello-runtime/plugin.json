@@ -14,7 +14,23 @@
         "command": "node",
         "args": ["plugin.js"],
         "inject": []
-      }
+      },
+      "ui": [
+        {
+          "id": "dirty-workspace",
+          "slot": "session.header",
+          "label": "Check changes",
+          "description": "Count modified files in the active workspace.",
+          "command": "hello.dirty"
+        },
+        {
+          "id": "dirty-workspace-toolbar",
+          "slot": "composer.toolbar",
+          "label": "Check changes",
+          "description": "Count modified files in the active workspace.",
+          "command": "hello.dirty"
+        }
+      ]
     }
   }
 }

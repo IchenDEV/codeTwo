@@ -3,13 +3,16 @@ import { useMemo, useState } from "react";
 import {
   Blocks,
   Boxes,
+  Check,
   CircleAlert,
   Download,
+  GitFork,
   Loader2,
   MonitorCog,
   Package,
   RefreshCw,
   Store,
+  X,
 } from "lucide-react";
 
 import {
@@ -49,6 +52,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+import { BundleAdministration } from "./BundleAdministration";
 import { SchemaConfigEditor } from "./SchemaConfigEditor";
 import type {
   PluginManagerChangePlan,
@@ -92,7 +96,27 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   unavailable: "Unavailable",
   refresh: "Refresh",
   bundleTools: "Bundle tools",
-  managedInBundleTools: "Managed in Bundle Tools",
+  advancedBundleTools: "Advanced tools",
+  installFromGithub: "Install from GitHub",
+  githubRepository: "GitHub repository",
+  githubHint: "Use owner/repository or a GitHub /tree/ URL. Installation never executes plugin code; trust is granted separately.",
+  closeInstaller: "Close GitHub installer",
+  installingPlugin: "Installing…",
+  bundleInstalled: (result) => `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
+  managedInBundleTools: "Managed at bundle level",
+  bundleManagement: "Bundle management",
+  bundleManagementUserOnly: "Installation, trust, and removal are managed in User scope.",
+  trustRequired: "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
+  trusted: "Trusted",
+  notTrusted: "Not trusted",
+  trustPlugin: "Trust plugin",
+  revokeTrust: "Revoke trust",
+  contributions: "Contributions",
+  diagnostics: "Diagnostics",
+  uninstall: "Uninstall",
+  uninstallTitle: (pluginName) => `Uninstall ${pluginName}?`,
+  uninstallDescription: "The plugin will stop and its installed files will be removed. Keeping data makes a later reinstall recoverable.",
+  keepPluginData: "Keep plugin data for reinstall",
   resetDefaults: "Reset to defaults",
   restoredLastGood: "Invalid plugin settings were replaced with the last known-good configuration.",
   safeMode: "Plugin safe mode is active. Only the management plane is guaranteed to be available.",
@@ -159,7 +183,7 @@ function scopeSupportsProject(supportedScopes: Array<"user" | "project">): boole
 function scopeValue(scope: PluginManagerScope, projects: PluginManagerProject[]): string {
   if (scope.kind === "user") return "user";
   const index = projects.findIndex((project) => project.path === scope.projectPath);
-  return index >= 0 ? `project:${index}` : "user";
+  return index >= 0 ? `project:${index}` : "project:current";
 }
 
 function ScopeSelector({
@@ -173,9 +197,13 @@ function ScopeSelector({
   labels: PluginManagerLabels;
   onChange: (scope: PluginManagerScope) => void;
 }) {
+  const currentProject = scope.kind === "project" && !projects.some((project) => project.path === scope.projectPath)
+    ? { path: scope.projectPath, label: scope.projectPath }
+    : null;
   const items = [
     { value: "user", label: labels.userScope },
     ...projects.map((project, index) => ({ value: `project:${index}`, label: labels.projectScope(project) })),
+    ...(currentProject ? [{ value: "project:current", label: labels.projectScope(currentProject) }] : []),
   ];
 
   return (
@@ -189,6 +217,10 @@ function ScopeSelector({
         onValueChange={(value) => {
           if (value === "user") {
             onChange({ kind: "user" });
+            return;
+          }
+          if (value === "project:current" && currentProject) {
+            onChange({ kind: "project", projectPath: currentProject.path });
             return;
           }
           const index = Number(value?.replace("project:", ""));
@@ -210,6 +242,79 @@ function ScopeSelector({
         </SelectContent>
       </Select>
     </Field>
+  );
+}
+
+function GithubInstaller({
+  repository,
+  labels,
+  busy,
+  error,
+  onRepositoryChange,
+  onClose,
+  onSubmit,
+}: {
+  repository: string;
+  labels: PluginManagerLabels;
+  busy: boolean;
+  error: string | null;
+  onRepositoryChange: (repository: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <form
+      data-plugin-github-installer
+      className="flex flex-col gap-3 rounded-(--ds-radius-module) bg-fill-quiet p-3"
+      aria-busy={busy}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h2 className="text-title font-medium">{labels.installFromGithub}</h2>
+          <p id="plugin-github-hint" className="max-w-2xl text-fine leading-relaxed text-muted-foreground">
+            {labels.githubHint}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          title={labels.closeInstaller}
+          aria-label={labels.closeInstaller}
+          disabled={busy}
+          onClick={onClose}
+        >
+          <X />
+        </Button>
+      </div>
+      <Field>
+        <FieldLabel htmlFor="plugin-github-repository">{labels.githubRepository}</FieldLabel>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            id="plugin-github-repository"
+            value={repository}
+            placeholder="owner/repository"
+            aria-describedby={error ? "plugin-github-hint plugin-github-error" : "plugin-github-hint"}
+            aria-invalid={error ? true : undefined}
+            onChange={(event) => onRepositoryChange(event.currentTarget.value)}
+          />
+          <Button type="submit" className="shrink-0" disabled={busy}>
+            {busy ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Download data-icon="inline-start" />}
+            {busy ? labels.installingPlugin : labels.install}
+          </Button>
+        </div>
+        {error ? (
+          <p id="plugin-github-error" role="alert" className="flex items-start gap-2 text-ui text-destructive">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{error}</span>
+          </p>
+        ) : null}
+      </Field>
+    </form>
   );
 }
 
@@ -318,10 +423,12 @@ function DetailList({ title, values }: { title: string; values?: string[] }) {
 function PluginList({
   plugins,
   selectedId,
+  labels,
   onSelect,
 }: {
   plugins: PluginManagerPlugin[];
   selectedId: string | null;
+  labels: PluginManagerLabels;
   onSelect: (id: string) => void;
 }) {
   return (
@@ -342,6 +449,9 @@ function PluginList({
             <span className="flex min-w-0 items-center gap-2">
               <span className="truncate font-medium">{plugin.name}</span>
               <Badge variant={statusVariant(plugin.state.status)}>{STATUS_LABELS[plugin.state.status]}</Badge>
+              {plugin.bundle?.requiresTrust && !plugin.bundle.trusted ? (
+                <Badge variant="destructive">{labels.notTrusted}</Badge>
+              ) : null}
             </span>
             <span className="truncate text-fine text-muted-foreground">
               {sourceLabel(plugin.source, plugin.sourceLabel)}
@@ -358,7 +468,11 @@ function PluginDetails({
   scope,
   labels,
   busy,
+  busyAction,
   onRequestChange,
+  onSetBundleEnabled,
+  onSetBundleTrusted,
+  onUninstallBundle,
   onSaveConfig,
   onReset,
 }: {
@@ -366,7 +480,11 @@ function PluginDetails({
   scope: PluginManagerScope;
   labels: PluginManagerLabels;
   busy: boolean;
+  busyAction: string | null;
   onRequestChange: (request: PluginManagerChangeRequest) => void;
+  onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
+  onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
+  onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
   onSaveConfig: PluginManagerPageProps["onSaveConfig"];
   onReset?: (pluginId: string, scope: PluginManagerScope) => void;
 }) {
@@ -382,18 +500,28 @@ function PluginDetails({
         </CardTitle>
         <CardDescription>{plugin.description || "No description provided."}</CardDescription>
         <CardAction>
-          <StateControl
-            id={plugin.id}
-            name={plugin.name}
-            kind="plugin"
-            required={plugin.required}
-            supportedScopes={plugin.supportedScopes}
-            state={plugin.state}
-            scope={scope}
-            labels={labels}
-            disabled={busy}
-            onChange={onRequestChange}
-          />
+          {plugin.bundle && !plugin.bundle.runtimeManaged && !onSetBundleEnabled ? (
+            <span className="text-fine text-muted-foreground">{labels.managedInBundleTools}</span>
+          ) : (
+            <StateControl
+              id={plugin.id}
+              name={plugin.name}
+              kind="plugin"
+              required={plugin.required}
+              supportedScopes={plugin.supportedScopes}
+              state={plugin.state}
+              scope={scope}
+              labels={labels}
+              disabled={busy || Boolean(plugin.bundle?.requiresTrust && !plugin.bundle.trusted)}
+              onChange={(request) => {
+                if (plugin.bundle && !plugin.bundle.runtimeManaged && scope.kind === "user" && onSetBundleEnabled) {
+                  void onSetBundleEnabled(plugin.bundle.id, request.desiredState === "enabled");
+                  return;
+                }
+                onRequestChange(request);
+              }}
+            />
+          )}
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 px-4">
@@ -403,6 +531,17 @@ function PluginDetails({
             <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{plugin.state.error}</span>
           </p>
+        ) : null}
+        {plugin.bundle ? (
+          <BundleAdministration
+            pluginName={plugin.name}
+            bundle={plugin.bundle}
+            scope={scope}
+            labels={labels}
+            busyAction={busyAction}
+            onSetTrusted={onSetBundleTrusted}
+            onUninstall={onUninstallBundle}
+          />
         ) : null}
         <DetailList title={labels.missingDependencies} values={plugin.state.missingDependencies} />
         <DetailList title={labels.dependencies} values={plugin.dependencies} />
@@ -718,6 +857,10 @@ export function PluginManagerPage({
   onSaveConfig,
   onInstallMarketplaceItem,
   onRefreshMarketplace,
+  onImportGithub,
+  onSetBundleEnabled,
+  onSetBundleTrusted,
+  onUninstallBundle,
   onOpenBundleTools,
   onResetPlugin,
 }: PluginManagerPageProps) {
@@ -732,6 +875,10 @@ export function PluginManagerPage({
   const [applyingPlan, setApplyingPlan] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [githubInstallerOpen, setGithubInstallerOpen] = useState(false);
+  const [githubRepository, setGithubRepository] = useState("");
+  const [githubError, setGithubError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const visiblePlugins = useMemo(
@@ -777,12 +924,14 @@ export function PluginManagerPage({
     const key = `${request.targetKind}:${request.targetId}`;
     setBusyTarget(key);
     setActionError(null);
+    setActionNotice(null);
     try {
       const plan = await onPlanChange(request);
       if (plan.requiresConfirmation) {
         setPendingPlan(plan);
       } else {
         await onApplyChange(plan);
+        setActionNotice(`${request.targetName} is now ${request.desiredState}.`);
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -797,6 +946,7 @@ export function PluginManagerPage({
     setActionError(null);
     try {
       await onApplyChange(pendingPlan);
+      setActionNotice(`${pendingPlan.request.targetName} is now ${pendingPlan.request.desiredState}.`);
       setPendingPlan(null);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -808,8 +958,10 @@ export function PluginManagerPage({
   const install = async (request: Parameters<typeof onInstallMarketplaceItem>[0]) => {
     setInstallingId(request.itemId);
     setActionError(null);
+    setActionNotice(null);
     try {
       await onInstallMarketplaceItem(request);
+      setActionNotice("Marketplace item installed.");
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -821,6 +973,7 @@ export function PluginManagerPage({
     if (!onRefreshMarketplace || refreshing) return;
     setRefreshing(true);
     setActionError(null);
+    setActionNotice(null);
     try {
       await onRefreshMarketplace();
     } catch (error) {
@@ -834,10 +987,53 @@ export function PluginManagerPage({
     if (!onResetPlugin) return;
     setBusyTarget(`plugin:${pluginId}`);
     setActionError(null);
+    setActionNotice(null);
     try {
       await onResetPlugin(pluginId, resetScope);
+      setActionNotice("Plugin settings reset to defaults.");
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyTarget(null);
+    }
+  };
+
+  const runBundleAction = async (key: string, action: () => Promise<void>, success: string) => {
+    setBusyTarget(key);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      await action();
+      setActionNotice(success);
+      return true;
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      setBusyTarget(null);
+    }
+  };
+
+  const importGithub = async () => {
+    if (!onImportGithub || busyTarget === "bundle-import") return;
+    const repository = githubRepository.trim();
+    if (!repository) {
+      setGithubError("Enter an owner/repository name or GitHub URL.");
+      return;
+    }
+    setBusyTarget("bundle-import");
+    setGithubError(null);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      const result = await onImportGithub(repository);
+      setTab("plugins");
+      setSelectedPluginId(`bundle:${result.pluginId}`);
+      setGithubRepository("");
+      setGithubInstallerOpen(false);
+      setActionNotice(labels.bundleInstalled(result));
+    } catch (error) {
+      setGithubError(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyTarget(null);
     }
@@ -863,16 +1059,50 @@ export function PluginManagerPage({
                 <h1 className="text-display font-semibold tracking-tight">{labels.title}</h1>
                 <p className="max-w-2xl text-hint leading-relaxed text-muted-foreground">{labels.description}</p>
               </div>
-              <div className="flex w-full items-center gap-2 sm:w-auto">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+                {onImportGithub ? (
+                  <Button
+                    type="button"
+                    size="compact"
+                    aria-expanded={githubInstallerOpen}
+                    aria-controls="plugin-github-installer"
+                    onClick={() => {
+                      setGithubInstallerOpen((open) => !open);
+                      setGithubError(null);
+                    }}
+                  >
+                    <GitFork data-icon="inline-start" />
+                    {labels.installFromGithub}
+                  </Button>
+                ) : null}
                 {onOpenBundleTools ? (
-                  <Button type="button" variant="outline" size="compact" onClick={onOpenBundleTools}>
+                  <Button type="button" variant="secondary" size="compact" onClick={onOpenBundleTools}>
                     <Package data-icon="inline-start" />
-                    {labels.bundleTools}
+                    {labels.advancedBundleTools}
                   </Button>
                 ) : null}
                 <ScopeSelector scope={scope} projects={projects} labels={labels} onChange={onScopeChange} />
               </div>
             </div>
+            {githubInstallerOpen ? (
+              <div id="plugin-github-installer">
+                <GithubInstaller
+                  repository={githubRepository}
+                  labels={labels}
+                  busy={busyTarget === "bundle-import"}
+                  error={githubError}
+                  onRepositoryChange={(repository) => {
+                    setGithubRepository(repository);
+                    setGithubError(null);
+                  }}
+                  onClose={() => {
+                    setGithubInstallerOpen(false);
+                    setGithubError(null);
+                  }}
+                  onSubmit={() => void importGithub()}
+                />
+              </div>
+            ) : null}
             <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
               <TabsList variant="line" className="w-full max-w-full justify-start overflow-x-auto pb-2 lg:w-auto">
                 <TabsTrigger value="plugins">
@@ -939,24 +1169,56 @@ export function PluginManagerPage({
                 <span>{actionError}</span>
               </p>
             ) : null}
+            {actionNotice ? (
+              <p role="status" aria-live="polite" className="mb-4 flex items-start gap-2 text-ui text-success">
+                <Check className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                <span>{actionNotice}</span>
+              </p>
+            ) : null}
             <TabsContent value="plugins" className="min-w-0">
               {visiblePlugins.length ? (
-                <div className="grid min-w-0 gap-4 md:grid-cols-5">
-                  <div className="min-w-0 md:col-span-2">
+                <div className="grid min-w-0 gap-4 lg:grid-cols-5">
+                  <div className="min-w-0 lg:col-span-2">
                     <PluginList
                       plugins={visiblePlugins}
                       selectedId={selectedPlugin?.id ?? null}
+                      labels={labels}
                       onSelect={setSelectedPluginId}
                     />
                   </div>
-                  <div className="min-w-0 md:col-span-3">
+                  <div className="min-w-0 lg:col-span-3">
                     {selectedPlugin ? (
                       <PluginDetails
                         plugin={selectedPlugin}
                         scope={scope}
                         labels={labels}
-                        busy={busyTarget === `plugin:${selectedPlugin.id}`}
+                        busy={busyTarget === `plugin:${selectedPlugin.id}` || Boolean(
+                          selectedPlugin.bundle && busyTarget?.endsWith(`:${selectedPlugin.bundle.id}`),
+                        )}
+                        busyAction={busyTarget}
                         onRequestChange={(request) => void requestChange(request)}
+                        onSetBundleEnabled={onSetBundleEnabled ? async (pluginId, enabled) => {
+                          await runBundleAction(
+                            `bundle-enabled:${pluginId}`,
+                            () => onSetBundleEnabled(pluginId, enabled),
+                            `${selectedPlugin.name} ${enabled ? "enabled" : "disabled"}.`,
+                          );
+                        } : undefined}
+                        onSetBundleTrusted={onSetBundleTrusted ? async (pluginId, trusted) => {
+                          await runBundleAction(
+                            `bundle-trust:${pluginId}`,
+                            () => onSetBundleTrusted(pluginId, trusted),
+                            `${selectedPlugin.name} ${trusted ? "trusted" : "trust revoked"}.`,
+                          );
+                        } : undefined}
+                        onUninstallBundle={onUninstallBundle ? async (pluginId, keepData) => {
+                          const uninstalled = await runBundleAction(
+                            `bundle-uninstall:${pluginId}`,
+                            () => onUninstallBundle(pluginId, keepData),
+                            `${selectedPlugin.name} uninstalled${keepData ? "; plugin data was kept" : ""}.`,
+                          );
+                          if (uninstalled) setSelectedPluginId(null);
+                        } : undefined}
                         onSaveConfig={onSaveConfig}
                         onReset={onResetPlugin ? (pluginId, resetScope) => void resetPlugin(pluginId, resetScope) : undefined}
                       />
@@ -970,15 +1232,15 @@ export function PluginManagerPage({
 
             <TabsContent value="components" className="min-w-0">
               {visibleComponents.length ? (
-                <div className="grid min-w-0 gap-4 md:grid-cols-5">
-                  <div className="min-w-0 md:col-span-2">
+                <div className="grid min-w-0 gap-4 lg:grid-cols-5">
+                  <div className="min-w-0 lg:col-span-2">
                     <ComponentList
                       components={visibleComponents}
                       selectedId={selectedComponent?.id ?? null}
                       onSelect={setSelectedComponentId}
                     />
                   </div>
-                  <div className="min-w-0 md:col-span-3">
+                  <div className="min-w-0 lg:col-span-3">
                     {selectedComponent ? (
                       <ComponentDetails
                         component={selectedComponent}

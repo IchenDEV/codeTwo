@@ -88,6 +88,21 @@ list. `command/call` uses that same realm and its normal project fallback/blocki
 `command/invoke` only ever names a command you declared. Returning a JSON-RPC error turns into a
 readable failure at the caller — the frontend sees `my.greet: <your message>`.
 
+When a user activates a manifest `ui` contribution, C2 first verifies bundle ownership, trust,
+enablement, the selected user/project realm, and that the contribution's command was registered by
+this process. The resulting `command/invoke` uses these args:
+
+```json
+{
+  "context": { "cwd": "/repo", "projectPath": "/repo", "sessionId": "session-id" },
+  "input": { "mode": "working-tree" }
+}
+```
+
+`context` is host state for this activation; `input` is the descriptor's static JSON value. Neither
+is a capability grant. Host commands remain accessible only through the ordinary realm-aware
+`command/call` seam.
+
 ### Plugin → host
 
 | method | kind | params | result |
@@ -164,7 +179,13 @@ one independently managed process, command realm, `dataDir`, and `projectPath` p
 The bundle's skills and other data-only extension components are not made project-scoped by this
 field; they remain user-only and are managed through Bundle Tools.
 
-A bundle whose only component is `extensions.dev.codetwo.runtime` is a valid bundle.
+A bundle whose only component is `extensions.dev.codetwo.runtime` is a valid bundle. UI action
+descriptors are declared beside it under `extensions.dev.codetwo.ui`; they do not alter this wire
+protocol or load third-party renderer code.
+
+`extensions.dev.codetwo.languageServers` is a separate host-owned stdio LSP contribution. Language
+servers use standard `Content-Length` LSP framing, not this newline-delimited plugin protocol. They
+may exist without a C2 process runtime and still share bundle trust, enablement, and teardown.
 
 ## Trust
 

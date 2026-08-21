@@ -58,7 +58,23 @@ an unknown top-level Agent Plugins field.
         "inject": ["store"],
         "optionalInject": ["engine"],
         "scopeSupport": ["user", "project"]
-      }
+      },
+      "ui": [{
+        "id": "review",
+        "slot": "composer.above",
+        "label": "Review workspace",
+        "description": "Run the plugin's review command.",
+        "command": "review.run",
+        "input": { "mode": "working-tree" },
+        "order": 10
+      }],
+      "languageServers": [{
+        "id": "zls",
+        "languages": ["zig"],
+        "command": "zls",
+        "args": [],
+        "env": {}
+      }]
     }
   }
 }
@@ -70,6 +86,8 @@ an unknown top-level Agent Plugins field.
 | --- | --- | --- |
 | `standardVersion` | yes | Semantic version of this C2 extension. The host loads compatible major version 1 data and ignores unsupported majors with a diagnostic. |
 | `runtime` | no | Declares one process runtime using the C2 Plugin Protocol. |
+| `ui` | no | Declares host-rendered action descriptors. A UI action requires `runtime` and may invoke only a command registered by that runtime. |
+| `languageServers` | no | Declares trusted stdio language-server processes selected by Monaco language ID. |
 
 The `runtime` object has these fields:
 
@@ -82,6 +100,38 @@ The `runtime` object has these fields:
 | `inject` | no | Required service names. The runtime remains pending until all exist and reloads when they change. |
 | `optionalInject` | no | Optional service names whose arrival or departure reloads the runtime. |
 | `scopeSupport` | no | `user` by default. `project` is honored only when explicitly declared. |
+
+The `ui` array contains action descriptors. Every entry requires a bundle-local `id`, one supported
+`slot`, a non-empty `label`, and a namespaced `command`. `description`, JSON `input`, and integer
+`order` are optional.
+
+| Slot | Host placement |
+| --- | --- |
+| `rail.features` | Primary feature list in the session rail. |
+| `session.header` | Session header actions. |
+| `transcript.before` | Inside the transcript scroll area, before the conversation. |
+| `composer.above` | Full-width action card above the composer. |
+| `composer.toolbar` | Compact action in the composer control row. |
+
+The host chooses the markup, component, spacing, focus behavior, and accessibility semantics. On
+activation it invokes the declared command with `{ context, input }`, after verifying that the
+contribution belongs to the bundle, the selected realm is active, and that same runtime registered
+the command. A descriptor cannot invoke another plugin's command.
+
+The `languageServers` array contains stdio server descriptors:
+
+| Field | Required | Contract |
+| --- | --- | --- |
+| `id` | yes | Bundle-local stable identifier. |
+| `languages` | yes | One to sixteen Monaco language IDs. Matching is case-insensitive. |
+| `command` | yes | Executable name or bundle-relative executable; `..` is forbidden. |
+| `args` | no | Ordered string arguments passed verbatim. The server working directory is the project root. |
+| `env` | no | Additional string environment variables for the server process. |
+
+Exactly one active plugin may provide a language in a project. Multiple active providers fail that
+language closed until policy removes the conflict. Plugin mappings take precedence over C2's
+built-in executable mapping. Disabling, untrusting, replacing, or uninstalling a bundle terminates
+its live language servers; the editor reconnects only after the active contribution catalog changes.
 
 For native `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` overlays, C2 continues to
 read the historical top-level `runtime` field. That compatibility form MUST NOT be copied into an
@@ -176,13 +226,27 @@ Plugin boundaries for current features are fixed as follows:
 The Rust core is the reference C2 1.0 runtime. The TUI and server may intentionally omit UI or
 host-native plugins through configuration while retaining the same graph and command semantics.
 
-The current Pure Bun Electrobun desktop is an experimental compatibility host, not a conforming
-full plugin runtime. It implements the renderer's typed command/event contract for the primary local
-path, including projects, sessions/ACP, constrained workspace I/O, Git, PTY, LSP, memory CRUD,
-automation CRUD, GitHub issue reads, and structured elicitation. It currently fails closed for:
+The current Pure Bun Electrobun desktop implements the renderer's typed command/event contract for
+the primary local path, including projects, sessions/ACP, constrained workspace I/O, Git, PTY, LSP,
+memory CRUD, automation CRUD, GitHub issue reads, and structured elicitation. Its in-process
+capabilities are registered as owned runtime modules: only `core` and `kernel` are essential, while
+workspace, Git, terminal, LSP, browser, provider-neutral host tools, memory, automation, scenes,
+Canvas, and the other product features use the same catalog and durable user/project policy as
+external runtimes. Disabling one removes its commands and services, makes dependents pending, and
+invokes the host adapter's resource cleanup where applicable.
 
-- bundle installation and dynamic runtime lifecycle;
-- user/project `plan_change -> apply_change` management;
+The desktop also owns a native Bun adapter for C2 process runtimes: existing installed records are
+reconciled at startup, portable runtime or LSP bundles can be imported from GitHub, trust and
+enablement remain separate, commands register and disappear live, safe UI actions render in the five
+supported slots, and plugin language servers use the existing LSP client and lifecycle. User/project
+runtime policy uses the same revision-bound `plan_change -> apply_change` contract. Project-capable
+bundles receive a separate process, command realm, and BLAKE3-keyed data directory per project.
+
+The Pure Bun host is still not a conforming full replacement for every Rust-core contribution
+adapter. It currently fails closed for:
+
+- importing bundles without a C2 process runtime or supported stdio language server, local
+  marketplace installation, and scaffold application;
 - isolated worktree creation/discard;
 - background automation execution;
 - scenes, pipelines, and canvas persistence;

@@ -2078,9 +2078,13 @@ export interface PluginCounts {
   lsp_servers: number;
   monitors: number;
   apps: number;
+  /** Safe declarative actions rendered into C2-owned UI slots. */
+  ui?: number;
   /** Agent Scenes components (R14); serde-defaulted server-side, so always present here. */
   scenes: number;
   pipelines: number;
+  /** Present for hosts that support a C2 JSON-RPC process runtime contribution. */
+  runtime?: number;
 }
 
 export type PluginStandard = "agent_plugins" | "codex" | "claude_code" | "conventional";
@@ -2107,6 +2111,34 @@ export interface PluginScaffoldInfo {
   files: number;
 }
 
+export const PLUGIN_UI_SLOT_IDS = [
+  "rail.features",
+  "session.header",
+  "transcript.before",
+  "composer.above",
+  "composer.toolbar",
+] as const;
+
+export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
+
+export interface PluginUiContribution {
+  id: string;
+  slot: PluginUiSlotId;
+  label: string;
+  description: string;
+  command: string;
+  input: unknown;
+  order: number;
+}
+
+export interface PluginLanguageServer {
+  id: string;
+  languages: string[];
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
 export interface PluginInfo {
   id: string;
   name: string;
@@ -2124,6 +2156,8 @@ export interface PluginInfo {
   counts: PluginCounts;
   scaffolds: PluginScaffoldInfo[];
   extension_components: PluginExtensionComponent[];
+  ui_contributions?: PluginUiContribution[];
+  lsp_servers?: PluginLanguageServer[];
   diagnostics: PluginDiagnostic[];
 }
 
@@ -2291,7 +2325,122 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             },
           ],
         },
+        {
+          id: "ui-lsp-demo",
+          name: "UI & LSP Demo",
+          version: "1.0.0",
+          description: "Renderer-only preview of declarative plugin slots and language-server contributions.",
+          author: "C2",
+          source: "Built-in preview",
+          repository: "",
+          spec_version: "1.0.0",
+          standard: "agent_plugins",
+          standards: ["agent_plugins"],
+          enabled: true,
+          trusted: true,
+          scope: "user",
+          counts: {
+            skills: 0,
+            subagents: 0,
+            mcp_servers: 0,
+            scaffolds: 0,
+            commands: 1,
+            hooks: 0,
+            lsp_servers: 1,
+            monitors: 0,
+            apps: 0,
+            ui: 5,
+            scenes: 0,
+            pipelines: 0,
+            runtime: 1,
+          },
+          extension_components: [
+            { kind: "ui", name: "Review tools", path: "rail.features", status: "ready" },
+            { kind: "ui", name: "Review workspace", path: "session.header", status: "ready" },
+            { kind: "ui", name: "Summarize thread", path: "transcript.before", status: "ready" },
+            { kind: "ui", name: "Project health", path: "composer.above", status: "ready" },
+            { kind: "ui", name: "Insert context", path: "composer.toolbar", status: "ready" },
+            { kind: "lsp", name: "zig", path: "zig", status: "ready" },
+          ],
+          ui_contributions: [
+            {
+              id: "review-tools",
+              slot: "rail.features",
+              label: "Review tools",
+              description: "Open the plugin's review workflow.",
+              command: "demo.review",
+              input: { mode: "tools" },
+              order: 0,
+            },
+            {
+              id: "review-workspace",
+              slot: "session.header",
+              label: "Review workspace",
+              description: "Run the plugin's project review command.",
+              command: "demo.review",
+              input: null,
+              order: 0,
+            },
+            {
+              id: "summarize-thread",
+              slot: "transcript.before",
+              label: "Summarize thread",
+              description: "Summarize the current conversation.",
+              command: "demo.review",
+              input: { mode: "summary" },
+              order: 0,
+            },
+            {
+              id: "project-health",
+              slot: "composer.above",
+              label: "Project health",
+              description: "Ask the plugin to inspect this project before starting the next turn.",
+              command: "demo.review",
+              input: { mode: "health" },
+              order: 0,
+            },
+            {
+              id: "insert-context",
+              slot: "composer.toolbar",
+              label: "Insert context",
+              description: "Insert plugin-provided context into this draft.",
+              command: "demo.review",
+              input: { mode: "context" },
+              order: 0,
+            },
+          ],
+          lsp_servers: [{
+            id: "zig",
+            languages: ["zig"],
+            command: "zls",
+            args: [],
+            env: {},
+          }],
+          diagnostics: [],
+          scaffolds: [],
+        },
       ];
+}
+
+/** Refresh bundle descriptors after install, trust, lifecycle, or on-disk inventory changes. */
+export async function onPluginsChanged(cb: () => void): Promise<() => void> {
+  if (!inDesktop) return () => {};
+  return listenDesktop<null>("plugins-changed", cb);
+}
+
+/** Invoke a manifest-declared UI action after the host verifies contribution and command ownership. */
+export async function invokePluginUi(
+  pluginId: string,
+  contributionId: string,
+  context: Record<string, unknown>,
+  projectPath: string | null,
+): Promise<unknown> {
+  if (!inDesktop) throw new Error("Plugin UI actions require the C2 desktop app.");
+  return call("plugins.invoke_ui", {
+    plugin_id: pluginId,
+    contribution_id: contributionId,
+    context,
+  }, projectPath);
 }
 
 /** Install a complete plugin from a GitHub repository or a selected /tree/ path. */

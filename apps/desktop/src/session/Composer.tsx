@@ -107,6 +107,8 @@ interface ComposerProps {
   runHint: string;
   skillHint: string;
   filesHint: string;
+  /** Host-rendered declarative plugin actions in the compact control row. */
+  pluginActions?: ReactNode;
   /** Keys the per-session brief-offer dismissal; null while no session exists yet. */
   sessionId?: string | null;
   /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
@@ -844,6 +846,7 @@ export function Composer({
   runHint,
   skillHint,
   filesHint,
+  pluginActions,
   sessionId,
   insertBriefRef,
 }: ComposerProps) {
@@ -985,6 +988,8 @@ export function Composer({
       />
 
       <Statusline contextWindow={contextWindow} usage={usage ?? null} />
+
+      {pluginActions}
 
       <div className="flex-1" />
 

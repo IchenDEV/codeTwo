@@ -11,6 +11,8 @@ import {
   type ProviderDefinition,
 } from "./acp";
 import { BunDatabase } from "./database";
+import { builtinPluginForCommand } from "./builtinPlugins";
+import { PluginRuntimeManager } from "./plugins";
 import {
   browserUseSettings,
   computerUseSettings,
@@ -53,6 +55,10 @@ import {
 
 type Args = Record<string, unknown>;
 type Handler = (args: Args, projectPath: string | null) => unknown | Promise<unknown>;
+interface RegisteredHandler {
+  plugin: string;
+  handler: Handler;
+}
 
 interface SessionRuntime {
   id: string;
@@ -159,7 +165,8 @@ export class PureBunHost {
   private hostTools: HostToolEvidence;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
-  private readonly handlers = new Map<string, Handler>();
+  private readonly plugins: PluginRuntimeManager;
+  private readonly handlers = new Map<string, RegisteredHandler>();
   private readonly runtimes = new Map<string, SessionRuntime>();
   private readonly pendingPermissions = new Map<string, PendingPermission>();
   private readonly pendingElicitations = new Map<string, PendingElicitation>();
@@ -170,27 +177,46 @@ export class PureBunHost {
     augmentGuiPath();
     this.hostTools = detectHostToolEvidence(process.env, dataDir);
     this.database = new BunDatabase(dataDir);
-    this.terminal = new TerminalManager(onEvent);
-    this.lsp = new LspManager(onEvent);
+    this.terminal = new TerminalManager((event) => this.emit(event));
+    this.lsp = new LspManager((event) => this.emit(event));
+    this.plugins = new PluginRuntimeManager(dataDir, {
+      hostCommands: () => [...this.handlers].map(([name, registered]) => ({
+        name,
+        plugin: registered.plugin,
+      })),
+      callHost: (name, args, projectPath) => this.call(name, args, projectPath),
+      reconcileBuiltin: (plugin, enabled, projectPath) => {
+        if (plugin === "terminal") this.terminal.setRuntimeEnabled(enabled, projectPath);
+        if (plugin === "lsp") this.lsp.setRuntimeEnabled(enabled, projectPath);
+      },
+      onChanged: () => {
+        this.lsp.invalidateRouting();
+        this.emit({ name: "plugins-changed", payload: null });
+        this.plugins.publish("skills/changed", null);
+      },
+    });
     this.registerCommands(dataDir);
-    queueMicrotask(() => {
-      this.onEvent({
+    this.plugins.start();
+    queueMicrotask(async () => {
+      await this.plugins.ready();
+      this.emit({
         name: "host-ready",
-        payload: { runtime: "bun", commands: [...this.handlers.keys()].sort() },
+        payload: { runtime: "bun", commands: this.commands() },
       });
     });
   }
 
   commands(): string[] {
-    return [...this.handlers.keys()].sort();
+    return [...new Set([...this.plugins.hostCommandNames(), ...this.plugins.commandNames()])].sort();
   }
 
   async call(name: string, args: unknown, projectPath: string | null): Promise<unknown> {
-    const handler = this.handlers.get(name);
-    if (!handler) {
-      throw new Error(`Pure Bun host does not implement command \`${name}\``);
+    const registered = this.handlers.get(name);
+    if (!registered) {
+      return this.plugins.call(name, args, projectPath);
     }
-    return handler(object(args), projectPath);
+    this.plugins.assertBuiltinEnabled(registered.plugin, projectPath);
+    return registered.handler(object(args), projectPath);
   }
 
   async shutdown(): Promise<void> {
@@ -210,6 +236,7 @@ export class PureBunHost {
       runtime.peer?.shutdown();
     }
     this.runtimes.clear();
+    await this.plugins.shutdown();
     this.terminal.shutdown();
     this.lsp.shutdown();
     this.database.close();
@@ -217,7 +244,7 @@ export class PureBunHost {
 
   private register(name: string, handler: Handler): void {
     if (this.handlers.has(name)) throw new Error(`duplicate Pure Bun command: ${name}`);
-    this.handlers.set(name, handler);
+    this.handlers.set(name, { plugin: builtinPluginForCommand(name).id, handler });
   }
 
   private registerCommands(dataDir: string): void {
@@ -355,7 +382,12 @@ export class PureBunHost {
     this.register("terminal.dump", (args) => this.terminal.dump(string(args.id, "id")));
     this.register("terminal.kill", (args) => this.terminal.kill(string(args.id, "id")));
 
-    this.register("lsp.start", (args) => this.lsp.start(string(args.cwd, "cwd"), string(args.lang, "lang")));
+    this.register("lsp.start", async (args, projectPath) => {
+      const cwd = string(args.cwd, "cwd");
+      const language = string(args.lang, "lang");
+      const launch = await this.plugins.languageServer(language, projectPath ?? cwd);
+      return this.lsp.start(cwd, language, launch);
+    });
     this.register("lsp.send", (args) => this.lsp.send(string(args.key, "key"), string(args.payload, "payload")));
     this.register("lsp.set_runtime_enabled", (args, projectPath) => this.lsp.setRuntimeEnabled(boolean(args.enabled), projectPath));
 
@@ -404,50 +436,54 @@ export class PureBunHost {
     this.register("keymap.get", () => this.readKeymap(dataDir));
     this.register("keymap.set", (args) => this.setKeymap(dataDir, string(args.action, "action"), string(args.key, "key")));
 
-    this.register("kernel.commands", () => this.commands().map((name) => ({ name, plugin: "pure-bun", scope: 1, description: null })));
-    this.register("kernel.scopes", () => [{
-      id: 1,
-      parent: null,
-      plugin: "pure-bun",
-      status: "active",
-      error: null,
-      inject: { required: [], optional: [] },
-      missing: [],
-      services: ["bun-runtime", "sqlite", "acp", "terminal", "lsp"],
-      commands: this.commands(),
-      config: {},
-    }]);
-    this.register("kernel.plugins", () => [{
-      name: "pure-bun",
-      description: "In-process Bun desktop runtime",
-      enabled: true,
-      running: true,
-      status: "active",
-      config: {},
-      schema: null,
-      available: false,
-    }]);
-    this.register("kernel.services", () => ["bun-runtime", "sqlite", "acp", "terminal", "lsp"]);
-    this.register("kernel.set_enabled", () => this.unsupported("kernel.set_enabled", "dynamic host plugins"));
+    this.register("kernel.commands", () => [
+      ...this.plugins.hostCommandDescriptors(),
+      ...this.plugins.commandDescriptors(),
+    ]);
+    this.register("kernel.scopes", () => [...this.plugins.builtinScopes(), ...this.plugins.scopes()]);
+    this.register("kernel.plugins", async () => this.kernelPlugins());
+    this.register("kernel.services", () => this.plugins.services());
+    this.register("kernel.set_enabled", (args) => this.plugins.setManagedEnabled(
+      string(args.name, "name"),
+      boolean(args.value),
+    ));
     this.register("kernel.configure", () => this.unsupported("kernel.configure", "dynamic host plugins"));
-    this.register("plugins.catalog", () => this.pluginCatalog());
-    this.register("plugins.plan_change", () => this.unsupported("plugins.plan_change", "dynamic plugin graph"));
-    this.register("plugins.apply_change", () => this.unsupported("plugins.apply_change", "dynamic plugin graph"));
-    this.register("plugins.reset", () => this.unsupported("plugins.reset", "dynamic plugin graph"));
-    this.register("extensions.list", () => ({ running: [], untrusted: [] }));
-    this.register("plugins.list", () => []);
+    this.register("plugins.catalog", (args) => this.pluginCatalog(args.scope));
+    this.register("plugins.plan_change", (args) => this.plugins.plan(args));
+    this.register("plugins.apply_change", (args) => this.plugins.apply(string(args.id, "id")));
+    this.register("plugins.reset", (args) => this.plugins.reset(
+      string(args.plugin, "plugin"),
+      args.scope,
+    ));
+    this.register("extensions.list", () => this.plugins.extensions());
+    this.register("plugins.list", () => this.plugins.list());
+    this.register("plugins.invoke_ui", (args, projectPath) => this.plugins.invokeUi(
+      string(args.plugin_id, "plugin_id"),
+      string(args.contribution_id, "contribution_id"),
+      args.context,
+      projectPath,
+    ));
     this.register("plugins.scene_dirs", () => []);
-    this.register("plugins.import_github", () => this.unsupported("plugins.import_github", "plugin installation"));
+    this.register("plugins.import_github", (args) => this.plugins.importGithub(string(args.repository, "repository")));
     this.register("plugins.read_marketplace", () => this.unsupported("plugins.read_marketplace", "plugin marketplace"));
     this.register("plugins.install_marketplace", () => this.unsupported("plugins.install_marketplace", "plugin marketplace"));
-    this.register("plugins.set_enabled", () => this.unsupported("plugins.set_enabled", "plugin lifecycle"));
-    this.register("plugins.set_trusted", () => this.unsupported("plugins.set_trusted", "plugin lifecycle"));
-    this.register("plugins.uninstall", () => this.unsupported("plugins.uninstall", "plugin lifecycle"));
+    this.register("plugins.set_enabled", (args) => this.plugins.setEnabled(
+      string(args.id, "id"),
+      boolean(args.value),
+    ));
+    this.register("plugins.set_trusted", (args) => this.plugins.setTrusted(
+      string(args.id, "id"),
+      boolean(args.value),
+    ));
+    this.register("plugins.uninstall", (args) => this.plugins.uninstall(
+      string(args.id, "id"),
+      boolean(args.keep_data),
+    ));
     this.register("plugins.apply_scaffold", () => this.unsupported("plugins.apply_scaffold", "plugin scaffolds"));
     this.register("market.catalog", () => []);
     this.register("market.install", () => this.unsupported("market.install", "component marketplace"));
 
-    this.register("skills.list", () => []);
+    this.register("skills.list", () => this.plugins.listSkills());
     this.register("skills.save", () => this.unsupported("skills.save", "skill library writes"));
     this.register("skills.delete", () => this.unsupported("skills.delete", "skill library writes"));
     this.register("skills.propose_macro", () => this.unsupported("skills.propose_macro", "macro generation"));
@@ -982,7 +1018,12 @@ export class PureBunHost {
   }
 
   private emitEngine(payload: Record<string, unknown>): void {
-    this.onEvent({ name: "engine-event", payload });
+    this.emit({ name: "engine-event", payload });
+  }
+
+  private emit(event: DesktopEvent): void {
+    this.onEvent(event);
+    if (event.name === "engine-event") this.plugins.publish("engine/event", event.payload);
   }
 
   private clearToolCalls(sessionId: string): void {
@@ -1173,36 +1214,26 @@ export class PureBunHost {
     writeFileSync(join(dataDir, "keymap.json"), `${JSON.stringify(current, null, 2)}\n`, "utf8");
   }
 
-  private pluginCatalog(): unknown {
-    return {
-      graph_revision: 1,
-      config_revision: 1,
-      recovery: { kind: "normal" },
-      plugins: [{
-        id: "pure-bun",
-        description: "In-process Bun desktop runtime",
-        metadata: {
-          origin: "host",
-          category: "foundation",
-          scope_support: ["user"],
-          essential: true,
-          default_enabled: true,
-        },
-        dependencies: { required: [], optional: [] },
-        state: "enabled",
-        enabled: true,
-        running: true,
-        status: "active",
-        missing: [],
-        error: null,
-        config: {},
-        schema: null,
-        available: false,
-        components: {},
-        commands: this.commands(),
-        services: ["bun-runtime", "sqlite", "acp", "terminal", "lsp"],
-      }],
-    };
+  private async pluginCatalog(scope: unknown): Promise<unknown> {
+    return this.plugins.catalog(scope);
+  }
+
+  private async kernelPlugins(): Promise<unknown[]> {
+    const catalog = object(await this.plugins.catalog({ kind: "user" }));
+    const managed = Array.isArray(catalog.plugins) ? catalog.plugins : [];
+    return managed.map((value) => {
+      const plugin = object(value);
+      return {
+        name: plugin.id,
+        description: plugin.description,
+        enabled: plugin.enabled,
+        running: plugin.running,
+        status: plugin.status,
+        config: plugin.config,
+        schema: plugin.schema,
+        available: plugin.available,
+      };
+    });
   }
 
   private elicitationForm(args: Args): { message: string; tool_call_id: string | null; fields: unknown[] } {

@@ -41,6 +41,31 @@ export interface PluginManagerScopedState {
   config?: unknown;
 }
 
+export interface PluginManagerBundleDiagnostic {
+  level: "warning" | "error";
+  message: string;
+  component?: string | null;
+}
+
+export interface PluginManagerBundleContribution {
+  id: string;
+  label: string;
+  count: number;
+}
+
+/** Installation and trust metadata for a plugin backed by an on-disk bundle. */
+export interface PluginManagerBundle {
+  id: string;
+  repository?: string | null;
+  standards: string[];
+  trusted: boolean;
+  enabled: boolean;
+  requiresTrust: boolean;
+  runtimeManaged: boolean;
+  contributions: PluginManagerBundleContribution[];
+  diagnostics: PluginManagerBundleDiagnostic[];
+}
+
 export interface PluginManagerPlugin {
   id: string;
   name: string;
@@ -60,6 +85,8 @@ export interface PluginManagerPlugin {
   /** JSON Schema. Simple object fields render as controls; other schemas use JSON. */
   configSchema?: unknown;
   configurable?: boolean;
+  /** Present only for installed bundles; built-ins never receive installation controls. */
+  bundle?: PluginManagerBundle;
 }
 
 export interface PluginManagerComponent {
@@ -126,6 +153,12 @@ export interface PluginManagerInstallRequest {
   scope: PluginManagerScope;
 }
 
+export interface PluginManagerBundleInstallResult {
+  pluginId: string;
+  name: string;
+  version?: string | null;
+}
+
 export interface PluginManagerRecovery {
   kind: "normal" | "restored_last_good" | "safe_mode";
   error?: string;
@@ -157,7 +190,27 @@ export interface PluginManagerLabels {
   unavailable: string;
   refresh: string;
   bundleTools: string;
+  advancedBundleTools: string;
+  installFromGithub: string;
+  githubRepository: string;
+  githubHint: string;
+  closeInstaller: string;
+  installingPlugin: string;
+  bundleInstalled: (result: PluginManagerBundleInstallResult) => string;
   managedInBundleTools: string;
+  bundleManagement: string;
+  bundleManagementUserOnly: string;
+  trustRequired: string;
+  trusted: string;
+  notTrusted: string;
+  trustPlugin: string;
+  revokeTrust: string;
+  contributions: string;
+  diagnostics: string;
+  uninstall: string;
+  uninstallTitle: (pluginName: string) => string;
+  uninstallDescription: string;
+  keepPluginData: string;
   resetDefaults: string;
   restoredLastGood: string;
   safeMode: string;
@@ -186,7 +239,11 @@ export interface PluginManagerPageProps {
   onSaveConfig: (request: PluginManagerConfigRequest) => Promise<void>;
   onInstallMarketplaceItem: (request: PluginManagerInstallRequest) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
-  /** Compatibility tools for trust, uninstall, GitHub import, and local marketplace manifests. */
+  onImportGithub?: (repository: string) => Promise<PluginManagerBundleInstallResult>;
+  onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
+  onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
+  onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
+  /** Advanced compatibility tools for local marketplace manifests and scaffolds. */
   onOpenBundleTools?: () => void;
   onResetPlugin?: (pluginId: string, scope: PluginManagerScope) => Promise<void>;
 }

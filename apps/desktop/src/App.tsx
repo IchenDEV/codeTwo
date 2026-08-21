@@ -48,6 +48,7 @@ import {
   gitStatus,
   githubImportPlugin,
   installMarketplacePlugin,
+  invokePluginUi,
   commentIssue,
   issueContext,
   listArchivedSessions,
@@ -68,6 +69,7 @@ import {
   onBrowserAgentActivity,
   onBrowserDownloadBlocked,
   onAutoSceneChanged,
+  onPluginsChanged,
   onEngineEvent,
   openProject,
   pickPluginMarketplace,
@@ -159,10 +161,14 @@ import { makeTranscriptHandler } from "./voice/VoiceButton";
 import { PluginHub } from "./market/Market";
 import {
   PluginManagerPage,
+  PluginUiSlot,
+  activePluginLanguageServers,
+  activePluginUiContributions,
   buildPluginManagerCatalog,
   normalizePluginProjectPath,
   pluginManagerComponentEnabled,
   toManagedPluginScope,
+  type ActivePluginUiContribution,
   type BuiltinUiComponentId,
   type PluginManagerChangePlan,
   type PluginManagerChangeRequest,
@@ -181,6 +187,7 @@ import { WorkspaceSearchModal } from "./files/WorkspaceSearch";
 import type { FileRevealTarget } from "./files/FileViewer";
 import { dirtyKey, isDirty as isFileDirty, markDirty } from "./files/dirty";
 import { synchronizeLspRuntimePolicy } from "./lsp/runtimePolicy";
+import { configurePluginLanguageServers } from "./lsp/client";
 import { quickQuotaProviderFor, quickQuotaSummary } from "./usage/quickQuota";
 import { AutomationsPage } from "./automation/AutomationsPage";
 import type { SessionConfig } from "./session/config";
@@ -2539,6 +2546,30 @@ export default function App() {
     });
   }, [refreshManagedCatalogs]);
 
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe = () => {};
+    const refreshBundles = () => listPlugins()
+      .then((next) => {
+        if (!disposed) setPlugins(next);
+      })
+      .catch((error) => console.warn("Could not load plugin bundles", error));
+    void refreshBundles();
+    void onPluginsChanged(() => {
+      void refreshBundles();
+      void refreshManagedCatalogs().catch((error) => {
+        console.warn("Could not refresh plugin catalog", error);
+      });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unsubscribe = stop;
+    });
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [refreshManagedCatalogs]);
+
   const pluginManagerProjects = useMemo(() => {
     const seen = new Set<string>();
     return projects.flatMap((project) => {
@@ -2597,6 +2628,43 @@ export default function App() {
   const lspPluginEnabled = activeComponentPolicyReady &&
     (activePluginModel.plugins.find((plugin) => plugin.id === "lsp")?.state.effectiveEnabled ?? false);
   const lspProjectPath = activeProject ? normalizePluginProjectPath(activeProject) : null;
+  const pluginUiActions = useMemo(
+    () => activeComponentPolicyReady
+      ? activePluginUiContributions(plugins, activePluginModel.plugins)
+      : activePluginUiContributions([], []),
+    [activeComponentPolicyReady, activePluginModel.plugins, plugins],
+  );
+  const pluginLanguageServers = useMemo(
+    () => activeComponentPolicyReady
+      ? activePluginLanguageServers(plugins, activePluginModel.plugins)
+      : [],
+    [activeComponentPolicyReady, activePluginModel.plugins, plugins],
+  );
+  useLayoutEffect(() => {
+    configurePluginLanguageServers(pluginLanguageServers);
+  }, [pluginLanguageServers]);
+  const invokePluginAction = useCallback(async (contribution: ActivePluginUiContribution) => {
+    try {
+      const result = await invokePluginUi(
+        contribution.pluginId,
+        contribution.id,
+        {
+          cwd: workspaceCwd,
+          projectPath: lspProjectPath,
+          sessionId: activeSession,
+        },
+        lspProjectPath,
+      );
+      const message = typeof result === "string"
+        ? result
+        : result && typeof result === "object" && "message" in result && typeof result.message === "string"
+          ? result.message
+          : `${contribution.label} completed.`;
+      toast(message, "success");
+    } catch (error) {
+      toast(`${contribution.label} failed: ${String(error)}`, "error");
+    }
+  }, [activeSession, lspProjectPath, toast, workspaceCwd]);
   // Close the renderer gate synchronously, then reopen it only after this project's backend has
   // resumed. This keeps mounted editor effects from racing a suspended project realm.
   useLayoutEffect(() => {
@@ -2797,8 +2865,10 @@ export default function App() {
   }, [cwd]);
 
   const openPluginHub = useCallback(() => {
-    const scope: PluginManagerScope = activeProject
-      ? { kind: "project", projectPath: normalizePluginProjectPath(activeProject) }
+    const normalizedActiveProject = activeProject ? normalizePluginProjectPath(activeProject) : null;
+    const scope: PluginManagerScope = normalizedActiveProject &&
+      pluginManagerProjects.some((project) => project.path === normalizedActiveProject)
+      ? { kind: "project", projectPath: normalizedActiveProject }
       : { kind: "user" };
     setPluginManagerScope(scope);
     setShowBundlePluginTools(false);
@@ -2809,7 +2879,7 @@ export default function App() {
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPluginHub(true);
-  }, [activeProject, refreshManagedCatalogs, refreshSkills]);
+  }, [activeProject, pluginManagerProjects, refreshManagedCatalogs, refreshSkills]);
 
   const refreshPluginManagerData = useCallback(async (scope: PluginManagerScope = pluginManagerScope) => {
     const [nextMarket, nextPlugins, nextSkills] = await Promise.all([
@@ -4166,6 +4236,16 @@ export default function App() {
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
+          pluginActions={(
+            <PluginUiSlot
+              slot="rail.features"
+              contributions={pluginUiActions["rail.features"]}
+              onInvoke={async (contribution) => {
+                await invokePluginAction(contribution);
+                if (narrowLayout) setNarrowRailOpen(false);
+              }}
+            />
+          )}
         />
 
         {showAutomations && (
@@ -4227,6 +4307,31 @@ export default function App() {
             }}
             onRefreshMarketplace={async () => {
               await refreshPluginManagerData(pluginManagerScope);
+            }}
+            onImportGithub={async (repository) => {
+              const result = await githubImportPlugin(repository);
+              await refreshPluginManagerData(pluginManagerScope);
+              toast(t("pluginHub.pluginInstalledToast", { name: result.plugin.name }), "success");
+              return {
+                pluginId: result.plugin.id,
+                name: result.plugin.name,
+                version: result.plugin.version,
+              };
+            }}
+            onSetBundleEnabled={async (pluginId, enabled) => {
+              await setPluginEnabled(pluginId, enabled);
+              await refreshPluginManagerData(pluginManagerScope);
+              toast(t(enabled ? "pluginHub.pluginEnabledToast" : "pluginHub.pluginDisabledToast"), "success");
+            }}
+            onSetBundleTrusted={async (pluginId, trusted) => {
+              await setPluginTrusted(pluginId, trusted);
+              await refreshPluginManagerData(pluginManagerScope);
+              toast(t(trusted ? "pluginHub.pluginTrustedToast" : "pluginHub.pluginUntrustedToast"), "success");
+            }}
+            onUninstallBundle={async (pluginId, keepData) => {
+              await uninstallPlugin(pluginId, keepData);
+              await refreshPluginManagerData(pluginManagerScope);
+              toast(t("pluginHub.pluginUninstalledToast"), "success");
             }}
             onOpenBundleTools={() => setShowBundlePluginTools(true)}
           />
@@ -4368,6 +4473,12 @@ export default function App() {
 
             <div className="electrobun-webkit-app-region-drag flex-1" />
 
+            <PluginUiSlot
+              slot="session.header"
+              contributions={pluginUiActions["session.header"]}
+              onInvoke={invokePluginAction}
+            />
+
             {/* Full-page mode hides the transcript, so the header carries the only sign that a turn
                 is in flight — and the way back to the answer without leaving the mode for good. */}
             {docMode && (running || turns.length > 0 || sessionLoading) && (
@@ -4463,6 +4574,13 @@ export default function App() {
                 onAddSelection={addSelectedText}
                 onExplainSelection={explainSelectedText}
                 onAskSelectionInSideChat={askSelectedTextInSideChat}
+                before={(
+                  <PluginUiSlot
+                    slot="transcript.before"
+                    contributions={pluginUiActions["transcript.before"]}
+                    onInvoke={invokePluginAction}
+                  />
+                )}
               />
             )}
 
@@ -4537,6 +4655,13 @@ export default function App() {
                     void dismissSceneBanner(sceneBanner.session, sceneBanner.stateKey);
                     setSceneBanner(null);
                   }}
+                />
+              )}
+              {!activeArchived && (
+                <PluginUiSlot
+                  slot="composer.above"
+                  contributions={pluginUiActions["composer.above"]}
+                  onInvoke={invokePluginAction}
                 />
               )}
               <div className={cn("contents", activeArchived && "hidden")}>
@@ -4639,6 +4764,13 @@ export default function App() {
                   runHint={hint("run")}
                   skillHint={hint("open_skill_picker")}
                   filesHint={hint("open_files")}
+                  pluginActions={(
+                    <PluginUiSlot
+                      slot="composer.toolbar"
+                      contributions={pluginUiActions["composer.toolbar"]}
+                      onInvoke={invokePluginAction}
+                    />
+                  )}
                   sessionId={activeSession}
                   insertBriefRef={insertBriefRef}
                 >
