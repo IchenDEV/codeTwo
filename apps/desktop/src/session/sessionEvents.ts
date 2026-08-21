@@ -70,6 +70,31 @@ export function permissionsFromSessions(
     .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
+/** Replace one session's pending inputs after an authoritative activity transition. */
+export function permissionQueueAfterActivity(
+  queue: readonly PermissionQueueItem[],
+  session: string,
+  activity: SessionActivity,
+): PermissionQueueItem[] {
+  const pending = permissionsFromSessions([{ id: session, activity }]);
+  return [...queue.filter((request) => request.session !== session), ...pending].sort(
+    (left, right) => (left.sequence ?? 0) - (right.sequence ?? 0),
+  );
+}
+
+/** Keep a prompt visible until the host confirms that it accepted the answer. */
+export function permissionQueueAfterAnswer(
+  queue: readonly PermissionQueueItem[],
+  session: string,
+  requestId: string,
+  accepted: boolean,
+): PermissionQueueItem[] {
+  if (!accepted) return [...queue];
+  return queue.filter(
+    (request) => request.session !== session || request.requestId !== requestId,
+  );
+}
+
 /** Preserve concurrent permission requests while updating a repeated request in place. */
 export function enqueuePermission(
   queue: PermissionQueueItem[],

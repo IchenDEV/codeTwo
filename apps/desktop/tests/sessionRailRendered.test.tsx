@@ -157,7 +157,7 @@ describe("SessionRail row layout", () => {
     expect(punctuation?.getAttribute("title")).toBeNull();
 
     expect(meaningful?.querySelectorAll("[data-session-line]")).toHaveLength(4);
-    expect(meaningful?.querySelectorAll("[data-session-icon-column]")).toHaveLength(4);
+    expect(meaningful?.querySelectorAll("[data-session-icon-column]")).toHaveLength(3);
     expect(meaningful?.querySelector('[data-session-line="preview"]')?.textContent).toBe(
       "A useful preview",
     );
@@ -166,7 +166,11 @@ describe("SessionRail row layout", () => {
     expect(meaningful?.getAttribute("title")).toBe("A useful preview");
 
     for (const row of [punctuation, meaningful]) {
-      expect(row?.querySelector('[data-session-line="status"]')?.textContent).toContain("Completed");
+      const provider = row?.querySelector('[data-session-line="provider"]');
+      const status = row?.querySelector('[data-session-line="status"]');
+      expect(status?.textContent).toContain("Completed");
+      expect(provider?.contains(status ?? null)).toBe(true);
+      expect(status?.className).toContain("ml-auto");
     }
 
     view.unmount();

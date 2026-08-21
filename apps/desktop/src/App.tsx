@@ -276,6 +276,8 @@ import {
   isTerminalSessionEvent,
   latestActivity,
   matchesSessionCreation,
+  permissionQueueAfterAnswer,
+  permissionQueueAfterActivity,
   permissionsFromSessions,
   sessionCreationBaseline,
   sessionCreationBaselineSha,
@@ -1866,24 +1868,8 @@ export default function App() {
             followDockEvent({ kind: "run_ended" });
           }
 
-          const state = ev.activity.state;
-          const pending =
-            state.kind === "awaiting_input"
-            ? state.pending.map((input) => ({
-                session: ev.session,
-                requestId: input.input_id,
-                title: input.title,
-                options: input.options,
-                sequence: input.sequence,
-              }))
-            : [];
           setPermissionQueue((previous) =>
-            [
-              ...previous.filter((request) => request.session !== ev.session),
-              ...pending,
-            ].sort(
-              (left, right) => (left.sequence ?? 0) - (right.sequence ?? 0),
-            ),
+            permissionQueueAfterActivity(previous, ev.session, ev.activity),
           );
           return;
         }
@@ -2521,38 +2507,44 @@ export default function App() {
     [createSession, setDocMode, t],
   );
 
-  const dequeuePermission = useCallback(
-    (session: string, requestId: string) => {
-    setPermissionQueue((previous) =>
-      previous.filter(
-          (request) =>
-            request.session !== session || request.requestId !== requestId,
-      ),
-    );
-    },
-    [],
-  );
-
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
-      await answerPermission(
+      const accepted = await answerPermission(
         permission.session,
         permission.requestId,
         optionId,
       );
-      dequeuePermission(permission.session, permission.requestId);
+      setPermissionQueue((previous) =>
+        permissionQueueAfterAnswer(
+          previous,
+          permission.session,
+          permission.requestId,
+          accepted,
+        ),
+      );
     },
-    [dequeuePermission, permission],
+    [permission],
   );
 
   const answerQuestion = useCallback(
     async (value: ElicitationAnswer) => {
       if (!permission) return;
-      await answerElicitation(permission.session, permission.requestId, value);
-      dequeuePermission(permission.session, permission.requestId);
+      const accepted = await answerElicitation(
+        permission.session,
+        permission.requestId,
+        value,
+      );
+      setPermissionQueue((previous) =>
+        permissionQueueAfterAnswer(
+          previous,
+          permission.session,
+          permission.requestId,
+          accepted,
+        ),
+      );
     },
-    [dequeuePermission, permission],
+    [permission],
   );
 
   /**
