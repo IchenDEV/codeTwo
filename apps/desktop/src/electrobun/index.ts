@@ -185,7 +185,6 @@ mainWindow.webview.on("dom-ready", () => {
       'document.documentElement.classList.add("macos-window-glass")',
     );
   }
-  mainWindow.setWindowButtonPosition(24, 17);
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });
   for (const event of queuedEvents.splice(0)) rpc.send.event(event);
