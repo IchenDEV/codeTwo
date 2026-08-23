@@ -13,12 +13,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { homedir, tmpdir } from "node:os";
 
 import type { DesktopEvent } from "../rpc";
 
 const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 const MAX_BINARY_BYTES = 24 * 1024 * 1024;
 const MAX_COMMAND_BYTES = 2 * 1024 * 1024;
+const MAX_VISUALIZATION_BYTES = 1024 * 1024;
 const PROJECT_CONFIG_FILES = [".codetwo.json", "codetwo.json"] as const;
 
 export interface ProjectScriptRecord {
@@ -162,6 +164,42 @@ export function readText(cwd: string, path: string): string {
   if (size > MAX_TEXT_BYTES) throw new Error(`text file is too large: ${path}`);
   const bytes = readFileSync(target);
   if (bytes.includes(0)) throw new Error(`file appears to be binary: ${path}`);
+  return bytes.toString("utf8");
+}
+
+/** Read a visualize fragment only from task-owned scratch, Codex visualization, or project roots. */
+export function readVisualization(path: string, projectPath?: string | null): string {
+  if (!isAbsolute(path) || extname(path).toLowerCase() !== ".html") {
+    throw new Error("visualization path must be an absolute .html file");
+  }
+  const target = realpathSync(path);
+  const configuredCodexRoot = process.env.CODEX_HOME
+    ? join(process.env.CODEX_HOME, "visualizations")
+    : null;
+  const roots = [
+    join(homedir(), ".codex", "visualizations"),
+    configuredCodexRoot,
+    tmpdir(),
+    projectPath,
+  ].flatMap((root) => {
+    if (!root || !exists(root)) return [];
+    try {
+      const canonical = realpathSync(root);
+      return statSync(canonical).isDirectory() ? [canonical] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (!roots.some((root) => pathInside(root, target))) {
+    throw new Error("visualization path is outside approved roots");
+  }
+  const stat = statSync(target);
+  if (!stat.isFile()) throw new Error("visualization path is not a file");
+  if (stat.size > MAX_VISUALIZATION_BYTES) {
+    throw new Error("visualization is larger than 1 MB");
+  }
+  const bytes = readFileSync(target);
+  if (bytes.includes(0)) throw new Error("visualization appears to be binary");
   return bytes.toString("utf8");
 }
 

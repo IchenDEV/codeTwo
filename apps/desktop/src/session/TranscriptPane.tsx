@@ -123,7 +123,7 @@ export function TranscriptPane({
                 {turns.map((turn) => (
                   <li
                     key={turn.transcriptStartSeq ?? turn.id}
-                    style={{ contentVisibility: "auto", containIntrinsicSize: "auto 180px" }}
+                    className="transcript-turn"
                   >
                     <TurnCard
                       turn={turn}

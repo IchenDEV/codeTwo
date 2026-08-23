@@ -286,6 +286,116 @@ describe("persisted transcript projection", () => {
       }),
     ]);
   });
+
+  test("keeps streamed tool calls between the text fragments that surrounded them", () => {
+    let turns = applyEvent([], {
+      event: "turn_started",
+      session: "session-a",
+      request_id: "request-1",
+    });
+    turns = applyEvent(turns, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-1",
+      text: "Before tool.",
+      transcript_seq: 11,
+    });
+    turns = applyEvent(turns, {
+      event: "tool_call",
+      session: "session-a",
+      id: "tool-1",
+      title: "Read workspace",
+      status: "pending",
+      transcript_seq: 12,
+    });
+    turns = applyEvent(turns, {
+      event: "tool_call",
+      session: "session-a",
+      id: "tool-1",
+      title: "Read workspace",
+      status: "completed",
+      transcript_seq: 13,
+    });
+    turns = applyEvent(turns, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-2",
+      text: "After tool.",
+      transcript_seq: 14,
+    });
+
+    expect(turns[0].content).toEqual([
+      { kind: "text", text: "Before tool.", transcriptSeq: 11 },
+      { kind: "tool", toolId: "tool-1", transcriptSeq: 12 },
+      { kind: "text", text: "After tool.", transcriptSeq: 14 },
+    ]);
+    expect(turns[0].tools[0].status).toBe("completed");
+  });
+
+  test("merges a durable snapshot with live tool ordering by transcript sequence", () => {
+    const loaded = turnsFromTranscript(
+      [
+        { seq: 10, role: "user", part: { kind: "prompt", text: "run", display: "run" } },
+        { seq: 11, role: "agent", part: { kind: "text", text: "Before" } },
+        {
+          seq: 13,
+          role: "agent",
+          part: {
+            kind: "tool_call",
+            id: "tool-1",
+            title: "Read",
+            status: "completed",
+          },
+        },
+        { seq: 14, role: "agent", part: { kind: "text", text: "After" } },
+      ],
+      true,
+      "request-1",
+    );
+    let live = applyEvent([], {
+      event: "turn_started",
+      session: "session-a",
+      request_id: "request-1",
+    });
+    live = applyEvent(live, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-1",
+      text: "Before",
+      transcript_seq: 11,
+    });
+    live = applyEvent(live, {
+      event: "tool_call",
+      session: "session-a",
+      id: "tool-1",
+      title: "Read",
+      status: "pending",
+      transcript_seq: 12,
+    });
+    live = applyEvent(live, {
+      event: "tool_call",
+      session: "session-a",
+      id: "tool-1",
+      title: "Read",
+      status: "completed",
+      transcript_seq: 13,
+    });
+    live = applyEvent(live, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-2",
+      text: "After",
+      transcript_seq: 14,
+    });
+
+    const merged = mergeLoadedTurns(loaded, live, true);
+    expect(merged[0].content).toEqual([
+      { kind: "text", text: "Before", transcriptSeq: 11 },
+      { kind: "tool", toolId: "tool-1", transcriptSeq: 12 },
+      { kind: "text", text: "After", transcriptSeq: 14 },
+    ]);
+    expect(merged[0].tools[0].status).toBe("completed");
+  });
 });
 
 describe("long prompt preview", () => {

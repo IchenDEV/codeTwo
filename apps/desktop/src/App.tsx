@@ -3921,6 +3921,29 @@ export default function App() {
     toast,
   ]);
 
+  useEffect(() => {
+    let confirmationOpen = false;
+    const onVisualizeFollowUp = (event: Event) => {
+      const detail = (event as CustomEvent<{ prompt?: string; title?: string }>).detail;
+      const prompt = detail?.prompt?.trim();
+      if (!prompt || !insertTextRef.current || confirmationOpen) return;
+      confirmationOpen = true;
+      void confirmNative(
+        t("visualization.followUp", { prompt }),
+        detail.title || t("visualization.title"),
+      ).then((accepted) => {
+        if (!accepted) return;
+        insertTextRef.current?.(prompt);
+        setTimeout(() => focusEditorRef.current?.(), 0);
+      }).finally(() => {
+        confirmationOpen = false;
+      });
+    };
+    window.addEventListener("codetwo-visualize-follow-up", onVisualizeFollowUp);
+    return () =>
+      window.removeEventListener("codetwo-visualize-follow-up", onVisualizeFollowUp);
+  }, [t]);
+
   /** Open a file as a tab in the right panel's editor, and bring that panel to the front. */
   const openFileTab = useCallback(
     (p: string, position?: Pick<WorkspaceContentMatch, "line" | "column">) => {

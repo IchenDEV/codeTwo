@@ -41,6 +41,12 @@
   --destructive-foreground: oklch(0.984 0.003 247.858);
   --success: oklch(0.627 0.194 149.214);
   --warning: oklch(0.666 0.179 58.318);
+  --viz-series-1: var(--primary);
+  --viz-series-2: var(--success);
+  --viz-series-3: var(--warning);
+  --viz-series-4: var(--destructive);
+  --viz-series-5: var(--term-ansi-6);
+  --viz-series-6: var(--term-ansi-5);
   --border: oklch(0.929 0.013 255.508);
   --input: oklch(0.929 0.013 255.508);
   --ring: oklch(0.546 0.215 262.881);
@@ -977,6 +983,40 @@
 }
 .canvas-ui-control {
   border-radius: var(--ds-radius-control);
+}
+
+/* A wide visualize result may borrow unused transcript width, but never escapes a side transcript
+   or a narrow app window. The iframe itself remains height-owned by its sandboxed document. */
+.codetwo-visualize.is-wide {
+  position: relative;
+  inset-inline-start: 50%;
+  width: min(1024px, calc(100vw - 320px));
+  min-width: 100%;
+  transform: translateX(-50%);
+}
+aside .codetwo-visualize.is-wide {
+  inset-inline-start: auto;
+  width: 100%;
+  min-width: 0;
+  transform: none;
+}
+
+/* Defer off-screen transcript turns without clipping a deliberate wide-mode visualization back to
+   the prose column. Only turns that actually contain a wide artifact opt out of paint containment. */
+.transcript-turn {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+.transcript-turn:has(.codetwo-visualize.is-wide) {
+  content-visibility: visible;
+}
+@media (max-width: 900px) {
+  .codetwo-visualize.is-wide {
+    inset-inline-start: auto;
+    width: 100%;
+    min-width: 0;
+    transform: none;
+  }
 }
 
 /* User-selected code typography applies to renderer-owned code surfaces, not only utility spans. */
