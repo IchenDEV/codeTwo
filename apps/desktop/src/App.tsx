@@ -5623,14 +5623,15 @@ export default function App() {
 
             {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
                 BlockNote unmounts (and takes the draft with it) if the structure around it changes.
-                Compact, the wrapper is just the composer's slot; expanded, it's a row that gives the
-                document the column. An empty thread is the hero state: the heading and the card sit
-                together in the centre of the column. */}
+                Compact, the wrapper is just the composer's slot; expanded, it is the document column
+                inside the outer transcript/document row. Keep this wrapper vertical so banners and
+                plugin contributions remain above the document instead of consuming its width. An empty
+                thread is the hero state: the heading and the card sit together in the centre. */}
             <div
               className={cn(
                 "flex",
                 docMode
-                  ? "order-1 min-h-0 min-w-0 flex-1"
+                  ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
                   : turns.length === 0 && !sessionLoading
                     ? "order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
                     : "order-2 shrink-0 flex-col",

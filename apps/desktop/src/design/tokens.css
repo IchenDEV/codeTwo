@@ -238,6 +238,11 @@
   --ds-input-radius: var(--ds-radius-control);
   --ds-card-radius: var(--ds-radius-module);
   --ds-dialog-radius: var(--ds-radius-modal);
+  --ds-menu-radius: var(--ds-radius-module);
+  --ds-menu-item-radius: var(--ds-radius-control);
+  --ds-menu-item-height: var(--ds-control-normal);
+  --ds-menu-padding: var(--ds-space-control-group);
+  --ds-menu-elevation: var(--ds-elevation-raised);
 
   /* Reasoning selector — reference presentation plus a nested desktop-density variant. */
   --ds-reasoning-selector-width: 450px;

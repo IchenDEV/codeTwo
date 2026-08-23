@@ -43,6 +43,10 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuItemDescription,
+  DropdownMenuItemText,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -778,7 +782,7 @@ export function SessionRail({
           <DropdownMenu>
             <DropdownMenuTrigger
               render={<button
-                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
                 title={activeProject ?? undefined}
               >
                 <Folder className="size-3.5 shrink-0" />
@@ -786,20 +790,21 @@ export function SessionRail({
                 <ChevronDown className="size-3 shrink-0 opacity-50" />
               </button>}
             />
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuGroup>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuRadioGroup value={activeProject ?? undefined} onValueChange={onSelectProject}>
                 {projects.map((p) => (
-                  <DropdownMenuItem key={p.path} onClick={() => onSelectProject(p.path)}>
+                  <DropdownMenuRadioItem key={p.path} value={p.path}>
                     <Folder className={cn(p.path === activeProject && "text-primary")} />
-                    <span className="min-w-0 flex-1 truncate" title={p.path}>
-                      {p.name}
-                    </span>
+                    <DropdownMenuItemText title={p.path}>
+                      <span className="truncate">{p.name}</span>
+                      <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>
+                    </DropdownMenuItemText>
                     <span className="shrink-0 text-fine text-muted-foreground">
                       {shortAge(p.last_opened_at)}
                     </span>
-                  </DropdownMenuItem>
+                  </DropdownMenuRadioItem>
                 ))}
-              </DropdownMenuGroup>
+              </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem onClick={onAddProject}>
