@@ -30,10 +30,9 @@ const nativeWindowEffects = readFileSync(
 );
 
 describe("macOS window chrome contract", () => {
-  test("centers the traffic lights on the 48px titlebar", () => {
+  test("leaves the native macOS traffic lights entirely to the system", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
-    expect(electrobunHost).not.toContain("trafficLightOffset:");
-    expect(electrobunHost).toContain("mainWindow.setWindowButtonPosition(24, 17)");
+    expect(electrobunHost).not.toMatch(/trafficLightOffset|setWindowButtonPosition/);
   });
 
   test("composes macOS sidebars as transparent blurred glass over an opaque workspace", () => {
