@@ -238,6 +238,7 @@
   --ds-input-radius: var(--ds-radius-control);
   --ds-card-radius: var(--ds-radius-module);
   --ds-dialog-radius: var(--ds-radius-modal);
+  --ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));
   --ds-menu-radius: var(--ds-radius-module);
   --ds-menu-item-radius: var(--ds-radius-control);
   --ds-menu-item-height: var(--ds-control-normal);

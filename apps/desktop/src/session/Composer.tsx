@@ -1348,7 +1348,7 @@ export function Composer({
                 "relative min-h-0 flex-1"
               : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
                 // shared raised shadow carry the separation without drawing a heavy box.
-                "rounded-2xl bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
+                "rounded-(--ds-composer-radius) bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -1408,9 +1408,12 @@ export function Composer({
                   ? // `w-max`, not `w-fit`: fit-content clamps to the column, and a clamped box
                     // lets the send button spill outside the card. Max-content always wraps every
                     // control — worst case the card floats a little over whatever sits beside it,
-                    // which its own z-plane makes safe.
-                    "glass-raised pointer-events-auto mx-auto w-max rounded-2xl border px-3 py-2 shadow-raised"
-                  : "px-3 pb-2.5 pt-1.5",
+                    // which its own z-plane makes safe. An 8px inset around the circular 32px
+                    // submit control aligns its centre with the surface's 24px corner centre.
+                    "glass-raised pointer-events-auto mx-auto w-max rounded-(--ds-composer-radius) border p-2 shadow-raised"
+                  : // Keep every outer edge 8px from the controls. The 24px surface radius then
+                    // shares its bottom-right centre with the circular send/stop control.
+                    "p-2",
               )}
             >
               {controls}
