@@ -12,6 +12,7 @@ import type {
 import { PureBunHost } from "./host";
 import { nativeContextMenuAction, nativeContextMenuConfig } from "./contextMenuHost";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
+import { AppshotManager } from "./appshots";
 import { configureMacOSWindowEffects } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
 
@@ -99,6 +100,7 @@ async function openWorkspace(path: string, target: WorkspaceOpenTarget): Promise
 const queuedEvents: DesktopEvent[] = [];
 let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
+let appshots: AppshotManager;
 const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 const dataDir =
   process.env.CODETWO_DATA_DIR ??
@@ -150,6 +152,16 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
       openDevtools: () => mainWindow.webview.openDevTools(),
       updateStatus: getAppUpdateStatus,
       updateCheck: startAppUpdateCheck,
+      appshotsSettings: () => appshots.getSettings(),
+      appshotsUpdate: (patch) => appshots.updateSettings(patch),
+      appshotsRequestPermissions: ({ kind }) => appshots.requestPermissions(kind),
+      appshotsOpenPrivacySettings: ({ kind }) => appshots.openPrivacySettings(kind),
+      appshotsCapture: async () => {
+        const capture = await appshots.capture();
+        rpc.send.appshotCaptured(capture);
+        mainWindow.show();
+        return capture;
+      },
     },
     messages: {},
   },
@@ -179,6 +191,13 @@ const mainWindow = new BrowserWindow({
   transparent: process.platform === "darwin",
   sandbox: false,
 });
+appshots = new AppshotManager(
+  dataDir,
+  process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev",
+  (capture) => rpc.send.appshotCaptured(capture),
+  (message) => rpc.send.appshotFailed({ message }),
+  () => mainWindow.show(),
+);
 if (process.platform === "darwin") {
   const windowEffectsStatus = configureMacOSWindowEffects(mainWindow.ptr);
   if (!windowEffectsStatus.shadow) {
@@ -216,5 +235,6 @@ Electrobun.events.on("before-quit", (event) => {
   if (shuttingDown) return;
   event.response = { allow: false };
   shuttingDown = true;
+  appshots.shutdown();
   void host.shutdown().finally(() => Utils.quit());
 });

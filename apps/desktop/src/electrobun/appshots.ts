@@ -1,0 +1,246 @@
+import { GlobalShortcut, Utils } from "electrobun/bun";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
+
+import type {
+  AppshotCapture,
+  AppshotDestination,
+  AppshotHotkey,
+  AppshotSettings,
+} from "./rpc";
+import {
+  captureMacOSAppshot,
+  macOSAppshotPermissions,
+  macOSCommandKeyState,
+  requestMacOSAppshotPermissions,
+} from "./appshots.native";
+
+const DEFAULT_SETTINGS = {
+  hotkey: "both-command",
+  destination: "automatic",
+  play_sound: true,
+} as const satisfies Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">;
+
+const HOTKEY_ACCELERATORS: Partial<Record<AppshotHotkey, string>> = {
+  "command-shift-2": "CommandOrControl+Shift+2",
+  "command-option-2": "CommandOrControl+Alt+2",
+};
+
+const captureRetentionMs = 7 * 24 * 60 * 60 * 1000;
+const maxStoredCaptures = 40;
+
+type StoredSettings = Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">;
+
+function isHotkey(value: unknown): value is AppshotHotkey {
+  return value === "both-command" || value === "command-shift-2" || value === "command-option-2";
+}
+
+function isDestination(value: unknown): value is AppshotDestination {
+  return value === "automatic" || value === "current" || value === "new";
+}
+
+export function normalizeAppshotSettings(value: unknown): StoredSettings {
+  const settings = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    hotkey: isHotkey(settings.hotkey) ? settings.hotkey : DEFAULT_SETTINGS.hotkey,
+    destination: isDestination(settings.destination) ? settings.destination : DEFAULT_SETTINGS.destination,
+    play_sound: typeof settings.play_sound === "boolean" ? settings.play_sound : DEFAULT_SETTINGS.play_sound,
+  };
+}
+
+export class AppshotManager {
+  private readonly settingsPath: string;
+  private readonly capturesDir: string;
+  private settings: StoredSettings;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private dualCommandLatched = false;
+  private registeredAccelerator: string | null = null;
+  private capturing = false;
+
+  constructor(
+    dataDir: string,
+    private readonly bundleIdentifier: string,
+    private readonly onCapture: (capture: AppshotCapture) => void,
+    private readonly onFailure: (message: string) => void,
+    private readonly activate: () => void,
+  ) {
+    this.settingsPath = join(dataDir, "appshots.json");
+    this.capturesDir = join(dataDir, "appshots");
+    mkdirSync(this.capturesDir, { recursive: true, mode: 0o700 });
+    chmodSync(this.capturesDir, 0o700);
+    try {
+      this.settings = normalizeAppshotSettings(JSON.parse(readFileSync(this.settingsPath, "utf8")));
+    } catch {
+      this.settings = { ...DEFAULT_SETTINGS };
+    }
+    this.cleanupCaptures();
+    this.applyHotkey();
+  }
+
+  getSettings(): AppshotSettings {
+    const permissions = macOSAppshotPermissions();
+    return {
+      ...this.settings,
+      available: permissions.available,
+      screen_recording: permissions.screenRecording,
+      accessibility: permissions.accessibility,
+      hotkey_registered: this.hotkeyRegistered(),
+      unavailable_reason: permissions.available ? null : "Appshots require macOS 14 or later.",
+    };
+  }
+
+  updateSettings(patch: Partial<StoredSettings>): AppshotSettings {
+    this.settings = normalizeAppshotSettings({ ...this.settings, ...patch });
+    writeFileSync(
+      this.settingsPath,
+      `${JSON.stringify(this.settings, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    this.applyHotkey();
+    return this.getSettings();
+  }
+
+  requestPermissions(kind: "screen-recording" | "accessibility"): AppshotSettings {
+    requestMacOSAppshotPermissions(kind);
+    return this.getSettings();
+  }
+
+  openPrivacySettings(kind: "screen-recording" | "accessibility"): boolean {
+    const pane = kind === "screen-recording" ? "Privacy_ScreenCapture" : "Privacy_Accessibility";
+    return Utils.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+  }
+
+  async capture(): Promise<AppshotCapture> {
+    if (this.capturing) throw new Error("An Appshot capture is already in progress.");
+    this.capturing = true;
+    const id = crypto.randomUUID();
+    const imagePath = join(this.capturesDir, `${id}.png`);
+    const metadataPath = join(this.capturesDir, `${id}.json`);
+    try {
+      const result = captureMacOSAppshot(imagePath, this.bundleIdentifier);
+      if (!result.ok) {
+        rmSync(imagePath, { force: true });
+        throw new Error(result.message ?? "Could not capture the frontmost window.");
+      }
+      chmodSync(imagePath, 0o600);
+      const capturedAt = new Date().toISOString();
+      const metadata = {
+        id,
+        app_name: result.app_name ?? "Application",
+        window_title: result.window_title ?? "Window",
+        text: result.text ?? "",
+        text_truncated: result.text_truncated === true,
+        captured_at: capturedAt,
+      };
+      writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+      const capture: AppshotCapture = {
+        id,
+        app_name: metadata.app_name,
+        window_title: metadata.window_title,
+        captured_at: capturedAt,
+        text_length: metadata.text.length,
+        text_truncated: metadata.text_truncated,
+        width: result.width ?? 0,
+        height: result.height ?? 0,
+        preview_data_url: `data:image/png;base64,${readFileSync(imagePath).toString("base64")}`,
+        destination: this.settings.destination,
+      };
+      if (this.settings.play_sound) {
+        const player = Bun.spawn(
+          ["/usr/bin/afplay", "/System/Library/Sounds/Glass.aiff"],
+          { stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+        );
+        void player.exited;
+      }
+      this.cleanupCaptures();
+      return capture;
+    } finally {
+      this.capturing = false;
+    }
+  }
+
+  shutdown(): void {
+    this.clearHotkey();
+  }
+
+  private hotkeyRegistered(): boolean {
+    const permissions = macOSAppshotPermissions();
+    if (!permissions.available) return false;
+    if (this.settings.hotkey === "both-command") {
+      return permissions.accessibility && this.pollTimer !== null;
+    }
+    return this.registeredAccelerator !== null
+      && GlobalShortcut.isRegistered(this.registeredAccelerator);
+  }
+
+  private applyHotkey(): void {
+    this.clearHotkey();
+    if (!macOSAppshotPermissions().available) return;
+    if (this.settings.hotkey === "both-command") {
+      this.pollTimer = setInterval(() => {
+        const bothPressed = macOSCommandKeyState() === 3;
+        if (bothPressed && !this.dualCommandLatched) {
+          this.dualCommandLatched = true;
+          void this.captureFromHotkey();
+        } else if (!bothPressed) {
+          this.dualCommandLatched = false;
+        }
+      }, 35);
+      return;
+    }
+    const accelerator = HOTKEY_ACCELERATORS[this.settings.hotkey];
+    if (accelerator && GlobalShortcut.register(accelerator, () => void this.captureFromHotkey())) {
+      this.registeredAccelerator = accelerator;
+    }
+  }
+
+  private clearHotkey(): void {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
+    this.dualCommandLatched = false;
+    if (this.registeredAccelerator) GlobalShortcut.unregister(this.registeredAccelerator);
+    this.registeredAccelerator = null;
+  }
+
+  private async captureFromHotkey(): Promise<void> {
+    try {
+      const capture = await this.capture();
+      this.onCapture(capture);
+      this.activate();
+    } catch (error) {
+      this.onFailure(error instanceof Error ? error.message : String(error));
+      this.activate();
+    }
+  }
+
+  private cleanupCaptures(): void {
+    const now = Date.now();
+    const entries = readdirSync(this.capturesDir)
+      .flatMap((name) => {
+        const path = join(this.capturesDir, name);
+        try {
+          return [{ name, path, modified: statSync(path).mtimeMs }];
+        } catch {
+          return [];
+        }
+      })
+      .sort((left, right) => right.modified - left.modified);
+    for (const [index, entry] of entries.entries()) {
+      if (index >= maxStoredCaptures * 2 || now - entry.modified > captureRetentionMs) {
+        if (existsSync(entry.path)) rmSync(entry.path, { force: true });
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ import {
   Store,
   Ticket,
   TriangleAlert,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -35,6 +36,7 @@ import {
   fallbackProviders,
   providerDisplayName,
   type ConfigOptionInfo,
+  type AppshotCapture,
   type ModelChoice,
 } from "../bridge";
 import type { ContextWindow } from "./contextWindow";
@@ -95,6 +97,8 @@ interface ComposerProps {
   /** Session summary is visible while its transcript detail is still loading; sending is gated. */
   loading: boolean;
   docEmpty: boolean;
+  appshots?: AppshotCapture[];
+  onRemoveAppshot?: (id: string) => void;
   onRun: () => void;
   onStop: () => void;
   onAttachFile: () => void;
@@ -876,6 +880,8 @@ export function Composer({
   running,
   loading,
   docEmpty,
+  appshots = [],
+  onRemoveAppshot,
   onRun,
   onStop,
   onAttachFile,
@@ -903,6 +909,7 @@ export function Composer({
   const briefDismissedRef = useRef(new Set<string>());
   const [, bumpBriefDismissals] = useState(0);
   const sessionKey = sessionId ?? "draft";
+  const composerEmpty = docEmpty && appshots.length === 0;
   const activeBrief = config.activeScene?.brief ?? null;
   const insertBrief = () => {
     const scene = config.activeScene;
@@ -914,7 +921,7 @@ export function Composer({
   };
   const showBriefOffer = briefOfferVisible({
     docMode,
-    docEmpty,
+    docEmpty: composerEmpty,
     hasBrief: activeBrief !== null,
     dismissed: briefDismissedRef.current.has(sessionKey),
   });
@@ -1006,7 +1013,7 @@ export function Composer({
             </DropdownMenuItem>
             {/* With content already in the document the floating offer stays away; the brief is
                 still one menu entry away while a scene with one is active. */}
-            {activeBrief && !docEmpty && (
+            {activeBrief && !composerEmpty && (
               <DropdownMenuItem onClick={insertBrief}>
                 <ListChecks />
                 {t("brief.menuInsert")}
@@ -1078,7 +1085,7 @@ export function Composer({
 
       {/* Enter makes a paragraph in a document, so the send chord has to be taught rather than
           assumed. It shows only while the document is empty, and so retires itself. */}
-      {docEmpty && !running && !loading && runHint && (
+      {composerEmpty && !running && !loading && runHint && (
         <span className="mx-1 hidden shrink-0 whitespace-nowrap text-fine text-muted-foreground @2xl/composer:inline">
           {t("composer.toSend", { key: runHint })}
         </span>
@@ -1107,7 +1114,7 @@ export function Composer({
             render={
             <Button
               size="icon"
-              variant={docEmpty ? "secondary" : "default"}
+              variant={composerEmpty ? "secondary" : "default"}
               className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
               onClick={onRun}
               disabled={loading}
@@ -1122,7 +1129,7 @@ export function Composer({
             }
           />
           <TooltipContent>
-            {loading ? t("composer.loadingSession") : docEmpty ? t("composer.runEmpty") : t("composer.run")}
+            {loading ? t("composer.loadingSession") : composerEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
           </TooltipContent>
         </Tooltip>
@@ -1186,6 +1193,39 @@ export function Composer({
             )}
             style={docMode ? undefined : { maxHeight: applied }}
           >
+            {appshots.length > 0 && (
+              <div data-appshot-attachments className="flex gap-2 overflow-x-auto px-4 pb-2">
+                {appshots.map((appshot) => (
+                  <div
+                    key={appshot.id}
+                    className="group relative flex w-64 shrink-0 items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet p-1.5 ring-[0.5px] ring-foreground/10"
+                  >
+                    <img
+                      src={appshot.preview_data_url}
+                      alt=""
+                      className="aspect-5/3 w-20 shrink-0 rounded-(--ds-radius-control) object-cover ring-[0.5px] ring-foreground/10"
+                    />
+                    <div className="min-w-0 flex-1 pr-5">
+                      <p className="truncate text-hint font-medium">{appshot.window_title}</p>
+                      <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
+                      <p className="text-cap text-muted-foreground">
+                        {t("composer.appshotText", { count: appshot.text_length })}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1 size-6 text-muted-foreground opacity-70 hover:opacity-100"
+                      aria-label={t("composer.removeAppshot", { title: appshot.window_title })}
+                      onClick={() => onRemoveAppshot?.(appshot.id)}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
             {children}
           </div>
 

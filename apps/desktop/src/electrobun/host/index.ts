@@ -173,6 +173,7 @@ function textContent(value: unknown): string | null {
 }
 
 export class PureBunHost {
+  private readonly dataDir: string;
   private readonly database: BunDatabase;
   private hostTools: HostToolEvidence;
   private readonly terminal: TerminalManager;
@@ -186,6 +187,7 @@ export class PureBunHost {
   private shuttingDown = false;
 
   constructor(dataDir: string, private readonly onEvent: (event: DesktopEvent) => void) {
+    this.dataDir = dataDir;
     augmentGuiPath();
     this.hostTools = detectHostToolEvidence(process.env, dataDir);
     this.database = new BunDatabase(dataDir);
@@ -1200,6 +1202,33 @@ export class PureBunHost {
         const mimeType = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension || "png"}`;
         blocks.push({ type: "image", data: bytes.toString("base64"), mimeType });
         prompt.push(`**Attached image workspace path:** ${JSON.stringify(path)}`);
+        continue;
+      }
+      if (type === "appshot") {
+        const id = string(block.id, "appshot id");
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+          throw new Error("appshot id is invalid");
+        }
+        const captureDirectory = join(this.dataDir, "appshots");
+        const imagePath = join(captureDirectory, `${id}.png`);
+        const metadataPath = join(captureDirectory, `${id}.json`);
+        const image = readFileSync(imagePath);
+        if (image.byteLength > 25 * 1024 * 1024) throw new Error("appshot image is too large");
+        const metadata = object(JSON.parse(readFileSync(metadataPath, "utf8")));
+        if (metadata.id !== id) throw new Error("appshot metadata does not match the capture");
+        const appName = optionalString(metadata.app_name) ?? "Application";
+        const title = optionalString(metadata.window_title) ?? "Window";
+        const capturedAt = optionalString(metadata.captured_at) ?? "unknown time";
+        const accessibleText = optionalString(metadata.text) ?? "";
+        canonical.push(`[appshot:${id}]`);
+        blocks.push({ type: "image", data: image.toString("base64"), mimeType: "image/png" });
+        prompt.push([
+          `**Appshot — ${appName}: ${title}**`,
+          `Captured: ${capturedAt}`,
+          accessibleText
+            ? `Accessible window text (may include content outside the visible scroll area):\n\n${accessibleText}`
+            : "No accessible window text was available; use the attached image.",
+        ].join("\n\n"));
         continue;
       }
       if (type === "issue") {
