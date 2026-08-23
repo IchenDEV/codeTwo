@@ -6,12 +6,59 @@
   max-width: 42.5rem;
   padding: 2rem 2rem 0;
 }
+
+.settings-project-page {
+  max-width: 48rem;
+}
+
+.project-settings-row {
+  gap: var(--ds-space-page-section);
+}
+
+.project-settings-control,
+.project-settings-error {
+  width: 18rem;
+}
+
+.project-settings-control {
+  gap: var(--ds-space-module-inset);
+  justify-content: flex-end;
+}
+
+.project-settings-error {
+  margin-left: auto;
+}
+
 .settings-memory-page {
   max-width: 77.5rem;
   padding: 1.5rem 1.5rem 0;
 }
 
 @media (max-width: 50rem) {
+  .settings-project-page {
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+  }
+
+  .project-settings-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .project-settings-control,
+  .project-settings-error {
+    width: 100%;
+  }
+
+  .project-settings-control {
+    justify-content: flex-start;
+  }
+
+  .project-settings-error {
+    margin-left: 0;
+  }
+
   .settings-memory-page {
     padding: 1rem 1rem 0;
   }

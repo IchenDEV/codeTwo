@@ -488,6 +488,19 @@ export interface Project {
   last_opened_at: number;
   /** Null follows the current draft/session; local is an explicit no-worktree default. */
   default_worktree_mode: ProjectWorktreeMode | null;
+  /** Icons are fetched separately so refreshing the project list never serializes image bytes. */
+  has_icon?: boolean;
+  icon_updated_at?: number;
+  /** Null keeps the current provider and lets it choose its own model. */
+  default_provider?: string | null;
+  default_model?: string | null;
+  /** Applied after a newly created session reports its provider-owned effort selector. */
+  default_reasoning_effort?: string | null;
+}
+
+export interface ProjectIconData {
+  mime_type: "image/png" | "image/jpeg" | "image/webp";
+  bytes: Uint8Array;
 }
 
 export interface MemorySettings {
@@ -1436,6 +1449,7 @@ export async function newSession(
   initialPolicy?: ExecutionPolicy | null,
   initialModel?: string | null,
   transient = false,
+  initialReasoningEffort?: string | null,
 ): Promise<void> {
   if (inDesktop) {
     await call("engine.new_session", {
@@ -1448,6 +1462,7 @@ export async function newSession(
       initial_policy: initialPolicy ?? null,
       model: initialModel ?? null,
       transient,
+      reasoning_effort: initialReasoningEffort ?? null,
     });
   }
 }
@@ -2051,6 +2066,50 @@ export async function openProject(path: string): Promise<void> {
 
 export async function renameProject(path: string, name: string): Promise<void> {
   if (inDesktop) await call("projects.rename", { path, name });
+}
+
+export async function setProjectAgentDefaults(
+  path: string,
+  provider: string | null,
+  model: string | null,
+  reasoningEffort: string | null,
+): Promise<void> {
+  if (inDesktop) {
+    await call("projects.set_agent_defaults", {
+      path,
+      provider,
+      model,
+      reasoning_effort: reasoningEffort,
+    });
+  }
+}
+
+export async function pickProjectIcon(): Promise<string | null> {
+  if (!inDesktop) return null;
+  const [picked] = await desktopOpenDialog({
+    directory: false,
+    multiple: false,
+    title: "Choose a project icon",
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+  });
+  return picked ?? null;
+}
+
+export async function setProjectIcon(path: string, source: string | null): Promise<number> {
+  return inDesktop ? call<number>("projects.set_icon", { path, source }) : Date.now();
+}
+
+export async function getProjectIcon(path: string): Promise<ProjectIconData | null> {
+  if (!inDesktop) return null;
+  const icon = await call<{ mime_type: ProjectIconData["mime_type"]; bytes: ArrayBuffer | number[] } | null>(
+    "projects.icon",
+    { path },
+  );
+  if (!icon) return null;
+  return {
+    mime_type: icon.mime_type,
+    bytes: icon.bytes instanceof ArrayBuffer ? new Uint8Array(icon.bytes) : new Uint8Array(icon.bytes),
+  };
 }
 
 export async function setProjectWorktreeMode(

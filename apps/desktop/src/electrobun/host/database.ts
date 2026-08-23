@@ -102,7 +102,12 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   last_opened_at INTEGER NOT NULL,
   added_at INTEGER NOT NULL DEFAULT 0,
-  default_worktree_mode TEXT
+  default_worktree_mode TEXT,
+  icon_path TEXT,
+  icon_updated_at INTEGER NOT NULL DEFAULT 0,
+  default_provider TEXT,
+  default_model TEXT,
+  default_reasoning_effort TEXT
 );
 CREATE TABLE IF NOT EXISTS memory_settings (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -203,6 +208,7 @@ export class BunDatabase {
     this.db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
     this.db.exec(BASE_SCHEMA);
     this.migrateSessionLifecycle();
+    this.migrateProjectProfiles();
     this.migrateMemoryManagement();
   }
 
@@ -215,6 +221,23 @@ export class BunDatabase {
     // A renderer or process crash may bypass the normal host shutdown path. Side chats are
     // intentionally app-lifetime data, so the next host start is the final cleanup boundary.
     this.purgeTransientSessions();
+  }
+
+  private migrateProjectProfiles(): void {
+    const additions = [
+      "ALTER TABLE projects ADD COLUMN icon_path TEXT",
+      "ALTER TABLE projects ADD COLUMN icon_updated_at INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE projects ADD COLUMN default_provider TEXT",
+      "ALTER TABLE projects ADD COLUMN default_model TEXT",
+      "ALTER TABLE projects ADD COLUMN default_reasoning_effort TEXT",
+    ];
+    for (const statement of additions) {
+      try {
+        this.db.exec(statement);
+      } catch (error) {
+        if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+      }
+    }
   }
 
   private migrateMemoryManagement(): void {
@@ -258,7 +281,8 @@ export class BunDatabase {
   listProjects(): unknown[] {
     return this.db
       .query(
-        `SELECT path,name,last_opened_at,default_worktree_mode
+        `SELECT path,name,last_opened_at,default_worktree_mode,icon_path,icon_updated_at,
+                default_provider,default_model,default_reasoning_effort
          FROM projects ORDER BY added_at DESC,path ASC`,
       )
       .all()
@@ -267,6 +291,11 @@ export class BunDatabase {
         name: text((row as Row).name),
         last_opened_at: Number((row as Row).last_opened_at ?? 0),
         default_worktree_mode: nullableText((row as Row).default_worktree_mode),
+        has_icon: nullableText((row as Row).icon_path) !== null,
+        icon_updated_at: Number((row as Row).icon_updated_at ?? 0),
+        default_provider: nullableText((row as Row).default_provider),
+        default_model: nullableText((row as Row).default_model),
+        default_reasoning_effort: nullableText((row as Row).default_reasoning_effort),
       }));
   }
 
@@ -286,11 +315,46 @@ export class BunDatabase {
   }
 
   renameProject(path: string, name: string): void {
-    this.db.query("UPDATE projects SET name=? WHERE path=?").run(name, path);
+    const normalized = name.trim();
+    if (!normalized || normalized.length > 80) {
+      throw new Error("project name must be between 1 and 80 characters");
+    }
+    this.db.query("UPDATE projects SET name=? WHERE path=?").run(normalized, path);
   }
 
   setProjectWorktreeMode(path: string, mode: string | null): void {
     this.db.query("UPDATE projects SET default_worktree_mode=? WHERE path=?").run(mode, path);
+  }
+
+  setProjectAgentDefaults(
+    path: string,
+    provider: string | null,
+    model: string | null,
+    reasoningEffort: string | null,
+  ): void {
+    const allowedEfforts = new Set(["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
+    if (reasoningEffort && !allowedEfforts.has(reasoningEffort)) {
+      throw new Error("unsupported project reasoning effort");
+    }
+    this.db
+      .query(
+        "UPDATE projects SET default_provider=?,default_model=?,default_reasoning_effort=? WHERE path=?",
+      )
+      .run(provider, provider ? model : null, provider ? reasoningEffort : null, path);
+  }
+
+  projectIconPath(path: string): string | null {
+    const row = this.db.query("SELECT icon_path FROM projects WHERE path=?").get(path) as Row | null;
+    return row ? nullableText(row.icon_path) : null;
+  }
+
+  setProjectIcon(path: string, iconPath: string | null, updatedAt: number): number {
+    const row = this.db.query("SELECT icon_updated_at FROM projects WHERE path=?").get(path) as Row | null;
+    const revision = Math.max(updatedAt, Number(row?.icon_updated_at ?? 0) + 1);
+    this.db
+      .query("UPDATE projects SET icon_path=?,icon_updated_at=? WHERE path=?")
+      .run(iconPath, revision, path);
+    return revision;
   }
 
   removeProject(path: string): void {
