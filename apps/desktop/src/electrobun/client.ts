@@ -2,6 +2,7 @@ import type {
   AppUpdateStatus,
   CodeTwoRPC,
   DesktopEvent,
+  NativeContextMenuRequest,
   OpenDialogOptions,
   SaveDialogOptions,
   WorkspaceOpenTarget,
@@ -77,6 +78,10 @@ export async function desktopSaveDialog(options: SaveDialogOptions): Promise<str
 
 export async function desktopConfirm(message: string, title?: string): Promise<boolean> {
   return (await client()).request.confirm({ message, title });
+}
+
+export async function desktopShowContextMenu(options: NativeContextMenuRequest): Promise<void> {
+  await (await client()).request.contextMenuShow(options);
 }
 
 export async function desktopOpenExternal(url: string): Promise<boolean> {

@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type HTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   Archive,
   ArchiveRestore,
@@ -27,6 +38,11 @@ import {
 } from "lucide-react";
 
 import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
+import {
+  nativeContextMenusAvailable,
+  showNativeContextMenu,
+} from "../electrobun/contextMenu";
+import type { NativeContextMenuItem } from "../electrobun/rpc";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
@@ -68,6 +84,36 @@ function shortAge(ts: number): string {
   if (s < 86_400) return `${Math.floor(s / 3600)}h`;
   if (s < 7 * 86_400) return `${Math.floor(s / 86_400)}d`;
   return `${Math.floor(s / (7 * 86_400))}w`;
+}
+
+type ContextMenuTriggerElement = ReactElement<{
+  render: ReactElement<HTMLAttributes<HTMLDivElement>>;
+}>;
+
+function SessionContextMenu({
+  items,
+  onAction,
+  children,
+}: {
+  items: NativeContextMenuItem[];
+  onAction: (action: string) => void;
+  children: ReactNode;
+}) {
+  if (!nativeContextMenusAvailable) return <ContextMenu>{children}</ContextMenu>;
+
+  const trigger = Children.toArray(children)[0];
+  if (!isValidElement(trigger)) return null;
+  const row = (trigger as ContextMenuTriggerElement).props.render;
+  const onContextMenu = row.props.onContextMenu;
+
+  return cloneElement(row, {
+    onContextMenu: (event) => {
+      onContextMenu?.(event);
+      event.preventDefault();
+      event.stopPropagation();
+      void showNativeContextMenu(items, onAction);
+    },
+  });
 }
 
 /**
@@ -307,6 +353,80 @@ export function SessionRail({
       setRenaming(null);
     };
 
+    const startRename = () => {
+      // Let the closing menu restore focus before mounting the auto-focus field.
+      setTimeout(() => setRenaming({ id: s.id, title: s.title }), 0);
+    };
+
+    const runContextMenuAction = (action: string) => {
+      switch (action) {
+        case "pin":
+          onPin(s.id, !s.pinned);
+          break;
+        case "rename":
+          startRename();
+          break;
+        case "archive":
+          onArchive(s.id, !isArchived);
+          break;
+        case "reveal-working-directory":
+          void revealWorkingDirectory(s.worktree_path ?? s.cwd);
+          break;
+        case "copy-working-directory":
+          void copyToClipboard(
+            s.worktree_path ?? s.cwd,
+            t("rail.workingDirectoryCopied"),
+          );
+          break;
+        case "copy-session-id":
+          void copyToClipboard(s.id, t("rail.sessionIdCopied"));
+          break;
+        case "discard-worktree":
+          onDiscardWorktree(s);
+          break;
+      }
+    };
+
+    const nativeMenuItems: NativeContextMenuItem[] = [
+      ...(!isArchived
+        ? [
+            {
+              type: "item",
+              label: s.pinned ? t("rail.unpin") : t("rail.pin"),
+              action: "pin",
+            } as const,
+          ]
+        : []),
+      { type: "item", label: t("rail.rename"), action: "rename" },
+      {
+        type: "item",
+        label: isArchived ? t("rail.unarchive") : t("rail.archive"),
+        action: "archive",
+      },
+      { type: "separator" },
+      {
+        type: "item",
+        label: t("rail.revealWorkingDirectory"),
+        action: "reveal-working-directory",
+      },
+      {
+        type: "item",
+        label: t("rail.copyWorkingDirectory"),
+        action: "copy-working-directory",
+      },
+      { type: "item", label: t("rail.copySessionId"), action: "copy-session-id" },
+      ...(s.worktree_path !== null && !s.worktree_discarded
+        ? [
+            { type: "separator" } as const,
+            {
+              type: "item",
+              label: t("worktree.discardAction"),
+              action: "discard-worktree",
+            } as const,
+          ]
+        : []),
+    ];
+
     const onRowKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
       if (event.target !== event.currentTarget) return;
 
@@ -348,7 +468,11 @@ export function SessionRail({
     };
 
     return (
-      <ContextMenu key={s.id}>
+      <SessionContextMenu
+        key={s.id}
+        items={nativeMenuItems}
+        onAction={runContextMenuAction}
+      >
         <ContextMenuTrigger
           render={
             <div
@@ -545,13 +669,7 @@ export function SessionRail({
                 {s.pinned ? t("rail.unpin") : t("rail.pin")}
               </ContextMenuItem>
             ) : null}
-            <ContextMenuItem
-              onClick={() => {
-                // Let Base UI finish restoring focus from the closing menu before the auto-focus
-                // input mounts; otherwise that restoration immediately blurs and cancels rename.
-                setTimeout(() => setRenaming({ id: s.id, title: s.title }), 0);
-              }}
-            >
+            <ContextMenuItem onClick={startRename}>
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
@@ -604,7 +722,7 @@ export function SessionRail({
             </>
           ) : null}
         </ContextMenuContent>
-      </ContextMenu>
+      </SessionContextMenu>
     );
   };
 
