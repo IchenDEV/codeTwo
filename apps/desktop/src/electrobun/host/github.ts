@@ -48,6 +48,95 @@ function object(value: unknown): JsonObject {
     : {};
 }
 
+export interface GitHubPullRequestSummary {
+  id: string;
+  number: number;
+  title: string;
+  url: string;
+  repository: {
+    name: string;
+    nameWithOwner: string;
+  };
+  author: {
+    login: string;
+  };
+  isDraft: boolean;
+  updatedAt: string;
+  createdAt: string;
+  labels: Array<{ name: string; color: string }>;
+  commentsCount: number;
+  authored: boolean;
+  reviewRequested: boolean;
+  reviewed: boolean;
+}
+
+export interface GitHubPullRequestDetail extends GitHubPullRequestSummary {
+  body: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  baseRefName: string;
+  headRefName: string;
+  state: string;
+  mergeStateStatus: string;
+  mergeable: string;
+  reviewDecision: string;
+  reviewers: Array<{ login: string; state: string }>;
+  checks: Array<{
+    name: string;
+    status: string;
+    conclusion: string;
+    detailsUrl: string | null;
+  }>;
+  files: Array<{
+    path: string;
+    additions: number;
+    deletions: number;
+    changeType: string;
+  }>;
+}
+
+const SEARCH_FIELDS = [
+  "number",
+  "title",
+  "url",
+  "repository",
+  "author",
+  "isDraft",
+  "updatedAt",
+  "createdAt",
+  "labels",
+  "commentsCount",
+].join(",");
+
+const DETAIL_FIELDS = [
+  "additions",
+  "author",
+  "baseRefName",
+  "body",
+  "changedFiles",
+  "comments",
+  "deletions",
+  "files",
+  "headRefName",
+  "isDraft",
+  "latestReviews",
+  "mergeStateStatus",
+  "mergeable",
+  "number",
+  "reviewDecision",
+  "reviewRequests",
+  "state",
+  "statusCheckRollup",
+  "title",
+  "updatedAt",
+  "url",
+].join(",");
+
+function array(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -230,3 +319,226 @@ export async function githubMergePullRequest(
     throw new Error(result.stderr.trim() || result.stdout.trim() || "Could not merge the pull request");
   }
 }
+function integer(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : 0;
+}
+
+function bool(value: unknown): boolean {
+  return value === true;
+}
+
+function pullRequestCoordinates(url: string): { owner: string; repo: string; number: number } {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Pull request URL is invalid");
+  }
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  const number = Number(parts[3]);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== "github.com" ||
+    parts.length !== 4 ||
+    parts[2] !== "pull" ||
+    !Number.isSafeInteger(number) ||
+    number <= 0
+  ) {
+    throw new Error("Only canonical github.com pull request URLs are supported");
+  }
+  return { owner: parts[0] ?? "", repo: parts[1] ?? "", number };
+}
+
+function searchSummary(
+  value: unknown,
+  relation: "authored" | "reviewRequested" | "reviewed",
+): GitHubPullRequestSummary | null {
+  const row = object(value);
+  const repository = object(row.repository);
+  const author = object(row.author);
+  const url = text(row.url);
+  const number = integer(row.number);
+  const nameWithOwner = text(repository.nameWithOwner);
+  if (!url || !number || !nameWithOwner) return null;
+  return {
+    id: url,
+    number,
+    title: text(row.title),
+    url,
+    repository: {
+      name: text(repository.name) || nameWithOwner.split("/").slice(-1)[0] || nameWithOwner,
+      nameWithOwner,
+    },
+    author: { login: text(author.login) || "unknown" },
+    isDraft: bool(row.isDraft),
+    updatedAt: text(row.updatedAt),
+    createdAt: text(row.createdAt),
+    labels: array(row.labels).map((item) => {
+      const label = object(item);
+      return { name: text(label.name), color: text(label.color) };
+    }).filter((label) => label.name.length > 0),
+    commentsCount: integer(row.commentsCount),
+    authored: relation === "authored",
+    reviewRequested: relation === "reviewRequested",
+    reviewed: relation === "reviewed",
+  };
+}
+
+function detailFromJson(
+  value: unknown,
+  summary: GitHubPullRequestSummary,
+): GitHubPullRequestDetail {
+  const row = object(value);
+  const reviewRequests = array(row.reviewRequests).map((item) => object(item));
+  const latestReviews = array(row.latestReviews).map((item) => object(item));
+  const reviewers = new Map<string, string>();
+  for (const request of reviewRequests) {
+    const login = text(request.login) || text(object(request.author).login);
+    if (login) reviewers.set(login, "REQUESTED");
+  }
+  for (const review of latestReviews) {
+    const login = text(object(review.author).login);
+    if (login) reviewers.set(login, text(review.state) || "REVIEWED");
+  }
+
+  return {
+    ...summary,
+    title: text(row.title) || summary.title,
+    url: text(row.url) || summary.url,
+    number: integer(row.number) || summary.number,
+    author: { login: text(object(row.author).login) || summary.author.login },
+    isDraft: typeof row.isDraft === "boolean" ? row.isDraft : summary.isDraft,
+    updatedAt: text(row.updatedAt) || summary.updatedAt,
+    commentsCount: array(row.comments).length || summary.commentsCount,
+    body: text(row.body),
+    additions: integer(row.additions),
+    deletions: integer(row.deletions),
+    changedFiles: integer(row.changedFiles),
+    baseRefName: text(row.baseRefName),
+    headRefName: text(row.headRefName),
+    state: text(row.state),
+    mergeStateStatus: text(row.mergeStateStatus),
+    mergeable: text(row.mergeable),
+    reviewDecision: text(row.reviewDecision),
+    reviewers: [...reviewers].map(([login, state]) => ({ login, state })),
+    checks: array(row.statusCheckRollup).map((item) => {
+      const check = object(item);
+      return {
+        name: text(check.name) || text(check.context) || "Check",
+        status: text(check.status) || text(check.state),
+        conclusion: text(check.conclusion),
+        detailsUrl: text(check.detailsUrl) || text(check.targetUrl) || null,
+      };
+    }),
+    files: array(row.files).map((item) => {
+      const file = object(item);
+      return {
+        path: text(file.path),
+        additions: integer(file.additions),
+        deletions: integer(file.deletions),
+        changeType: text(file.changeType),
+      };
+    }).filter((file) => file.path.length > 0),
+  };
+}
+
+async function githubJson(command: string[], timeoutMs = 60_000): Promise<unknown> {
+  const result = await runProcess(command, undefined, timeoutMs, {
+    GH_PROMPT_DISABLED: "1",
+    GH_PAGER: "cat",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.trim() || `${command.slice(0, 3).join(" ")} failed`);
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    throw new Error("GitHub CLI returned invalid JSON");
+  }
+}
+
+async function search(
+  relation: "authored" | "reviewRequested" | "reviewed",
+  qualifier: string,
+): Promise<GitHubPullRequestSummary[]> {
+  const raw = await githubJson([
+    "gh",
+    "search",
+    "prs",
+    "--state=open",
+    qualifier,
+    "--limit=50",
+    "--sort=updated",
+    "--order=desc",
+    `--json=${SEARCH_FIELDS}`,
+  ]);
+  return array(raw)
+    .map((item) => searchSummary(item, relation))
+    .filter((item): item is GitHubPullRequestSummary => item !== null);
+}
+
+export async function listGitHubPullRequests(): Promise<GitHubPullRequestSummary[]> {
+  if (!which("gh")) throw new Error("GitHub CLI is not installed");
+  const [authored, reviewRequested, reviewed] = await Promise.all([
+    search("authored", "--author=@me"),
+    search("reviewRequested", "--review-requested=@me"),
+    search("reviewed", "--reviewed-by=@me"),
+  ]);
+  const merged = new Map<string, GitHubPullRequestSummary>();
+  for (const item of [...authored, ...reviewRequested, ...reviewed]) {
+    const previous = merged.get(item.id);
+    merged.set(item.id, previous ? {
+      ...previous,
+      authored: previous.authored || item.authored,
+      reviewRequested: previous.reviewRequested || item.reviewRequested,
+      reviewed: previous.reviewed || item.reviewed,
+    } : item);
+  }
+  return [...merged.values()].sort((left, right) =>
+    Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+      || left.repository.nameWithOwner.localeCompare(right.repository.nameWithOwner)
+      || left.number - right.number,
+  );
+}
+
+export function parseGitHubPullRequestSummary(value: unknown): GitHubPullRequestSummary {
+  const row = object(value);
+  const summary = searchSummary(
+    row,
+    bool(row.reviewRequested) ? "reviewRequested" : bool(row.reviewed) ? "reviewed" : "authored",
+  );
+  if (!summary) throw new Error("Pull request selection is invalid");
+  return {
+    ...summary,
+    authored: bool(row.authored),
+    reviewRequested: bool(row.reviewRequested),
+    reviewed: bool(row.reviewed),
+  };
+}
+
+export async function getGitHubPullRequest(
+  url: string,
+  summaryValue: unknown,
+): Promise<GitHubPullRequestDetail> {
+  const summary = parseGitHubPullRequestSummary(summaryValue);
+  const coordinates = pullRequestCoordinates(url);
+  const expected = `${coordinates.owner}/${coordinates.repo}`.toLocaleLowerCase();
+  if (summary.url !== url || summary.repository.nameWithOwner.toLocaleLowerCase() !== expected) {
+    throw new Error("Pull request selection does not match its repository");
+  }
+  const raw = await githubJson([
+    "gh",
+    "pr",
+    "view",
+    url,
+    `--json=${DETAIL_FIELDS}`,
+  ]);
+  return detailFromJson(raw, summary);
+}
+
+export const githubPullRequestInternals = {
+  detailFromJson,
+  parseGitHubPullRequestSummary,
+  pullRequestCoordinates,
+  searchSummary,
+};
