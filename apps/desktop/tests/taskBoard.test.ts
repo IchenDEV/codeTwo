@@ -9,6 +9,7 @@ import {
   TASKBOARD_STORAGE_KEY,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  associateTaskSession,
   boardLabels,
   boardReducer,
   countTasksByStatus,
@@ -20,6 +21,7 @@ import {
   saveBoardSnapshot,
   seedTasks,
   sortBoardTasks,
+  taskForSession,
   type BoardFilters,
   type BoardTask,
   type StorageLike,
@@ -58,6 +60,7 @@ function task(
     order,
     createdAt: BASE_TIME,
     updatedAt: BASE_TIME,
+    sessionIds: [],
     ...overrides,
   };
 }
@@ -98,7 +101,7 @@ describe("task board model constants and creation", () => {
       in_review: 2,
       done: 2,
     });
-    expect(first.some((item) => item.linkedSessionId)).toBe(false);
+    expect(first.every((item) => item.sessionIds.length === 0)).toBe(true);
 
     first[0]!.title = "mutated";
     first[0]!.labels.push("mutated");
@@ -113,7 +116,7 @@ describe("task board model constants and creation", () => {
         status: "in_progress",
         priority: "high",
         labels: [" 前端 ", "", "前端", "体验"],
-        linkedSessionId: " session-7 ",
+        sessionIds: [" session-7 ", "session-7", " session-8 "],
       },
       { id: " task-7 ", now: BASE_TIME },
     );
@@ -128,8 +131,26 @@ describe("task board model constants and creation", () => {
       order: 0,
       createdAt: BASE_TIME,
       updatedAt: BASE_TIME,
-      linkedSessionId: "session-7",
+      sessionIds: ["session-7", "session-8"],
     });
+  });
+
+  test("adds durable sessions to a task history and starts todo work", () => {
+    const tasks = [
+      task("tracked", "todo", 0, { sessionIds: ["session-1"] }),
+      task("previous-owner", "in_progress", 0, { sessionIds: ["session-2"] }),
+    ];
+    const associated = associateTaskSession(tasks, "tracked", "session-2", BASE_TIME + 1);
+
+    expect(associated?.[0]).toMatchObject({
+      status: "in_progress",
+      updatedAt: BASE_TIME + 1,
+      sessionIds: ["session-1", "session-2"],
+    });
+    expect(taskForSession(associated ?? [], "session-2")?.id).toBe("tracked");
+    expect(associated?.[1]?.sessionIds).toEqual([]);
+    expect(associateTaskSession(tasks, "missing", "session-2")).toBeNull();
+    expect(tasks[0]?.sessionIds).toEqual(["session-1"]);
   });
 });
 
@@ -262,7 +283,7 @@ describe("task board persistence", () => {
     const rawTask = task(" normalized ", "todo", 0, {
       title: " Normalized title ",
       labels: [" UI ", "UI", ""],
-      linkedSessionId: " session-1 ",
+      sessionIds: [" session-1 ", "session-1", " session-2 "],
     });
     const loaded = parseBoardSnapshot(
       JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [rawTask] }),
@@ -275,10 +296,22 @@ describe("task board persistence", () => {
           id: "normalized",
           title: "Normalized title",
           labels: ["UI"],
-          linkedSessionId: "session-1",
+          sessionIds: ["session-1", "session-2"],
         },
       ],
     });
+  });
+
+  test("migrates the v1 single-session shape without losing its association", () => {
+    const legacy = task("legacy");
+    const { sessionIds: _sessionIds, ...legacyTask } = legacy;
+    const loaded = parseBoardSnapshot(JSON.stringify({
+      version: 1,
+      tasks: [{ ...legacyTask, linkedSessionId: " session-old " }],
+    }));
+
+    expect(loaded.warning).toBeNull();
+    expect(loaded.tasks[0]?.sessionIds).toEqual(["session-old"]);
   });
 
   test("reports storage read failures with a warning instead of throwing", () => {

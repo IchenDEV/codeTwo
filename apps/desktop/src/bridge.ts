@@ -2092,7 +2092,7 @@ export type KeymapEntry = [action: string, key: string, label: string];
 // the browser-preview fallback; inside desktop the real keymap (with user overrides) comes from core.
 export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["run", "Mod+Enter", "Run prompt"],
-  ["new_session", "Mod+N", "New session"],
+  ["new_session", "Mod+N", "New task"],
   ["cancel", "Mod+.", "Cancel turn"],
   ["toggle_terminal", "Mod+J", "Toggle terminal"],
   ["toggle_browser", "Mod+B", "Toggle browser"],

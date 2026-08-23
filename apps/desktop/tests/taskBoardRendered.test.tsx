@@ -16,7 +16,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const { ToastProvider } = await import("../src/ui/toast")
 const { Simulate } = await import("react-dom/test-utils")
-const { TASKBOARD_STORAGE_KEY, createBoardTask } = await import(
+const { TASKBOARD_SNAPSHOT_VERSION, TASKBOARD_STORAGE_KEY, createBoardTask } = await import(
   "../src/taskboard/taskBoard"
 )
 const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
@@ -151,6 +151,8 @@ describe("TaskBoardPage rendered", () => {
     const description = header?.querySelector("p")
     const controls = header?.querySelector("[data-page-header-controls]")
     const content = header?.querySelector("[data-page-header-content]")
+    const board = view.container.querySelector("[data-task-board-columns]")
+    const boardContent = view.container.querySelector("[data-task-board-content]")
 
     expect(title?.textContent).toBe("任务看板")
     expect(title?.className).toContain("text-display")
@@ -159,8 +161,13 @@ describe("TaskBoardPage rendered", () => {
     expect(description?.className).toContain("text-ui")
     expect(header?.className).toContain("pt-10")
     expect(header?.className).toContain("sm:pt-14")
+    expect(content?.className).toContain("px-6")
     expect(content?.className).toContain("max-w-4xl")
     expect(content?.className).toContain("sm:px-8")
+    expect(board?.className).not.toContain("px-6")
+    expect(boardContent?.className).toContain("max-w-4xl")
+    expect(boardContent?.className).toContain("px-6")
+    expect(boardContent?.className).toContain("sm:px-8")
     expect(controls?.className).toContain("mt-8")
     expect(view.container.querySelector('button[aria-label="返回"]')).toBeNull()
     const columns = Array.from(
@@ -207,6 +214,39 @@ describe("TaskBoardPage rendered", () => {
 
     const snapshot = JSON.parse(dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY))
     expect(snapshot.tasks.some((task) => task.title === "完成渲染测试")).toBe(true)
+  })
+
+  test("keeps session management out of the task editor", async () => {
+    installStorage()
+    const task = createBoardTask(
+      { title: "保持独立的历史任务", status: "todo" },
+      { id: "TASK-2000", now: 1_700_000_000_000 },
+    )
+    dom.window.localStorage.setItem(
+      TASKBOARD_STORAGE_KEY,
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] }),
+    )
+    const view = await renderBoard()
+
+    await click(button(view.container, "保持独立的历史任务"))
+    expect(dom.document.body.textContent).not.toContain("关联会话")
+  })
+
+  test("starts a task without a live session from its card", async () => {
+    installStorage()
+    const task = createBoardTask(
+      { title: "开始待办任务", status: "todo" },
+      { id: "TASK-2000", now: 1_700_000_000_000 },
+    )
+    dom.window.localStorage.setItem(
+      TASKBOARD_STORAGE_KEY,
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] }),
+    )
+    const started = []
+    const view = await renderBoard({ onStartTask: (selected) => started.push(selected.id) })
+
+    await click(button(view.container, "开始任务"))
+    expect(started).toEqual(["TASK-2000"])
   })
 
   test("searches the rendered cards and preserves exactly four columns", async () => {
@@ -321,13 +361,13 @@ describe("TaskBoardPage rendered", () => {
       {
         title: "继续会话中的实现",
         status: "in_progress",
-        linkedSessionId: "session-1",
+        sessionIds: ["session-old", "session-1"],
       },
       { id: "TASK-2001", now: 1_700_000_000_000 },
     )
     dom.window.localStorage.setItem(
       TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: 1, tasks: [task] }),
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] }),
     )
     const opened = []
     const view = await renderBoard({
@@ -335,47 +375,35 @@ describe("TaskBoardPage rendered", () => {
       onOpenSession: (id) => opened.push(id),
     })
 
-    await click(button(view.container, "任务看板实现"))
+    expect(view.container.textContent).toContain("2 个会话")
+    await click(button(view.container, "继续任务"))
     expect(opened).toEqual(["session-1"])
   })
 
-  test("clears an existing session association through the editor", async () => {
+  test("can deliberately continue a linked task in a fresh session", async () => {
     installStorage()
     const task = createBoardTask(
       {
         title: "取消会话关联",
         status: "todo",
-        linkedSessionId: "session-1",
+        sessionIds: ["session-1"],
       },
       { id: "TASK-2002", now: 1_700_000_000_000 },
     )
     dom.window.localStorage.setItem(
       TASKBOARD_STORAGE_KEY,
-      JSON.stringify({ version: 1, tasks: [task] }),
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [task] }),
     )
+    const started = []
     const view = await renderBoard({
       sessions: [{ id: "session-1", title: "旧会话" }],
       onOpenSession: () => {},
+      onStartTask: (selected) => started.push(selected.id),
     })
 
-    await click(button(view.container, "取消会话关联"))
-    const linkedSessionField = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="field"]'),
-    ).find((field) => field.textContent?.includes("关联会话"))
-    const trigger = linkedSessionField?.querySelector('[data-slot="select-trigger"]')
-    await openSelect(trigger)
-    const noSession = Array.from(
-      dom.document.body.querySelectorAll('[data-slot="select-item"]'),
-    ).find((item) => item.textContent?.includes("暂不关联"))
-    await selectItem(noSession)
-    expect(trigger?.textContent).toContain("暂不关联")
-    expect(trigger?.textContent).not.toContain("__taskboard_no_session__")
-    await click(button(dom.document.body, "保存更改"))
-
-    await waitFor(() => {
-      expect(dom.document.body.querySelector('[data-slot="dialog-content"]')).toBeNull()
-    })
-    const snapshot = JSON.parse(dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY))
-    expect(snapshot.tasks[0].linkedSessionId).toBeUndefined()
+    const trigger = view.container.querySelector('[aria-label="任务操作：取消会话关联"]')
+    await openMenu(trigger)
+    await click(menuItem("在新会话中继续"))
+    expect(started).toEqual(["TASK-2002"])
   })
 })

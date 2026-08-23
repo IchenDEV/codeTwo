@@ -22,6 +22,9 @@ export const en = {
   // rail — conversations
   "rail.features": "Features",
   "rail.newSession": "New session",
+  "rail.newTask": "New task",
+  "rail.newOptions": "New task options",
+  "rail.newTemporarySession": "Temporary session",
   "rail.searchLabel": "Search",
   "rail.allProjects": "All projects",
   "rail.empty": "Nothing here yet.",
@@ -1277,7 +1280,7 @@ export const en = {
   // keymap action labels — the core ships English ones; these override by action id, and anything
   // without an entry falls back to whatever the core said, so a new action is never blank.
   "action.run": "Run prompt",
-  "action.new_session": "New session",
+  "action.new_session": "New task",
   "action.cancel": "Cancel turn",
   "action.toggle_terminal": "Toggle terminal",
   "action.toggle_browser": "Toggle browser",
@@ -1687,6 +1690,9 @@ export const zhCN: Record<StringKey, string> = {
 
   "rail.features": "功能",
   "rail.newSession": "新建会话",
+  "rail.newTask": "新建任务",
+  "rail.newOptions": "新建任务选项",
+  "rail.newTemporarySession": "临时会话",
   "rail.searchLabel": "搜索",
   "rail.allProjects": "所有项目",
   "rail.empty": "这里还是空的。",
@@ -2836,7 +2842,7 @@ export const zhCN: Record<StringKey, string> = {
   "toast.dismiss": "关闭",
 
   "action.run": "运行提示词",
-  "action.new_session": "新建会话",
+  "action.new_session": "新建任务",
   "action.cancel": "取消当前轮次",
   "action.toggle_terminal": "切换终端",
   "action.toggle_browser": "切换浏览器",
