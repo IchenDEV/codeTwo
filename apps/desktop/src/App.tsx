@@ -7,6 +7,7 @@ import {
   FolderPlus,
   Keyboard,
   PanelLeft,
+  SquareKanban,
 } from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
@@ -310,6 +311,14 @@ import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
+import {
+  associateTaskSession,
+  createBoardTask,
+  loadBoardSnapshot,
+  saveBoardSnapshot,
+  taskForSession,
+  type BoardTask,
+} from "./taskboard/taskBoard";
 
 import {
   actionForEvent,
@@ -608,6 +617,10 @@ export default function App() {
   const quickQuotaRequestRef = useRef(0);
   const [showMissionControl, setShowMissionControl] = useState(false);
   const [showTaskBoard, setShowTaskBoard] = useState(false);
+  const [activeBoardTask, setActiveBoardTask] = useState<BoardTask | null>(null);
+  const activeBoardTaskRef = useRef<BoardTask | null>(null);
+  const [temporarySession, setTemporarySession] = useState(false);
+  const temporarySessionRef = useRef(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
@@ -896,6 +909,13 @@ export default function App() {
   const toast = useToast();
   const t = useT();
   const { locale } = useLanguage();
+
+  const setTaskContext = useCallback((task: BoardTask | null, temporary: boolean) => {
+    activeBoardTaskRef.current = task;
+    temporarySessionRef.current = temporary;
+    setActiveBoardTask(task);
+    setTemporarySession(temporary);
+  }, []);
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const editorRevisionRef = useRef(0);
@@ -1482,6 +1502,9 @@ export default function App() {
       activeSessionProvenanceRef.current = null;
       setActiveSessionReceipt(null);
       setActiveSession(null);
+      // A project opens a normal Task draft. Its Task record is created from the first prompt;
+      // only the explicit Temporary session action opts out.
+      setTaskContext(null, false);
       setTurns([]);
       setModels([]);
       setCurrentModel(null);
@@ -1494,7 +1517,7 @@ export default function App() {
       setMemoryWrite("inherit");
       void openProject(path).then(refreshProjects);
     },
-    [invalidatePendingCreation, projects, refreshProjects],
+    [invalidatePendingCreation, projects, refreshProjects, setTaskContext],
   );
 
   const addProjectFolder = useCallback(async () => {
@@ -1509,14 +1532,17 @@ export default function App() {
     }
   }, [refreshProjects, selectProject, toast]);
 
-  const activeTitle = useMemo(
+  const activeSessionTitle = useMemo(
     () =>
       (
         sessions.find((s) => s.id === activeSession) ??
         archivedSessions.find((s) => s.id === activeSession)
-      )?.title ?? "New session",
+      )?.title ?? null,
     [sessions, archivedSessions, activeSession],
   );
+  const activeTitle = activeBoardTask?.title
+    ?? activeSessionTitle
+    ?? t(temporarySession ? "rail.newTemporarySession" : "rail.newTask");
 
   // An archived chat is read-only: browsing it is fine, continuing it is not. The composer steps
   // aside for a notice until the session is restored.
@@ -1546,10 +1572,18 @@ export default function App() {
 
   const taskBoardSessions = useMemo(
     () =>
-      [...sessions, ...archivedSessions].map((session) => ({
-        id: session.id,
-        title: session.title,
-      })),
+      [
+        ...sessions.map((session) => ({
+          id: session.id,
+          title: session.title,
+          archived: false,
+        })),
+        ...archivedSessions.map((session) => ({
+          id: session.id,
+          title: session.title,
+          archived: true,
+        })),
+      ],
     [archivedSessions, sessions],
   );
 
@@ -1683,6 +1717,34 @@ export default function App() {
           activeSessionProvenanceRef.current = provenance;
           setActiveSessionReceipt(provenance);
           setActiveSession(ev.session);
+          {
+            const stagedTask = activeBoardTaskRef.current;
+            if (stagedTask) {
+              const board = loadBoardSnapshot();
+              const associated = associateTaskSession(
+                board.tasks,
+                stagedTask.id,
+                ev.session,
+              );
+              if (associated) {
+                const saved = saveBoardSnapshot(associated);
+                if (saved.ok) {
+                  const task = associated.find((candidate) => candidate.id === stagedTask.id) ?? null;
+                  setTaskContext(task, false);
+                } else {
+                  // The Session exists, but the durable association does not. Keep the UI honest
+                  // instead of leaving the staged Task title visible as if persistence succeeded.
+                  setTaskContext(null, true);
+                  toast(saved.warning, "error");
+                }
+              } else {
+                // The Task was deleted from another board view while this draft was open. Keep the
+                // new Session usable, but never claim that its missing Task association succeeded.
+                setTaskContext(null, true);
+                toast("任务已不存在，本次会话已转为临时会话。", "error");
+              }
+            }
+          }
           autoSceneBySessionRef.current.set(ev.session, autoSceneRef.current);
           {
             // Delegation trail: the delegated draft just became a real session.
@@ -2194,7 +2256,7 @@ export default function App() {
     return () => {
       if (unlisten) unlisten();
     };
-  }, [refreshSessions, t, toast]);
+  }, [refreshSessions, setTaskContext, t, toast]);
 
   // Rendered QA has no desktop event bridge in the Vite shell. This query-controlled fixture is
   // development-only and is replaced at build time, so production never gets a fake default.
@@ -2293,6 +2355,25 @@ export default function App() {
       ? [{ id: block.id, revision: block.frozen_revision }]
         : [],
     );
+    // Ordinary blank drafts become Tasks on their first real run. Temporary sessions are the only
+    // explicit opt-out, so no durable Session can silently fall through the Task board again.
+    if (!targetSession && !activeBoardTaskRef.current && !temporarySessionRef.current) {
+      const board = loadBoardSnapshot();
+      if (board.warning) toast(board.warning, "error");
+      const summary = summarizeDoc(doc).replace(/\s+/g, " ").trim();
+      const task = createBoardTask({
+        title: summary.slice(0, 72) || "未命名任务",
+        status: "todo",
+        priority: "none",
+        order: board.tasks.filter((candidate) => candidate.status === "todo").length,
+      });
+      const saved = saveBoardSnapshot([...board.tasks, task]);
+      if (!saved.ok) {
+        toast(saved.warning, "error");
+        return;
+      }
+      setTaskContext(task, false);
+    }
     if (planMode)
       doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     const promptRequestId = globalThis.crypto.randomUUID();
@@ -2405,6 +2486,7 @@ export default function App() {
     refreshSessions,
     invalidatePendingCreation,
     markSessionStopped,
+    setTaskContext,
     updateRunningSession,
   ]);
 
@@ -2481,6 +2563,21 @@ export default function App() {
     t,
     invalidatePendingCreation,
   ]);
+
+  const createTaskDraft = useCallback(() => {
+    setTaskContext(null, false);
+    createSession();
+  }, [createSession, setTaskContext]);
+
+  const createTemporarySession = useCallback(() => {
+    setTaskContext(null, true);
+    createSession();
+  }, [createSession, setTaskContext]);
+
+  const startBoardTask = useCallback((task: BoardTask) => {
+    setTaskContext(task, false);
+    createSession();
+  }, [createSession, setTaskContext]);
 
   const addSelectedText = useCallback(
     (text: string) => {
@@ -2703,6 +2800,9 @@ export default function App() {
       activeSessionProvenanceRef.current = provenance;
       setActiveSessionReceipt(provenance);
       setActiveSession(id);
+      const board = loadBoardSnapshot();
+      const task = board.warning ? null : taskForSession(board.tasks, id);
+      setTaskContext(task, task === null);
       {
         // Restore the concrete scene and Agent-owned routing independently: Auto can be enabled
         // before the Agent has selected the first scene.
@@ -2813,6 +2913,7 @@ export default function App() {
       t,
       followDockEvent,
       invalidatePendingCreation,
+      setTaskContext,
       updateTranscriptCursor,
     ],
   );
@@ -4346,7 +4447,7 @@ export default function App() {
           setShowTaskBoard(false);
           setShowPluginHub(false);
           setShowAutomations(false);
-          void createSession();
+          createTaskDraft();
           break;
         case "cancel":
           if (activeSessionRef.current && running)
@@ -4461,7 +4562,7 @@ export default function App() {
     },
     [
       run,
-      createSession,
+      createTaskDraft,
       running,
       mode,
       sandbox,
@@ -4499,13 +4600,13 @@ export default function App() {
     },
     {
       id: "new",
-      label: "New session",
+      label: "New task",
       hint: hint("new_session"),
       run: () => {
       setShowTaskBoard(false);
       setShowPluginHub(false);
       setShowAutomations(false);
-      void createSession();
+      createTaskDraft();
       },
     },
     {
@@ -5113,7 +5214,14 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginHub(false);
             setShowAutomations(false);
-            void createSession();
+            createTaskDraft();
+            if (narrowLayout) setNarrowRailOpen(false);
+          }}
+          onNewTemporary={() => {
+            setShowTaskBoard(false);
+            setShowPluginHub(false);
+            setShowAutomations(false);
+            createTemporarySession();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
             onRename={(id, title) =>
@@ -5198,6 +5306,7 @@ export default function App() {
               setShowTaskBoard(false);
               void selectSession(id);
             }}
+            onStartTask={startBoardTask}
           />
         )}
 
@@ -5518,9 +5627,33 @@ export default function App() {
                     </span>
               </>
             )}
+            {activeBoardTask ? (
+              <button
+                type="button"
+                className="rounded p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label={t("taskboard.open")}
+                title={activeBoardTask.id}
+                onClick={openTaskBoard}
+              >
+                <SquareKanban className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
             <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
+            {activeBoardTask && activeSessionTitle ? (
+              <>
+                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
+                  {activeSessionTitle}
+                </span>
+              </>
+            ) : null}
+            {!activeBoardTask && activeSession ? (
+              <span className="rounded-full bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
+                {t("rail.newTemporarySession")}
+              </span>
+            ) : null}
 
             <div className="electrobun-webkit-app-region-drag flex-1" />
 

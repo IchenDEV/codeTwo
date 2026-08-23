@@ -67,6 +67,7 @@ function renderRail(overrides = {}) {
           runningSessions={new Set()}
           onSelect={() => {}}
           onNew={() => {}}
+          onNewTemporary={() => {}}
           onRename={() => {}}
           onPin={() => {}}
           onArchive={() => {}}
@@ -122,10 +123,12 @@ describe("SessionRail row layout", () => {
       onOpenSettings: () => opened.push("settings"),
     });
     const features = view.container.querySelector("[data-rail-features]");
-    const rows = [...(features?.querySelectorAll("button") ?? [])];
+    const rows = [...(features?.querySelectorAll(
+      ':scope > button, :scope > [data-rail-feature="new-task"] > button:first-child',
+    ) ?? [])];
 
     expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
-      "New session",
+      "New task",
       "Task board",
       "Scheduled tasks",
       "Plugins",

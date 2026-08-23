@@ -104,7 +104,7 @@ const EMPTY_USAGE = {
 
 const DEFAULT_KEYMAP: [string, string, string][] = [
   ["run", "Mod+Enter", "Run prompt"],
-  ["new_session", "Mod+N", "New session"],
+  ["new_session", "Mod+N", "New task"],
   ["cancel", "Mod+.", "Cancel turn"],
   ["toggle_terminal", "Mod+J", "Toggle terminal"],
   ["toggle_browser", "Mod+B", "Toggle browser"],

@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type FormEvent } from "react"
+import { useId, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -41,13 +41,11 @@ export interface TaskEditorValue {
   status: TaskStatus
   priority: TaskPriority
   labels: string[]
-  linkedSessionId?: string
 }
 
 interface TaskEditorDialogProps {
   task?: BoardTask | null
   initialStatus?: TaskStatus
-  sessions?: Array<{ id: string; title: string }>
   onCancel: () => void
   onSave: (value: TaskEditorValue) => void
 }
@@ -67,8 +65,6 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
   urgent: "紧急",
 }
 
-const NO_SESSION = "__taskboard_no_session__"
-
 function normalizeLabels(value: string): string[] {
   const labels: string[] = []
   const seen = new Set<string>()
@@ -84,7 +80,6 @@ function normalizeLabels(value: string): string[] {
 export function TaskEditorDialog({
   task = null,
   initialStatus = "todo",
-  sessions = [],
   onCancel,
   onSave,
 }: TaskEditorDialogProps) {
@@ -98,19 +93,9 @@ export function TaskEditorDialog({
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? initialStatus)
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "medium")
   const [labels, setLabels] = useState(task?.labels.join("，") ?? "")
-  const [linkedSessionId, setLinkedSessionId] = useState(task?.linkedSessionId ?? NO_SESSION)
   const [submitted, setSubmitted] = useState(false)
 
   const titleMissing = submitted && title.trim().length === 0
-  const sessionOptions = useMemo(() => {
-    if (!task?.linkedSessionId || sessions.some((session) => session.id === task.linkedSessionId)) {
-      return sessions
-    }
-    return [
-      ...sessions,
-      { id: task.linkedSessionId, title: "已关联会话（当前不可用）" },
-    ]
-  }, [sessions, task?.linkedSessionId])
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -124,7 +109,6 @@ export function TaskEditorDialog({
       status,
       priority,
       labels: normalizeLabels(labels),
-      ...(linkedSessionId !== NO_SESSION ? { linkedSessionId } : {}),
     })
   }
 
@@ -236,36 +220,6 @@ export function TaskEditorDialog({
               <FieldDescription>相同标签会自动合并。</FieldDescription>
             </Field>
 
-            <Field>
-              <FieldLabel id={`${formId}-session-label`}>关联会话</FieldLabel>
-              <Select
-                value={linkedSessionId}
-                onValueChange={(value) => value && setLinkedSessionId(value)}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-full"
-                  aria-labelledby={`${formId}-session-label`}
-                >
-                  <SelectValue>
-                    {linkedSessionId === NO_SESSION
-                      ? "暂不关联"
-                      : sessionOptions.find((session) => session.id === linkedSessionId)?.title ??
-                        "已关联会话（当前不可用）"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value={NO_SESSION}>暂不关联</SelectItem>
-                    {sessionOptions.map((session) => (
-                      <SelectItem key={session.id} value={session.id}>
-                        {session.title}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
           </FieldGroup>
         </form>
 

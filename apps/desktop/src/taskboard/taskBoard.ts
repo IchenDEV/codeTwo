@@ -17,7 +17,8 @@ export interface BoardTask {
   order: number;
   createdAt: number;
   updatedAt: number;
-  linkedSessionId?: string;
+  /** Ordered oldest to newest. A Task owns its Session history, never only one Session. */
+  sessionIds: string[];
 }
 
 export interface BoardFilters {
@@ -37,7 +38,7 @@ export interface StorageLike {
 }
 
 export const TASKBOARD_STORAGE_KEY = "codetwo.taskboard.v1";
-export const TASKBOARD_SNAPSHOT_VERSION = 1 as const;
+export const TASKBOARD_SNAPSHOT_VERSION = 2 as const;
 
 export const CORRUPT_BOARD_WARNING = "无法读取已保存的任务看板，已恢复为示例任务。";
 export const LOAD_BOARD_WARNING = "无法访问本地任务数据，已恢复为示例任务。";
@@ -70,6 +71,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 0,
     createdAt: Date.UTC(2026, 7, 4, 9, 0),
     updatedAt: Date.UTC(2026, 7, 6, 16, 30),
+    sessionIds: [],
   },
   {
     id: "seed-local-persistence",
@@ -81,6 +83,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 0,
     createdAt: Date.UTC(2026, 7, 7, 10, 15),
     updatedAt: Date.UTC(2026, 7, 12, 14, 20),
+    sessionIds: [],
   },
   {
     id: "seed-review-mobile-layout",
@@ -92,6 +95,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 0,
     createdAt: Date.UTC(2026, 7, 8, 11, 0),
     updatedAt: Date.UTC(2026, 7, 12, 18, 45),
+    sessionIds: [],
   },
   {
     id: "seed-empty-state-copy",
@@ -103,6 +107,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 0,
     createdAt: Date.UTC(2026, 7, 10, 9, 40),
     updatedAt: Date.UTC(2026, 7, 10, 9, 40),
+    sessionIds: [],
   },
   {
     id: "seed-session-link",
@@ -114,6 +119,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 1,
     createdAt: Date.UTC(2026, 7, 11, 13, 25),
     updatedAt: Date.UTC(2026, 7, 11, 13, 25),
+    sessionIds: [],
   },
   {
     id: "seed-accessibility-notes",
@@ -125,6 +131,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 2,
     createdAt: Date.UTC(2026, 7, 12, 8, 50),
     updatedAt: Date.UTC(2026, 7, 12, 8, 50),
+    sessionIds: [],
   },
   {
     id: "seed-filter-search",
@@ -136,6 +143,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 1,
     createdAt: Date.UTC(2026, 7, 9, 14, 10),
     updatedAt: Date.UTC(2026, 7, 13, 9, 15),
+    sessionIds: [],
   },
   {
     id: "seed-review-drag-order",
@@ -147,6 +155,7 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 1,
     createdAt: Date.UTC(2026, 7, 10, 15, 35),
     updatedAt: Date.UTC(2026, 7, 13, 11, 5),
+    sessionIds: [],
   },
   {
     id: "seed-priority-guidelines",
@@ -158,11 +167,12 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
     order: 1,
     createdAt: Date.UTC(2026, 7, 5, 10, 20),
     updatedAt: Date.UTC(2026, 7, 9, 17, 40),
+    sessionIds: [],
   },
 ];
 
 function cloneTask(task: BoardTask): BoardTask {
-  return { ...task, labels: [...task.labels] };
+  return { ...task, labels: [...task.labels], sessionIds: [...task.sessionIds] };
 }
 
 /** Returns a fresh deterministic starter board so consumers cannot mutate the shared template. */
@@ -205,7 +215,7 @@ export interface CreateBoardTaskInput {
   priority?: TaskPriority;
   labels?: readonly string[];
   order?: number;
-  linkedSessionId?: string;
+  sessionIds?: readonly string[];
 }
 
 export interface CreateBoardTaskOptions {
@@ -219,7 +229,6 @@ export function createBoardTask(
   options: CreateBoardTaskOptions = {},
 ): BoardTask {
   const now = options.now ?? Date.now();
-  const linkedSessionId = input.linkedSessionId?.trim();
   return {
     id: options.id?.trim() || generatedTaskId(),
     title: input.title.trim() || "未命名任务",
@@ -230,8 +239,77 @@ export function createBoardTask(
     order: Number.isFinite(input.order) ? (input.order ?? 0) : 0,
     createdAt: now,
     updatedAt: now,
-    ...(linkedSessionId ? { linkedSessionId } : {}),
+    sessionIds: normalizeSessionIds(input.sessionIds),
   };
+}
+
+function normalizeSessionIds(values: readonly string[] | undefined): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const rawValue of values ?? []) {
+    const value = rawValue.trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+  }
+  return normalized;
+}
+
+export function latestTaskSessionId(task: BoardTask): string | null {
+  return task.sessionIds[task.sessionIds.length - 1] ?? null;
+}
+
+export function taskForSession(
+  tasks: readonly BoardTask[],
+  sessionId: string,
+): BoardTask | null {
+  return tasks.find((task) => task.sessionIds.includes(sessionId)) ?? null;
+}
+
+/**
+ * Records the durable Session created for a Task. The first actual run starts a todo Task, while
+ * completed/review Tasks keep their explicit board state when a Session is merely inspected.
+ */
+export function associateTaskSession(
+  tasks: readonly BoardTask[],
+  taskId: string,
+  sessionId: string,
+  now = Date.now(),
+): BoardTask[] | null {
+  const index = tasks.findIndex((task) => task.id === taskId);
+  if (index < 0) return null;
+  const task = tasks[index]!;
+  const alreadyLinked = task.sessionIds.includes(sessionId);
+  const linkedElsewhere = tasks.some(
+    (candidate, candidateIndex) =>
+      candidateIndex !== index && candidate.sessionIds.includes(sessionId),
+  );
+  const status = task.status === "todo" ? "in_progress" : task.status;
+  const updatedAt = Math.max(now, task.createdAt, task.updatedAt);
+  if (
+    alreadyLinked
+    && !linkedElsewhere
+    && status === task.status
+    && updatedAt === task.updatedAt
+  ) {
+    return tasks.map(cloneTask);
+  }
+  const updated: BoardTask = {
+    ...task,
+    status,
+    updatedAt,
+    sessionIds: alreadyLinked ? [...task.sessionIds] : [...task.sessionIds, sessionId],
+  };
+  return tasks.map((candidate, candidateIndex) => {
+    if (candidateIndex === index) return updated;
+    if (!candidate.sessionIds.includes(sessionId)) return cloneTask(candidate);
+    return {
+      ...candidate,
+      updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
+      labels: [...candidate.labels],
+      sessionIds: candidate.sessionIds.filter((id) => id !== sessionId),
+    };
+  });
 }
 
 /** Non-mutating, stable ordering by board column and then each task's explicit order. */
@@ -314,7 +392,7 @@ function isTaskPriority(value: unknown): value is TaskPriority {
   return typeof value === "string" && (TASK_PRIORITIES as readonly string[]).includes(value);
 }
 
-function parseTask(value: unknown): BoardTask | null {
+function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSION): BoardTask | null {
   if (!isRecord(value)) return null;
   const {
     id,
@@ -326,8 +404,12 @@ function parseTask(value: unknown): BoardTask | null {
     order,
     createdAt,
     updatedAt,
+    sessionIds,
     linkedSessionId,
   } = value;
+  const persistedSessionIds = version === 1
+    ? (typeof linkedSessionId === "string" ? [linkedSessionId] : [])
+    : sessionIds;
   if (
     typeof id !== "string"
     || !id.trim()
@@ -346,7 +428,8 @@ function parseTask(value: unknown): BoardTask | null {
     || typeof updatedAt !== "number"
     || !Number.isSafeInteger(updatedAt)
     || updatedAt < createdAt
-    || (linkedSessionId !== undefined && (typeof linkedSessionId !== "string" || !linkedSessionId.trim()))
+    || !Array.isArray(persistedSessionIds)
+    || !persistedSessionIds.every((sessionId) => typeof sessionId === "string" && sessionId.trim())
   ) {
     return null;
   }
@@ -360,7 +443,7 @@ function parseTask(value: unknown): BoardTask | null {
     order,
     createdAt,
     updatedAt,
-    ...(typeof linkedSessionId === "string" ? { linkedSessionId: linkedSessionId.trim() } : {}),
+    sessionIds: normalizeSessionIds(persistedSessionIds),
   };
 }
 
@@ -374,17 +457,24 @@ export function parseBoardSnapshot(raw: string): TaskBoardState {
     const value: unknown = JSON.parse(raw);
     if (
       !isRecord(value)
-      || value.version !== TASKBOARD_SNAPSHOT_VERSION
+      || (value.version !== 1 && value.version !== TASKBOARD_SNAPSHOT_VERSION)
       || !Array.isArray(value.tasks)
     ) {
       return corruptBoardState();
     }
+    const version = value.version;
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
+    const claimedSessions = new Set<string>();
     for (const valueTask of value.tasks) {
-      const task = parseTask(valueTask);
+      const task = parseTask(valueTask, version);
       if (!task || ids.has(task.id)) return corruptBoardState();
       ids.add(task.id);
+      task.sessionIds = task.sessionIds.filter((sessionId) => {
+        if (claimedSessions.has(sessionId)) return false;
+        claimedSessions.add(sessionId);
+        return true;
+      });
       tasks.push(task);
     }
     return { tasks, warning: null };
@@ -472,7 +562,8 @@ function sameTask(left: BoardTask, right: BoardTask): boolean {
     && left.order === right.order
     && left.createdAt === right.createdAt
     && left.updatedAt === right.updatedAt
-    && left.linkedSessionId === right.linkedSessionId
+    && left.sessionIds.length === right.sessionIds.length
+    && left.sessionIds.every((sessionId, index) => sessionId === right.sessionIds[index])
     && left.labels.length === right.labels.length
     && left.labels.every((label, index) => label === right.labels[index]);
 }

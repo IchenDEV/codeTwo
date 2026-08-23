@@ -8,6 +8,7 @@ import {
 } from "react"
 import {
   CheckCircle2,
+  ArrowRight,
   Circle,
   CircleDot,
   CircleEllipsis,
@@ -15,7 +16,7 @@ import {
   Filter,
   Flag,
   GripVertical,
-  Link2,
+  MessageSquareText,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -73,8 +74,9 @@ import {
 } from "./TaskEditorDialog"
 
 interface TaskBoardPageProps {
-  sessions?: Array<{ id: string; title: string }>
+  sessions?: Array<{ id: string; title: string; archived?: boolean }>
   onOpenSession?: (id: string) => void
+  onStartTask?: (task: BoardTask) => void
 }
 
 interface EditorState {
@@ -146,7 +148,8 @@ function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[
 
 function TaskCard({
   task,
-  linkedSessionTitle,
+  latestSessionTitle,
+  sessionCount,
   dragTarget,
   onDragStart,
   onDragEnd,
@@ -155,10 +158,12 @@ function TaskCard({
   onEdit,
   onDelete,
   onMove,
-  onOpenSession,
+  onContinue,
+  onStartNewSession,
 }: {
   task: BoardTask
-  linkedSessionTitle?: string
+  latestSessionTitle?: string
+  sessionCount: number
   dragTarget: boolean
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void
   onDragEnd: () => void
@@ -167,7 +172,8 @@ function TaskCard({
   onEdit: () => void
   onDelete: () => void
   onMove: (status: TaskStatus) => void
-  onOpenSession?: () => void
+  onContinue?: () => void
+  onStartNewSession?: () => void
 }) {
   return (
     <div
@@ -215,10 +221,16 @@ function TaskCard({
                     <Pencil aria-hidden />
                     编辑任务
                   </DropdownMenuItem>
-                  {onOpenSession ? (
-                    <DropdownMenuItem onClick={onOpenSession}>
+                  {latestSessionTitle && onContinue ? (
+                    <DropdownMenuItem onClick={onContinue}>
                       <ExternalLink aria-hidden />
-                      打开关联会话
+                      打开最近会话
+                    </DropdownMenuItem>
+                  ) : null}
+                  {onStartNewSession ? (
+                    <DropdownMenuItem onClick={onStartNewSession}>
+                      <MessageSquareText aria-hidden />
+                      {sessionCount > 0 ? "在新会话中继续" : "开始任务"}
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuGroup>
@@ -282,21 +294,24 @@ function TaskCard({
             ) : null}
           </div>
 
-          {task.linkedSessionId ? (
-            <button
-              type="button"
-              className="flex min-w-0 items-center gap-1 text-left text-hint text-primary outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:text-muted-foreground"
-              disabled={!onOpenSession}
-              onClick={onOpenSession}
-            >
-              <Link2 aria-hidden className="size-3.5 shrink-0" />
-              <span className="truncate">{linkedSessionTitle ?? "关联会话"}</span>
-            </button>
-          ) : null}
-
-          <span className="text-fine text-muted-foreground">
-            {formatUpdatedAt(task.updatedAt)}
-          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            {onContinue ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="compact"
+                className="-ml-2 text-primary"
+                onClick={onContinue}
+              >
+                {sessionCount > 0 ? "继续任务" : "开始任务"}
+                <ArrowRight data-icon="inline-end" aria-hidden />
+              </Button>
+            ) : null}
+            <span className="ml-auto truncate text-fine text-muted-foreground">
+              {sessionCount > 0 ? `${sessionCount} 个会话 · ` : ""}
+              {formatUpdatedAt(task.updatedAt)}
+            </span>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -315,18 +330,20 @@ function BoardColumn({
   openEditor,
   deleteTask,
   onOpenSession,
+  onStartTask,
 }: {
   status: TaskStatus
   tasks: BoardTask[]
   totalCount: number
   filtered: boolean
-  sessionsById: ReadonlyMap<string, string>
+  sessionsById: ReadonlyMap<string, { title: string; archived: boolean }>
   dragState: DragState | null
   setDragState: (state: DragState | null) => void
   dispatch: (action: BoardAction) => void
   openEditor: (task: BoardTask | null, status: TaskStatus) => void
   deleteTask: (task: BoardTask) => void
   onOpenSession?: (id: string) => void
+  onStartTask?: (task: BoardTask) => void
 }) {
   const StatusIcon = STATUS_ICONS[status]
   const columnEndTarget = dragState?.status === status && dragState.beforeId === undefined
@@ -372,44 +389,53 @@ function BoardColumn({
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
-        {tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            linkedSessionTitle={
-              task.linkedSessionId ? sessionsById.get(task.linkedSessionId) : undefined
-            }
-            dragTarget={dragState?.status === status && dragState.beforeId === task.id}
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = "move"
-              event.dataTransfer.setData("text/plain", task.id)
-              setDragState({ taskId: task.id, status })
-            }}
-            onDragEnd={() => setDragState(null)}
-            onDragOver={(event) => {
-              event.preventDefault()
-              event.dataTransfer.dropEffect = "move"
-              if (dragState?.taskId && dragState.taskId !== task.id) {
-                setDragState({ taskId: dragState.taskId, status, beforeId: task.id })
+        {tasks.map((task) => {
+          const availableSessions = task.sessionIds.filter(
+            (id) => sessionsById.get(id)?.archived === false,
+          )
+          const latestSessionId = availableSessions[availableSessions.length - 1]
+          const continueTask = latestSessionId && onOpenSession
+            ? () => onOpenSession(latestSessionId)
+            : onStartTask
+              ? () => onStartTask(task)
+              : undefined
+          return (
+            <TaskCard
+              key={task.id}
+              task={task}
+              latestSessionTitle={
+                latestSessionId ? sessionsById.get(latestSessionId)?.title : undefined
               }
-            }}
-            onDrop={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              const taskId = dragState?.taskId || event.dataTransfer.getData("text/plain")
-              if (taskId && taskId !== task.id) move(taskId, status, task.id)
-              else setDragState(null)
-            }}
-            onEdit={() => openEditor(task, status)}
-            onDelete={() => deleteTask(task)}
-            onMove={(targetStatus) => move(task.id, targetStatus)}
-            onOpenSession={
-              task.linkedSessionId && sessionsById.has(task.linkedSessionId) && onOpenSession
-                ? () => onOpenSession(task.linkedSessionId as string)
-                : undefined
-            }
-          />
-        ))}
+              sessionCount={task.sessionIds.length}
+              dragTarget={dragState?.status === status && dragState.beforeId === task.id}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move"
+                event.dataTransfer.setData("text/plain", task.id)
+                setDragState({ taskId: task.id, status })
+              }}
+              onDragEnd={() => setDragState(null)}
+              onDragOver={(event) => {
+                event.preventDefault()
+                event.dataTransfer.dropEffect = "move"
+                if (dragState?.taskId && dragState.taskId !== task.id) {
+                  setDragState({ taskId: dragState.taskId, status, beforeId: task.id })
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                const taskId = dragState?.taskId || event.dataTransfer.getData("text/plain")
+                if (taskId && taskId !== task.id) move(taskId, status, task.id)
+                else setDragState(null)
+              }}
+              onEdit={() => openEditor(task, status)}
+              onDelete={() => deleteTask(task)}
+              onMove={(targetStatus) => move(task.id, targetStatus)}
+              onContinue={continueTask}
+              onStartNewSession={onStartTask ? () => onStartTask(task) : undefined}
+            />
+          )
+        })}
 
         {tasks.length === 0 ? (
           <div className="grid flex-1 place-content-center gap-2 px-4 py-8 text-center text-muted-foreground">
@@ -455,6 +481,7 @@ function BoardColumn({
 export function TaskBoardPage({
   sessions = [],
   onOpenSession,
+  onStartTask,
 }: TaskBoardPageProps) {
   const toast = useToast()
   const [state, dispatchBase] = useReducer(boardReducer, undefined, loadBoardSnapshot)
@@ -489,7 +516,10 @@ export function TaskBoardPage({
   )
   const availableLabels = useMemo(() => boardLabels(state.tasks), [state.tasks])
   const sessionsById = useMemo(
-    () => new Map(sessions.map((session) => [session.id, session.title])),
+    () => new Map(sessions.map((session) => [
+      session.id,
+      { title: session.title, archived: session.archived === true },
+    ])),
     [sessions]
   )
   const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
@@ -514,7 +544,6 @@ export function TaskBoardPage({
         task: {
           ...editor.task,
           ...value,
-          linkedSessionId: value.linkedSessionId,
           updatedAt: Math.max(Date.now(), editor.task.createdAt, editor.task.updatedAt),
         },
       })
@@ -670,24 +699,33 @@ export function TaskBoardPage({
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 pb-6 pt-1">
-        <div className="flex h-full min-w-max gap-4">
-          {TASK_STATUSES.map((status) => (
-            <BoardColumn
-              key={status}
-              status={status}
-              tasks={visibleTasks.filter((task) => task.status === status)}
-              totalCount={state.tasks.filter((task) => task.status === status).length}
-              filtered={filtered}
-              sessionsById={sessionsById}
-              dragState={dragState}
-              setDragState={setDragState}
-              dispatch={dispatch}
-              openEditor={openEditor}
-              deleteTask={deleteTask}
-              onOpenSession={onOpenSession}
-            />
-          ))}
+      <div
+        data-task-board-columns
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-6 pt-1"
+      >
+        <div
+          data-task-board-content
+          className="mx-auto h-full w-full max-w-4xl px-6 sm:px-8"
+        >
+          <div className="flex h-full min-w-max gap-4 pr-6 sm:pr-8">
+            {TASK_STATUSES.map((status) => (
+              <BoardColumn
+                key={status}
+                status={status}
+                tasks={visibleTasks.filter((task) => task.status === status)}
+                totalCount={state.tasks.filter((task) => task.status === status).length}
+                filtered={filtered}
+                sessionsById={sessionsById}
+                dragState={dragState}
+                setDragState={setDragState}
+                dispatch={dispatch}
+                openEditor={openEditor}
+                deleteTask={deleteTask}
+                onOpenSession={onOpenSession}
+                onStartTask={onStartTask}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -696,7 +734,6 @@ export function TaskBoardPage({
           key={editor.task?.id ?? `new-${editor.initialStatus}`}
           task={editor.task}
           initialStatus={editor.initialStatus}
-          sessions={sessions}
           onCancel={() => setEditor(null)}
           onSave={saveEditor}
         />

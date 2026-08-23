@@ -139,6 +139,7 @@ export function SessionRail({
   runningSessions,
   onSelect,
   onNew,
+  onNewTemporary,
   onRename,
   onPin,
   onArchive,
@@ -181,7 +182,10 @@ export function SessionRail({
   /** Every session with a turn in flight, including background sessions. */
   runningSessions: ReadonlySet<string>;
   onSelect: (id: string) => void;
+  /** Opens the default Task-owned draft. */
   onNew: () => void;
+  /** Explicit escape hatch for work the user does not want tracked as a Task. */
+  onNewTemporary: () => void;
   onRename: (id: string, title: string) => void;
   /** Keeps an active session above the recency list until explicitly unpinned. */
   onPin: (id: string, pinned: boolean) => void;
@@ -781,18 +785,42 @@ export function SessionRail({
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
       <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-3 pb-2">
-        <button
-          data-rail-feature="new-session"
-          className={featureRowClass}
-          title={`${t("rail.newSession")} ${newHint}`}
-          onClick={onNew}
-        >
-          <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("rail.newSession")}</span>
-          <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
-            <Plus className="size-2.5" aria-hidden />
-          </span>
-        </button>
+        <div data-rail-feature="new-task" className="flex min-w-0 items-center gap-0.5">
+          <button
+            className={cn(featureRowClass, "min-w-0 flex-1")}
+            title={`${t("rail.newTask")} ${newHint}`}
+            onClick={onNew}
+          >
+            <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t("rail.newTask")}</span>
+            <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
+              <Plus className="size-2.5" aria-hidden />
+            </span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-muted-foreground"
+                  aria-label={t("rail.newOptions")}
+                >
+                  <ChevronDown aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="start">
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={onNewTemporary}>
+                  <SquarePen aria-hidden />
+                  {t("rail.newTemporarySession")}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
         <button
           data-rail-feature="task-board"
           aria-current={taskBoardOpen ? "page" : undefined}
