@@ -25,7 +25,6 @@ import {
 import { pickAppearanceThemeDocument, saveAppearanceThemeDocument } from "../bridge";
 import { useT } from "../i18n";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -506,17 +505,6 @@ export function AppearanceSettings({
       <section className="appearance-section" aria-labelledby="appearance-surfaces">
         <h2 id="appearance-surfaces" className="appearance-settings-heading">{t("settings.surfaces")}</h2>
         <div className="appearance-setting-list">
-          <div className="appearance-setting-row">
-            <span className="appearance-setting-copy">
-              <strong>{t("settings.pet")}</strong>
-              <span>{t("settings.petHint")}</span>
-            </span>
-            <Checkbox
-              aria-label={t("settings.pet")}
-              checked={settings.petEnabled}
-              onCheckedChange={(checked) => setAppearanceSettings({ petEnabled: checked === true })}
-            />
-          </div>
           <RangeSetting
             label={t("settings.sidebarOpacity")}
             hint={t("settings.sidebarOpacityHint")}

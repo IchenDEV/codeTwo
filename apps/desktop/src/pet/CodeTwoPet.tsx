@@ -2,17 +2,53 @@ import { PetX } from "@petx/react";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { setAppearanceSettings } from "../appearance";
+import { setAppearanceSettings, useAppearanceSettings, type PetSize } from "../appearance";
 import { VoiceButton } from "../voice/VoiceButton";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import type { CodeTwoPetAnimation } from "./state";
+import { BUILTIN_PET, petSpritesheetUrl } from "./store";
 
 import "@petx/react/styles.css";
 import "./pet.css";
 
-const PET_SPRITESHEET = "/pets/naiwa/spritesheet.webp";
+export const PET_SPRITESHEET = BUILTIN_PET.spritesheetUrl;
+export const PET_SIZE_PIXELS: Record<PetSize, number> = {
+  small: 88,
+  medium: 112,
+  large: 136,
+};
 const WAVE_DURATION_MS = 820;
+
+export function CodeTwoPetSprite({
+  animation,
+  size,
+  title,
+  src = PET_SPRITESHEET,
+  spriteVersionNumber = 2,
+  playing = true,
+  frame,
+}: {
+  animation: CodeTwoPetAnimation | "waving";
+  size: number;
+  title: string;
+  src?: string;
+  spriteVersionNumber?: number;
+  playing?: boolean;
+  frame?: number;
+}) {
+  return (
+    <PetX
+      src={src}
+      spriteVersionNumber={spriteVersionNumber}
+      animation={animation}
+      size={size}
+      title={title}
+      playing={playing}
+      frame={frame}
+    />
+  );
+}
 
 export function CodeTwoPet({
   animation,
@@ -24,6 +60,7 @@ export function CodeTwoPet({
   onVoiceText: (text: string) => void;
 }) {
   const t = useT();
+  const appearance = useAppearanceSettings();
   const [wave, setWave] = useState(0);
   const waveTimer = useRef<number>();
 
@@ -43,7 +80,8 @@ export function CodeTwoPet({
     }, WAVE_DURATION_MS);
   };
 
-  const activeAnimation = wave > 0 ? "waving" : animation;
+  const activeAnimation = wave > 0 ? "waving" : appearance.petActivityEnabled ? animation : "idle";
+  const spritesheetUrl = petSpritesheetUrl(appearance.petSource, appearance.petId);
 
   return (
     <section className="codetwo-pet-stage" aria-label={t("pet.label")}>
@@ -54,13 +92,12 @@ export function CodeTwoPet({
         title={t("pet.wave")}
         onClick={greet}
       >
-        <PetX
-          key={`${activeAnimation}-${wave}`}
-          src={PET_SPRITESHEET}
-          spriteVersionNumber={2}
+        <CodeTwoPetSprite
+          key={`${appearance.petSource}-${appearance.petId}-${activeAnimation}-${wave}`}
           animation={activeAnimation}
-          size={112}
-          title={t("pet.label")}
+          size={PET_SIZE_PIXELS[appearance.petSize]}
+          src={spritesheetUrl}
+          title={appearance.petName || t("pet.label")}
         />
       </button>
 

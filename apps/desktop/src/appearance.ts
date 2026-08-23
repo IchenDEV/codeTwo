@@ -3,6 +3,8 @@ import { useSyncExternalStore } from "react";
 export type ColorScheme = "light" | "dark";
 export type ThemePreference = ColorScheme | "system";
 export type AppearanceColorKey = "accent" | "background" | "foreground";
+export type PetSize = "small" | "medium" | "large";
+export type PetSource = "builtin" | "petshare";
 
 export interface ThemePalette {
   accent: string;
@@ -24,6 +26,11 @@ export interface AppearanceSettings {
   activeThemeId: string;
   customThemes: AppearanceTheme[];
   petEnabled: boolean;
+  petActivityEnabled: boolean;
+  petSize: PetSize;
+  petSource: PetSource;
+  petId: string;
+  petName: string;
   uiFont: UiFontId;
   codeFont: CodeFontId;
   uiFontSize: number;
@@ -95,6 +102,11 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   activeThemeId: "code2",
   customThemes: [],
   petEnabled: true,
+  petActivityEnabled: true,
+  petSize: "medium",
+  petSource: "builtin",
+  petId: "naiwa",
+  petName: "Naiwa",
   uiFont: "system",
   codeFont: "system-mono",
   uiFontSize: 13,
@@ -111,6 +123,20 @@ function clamp(value: unknown, min: number, max: number, fallback: number): numb
 
 function isPreference(value: unknown): value is ThemePreference {
   return value === "system" || value === "light" || value === "dark";
+}
+
+function isPetSize(value: unknown): value is PetSize {
+  return value === "small" || value === "medium" || value === "large";
+}
+
+function isPetSource(value: unknown): value is PetSource {
+  return value === "builtin" || value === "petshare";
+}
+
+function safePetId(value: unknown): string | null {
+  return typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,79}$/.test(value)
+    ? value
+    : null;
 }
 
 export function isHexColor(value: unknown): value is string {
@@ -157,6 +183,13 @@ function includesId<T extends readonly { id: string }[]>(items: T, value: unknow
 
 export function normalizeAppearanceSettings(value: unknown): AppearanceSettings {
   const candidate = value && typeof value === "object" ? value as Partial<AppearanceSettings> : {};
+  const requestedPetSource = isPetSource(candidate.petSource)
+    ? candidate.petSource
+    : DEFAULT_APPEARANCE_SETTINGS.petSource;
+  const petId = safePetId(candidate.petId);
+  const petSource = requestedPetSource === "petshare" && petId
+    ? requestedPetSource
+    : DEFAULT_APPEARANCE_SETTINGS.petSource;
   const customThemes: AppearanceTheme[] = [];
   const seenThemeIds = new Set<string>();
   if (Array.isArray(candidate.customThemes)) {
@@ -179,6 +212,15 @@ export function normalizeAppearanceSettings(value: unknown): AppearanceSettings 
     petEnabled: typeof candidate.petEnabled === "boolean"
       ? candidate.petEnabled
       : DEFAULT_APPEARANCE_SETTINGS.petEnabled,
+    petActivityEnabled: typeof candidate.petActivityEnabled === "boolean"
+      ? candidate.petActivityEnabled
+      : DEFAULT_APPEARANCE_SETTINGS.petActivityEnabled,
+    petSize: isPetSize(candidate.petSize) ? candidate.petSize : DEFAULT_APPEARANCE_SETTINGS.petSize,
+    petSource,
+    petId: petSource === "petshare" && petId ? petId : DEFAULT_APPEARANCE_SETTINGS.petId,
+    petName: petSource === "petshare"
+      ? safeName(candidate.petName, petId ?? DEFAULT_APPEARANCE_SETTINGS.petName)
+      : DEFAULT_APPEARANCE_SETTINGS.petName,
     uiFont: includesId(UI_FONTS, candidate.uiFont) ? candidate.uiFont : DEFAULT_APPEARANCE_SETTINGS.uiFont,
     codeFont: includesId(CODE_FONTS, candidate.codeFont) ? candidate.codeFont : DEFAULT_APPEARANCE_SETTINGS.codeFont,
     uiFontSize: clamp(candidate.uiFontSize, 12, 16, DEFAULT_APPEARANCE_SETTINGS.uiFontSize),
@@ -239,6 +281,32 @@ export function setAppearanceSettings(
 
 export function resetAppearanceSettings(): void {
   emit(DEFAULT_APPEARANCE_SETTINGS);
+}
+
+/** Restore visual appearance without changing the companion configured on its own settings page. */
+export function resetVisualAppearanceSettings(): void {
+  emit({
+    ...DEFAULT_APPEARANCE_SETTINGS,
+    petEnabled: snapshot.petEnabled,
+    petActivityEnabled: snapshot.petActivityEnabled,
+    petSize: snapshot.petSize,
+    petSource: snapshot.petSource,
+    petId: snapshot.petId,
+    petName: snapshot.petName,
+  });
+}
+
+/** Restore only settings owned by the Pets page. */
+export function resetPetSettings(): void {
+  emit({
+    ...snapshot,
+    petEnabled: DEFAULT_APPEARANCE_SETTINGS.petEnabled,
+    petActivityEnabled: DEFAULT_APPEARANCE_SETTINGS.petActivityEnabled,
+    petSize: DEFAULT_APPEARANCE_SETTINGS.petSize,
+    petSource: DEFAULT_APPEARANCE_SETTINGS.petSource,
+    petId: DEFAULT_APPEARANCE_SETTINGS.petId,
+    petName: DEFAULT_APPEARANCE_SETTINGS.petName,
+  });
 }
 
 export function themeCatalog(settings = snapshot): AppearanceTheme[] {

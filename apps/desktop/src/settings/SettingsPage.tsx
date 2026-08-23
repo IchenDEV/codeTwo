@@ -16,6 +16,7 @@ import {
   Package,
   Palette,
   Plus,
+  PawPrint,
   RefreshCw,
   RotateCcw,
   ScanText,
@@ -62,7 +63,7 @@ import {
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
 import { en as EN_STRINGS, LOCALES, type StringKey } from "../i18n/strings";
-import { resetAppearanceSettings } from "../appearance";
+import { resetVisualAppearanceSettings } from "../appearance";
 import { useTheme } from "../theme";
 import { setTerminalSettings, useTerminalSettings } from "../terminal/settings";
 import { ProviderIcon } from "../providers/ProviderIcon";
@@ -71,6 +72,7 @@ import { MemorySettingsPage } from "./MemorySettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { ModelPicker } from "../session/Composer";
+import { PetSettings } from "./PetSettings";
 import {
   worktreeBranchDisplay,
   worktreeDiscardRoute,
@@ -90,6 +92,7 @@ import "./settings-page.css";
 export type SettingsTab =
   | "general"
   | "appearance"
+  | "pets"
   | "project"
   | "memory"
   | "keybindings"
@@ -117,6 +120,7 @@ const NAV_GROUPS: {
     items: [
       { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
       { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
+      { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
       { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
       { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
     ],
@@ -248,11 +252,13 @@ function GroupHeading({ children }: { children: ReactNode }) {
  * description is a slot rather than an afterthought so the first row starts at the same height on
  * every page — General used to skip it and sat one line higher than the rest.
  */
-function Page({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function Page({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
     <div>
       <h1 className="text-display font-semibold tracking-tight">{title}</h1>
-      <p className="pb-3 pt-1.5 text-hint leading-relaxed text-muted-foreground">{description}</p>
+      {description && (
+        <p className="pb-3 pt-1.5 text-hint leading-relaxed text-muted-foreground">{description}</p>
+      )}
       {children}
     </div>
   );
@@ -664,7 +670,7 @@ export function SettingsPage({
     if (tab === "general") {
       setLanguage("system");
     } else if (tab === "appearance") {
-      resetAppearanceSettings();
+      resetVisualAppearanceSettings();
     } else if (tab === "keybindings") {
       onResetAll?.();
     }
@@ -990,7 +996,11 @@ export function SettingsPage({
           <div
             className={cn(
               "mx-auto w-full pb-20",
-              tab === "memory" ? "settings-memory-page" : "settings-standard-page",
+              tab === "memory"
+                ? "settings-memory-page"
+                : tab === "pets"
+                  ? "settings-pets-page"
+                  : "settings-standard-page",
               tab === "project" && "settings-project-page",
             )}
           >
@@ -1066,6 +1076,12 @@ export function SettingsPage({
             {tab === "appearance" && (
               <Page title={t("settings.appearance")} description={t("settings.appearanceHint")}>
                 <AppearanceSettings value={theme} onChange={setTheme} />
+              </Page>
+            )}
+
+            {tab === "pets" && (
+              <Page title={t("settings.pets")}>
+                <PetSettings />
               </Page>
             )}
 
