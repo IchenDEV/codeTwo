@@ -24,7 +24,7 @@ import {
   parseCanvasHistoryPrompt,
   type CanvasHistoryMarker,
 } from "./promptPreview";
-import { isRunning, type Turn } from "./turns";
+import { isRunning, type ToolEntry, type Turn } from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import { MarkdownContent } from "./MarkdownContent";
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
@@ -160,6 +161,125 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
+function ToolCallBlock({ tool }: { tool: ToolEntry }) {
+  const textOutputs = (tool.outputs ?? []).flatMap((output) =>
+    output.type === "text" ? [output.text] : [],
+  );
+  const images = (tool.outputs ?? []).flatMap((output) =>
+    output.type === "image" ? [output.artifact] : [],
+  );
+  const resourceLinks = (tool.outputs ?? []).flatMap((output) => {
+    if (output.type !== "resource_link") return [];
+    const safe = safeResourceLink(output.uri);
+    return safe ? [{ ...output, ...safe }] : [];
+  });
+  const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
+  const [open, setOpen] = useState(
+    (tool.status !== "completed" && tool.status !== "failed") ||
+      images.length + resourceLinks.length > 0,
+  );
+  const header = (
+    <>
+      <Wrench className="size-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{tool.title}</span>
+      {tool.kind ? (
+        <span className="shrink-0 font-mono text-cap text-muted-foreground">{tool.kind}</span>
+      ) : null}
+      <span className="flex shrink-0 items-center gap-1.5 text-fine">
+        <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
+        {tool.status}
+      </span>
+    </>
+  );
+
+  if (!hasOutput) {
+    return (
+      <div
+        className="my-3 flex min-w-0 items-center gap-2 px-1 py-1.5 text-ui text-muted-foreground"
+        data-tool-call={tool.id}
+      >
+        {header}
+      </div>
+    );
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="my-3 min-w-0" data-tool-call={tool.id}>
+      <CollapsibleTrigger
+        className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {header}
+        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+        <CollapsibleContent className="mt-1.5 min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
+          {textOutputs.map((output, index) => (
+            <pre
+              key={index}
+              className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code leading-relaxed"
+            >
+              <code>{output}</code>
+            </pre>
+          ))}
+          {images.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2" aria-label="Generated images">
+              {images.map((artifact) => (
+                <ArtifactImage key={artifact.id} artifact={artifact} />
+              ))}
+            </div>
+          ) : null}
+          {resourceLinks.length > 0 ? (
+            <div className="flex flex-col gap-1.5 p-2" aria-label="Tool links">
+              {resourceLinks.map((link) => (
+                <button
+                  key={link.uri}
+                  type="button"
+                  className="flex min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-2 py-1.5 text-left text-fine transition-colors hover:bg-accent/50"
+                  title={link.uri}
+                  onClick={() => void openExternal(link.uri)}
+                >
+                  <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
+                  <span className="max-w-52 truncate font-mono text-cap text-muted-foreground">
+                    {link.host}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+type RenderBlock =
+  | { kind: "text"; text: string }
+  | { kind: "tool"; tool: ToolEntry };
+
+/** Join adjacent streamed chunks while retaining tool calls at their exact event boundary. */
+function orderedBlocks(turn: Turn): RenderBlock[] {
+  const tools = new Map(turn.tools.map((tool) => [tool.id, tool]));
+  const seenTools = new Set<string>();
+  const blocks: RenderBlock[] = [];
+  for (const entry of turn.content ?? []) {
+    if (entry.kind === "text") {
+      const tail = blocks[blocks.length - 1];
+      if (tail?.kind === "text") tail.text += entry.text;
+      else blocks.push({ kind: "text", text: entry.text });
+      continue;
+    }
+    const tool = tools.get(entry.toolId);
+    if (!tool || seenTools.has(tool.id)) continue;
+    seenTools.add(tool.id);
+    blocks.push({ kind: "tool", tool });
+  }
+  // Compatibility for turns produced by older renderers and manually constructed fixtures.
+  if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
+  for (const tool of turn.tools) {
+    if (!seenTools.has(tool.id)) blocks.push({ kind: "tool", tool });
+  }
+  return blocks;
+}
+
 /**
  * Plan entries → checklist markdown (R4 plan-as-document). Transcript plan entries are plain
  * strings — the engine keeps only the entry content — so an entry already carrying a checkbox
@@ -197,7 +317,7 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
-/** A collapsible group of secondary detail (agents / thinking / tools / plan). */
+/** A collapsible group of secondary detail (agents / thinking / plan / memory). */
 function Detail({
   icon: Icon,
   label,
@@ -228,8 +348,8 @@ function Detail({
  * One prompt → response cycle.
  *
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
- * transcript reads as a conversation instead of a stack of equally-weighted cards. Thinking, tool
- * calls and the plan stay collapsed underneath.
+ * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
+ * their streamed position; thinking and plan metadata stay collapsed underneath.
  */
 export const TurnCard = memo(function TurnCard({
   turn,
@@ -256,27 +376,7 @@ export const TurnCard = memo(function TurnCard({
   const running = isRunning(turn);
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
-  const artifacts = useMemo(
-    () =>
-      turn.tools.flatMap((tool) =>
-        (tool.outputs ?? []).flatMap((output) =>
-          output.type === "image" ? [output.artifact] : [],
-        ),
-      ),
-    [turn.tools],
-  );
-  const resourceLinks = useMemo(() => {
-    const seen = new Set<string>();
-    return turn.tools.flatMap((tool) =>
-      (tool.outputs ?? []).flatMap((output) => {
-        if (output.type !== "resource_link") return [];
-        const safe = safeResourceLink(output.uri);
-        if (!safe || seen.has(safe.uri)) return [];
-        seen.add(safe.uri);
-        return [{ ...output, ...safe }];
-      }),
-    );
-  }, [turn.tools]);
+  const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
@@ -300,7 +400,6 @@ export const TurnCard = memo(function TurnCard({
   }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
   const hasDetail =
     agents.length +
-      turn.tools.length +
       turn.thoughts.length +
       turn.plan.length +
       (turn.memory?.items.length ?? 0) >
@@ -408,40 +507,22 @@ export const TurnCard = memo(function TurnCard({
         </div>
       )}
 
-      {/* answer */}
-      {turn.text && (
-        <p className="mt-3.5 whitespace-pre-wrap break-words text-ui leading-[1.7] text-foreground/90">
-          {turn.text}
-        </p>
-      )}
-
-      {artifacts.length > 0 && (
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Generated images">
-          {artifacts.map((artifact) => (
-            <ArtifactImage key={artifact.id} artifact={artifact} />
-          ))}
+      {/* Streamed answer blocks keep provider order: text → tool → text → visual/chart. */}
+      {blocks.length > 0 ? (
+        <div className="mt-3.5 min-w-0">
+          {blocks.map((block, index) =>
+            block.kind === "text" ? (
+              <MarkdownContent
+                key={`text-${index}`}
+                text={block.text}
+                streaming={running && index === blocks.length - 1}
+              />
+            ) : (
+              <ToolCallBlock key={block.tool.id} tool={block.tool} />
+            ),
+          )}
         </div>
-      )}
-
-      {resourceLinks.length > 0 && (
-        <div className="mt-3 flex flex-col gap-1.5" aria-label="Tool links">
-          {resourceLinks.map((link) => (
-            <button
-              key={link.uri}
-              type="button"
-              className="flex min-w-0 items-center gap-2 rounded-(--ds-radius-control) border bg-fill-quiet px-3 py-2 text-left text-fine transition-colors hover:bg-accent/50"
-              title={link.uri}
-              onClick={() => void openExternal(link.uri)}
-            >
-              <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{link.name}</span>
-              <span className="max-w-52 truncate font-mono text-cap text-muted-foreground">
-                {link.host}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      ) : null}
 
       {running && !turn.text && (
         <p
@@ -482,23 +563,6 @@ export const TurnCard = memo(function TurnCard({
                       {agent.task}
                     </p>
                   )}
-                </div>
-              ))}
-            </div>
-          </Detail>
-
-          <Detail icon={Wrench} label={t("turn.tools")} count={turn.tools.length}>
-            <div className="flex flex-col gap-0.5">
-              {turn.tools.map((tool) => (
-                <div key={tool.id} className="flex items-center gap-2 text-fine">
-                  <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(tool.status))} />
-                  <span className="truncate font-mono">{tool.title}</span>
-                  {tool.kind && (
-                    <span className="shrink-0 rounded bg-fill-quiet px-1.5 py-0.5 text-cap text-muted-foreground">
-                      {tool.kind}
-                    </span>
-                  )}
-                  <span className="ms-auto shrink-0 text-muted-foreground">{tool.status}</span>
                 </div>
               ))}
             </div>

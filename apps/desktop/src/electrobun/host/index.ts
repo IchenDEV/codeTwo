@@ -27,6 +27,7 @@ import {
   saveComputerUseSelection,
   saveBrowserUseSelection,
   withProviderToolInstructions,
+  withRichResponseInstructions,
   type HostToolEvidence,
   type ProviderToolset,
 } from "./providerTools";
@@ -52,6 +53,7 @@ import {
   listProjectScripts,
   readBinary,
   readText,
+  readVisualization,
   renamePath,
   runProjectScript,
   runProcess,
@@ -609,6 +611,8 @@ export class PureBunHost {
     this.register("issues.delegations", () => []);
 
     this.register("artifacts.get", () => this.unsupported("artifacts.get", "artifact persistence"));
+    this.register("artifacts.read_visualization", (args, projectPath) =>
+      readVisualization(string(args.path, "path"), projectPath));
     this.register("artifacts.save_as", () => this.unsupported("artifacts.save_as", "artifact export"));
     this.register("artifacts.reveal", () => this.unsupported("artifacts.reveal", "artifact reveal"));
     this.register("scene_artifacts.list", () => []);
@@ -687,7 +691,9 @@ export class PureBunHost {
       if (!runtime.acpSessionId) throw new Error("ACP session was not created");
       const response = object(await peer.prompt(
         runtime.acpSessionId,
-        withProviderToolInstructions(blocks, runtime.toolset.instructions),
+        withRichResponseInstructions(
+          withProviderToolInstructions(blocks, runtime.toolset.instructions),
+        ),
       ));
       if (runtime.shuttingDown) return;
       const stopReason = optionalString(response.stopReason) ?? "end_turn";

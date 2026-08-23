@@ -707,3 +707,12 @@ export function withProviderToolInstructions(blocks: unknown[], instructions: st
     ...blocks,
   ];
 }
+
+const RICH_RESPONSE_INSTRUCTIONS = `[C2 rich response rendering]
+Use rich output only when it makes the answer materially clearer.
+- For a compact inline chart, emit a fenced \`chart\` JSON block with exactly: {"type":"line"|"bar","title":"…","xLabel":"…","yLabel":"…","labels":["…"],"series":[{"name":"…","values":[0]}]}. Labels and values must have equal lengths; use finite numbers only.
+- When the visualize skill creates an HTML fragment, preserve its final reference exactly as: visualize{"path":"/absolute/path.html","mode":"wide","title":"…"}. Do not paste the fragment into the answer.`;
+
+export function withRichResponseInstructions(blocks: unknown[]): unknown[] {
+  return [{ type: "text", text: RICH_RESPONSE_INSTRUCTIONS }, ...blocks];
+}

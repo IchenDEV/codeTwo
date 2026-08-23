@@ -89,6 +89,15 @@ export interface ToolEntry {
 }
 
 /**
+ * The render-order projection of one turn. Text chunks stay as independent atoms so a tool call
+ * can sit between two streamed answer fragments without splitting the durable assistant message.
+ * Repeated tool updates keep one position and update the matching ToolEntry in place.
+ */
+export type TurnContentEntry =
+  | { kind: "text"; text: string; transcriptSeq?: number }
+  | { kind: "tool"; toolId: string; transcriptSeq?: number };
+
+/**
  * One prompt → response cycle. The engine streams fragments; grouping them into turns is what makes
  * the transcript readable (previously every text chunk became its own row).
  */
@@ -114,6 +123,7 @@ export interface Turn {
   pendingThoughtDeltaSkips: number;
   thoughts: string[];
   tools: ToolEntry[];
+  content: TurnContentEntry[];
   plan: string[];
   memory?: MemoryReceipt;
   error?: string;
@@ -139,6 +149,7 @@ export function newTurn(prompt: string, requestId?: string): Turn {
     pendingThoughtDeltaSkips: 0,
     thoughts: [],
     tools: [],
+    content: [],
     plan: [],
     startedAt: Date.now(),
   };
@@ -275,6 +286,39 @@ function mergeToolOutputs(current: ToolOutput[], incoming: ToolOutput[]): ToolOu
     if (!duplicate) output.push(item);
   }
   return output;
+}
+
+function appendTextContent(
+  content: readonly TurnContentEntry[],
+  text: string,
+  transcriptSeq?: number | null,
+): TurnContentEntry[] {
+  return [
+    ...content,
+    {
+      kind: "text" as const,
+      text,
+      ...(transcriptSeq == null ? {} : { transcriptSeq }),
+    },
+  ];
+}
+
+function appendToolContent(
+  content: readonly TurnContentEntry[],
+  toolId: string,
+  transcriptSeq?: number | null,
+): TurnContentEntry[] {
+  if (content.some((entry) => entry.kind === "tool" && entry.toolId === toolId)) {
+    return [...content];
+  }
+  return [
+    ...content,
+    {
+      kind: "tool" as const,
+      toolId,
+      ...(transcriptSeq == null ? {} : { transcriptSeq }),
+    },
+  ];
 }
 
 /**
@@ -419,6 +463,7 @@ export function applyEvent(
       } else {
         cur.text += ev.text;
         cur.textDeltas = [...cur.textDeltas, ev.text];
+        cur.content = appendTextContent(cur.content, ev.text, ev.transcript_seq);
       }
       break;
     case "agent_thought":
@@ -439,6 +484,7 @@ export function applyEvent(
         outputs: ev.outputs,
         transcriptSeq: ev.transcript_seq,
       });
+      cur.content = appendToolContent(cur.content, ev.id, ev.transcript_seq);
       break;
     }
     case "plan":
@@ -474,6 +520,78 @@ function mergeDeltas(
     deltas: [...snapshot, ...live.slice(Math.min(snapshot.length, live.length))],
     pendingSkips: Math.max(0, snapshot.length - observedLiveCount),
   };
+}
+
+function mergeTurnContent(
+  snapshot: readonly TurnContentEntry[],
+  live: readonly TurnContentEntry[],
+  boundaryKnown: boolean,
+): TurnContentEntry[] {
+  if (snapshot.length === 0) return [...live];
+  if (live.length === 0) return [...snapshot];
+
+  const durable = [...snapshot, ...live].filter(
+    (entry): entry is TurnContentEntry & { transcriptSeq: number } =>
+      entry.transcriptSeq !== undefined,
+  );
+  if (durable.length > 0) {
+    const bySeq = new Map<number, TurnContentEntry>();
+    for (const entry of [...live, ...snapshot]) {
+      if (entry.transcriptSeq === undefined) continue;
+      // Snapshot state wins an equal sequence because it was read after persistence.
+      bySeq.set(entry.transcriptSeq, entry);
+    }
+    const ordered = [...bySeq.values()].sort(
+      (left, right) => (left.transcriptSeq ?? 0) - (right.transcriptSeq ?? 0),
+    );
+    const seenTools = new Set<string>();
+    const deduped = ordered.filter((entry) => {
+      if (entry.kind === "text") return true;
+      if (seenTools.has(entry.toolId)) return false;
+      seenTools.add(entry.toolId);
+      return true;
+    });
+
+    // A disabled/failed store can still produce sequence-less live output. Keep it after the
+    // durable edge instead of silently dropping provider output.
+    let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
+    const durableTools = new Set(
+      deduped.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
+    );
+    const sequenceLess = live.filter((entry) => {
+      if (entry.transcriptSeq !== undefined) return false;
+      if (entry.kind === "text" && boundaryKnown && textToSkip > 0) {
+        textToSkip -= 1;
+        return false;
+      }
+      if (entry.kind === "tool") {
+        if (durableTools.has(entry.toolId)) return false;
+        durableTools.add(entry.toolId);
+      }
+      return true;
+    });
+    if (sequenceLess.length === 0) return deduped;
+    return [...deduped, ...mergeTurnContent([], sequenceLess, boundaryKnown)];
+  }
+
+  if (!boundaryKnown) return [...snapshot, ...live];
+
+  let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
+  const seenTools = new Set(
+    snapshot.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
+  );
+  const tail = live.filter((entry) => {
+    if (entry.kind === "text" && textToSkip > 0) {
+      textToSkip -= 1;
+      return false;
+    }
+    if (entry.kind === "tool") {
+      if (seenTools.has(entry.toolId)) return false;
+      seenTools.add(entry.toolId);
+    }
+    return true;
+  });
+  return [...snapshot, ...tail];
 }
 
 /** Merge events received during an async transcript read without dropping or duplicating its tail. */
@@ -519,6 +637,11 @@ export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean)
     pendingThoughtDeltaSkips: thoughtMerge.pendingSkips,
     thoughts: thoughtMerge.deltas,
     tools,
+    content: mergeTurnContent(
+      loadedTail.content,
+      liveTurn.content,
+      liveTurn.streamBoundaryKnown,
+    ),
     plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
     error: liveTurn.error ?? loadedTail.error,
     stopReason: liveTurn.stopReason ?? loadedTail.stopReason,
@@ -560,10 +683,12 @@ export function turnsFromTranscript(
       case "text":
         cur.text += part.text;
         cur.textDeltas.push(part.text);
+        cur.content = appendTextContent(cur.content, part.text, seq);
         break;
       case "prompt":
         cur.text += part.text;
         cur.textDeltas.push(part.text);
+        cur.content = appendTextContent(cur.content, part.text, seq);
         break;
       case "reasoning":
         cur.thoughts.push(part.text);
@@ -578,6 +703,7 @@ export function turnsFromTranscript(
           outputs: part.outputs,
           transcriptSeq: seq,
         });
+        cur.content = appendToolContent(cur.content, part.id, seq);
         break;
       case "plan":
         cur.plan = part.entries;

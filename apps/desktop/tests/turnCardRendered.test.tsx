@@ -4,6 +4,7 @@ import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { TurnCard } = await import("../src/session/TurnCard");
+const { I18nProvider } = await import("../src/i18n");
 
 let restoreCanvasContext: (() => void) | null = null;
 
@@ -98,7 +99,11 @@ describe("TurnCard rendered activity", () => {
         },
       ],
     };
-    const rendered = mount(<TurnCard turn={turn} />);
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>,
+    );
     const links = rendered.container.querySelector('[aria-label="Tool links"]');
 
     expect(links?.textContent).toContain("Sites production deployment");
@@ -125,5 +130,63 @@ describe("TurnCard rendered activity", () => {
     const withMenu = mount(<TurnCard turn={runningTurn()} onSaveTemplate={() => {}} />);
     expect(trigger(withMenu)).toBeTruthy();
     withMenu.unmount();
+  });
+
+  test("renders Markdown and keeps a tool call between streamed text segments", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "**Before**After",
+      textDeltas: ["**Before**", "After"],
+      content: [
+        { kind: "text", text: "**Before**", transcriptSeq: 11 },
+        { kind: "tool", toolId: "tool-1", transcriptSeq: 12 },
+        { kind: "text", text: "After", transcriptSeq: 14 },
+      ],
+      tools: [{ id: "tool-1", title: "Read workspace", status: "completed" }],
+      endedAt: 2,
+    };
+    const rendered = mount(<TurnCard turn={turn} />);
+    const ordered = [...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call]")];
+
+    expect(ordered).toHaveLength(3);
+    expect(ordered[0].textContent).toContain("Before");
+    expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
+    expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
+    expect(ordered[2].textContent).toContain("After");
+    rendered.unmount();
+  });
+
+  test("renders a valid fenced chart as an accessible SVG", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const source = `\`\`\`chart\n${JSON.stringify({
+      type: "bar",
+      title: "Build time",
+      xLabel: "Release",
+      yLabel: "Seconds",
+      labels: ["1.0", "1.1"],
+      series: [{ name: "Desktop", values: [42, 31] }],
+    })}\n\`\`\``;
+    const turn = {
+      ...runningTurn(),
+      text: source,
+      textDeltas: [source],
+      content: [{ kind: "text", text: source, transcriptSeq: 11 }],
+      endedAt: 2,
+    };
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>,
+    );
+    const chart = rendered.container.querySelector("[data-chart-block]");
+    const svg = chart?.querySelector('svg[role="img"]');
+
+    expect(chart?.textContent).toContain("Build time");
+    expect(svg?.getAttribute("aria-label")).toContain("Bar chart");
+    expect(svg?.querySelectorAll("rect").length).toBeGreaterThan(1);
+    rendered.unmount();
   });
 });

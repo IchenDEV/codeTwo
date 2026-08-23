@@ -1465,6 +1465,32 @@ export async function revealArtifact(id: string): Promise<void> {
   if (inDesktop) await call("artifacts.reveal", { id });
 }
 
+/** Load a bounded local visualize fragment; the host validates its canonical root and file type. */
+export async function readVisualization(path: string): Promise<string> {
+  if (
+    !inDesktop &&
+    import.meta.env.DEV &&
+    path === "/__codetwo__/rich-transcript-preview.html"
+  ) {
+    return String.raw`<section class="card" aria-labelledby="release-confidence">
+  <div class="viz-row" style="justify-content:space-between">
+    <div><h2 id="release-confidence">Release confidence</h2><p class="text-small text-muted">Latest verification run</p></div>
+    <span class="viz-badge">Healthy</span>
+  </div>
+  <div class="viz-grid" style="margin-top:12px">
+    <div><p class="text-small text-muted">Checks passed</p><p class="viz-stat-value">511</p></div>
+    <div><p class="text-small text-muted">New design violations</p><p class="viz-stat-value">0</p></div>
+    <div><p class="text-small text-muted">Renderer build</p><p class="viz-stat-value">Passed</p></div>
+  </div>
+  <div class="viz-row" style="margin-top:14px">
+    <button class="btn btn-primary" onclick="window.openai.sendFollowUpMessage({prompt:'Show the failed checks only',title:'Filter verification results'})"><i data-lucide="list-filter" aria-hidden="true"></i>Filter results</button>
+    <span class="text-small text-muted">Updated just now</span>
+  </div>
+</section><script>window.lucide.createIcons();</script>`;
+  }
+  return call<string>("artifacts.read_visualization", { path });
+}
+
 export async function writeText(cwd: string, path: string, content: string): Promise<void> {
   if (inDesktop) await call("workspace.write_text", { cwd, path, content });
 }
@@ -1692,10 +1718,10 @@ export async function onBrowserPopup(cb: (p: BrowserNav) => void): Promise<() =>
  * JS-confirm delegate), which turns every "are you sure?" into "yes" — so anything destructive
  * must come through here instead.
  */
-export async function confirmNative(message: string): Promise<boolean> {
+export async function confirmNative(message: string, title?: string): Promise<boolean> {
   if (!inDesktop) return window.confirm(message);
   try {
-    return await desktopConfirm(message);
+    return await desktopConfirm(message, title);
   } catch (e) {
     // A missing capability must fail closed: "no" loses nothing, "yes" can destroy work.
     console.error("confirmNative:", e);

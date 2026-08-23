@@ -12,6 +12,8 @@ const showDesignSystem =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");
 const showPetPreview =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has("pet-preview");
+const showRichTranscript =
+  import.meta.env.DEV && new URLSearchParams(window.location.search).has("rich-transcript");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -45,9 +47,11 @@ new MutationObserver((records) => {
 async function render() {
   const Root = showPetPreview
     ? (await import("./pet/PetPreview")).PetPreview
-    : showDesignSystem
-      ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
-      : App;
+    : showRichTranscript
+      ? (await import("./session/RichTranscriptPreview")).RichTranscriptPreview
+      : showDesignSystem
+        ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
+        : App;
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>

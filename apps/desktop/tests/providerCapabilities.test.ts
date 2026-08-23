@@ -14,6 +14,7 @@ import {
   saveComputerUseSelection,
   stdioServer,
   withProviderToolInstructions,
+  withRichResponseInstructions,
   type AcpMcpServer,
   type HostToolEvidence,
 } from "../src/electrobun/host/providerTools";
@@ -161,6 +162,16 @@ describe("provider capability wire compatibility", () => {
     expect(codex.mcpServers).toEqual([]);
     expect(codex.instructions).toEqual([]);
     expect(codex.capabilities.find((item) => item.id === "image_generation")?.state).toBe("ready");
+  });
+
+  test("describes the chart and visualize renderer contracts to providers", () => {
+    const blocks = withRichResponseInstructions([{ type: "text", text: "hello" }]) as Array<{
+      type: string;
+      text: string;
+    }>;
+    expect(blocks[0]?.text).toContain("fenced `chart` JSON block");
+    expect(blocks[0]?.text).toContain("visualize");
+    expect(blocks[1]).toEqual({ type: "text", text: "hello" });
   });
 
   test("forwards only the browser trust hash from the shell policy", () => {
