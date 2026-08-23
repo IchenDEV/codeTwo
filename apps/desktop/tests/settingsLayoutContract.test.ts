@@ -13,6 +13,26 @@ describe("Settings page layout contract", () => {
     expect(menuIndex).toBeGreaterThan(backIndex);
   });
 
+  test("groups the settings menu and keeps it scrollable in short windows", () => {
+    const personalIndex = source.indexOf('labelKey: "settings.navPersonal"');
+    const workspaceIndex = source.indexOf('labelKey: "settings.navWorkspace"');
+    const integrationsIndex = source.indexOf('labelKey: "settings.navIntegrations"');
+
+    expect(personalIndex).toBeGreaterThan(-1);
+    expect(workspaceIndex).toBeGreaterThan(personalIndex);
+    expect(integrationsIndex).toBeGreaterThan(workspaceIndex);
+    expect(source).toMatch(
+      /<nav[\s\S]*?className="[^"]*\bmin-h-0\b[^"]*\boverflow-y-auto\b[^"]*"/,
+    );
+  });
+
+  test("uses a compact item rhythm inside visibly separated groups", () => {
+    expect(source).toContain('className="space-y-1"');
+    expect(source).toContain('className="min-h-0 flex-1 space-y-6');
+    expect(source).toContain("gap-2 rounded-lg px-2 py-1.5");
+    expect(source).toContain('<Icon className="size-3.5 shrink-0" />');
+  });
+
   test("keeps every settings tab on the shared 40px titlebar", () => {
     expect(source).toMatch(
       /<header[\s\S]*?data-settings-titlebar[\s\S]*?className="[^"]*\bsettings-titlebar\b[^"]*\bshrink-0\b[^"]*"/,
@@ -31,7 +51,7 @@ describe("Settings page layout contract", () => {
   });
 
   test("removes and closes the Memory tab when its component policy is disabled", () => {
-    expect(source).toContain('NAV.filter(({ id }) => memoryEnabled || id !== "memory")');
+    expect(source).toContain('group.items.filter(({ id }) => memoryEnabled || id !== "memory")');
     expect(source).toContain('current === "memory" ? "general" : current');
     expect(source).toMatch(
       /\{tab === "memory" && memoryEnabled && \([\s\S]*?<MemorySettingsPage[\s\S]*?projectPath=\{projectPath\}[\s\S]*?projects=\{projects\}[\s\S]*?onOpenSession=\{onOpenSession\}[\s\S]*?\/>(?:[\s\S]*?)\)\}/,

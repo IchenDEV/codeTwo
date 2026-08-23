@@ -77,17 +77,45 @@ export type SettingsTab =
   | "usage"
   | "browser";
 
-const NAV: { id: SettingsTab; icon: typeof Keyboard; labelKey?: StringKey; label?: string }[] = [
-  { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
-  { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
-  { id: "project", icon: Folder, labelKey: "settings.project" },
-  { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
-  { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
-  { id: "providers", icon: Package, labelKey: "settings.providers" },
-  { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
-  { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
-  { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
-  { id: "browser", icon: Globe, label: "Browser" },
+type SettingsNavItem = {
+  id: SettingsTab;
+  icon: typeof Keyboard;
+  labelKey: StringKey;
+};
+
+const NAV_GROUPS: {
+  id: "personal" | "workspace" | "integrations";
+  labelKey: StringKey;
+  items: SettingsNavItem[];
+}[] = [
+  {
+    id: "personal",
+    labelKey: "settings.navPersonal",
+    items: [
+      { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+      { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
+      { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
+      { id: "usage", icon: ChartNoAxesColumn, labelKey: "usage.title" },
+    ],
+  },
+  {
+    id: "workspace",
+    labelKey: "settings.navWorkspace",
+    items: [
+      { id: "project", icon: Folder, labelKey: "settings.project" },
+      { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
+    ],
+  },
+  {
+    id: "integrations",
+    labelKey: "settings.navIntegrations",
+    items: [
+      { id: "providers", icon: Package, labelKey: "settings.providers" },
+      { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
+      { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
+      { id: "browser", icon: Globe, labelKey: "settings.browser" },
+    ],
+  },
 ];
 
 const WORKTREE_KIND_LABELS: Record<WorktreeEntryKind, StringKey> = {
@@ -540,29 +568,47 @@ export function SettingsPage({
           data-settings-back
           disabled={projectModeSaving}
           onClick={onClose}
-          className="mx-2 mb-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="mx-3 mb-2 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <ArrowLeft className="size-4 shrink-0" />
+          <ArrowLeft className="size-3.5 shrink-0" />
           {t("settings.back")}
         </button>
-        <nav className="flex-1 space-y-0.5 px-2">
-          {NAV.filter(({ id }) => memoryEnabled || id !== "memory").map(
-            ({ id, icon: Icon, labelKey, label }) => (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui transition-colors",
-                  id === tab
-                    ? "bg-accent font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                )}
-              >
-                <Icon className="size-4 shrink-0" />
-                {labelKey ? t(labelKey) : label}
-              </button>
-            ),
-          )}
+        <nav
+          aria-label={t("settings.title")}
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
+        >
+          {NAV_GROUPS.map((group) => {
+            const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory");
+            const headingId = `settings-nav-${group.id}`;
+            return (
+              <section key={group.id} aria-labelledby={headingId}>
+                <h2
+                  id={headingId}
+                  className="px-2 pb-2 text-hint font-medium text-muted-foreground"
+                >
+                  {t(group.labelKey)}
+                </h2>
+                <div className="space-y-1">
+                  {items.map(({ id, icon: Icon, labelKey }) => (
+                    <button
+                      key={id}
+                      aria-current={id === tab ? "page" : undefined}
+                      onClick={() => setTab(id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
+                        id === tab
+                          ? "bg-accent font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      )}
+                    >
+                      <Icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{t(labelKey)}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </nav>
       </aside>
 
