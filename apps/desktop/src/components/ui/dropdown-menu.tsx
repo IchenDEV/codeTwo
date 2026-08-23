@@ -1,14 +1,27 @@
 import * as React from "react";
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import { CheckIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
+const menuItemStyles =
+  "group/dropdown-menu-item relative flex min-h-(--ds-menu-item-height) cursor-default select-none items-center gap-2.5 rounded-(--ds-menu-item-radius) px-2 py-1.5 text-ui leading-4 outline-none transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) focus:bg-(--ds-color-fill-hover) focus:text-(--ds-color-text) data-highlighted:bg-(--ds-color-fill-hover) data-highlighted:text-(--ds-color-text) data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-(--ds-color-destructive) data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:data-highlighted:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-(--ds-icon-list) [&_svg:not([class*='text-'])]:text-muted-foreground";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
 
-function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
+function DropdownMenuTrigger({ className, ...props }: MenuPrimitive.Trigger.Props) {
+  return (
+    <MenuPrimitive.Trigger
+      data-slot="dropdown-menu-trigger"
+      className={cn(
+        "transition-colors duration-(--ds-motion-feedback) ease-(--ds-ease-enter) data-[popup-open]:bg-(--ds-color-fill-hover) data-[popup-open]:text-(--ds-color-text)",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function DropdownMenuContent({
@@ -32,7 +45,7 @@ function DropdownMenuContent({
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
           className={cn(
-            "glass-raised pop-layer z-50 max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none",
+            "pop-layer z-50 max-h-(--available-height) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-(--ds-menu-radius) bg-(--ds-color-raised) p-(--ds-menu-padding) text-(--ds-color-text) shadow-(--ds-menu-elevation) outline-none",
             className,
           )}
           {...props}
@@ -46,6 +59,10 @@ function DropdownMenuGroup({ ...props }: MenuPrimitive.Group.Props) {
   return <MenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />;
 }
 
+function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
+  return <MenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
+}
+
 function DropdownMenuItem({
   className,
   variant = "default",
@@ -55,10 +72,49 @@ function DropdownMenuItem({
     <MenuPrimitive.Item
       data-slot="dropdown-menu-item"
       data-variant={variant}
-      className={cn(
-        "group/dropdown-menu-item relative flex cursor-default select-none items-center gap-2.5 rounded-md px-2 py-1.5 text-ui outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg:not([class*='text-'])]:text-muted-foreground",
-        className,
-      )}
+      className={cn(menuItemStyles, className)}
+      {...props}
+    />
+  );
+}
+
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: MenuPrimitive.RadioItem.Props) {
+  return (
+    <MenuPrimitive.RadioItem
+      data-slot="dropdown-menu-radio-item"
+      className={cn(menuItemStyles, className)}
+      {...props}
+    >
+      {children}
+      <MenuPrimitive.RadioItemIndicator
+        data-slot="dropdown-menu-radio-item-indicator"
+        className="ml-auto flex size-(--ds-icon-list) shrink-0 items-center justify-center text-(--ds-color-text)"
+      >
+        <CheckIcon />
+      </MenuPrimitive.RadioItemIndicator>
+    </MenuPrimitive.RadioItem>
+  );
+}
+
+function DropdownMenuItemText({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="dropdown-menu-item-text"
+      className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}
+      {...props}
+    />
+  );
+}
+
+function DropdownMenuItemDescription({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span
+      data-slot="dropdown-menu-item-description"
+      className={cn("truncate text-fine leading-3.5 text-muted-foreground", className)}
       {...props}
     />
   );
@@ -71,7 +127,7 @@ function DropdownMenuSeparator({
   return (
     <MenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1 my-1 h-px bg-border", className)}
+      className={cn("-mx-1 my-1.5 h-px bg-border", className)}
       {...props}
     />
   );
@@ -93,6 +149,10 @@ export {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuItemDescription,
+  DropdownMenuItemText,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 };

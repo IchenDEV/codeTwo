@@ -88,6 +88,15 @@ describe("macOS window chrome contract", () => {
     );
   });
 
+  test("stacks composer contributions above the full-page document", () => {
+    expect(appSource).toContain(
+      'docMode\n                  ? "order-1 min-h-0 min-w-0 flex-1 flex-col"',
+    );
+    expect(appSource).not.toContain(
+      'docMode\n                  ? "order-1 min-h-0 min-w-0 flex-1"',
+    );
+  });
+
   test("keeps both dock header states aligned to the 48px titlebar", () => {
     const titlebarClasses = Array.from(
       dockSource.matchAll(/data-dock-titlebar[\s\S]*?className="([^"]+)"/g),

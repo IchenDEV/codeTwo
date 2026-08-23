@@ -146,6 +146,35 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("renders project choices as checked menu rows with their paths", async () => {
+    activateDom();
+    const selected = [];
+    const view = renderRail({
+      projects: [
+        { name: "repo", path: "/tmp/repo", last_opened_at: Date.now() },
+        { name: "other", path: "/tmp/other", last_opened_at: Date.now() - 60_000 },
+      ],
+      activeProject: "/tmp/repo",
+      onSelectProject: (path) => selected.push(path),
+    });
+
+    click(view.container.querySelector('button[title="/tmp/repo"]'));
+    await waitFor(() => {
+      const choices = [...dom.document.body.querySelectorAll('[role="menuitemradio"]')];
+      expect(choices).toHaveLength(2);
+      expect(choices[0]?.textContent).toContain("/tmp/repo");
+      expect(choices[0]?.getAttribute("data-checked")).not.toBeNull();
+      expect(choices[0]?.querySelector('[data-slot="dropdown-menu-radio-item-indicator"]'))
+        .toBeTruthy();
+      expect(choices[1]?.textContent).toContain("/tmp/other");
+    });
+
+    click(dom.document.body.querySelectorAll('[role="menuitemradio"]')[1]);
+    expect(selected).toEqual(["/tmp/other"]);
+
+    view.unmount();
+  });
+
   test("renders useful latest conversation summaries and omits empty ones", () => {
     activateDom();
     const view = renderRail();
