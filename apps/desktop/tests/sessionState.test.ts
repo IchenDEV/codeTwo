@@ -313,6 +313,57 @@ describe("session event isolation", () => {
     expect(turns[1].text).toBe("winner answer");
   });
 
+  test("keeps queued prompts pending until their own native turn starts", () => {
+    const active = { ...newTurn("active", "active-request"), accepted: true };
+    let turns = [active, { ...newTurn("next", "queued-request"), delivery: "queued" as const }];
+    turns = applyEvent(turns, {
+      event: "prompt_queued",
+      session: "session-a",
+      request_id: "queued-request",
+      position: 2,
+    });
+    expect(turns[1]).toMatchObject({ delivery: "queued", queuePosition: 2, accepted: false });
+
+    turns = applyEvent(turns, {
+      event: "turn_started",
+      session: "session-a",
+      request_id: "queued-request",
+    });
+    expect(turns[1]).toMatchObject({ accepted: true, streamBoundaryKnown: true });
+    expect(turns[1].delivery).toBeUndefined();
+    expect(turns[1].queuePosition).toBeUndefined();
+  });
+
+  test("moves the stream boundary to a provider-accepted steering prompt", () => {
+    const active = { ...newTurn("active", "active-request"), accepted: true };
+    const steer = { ...newTurn("change course", "steer-request"), delivery: "steer" as const };
+    let turns = applyEvent([active, steer], {
+      event: "steer_accepted",
+      session: "session-a",
+      request_id: "steer-request",
+      transcript_seq: 42,
+      outcome: "injected",
+    });
+    turns = applyEvent(
+      turns,
+      {
+        event: "agent_text",
+        session: "session-a",
+        message_id: "chunk-1",
+        text: "steered answer",
+      },
+      "steer-request",
+    );
+
+    expect(isRunning(turns[0])).toBe(false);
+    expect(turns[1]).toMatchObject({
+      accepted: true,
+      delivery: "steer",
+      transcriptStartSeq: 42,
+      text: "steered answer",
+    });
+  });
+
   test("compares the submitted editor revision structurally", () => {
     const submitted = [
       { type: "text", text: "ship it" },

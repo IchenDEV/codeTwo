@@ -17,6 +17,7 @@ import {
   Sparkles,
   Square,
   Store,
+  Target,
   Ticket,
   TriangleAlert,
   X,
@@ -37,12 +38,15 @@ import {
   providerDisplayName,
   type ConfigOptionInfo,
   type AppshotCapture,
+  type GoalCapabilityInfo,
+  type GoalSnapshot,
   type ModelChoice,
 } from "../bridge";
 import type { ContextWindow } from "./contextWindow";
 // Explicit extension: this directory also contains the case-colliding `statusline.ts` helper.
 import { Statusline, type StatuslineUsage } from "./Statusline.tsx";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {
   DropdownMenu,
@@ -100,7 +104,13 @@ interface ComposerProps {
   appshots?: AppshotCapture[];
   onRemoveAppshot?: (id: string) => void;
   onRun: () => void;
+  onQueue: () => void;
+  onSteer: () => void;
   onStop: () => void;
+  steeringSupported: boolean;
+  goalCapability: GoalCapabilityInfo | null;
+  goal: GoalSnapshot | null;
+  onGoal: (action: "set" | "pause" | "resume" | "clear", objective?: string) => Promise<void>;
   onAttachFile: () => void;
   onInsertSkill: () => void;
   onInsertIssue: () => void;
@@ -380,6 +390,126 @@ export function MemoryPicker({ config }: { config: SessionConfig }) {
   );
 }
 
+/** A provider-reported collaboration selector. Plan is never synthesized into prompt text. */
+export function CollaborationModePicker({
+  options,
+  onChange,
+}: {
+  options: ConfigOptionInfo[];
+  onChange: (configId: string, value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const option = options.find(
+    (candidate) =>
+      candidate.category === "collaboration_mode" || candidate.id === "collaboration_mode",
+  );
+  if (!option || option.choices.length < 2) return null;
+  const current = option.choices.find((choice) => choice.id === option.current);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={<Chip aria-label={`${option.name}: ${current?.name ?? option.current}`}>
+          <ListChecks className="size-3.5 shrink-0" />
+          <span>{current?.name ?? option.current}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>}
+      />
+      <PopoverContent align="center" side="top" className="w-64 p-1.5">
+        <MenuSection>{option.name}</MenuSection>
+        {option.choices.map((choice) => (
+          <MenuRow
+            key={choice.id}
+            selected={choice.id === option.current}
+            isDefault={false}
+            label={choice.name}
+            detail={choice.description}
+            onClick={() => {
+              onChange(option.id, choice.id);
+              setOpen(false);
+            }}
+          />
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function GoalPicker({
+  capability,
+  goal,
+  onGoal,
+}: {
+  capability: GoalCapabilityInfo | null;
+  goal: GoalSnapshot | null;
+  onGoal: (action: "set" | "pause" | "resume" | "clear", objective?: string) => Promise<void>;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [objective, setObjective] = useState("");
+  const [pending, setPending] = useState(false);
+  if (!capability) return null;
+  const run = async (action: "set" | "pause" | "resume" | "clear") => {
+    setPending(true);
+    try {
+      await onGoal(action, action === "set" ? objective.trim() : undefined);
+      if (action === "set") setObjective("");
+    } finally {
+      setPending(false);
+    }
+  };
+  const can = (action: string) => capability.actions.includes(action);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={<Chip
+          aria-label={goal ? `${t("goal.label")}: ${goal.objective}` : t("goal.label")}
+          className={cn(goal && "text-primary hover:text-primary")}
+        >
+          <Target className="size-3.5 shrink-0" />
+          <span className="max-w-32 truncate">{goal?.objective ?? t("goal.label")}</span>
+          <ChevronDown className="size-3 shrink-0 opacity-50" />
+        </Chip>}
+      />
+      <PopoverContent align="center" side="top" className="w-80 p-2">
+        {goal ? (
+          <div className="space-y-2">
+            <div className="px-1">
+              <p className="text-ui font-medium text-foreground">{goal.objective}</p>
+              <p className="mt-0.5 text-fine text-muted-foreground">{t(`goal.status.${goal.status}` as "goal.status.active")}</p>
+            </div>
+            <div className="flex gap-1.5">
+              {goal.status === "paused" && can("resume") ? (
+                <Button size="sm" disabled={pending} onClick={() => void run("resume")}>{t("goal.resume")}</Button>
+              ) : can("pause") ? (
+                <Button size="sm" variant="secondary" disabled={pending} onClick={() => void run("pause")}>{t("goal.pause")}</Button>
+              ) : null}
+              {can("clear") ? (
+                <Button size="sm" variant="ghost" disabled={pending} onClick={() => void run("clear")}>{t("goal.clear")}</Button>
+              ) : null}
+            </div>
+          </div>
+        ) : can("set") ? (
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (objective.trim()) void run("set");
+            }}
+          >
+            <Input
+              value={objective}
+              onChange={(event) => setObjective(event.currentTarget.value)}
+              placeholder={t("goal.placeholder")}
+              aria-label={t("goal.objective")}
+            />
+            <Button type="submit" size="sm" disabled={pending || !objective.trim()}>{t("goal.start")}</Button>
+          </form>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const WORKTREE_BASELINES = ["current", "origin_default"] as const;
 
 /** Worktree isolation is a baseline choice, not a boolean: both commit sources stay explicit. */
@@ -513,7 +643,10 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const providers = config.providers.length > 0 ? config.providers : fallbackProviders();
+  const registry = config.providers.length > 0 ? config.providers : fallbackProviders();
+  // Disabled providers stop being new-session choices. Keep the active one visible so a resumed
+  // session still identifies the runtime it already owns.
+  const providers = registry.filter((candidate) => candidate.enabled !== false || candidate.id === config.provider);
   const active = providers.find((p) => p.id === config.provider);
   const activeLabel = active?.display_name ?? providerDisplayName(config.provider);
   const registryReady = config.providersStatus === "ready";
@@ -575,7 +708,9 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
             // The dot says installed; the line under it says what's missing, so the list itself
             // answers "why can't I use that one?" without a paragraph of warning text.
             detail={registryReady && !p.available
-              ? p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
+              ? p.enabled === false
+                ? t("settings.providerDisabled")
+                : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
               : null}
             leading={
               <>
@@ -592,6 +727,7 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
                 />
               </>
             }
+            disabled={registryReady && !p.available}
             onClick={() => {
               config.onProvider(p.id);
               setOpen(false);
@@ -883,7 +1019,13 @@ export function Composer({
   appshots = [],
   onRemoveAppshot,
   onRun,
+  onQueue,
+  onSteer,
   onStop,
+  steeringSupported,
+  goalCapability,
+  goal,
+  onGoal,
   onAttachFile,
   onInsertSkill,
   onInsertIssue,
@@ -1039,6 +1181,9 @@ export function Composer({
         onConfigOption={onConfigOption}
       />
 
+      <CollaborationModePicker options={configOptions} onChange={onConfigOption} />
+      <GoalPicker capability={goalCapability} goal={goal} onGoal={onGoal} />
+
       <Statusline contextWindow={contextWindow} usage={usage ?? null} />
 
       {pluginActions}
@@ -1092,20 +1237,56 @@ export function Composer({
       )}
 
       {running ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="destructive"
-              size="icon"
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-              onClick={onStop}
-              aria-label={t("composer.stop")}
-            >
-              <Square className="size-3.5 fill-current" />
-            </Button>}
-          />
-          <TooltipContent>{t("composer.stop")}</TooltipContent>
-        </Tooltip>
+        <>
+          <div className="flex shrink-0 items-center rounded-full border bg-background">
+            <Tooltip>
+              <TooltipTrigger
+                render={<Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full"
+                  onClick={onQueue}
+                  aria-label={t("composer.queue")}
+                >
+                  <ArrowUp className="size-4" />
+                </Button>}
+              />
+              <TooltipContent>{t("composer.queue")}</TooltipContent>
+            </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 rounded-full text-muted-foreground"
+                  aria-label={t("composer.sendOptions")}
+                >
+                  <ChevronDown className="size-3.5" />
+                </Button>}
+              />
+              <DropdownMenuContent align="end" side="top">
+                <DropdownMenuItem onClick={onQueue}>{t("composer.queue")}</DropdownMenuItem>
+                {steeringSupported ? (
+                  <DropdownMenuItem onClick={onSteer}>{t("composer.steer")}</DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={<Button
+                variant="destructive"
+                size="icon"
+                className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
+                onClick={onStop}
+                aria-label={t("composer.stop")}
+              >
+                <Square className="size-3.5 fill-current" />
+              </Button>}
+            />
+            <TooltipContent>{t("composer.stop")}</TooltipContent>
+          </Tooltip>
+        </>
       ) : (
         <Tooltip>
           {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it

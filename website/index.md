@@ -163,7 +163,7 @@ description: Compose structured prompts, weave in reusable skills, and run your 
             <div>
               <h3>OpenAI Codex</h3>
               <p>App Server adapter · Node required</p>
-              <code>codex-acp@1.1.14</code>
+              <code>codex-acp@1.6.2</code>
             </div>
           </article>
           <article class="provider-entry">

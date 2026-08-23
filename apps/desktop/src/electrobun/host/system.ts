@@ -80,8 +80,13 @@ export function augmentGuiPath(): void {
     "/usr/local/bin",
     "/opt/local/bin",
     join(home, ".local/bin"),
+    join(home, ".n/bin"),
+    join(home, ".bun/bin"),
     join(home, ".cargo/bin"),
+    join(home, ".grok/bin"),
+    join(home, ".kimi-code/bin"),
     join(home, ".opencode/bin"),
+    join(home, "Library/pnpm"),
   ];
   const current = (process.env.PATH ?? "").split(":").filter(Boolean);
   for (const entry of fallbacks) {

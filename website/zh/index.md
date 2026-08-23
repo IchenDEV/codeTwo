@@ -153,7 +153,7 @@ description: 在一个本地界面中编写结构化提示词、组合可复用�
             <div>
               <h3>OpenAI Codex</h3>
               <p>App Server 适配器 · 需要 Node</p>
-              <code>codex-acp@1.1.14</code>
+              <code>codex-acp@1.6.2</code>
             </div>
           </article>
           <article class="provider-entry">

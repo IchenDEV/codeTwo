@@ -21,7 +21,7 @@ C2 不会重新实现智能体，也不代理模型访问；它只在本机启�
 | Provider | 接入方式 | C2 启动命令 | 前置要求 |
 | --- | --- | --- | --- |
 | **Claude Code** | ACP 适配器 | `npx -y @agentclientprotocol/claude-agent-acp` | Node，以及已完成身份验证的 Claude Code 环境 |
-| **OpenAI Codex** | App Server ACP 适配器 | `npx -y @agentclientprotocol/codex-acp@1.1.14` | Node，以及本地 Codex runtime/登录状态 |
+| **OpenAI Codex** | App Server ACP 适配器 | `npx -y @agentclientprotocol/codex-acp@1.6.2` | Node，以及本地 Codex runtime/登录状态 |
 | **Grok** | 原生 ACP | `grok agent stdio` | 已登录的 `grok` CLI，并位于 `PATH` 中 |
 | **Cursor** | CLI 内置 ACP 模式 | `cursor-agent --acp` | 已登录的 `cursor-agent`，并位于 `PATH` 中 |
 | **OpenCode 1** | CLI 内置 ACP 模式 | `opencode acp` | 已登录的 `opencode`，并位于 `PATH` 中 |

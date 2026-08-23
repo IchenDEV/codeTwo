@@ -47,6 +47,7 @@ import {
   cancelTurn,
   compileDoc,
   confirmNative,
+  controlGoal,
   addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
@@ -97,6 +98,8 @@ import {
   pickDirectory,
   providerQuota,
   providerLabel,
+  prepareSession,
+  queuePrompt,
   removeProject,
   resetManagedPlugin,
   renameProject,
@@ -116,6 +119,7 @@ import {
   type WorkspaceOpenTarget,
   setSessionMemoryPolicy,
   setExecutionPolicy,
+  steerPrompt,
   submitPrompt,
   uninstallPlugin,
   type Checkpoint,
@@ -135,6 +139,7 @@ import {
   type Annotation,
   type AppshotCapture,
   type GitStatus,
+  type GoalSnapshot,
   type Issue,
   type KeymapEntry,
   type MarketItem,
@@ -152,6 +157,7 @@ import {
   type Sandbox,
   type SessionActivity,
   type SessionInfo,
+  type SessionInteractionCapabilities,
   type SkillInfo,
   type WorktreeBaselineKind,
   type WorktreeBaselineOption,
@@ -235,6 +241,7 @@ import {
   sceneCustomized,
   softApplyPending,
   MEMORY_PRESET_POLICY,
+  sceneCollaborationChoice,
   sceneEffortChoice,
   type SceneInfo,
 } from "./session/scene";
@@ -374,7 +381,7 @@ const EMPTY_APPSHOTS: AppshotCapture[] = [];
 
 interface PendingPromptRequest {
   requestId: string;
-  /** Raw editor revision before plan-mode or other synthetic blocks are injected. */
+  /** Raw editor revision at the moment this immutable request was submitted. */
   editorSnapshot: DocBlock[];
   editorRevision: number;
   /** Exact submitted prompt, retained for an explicit provider retry after Composer clear. */
@@ -389,7 +396,7 @@ interface PendingPromptRequest {
 
 interface PendingCreation {
   doc: DocBlock[];
-  /** Frozen Composer document before the internal plan-first block is injected. */
+  /** Frozen Composer document retained for a provider retry. */
   canvasRetryDoc: DocBlock[];
   promptRequestId: string;
   editorSnapshot: DocBlock[];
@@ -692,6 +699,8 @@ export default function App() {
   const autoSceneRef = useRef(false);
   /** Sessions whose scene reasoning_effort has been applied (once options arrived). */
   const sceneEffortAppliedRef = useRef(new Set<string>());
+  /** Last scene plan posture sent through each session's provider-owned collaboration option. */
+  const scenePlanAppliedRef = useRef(new Map<string, boolean>());
   /** Stage binding for the next created session (advance-in-new-session handshake). */
   const pendingPipelineBindRef = useRef<{
     instanceId: string;
@@ -760,6 +769,10 @@ export default function App() {
   const [defaultModel, setDefaultModel] = useState<string | null>(null);
   // Session config options (model + reasoning effort) — the newer ACP surface, same lifecycle.
   const [configOptions, setConfigOptions] = useState<ConfigOptionInfo[]>([]);
+  const [interactionCapabilities, setInteractionCapabilities] = useState<
+    Record<string, SessionInteractionCapabilities>
+  >({});
+  const [goals, setGoals] = useState<Record<string, GoalSnapshot | null>>({});
   // Provider-reported context windows are session-level state, not transcript parts. Keeping the
   // map keyed by id prevents a late/background provider event from repainting the active session.
   const [contextWindows, setContextWindows] = useState<ContextWindowBySession>(
@@ -843,6 +856,10 @@ export default function App() {
   const running = activeSession
     ? runningSessions.has(activeSession)
     : pendingSessionRunning;
+  const activeInteractionCapabilities = activeSession
+    ? interactionCapabilities[activeSession] ?? null
+    : null;
+  const activeGoal = activeSession ? goals[activeSession] ?? null : null;
   const policyChangeDisabled = executionPolicyChangeDisabled(
     pendingSessionRunning,
     activeSession,
@@ -1103,6 +1120,9 @@ export default function App() {
   // Prompt acknowledgements are broadcast to every client. Only the exact request initiated by
   // this window may clear its editor draft.
   const pendingPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(
+    new Map(),
+  );
+  const pendingDeferredPromptRequestsRef = useRef<Map<string, PendingPromptRequest>>(
     new Map(),
   );
   // TurnStarted consumes the pending entry, but a provider may reject images asynchronously after
@@ -1694,34 +1714,40 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = useCallback(() => {
+  const refreshProviders = useCallback(async (): Promise<ProviderInfo[]> => {
     const request = ++providerRegistryRequestRef.current;
     setProvidersStatus("loading");
-    void loadProviderRegistry(listProviders)
-      .then((list) => {
-        if (request !== providerRegistryRequestRef.current) return;
-        setProviders(list);
-        setProvidersStatus("ready");
-        // Default to a provider whose CLI is actually installed. Shipping `grok` as the default
-        // meant a machine without it failed on the first session with a raw spawn error.
-        if (!providerPinned.current) {
-          setProvider((current) => {
-            const selected = list.find((candidate) => candidate.id === current);
-            return selected?.available
-              ? current
-              : (list.find((candidate) => candidate.available)?.id ?? current);
-          });
+    try {
+      const list = await loadProviderRegistry(listProviders);
+      if (request !== providerRegistryRequestRef.current) return list;
+      setProviders(list);
+      setProvidersStatus("ready");
+      // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
+      // default meant a machine without it failed on the first session with a raw spawn error.
+      setProvider((current) => {
+        const selected = list.find((candidate) => candidate.id === current);
+        // Explicitly disabling the selected provider must leave new sessions with a runnable
+        // choice even when that provider had previously been pinned in the Composer.
+        if (selected?.enabled === false) {
+          return list.find((candidate) => candidate.available)?.id ?? current;
         }
-      })
-      .catch((error) => {
-        if (request !== providerRegistryRequestRef.current) return;
+        if (providerPinned.current) return current;
+        return selected?.available
+          ? current
+          : (list.find((candidate) => candidate.available)?.id ?? current);
+      });
+      return list;
+    } catch (error) {
+      if (request === providerRegistryRequestRef.current) {
         console.error("Could not load the provider registry", error);
         setProvidersStatus("error");
-      });
+      }
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
-    refreshProviders();
+    void refreshProviders().catch(() => {});
     return () => {
       providerRegistryRequestRef.current += 1;
     };
@@ -1793,6 +1819,9 @@ export default function App() {
               }
             }
           }
+          // Connect as soon as the durable shell exists so Plan/Goal capability selectors can be
+          // provider-authored before the next prompt instead of appearing only after it runs.
+          void prepareSession(ev.session).catch(() => undefined);
           autoSceneBySessionRef.current.set(ev.session, autoSceneRef.current);
           {
             // Delegation trail: the delegated draft just became a real session.
@@ -1843,13 +1872,12 @@ export default function App() {
                   void setSessionModel(ev.session, scene.execution.model);
                 }
                 setActiveSceneName(pendingScene);
-                // Reasoning effort has no provider-stable config id before the session reports
-                // its options, so it stays pending even after a full apply.
-                setScenePendingFields(
-                  scene?.execution?.reasoning_effort
-                    ? ["reasoning_effort"]
-                    : [],
-                );
+                // Provider-owned config ids do not exist until the session reports its options,
+                // so scene effort and collaboration posture stay pending until that handshake.
+                const pending: string[] = [];
+                if (scene?.execution?.reasoning_effort) pending.push("reasoning_effort");
+                if (scene?.execution?.plan_first !== undefined) pending.push("plan_first");
+                setScenePendingFields(pending);
               }
             } else {
               setActiveSceneName(
@@ -2007,6 +2035,17 @@ export default function App() {
           setContextWindows((previous) => updateContextWindow(previous, ev));
           return;
         }
+        if (ev.event === "session_capabilities") {
+          setInteractionCapabilities((previous) => ({
+            ...previous,
+            [ev.session]: { steering: ev.steering, goal: ev.goal },
+          }));
+          return;
+        }
+        if (ev.event === "goal_changed") {
+          setGoals((previous) => ({ ...previous, [ev.session]: ev.goal }));
+          return;
+        }
         if (
           ev.event === "exit_criteria_met" ||
           ev.event === "hook_suggestion" ||
@@ -2068,6 +2107,12 @@ export default function App() {
           if (ev.session !== activeSessionRef.current) return;
           // The agent's set is authoritative — it replaces any optimistic UI state wholesale.
           setConfigOptions(ev.options);
+          const collaboration = ev.options.find(
+            (option) =>
+              option.category === "collaboration_mode" ||
+              option.id === "collaboration_mode",
+          );
+          if (collaboration) setPlanMode(collaboration.current === "plan");
           if (model?.current) {
             setCurrentModel(model.current);
             // Same rule as `models`: the first report after a reset is the adapter's own pick.
@@ -2093,6 +2138,39 @@ export default function App() {
                   .catch(() => {
                     sceneEffortAppliedRef.current.delete(ev.session);
                   });
+              }
+            }
+          }
+          {
+            // `plan_first` is also provider-owned. A scene can request it, but the request is sent
+            // only after the adapter advertises the collaboration selector and its native values.
+            const scene = scenesRef.current.find(
+              (s) => s.reference === activeSceneNameRef.current,
+            );
+            const wanted = scene?.execution?.plan_first;
+            const applied = scenePlanAppliedRef.current.get(ev.session);
+            if (wanted !== undefined && applied !== wanted) {
+              const choice = sceneCollaborationChoice(ev.options, wanted);
+              if (choice) {
+                if (collaboration?.current === choice.value) {
+                  scenePlanAppliedRef.current.set(ev.session, wanted);
+                  setScenePendingFields((prev) =>
+                    prev.filter((field) => field !== "plan_first"),
+                  );
+                } else {
+                  scenePlanAppliedRef.current.set(ev.session, wanted);
+                  setPlanMode(wanted);
+                  void setConfigOption(ev.session, choice.configId, choice.value)
+                    .then(() => {
+                      setScenePendingFields((prev) =>
+                        prev.filter((field) => field !== "plan_first"),
+                      );
+                    })
+                    .catch(() => {
+                      scenePlanAppliedRef.current.delete(ev.session);
+                      setPlanMode(collaboration?.current === "plan");
+                    });
+                }
               }
             }
           }
@@ -2138,13 +2216,58 @@ export default function App() {
           );
           return;
         }
+        if (ev.event === "prompt_queued" || ev.event === "steer_accepted") {
+          const requestId = ev.request_id ?? undefined;
+          const pendingRequest = requestId
+            ? pendingDeferredPromptRequestsRef.current.get(requestId)
+            : undefined;
+          if (pendingRequest) {
+            const currentEditor = getBlocksRef.current?.();
+            if (
+              currentEditor &&
+              matchesSubmittedEditorRevision(
+                currentEditor,
+                editorRevisionRef.current,
+                pendingRequest.editorSnapshot,
+                pendingRequest.editorRevision,
+              )
+            ) {
+              for (const id of canvasIdsToPurgeAfterTurnStart(
+                true,
+                pendingRequest.canvasIds,
+              )) {
+                canvasPurgeRequestedRef.current.add(id);
+              }
+              clearEditorRef.current?.();
+            }
+            if (ev.event === "steer_accepted") {
+              pendingDeferredPromptRequestsRef.current.delete(requestId!);
+              if (pendingRequest.canvasRefs.length > 0) {
+                acceptedCanvasRequestsRef.current.set(
+                  `${ev.session}:${requestId}`,
+                  pendingRequest,
+                );
+              }
+            }
+          }
+          if (ev.event === "steer_accepted") {
+            markSessionStarted(ev.session, ev.request_id);
+          }
+          if (ev.session === activeSessionRef.current) {
+            setTurns((previous) => applyEvent(previous, ev));
+          }
+          return;
+        }
         if (ev.event === "turn_started") {
           markSessionStarted(ev.session, ev.request_id);
-          const pendingRequest = pendingPromptRequestsRef.current.get(
-            ev.session,
-          );
+          const pendingRequest =
+            pendingPromptRequestsRef.current.get(ev.session) ??
+            (ev.request_id
+              ? pendingDeferredPromptRequestsRef.current.get(ev.request_id)
+              : undefined);
           if (pendingRequest && ev.request_id === pendingRequest.requestId) {
             pendingPromptRequestsRef.current.delete(ev.session);
+            pendingDeferredPromptRequestsRef.current.delete(pendingRequest.requestId);
             if (canvasProviderRetrySessionRef.current === ev.session) {
               // An explicit structure-only retry was accepted in the original session; do not
               // force a later unrelated provider selection into a new session.
@@ -2197,6 +2320,9 @@ export default function App() {
         ) {
           // No matching TurnStarted arrived, so the core did not durably accept this draft.
           pendingPromptRequestsRef.current.delete(eventSession);
+        }
+        if (ev.event === "error" && ev.request_id) {
+          pendingDeferredPromptRequestsRef.current.delete(ev.request_id);
         }
         const ended = isTerminalSessionEvent(ev);
         if (ended) {
@@ -2433,8 +2559,6 @@ export default function App() {
       }
       setTaskContext(task, false);
     }
-    if (planMode)
-      doc = [{ type: "skill", skill_id: "plan-first", params: {} }, ...doc];
     const promptRequestId = globalThis.crypto.randomUUID();
     const creationRequestId = targetSession ? null : promptRequestId;
     if (targetSession) {
@@ -2537,7 +2661,6 @@ export default function App() {
     mode,
     sandbox,
     currentModel,
-    planMode,
     freezeCanvasesRef,
     running,
     toast,
@@ -2551,6 +2674,90 @@ export default function App() {
     updateRunningSession,
     activeAppshots,
   ]);
+
+  const sendDuringTurn = useCallback(
+    async (delivery: "queued" | "steer") => {
+      if (sessionLoading) {
+        toast(t("toast.sessionLoading"));
+        return;
+      }
+      const session = activeSessionRef.current;
+      if (!session || !runningSessionsRef.current.has(session)) {
+        toast(t("toast.notRunning"), "error");
+        return;
+      }
+      const getBlocks = getBlocksRef.current;
+      if (!getBlocks) return;
+      const editorSnapshot = getBlocks();
+      const editorRevision = editorRevisionRef.current;
+      const appshotIds = activeAppshots.map((capture) => capture.id);
+      let doc: DocBlock[] = [
+        ...editorSnapshot,
+        ...activeAppshots.map((capture): DocBlock => ({
+          type: "appshot",
+          id: capture.id,
+          title: capture.window_title,
+        })),
+      ];
+      if (doc.length === 0) {
+        toast(t("toast.emptyDoc"));
+        focusEditorRef.current?.();
+        return;
+      }
+      if (delivery === "steer" && !interactionCapabilities[session]?.steering) {
+        toast(t("toast.steerUnsupported"), "error");
+        return;
+      }
+      try {
+        if (freezeCanvasesRef.current) doc = await freezeCanvasesRef.current(doc);
+      } catch (error) {
+        toast(
+          `Canvas could not be frozen: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
+        return;
+      }
+      const requestId = globalThis.crypto.randomUUID();
+      const pending: PendingPromptRequest = {
+        requestId,
+        editorSnapshot,
+        editorRevision,
+        submittedDoc: doc,
+        canvasIds: doc.flatMap((block) => (block.type === "canvas" ? [block.id] : [])),
+        canvasRefs: doc.flatMap((block) =>
+          block.type === "canvas"
+            ? [{ id: block.id, revision: block.frozen_revision }]
+            : [],
+        ),
+        appshotIds,
+      };
+      pendingDeferredPromptRequestsRef.current.set(requestId, pending);
+      const optimistic = newTurn(summarizeDoc(doc), requestId);
+      optimistic.delivery = delivery;
+      optimistic.queuePosition = delivery === "queued" ? 1 : undefined;
+      setTurns((previous) => [...previous, optimistic]);
+      try {
+        if (delivery === "queued") {
+          await queuePrompt(session, doc, requestId);
+        } else {
+          await steerPrompt(session, doc, requestId);
+        }
+      } catch (error) {
+        pendingDeferredPromptRequestsRef.current.delete(requestId);
+        setTurns((previous) =>
+          applyEvent(previous, {
+            event: "error",
+            session,
+            message: String(error),
+            terminal: false,
+            request_id: requestId,
+          }),
+        );
+        toast(t("toast.turnFailed", { error: String(error) }), "error");
+      }
+    },
+    [activeAppshots, interactionCapabilities, sessionLoading, t, toast],
+  );
 
   const createSession = useCallback(() => {
     const currentSessionId = activeSessionRef.current;
@@ -2901,6 +3108,7 @@ export default function App() {
       const board = loadBoardSnapshot();
       const task = board.warning ? null : taskForSession(board.tasks, id);
       setTaskContext(task, task === null);
+      void prepareSession(id).catch(() => undefined);
       {
         // Restore the concrete scene and Agent-owned routing independently: Auto can be enabled
         // before the Agent has selected the first scene.
@@ -4251,10 +4459,42 @@ export default function App() {
         const preset = MEMORY_PRESET_POLICY[execution.memory_preset];
         onMemoryPolicyChange(preset.read, preset.write);
       }
-      if (execution?.plan_first !== undefined)
-        setPlanMode(execution.plan_first);
+      const pending = softApplyPending(scene, live);
+      if (execution?.plan_first !== undefined) {
+        const wanted = execution.plan_first;
+        const choice = sceneCollaborationChoice(configOptions, wanted);
+        if (!session || !choice) {
+          if (!pending.includes("plan_first")) pending.push("plan_first");
+        } else {
+          const previousPlanMode = planMode;
+          scenePlanAppliedRef.current.set(session, wanted);
+          setPlanMode(wanted);
+          setConfigOptions((options) =>
+            options.map((option) =>
+              option.id === choice.configId
+                ? { ...option, current: choice.value }
+                : option,
+            ),
+          );
+          void setConfigOption(session, choice.configId, choice.value).catch((error) => {
+            scenePlanAppliedRef.current.delete(session);
+            setPlanMode(previousPlanMode);
+            setConfigOptions((options) =>
+              options.map((option) =>
+                option.id === choice.configId
+                  ? { ...option, current: previousPlanMode ? "plan" : "default" }
+                  : option,
+              ),
+            );
+            setScenePendingFields((fields) =>
+              fields.includes("plan_first") ? fields : [...fields, "plan_first"],
+            );
+            toast(t("toast.configFailed", { error: String(error) }), "error");
+          });
+        }
+      }
       setActiveSceneName(reference);
-      setScenePendingFields(softApplyPending(scene, live));
+      setScenePendingFields(pending);
       if (session) {
         sceneBySessionRef.current.set(session, reference);
         void applySceneToSession(session, reference, confirmed).then(
@@ -4285,6 +4525,7 @@ export default function App() {
       planMode,
       provider,
       currentModel,
+      configOptions,
       onSessionModeChange,
       onMemoryPolicyChange,
       toast,
@@ -5125,7 +5366,9 @@ export default function App() {
         setDefaultModel(null);
       }
     },
-    onReloadProviders: refreshProviders,
+    onReloadProviders: () => {
+      void refreshProviders().catch(() => {});
+    },
     mode,
     sandbox,
     modeChangeDisabled: policyChangeDisabled,
@@ -5239,6 +5482,7 @@ export default function App() {
           onResetAll={resetAllBindings}
           providers={providers}
           provider={provider}
+          onReloadProviders={refreshProviders}
           projectPath={activeProject ?? cwd}
           project={
             projects.find((project) => project.path === activeProject) ?? null
@@ -6071,6 +6315,12 @@ export default function App() {
                           (item) => item.id === configId,
                         );
                     if (
+                      option?.category === "collaboration_mode" ||
+                      configId === "collaboration_mode"
+                    ) {
+                      setPlanMode(value === "plan");
+                    }
+                    if (
                           (option?.category === "model" ||
                             configId === "model") &&
                       value !== currentModelRef.current
@@ -6109,6 +6359,21 @@ export default function App() {
                   appshots={activeAppshots}
                   onRemoveAppshot={(id) => removePendingAppshots([id])}
                   onRun={() => void run()}
+                  onQueue={() => void sendDuringTurn("queued")}
+                  onSteer={() => void sendDuringTurn("steer")}
+                  steeringSupported={activeInteractionCapabilities?.steering ?? false}
+                  goalCapability={activeInteractionCapabilities?.goal ?? null}
+                  goal={activeGoal}
+                  onGoal={async (action, objective) => {
+                    const session = activeSessionRef.current;
+                    if (!session) return;
+                    try {
+                      await controlGoal(session, action, objective);
+                    } catch (error) {
+                      toast(t("toast.goalFailed", { error: String(error) }), "error");
+                      throw error;
+                    }
+                  }}
                       onStop={() =>
                         activeSession && void cancelTurn(activeSession)
                       }

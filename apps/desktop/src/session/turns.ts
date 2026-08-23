@@ -109,6 +109,9 @@ export interface Turn {
   requestId?: string;
   /** False for an optimistic local row until its matching TurnStarted arrives. */
   accepted: boolean;
+  /** Client/provider delivery state before this prompt becomes the active response phase. */
+  delivery?: "queued" | "steer";
+  queuePosition?: number;
   /** True when live deltas were observed from this turn's explicit TurnStarted boundary. */
   streamBoundaryKnown: boolean;
   prompt: string;
@@ -338,6 +341,8 @@ export function applyEvent(
     ev.event === "usage" ||
     ev.event === "models" ||
     ev.event === "config_options" ||
+    ev.event === "session_capabilities" ||
+    ev.event === "goal_changed" ||
     ev.event === "permission_request"
   ) {
     return turns;
@@ -366,6 +371,8 @@ export function applyEvent(
         ...list[match],
         accepted: true,
         streamBoundaryKnown: true,
+        delivery: undefined,
+        queuePosition: undefined,
       };
       delete accepted.endedAt;
       list[match] = accepted;
@@ -375,6 +382,40 @@ export function applyEvent(
     remote.accepted = true;
     remote.streamBoundaryKnown = true;
     return [...turns, remote];
+  }
+
+  if (ev.event === "prompt_queued") {
+    const match = requestId
+      ? turns.findIndex((turn) => turn.requestId === requestId)
+      : -1;
+    if (match < 0) return turns;
+    const list = [...turns];
+    list[match] = {
+      ...list[match],
+      delivery: "queued",
+      queuePosition: ev.position,
+    };
+    return list;
+  }
+
+  if (ev.event === "steer_accepted") {
+    const match = requestId
+      ? turns.findIndex((turn) => turn.requestId === requestId)
+      : -1;
+    if (match < 0) return turns;
+    const list = turns.map((turn, index) =>
+      index !== match && isRunning(turn) && turn.accepted
+        ? { ...turn, endedAt: Date.now() }
+        : turn,
+    );
+    list[match] = {
+      ...list[match],
+      accepted: true,
+      delivery: "steer",
+      streamBoundaryKnown: true,
+      transcriptStartSeq: ev.transcript_seq ?? list[match].transcriptStartSeq,
+    };
+    return list;
   }
 
   if (ev.event === "error" && requestId) {

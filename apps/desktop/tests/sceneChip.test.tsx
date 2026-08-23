@@ -136,7 +136,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("shows every current posture value and wraps scene details without emoji", async () => {
+  test("shows scene-owned posture values and wraps scene details without emoji", async () => {
     activateDom();
     const rendered = renderChip(config());
     const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
@@ -158,7 +158,8 @@ describe("SceneChip", () => {
     const content = dom.document.body.textContent ?? "";
     expect(content).toContain("Ask first");
     expect(content).toContain("Memory on");
-    expect(content).toContain("Plan first: Off");
+    // Collaboration mode lives in the provider-native Composer selector, not this scene popover.
+    expect(content).not.toContain("Plan first: Off");
     expect(content).toContain("No worktree");
     expect(content).not.toContain("🛠️");
     expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(

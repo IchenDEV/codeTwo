@@ -1,7 +1,7 @@
 import type { ProviderInfo } from "../bridge";
 
 const DEFAULT_RETRY_DELAYS_MS = [0, 250, 750] as const;
-const DEFAULT_ATTEMPT_TIMEOUT_MS = 2_000;
+const DEFAULT_ATTEMPT_TIMEOUT_MS = 7_000;
 
 function timeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
