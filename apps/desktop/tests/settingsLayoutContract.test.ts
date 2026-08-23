@@ -5,6 +5,14 @@ const source = readFileSync(new URL("../src/settings/SettingsPage.tsx", import.m
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
 
 describe("Settings page layout contract", () => {
+  test("places the Back action above the settings menu", () => {
+    const backIndex = source.indexOf("data-settings-back");
+    const menuIndex = source.indexOf("<nav", backIndex);
+
+    expect(backIndex).toBeGreaterThan(-1);
+    expect(menuIndex).toBeGreaterThan(backIndex);
+  });
+
   test("keeps every settings tab on the shared 40px titlebar", () => {
     expect(source).toMatch(
       /<header[\s\S]*?data-settings-titlebar[\s\S]*?className="[^"]*\bsettings-titlebar\b[^"]*\bshrink-0\b[^"]*"/,
