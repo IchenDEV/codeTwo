@@ -194,8 +194,6 @@ export function PluginHub({
     scenes: t("pluginHub.scenes"),
     pipelines: t("pluginHub.pipelines"),
   };
-  const standardLabel = (standard: PluginInfo["standard"]) =>
-    t(`pluginHub.standard.${standard}` as "pluginHub.standard.agent_plugins");
   const statusLabel = (status: string) => t(`pluginHub.status.${status}` as "pluginHub.status.ready");
   const empty =
     (tab === "plugins" && visiblePlugins.length === 0) ||
@@ -358,11 +356,9 @@ export function PluginHub({
                             <Badge variant="outline" className="text-cap">
                               v{plugin.version}
                             </Badge>
-                            {plugin.standards.map((standard) => (
-                              <Badge key={standard} variant="secondary" className="text-cap">
-                                {standardLabel(standard)}
-                              </Badge>
-                            ))}
+                            <Badge variant="secondary" className="text-cap">
+                              C2 {plugin.standard_version}
+                            </Badge>
                             {!plugin.enabled && (
                               <Badge variant="outline" className="text-cap text-muted-foreground">
                                 {t("pluginHub.disabled")}
@@ -374,7 +370,6 @@ export function PluginHub({
                             {plugin.source}
                             {plugin.author ? ` · ${plugin.author}` : ""}
                             {` · ${t(`pluginHub.scope.${plugin.scope}` as "pluginHub.scope.user")}`}
-                            {plugin.spec_version ? ` · ${plugin.spec_version}` : ""}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {countLabels(plugin, labels)
@@ -588,9 +583,7 @@ export function PluginHub({
                 <div className="py-3">
                   <div className="mb-2 flex items-center gap-2">
                     <span className="text-ui font-semibold">{marketplace.display_name}</span>
-                    <Badge variant="outline" className="text-cap uppercase">
-                      {standardLabel(marketplace.standard)}
-                    </Badge>
+                    <Badge variant="outline" className="text-cap">C2</Badge>
                   </div>
                   {marketplace.description && (
                     <p className="text-hint text-muted-foreground">{marketplace.description}</p>

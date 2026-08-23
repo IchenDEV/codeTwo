@@ -92,13 +92,11 @@ fn lsp_start(
             .into_iter()
             .filter(|plugin| plugin.enabled && plugin.trusted)
         {
-            for server in plugin.lsp_servers.into_iter().filter(|server| {
-                server.transport == "stdio"
-                    && server
-                        .extension_to_language
-                        .iter()
-                        .any(|(_, language)| language == &lang)
-            }) {
+            for server in plugin
+                .lsp_servers
+                .into_iter()
+                .filter(|server| server.languages.iter().any(|language| language == &lang))
+            {
                 let command = expand_project_dir(&server.command, &cwd);
                 let args = server
                     .args
@@ -108,22 +106,15 @@ fn lsp_start(
                 let mut env = server
                     .env
                     .into_iter()
-                    .filter(|(name, _)| {
-                        !matches!(
-                            name.as_str(),
-                            "CLAUDE_PROJECT_DIR" | "CODEX_PROJECT_DIR" | "PLUGIN_PROJECT_DIR"
-                        )
-                    })
+                    .filter(|(name, _)| name != "PLUGIN_PROJECT_DIR")
                     .map(|(name, value)| (name, expand_project_dir(&value, &cwd)))
                     .collect::<Vec<_>>();
-                env.push(("CLAUDE_PROJECT_DIR".into(), cwd.clone()));
-                env.push(("CODEX_PROJECT_DIR".into(), cwd.clone()));
                 env.push(("PLUGIN_PROJECT_DIR".into(), cwd.clone()));
                 if let Some(key) = start_server(
                     host,
                     state,
                     &cwd,
-                    &format!("plugin:{}:{}", plugin.id, server.name),
+                    &format!("plugin:{}:{}", plugin.id, server.id),
                     &command,
                     &args,
                     &env,
@@ -188,12 +179,7 @@ fn start_server(
 }
 
 fn expand_project_dir(value: &str, cwd: &str) -> String {
-    value
-        .replace("${CLAUDE_PROJECT_DIR}", cwd)
-        .replace("$CLAUDE_PROJECT_DIR", cwd)
-        .replace("${CODEX_PROJECT_DIR}", cwd)
-        .replace("$CODEX_PROJECT_DIR", cwd)
-        .replace("${PLUGIN_PROJECT_DIR}", cwd)
+    value.replace("${PLUGIN_PROJECT_DIR}", cwd)
 }
 
 /// Forward one already-serialized JSON-RPC message to the server, framed.

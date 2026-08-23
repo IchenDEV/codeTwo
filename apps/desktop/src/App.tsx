@@ -3616,9 +3616,18 @@ export default function App() {
   const pluginUiActions = useMemo(
     () =>
       activeComponentPolicyReady
-      ? activePluginUiContributions(plugins, activePluginModel.plugins)
+      ? activePluginUiContributions(
+          plugins,
+          activePluginModel.plugins,
+          activePluginModel.components,
+        )
       : activePluginUiContributions([], []),
-    [activeComponentPolicyReady, activePluginModel.plugins, plugins],
+    [
+      activeComponentPolicyReady,
+      activePluginModel.components,
+      activePluginModel.plugins,
+      plugins,
+    ],
   );
   const pluginLanguageServers = useMemo(
     () =>

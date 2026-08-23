@@ -15,25 +15,8 @@ use crate::app::json;
 use crate::app::service::PluginHub;
 use crate::app::PluginManager;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginResult};
-use serde::Deserialize;
 use serde_json::{json as jval, Value};
 use std::sync::Arc;
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    /// Run plugins the user has not marked trusted. Off, and it should stay off outside
-    /// development: a bundle's `runtime` block is arbitrary code.
-    #[serde(default)]
-    allow_untrusted: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            allow_untrusted: false,
-        }
-    }
-}
 
 pub struct ExtensionsPlugin;
 
@@ -51,32 +34,12 @@ impl Plugin for ExtensionsPlugin {
         Injection::required(["plugin-hub", "plugin-manager"])
     }
 
-    fn schema(&self) -> Option<Value> {
-        Some(jval!({
-            "type": "object",
-            "properties": {
-                "allow_untrusted": {
-                    "type": "boolean",
-                    "default": false,
-                    "title": "Run untrusted plugins",
-                    "description": "Development only. A bundle's runtime block is arbitrary code."
-                }
-            }
-        }))
-    }
-
-    async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
-        let config: Config = serde_json::from_value(config).unwrap_or_default();
+    async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let hub = ctx.expect::<PluginHub>()?;
         let manager = ctx.expect::<PluginManager>()?;
 
         ctx.provide(Arc::new(ExtensionRuntimeHost))?;
         publish_host_events(&ctx);
-        if config.allow_untrusted {
-            tracing::warn!(
-                "extensions.allow_untrusted is deprecated; trust remains a hard execution gate"
-            );
-        }
         {
             let _inventory = hub.inventory.lock().await;
             manager

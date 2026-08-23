@@ -21,9 +21,7 @@ const bundle = {
   author: "C2",
   source: "Test",
   repository: "local",
-  spec_version: "1.0.0",
-  standard: "agent_plugins" as const,
-  standards: ["agent_plugins" as const],
+  standard_version: "1.0.0",
   enabled: true,
   trusted: true,
   scope: "user" as const,
@@ -87,5 +85,22 @@ describe("plugin UI and LSP contribution policy", () => {
     )).toBe(true);
     expect(activePluginLanguageServers([{ ...bundle, trusted: false }], managed("active"))).toEqual([]);
     expect(activePluginLanguageServers([{ ...bundle, enabled: false }], managed("active"))).toEqual([]);
+  });
+
+  test("applies the same component policy to rendering that the host enforces on invocation", () => {
+    const components = [{
+      id: "bundle:review:ui:review-1",
+      pluginId: "bundle:review",
+      pluginName: "Review Tools",
+      name: "Review 1",
+      kind: "uiAction",
+      slot: "session.header",
+      source: "bundle" as const,
+      supportedScopes: ["user" as const],
+      state: { effectiveEnabled: false, status: "disabled" as const },
+    }];
+    const active = activePluginUiContributions([bundle], managed("active"), components);
+    expect(active["session.header"]).toEqual([]);
+    expect(active["rail.features"]).toHaveLength(1);
   });
 });

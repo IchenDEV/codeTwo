@@ -112,7 +112,7 @@ function installRuntime(dataDir: string, trusted: boolean, options: RuntimeFixtu
     chmodSync(join(bundleDir, "lsp.cjs"), 0o755);
   }
   writeFileSync(join(pluginDir, "installed-plugin.json"), JSON.stringify({
-    schema_version: 2,
+    schema_version: 3,
     id: "fixture",
     name: "Fixture Runtime",
     version: "1.0.0",
@@ -120,9 +120,7 @@ function installRuntime(dataDir: string, trusted: boolean, options: RuntimeFixtu
     author: "C2",
     source: "Test",
     repository: "local",
-    spec_version: "1.0.0",
-    standard: "agent_plugins",
-    standards: ["agent_plugins"],
+    standard_version: "1.0.0",
     enabled: true,
     trusted,
     scope: "user",
@@ -163,7 +161,7 @@ function installRuntime(dataDir: string, trusted: boolean, options: RuntimeFixtu
     diagnostics: [],
     runtime: {
       protocol: "1.0.0",
-      command: process.execPath,
+      command: "bun",
       args: ["plugin.cjs"],
       inject: ["extensions-runtime"],
       scopeSupport: normalized.projectCapable ? ["user", "project"] : ["user"],
@@ -237,7 +235,8 @@ describe("Pure Bun process plugin host", () => {
       expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).browser_use_selection)
         .toEqual({ "*": "automatic" });
       for (const component of BUILTIN_UI_COMPONENTS) {
-        expect(BUILTIN_PLUGIN_BY_ID.get(component.pluginId)?.components).toContain(component.id);
+        expect(BUILTIN_PLUGIN_BY_ID.get(component.pluginId)?.components)
+          .toContainEqual(expect.objectContaining({ id: component.id }));
       }
     } finally {
       await host.shutdown();
@@ -489,6 +488,26 @@ describe("Pure Bun process plugin host", () => {
         contribution_id: "missing",
         context: {},
       }, workspace)).rejects.toThrow("unknown UI contribution");
+
+      await expect(host.call("plugins.plan_change", {
+        plugin: "bundle:fixture",
+        scope: { kind: "project", project_path: workspace },
+        component: "bundle:fixture:ui:missing",
+        state: "disabled",
+      }, workspace)).rejects.toThrow("does not belong to plugin");
+
+      const componentPlan = await host.call("plugins.plan_change", {
+        plugin: "bundle:fixture",
+        scope: { kind: "project", project_path: workspace },
+        component: "bundle:fixture:ui:where",
+        state: "disabled",
+      }, workspace) as { id: string };
+      await host.call("plugins.apply_change", { id: componentPlan.id }, workspace);
+      await expect(host.call("plugins.invoke_ui", {
+        plugin_id: "fixture",
+        contribution_id: "where",
+        context: {},
+      }, workspace)).rejects.toThrow("UI contribution `where` is disabled in this scope");
 
       const plan = await host.call("plugins.plan_change", {
         plugin: "bundle:fixture",

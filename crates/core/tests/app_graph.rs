@@ -4,7 +4,7 @@
 use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp, EngineService, StoreService};
 use codetwo_core::Engine;
-use codetwo_kernel::{PluginEntry, Status};
+use codetwo_kernel::{KernelError, PluginEntry, Status};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -25,6 +25,30 @@ fn status_of(app: &CoreApp, plugin: &str) -> Status {
         .find(|scope| scope.plugin == plugin)
         .map(|scope| scope.status)
         .unwrap_or(Status::Disposed)
+}
+
+async fn change_plugin(
+    app: &CoreApp,
+    plugin: &str,
+    state: Option<&str>,
+    config: Option<Value>,
+) -> Result<Value, KernelError> {
+    let plan = app
+        .call(
+            "plugins.plan_change",
+            json!({
+                "plugin": plugin,
+                "scope": { "kind": "user" },
+                "state": state,
+                "config": config,
+            }),
+        )
+        .await?;
+    app.call(
+        "plugins.apply_change",
+        json!({ "id": plan["id"].as_str().expect("plan id") }),
+    )
+    .await
 }
 
 #[tokio::test]
@@ -219,11 +243,7 @@ async fn turning_storage_off_is_rejected_when_enabled_dependents_would_be_pendin
     let (app, _dir) = boot().await;
     assert_eq!(status_of(&app, "engine"), Status::Active);
 
-    let error = app
-        .call(
-            "kernel.set_enabled",
-            json!({ "name": "store", "value": false }),
-        )
+    let error = change_plugin(&app, "store", Some("disabled"), None)
         .await
         .unwrap_err()
         .to_string();
@@ -274,12 +294,9 @@ async fn disabling_a_leaf_removes_its_service_and_command_surface() {
         .await
         .is_ok());
 
-    app.call(
-        "kernel.set_enabled",
-        json!({ "name": "terminal", "value": false }),
-    )
-    .await
-    .unwrap();
+    change_plugin(&app, "terminal", Some("disabled"), None)
+        .await
+        .unwrap();
     app.flush().await;
 
     assert_eq!(status_of(&app, "terminal"), Status::Disposed);
@@ -310,11 +327,7 @@ async fn disabling_a_required_host_capability_rolls_back_the_transaction() {
         .unwrap();
     assert_eq!(status_of(&app, "engine"), Status::Active);
 
-    let error = app
-        .call(
-            "kernel.set_enabled",
-            json!({ "name": "terminal", "value": false }),
-        )
+    let error = change_plugin(&app, "terminal", Some("disabled"), None)
         .await
         .unwrap_err()
         .to_string();
@@ -333,9 +346,11 @@ async fn reconfiguring_a_dependency_rebuilds_what_was_built_on_it() {
     let first = app.service::<EngineService>().expect("engine");
 
     let db = dir.path().join("moved.db");
-    app.call(
-        "kernel.configure",
-        json!({ "name": "store", "config": { "path": db.to_string_lossy() } }),
+    change_plugin(
+        &app,
+        "store",
+        Some("enabled"),
+        Some(json!({ "path": db.to_string_lossy() })),
     )
     .await
     .unwrap();

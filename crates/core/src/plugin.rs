@@ -1,11 +1,10 @@
-//! Installable plugin bundles: canonical Codex/Claude manifests plus C2 conventions for
-//! skills, subagents, MCP servers, and project scaffolds.
+//! Installable C2 Plugin Standard bundles.
 //!
 //! Installation is data-only. C2 validates and stores plugin files but never runs repository
 //! scripts during install. MCP processes start only when the user composes that MCP component into
 //! a session; scaffolds are applied explicitly to a selected workspace without overwriting files.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -38,10 +37,6 @@ static AGENT_MCP_SCHEMA: LazyLock<Value> = LazyLock::new(|| {
         .expect("bundled Agent Plugins MCP schema must be valid JSON")
 });
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginCounts {
     pub skills: usize,
@@ -58,7 +53,9 @@ pub struct PluginCounts {
     pub monitors: usize,
     #[serde(default)]
     pub apps: usize,
-    /// Agent Scenes 1.0.0 components (`scenes/*.scene.json`); defaulted so pre-R14 records load.
+    #[serde(default)]
+    pub ui: usize,
+    /// Agent Scenes 1.0.0 components (`scenes/*.scene.json`).
     #[serde(default)]
     pub scenes: usize,
     #[serde(default)]
@@ -80,20 +77,11 @@ impl PluginCounts {
             + self.lsp_servers
             + self.monitors
             + self.apps
+            + self.ui
             + self.scenes
             + self.pipelines
             + self.runtime
     }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PluginStandard {
-    AgentPlugins,
-    Codex,
-    ClaudeCode,
-    #[default]
-    Conventional,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,22 +121,22 @@ pub struct PluginExtensionComponent {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginLspServer {
-    pub name: String,
-    #[serde(default)]
-    pub source_path: String,
+    pub id: String,
+    pub languages: Vec<String>,
     pub command: String,
-    #[serde(default)]
     pub args: Vec<String>,
-    #[serde(default)]
-    pub env: Vec<(String, String)>,
-    #[serde(default)]
-    pub extension_to_language: Vec<(String, String)>,
-    #[serde(default = "default_lsp_transport")]
-    pub transport: String,
+    pub env: std::collections::BTreeMap<String, String>,
 }
 
-fn default_lsp_transport() -> String {
-    "stdio".into()
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginUiContribution {
+    pub id: String,
+    pub slot: String,
+    pub label: String,
+    pub description: String,
+    pub command: String,
+    pub input: Value,
+    pub order: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,9 +157,10 @@ pub struct PluginScaffold {
 /// plugin **trusted** *and* enabled — see [`crate::app::protocol`], which is the only place that
 /// spawns it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginRuntimeSpec {
     /// Protocol version the plugin implements. Major must match the host's.
-    #[serde(default)]
+    #[serde(default = "default_plugin_protocol_version")]
     pub protocol: String,
     /// Executable to run, resolved against `PATH` or the bundle directory.
     pub command: String,
@@ -187,8 +176,8 @@ pub struct PluginRuntimeSpec {
     /// Services the plugin can use if present; their arrival or departure restarts it.
     #[serde(default, rename = "optionalInject")]
     pub optional_inject: Vec<String>,
-    /// Configuration scopes this process supports. Existing manifests remain user-only; project
-    /// instances are created only when the bundle opts in explicitly.
+    /// Configuration scopes this process supports. Project instances are created only when the
+    /// bundle opts in explicitly.
     #[serde(default = "default_runtime_scope_support", rename = "scopeSupport")]
     pub scope_support: Vec<codetwo_kernel::PluginScopeSupport>,
 }
@@ -197,43 +186,33 @@ fn default_runtime_scope_support() -> Vec<codetwo_kernel::PluginScopeSupport> {
     vec![codetwo_kernel::PluginScopeSupport::User]
 }
 
+fn default_plugin_protocol_version() -> String {
+    "1.0.0".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct InstalledPlugin {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
     pub version: String,
-    #[serde(default)]
     pub description: String,
-    #[serde(default)]
     pub author: String,
     pub source: String,
     pub repository: String,
-    #[serde(default)]
-    pub spec_version: String,
-    #[serde(default)]
-    pub standard: PluginStandard,
-    #[serde(default)]
-    pub standards: Vec<PluginStandard>,
-    #[serde(default = "default_true")]
+    pub standard_version: String,
     pub enabled: bool,
-    #[serde(default)]
     pub trusted: bool,
-    #[serde(default)]
     pub scope: PluginInstallScope,
     pub counts: PluginCounts,
-    #[serde(default)]
     pub components: Vec<Skill>,
-    #[serde(default)]
     pub scaffolds: Vec<PluginScaffold>,
-    #[serde(default)]
     pub extension_components: Vec<PluginExtensionComponent>,
-    #[serde(default)]
+    pub ui_contributions: Vec<PluginUiContribution>,
     pub lsp_servers: Vec<PluginLspServer>,
-    #[serde(default)]
     pub diagnostics: Vec<PluginDiagnostic>,
-    /// Present when the bundle ships a protocol plugin. Pre-existing records simply have `None`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime: Option<PluginRuntimeSpec>,
 }
 
@@ -268,7 +247,7 @@ pub enum PluginError {
     Json(#[from] serde_json::Error),
     #[error("The repository contains multiple plugins; import a specific /tree/ path")]
     MultiplePlugins,
-    #[error("The plugin does not contain a supported Skill, Subagent, MCP server, or scaffold")]
+    #[error("The plugin does not contain a supported C2 component")]
     NoComponents,
     #[error("Plugin contains more than {0} components")]
     TooManyComponents(usize),
@@ -292,8 +271,6 @@ pub enum PluginError {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct RawManifest {
-    #[serde(rename = "$schema", default)]
-    schema: String,
     #[serde(default)]
     name: String,
     #[serde(default)]
@@ -304,41 +281,9 @@ struct RawManifest {
     author: Value,
     #[serde(default)]
     repository: String,
-    #[serde(default)]
-    skills: Option<Value>,
-    #[serde(rename = "mcpServers", default)]
-    mcp_servers: Option<Value>,
-    #[serde(default)]
-    commands: Option<Value>,
-    #[serde(default)]
-    workflows: Option<Value>,
-    #[serde(default)]
-    agents: Option<Value>,
-    #[serde(default)]
-    hooks: Option<Value>,
-    #[serde(rename = "lspServers", default)]
-    lsp_servers: Option<Value>,
-    #[serde(rename = "outputStyles", default)]
-    output_styles: Option<Value>,
-    #[serde(default)]
-    apps: Option<Value>,
-    #[serde(default)]
-    experimental: Value,
-    #[serde(default)]
-    channels: Option<Value>,
-    #[serde(default)]
-    dependencies: Option<Value>,
-    #[serde(rename = "userConfig", default)]
-    user_config: Option<Value>,
-    #[serde(default)]
-    interface: Value,
-    /// Agent Plugins client extension data. C2 owns `extensions.dev.codetwo`.
+    /// C2 Plugin Standard data lives only in this Agent Plugins extension map.
     #[serde(default)]
     extensions: Value,
-    /// Legacy C2 field for native Codex/Claude manifests. Agent Plugins manifests must use the
-    /// namespaced `extensions.dev.codetwo.runtime` field instead.
-    #[serde(default)]
-    runtime: Option<Value>,
 }
 
 fn semantic_version_major(value: &str) -> Option<u64> {
@@ -353,128 +298,68 @@ fn semantic_version_major(value: &str) -> Option<u64> {
     Some(major)
 }
 
-fn c2_extension_runtime(
-    manifest: &RawManifest,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Option<Value> {
+fn c2_extension(manifest: &RawManifest) -> Result<&serde_json::Map<String, Value>, PluginError> {
     let extension = manifest
         .extensions
-        .as_object()?
-        .get(C2_EXTENSION_NAMESPACE)?
-        .as_object()?;
+        .as_object()
+        .and_then(|extensions| extensions.get(C2_EXTENSION_NAMESPACE))
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            PluginError::Invalid(format!(
+                "C2 plugins require extensions.{C2_EXTENSION_NAMESPACE}"
+            ))
+        })?;
     let standard_version = extension
         .get("standardVersion")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let supported_major = semantic_version_major(C2_PLUGIN_STANDARD_VERSION)
-        .expect("C2 plugin standard version must be semantic");
-    match semantic_version_major(standard_version) {
-        Some(major) if major == supported_major => {}
-        Some(_) => {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Warning,
-                code: "c2_extension.unsupported_version".into(),
-                message: format!(
-                    "Ignored {C2_EXTENSION_NAMESPACE} extension version {standard_version}; this host supports {C2_PLUGIN_STANDARD_VERSION}"
-                ),
-                component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
-            });
-            return None;
-        }
-        None => {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Warning,
-                code: "c2_extension.invalid_version".into(),
-                message: format!(
-                    "Ignored {C2_EXTENSION_NAMESPACE} extension without a valid standardVersion"
-                ),
-                component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
-            });
-            return None;
-        }
+    if standard_version != C2_PLUGIN_STANDARD_VERSION {
+        return Err(PluginError::Invalid(format!(
+            "Unsupported C2 plugin standard: {}",
+            if standard_version.is_empty() {
+                "missing"
+            } else {
+                standard_version
+            }
+        )));
     }
-    for key in extension
+    let unknown = extension
         .keys()
-        .filter(|key| !matches!(key.as_str(), "standardVersion" | "runtime"))
-    {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Warning,
-            code: "c2_extension.unknown_field".into(),
-            message: format!("Ignored unknown {C2_EXTENSION_NAMESPACE} extension field: {key}"),
-            component: Some(format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}")),
-        });
+        .filter(|key| {
+            !matches!(
+                key.as_str(),
+                "standardVersion" | "runtime" | "ui" | "languageServers"
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(PluginError::Invalid(format!(
+            "Unknown C2 plugin fields: {}",
+            unknown.join(", ")
+        )));
     }
-    extension.get("runtime").cloned()
+    Ok(extension)
 }
 
-fn select_runtime(
-    manifests: &[(PluginStandard, RawManifest)],
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Option<Value> {
-    let mut selected = None;
-    for (standard, manifest) in manifests {
-        let candidate = if *standard == PluginStandard::AgentPlugins {
-            c2_extension_runtime(manifest, diagnostics)
-        } else {
-            manifest.runtime.clone()
-        };
-        let Some(candidate) = candidate else {
-            continue;
-        };
-        if selected.is_some() {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Warning,
-                code: "runtime.manifest_conflict".into(),
-                message: "Ignored lower-priority runtime declaration; precedence is Agent Plugins, Codex, then Claude Code".into(),
-                component: None,
-            });
-        } else {
-            selected = Some(candidate);
-        }
-    }
-    selected
-}
-
-/// Validate the selected C2 `runtime` declaration. A malformed one is a diagnostic, not an install
-/// failure: the rest of the bundle (skills, scenes, scaffolds) is still perfectly good content.
 fn parse_runtime(
+    root: &Path,
     raw: Option<&Value>,
     diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Option<PluginRuntimeSpec> {
-    let raw = raw?;
-    let spec: PluginRuntimeSpec = match serde_json::from_value(raw.clone()) {
-        Ok(spec) => spec,
-        Err(error) => {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Warning,
-                code: "runtime.invalid".into(),
-                message: format!("runtime block ignored: {error}"),
-                component: None,
-            });
-            return None;
-        }
+) -> Result<Option<PluginRuntimeSpec>, PluginError> {
+    let Some(raw) = raw else {
+        return Ok(None);
     };
+    let spec: PluginRuntimeSpec = serde_json::from_value(raw.clone())
+        .map_err(|error| PluginError::Invalid(format!("Invalid C2 runtime: {error}")))?;
     let command = spec.command.trim();
     if command.is_empty() {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Warning,
-            code: "runtime.invalid".into(),
-            message: "runtime block ignored: `command` is empty".into(),
-            component: None,
-        });
-        return None;
+        return Err(PluginError::Invalid(
+            "Invalid C2 runtime: `command` is empty".into(),
+        ));
     }
-    // The command is resolved against PATH or the bundle directory at launch; a path that climbs
-    // out of the bundle is refused here rather than at spawn time.
-    if command.contains("..") {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Error,
-            code: "runtime.unsafe_command".into(),
-            message: "runtime block ignored: `command` may not contain `..`".into(),
-            component: None,
-        });
-        return None;
-    }
+    validate_c2_command(root, command, "runtime", "runtime")
+        .map_err(|error| PluginError::Invalid(format!("Invalid C2 runtime: {error}")))?;
     diagnostics.push(PluginDiagnostic {
         level: PluginDiagnosticLevel::Warning,
         code: "runtime.requires_trust".into(),
@@ -482,19 +367,15 @@ fn parse_runtime(
             .into(),
         component: None,
     });
-    Some(spec)
+    Ok(Some(spec))
 }
 
 #[derive(Debug, Default)]
 struct ManifestSet {
     primary: RawManifest,
     runtime: Option<Value>,
-    standards: Vec<PluginStandard>,
-    skill_paths: Vec<String>,
-    agent_paths: Vec<String>,
-    mcp_sources: Vec<Value>,
-    agent_portable: bool,
     extension_components: Vec<PluginExtensionComponent>,
+    ui_contributions: Vec<PluginUiContribution>,
     lsp_servers: Vec<PluginLspServer>,
     diagnostics: Vec<PluginDiagnostic>,
 }
@@ -513,45 +394,22 @@ struct SkillCandidate {
     strict_agent_skill: bool,
 }
 
-#[derive(Debug)]
-struct McpConfigSource {
-    value: Value,
-    strict_agent_plugins: bool,
-    label: String,
-}
-
 /// Build a complete plugin bundle from a verified GitHub checkout.
 pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginError> {
     let selected = checkout
         .selected_root()
         .map_err(|error| PluginError::Invalid(error.to_string()))?;
-    let (plugin_root, manifest_paths) = locate_plugin_root(&selected)?;
-    let mut manifest_set = load_manifest_set(&plugin_root, &manifest_paths)?;
+    let plugin_root = locate_plugin_root(&selected)?;
+    let mut manifest_set = load_manifest(&plugin_root)?;
     let manifest = manifest_set.primary.clone();
 
-    let fallback_name = plugin_root
-        .file_name()
-        .and_then(|name| name.to_str())
-        .filter(|name| !name.is_empty())
-        .unwrap_or(&checkout.spec.repo);
-    let manifest_name = if manifest.name.trim().is_empty() {
-        fallback_name.to_string()
-    } else {
-        manifest.name.trim().to_string()
-    };
-    let display_name = manifest
-        .interface
-        .get("displayName")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(&manifest_name)
-        .trim()
-        .to_string();
-    let version = if manifest.version.trim().is_empty() {
-        "0.0.0".to_string()
-    } else {
-        manifest.version.trim().to_string()
-    };
+    let manifest_name = manifest.name.trim().to_string();
+    if semantic_version_major(manifest.version.trim()).is_none() {
+        return Err(PluginError::Invalid(
+            "C2 plugins require a semantic version".into(),
+        ));
+    }
+    let version = manifest.version.trim().to_string();
     let checkout_root = checkout.root.canonicalize()?;
     let root_relative = plugin_root
         .strip_prefix(&checkout_root)
@@ -575,20 +433,8 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
         )
     );
 
-    let source = format!("Plugin · {display_name}");
-    let native_conventions = manifest_set.standards.iter().any(|standard| {
-        matches!(
-            standard,
-            PluginStandard::Codex | PluginStandard::ClaudeCode | PluginStandard::Conventional
-        )
-    });
-    let skill_files = discover_skill_files(
-        &plugin_root,
-        &manifest_set.skill_paths,
-        manifest_set.agent_portable,
-        native_conventions,
-        &mut manifest_set.diagnostics,
-    )?;
+    let source = format!("Plugin · {manifest_name}");
+    let skill_files = discover_skill_files(&plugin_root, &mut manifest_set.diagnostics)?;
     let mut components = parse_skills(
         &plugin_root,
         &plugin_id,
@@ -607,26 +453,20 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
         &plugin_root,
         &plugin_id,
         &source,
-        &manifest_set.agent_paths,
-        native_conventions,
         &mut manifest_set.diagnostics,
     )?);
-    components.extend(parse_mcp_servers(
-        &plugin_root,
-        &plugin_id,
-        &source,
-        &manifest_set.mcp_sources,
-        manifest_set.agent_portable,
-        native_conventions,
-        &mut manifest_set.diagnostics,
-    )?);
+    components.extend(parse_mcp_servers(&plugin_root, &plugin_id, &source)?);
     if components.len() > MAX_COMPONENTS {
         return Err(PluginError::TooManyComponents(MAX_COMPONENTS));
     }
 
     let scaffolds = discover_scaffolds(&plugin_root)?;
     let (scene_count, pipeline_count) = count_scene_components(&plugin_root);
-    let runtime = parse_runtime(manifest_set.runtime.as_ref(), &mut manifest_set.diagnostics);
+    let runtime = parse_runtime(
+        &plugin_root,
+        manifest_set.runtime.as_ref(),
+        &mut manifest_set.diagnostics,
+    )?;
     let counts = PluginCounts {
         skills: components
             .iter()
@@ -668,6 +508,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             .iter()
             .filter(|item| item.kind == "app")
             .count(),
+        ui: manifest_set.ui_contributions.len(),
         scenes: scene_count,
         pipelines: pipeline_count,
         runtime: usize::from(runtime.is_some()),
@@ -687,23 +528,15 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
     };
     Ok(PluginBundle {
         plugin: InstalledPlugin {
-            schema_version: 2,
+            schema_version: 3,
             id: plugin_id,
-            name: display_name,
+            name: manifest_name,
             version,
             description: truncate(manifest.description.trim(), 500),
             author: author_name(&manifest.author),
             source: checkout.spec.source(),
             repository,
-            spec_version: if manifest_set.agent_portable {
-                "1.0.0".into()
-            } else if manifest.schema.trim().is_empty() {
-                "native".into()
-            } else {
-                manifest.schema.trim().to_string()
-            },
-            standard: manifest_set.standards.first().copied().unwrap_or_default(),
-            standards: manifest_set.standards,
+            standard_version: C2_PLUGIN_STANDARD_VERSION.into(),
             enabled: true,
             trusted: false,
             scope: PluginInstallScope::User,
@@ -711,6 +544,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             components,
             scaffolds,
             extension_components: manifest_set.extension_components,
+            ui_contributions: manifest_set.ui_contributions,
             lsp_servers: manifest_set.lsp_servers,
             diagnostics: manifest_set.diagnostics,
             runtime,
@@ -786,9 +620,11 @@ pub fn install(
         serde_json::from_str::<InstalledPlugin>(&text)
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
     }) {
-        bundle.plugin.enabled = previous.enabled;
-        bundle.plugin.trusted = previous.trusted;
-        bundle.plugin.scope = previous.scope;
+        if previous.schema_version == 3 && previous.standard_version == C2_PLUGIN_STANDARD_VERSION {
+            bundle.plugin.enabled = previous.enabled;
+            bundle.plugin.trusted = previous.trusted;
+            bundle.plugin.scope = previous.scope;
+        }
     }
     let stage = plugins_dir.join(format!(".{id}.stage-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(stage.join(BUNDLE_DIR))?;
@@ -852,11 +688,15 @@ pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError>
             }
         };
         match serde_json::from_str::<InstalledPlugin>(&text) {
-            Ok(mut plugin) => {
+            Ok(mut plugin)
+                if plugin.schema_version == 3
+                    && plugin.standard_version == C2_PLUGIN_STANDARD_VERSION =>
+            {
                 let data_dir = plugin_data_dir(plugins_dir, &plugin.id);
                 resolve_relative_mcp_commands(&mut plugin, &plugin_dir, &data_dir);
                 plugins.push(plugin);
             }
+            Ok(_) => tracing::warn!("plugin {:?}: unsupported installed record", plugin_dir),
             Err(error) => tracing::warn!("plugin {:?}: {error}", plugin_dir),
         }
     }
@@ -976,201 +816,62 @@ pub fn apply_scaffold(
     })
 }
 
-fn load_manifest_set(root: &Path, paths: &[PathBuf]) -> Result<ManifestSet, PluginError> {
-    let mut parsed = Vec::new();
+fn load_manifest(root: &Path) -> Result<ManifestSet, PluginError> {
     let mut diagnostics = Vec::new();
-    for path in paths {
-        ensure_plugin_path(root, path)?;
-        let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
-        let standard = manifest_standard(path);
-        if standard == PluginStandard::AgentPlugins {
-            validate_agent_manifest(&value, &mut diagnostics)?;
-        }
-        let raw: RawManifest = serde_json::from_value(value)?;
-        parsed.push((standard, raw));
+    let manifest_path = root.join("plugin.json");
+    ensure_plugin_path(root, &manifest_path)?;
+    if !manifest_path.is_file() {
+        return Err(PluginError::Invalid(
+            "C2 plugin root must contain plugin.json".into(),
+        ));
     }
-    parsed.sort_by_key(|(standard, _)| standard_priority(*standard));
-
-    let primary = parsed
-        .first()
-        .map(|(_, manifest)| manifest.clone())
-        .unwrap_or_default();
-    let mut standards = Vec::new();
-    let mut skill_paths = Vec::new();
-    let mut agent_paths = Vec::new();
-    let mut mcp_sources = Vec::new();
-    let mut names = BTreeSet::new();
-    for (standard, manifest) in &parsed {
-        if !standards.contains(standard) {
-            standards.push(*standard);
-        }
-        if !manifest.name.trim().is_empty() {
-            names.insert(manifest.name.trim().to_string());
-        }
-        if *standard != PluginStandard::AgentPlugins {
-            if let Some(value) = &manifest.skills {
-                skill_paths.extend(path_values(value, "skills")?);
-            }
-            if let Some(value) = &manifest.agents {
-                agent_paths.extend(path_values(value, "agents")?);
-            }
-            if let Some(value) = &manifest.mcp_servers {
-                mcp_sources.push(value.clone());
-            }
-        }
+    let value: Value = serde_json::from_str(&std::fs::read_to_string(&manifest_path)?)?;
+    validate_agent_manifest(&value)?;
+    let primary: RawManifest = serde_json::from_value(value)?;
+    let extension = c2_extension(&primary)?;
+    let runtime = extension.get("runtime").cloned();
+    let lsp_servers = discover_lsp_servers(root, extension.get("languageServers"))?;
+    let mut extension_components =
+        discover_extension_components(root, &lsp_servers, &mut diagnostics)?;
+    let ui_contributions = discover_ui_contributions(extension.get("ui"))?;
+    if !ui_contributions.is_empty() && runtime.is_none() {
+        return Err(PluginError::Invalid(
+            "UI action contributions require extensions.dev.codetwo.runtime".into(),
+        ));
     }
-    if standards.is_empty() {
-        standards.push(PluginStandard::Conventional);
-    }
-    if names.len() > 1 {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Warning,
-            code: "manifest_identity_conflict".into(),
-            message: format!(
-                "Plugin manifests use different names ({}); metadata follows Agent Plugins, Codex, then Claude Code precedence",
-                names.into_iter().collect::<Vec<_>>().join(", ")
+    extension_components.extend(ui_contributions.iter().map(|contribution| {
+        PluginExtensionComponent {
+            kind: "ui".into(),
+            name: contribution.label.clone(),
+            path: format!(
+                "plugin.json#extensions.{C2_EXTENSION_NAMESPACE}.ui.{}.{}",
+                contribution.id, contribution.slot
             ),
-            component: None,
-        });
-    }
-
-    let lsp_servers = discover_lsp_servers(root, &parsed, &mut diagnostics)?;
-    let extension_components =
-        discover_extension_components(root, &parsed, &lsp_servers, &mut diagnostics)?;
-    let runtime = select_runtime(&parsed, &mut diagnostics);
+            status: "requires_trust".into(),
+        }
+    }));
     Ok(ManifestSet {
         primary,
         runtime,
-        agent_portable: standards.contains(&PluginStandard::AgentPlugins),
-        standards,
-        skill_paths,
-        agent_paths,
-        mcp_sources,
         extension_components,
+        ui_contributions,
         lsp_servers,
         diagnostics,
     })
 }
 
-fn locate_plugin_root(selected: &Path) -> Result<(PathBuf, Vec<PathBuf>), PluginError> {
-    let direct = direct_manifests(selected)?;
-    if !direct.is_empty() {
-        return Ok((selected.to_path_buf(), direct));
+fn locate_plugin_root(selected: &Path) -> Result<PathBuf, PluginError> {
+    let root = selected.canonicalize()?;
+    if !root.is_dir() || !root.join("plugin.json").is_file() {
+        return Err(PluginError::Invalid(
+            "C2 plugin root must contain plugin.json; select the bundle directory explicitly"
+                .into(),
+        ));
     }
-    let mut manifests = Vec::new();
-    find_manifests(selected, 0, &mut manifests)?;
-    manifests.sort();
-    manifests.dedup();
-    let mut roots = Vec::new();
-    for manifest in manifests {
-        let parent = manifest
-            .parent()
-            .ok_or_else(|| PluginError::Invalid("Plugin manifest has no root".into()))?;
-        let root = if matches!(
-            parent.file_name().and_then(|name| name.to_str()),
-            Some(".codex-plugin" | ".claude-plugin")
-        ) {
-            parent
-                .parent()
-                .ok_or_else(|| PluginError::Invalid("Plugin manifest has no root".into()))?
-        } else {
-            parent
-        };
-        if !roots.iter().any(|known: &PathBuf| known == root) {
-            roots.push(root.to_path_buf());
-        }
-    }
-    match roots.as_slice() {
-        [] => Ok((selected.to_path_buf(), Vec::new())),
-        [root] => Ok((root.clone(), direct_manifests(root)?)),
-        _ => Err(PluginError::MultiplePlugins),
-    }
+    Ok(root)
 }
 
-fn direct_manifests(root: &Path) -> Result<Vec<PathBuf>, PluginError> {
-    let mut out = Vec::new();
-    let portable = root.join("plugin.json");
-    if portable.is_file() && is_agent_manifest(&portable)? {
-        out.push(portable);
-    }
-    for relative in [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"] {
-        let manifest = root.join(relative);
-        if manifest.is_file() {
-            ensure_plugin_path(root, &manifest)?;
-            out.push(manifest);
-        }
-    }
-    Ok(out)
-}
-
-fn find_manifests(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) -> Result<(), PluginError> {
-    if depth > 4 {
-        return Ok(());
-    }
-    let portable = dir.join("plugin.json");
-    if portable.is_file() && is_agent_manifest(&portable)? {
-        out.push(portable);
-    }
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let metadata = std::fs::symlink_metadata(&path)?;
-        if metadata.file_type().is_symlink() || !metadata.is_dir() {
-            continue;
-        }
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if matches!(name.as_ref(), ".git" | "node_modules" | "target" | ".venv") {
-            continue;
-        }
-        if matches!(name.as_ref(), ".codex-plugin" | ".claude-plugin") {
-            let manifest = path.join("plugin.json");
-            if manifest.is_file() {
-                out.push(manifest);
-            }
-            continue;
-        }
-        find_manifests(&path, depth + 1, out)?;
-    }
-    Ok(())
-}
-
-fn is_agent_manifest(path: &Path) -> Result<bool, PluginError> {
-    let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
-    Ok(value
-        .get("$schema")
-        .and_then(Value::as_str)
-        .is_some_and(|schema| {
-            schema.starts_with("https://agent-plugins.org/schemas/")
-                && schema.ends_with("/plugin.schema.json")
-        }))
-}
-
-fn manifest_standard(path: &Path) -> PluginStandard {
-    match path
-        .parent()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-    {
-        Some(".codex-plugin") => PluginStandard::Codex,
-        Some(".claude-plugin") => PluginStandard::ClaudeCode,
-        _ => PluginStandard::AgentPlugins,
-    }
-}
-
-fn standard_priority(standard: PluginStandard) -> u8 {
-    match standard {
-        PluginStandard::AgentPlugins => 0,
-        PluginStandard::Codex => 1,
-        PluginStandard::ClaudeCode => 2,
-        PluginStandard::Conventional => 3,
-    }
-}
-
-fn validate_agent_manifest(
-    value: &Value,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Result<(), PluginError> {
+fn validate_agent_manifest(value: &Value) -> Result<(), PluginError> {
     let object = value.as_object().ok_or_else(|| {
         PluginError::Invalid("Agent Plugins plugin.json must be an object".into())
     })?;
@@ -1208,13 +909,16 @@ fn validate_agent_manifest(
         "keywords",
         "extensions",
     ];
-    for key in object.keys().filter(|key| !allowed.contains(&key.as_str())) {
-        diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Warning,
-            code: "agent_manifest_unknown_field".into(),
-            message: format!("Ignored unknown Agent Plugins manifest field: {key}"),
-            component: Some("plugin.json".into()),
-        });
+    let unknown = object
+        .keys()
+        .filter(|key| !allowed.contains(&key.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(PluginError::Invalid(format!(
+            "Unknown Agent Plugins manifest fields: {}",
+            unknown.join(", ")
+        )));
     }
     if let Some(extensions) = object.get("extensions") {
         match extensions.as_object() {
@@ -1227,12 +931,11 @@ fn validate_agent_manifest(
                     )));
                 }
             }
-            None => diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Warning,
-                code: "agent_manifest_extensions_ignored".into(),
-                message: "Ignored non-object Agent Plugins extensions field".into(),
-                component: Some("plugin.json".into()),
-            }),
+            None => {
+                return Err(PluginError::Invalid(
+                    "Agent Plugins extensions must be an object".into(),
+                ));
+            }
         }
     }
     for key in [
@@ -1248,10 +951,19 @@ fn validate_agent_manifest(
             )));
         }
     }
-    if object.get("author").is_some_and(|value| !value.is_object()) {
-        return Err(PluginError::Invalid(
-            "Agent Plugins manifest field author must be an object".into(),
-        ));
+    if let Some(author) = object.get("author") {
+        let author = author.as_object().ok_or_else(|| {
+            PluginError::Invalid("Agent Plugins manifest field author must be an object".into())
+        })?;
+        if author
+            .keys()
+            .any(|key| !matches!(key.as_str(), "name" | "email" | "url"))
+            || author.values().any(|value| !value.is_string())
+        {
+            return Err(PluginError::Invalid(
+                "Agent Plugins manifest field author must match the 1.0.0 schema".into(),
+            ));
+        }
     }
     if object.get("keywords").is_some_and(|value| {
         value
@@ -1283,217 +995,243 @@ fn valid_agent_plugin_name(value: &str) -> bool {
             .is_some_and(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit())
 }
 
-fn path_values(value: &Value, label: &str) -> Result<Vec<String>, PluginError> {
-    if let Some(path) = value.as_str() {
-        return Ok(vec![path.to_string()]);
-    }
-    let items = value
-        .as_array()
-        .ok_or_else(|| PluginError::Invalid(format!("{label} must be a path or array of paths")))?;
-    items
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(str::to_string)
-                .ok_or_else(|| PluginError::Invalid(format!("{label} paths must be strings")))
-        })
-        .collect()
-}
-
 fn discover_lsp_servers(
     root: &Path,
-    manifests: &[(PluginStandard, RawManifest)],
-    diagnostics: &mut Vec<PluginDiagnostic>,
+    value: Option<&Value>,
 ) -> Result<Vec<PluginLspServer>, PluginError> {
-    let mut documents = Vec::<(String, Value)>::new();
-    let mut loaded_paths = HashSet::new();
-    for (standard, manifest) in manifests {
-        if *standard == PluginStandard::AgentPlugins {
-            continue;
-        }
-        let Some(value) = manifest.lsp_servers.as_ref() else {
-            continue;
-        };
-        if value.is_object() {
-            documents.push(("plugin.json#lspServers".into(), value.clone()));
-            continue;
-        }
-        for relative in path_values(value, "lspServers")? {
-            load_lsp_document(
-                root,
-                &relative,
-                &mut loaded_paths,
-                &mut documents,
-                diagnostics,
-            )?;
-        }
-    }
-    if manifests
-        .iter()
-        .any(|(standard, _)| *standard == PluginStandard::ClaudeCode)
-        && root.join(".lsp.json").is_file()
-    {
-        load_lsp_document(
-            root,
-            "./.lsp.json",
-            &mut loaded_paths,
-            &mut documents,
-            diagnostics,
-        )?;
-    }
-
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let entries = value.as_array().ok_or_else(|| {
+        PluginError::Invalid("extensions.dev.codetwo.languageServers must be an array".into())
+    })?;
     let mut servers = Vec::new();
-    let mut names = HashSet::new();
-    for (label, document) in documents {
-        let Some(entries) = document.as_object() else {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Error,
-                code: "invalid_lsp_document".into(),
-                message: "LSP configuration must be a JSON object".into(),
-                component: Some(label),
-            });
-            continue;
-        };
-        for (name, value) in entries {
-            if !names.insert(name.clone()) {
-                diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Warning,
-                    code: "duplicate_lsp_server".into(),
-                    message: format!("Ignored duplicate LSP server named {name}"),
-                    component: Some(label.clone()),
-                });
-                continue;
-            }
-            match parse_lsp_server(root, name, value, &label) {
-                Ok(server) => servers.push(server),
-                Err(message) => diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Error,
-                    code: "invalid_lsp_server".into(),
-                    message,
-                    component: Some(format!("{label}#{name}")),
-                }),
-            }
+    let mut ids = HashSet::new();
+    for (index, value) in entries.iter().enumerate() {
+        let server = parse_lsp_server(root, value).map_err(|message| {
+            PluginError::Invalid(format!(
+                "extensions.dev.codetwo.languageServers[{index}] is invalid: {message}"
+            ))
+        })?;
+        if !ids.insert(server.id.clone()) {
+            return Err(PluginError::Invalid(format!(
+                "Duplicate C2 language server id: {}",
+                server.id
+            )));
         }
+        servers.push(server);
     }
     Ok(servers)
 }
 
-fn load_lsp_document(
-    root: &Path,
-    relative: &str,
-    loaded_paths: &mut HashSet<String>,
-    documents: &mut Vec<(String, Value)>,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Result<(), PluginError> {
-    if !relative.starts_with("./") {
-        return Err(PluginError::Invalid(
-            "Plugin manifest path for lspServers must start with ./".into(),
-        ));
+fn discover_ui_contributions(
+    value: Option<&Value>,
+) -> Result<Vec<PluginUiContribution>, PluginError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let entries = value
+        .as_array()
+        .ok_or_else(|| PluginError::Invalid("extensions.dev.codetwo.ui must be an array".into()))?;
+    let slots = [
+        "rail.features",
+        "session.header",
+        "transcript.before",
+        "composer.above",
+        "composer.toolbar",
+    ];
+    let mut ids = HashSet::new();
+    let mut contributions = Vec::new();
+    for (index, value) in entries.iter().enumerate() {
+        let item = value.as_object().ok_or_else(|| {
+            PluginError::Invalid(format!(
+                "extensions.dev.codetwo.ui[{index}] must be an object"
+            ))
+        })?;
+        let unknown = item
+            .keys()
+            .filter(|key| {
+                !matches!(
+                    key.as_str(),
+                    "id" | "slot" | "label" | "description" | "command" | "input" | "order"
+                )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !unknown.is_empty() {
+            return Err(PluginError::Invalid(format!(
+                "extensions.dev.codetwo.ui[{index}] has unknown fields: {}",
+                unknown.join(", ")
+            )));
+        }
+        let id = item
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| require_safe_id(id).is_ok())
+            .ok_or_else(|| {
+                PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] requires a safe id"
+                ))
+            })?;
+        if !ids.insert(id.to_string()) {
+            return Err(PluginError::Invalid(format!(
+                "Duplicate C2 UI contribution id: {id}"
+            )));
+        }
+        let slot = item
+            .get("slot")
+            .and_then(Value::as_str)
+            .filter(|slot| slots.contains(slot))
+            .ok_or_else(|| {
+                PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] has an invalid slot"
+                ))
+            })?;
+        let label = item
+            .get("label")
+            .and_then(Value::as_str)
+            .filter(|label| !label.trim().is_empty() && label.len() <= 80)
+            .ok_or_else(|| {
+                PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] requires a label"
+                ))
+            })?;
+        let description = match item.get("description") {
+            None => "",
+            Some(Value::String(description)) if description.len() <= 300 => description.trim(),
+            Some(_) => {
+                return Err(PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] has an invalid description"
+                )))
+            }
+        };
+        let command = item
+            .get("command")
+            .and_then(Value::as_str)
+            .filter(|command| {
+                let segments = command.split('.').collect::<Vec<_>>();
+                segments.len() >= 2
+                    && segments.iter().all(|segment| {
+                        !segment.is_empty()
+                            && segment
+                                .chars()
+                                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+                    })
+            })
+            .ok_or_else(|| {
+                PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] requires a namespaced command"
+                ))
+            })?;
+        let order = match item.get("order") {
+            None => 0,
+            Some(Value::Number(order)) => order
+                .as_i64()
+                .filter(|order| (-100..=100).contains(order))
+                .ok_or_else(|| {
+                    PluginError::Invalid(format!(
+                        "extensions.dev.codetwo.ui[{index}] has an invalid order"
+                    ))
+                })? as i32,
+            Some(_) => {
+                return Err(PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.ui[{index}] has an invalid order"
+                )))
+            }
+        };
+        contributions.push(PluginUiContribution {
+            id: id.into(),
+            slot: slot.to_string(),
+            label: label.trim().into(),
+            description: description.into(),
+            command: command.into(),
+            input: item.get("input").cloned().unwrap_or(Value::Null),
+            order,
+        });
     }
-    let safe = safe_relative(Path::new(relative))?;
-    let normalized = safe.to_string_lossy().into_owned();
-    if !loaded_paths.insert(normalized.clone()) {
-        return Ok(());
-    }
-    let path = root.join(&safe);
-    if !path.exists() {
-        diagnostics.push(missing_component_diagnostic("lsp", relative));
-        return Ok(());
-    }
-    ensure_plugin_path(root, &path)?;
-    match serde_json::from_str::<Value>(&read_small_text(&path)?) {
-        Ok(value) => documents.push((normalized, value)),
-        Err(error) => diagnostics.push(PluginDiagnostic {
-            level: PluginDiagnosticLevel::Error,
-            code: "invalid_lsp_json".into(),
-            message: format!("Skipped invalid LSP configuration: {error}"),
-            component: Some(relative.into()),
-        }),
-    }
-    Ok(())
+    Ok(contributions)
 }
 
-fn parse_lsp_server(
-    root: &Path,
-    name: &str,
-    value: &Value,
-    source_path: &str,
-) -> Result<PluginLspServer, String> {
+fn parse_lsp_server(root: &Path, value: &Value) -> Result<PluginLspServer, String> {
     let config = value
         .as_object()
-        .ok_or_else(|| format!("LSP server {name} must be an object"))?;
+        .ok_or_else(|| "language server must be an object".to_string())?;
+    let unknown = config
+        .keys()
+        .filter(|key| {
+            !matches!(
+                key.as_str(),
+                "id" | "languages" | "command" | "args" | "env"
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(format!("unknown fields: {}", unknown.join(", ")));
+    }
+    let id = config
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|id| require_safe_id(id).is_ok())
+        .ok_or_else(|| "language server requires a safe id".to_string())?;
     let command = config
         .get("command")
         .and_then(Value::as_str)
         .filter(|command| !command.trim().is_empty())
-        .ok_or_else(|| format!("LSP server {name} requires command"))?;
-    validate_native_command(root, command, name, "LSP")?;
-    let args = string_array(config.get("args"), &format!("LSP server {name} args"))
+        .ok_or_else(|| format!("language server {id} requires command"))?;
+    validate_c2_command(root, command, id, "language server")?;
+    let args = string_array(config.get("args"), &format!("language server {id} args"))
         .map_err(|error| error.to_string())?;
-    let env = string_map(config.get("env"), &format!("LSP server {name} env"))
+    let env = string_map(config.get("env"), &format!("language server {id} env"))
         .map_err(|error| error.to_string())?;
-    let mappings = config
-        .get("extensionToLanguage")
-        .and_then(Value::as_object)
-        .ok_or_else(|| format!("LSP server {name} requires extensionToLanguage"))?;
-    let mut extension_to_language = Vec::new();
-    for (extension, language) in mappings {
-        let language = language.as_str().ok_or_else(|| {
-            format!("LSP server {name} extensionToLanguage values must be strings")
-        })?;
-        if extension.is_empty() || language.trim().is_empty() {
-            return Err(format!(
-                "LSP server {name} extensionToLanguage entries cannot be empty"
-            ));
-        }
-        extension_to_language.push((extension.clone(), language.into()));
-    }
-    if extension_to_language.is_empty() {
+    let languages = string_array(
+        config.get("languages"),
+        &format!("language server {id} languages"),
+    )
+    .map_err(|error| error.to_string())?
+    .into_iter()
+    .map(|language| language.to_ascii_lowercase())
+    .collect::<HashSet<_>>();
+    if languages.is_empty()
+        || languages.len() > 16
+        || languages.iter().any(|language| {
+            !language
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || "+_.-".contains(ch))
+        })
+    {
         return Err(format!(
-            "LSP server {name} extensionToLanguage cannot be empty"
-        ));
-    }
-    let transport = config
-        .get("transport")
-        .and_then(Value::as_str)
-        .unwrap_or("stdio");
-    if !matches!(transport, "stdio" | "socket") {
-        return Err(format!(
-            "LSP server {name} has unsupported transport {transport}"
+            "language server {id} requires one to sixteen valid language ids"
         ));
     }
     Ok(PluginLspServer {
-        name: name.into(),
-        source_path: source_path.into(),
+        id: id.into(),
+        languages: languages.into_iter().collect(),
         command: command.into(),
         args,
-        env,
-        extension_to_language,
-        transport: transport.into(),
+        env: env.into_iter().collect(),
     })
 }
 
-fn validate_native_command(
-    root: &Path,
-    command: &str,
-    name: &str,
-    kind: &str,
-) -> Result<(), String> {
-    if let Some(relative) = command.strip_prefix("./") {
-        let path =
-            root.join(safe_relative(Path::new(relative)).map_err(|error| error.to_string())?);
-        if path.exists() {
-            ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
+fn validate_c2_command(root: &Path, command: &str, name: &str, kind: &str) -> Result<(), String> {
+    if command.contains('/') || command.contains('\\') {
+        if Path::new(command).is_absolute() || command.contains("..") || command.contains("${") {
+            return Err(format!(
+                "{kind} {name} command must be a bare executable or bundle-relative path"
+            ));
         }
+        let path = root.join(safe_relative(Path::new(command)).map_err(|error| error.to_string())?);
+        if !path.exists() {
+            return Err(format!(
+                "{kind} {name} command does not exist in the bundle"
+            ));
+        }
+        ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
         return Ok(());
     }
-    if command.starts_with("${CLAUDE_PLUGIN_ROOT}/") || command.starts_with("${CODEX_PLUGIN_ROOT}/")
-    {
-        return Ok(());
-    }
-    if command.contains('/') || command.contains('\\') || command.contains("${") {
+    if command.contains("${") || command.contains("..") {
         return Err(format!(
-            "{kind} server {name} command must be a bare executable or a plugin-root path"
+            "{kind} {name} command must be a bare executable or bundle-relative path"
         ));
     }
     Ok(())
@@ -1501,87 +1239,15 @@ fn validate_native_command(
 
 fn discover_extension_components(
     root: &Path,
-    manifests: &[(PluginStandard, RawManifest)],
     lsp_servers: &[PluginLspServer],
     diagnostics: &mut Vec<PluginDiagnostic>,
 ) -> Result<Vec<PluginExtensionComponent>, PluginError> {
     let mut components = Vec::new();
-    let standards: HashSet<_> = manifests.iter().map(|(standard, _)| *standard).collect();
-
-    let mut command_paths = Vec::new();
-    let mut workflow_paths = Vec::new();
-    let mut hook_paths = Vec::new();
-    let mut app_paths = Vec::new();
-    let mut output_style_paths = Vec::new();
-    let mut monitor_paths = Vec::new();
-    for (standard, manifest) in manifests {
-        if *standard == PluginStandard::AgentPlugins {
-            continue;
-        }
-        append_manifest_paths(&mut command_paths, manifest.commands.as_ref(), "commands")?;
-        append_manifest_paths(
-            &mut workflow_paths,
-            manifest.workflows.as_ref(),
-            "workflows",
-        )?;
-        append_manifest_paths(&mut hook_paths, manifest.hooks.as_ref(), "hooks")?;
-        append_manifest_paths(&mut app_paths, manifest.apps.as_ref(), "apps")?;
-        append_manifest_paths(
-            &mut output_style_paths,
-            manifest.output_styles.as_ref(),
-            "outputStyles",
-        )?;
-        append_manifest_paths(
-            &mut monitor_paths,
-            manifest.experimental.get("monitors"),
-            "experimental.monitors",
-        )?;
-        if manifest.channels.is_some() {
-            components.push(PluginExtensionComponent {
-                kind: "channel".into(),
-                name: "channels".into(),
-                path: ".claude-plugin/plugin.json#channels".into(),
-                status: "unsupported".into(),
-            });
-        }
-        if manifest.dependencies.is_some() {
-            components.push(PluginExtensionComponent {
-                kind: "dependency".into(),
-                name: "plugin dependencies".into(),
-                path: ".claude-plugin/plugin.json#dependencies".into(),
-                status: "unsupported".into(),
-            });
-        }
-        if manifest.user_config.is_some() {
-            components.push(PluginExtensionComponent {
-                kind: "user_config".into(),
-                name: "user configuration".into(),
-                path: ".claude-plugin/plugin.json#userConfig".into(),
-                status: "unsupported".into(),
-            });
-        }
-    }
-
-    if standards.contains(&PluginStandard::ClaudeCode) {
-        add_existing_default(root, "commands", &mut command_paths);
-        add_existing_default(root, "workflows", &mut workflow_paths);
-        add_existing_default(root, "hooks/hooks.json", &mut hook_paths);
-        add_existing_default(root, "output-styles", &mut output_style_paths);
-        add_existing_default(root, "monitors/monitors.json", &mut monitor_paths);
-        add_simple_existing_component(
-            root,
-            "settings.json",
-            "settings",
-            "unsupported",
-            &mut components,
-        )?;
-        add_simple_existing_component(root, "bin", "bin", "unsupported", &mut components)?;
-        add_simple_existing_component(root, "themes", "theme", "unsupported", &mut components)?;
-    }
-    if standards.contains(&PluginStandard::Codex) {
-        add_existing_default(root, "hooks/hooks.json", &mut hook_paths);
-        add_existing_default(root, ".app.json", &mut app_paths);
-    }
+    let command_paths = root
+        .join("commands")
+        .is_dir()
+        .then(|| vec!["./commands".to_string()])
+        .unwrap_or_default();
 
     discover_markdown_components(
         root,
@@ -1591,49 +1257,27 @@ fn discover_extension_components(
         &mut components,
         diagnostics,
     )?;
-    discover_file_components(
-        root,
-        &workflow_paths,
-        "workflow",
-        "unsupported",
-        &mut components,
-        diagnostics,
-    )?;
-    discover_file_components(
-        root,
-        &hook_paths,
-        "hook",
-        "unsupported",
-        &mut components,
-        diagnostics,
-    )?;
     components.extend(lsp_servers.iter().map(|server| PluginExtensionComponent {
         kind: "lsp".into(),
-        name: server.name.clone(),
-        path: server.source_path.clone(),
-        status: if server.transport == "stdio" {
-            "requires_trust".into()
-        } else {
-            "unsupported".into()
-        },
+        name: server.id.clone(),
+        path: format!("plugin.json#extensions.{C2_EXTENSION_NAMESPACE}.languageServers"),
+        status: "requires_trust".into(),
     }));
-    discover_file_components(
-        root,
-        &app_paths,
-        "app",
-        "unsupported",
-        &mut components,
-        diagnostics,
-    )?;
-    discover_file_components(
-        root,
-        &output_style_paths,
-        "output_style",
-        "unsupported",
-        &mut components,
-        diagnostics,
-    )?;
-    discover_monitor_entries(root, &monitor_paths, &mut components, diagnostics)?;
+    for (relative, kind) in [
+        ("hooks/hooks.json", "hook"),
+        ("monitors/monitors.json", "monitor"),
+    ] {
+        let path = root.join(relative);
+        if path.is_file() {
+            ensure_plugin_path(root, &path)?;
+            components.push(PluginExtensionComponent {
+                kind: kind.into(),
+                name: kind.into(),
+                path: relative.into(),
+                status: "unsupported".into(),
+            });
+        }
+    }
 
     components.sort_by(|left, right| {
         left.kind
@@ -1648,7 +1292,7 @@ fn discover_extension_components(
         if component.status == "unsupported" {
             diagnostics.push(PluginDiagnostic {
                 level: PluginDiagnosticLevel::Warning,
-                code: "native_component_unsupported".into(),
+                code: "component_unsupported".into(),
                 message: format!(
                     "{} is preserved but has no C2 runtime adapter yet",
                     component.kind
@@ -1658,58 +1302,6 @@ fn discover_extension_components(
         }
     }
     Ok(components)
-}
-
-fn append_manifest_paths(
-    output: &mut Vec<String>,
-    value: Option<&Value>,
-    label: &str,
-) -> Result<(), PluginError> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    if value.is_object() {
-        return Ok(());
-    }
-    for path in path_values(value, label)? {
-        if !path.starts_with("./") {
-            return Err(PluginError::Invalid(format!(
-                "Plugin manifest path for {label} must start with ./"
-            )));
-        }
-        output.push(path);
-    }
-    Ok(())
-}
-
-fn add_existing_default(root: &Path, relative: &str, output: &mut Vec<String>) {
-    if root.join(relative).exists() {
-        output.push(format!("./{relative}"));
-    }
-}
-
-fn add_simple_existing_component(
-    root: &Path,
-    relative: &str,
-    kind: &str,
-    status: &str,
-    output: &mut Vec<PluginExtensionComponent>,
-) -> Result<(), PluginError> {
-    let path = root.join(relative);
-    if path.exists() {
-        ensure_plugin_path(root, &path)?;
-        output.push(PluginExtensionComponent {
-            kind: kind.into(),
-            name: Path::new(relative)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or(kind)
-                .to_string(),
-            path: relative.into(),
-            status: status.into(),
-        });
-    }
-    Ok(())
 }
 
 fn discover_markdown_components(
@@ -1750,83 +1342,6 @@ fn discover_markdown_components(
     Ok(())
 }
 
-fn discover_file_components(
-    root: &Path,
-    configured: &[String],
-    kind: &str,
-    status: &str,
-    output: &mut Vec<PluginExtensionComponent>,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Result<(), PluginError> {
-    for relative in configured {
-        let path = root.join(safe_relative(Path::new(relative))?);
-        if !path.exists() {
-            diagnostics.push(missing_component_diagnostic(kind, relative));
-            continue;
-        }
-        ensure_plugin_path(root, &path)?;
-        output.push(PluginExtensionComponent {
-            kind: kind.into(),
-            name: path
-                .file_stem()
-                .and_then(|name| name.to_str())
-                .unwrap_or(kind)
-                .to_string(),
-            path: path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .into_owned(),
-            status: status.into(),
-        });
-    }
-    Ok(())
-}
-
-fn discover_monitor_entries(
-    root: &Path,
-    configured: &[String],
-    output: &mut Vec<PluginExtensionComponent>,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Result<(), PluginError> {
-    for relative in configured {
-        let path = root.join(safe_relative(Path::new(relative))?);
-        if !path.exists() {
-            diagnostics.push(missing_component_diagnostic("monitor", relative));
-            continue;
-        }
-        ensure_plugin_path(root, &path)?;
-        let value: Value = serde_json::from_str(&read_small_text(&path)?)?;
-        if let Some(entries) = value.as_array() {
-            for (index, entry) in entries.iter().enumerate() {
-                let name = entry
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| format!("monitor-{}", index + 1));
-                output.push(PluginExtensionComponent {
-                    kind: "monitor".into(),
-                    name,
-                    path: path
-                        .strip_prefix(root)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .into_owned(),
-                    status: "unsupported".into(),
-                });
-            }
-        } else {
-            diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Error,
-                code: "invalid_monitor_config".into(),
-                message: "Monitor configuration must be a JSON array".into(),
-                component: Some(relative.clone()),
-            });
-        }
-    }
-    Ok(())
-}
-
 fn missing_component_diagnostic(kind: &str, relative: &str) -> PluginDiagnostic {
     PluginDiagnostic {
         level: PluginDiagnosticLevel::Warning,
@@ -1838,97 +1353,40 @@ fn missing_component_diagnostic(kind: &str, relative: &str) -> PluginDiagnostic 
 
 fn discover_skill_files(
     root: &Path,
-    configured: &[String],
-    agent_portable: bool,
-    native_conventions: bool,
     diagnostics: &mut Vec<PluginDiagnostic>,
 ) -> Result<Vec<SkillCandidate>, PluginError> {
     let mut files = Vec::new();
-    let top = root.join("SKILL.md");
-    if native_conventions && top.is_file() {
-        ensure_plugin_path(root, &top)?;
-        files.push(SkillCandidate {
-            path: top,
-            strict_agent_skill: false,
-        });
-    }
-    if agent_portable {
-        let skills_root = root.join("skills");
-        match std::fs::read_dir(&skills_root) {
-            Ok(entries) => {
-                for entry in entries {
-                    let entry = entry?;
-                    let metadata = std::fs::symlink_metadata(entry.path())?;
-                    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                        continue;
-                    }
-                    let manifest = entry.path().join("SKILL.md");
-                    if manifest.is_file() {
-                        ensure_plugin_path(root, &manifest)?;
-                        files.push(SkillCandidate {
-                            path: manifest,
-                            strict_agent_skill: true,
-                        });
-                    }
+    let skills_root = root.join("skills");
+    match std::fs::read_dir(&skills_root) {
+        Ok(entries) => {
+            for entry in entries {
+                let entry = entry?;
+                let metadata = std::fs::symlink_metadata(entry.path())?;
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    continue;
+                }
+                let manifest = entry.path().join("SKILL.md");
+                if manifest.is_file() {
+                    ensure_plugin_path(root, &manifest)?;
+                    files.push(SkillCandidate {
+                        path: manifest,
+                        strict_agent_skill: true,
+                    });
                 }
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => {
-                diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Error,
-                    code: "agent_skills_location_invalid".into(),
-                    message: format!("Could not read Agent Plugins skills directory: {error}"),
-                    component: Some("skills".into()),
-                });
-            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            diagnostics.push(PluginDiagnostic {
+                level: PluginDiagnosticLevel::Error,
+                code: "agent_skills_location_invalid".into(),
+                message: format!("Could not read Agent Plugins skills directory: {error}"),
+                component: Some("skills".into()),
+            });
         }
     }
-
-    let mut native_files = Vec::new();
-    if native_conventions {
-        for relative in ["skills", ".codex/skills", ".claude/skills"] {
-            collect_named(&root.join(relative), "SKILL.md", 0, &mut native_files)?;
-        }
-    }
-    for configured in configured {
-        if !configured.starts_with("./") {
-            safe_relative(Path::new(configured))?;
-            return Err(PluginError::Invalid(
-                "Plugin manifest path for skills must start with ./".into(),
-            ));
-        }
-        let configured = root.join(safe_relative(Path::new(configured))?);
-        if !configured.exists() {
-            diagnostics.push(missing_component_diagnostic(
-                "skill",
-                &configured
-                    .strip_prefix(root)
-                    .unwrap_or(&configured)
-                    .to_string_lossy(),
-            ));
-            continue;
-        }
-        ensure_plugin_path(root, &configured)?;
-        if configured.is_file() {
-            native_files.push(configured);
-        } else {
-            collect_named(&configured, "SKILL.md", 0, &mut native_files)?;
-        }
-    }
-    files.extend(native_files.into_iter().map(|path| SkillCandidate {
-        path,
-        strict_agent_skill: false,
-    }));
     files.sort_by(|left, right| left.path.cmp(&right.path));
-    let mut merged = Vec::<SkillCandidate>::new();
-    for candidate in files {
-        if let Some(previous) = merged.last_mut().filter(|item| item.path == candidate.path) {
-            previous.strict_agent_skill |= candidate.strict_agent_skill;
-        } else {
-            merged.push(candidate);
-        }
-    }
-    Ok(merged)
+    Ok(files)
 }
 
 fn parse_skills(
@@ -2049,34 +1507,10 @@ fn parse_subagents(
     root: &Path,
     plugin_id: &str,
     source: &str,
-    configured: &[String],
-    native_conventions: bool,
-    diagnostics: &mut Vec<PluginDiagnostic>,
+    _diagnostics: &mut Vec<PluginDiagnostic>,
 ) -> Result<Vec<Skill>, PluginError> {
     let mut files = Vec::new();
-    if native_conventions {
-        for relative in ["agents", "subagents", ".codex/agents", ".claude/agents"] {
-            collect_extension(&root.join(relative), "md", 0, &mut files)?;
-        }
-    }
-    for relative in configured {
-        if !relative.starts_with("./") {
-            return Err(PluginError::Invalid(
-                "Plugin manifest path for agents must start with ./".into(),
-            ));
-        }
-        let path = root.join(safe_relative(Path::new(relative))?);
-        if !path.exists() {
-            diagnostics.push(missing_component_diagnostic("agent", relative));
-            continue;
-        }
-        ensure_plugin_path(root, &path)?;
-        if path.is_file() {
-            files.push(path);
-        } else {
-            collect_extension(&path, "md", 0, &mut files)?;
-        }
-    }
+    collect_extension(&root.join("agents"), "md", 0, &mut files)?;
     files.sort();
     files.dedup();
     let mut agents = Vec::new();
@@ -2117,226 +1551,82 @@ fn parse_mcp_servers(
     root: &Path,
     plugin_id: &str,
     source: &str,
-    configured: &[Value],
-    agent_portable: bool,
-    native_conventions: bool,
-    diagnostics: &mut Vec<PluginDiagnostic>,
 ) -> Result<Vec<Skill>, PluginError> {
-    let mut sources = Vec::new();
-    if agent_portable {
-        let path = root.join("mcp.json");
-        if path.is_file() {
-            ensure_plugin_path(root, &path)?;
-            match serde_json::from_str::<Value>(&std::fs::read_to_string(&path)?) {
-                Ok(value) => sources.push(McpConfigSource {
-                    value,
-                    strict_agent_plugins: true,
-                    label: "mcp.json".into(),
-                }),
-                Err(error) => diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Error,
-                    code: "invalid_agent_mcp_json".into(),
-                    message: format!("Disabled Agent Plugins MCP configuration: {error}"),
-                    component: Some("mcp.json".into()),
-                }),
-            }
-        }
+    let path = root.join("mcp.json");
+    if !path.is_file() {
+        return Ok(Vec::new());
     }
-    let default_path = root.join(".mcp.json");
-    if native_conventions && default_path.is_file() {
-        ensure_plugin_path(root, &default_path)?;
-        match serde_json::from_str::<Value>(&std::fs::read_to_string(default_path)?) {
-            Ok(value) => sources.push(McpConfigSource {
-                value,
-                strict_agent_plugins: false,
-                label: ".mcp.json".into(),
-            }),
-            Err(error) => diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Error,
-                code: "invalid_native_mcp_json".into(),
-                message: format!("Skipped native MCP configuration: {error}"),
-                component: Some(".mcp.json".into()),
-            }),
-        }
-    }
-    for value in configured {
-        push_native_mcp_sources(root, value, &mut sources, diagnostics)?;
-    }
+    ensure_plugin_path(root, &path)?;
+    let value = serde_json::from_str::<Value>(&std::fs::read_to_string(&path)?)?;
+    let servers = mcp_entries(&value).map_err(PluginError::Invalid)?;
 
     let mut components = Vec::new();
-    let mut names = HashSet::new();
-    for source_config in sources {
-        let servers = match mcp_entries(&source_config) {
-            Ok(servers) => servers,
-            Err(message) => {
-                diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Error,
-                    code: "invalid_mcp_document".into(),
-                    message,
-                    component: Some(source_config.label),
-                });
-                continue;
-            }
-        };
-        for (name, config) in servers {
-            if !names.insert(name.clone()) {
-                diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Warning,
-                    code: "duplicate_mcp_server".into(),
-                    message: format!("Ignored duplicate MCP server named {name}"),
-                    component: Some(source_config.label.clone()),
-                });
-                continue;
-            }
-            match parse_mcp_server(root, &name, config, source_config.strict_agent_plugins) {
-                Ok(server) => components.push(Skill {
-                    id: format!("{plugin_id}:mcp:{}", slug_with_hash(&name)),
-                    name: name.to_string(),
-                    description: format!("MCP server from plugin {source}"),
-                    icon: None,
-                    source: Some(source.to_string()),
-                    payload: SkillPayload::Mcp { server },
-                }),
-                Err(message) => diagnostics.push(PluginDiagnostic {
-                    level: PluginDiagnosticLevel::Error,
-                    code: "invalid_mcp_server".into(),
-                    message,
-                    component: Some(format!("{}#{name}", source_config.label)),
-                }),
-            }
-        }
+    for (name, config) in servers {
+        let server = parse_mcp_server(root, name, config).map_err(PluginError::Invalid)?;
+        components.push(Skill {
+            id: format!("{plugin_id}:mcp:{}", slug_with_hash(name)),
+            name: name.to_string(),
+            description: format!("MCP server from plugin {source}"),
+            icon: None,
+            source: Some(source.to_string()),
+            payload: SkillPayload::Mcp { server },
+        });
     }
     Ok(components)
 }
 
-fn push_native_mcp_sources(
-    root: &Path,
-    value: &Value,
-    sources: &mut Vec<McpConfigSource>,
-    diagnostics: &mut Vec<PluginDiagnostic>,
-) -> Result<(), PluginError> {
-    if let Some(path) = value.as_str() {
-        if !path.starts_with("./") {
-            return Err(PluginError::Invalid(
-                "Plugin manifest path for mcpServers must start with ./".into(),
-            ));
-        }
-        let full_path = root.join(safe_relative(Path::new(path))?);
-        if !full_path.exists() {
-            diagnostics.push(missing_component_diagnostic("mcp", path));
-            return Ok(());
-        }
-        ensure_plugin_path(root, &full_path)?;
-        match serde_json::from_str::<Value>(&std::fs::read_to_string(&full_path)?) {
-            Ok(value) => sources.push(McpConfigSource {
-                value,
-                strict_agent_plugins: false,
-                label: path.into(),
-            }),
-            Err(error) => diagnostics.push(PluginDiagnostic {
-                level: PluginDiagnosticLevel::Error,
-                code: "invalid_native_mcp_json".into(),
-                message: format!("Skipped native MCP configuration: {error}"),
-                component: Some(path.into()),
-            }),
-        }
-        return Ok(());
-    }
-    if let Some(items) = value.as_array() {
-        for item in items {
-            push_native_mcp_sources(root, item, sources, diagnostics)?;
-        }
-        return Ok(());
-    }
-    if value.is_object() {
-        sources.push(McpConfigSource {
-            value: value.clone(),
-            strict_agent_plugins: false,
-            label: "inline mcpServers".into(),
-        });
-        return Ok(());
-    }
-    Err(PluginError::Invalid(
-        "mcpServers must be a path, array, or object".into(),
-    ))
-}
-
-fn mcp_entries(source: &McpConfigSource) -> Result<&serde_json::Map<String, Value>, String> {
-    let object = source
-        .value
+fn mcp_entries(value: &Value) -> Result<&serde_json::Map<String, Value>, String> {
+    let object = value
         .as_object()
         .ok_or_else(|| "MCP configuration must be a JSON object".to_string())?;
-    if source.strict_agent_plugins {
-        let schema = object
-            .get("$schema")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let supported_schema = AGENT_MCP_SCHEMA
-            .get("$id")
-            .and_then(Value::as_str)
-            .expect("bundled Agent Plugins MCP schema must declare $id");
-        if schema != supported_schema {
-            return Err(format!("Unsupported Agent Plugins MCP schema: {schema}"));
-        }
-        if object
-            .keys()
-            .any(|key| !matches!(key.as_str(), "$schema" | "mcpServers"))
-        {
-            return Err("Agent Plugins mcp.json contains unknown top-level fields".into());
-        }
-        return object
-            .get("mcpServers")
-            .and_then(Value::as_object)
-            .ok_or_else(|| "Agent Plugins mcp.json requires an mcpServers object".into());
+    let schema = object
+        .get("$schema")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let supported_schema = AGENT_MCP_SCHEMA
+        .get("$id")
+        .and_then(Value::as_str)
+        .expect("bundled Agent Plugins MCP schema must declare $id");
+    if schema != supported_schema {
+        return Err(format!("Unsupported Agent Plugins MCP schema: {schema}"));
+    }
+    if object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "$schema" | "mcpServers"))
+    {
+        return Err("Agent Plugins mcp.json contains unknown top-level fields".into());
     }
     object
         .get("mcpServers")
-        .unwrap_or(&source.value)
-        .as_object()
-        .ok_or_else(|| "MCP configuration must contain an mcpServers object".into())
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Agent Plugins mcp.json requires an mcpServers object".into())
 }
 
-fn parse_mcp_server(
-    root: &Path,
-    name: &str,
-    value: &Value,
-    strict: bool,
-) -> Result<McpServer, String> {
+fn parse_mcp_server(root: &Path, name: &str, value: &Value) -> Result<McpServer, String> {
     let config = value
         .as_object()
         .ok_or_else(|| format!("MCP server {name} must be an object"))?;
-    let declared = config.get("type").and_then(Value::as_str);
-    let transport_name = if strict {
-        declared.ok_or_else(|| format!("MCP server {name} requires a type"))?
-    } else if declared.is_some() {
-        declared.unwrap()
-    } else if config.contains_key("command") {
-        "stdio"
-    } else {
-        "http"
-    };
+    let transport_name = config
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("MCP server {name} requires a type"))?;
 
     match transport_name {
         "stdio" => {
-            if strict {
-                reject_unknown_fields(config, &["type", "command", "args", "env", "cwd"], name)?;
-            }
+            reject_unknown_fields(config, &["type", "command", "args", "env", "cwd"], name)?;
             let command = config
                 .get("command")
                 .and_then(Value::as_str)
                 .filter(|command| !command.is_empty())
                 .ok_or_else(|| format!("MCP server {name} requires a non-empty command"))?;
-            if strict {
-                validate_stdio_command(root, command, name)?;
-            }
+            validate_stdio_command(root, command, name)?;
             let args = string_array(config.get("args"), &format!("MCP server {name} args"))
                 .map_err(|error| error.to_string())?;
             let env = string_map(config.get("env"), &format!("MCP server {name} env"))
                 .map_err(|error| error.to_string())?;
-            if strict
-                && env
-                    .iter()
-                    .any(|(key, _)| matches!(key.as_str(), "PLUGIN_ROOT" | "PLUGIN_DATA"))
+            if env
+                .iter()
+                .any(|(key, _)| matches!(key.as_str(), "PLUGIN_ROOT" | "PLUGIN_DATA"))
             {
                 return Err(format!(
                     "MCP server {name} cannot set reserved plugin environment variables"
@@ -2348,7 +1638,7 @@ fn parse_mcp_server(
                     value
                         .as_str()
                         .ok_or_else(|| format!("MCP server {name} cwd must be a string"))
-                        .and_then(|cwd| validate_mcp_cwd(root, cwd, strict, name))
+                        .and_then(|cwd| validate_mcp_cwd(root, cwd, name))
                 })
                 .transpose()?;
             Ok(McpServer {
@@ -2362,13 +1652,11 @@ fn parse_mcp_server(
             })
         }
         "http" | "streamable-http" | "sse" => {
-            if strict {
-                reject_unknown_fields(config, &["type", "url", "headers"], name)?;
-                if transport_name == "http" {
-                    return Err(format!(
-                        "MCP server {name} must declare streamable-http, not http, in Agent Plugins"
-                    ));
-                }
+            reject_unknown_fields(config, &["type", "url", "headers"], name)?;
+            if transport_name == "http" {
+                return Err(format!(
+                    "MCP server {name} must declare streamable-http, not http, in Agent Plugins"
+                ));
             }
             let url = config
                 .get("url")
@@ -2423,9 +1711,12 @@ fn validate_stdio_command(root: &Path, command: &str, name: &str) -> Result<(), 
     }
     if command.starts_with("./") {
         let path = root.join(safe_relative(Path::new(command)).map_err(|error| error.to_string())?);
-        if path.exists() {
-            ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
+        if !path.is_file() {
+            return Err(format!(
+                "MCP server {name} command does not exist in the bundle"
+            ));
         }
+        ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
     } else if command.contains('/') || command.contains('\\') {
         return Err(format!(
             "MCP server {name} command must be a bare executable or start with ./"
@@ -2434,10 +1725,7 @@ fn validate_stdio_command(root: &Path, command: &str, name: &str) -> Result<(), 
     Ok(())
 }
 
-fn validate_mcp_cwd(root: &Path, cwd: &str, strict: bool, name: &str) -> Result<String, String> {
-    if !strict {
-        return Ok(cwd.into());
-    }
+fn validate_mcp_cwd(root: &Path, cwd: &str, name: &str) -> Result<String, String> {
     let relative = if let Some(relative) = cwd.strip_prefix("./") {
         Some(relative)
     } else if let Some(relative) = cwd.strip_prefix("${PLUGIN_ROOT}") {
@@ -2450,9 +1738,12 @@ fn validate_mcp_cwd(root: &Path, cwd: &str, strict: bool, name: &str) -> Result<
     if let Some(relative) = relative.filter(|value| !value.is_empty()) {
         let path =
             root.join(safe_relative(Path::new(relative)).map_err(|error| error.to_string())?);
-        if path.exists() {
-            ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
+        if !path.is_dir() {
+            return Err(format!(
+                "MCP server {name} cwd does not exist in the bundle"
+            ));
         }
+        ensure_plugin_path(root, &path).map_err(|error| error.to_string())?;
     }
     Ok(cwd.into())
 }
@@ -2695,17 +1986,6 @@ fn collect_files(
     Ok(())
 }
 
-fn collect_named(
-    dir: &Path,
-    filename: &str,
-    depth: usize,
-    out: &mut Vec<PathBuf>,
-) -> Result<(), PluginError> {
-    collect_matching(dir, depth, out, &|path| {
-        path.file_name().and_then(|name| name.to_str()) == Some(filename)
-    })
-}
-
 fn collect_extension(
     dir: &Path,
     extension: &str,
@@ -2787,7 +2067,6 @@ fn plugin_data_dir(plugins_dir: &Path, id: &str) -> PathBuf {
 
 fn resolve_relative_mcp_commands(plugin: &mut InstalledPlugin, plugin_dir: &Path, data_dir: &Path) {
     let bundle_root = plugin_dir.join(BUNDLE_DIR);
-    let standards = plugin.standards.clone();
     for component in &mut plugin.components {
         let SkillPayload::Mcp { server } = &mut component.payload else {
             continue;
@@ -2797,132 +2076,58 @@ fn resolve_relative_mcp_commands(plugin: &mut InstalledPlugin, plugin_dir: &Path
         };
         if let Some(relative) = command.strip_prefix("./") {
             *command = bundle_root.join(relative).display().to_string();
-        } else if standards
-            .iter()
-            .any(|standard| matches!(standard, PluginStandard::Codex | PluginStandard::ClaudeCode))
-        {
-            *command = expand_plugin_variables(command, &bundle_root, data_dir, &standards);
         }
         for arg in args {
-            *arg = expand_plugin_variables(arg, &bundle_root, data_dir, &standards);
+            *arg = expand_plugin_variables(arg, &bundle_root, data_dir);
         }
         for (_, value) in env.iter_mut() {
-            *value = expand_plugin_variables(value, &bundle_root, data_dir, &standards);
+            *value = expand_plugin_variables(value, &bundle_root, data_dir);
         }
         env.retain(|(name, _)| {
-            ![
-                "PLUGIN_ROOT",
-                "PLUGIN_DATA",
-                "CLAUDE_PLUGIN_ROOT",
-                "CLAUDE_PLUGIN_DATA",
-                "CODEX_PLUGIN_ROOT",
-                "CODEX_PLUGIN_DATA",
-            ]
-            .iter()
-            .any(|reserved| name.eq_ignore_ascii_case(reserved))
+            !["PLUGIN_ROOT", "PLUGIN_DATA"]
+                .iter()
+                .any(|reserved| name.eq_ignore_ascii_case(reserved))
         });
         env.push(("PLUGIN_ROOT".into(), bundle_root.display().to_string()));
         env.push(("PLUGIN_DATA".into(), data_dir.display().to_string()));
-        if standards.contains(&PluginStandard::ClaudeCode) {
-            env.push((
-                "CLAUDE_PLUGIN_ROOT".into(),
-                bundle_root.display().to_string(),
-            ));
-            env.push(("CLAUDE_PLUGIN_DATA".into(), data_dir.display().to_string()));
-        }
-        if standards.contains(&PluginStandard::Codex) {
-            env.push((
-                "CODEX_PLUGIN_ROOT".into(),
-                bundle_root.display().to_string(),
-            ));
-            env.push(("CODEX_PLUGIN_DATA".into(), data_dir.display().to_string()));
-        }
         if let Some(cwd) = &mut server.cwd {
             if let Some(relative) = cwd.strip_prefix("./") {
                 *cwd = bundle_root.join(relative).display().to_string();
             } else {
-                *cwd = expand_plugin_variables(cwd, &bundle_root, data_dir, &standards);
+                *cwd = expand_plugin_variables(cwd, &bundle_root, data_dir);
             }
         }
     }
     for server in &mut plugin.lsp_servers {
         if let Some(relative) = server.command.strip_prefix("./") {
             server.command = bundle_root.join(relative).display().to_string();
-        } else {
-            server.command =
-                expand_plugin_variables(&server.command, &bundle_root, data_dir, &standards);
         }
         for arg in &mut server.args {
-            *arg = expand_plugin_variables(arg, &bundle_root, data_dir, &standards);
+            *arg = expand_plugin_variables(arg, &bundle_root, data_dir);
         }
-        for (_, value) in &mut server.env {
-            *value = expand_plugin_variables(value, &bundle_root, data_dir, &standards);
+        for value in server.env.values_mut() {
+            *value = expand_plugin_variables(value, &bundle_root, data_dir);
         }
-        server.env.retain(|(name, _)| {
-            ![
-                "PLUGIN_ROOT",
-                "PLUGIN_DATA",
-                "CLAUDE_PLUGIN_ROOT",
-                "CLAUDE_PLUGIN_DATA",
-                "CODEX_PLUGIN_ROOT",
-                "CODEX_PLUGIN_DATA",
-            ]
-            .iter()
-            .any(|reserved| name.eq_ignore_ascii_case(reserved))
+        server.env.retain(|name, _| {
+            !["PLUGIN_ROOT", "PLUGIN_DATA"]
+                .iter()
+                .any(|reserved| name.eq_ignore_ascii_case(reserved))
         });
         server
             .env
-            .push(("PLUGIN_ROOT".into(), bundle_root.display().to_string()));
+            .insert("PLUGIN_ROOT".into(), bundle_root.display().to_string());
         server
             .env
-            .push(("PLUGIN_DATA".into(), data_dir.display().to_string()));
-        if standards.contains(&PluginStandard::ClaudeCode) {
-            server.env.push((
-                "CLAUDE_PLUGIN_ROOT".into(),
-                bundle_root.display().to_string(),
-            ));
-            server
-                .env
-                .push(("CLAUDE_PLUGIN_DATA".into(), data_dir.display().to_string()));
-        }
-        if standards.contains(&PluginStandard::Codex) {
-            server.env.push((
-                "CODEX_PLUGIN_ROOT".into(),
-                bundle_root.display().to_string(),
-            ));
-            server
-                .env
-                .push(("CODEX_PLUGIN_DATA".into(), data_dir.display().to_string()));
-        }
+            .insert("PLUGIN_DATA".into(), data_dir.display().to_string());
     }
 }
 
-fn expand_plugin_variables(
-    value: &str,
-    root: &Path,
-    data: &Path,
-    standards: &[PluginStandard],
-) -> String {
+fn expand_plugin_variables(value: &str, root: &Path, data: &Path) -> String {
     let root = root.display().to_string();
     let data = data.display().to_string();
-    let mut expanded = value
+    value
         .replace("${PLUGIN_ROOT}", &root)
-        .replace("${PLUGIN_DATA}", &data);
-    if standards.contains(&PluginStandard::ClaudeCode) {
-        expanded = expanded
-            .replace("${CLAUDE_PLUGIN_ROOT}", &root)
-            .replace("$CLAUDE_PLUGIN_ROOT", &root)
-            .replace("${CLAUDE_PLUGIN_DATA}", &data)
-            .replace("$CLAUDE_PLUGIN_DATA", &data);
-    }
-    if standards.contains(&PluginStandard::Codex) {
-        expanded = expanded
-            .replace("${CODEX_PLUGIN_ROOT}", &root)
-            .replace("$CODEX_PLUGIN_ROOT", &root)
-            .replace("${CODEX_PLUGIN_DATA}", &data)
-            .replace("$CODEX_PLUGIN_DATA", &data);
-    }
-    expanded
+        .replace("${PLUGIN_DATA}", &data)
 }
 
 fn string_array(value: Option<&Value>, label: &str) -> Result<Vec<String>, PluginError> {
@@ -3192,10 +2397,11 @@ mod tests {
             &root.join("plugin.json"),
             r#"{
               "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-              "name":"portable-runtime",
+              "name":"c2-runtime","version":"1.0.0",
               "extensions":{"dev.codetwo":{
                 "standardVersion":"1.0.0",
-                "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"],"scopeSupport":["user","project"]}
+                "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"],"scopeSupport":["user","project"]},
+                "ui":[{"id":"review","slot":"composer.toolbar","label":"Review","description":"Review this project.","command":"review.run","input":{"mode":"project"},"order":10}]
               }}
             }"#,
         );
@@ -3213,15 +2419,13 @@ mod tests {
             ]
         );
         assert_eq!(bundle.plugin.counts.runtime, 1);
-        assert!(!bundle
-            .plugin
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "agent_manifest_unknown_field"));
+        assert_eq!(bundle.plugin.counts.ui, 1);
+        assert_eq!(bundle.plugin.ui_contributions[0].command, "review.run");
+        assert_eq!(bundle.plugin.ui_contributions[0].order, 10);
     }
 
     #[test]
-    fn unsupported_c2_extension_keeps_portable_components() {
+    fn rejects_unsupported_c2_standard() {
         let root =
             std::env::temp_dir().join(format!("codetwo-future-extension-{}", uuid::Uuid::new_v4()));
         write(
@@ -3240,15 +2444,10 @@ mod tests {
             "---\nname: review\ndescription: Review a change\n---\nReview the current change.",
         );
 
-        let bundle = from_github(&checkout(root)).unwrap();
-        assert_eq!(bundle.plugin.counts.skills, 1);
-        assert_eq!(bundle.plugin.counts.runtime, 0);
-        assert!(bundle.plugin.runtime.is_none());
-        assert!(bundle
-            .plugin
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "c2_extension.unsupported_version"));
+        assert!(matches!(
+            from_github(&checkout(root)),
+            Err(PluginError::Invalid(message)) if message.contains("Unsupported C2 plugin standard")
+        ));
     }
 
     #[test]
@@ -3269,25 +2468,6 @@ mod tests {
             from_github(&checkout(root)),
             Err(PluginError::Invalid(message)) if message.contains("extension dev.codetwo must be an object")
         ));
-    }
-
-    #[test]
-    fn keeps_top_level_runtime_for_native_manifests() {
-        let root =
-            std::env::temp_dir().join(format!("codetwo-native-runtime-{}", uuid::Uuid::new_v4()));
-        write(
-            &root.join(".codex-plugin/plugin.json"),
-            r#"{
-              "name":"native-runtime",
-              "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"]}
-            }"#,
-        );
-        write(&root.join("plugin.js"), "process.exit(0);\n");
-
-        let bundle = from_github(&checkout(root)).unwrap();
-        assert_eq!(bundle.plugin.standard, PluginStandard::Codex);
-        assert_eq!(bundle.plugin.counts.runtime, 1);
-        assert_eq!(bundle.plugin.runtime.unwrap().command, "node");
     }
 
     #[test]
@@ -3312,19 +2492,28 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(bundle.plugin.standard, PluginStandard::AgentPlugins);
+        assert_eq!(bundle.plugin.standard_version, "1.0.0");
         assert_eq!(bundle.plugin.counts.runtime, 1);
         assert_eq!(bundle.plugin.runtime.unwrap().command, "node");
-        assert!(!bundle
-            .plugin
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "agent_manifest_unknown_field"));
     }
 
     fn write(path: &Path, text: &str) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, text).unwrap();
+    }
+
+    fn write_manifest(root: &Path, name: &str, version: &str, c2_fields: &str) {
+        let text = [
+            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":""#,
+            name,
+            r#"","version":""#,
+            version,
+            r#"","extensions":{"dev.codetwo":{"standardVersion":"1.0.0""#,
+            c2_fields,
+            "}}}",
+        ]
+        .concat();
+        write(&root.join("plugin.json"), &text);
     }
 
     fn checkout(root: PathBuf) -> GitHubCheckout {
@@ -3340,15 +2529,15 @@ mod tests {
     }
 
     #[test]
-    fn loads_agent_plugins_1_0_with_narrow_component_failures() {
+    fn loads_canonical_agent_plugin_components_and_isolates_invalid_skills() {
         let root =
             std::env::temp_dir().join(format!("codetwo-agent-plugin-{}", uuid::Uuid::new_v4()));
         write(
             &root.join("plugin.json"),
             r#"{
               "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-              "name":"portable-tools","version":"1.0.0","description":"Portable tools",
-              "futureField":true
+              "name":"c2-tools","version":"1.0.0","description":"C2 tools",
+              "extensions":{"dev.codetwo":{"standardVersion":"1.0.0"}}
             }"#,
         );
         write(
@@ -3364,12 +2553,8 @@ mod tests {
             "---\nname: hidden\ndescription: Nested too deeply\n---\nDo not discover this.",
         );
         write(
-            &root.join("agents/native-only.md"),
-            "---\nname: native-only\ndescription: Native extension\n---\nDo not discover this in a portable-only package.",
-        );
-        write(
-            &root.join(".mcp.json"),
-            r#"{"mcpServers":{"native-only":{"command":"native-only"}}}"#,
+            &root.join("agents/reviewer.md"),
+            "---\nname: reviewer\ndescription: Review specialist\n---\nReview the requested change.",
         );
         write(&root.join("bin/server"), "#!/bin/sh\nexit 0\n");
         write(
@@ -3377,38 +2562,39 @@ mod tests {
             r#"{
               "$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
               "mcpServers":{
-                "local":{"type":"stdio","command":"./bin/server","args":["${PLUGIN_ROOT}/config.json"],"env":{"DATA":"${PLUGIN_DATA}/cache"},"cwd":"${PLUGIN_DATA}"},
-                "bad-http":{"type":"streamable-http","url":"http://example.com/mcp"},
-                "bad-field":{"type":"stdio","command":"tool","shell":true}
+                "local":{"type":"stdio","command":"./bin/server","args":["${PLUGIN_ROOT}/config.json"],"env":{"DATA":"${PLUGIN_DATA}/cache"},"cwd":"${PLUGIN_DATA}"}
               }
             }"#,
         );
 
         let bundle = from_github(&checkout(root)).unwrap();
-        assert_eq!(bundle.plugin.standard, PluginStandard::AgentPlugins);
-        assert_eq!(bundle.plugin.spec_version, "1.0.0");
+        assert_eq!(bundle.plugin.standard_version, "1.0.0");
         assert_eq!(bundle.plugin.counts.skills, 1);
-        assert_eq!(bundle.plugin.counts.subagents, 0);
+        assert_eq!(bundle.plugin.counts.subagents, 1);
         assert_eq!(bundle.plugin.counts.mcp_servers, 1);
         assert!(bundle
             .plugin
             .diagnostics
             .iter()
-            .any(|diagnostic| diagnostic.code == "agent_manifest_unknown_field"));
-        assert!(
-            bundle
-                .plugin
-                .diagnostics
-                .iter()
-                .filter(|diagnostic| diagnostic.code == "invalid_mcp_server")
-                .count()
-                >= 2
-        );
-        assert!(bundle
-            .plugin
-            .diagnostics
-            .iter()
             .any(|diagnostic| diagnostic.code == "invalid_agent_skill"));
+    }
+
+    #[test]
+    fn rejects_a_malformed_declared_mcp_server() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-invalid-mcp-{}", uuid::Uuid::new_v4()));
+        write_manifest(&root, "invalid-mcp", "1.0.0", "");
+        write(
+            &root.join("mcp.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+              "mcpServers":{"broken":{"type":"stdio","command":"tool","shell":true}}
+            }"#,
+        );
+        assert!(matches!(
+            from_github(&checkout(root)),
+            Err(PluginError::Invalid(message)) if message.contains("unknown field shell")
+        ));
     }
 
     #[test]
@@ -3444,20 +2630,17 @@ mod tests {
     }
 
     #[test]
-    fn parses_and_resolves_trust_gated_native_lsp_servers() {
-        let root = std::env::temp_dir().join(format!(
-            "codetwo-native-lsp-plugin-{}",
-            uuid::Uuid::new_v4()
-        ));
+    fn parses_and_resolves_c2_language_servers() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-c2-lsp-plugin-{}", uuid::Uuid::new_v4()));
         write(
-            &root.join(".claude-plugin/plugin.json"),
+            &root.join("plugin.json"),
             r#"{
-              "name":"native-lsp",
-              "lspServers":{
-                "inline":{"command":"${CLAUDE_PLUGIN_ROOT}/bin/lsp","args":["--stdio","${CLAUDE_PLUGIN_DATA}/cache"],"env":{"ROOT":"${CLAUDE_PLUGIN_ROOT}"},"extensionToLanguage":{".rs":"rust"}},
-                "socket-only":{"command":"socket-lsp","transport":"socket","extensionToLanguage":{".sock":"socketlang"}},
-                "broken":{"command":"broken"}
-              }
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"c2-lsp","version":"1.0.0",
+              "extensions":{"dev.codetwo":{"standardVersion":"1.0.0","languageServers":[
+                {"id":"inline","languages":["rust"],"command":"./bin/lsp","args":["--stdio","${PLUGIN_DATA}/cache"],"env":{"ROOT":"${PLUGIN_ROOT}"}}
+              ]}}
             }"#,
         );
         write(
@@ -3466,31 +2649,24 @@ mod tests {
         );
         write(&root.join("bin/lsp"), "#!/bin/sh\nexit 0\n");
         let data =
-            std::env::temp_dir().join(format!("codetwo-native-lsp-store-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("codetwo-c2-lsp-store-{}", uuid::Uuid::new_v4()));
         let installed = install(&data, from_github(&checkout(root)).unwrap()).unwrap();
-        assert_eq!(installed.counts.lsp_servers, 2);
-        assert!(installed
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code == "invalid_lsp_server"));
+        assert_eq!(installed.counts.lsp_servers, 1);
 
         let loaded = load_dir(&data).unwrap();
         let inline = loaded[0]
             .lsp_servers
             .iter()
-            .find(|server| server.name == "inline")
+            .find(|server| server.id == "inline")
             .unwrap();
         assert!(Path::new(&inline.command).is_absolute());
         assert!(inline.args[1].ends_with("/cache"));
         assert!(inline
             .env
             .iter()
-            .any(|(name, value)| name == "CLAUDE_PLUGIN_ROOT" && Path::new(value).is_absolute()));
+            .any(|(name, value)| name == "PLUGIN_ROOT" && Path::new(value).is_absolute()));
         assert!(loaded[0].extension_components.iter().any(|component| {
             component.name == "inline" && component.status == "requires_trust"
-        }));
-        assert!(loaded[0].extension_components.iter().any(|component| {
-            component.name == "socket-only" && component.status == "unsupported"
         }));
         let _ = std::fs::remove_dir_all(data);
     }
@@ -3501,7 +2677,7 @@ mod tests {
             std::env::temp_dir().join(format!("codetwo-agent-plugin-env-{}", uuid::Uuid::new_v4()));
         write(
             &root.join("plugin.json"),
-            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"portable-env"}"#,
+            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"c2-env","version":"1.0.0","extensions":{"dev.codetwo":{"standardVersion":"1.0.0"}}}"#,
         );
         write(
             &root.join("skills/example/SKILL.md"),
@@ -3552,33 +2728,27 @@ mod tests {
     fn parses_complete_manifest_and_all_component_types() {
         let root = std::env::temp_dir().join(format!("codetwo-plugin-{}", uuid::Uuid::new_v4()));
         write(
-            &root.join(".codex-plugin/plugin.json"),
+            &root.join("plugin.json"),
             r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
               "name":"developer-kit","version":"1.2.0","description":"Developer workflow",
-              "author":{"name":"Acme"},"skills":"./custom-skills/","mcpServers":"./extra.mcp.json",
-              "interface":{"displayName":"Developer Kit"}
+              "author":{"name":"Acme"},
+              "extensions":{"dev.codetwo":{"standardVersion":"1.0.0"}}
             }"#,
         );
         write(
             &root.join("skills/review/SKILL.md"),
-            "---\nname: Review\ndescription: Review changes\n---\nCheck the diff carefully.",
-        );
-        write(
-            &root.join("custom-skills/release/SKILL.md"),
-            "---\nname: Release\ndescription: Ship safely\n---\nVerify the release.",
+            "---\nname: review\ndescription: Review changes\n---\nCheck the diff carefully.",
         );
         write(
             &root.join("agents/researcher.md"),
             "---\nname: Researcher\ndescription: Find evidence\nmodel: fast\ntools: [web, files]\n---\nResearch before answering.",
         );
         write(
-            &root.join(".mcp.json"),
-            r#"{"mcpServers":{"local":{"command":"./bin/server","args":["--stdio"],"env":{"MODE":"safe"}},"remote":{"type":"http","url":"https://mcp.example.test","headers":{"X-Key":"value"}},"events":{"type":"sse","url":"https://mcp.example.test/sse"}}}"#,
+            &root.join("mcp.json"),
+            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"local":{"type":"stdio","command":"./bin/server","args":["--stdio"],"env":{"MODE":"safe"}},"remote":{"type":"streamable-http","url":"https://mcp.example.test","headers":{"X-Key":"value"}},"events":{"type":"sse","url":"https://mcp.example.test/sse"}}}"#,
         );
-        write(
-            &root.join("extra.mcp.json"),
-            r#"{"extra":{"command":"extra-mcp"}}"#,
-        );
+        write(&root.join("bin/server"), "#!/bin/sh\nexit 0\n");
         write(
             &root.join("scaffolds/react/scaffold.json"),
             r#"{"name":"React App","description":"Minimal app"}"#,
@@ -3589,11 +2759,11 @@ mod tests {
         );
 
         let bundle = from_github(&checkout(root)).unwrap();
-        assert_eq!(bundle.plugin.name, "Developer Kit");
+        assert_eq!(bundle.plugin.name, "developer-kit");
         assert_eq!(bundle.plugin.version, "1.2.0");
-        assert_eq!(bundle.plugin.counts.skills, 2);
+        assert_eq!(bundle.plugin.counts.skills, 1);
         assert_eq!(bundle.plugin.counts.subagents, 1);
-        assert_eq!(bundle.plugin.counts.mcp_servers, 4);
+        assert_eq!(bundle.plugin.counts.mcp_servers, 3);
         assert_eq!(bundle.plugin.counts.scaffolds, 1);
         assert!(bundle
             .plugin
@@ -3615,9 +2785,10 @@ mod tests {
     fn installs_loads_uninstalls_and_applies_scaffold_without_overwrite() {
         let root =
             std::env::temp_dir().join(format!("codetwo-plugin-src-{}", uuid::Uuid::new_v4()));
+        write_manifest(&root, "helper", "1.0.0", "");
         write(
-            &root.join("SKILL.md"),
-            "---\nname: Helper\n---\nHelp carefully.",
+            &root.join("skills/helper/SKILL.md"),
+            "---\nname: helper\ndescription: Help carefully\n---\nHelp carefully.",
         );
         write(&root.join("scaffolds/basic/README.md"), "hello");
         write(&root.join("bin/tool"), "#!/bin/sh\nexit 0\n");
@@ -3675,10 +2846,7 @@ mod tests {
             "codetwo-local-plugin-source-{}",
             uuid::Uuid::new_v4()
         ));
-        write(
-            &source.join(".claude-plugin/plugin.json"),
-            r#"{"name":"local-state","version":"1.0.0"}"#,
-        );
+        write_manifest(&source, "local-state", "1.0.0", "");
         write(
             &source.join("skills/example/SKILL.md"),
             "---\nname: example\ndescription: Example\n---\nExample.",
@@ -3695,10 +2863,7 @@ mod tests {
         .unwrap();
         set_enabled(&data, &first.id, false).unwrap();
         set_trusted(&data, &first.id, true).unwrap();
-        write(
-            &source.join(".claude-plugin/plugin.json"),
-            r#"{"name":"local-state","version":"2.0.0"}"#,
-        );
+        write_manifest(&source, "local-state", "2.0.0", "");
 
         let updated = install(
             &data,
@@ -3720,16 +2885,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_manifest_paths_outside_plugin() {
+    fn requires_the_bundle_root_to_be_selected_explicitly() {
         let root =
             std::env::temp_dir().join(format!("codetwo-plugin-bad-{}", uuid::Uuid::new_v4()));
         write(
-            &root.join(".codex-plugin/plugin.json"),
-            r#"{"name":"bad","version":"1.0.0","skills":"../outside"}"#,
+            &root.join("packages/tool/plugin.json"),
+            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"nested","version":"1.0.0","extensions":{"dev.codetwo":{"standardVersion":"1.0.0"}}}"#,
         );
         assert!(matches!(
             from_github(&checkout(root)),
-            Err(PluginError::UnsafePath(_))
+            Err(PluginError::Invalid(message)) if message.contains("select the bundle directory explicitly")
         ));
     }
 
@@ -3742,19 +2907,18 @@ mod tests {
             std::env::temp_dir().join(format!("codetwo-plugin-link-{}", uuid::Uuid::new_v4()));
         let outside =
             std::env::temp_dir().join(format!("codetwo-plugin-outside-{}", uuid::Uuid::new_v4()));
-        write(
-            &outside.join("SKILL.md"),
-            "---\nname: Outside\n---\nDo not import me.",
-        );
-        write(
-            &root.join(".codex-plugin/plugin.json"),
-            r#"{"name":"bad-link","version":"1.0.0","skills":"./linked"}"#,
+        write(&outside.join("tool"), "#!/bin/sh\nexit 0\n");
+        write_manifest(
+            &root,
+            "bad-link",
+            "1.0.0",
+            r#","runtime":{"protocol":"1.0.0","command":"linked/tool"}"#,
         );
         symlink(&outside, root.join("linked")).unwrap();
 
         assert!(matches!(
             from_github(&checkout(root)),
-            Err(PluginError::UnsafePath(_))
+            Err(PluginError::Invalid(message)) if message.contains("Plugin path is unsafe")
         ));
         let _ = std::fs::remove_dir_all(outside);
     }
@@ -3766,9 +2930,10 @@ mod tests {
 
         let root =
             std::env::temp_dir().join(format!("codetwo-plugin-src-{}", uuid::Uuid::new_v4()));
+        write_manifest(&root, "scaffold-safety", "1.0.0", "");
         write(
-            &root.join("SKILL.md"),
-            "---\nname: Helper\n---\nHelp carefully.",
+            &root.join("skills/helper/SKILL.md"),
+            "---\nname: helper\ndescription: Help carefully\n---\nHelp carefully.",
         );
         write(&root.join("scaffolds/basic/nested/file.txt"), "safe");
         let bundle = from_github(&checkout(root)).unwrap();
@@ -3804,7 +2969,8 @@ mod tests {
             &root.join("plugin.json"),
             r#"{
               "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-              "name":"scene-pack","version":"1.0.0","description":"Scenes only"
+              "name":"scene-pack","version":"1.0.0","description":"Scenes only",
+              "extensions":{"dev.codetwo":{"standardVersion":"1.0.0"}}
             }"#,
         );
         write(
@@ -3840,13 +3006,6 @@ mod tests {
         install(&data, bundle).unwrap();
         let scenes_dir = plugin_scenes_dir(&data, &plugin_id);
         assert!(scenes_dir.join("valid.scene.json").is_file());
-
-        // Old records without the new count fields must keep deserializing (serde defaults).
-        let legacy: PluginCounts =
-            serde_json::from_str(r#"{"skills":1,"subagents":0,"mcp_servers":0,"scaffolds":0}"#)
-                .unwrap();
-        assert_eq!(legacy.scenes, 0);
-        assert_eq!(legacy.pipelines, 0);
 
         let _ = std::fs::remove_dir_all(root);
         let _ = std::fs::remove_dir_all(data);

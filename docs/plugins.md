@@ -3,7 +3,7 @@
 C2 is a plugin graph. This document explains what that means, how to write a plugin, and how
 the core and host-specific plugins fit together.
 
-For the normative package, naming, lifecycle, scope, security, compatibility, and host-capability
+For the normative package, naming, lifecycle, scope, security, versioning, and host-capability
 rules, see the [C2 Plugin Standard 1.0.0](plugin-standard.md). This document focuses on the graph's
 implementation and rationale.
 
@@ -187,10 +187,9 @@ const graph = await kernelScopes();       // what is loaded, and why something i
 ## The unified plugin manager
 
 Every registered factory has catalog metadata: provenance (`built_in`, `host`, or `third_party`),
-category, supported configuration scopes, default state, and whether it is essential. Existing
-plugins that do not declare metadata keep backwards-compatible defaults. Hosts may classify a
-factory centrally with `PluginRegistry::set_metadata`; this keeps reusable plugin implementations
-free of desktop product policy.
+category, supported configuration scopes, default state, and whether it is essential. A factory
+may declare this metadata or receive it centrally through `PluginRegistry::set_metadata`; this
+keeps reusable plugin implementations free of desktop product policy.
 
 The desktop's Plugins page is a data-only view over that catalog. It can show built-in plugins,
 desktop host plugins, installed bundles, C2-owned UI contributions, and marketplace entries in one
@@ -207,9 +206,6 @@ State changes use a two-step protocol:
 2. After confirmation, `plugins.apply_change` consumes that exact plan. A stale or already-used
    plan is rejected. The loader unloads or reloads the relevant scopes immediately; no application
    restart is involved.
-
-`kernel.set_enabled` and `kernel.configure` remain compatibility commands, but they route through
-the same durable manager rather than mutating an unrelated in-memory switch.
 
 An installed bundle with `extensions.dev.codetwo.runtime` joins this same catalog as a dynamically
 registered third-party integration named `bundle:<id>`. Its managed runtime controls use `plugins.catalog`,
@@ -230,10 +226,10 @@ trust changes.
 That unification currently applies to the bundle's **process runtime**. Skills and other data-only
 extension components shipped in the same bundle remain user-wide contributions. The unified page
 lists their component descriptors as read-only and uses the existing bundle command for their
-install-wide enabled state; it does not route that switch through `plugins.plan_change`. That
-install-wide switch also remains a compatibility/default input for a process runtime, while
-explicit managed runtime policy belongs to the unified manager. Project policy for `bundle:<id>`
-must not be presented as if it isolated those data contributions.
+install-wide enabled state; it does not route that switch through `plugins.plan_change`. The bundle
+switch gates every contribution and supplies the initial runtime state. Explicit user/project
+runtime policy belongs to the unified manager. Project policy for `bundle:<id>` must not be
+presented as if it isolated those data contributions.
 
 ### User and project policy
 
@@ -273,11 +269,14 @@ commands, event subscriptions — lands in the same kernel registries a built-in
 show up in `kernel.commands`, are callable through `call()`, and vanish when it unloads. It
 declares `inject` in its manifest and gets the same reactive contract. It is not a lesser citizen.
 
-A portable bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
+A C2 bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
 starts only once the user marks the bundle **trusted** — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
+Runtime, safe UI actions, and language servers are distributed together from that same bundle root;
+run `cd apps/desktop && bun run plugin:validate <bundle-root>` before publishing it or installing it
+from GitHub.
 
-The runtime appears in the managed catalog as `bundle:<id>`. Existing manifests are user-only:
+The runtime appears in the managed catalog as `bundle:<id>`. Runtimes are user-only by default:
 omitting `runtime.scopeSupport` is equivalent to `["user"]`. A bundle must explicitly declare
 `["user", "project"]` before the manager will create project-scoped process instances. Those
 instances use the ordinary project child graph, command realm, policy inheritance, lifecycle, and
@@ -297,7 +296,7 @@ CoreApp::boot_with(config, registry).await?;
 
 A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
 remote modules; product commands remain behind the same command seam as the TUI and server. The
-current Pure Bun compatibility host implements an equivalent in-process plugin graph over that seam
+current Pure Bun host implements an equivalent in-process plugin graph over that seam
 and reports its missing adapters explicitly rather than claiming the Rust runtime is present.
 
 ## Two senses of "plugin"

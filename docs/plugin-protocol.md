@@ -61,11 +61,11 @@ graph. A plugin that misses the window is marked failed, by name, and everything
 }}
 ```
 
-Compatibility is by **major version**. Declaring `2.x` to a `1.x` host is refused with a readable
-error; omitting `protocolVersion` is tolerated.
+Wire compatibility is by **major version**. Declaring `2.x` to a `1.x` host, or omitting
+`protocolVersion`, is refused with a readable error.
 
-`dataDir` is yours to write to and is created before you start. A user-scoped instance keeps the
-legacy directory `<plugins-dir>/.data/<id>`. A project-scoped instance gets
+`dataDir` is yours to write to and is created before you start. A user-scoped instance gets
+`<plugins-dir>/.data/<id>`. A project-scoped instance gets
 `<plugins-dir>/.data/<id>/projects/<blake3(normalized-project-path)>`, so two projects do not share
 runtime files. `projectPath` is the normalized project identity for that instance and is omitted
 for the user-scoped instance.
@@ -139,8 +139,8 @@ the sender or subscriber is a project-scoped runtime.
 
 ## Declaring a plugin
 
-For an Agent Plugins 1.0.0 bundle, add the runtime under C2's client-extension namespace. The
-portable schema is closed, so a top-level `runtime` field is non-conforming and ignored:
+Every C2 bundle uses the Agent Plugins 1.0.0 root schema and the mandatory C2 extension. Add the
+runtime under C2's client-extension namespace; a top-level `runtime` field invalidates the bundle:
 
 ```json
 {
@@ -164,9 +164,6 @@ portable schema is closed, so a top-level `runtime` field is non-conforming and 
 }
 ```
 
-Native `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` overlays retain compatibility
-with the historical top-level `runtime` field. New portable bundles must use the namespace above.
-
 The process starts with the bundle directory as its working directory.
 
 `inject` gets you the same reactive contract a Rust plugin has: your process is not started until
@@ -174,7 +171,7 @@ those services exist, and is **restarted** if one is replaced. It is declared in
 than at `initialize` because the host needs to know before deciding whether to start you at all.
 
 `scopeSupport` is an explicit capability declaration. If it is omitted, the runtime supports only
-`["user"]` for backwards compatibility. Include `"project"` only when the process is prepared for
+`["user"]`. Include `"project"` only when the process is prepared for
 one independently managed process, command realm, `dataDir`, and `projectPath` per active project.
 The bundle's skills and other data-only extension components are not made project-scoped by this
 field; they remain user-only and are managed through Bundle Tools.
@@ -196,8 +193,7 @@ A process starts only when its bundle is **enabled *and* trusted**. Trust is a s
 user action, and installing a bundle that ships a C2 runtime raises a diagnostic saying so.
 Until then the plugin is listed by `extensions.list` under `untrusted` and does not run.
 
-Trust is a hard gate in every realm. The legacy `extensions.allow_untrusted` setting is deprecated
-and ignored; it cannot bypass this check.
+Trust is a hard gate in every realm. No configuration setting can bypass it.
 
 ## Lifecycle
 

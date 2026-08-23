@@ -88,15 +88,13 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      spec_version: "1",
-      standard: "agent_plugins",
-      standards: ["agent_plugins"],
+      standard_version: "1.0.0",
       enabled: true,
       trusted: true,
       scope: "user",
       counts: { runtime: 1, skills: 2 },
       scaffolds: [],
-      extension_components: [{ kind: "lsp", name: "rust", path: ".lsp.json", status: "ready" }],
+      extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
       diagnostics: [],
     };
     const model = buildPluginManagerCatalog({
@@ -125,7 +123,7 @@ describe("unified plugin catalog adapter", () => {
       ],
     });
     expect(model.components.find((component) => component.id === "plugin-manager.page")?.required).toBe(true);
-    expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe(".lsp.json");
+    expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
     expect(model.components.find((component) => component.id === "skill:review-skill")?.pluginId).toBe("bundle:review");
     expect(model.marketplaceItems[0]).toMatchObject({ id: "market:browser-tool", installable: true });
   });
@@ -164,16 +162,14 @@ describe("unified plugin catalog adapter", () => {
 
   test("does not misrepresent bundle install provenance as project-local lifecycle support", () => {
     const bundle = {
-      id: "legacy-local",
-      name: "Legacy local bundle",
+      id: "local-tools",
+      name: "Local tools bundle",
       version: "1.0.0",
       description: "Existing record with local provenance",
       author: "C2",
       source: "Local",
       repository: "/tmp/plugin",
-      spec_version: "1",
-      standard: "agent_plugins",
-      standards: ["agent_plugins"],
+      standard_version: "1.0.0",
       enabled: true,
       trusted: true,
       scope: "local",
@@ -203,16 +199,23 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      spec_version: "1",
-      standard: "agent_plugins",
-      standards: ["agent_plugins"],
+      standard_version: "1.0.0",
       // Installation state remains global descriptor data. It must not override project policy.
       enabled: true,
       trusted: true,
       scope: "user",
       counts: { runtime: 1 },
       scaffolds: [],
-      extension_components: [{ kind: "lsp", name: "rust", path: ".lsp.json", status: "ready" }],
+      extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
+      ui_contributions: [{
+        id: "review",
+        slot: "session.header",
+        label: "Review",
+        description: "Review this workspace.",
+        command: "review.run",
+        input: null,
+        order: 0,
+      }],
       diagnostics: [],
     };
     const metadata = {
@@ -223,13 +226,14 @@ describe("unified plugin catalog adapter", () => {
       default_enabled: true,
     };
     const extensionId = "bundle:review:extension:lsp:rust";
+    const uiId = "bundle:review:ui:review";
     const userCatalog = {
       ...emptyCatalog,
       plugins: [entry("bundle:review", {
         metadata,
         state: "enabled",
         enabled: true,
-        components: { [extensionId]: "enabled", "skill:review-skill": "enabled" },
+        components: { [uiId]: "enabled" },
       })],
     };
     const projectCatalog = {
@@ -240,7 +244,7 @@ describe("unified plugin catalog adapter", () => {
         enabled: false,
         running: false,
         status: "disposed",
-        components: { [extensionId]: "disabled", "skill:review-skill": "disabled" },
+        components: { [uiId]: "disabled" },
       })],
     };
 
@@ -275,6 +279,11 @@ describe("unified plugin catalog adapter", () => {
       manageable: false,
       supportedScopes: ["user"],
       state: { effectiveEnabled: true, status: "active" },
+    });
+    expect(model.components.find((component) => component.id === uiId)).toMatchObject({
+      manageable: true,
+      supportedScopes: ["user", "project"],
+      state: { effectiveEnabled: false, override: "disabled", status: "disabled" },
     });
     expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
       pluginId: "bundle:review",

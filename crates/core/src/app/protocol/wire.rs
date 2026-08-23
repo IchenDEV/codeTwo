@@ -108,12 +108,7 @@ fn default_level() -> String {
 
 /// True when a plugin's declared version is one this host can talk to.
 pub fn version_is_compatible(declared: &str) -> bool {
-    // An empty declaration means "whatever you are" — tolerated, since the handshake itself
-    // already proves they speak this protocol.
-    if declared.trim().is_empty() {
-        return true;
-    }
-    major(declared) == major(PROTOCOL_VERSION)
+    !declared.trim().is_empty() && major(declared) == major(PROTOCOL_VERSION)
 }
 
 fn major(version: &str) -> &str {
@@ -128,10 +123,7 @@ mod tests {
     fn compatibility_is_by_major_version() {
         assert!(version_is_compatible("1.0.0"));
         assert!(version_is_compatible("1.4.2"), "a newer minor is still us");
-        assert!(
-            version_is_compatible(""),
-            "an unversioned plugin is tolerated"
-        );
+        assert!(!version_is_compatible(""));
         assert!(!version_is_compatible("2.0.0"));
         assert!(!version_is_compatible("0.9.0"));
     }
