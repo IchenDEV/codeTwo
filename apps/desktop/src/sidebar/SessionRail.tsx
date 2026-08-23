@@ -25,6 +25,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderX,
+  GitPullRequest,
   Hash,
   PanelLeft,
   Pencil,
@@ -158,6 +159,8 @@ export function SessionRail({
   onWidth,
   taskBoardOpen,
   onOpenTaskBoard,
+  pullRequestsOpen,
+  onOpenPullRequests,
   automationsOpen,
   pluginHubOpen,
   quickQuota,
@@ -212,6 +215,8 @@ export function SessionRail({
   onWidth: (n: number) => void;
   taskBoardOpen: boolean;
   onOpenTaskBoard: () => void;
+  pullRequestsOpen: boolean;
+  onOpenPullRequests: () => void;
   automationsOpen: boolean;
   pluginHubOpen: boolean;
   /** Most constrained provider-owned quota window, for the glanceable rail meter. */
@@ -821,6 +826,15 @@ export function SessionRail({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <button
+          data-rail-feature="pull-requests"
+          aria-current={pullRequestsOpen ? "page" : undefined}
+          className={cn(featureRowClass, pullRequestsOpen && "bg-accent font-medium text-foreground")}
+          onClick={onOpenPullRequests}
+        >
+          <GitPullRequest className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("pullRequests.title")}</span>
+        </button>
         <button
           data-rail-feature="task-board"
           aria-current={taskBoardOpen ? "page" : undefined}

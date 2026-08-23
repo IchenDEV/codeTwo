@@ -85,6 +85,8 @@ function renderRail(overrides = {}) {
           onWidth={() => {}}
           taskBoardOpen={false}
           onOpenTaskBoard={() => {}}
+          pullRequestsOpen={false}
+          onOpenPullRequests={() => {}}
           automationsOpen={false}
           pluginHubOpen={false}
           quickQuota={{ remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
@@ -116,6 +118,7 @@ describe("SessionRail row layout", () => {
       taskBoardOpen: true,
       automationsOpen: true,
       onNew: () => opened.push("new"),
+      onOpenPullRequests: () => opened.push("pull-requests"),
       onOpenTaskBoard: () => opened.push("tasks"),
       onOpenAutomations: () => opened.push("scheduled"),
       onOpenMarket: () => opened.push("plugins"),
@@ -129,6 +132,7 @@ describe("SessionRail row layout", () => {
 
     expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
       "New task",
+      "Pull requests",
       "Task board",
       "Scheduled tasks",
       "Plugins",
@@ -141,7 +145,7 @@ describe("SessionRail row layout", () => {
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
     for (const row of rows) click(row);
-    expect(opened).toEqual(["new", "tasks", "scheduled", "plugins", "usage", "settings"]);
+    expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "usage", "settings"]);
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
     expect(features?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
       .toBe("42");

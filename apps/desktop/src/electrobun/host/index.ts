@@ -15,9 +15,11 @@ import { BunDatabase } from "./database";
 import { builtinPluginForCommand } from "./builtinPlugins";
 import {
   githubCurrentPullRequest,
+  getGitHubPullRequest,
   githubMergePullRequest,
   githubPullRequestDiff,
   githubReviewPullRequest,
+  listGitHubPullRequests,
 } from "./github";
 import { PluginRuntimeManager } from "./plugins";
 import {
@@ -447,6 +449,11 @@ export class PureBunHost {
       string(args.cwd, "cwd"),
       number(args.number, 0),
       string(args.strategy, "strategy"),
+    ));
+    this.register("github.pull_requests", () => listGitHubPullRequests());
+    this.register("github.pull_request", (args) => getGitHubPullRequest(
+      string(args.url, "url"),
+      args.summary,
     ));
 
     this.register("terminal.tmux_available", () => which("tmux") !== null);

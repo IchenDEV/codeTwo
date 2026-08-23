@@ -140,6 +140,7 @@ import {
   type AppshotCapture,
   type GitStatus,
   type GoalSnapshot,
+  type GitHubPullRequestDetail,
   type Issue,
   type KeymapEntry,
   type MarketItem,
@@ -329,6 +330,7 @@ import {
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
+import { PullRequestsPage } from "./github/PullRequestsPage";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 import {
   associateTaskSession,
@@ -646,6 +648,7 @@ export default function App() {
   const activeBoardTaskRef = useRef<BoardTask | null>(null);
   const [temporarySession, setTemporarySession] = useState(false);
   const temporarySessionRef = useRef(false);
+  const [showPullRequests, setShowPullRequests] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
@@ -948,6 +951,7 @@ export default function App() {
   const openTaskBoard = useCallback(() => {
     setShowAutomations(false);
     setShowPluginHub(false);
+    setShowPullRequests(false);
     setShowTaskBoard(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -2782,6 +2786,7 @@ export default function App() {
 
     invalidatePendingCreation();
     setShowTaskBoard(false);
+    setShowPullRequests(false);
     sessionLoadSeq.current += 1;
     setSessionLoading(false);
     setPendingSessionRunning(false);
@@ -2925,6 +2930,26 @@ export default function App() {
     [manualDockTab, t],
   );
 
+  const chatAboutPullRequest = useCallback(
+    (detail: GitHubPullRequestDetail) => {
+      const prompt = [
+        t("pullRequests.chatPrompt"),
+        `**${detail.repository.nameWithOwner} #${detail.number} — ${detail.title}**`,
+        detail.url,
+        detail.body,
+      ].filter(Boolean).join("\n\n");
+      setShowPullRequests(false);
+      createSession();
+      clearEditorRef.current?.();
+      setDocMode(true);
+      setTimeout(() => {
+        void insertMarkdownRef.current?.(prompt, "replace");
+        focusEditorRef.current?.();
+      }, 0);
+    },
+    [createSession, setDocMode, t],
+  );
+
   const answer = useCallback(
     async (optionId: string | null) => {
       if (!permission) return;
@@ -3063,6 +3088,7 @@ export default function App() {
       // An explicit navigation wins over any in-flight session creation. Its late SessionCreated
       // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
       setShowTaskBoard(false);
+      setShowPullRequests(false);
       invalidatePendingCreation();
       const stored =
         sessions.find((s) => s.id === id) ??
@@ -3785,6 +3811,7 @@ export default function App() {
     refreshSkills();
     setShowAutomations(false);
     setShowTaskBoard(false);
+    setShowPullRequests(false);
     setShowPluginHub(true);
   }, [
     activeProject,
@@ -3886,6 +3913,7 @@ export default function App() {
     }
     setShowTaskBoard(false);
     setShowPluginHub(false);
+    setShowPullRequests(false);
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -3896,6 +3924,19 @@ export default function App() {
     setRailCollapsedRaw,
     toast,
   ]);
+
+  const openPullRequests = useCallback(() => {
+    if (!componentEnabled("git.surface")) {
+      toast("Source control is disabled in Plugins.", "info");
+      return;
+    }
+    setShowAutomations(false);
+    setShowPluginHub(false);
+    setShowTaskBoard(false);
+    setShowPullRequests(true);
+    if (narrowLayout) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
 
   const openSourceControl = useCallback(() => {
     if (!componentEnabled("git.surface")) {
@@ -4841,6 +4882,7 @@ export default function App() {
           setShowTaskBoard(false);
           setShowPluginHub(false);
           setShowAutomations(false);
+          setShowPullRequests(false);
           setSettingsInitialTab("general");
           setShowSettings(true);
           break;
@@ -4861,6 +4903,7 @@ export default function App() {
           setShowTaskBoard(false);
           setShowPluginHub(false);
           setShowAutomations(false);
+          setShowPullRequests(false);
           setSettingsInitialTab("usage");
           setShowSettings(true);
           break;
@@ -4978,6 +5021,11 @@ export default function App() {
       run: openSourceControl,
     },
     {
+      id: "pull-requests",
+      label: t("pullRequests.title"),
+      run: openPullRequests,
+    },
+    {
       id: "checkpoint",
       label: "Checkpoint now",
       run: () => void doCheckpoint(),
@@ -5022,6 +5070,7 @@ export default function App() {
         setShowTaskBoard(false);
         setShowPluginHub(false);
         setShowAutomations(false);
+        setShowPullRequests(false);
         setSettingsInitialTab("usage");
         setShowSettings(true);
       },
@@ -5069,6 +5118,7 @@ export default function App() {
       label: "Open settings",
       hint: hint("open_settings"),
       run: () => {
+        setShowPullRequests(false);
         setSettingsInitialTab("general");
         setShowSettings(true);
       },
@@ -5537,6 +5587,7 @@ export default function App() {
           onSelectProject={(path) => {
             setShowAutomations(false);
             setShowPluginHub(false);
+            setShowPullRequests(false);
             selectProject(path);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -5620,6 +5671,7 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginHub(false);
             setShowAutomations(false);
+            setShowPullRequests(false);
             setSettingsInitialTab("general");
             setShowSettings(true);
           }}
@@ -5631,6 +5683,11 @@ export default function App() {
             if (showTaskBoard) setShowTaskBoard(false);
             else openTaskBoard();
           }}
+          pullRequestsOpen={showPullRequests}
+          onOpenPullRequests={() => {
+            if (showPullRequests) setShowPullRequests(false);
+            else openPullRequests();
+          }}
           automationsOpen={showAutomations}
           pluginHubOpen={showPluginHub}
           quickQuota={railQuickQuota}
@@ -5640,6 +5697,7 @@ export default function App() {
             setShowTaskBoard(false);
             setShowPluginHub(false);
             setShowAutomations(false);
+            setShowPullRequests(false);
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
@@ -5654,6 +5712,21 @@ export default function App() {
             />
             }
         />
+
+          {showPullRequests && (
+            <PullRequestsPage
+              headerLeadingAction={
+                displayedRailCollapsed ? (
+                  <IconAction
+                    icon={PanelLeft}
+                    label={t("rail.expand")}
+                    onClick={toggleDisplayedRail}
+                  />
+                ) : undefined
+              }
+              onChat={chatAboutPullRequest}
+            />
+          )}
 
           {showAutomations && (
             componentEnabled("automation.page") ? (
@@ -5951,10 +6024,10 @@ export default function App() {
         <div
           ref={sessionWorkspaceRef}
             aria-hidden={
-              showTaskBoard || showPluginHub || showAutomations || undefined
+              showTaskBoard || showPluginHub || showAutomations || showPullRequests || undefined
             }
             className={
-              showTaskBoard || showPluginHub || showAutomations
+              showTaskBoard || showPluginHub || showAutomations || showPullRequests
                 ? "hidden"
                 : "contents"
             }

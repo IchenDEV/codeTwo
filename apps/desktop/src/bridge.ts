@@ -3506,6 +3506,65 @@ export async function gitSuggestCommit(cwd: string): Promise<string> {
   return inDesktop ? call<string>("git.suggest_message", { cwd }) : "chore: update";
 }
 
+// ---- GitHub pull requests --------------------------------------------------------------------
+
+export interface GitHubPullRequestSummary {
+  id: string;
+  number: number;
+  title: string;
+  url: string;
+  repository: { name: string; nameWithOwner: string };
+  author: { login: string };
+  isDraft: boolean;
+  updatedAt: string;
+  createdAt: string;
+  labels: Array<{ name: string; color: string }>;
+  commentsCount: number;
+  authored: boolean;
+  reviewRequested: boolean;
+  reviewed: boolean;
+}
+
+export interface GitHubPullRequestDetail extends GitHubPullRequestSummary {
+  body: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  baseRefName: string;
+  headRefName: string;
+  state: string;
+  mergeStateStatus: string;
+  mergeable: string;
+  reviewDecision: string;
+  reviewers: Array<{ login: string; state: string }>;
+  checks: Array<{
+    name: string;
+    status: string;
+    conclusion: string;
+    detailsUrl: string | null;
+  }>;
+  files: Array<{
+    path: string;
+    additions: number;
+    deletions: number;
+    changeType: string;
+  }>;
+}
+
+export async function listGitHubPullRequests(): Promise<GitHubPullRequestSummary[]> {
+  return inDesktop ? call<GitHubPullRequestSummary[]>("github.pull_requests") : [];
+}
+
+export async function getGitHubPullRequest(
+  summary: GitHubPullRequestSummary,
+): Promise<GitHubPullRequestDetail> {
+  if (!inDesktop) throw new Error("GitHub pull requests require the desktop host");
+  return call<GitHubPullRequestDetail>("github.pull_request", {
+    url: summary.url,
+    summary,
+  });
+}
+
 export async function browserContext(annotation: Annotation): Promise<string> {
   // Mirrors core::browser::Annotation::to_context without requiring a native browser plugin.
   let s = `**Browser context** — ${annotation.url}`;
