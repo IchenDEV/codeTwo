@@ -201,9 +201,9 @@ function Page({ title, description, children }: { title: string; description: st
 /**
  * Settings as a full-window page: its own nav rail on the left (General, Memory, Keybindings,
  * Providers, Usage)
- * with a Back row at the bottom, and one scrolling column of rows per category. The window-wide
- * takeover is deliberate — a settings surface with its own sidebar reads as a *place* you went to,
- * which is what earns the explicit way back.
+ * with a Back row above the category menu, and one scrolling column of rows per category. The
+ * window-wide takeover is deliberate — a settings surface with its own sidebar reads as a *place*
+ * you went to, which is what earns the explicit way back.
  */
 export function SettingsPage({
   bindings,
@@ -537,6 +537,15 @@ export function SettingsPage({
       <aside className="glass-rail flex w-56 shrink-0 flex-col">
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
+        <button
+          data-settings-back
+          disabled={projectModeSaving}
+          onClick={onClose}
+          className="mx-2 mb-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <ArrowLeft className="size-4 shrink-0" />
+          {t("settings.back")}
+        </button>
         <nav className="flex-1 space-y-0.5 px-2">
           {NAV.filter(({ id }) => memoryEnabled || id !== "memory").map(
             ({ id, icon: Icon, labelKey, label }) => (
@@ -556,14 +565,6 @@ export function SettingsPage({
             ),
           )}
         </nav>
-        <button
-          disabled={projectModeSaving}
-          onClick={onClose}
-          className="m-2 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <ArrowLeft className="size-4 shrink-0" />
-          {t("settings.back")}
-        </button>
       </aside>
 
       {/* ---- the page ---- */}
