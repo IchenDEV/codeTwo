@@ -80,10 +80,10 @@ describe("macOS window chrome contract", () => {
 
   test("keeps the empty-session hero below the titlebar when the bottom panel opens", () => {
     expect(appSource).toContain(
-      '"order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"',
+      '"order-2 min-h-0 flex-1 flex-col overflow-y-auto"',
     );
-    expect(appSource).not.toContain(
-      '"order-2 min-h-0 flex-1 flex-col justify-center pb-16"',
+    expect(appSource).toContain(
+      'className="animate-rise-in flex flex-1 items-center justify-center-safe px-6 py-8"',
     );
   });
 

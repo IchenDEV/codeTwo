@@ -922,6 +922,26 @@
   }
 }
 
+/* Compact windows keep every command reachable, but the titlebar switches to icon density and
+   the empty-state tiles drop their secondary line so the Composer never collides with them. */
+@media (max-width: 999px) {
+  [data-session-breadcrumb],
+  .session-header-action-label,
+  .empty-session-starter-description,
+  .plugin-contribution-description {
+    display: none;
+  }
+
+  .session-header-labeled-button {
+    width: var(--ds-control-normal);
+    padding-inline: 0;
+  }
+
+  [data-empty-session-hero] {
+    padding-block: var(--ds-space-page);
+  }
+}
+
 /* Motion is decoration here — every animation above is an entrance or a hover, so honouring the
    system preference costs nothing and skipping it would be the kind of thing that makes an app
    feel careless rather than native. */

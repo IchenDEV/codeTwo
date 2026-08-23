@@ -1167,7 +1167,7 @@ export function Composer({
                 "relative min-h-0 flex-1"
               : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
                 // shared raised shadow carry the separation without drawing a heavy box.
-                "rounded-2xl bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
+                "rounded-2xl bg-card shadow-raised transition-shadow duration-200",
           )}
         >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
@@ -1242,7 +1242,7 @@ export function Composer({
         {!docMode && checkout && (
           <button
             onClick={checkout.onOpen}
-            className="mt-3 flex h-8 items-center gap-1.5 rounded-(--ds-radius-control) bg-muted/30 px-3 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07] transition-colors hover:bg-accent hover:text-foreground"
+            className="mt-1.5 flex h-(--ds-control-normal) items-center gap-1.5 rounded-(--ds-radius-control) bg-transparent px-2 text-hint text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
           >
             {/* Squeezed, the row keeps what identifies the checkout (project, dirty count) and
                 sheds the caption and branch name — both one click away. */}

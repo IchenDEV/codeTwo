@@ -37,7 +37,7 @@ function SplitMenuTrigger({ label, disabled = false }: { label: string; disabled
       render={(
         <Button
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="compact"
           disabled={disabled}
           aria-label={label}
@@ -125,24 +125,38 @@ export function SessionHeaderActions({
   const t = useT();
 
   return (
-    <div className="flex shrink-0 items-center gap-2" role="group" aria-label={t("header.actions")}>
-      <Button type="button" variant="secondary" size="compact" onClick={onAddAction}>
+    <div
+      data-session-header-actions
+      className="flex shrink-0 items-center gap-1"
+      role="group"
+      aria-label={t("header.actions")}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="compact"
+        className="session-header-labeled-button"
+        aria-label={t("header.addAction")}
+        title={t("header.addAction")}
+        onClick={onAddAction}
+      >
         <Plus className="size-4" aria-hidden />
-        {t("header.addAction")}
+        <span className="session-header-action-label">{t("header.addAction")}</span>
       </Button>
 
       {actions.slice(0, 2).map((action) => (
         <Button
           key={action.id}
           type="button"
-          variant="secondary"
+          variant="ghost"
           size="compact"
-          className="max-w-36"
+          className="session-header-labeled-button max-w-36"
           title={action.command}
+          aria-label={action.name || action.id}
           onClick={() => onRunAction?.(action)}
         >
           <Play className="size-3.5" aria-hidden />
-          <span className="truncate">{action.name || action.id}</span>
+          <span className="session-header-action-label truncate">{action.name || action.id}</span>
         </Button>
       ))}
 
@@ -152,7 +166,7 @@ export function SessionHeaderActions({
             render={(
               <Button
                 type="button"
-                variant="secondary"
+                variant="ghost"
                 size="icon"
                 className="size-7"
                 aria-label={t("actionDialog.moreActions")}
@@ -181,13 +195,15 @@ export function SessionHeaderActions({
         <div className="flex shrink-0">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="compact"
-            className="rounded-r-none px-2.5"
+            className="session-header-labeled-button rounded-r-none px-2.5"
+            aria-label={t("header.open")}
+            title={t("header.open")}
             onClick={onOpen}
           >
             <Folder className="size-4" aria-hidden />
-            {t("header.open")}
+            <span className="session-header-action-label">{t("header.open")}</span>
           </Button>
           <SplitMenuTrigger label={`${t("header.open")} · ${t("header.more")}`} />
         </div>
@@ -214,14 +230,16 @@ export function SessionHeaderActions({
         <div className="flex shrink-0">
           <Button
             type="button"
-            variant="secondary"
+            variant="ghost"
             size="compact"
             disabled={!canCommit}
-            className="rounded-r-none px-2.5"
+            className="session-header-labeled-button rounded-r-none px-2.5"
+            aria-label={t("header.commit")}
+            title={t("header.commit")}
             onClick={onCommit}
           >
             <GitCommitHorizontal className="size-4" aria-hidden />
-            {t("header.commit")}
+            <span className="session-header-action-label">{t("header.commit")}</span>
           </Button>
           <SplitMenuTrigger
             disabled={!canCommit}

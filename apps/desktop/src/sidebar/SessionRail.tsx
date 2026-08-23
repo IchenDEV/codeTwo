@@ -119,7 +119,7 @@ function SessionContextMenu({
 /**
  * The rail, four zones top to bottom:
  *
- * 1. Title — sidebar controls on the traffic-light line, with search directly below it.
+ * 1. Title — the app name, search, and sidebar controls share the traffic-light line.
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
  * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
@@ -746,12 +746,31 @@ export function SessionRail({
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* Keep the controls centred in the same 48px title row as the main header, with enough
-          clearance for the macOS traffic lights. */}
+      {/* One quiet title row gives the rail a stable identity without adding another search card. */}
       <div
+        data-rail-title
         className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pl-24 pr-3"
       >
-        <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
+        <span className="electrobun-webkit-app-region-drag min-w-0 flex-1 truncate text-title font-semibold tracking-tight">
+          {t("app.name")}
+        </span>
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={t("rail.searchLabel")}
+              onClick={onOpenSearch}
+            >
+              <Search className="size-4" />
+            </Button>}
+          />
+          <TooltipContent>
+            {t("rail.searchLabel")}
+            {searchHint && <span className="ml-1.5 opacity-60">{searchHint}</span>}
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={<Button
@@ -767,20 +786,6 @@ export function SessionRail({
           />
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
-      </div>
-      <div className="px-3 pb-2 pt-2">
-        <button
-          onClick={onOpenSearch}
-          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
-        >
-          <Search className="size-3.5 shrink-0" />
-          <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
-          {searchHint && (
-            <kbd className="shrink-0 rounded border bg-fill-rest px-1 py-px font-mono text-cap text-muted-foreground/80">
-              {searchHint}
-            </kbd>
-          )}
-        </button>
       </div>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}

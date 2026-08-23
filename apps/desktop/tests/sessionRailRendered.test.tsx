@@ -99,12 +99,14 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
-  test("omits the sidebar wordmark while keeping the collapse control", () => {
+  test("keeps the app identity, search, and collapse control on one title row", () => {
     activateDom();
     const view = renderRail();
+    const title = view.container.querySelector("[data-rail-title]");
 
-    expect(view.container.textContent).not.toContain("C2");
-    expect(view.container.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
+    expect(title?.textContent).toContain("C2");
+    expect(title?.querySelector('button[aria-label="Search"]')).toBeTruthy();
+    expect(title?.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
 
     view.unmount();
   });

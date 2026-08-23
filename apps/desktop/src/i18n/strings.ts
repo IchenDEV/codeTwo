@@ -709,6 +709,23 @@ export const en = {
   // The hero heading wraps the project name: "{greetingIn} <project>{greetingEnd}".
   "transcript.greetingIn": "What should we build in",
   "transcript.greetingEnd": "?",
+  "transcript.starters": "Ways to get started",
+  "transcript.starter.explore.title": "Explore the project",
+  "transcript.starter.explore.description": "Understand its structure and execution flow",
+  "transcript.starter.explore.prompt":
+    "Explore this project and explain its architecture, key modules, and main execution flow.",
+  "transcript.starter.build.title": "Build a feature",
+  "transcript.starter.build.description": "Turn an idea into a working implementation",
+  "transcript.starter.build.prompt":
+    "Build a new feature in this project. Start by understanding the relevant code, then implement and verify it.",
+  "transcript.starter.review.title": "Review the code",
+  "transcript.starter.review.description": "Find risks and concrete improvements",
+  "transcript.starter.review.prompt":
+    "Review the current code and suggest concrete improvements, prioritizing correctness, maintainability, and user impact.",
+  "transcript.starter.fix.title": "Fix an issue",
+  "transcript.starter.fix.description": "Trace the cause, repair it, and verify the result",
+  "transcript.starter.fix.prompt":
+    "Find and fix an issue in this project. Reproduce it, identify the root cause, implement the smallest safe fix, and verify it.",
   "transcript.label": "Conversation transcript",
   "transcript.jumpLatest": "Jump to latest",
   "transcript.hint":
@@ -2340,6 +2357,22 @@ export const zhCN: Record<StringKey, string> = {
   "transcript.greeting": "今天做点什么？",
   "transcript.greetingIn": "在",
   "transcript.greetingEnd": "里做点什么？",
+  "transcript.starters": "开始方式",
+  "transcript.starter.explore.title": "理解项目",
+  "transcript.starter.explore.description": "梳理结构、模块与运行流程",
+  "transcript.starter.explore.prompt": "探索这个项目，说明整体架构、关键模块和主要运行流程。",
+  "transcript.starter.build.title": "构建功能",
+  "transcript.starter.build.description": "把想法变成可运行的实现",
+  "transcript.starter.build.prompt":
+    "在这个项目中构建一个新功能。先理解相关代码，再完成实现并验证结果。",
+  "transcript.starter.review.title": "审查代码",
+  "transcript.starter.review.description": "找出风险并提出具体改进",
+  "transcript.starter.review.prompt":
+    "审查当前代码并提出具体改进，优先关注正确性、可维护性和用户影响。",
+  "transcript.starter.fix.title": "修复问题",
+  "transcript.starter.fix.description": "定位原因、完成修复并验证",
+  "transcript.starter.fix.prompt":
+    "查找并修复这个项目中的一个问题。先复现并定位根因，再实施最小安全修复并完成验证。",
   "transcript.label": "对话记录",
   "transcript.jumpLatest": "回到最新",
   "transcript.hint": "在下面写提示词——输入 / 插入技能，@ 引用文件。",
