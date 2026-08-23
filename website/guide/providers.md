@@ -100,10 +100,10 @@ tools with a real portable MCP boundary across providers; private provider runti
 C2 reads `host-tools.json` from its data directory. TUI/server use
 `~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
 `CODETWO_DATA_DIR` when that environment variable is set. In **Settings → Computer Use**, choose
-Automatic, no external backend, or one compatible backend for each provider. Cua Driver is shown as
+Automatic, no external backend, or one backend for new sessions. Cua Driver is shown as
 a built-in catalog option and becomes selectable when `cua-driver` is on `PATH`; other brands appear
-after their MCP definition is added to this file. Selecting an entry activates it for that provider
-even when its legacy `enabled` flag is false.
+after their MCP definition is added to this file. Selecting an entry activates it for every
+compatible provider even when its legacy `enabled` flag is false.
 
 For [Cua Driver](https://cua.ai/docs/reference/cua-driver/cli-reference), whose binary exposes a
 stdio MCP server with `cua-driver mcp`:
@@ -112,8 +112,7 @@ stdio MCP server with `cua-driver mcp`:
 {
   "schema_version": 1,
   "computer_use_selection": {
-    "claude_code": "cua",
-    "codex": "automatic"
+    "*": "cua"
   },
   "computer_use": [
     {
@@ -163,17 +162,16 @@ them natively; C2 only shares them across providers when a real MCP driver or ga
 
 ### Configure Browser Use or another browser MCP
 
-In **Settings → Browser Use**, each provider can choose Automatic, no external backend, or any
-compatible configured browser MCP. Codex can additionally choose **OpenAI Browser / Chrome** when
-C2 verifies its installed native Browser runtime. Other brands use the `browser_use` array in the
-same `host-tools.json` file:
+In **Settings → Browser Use**, choose one global Automatic, no external backend, or configured
+browser MCP option for new sessions. **OpenAI Browser / Chrome** remains compatible only with Codex;
+portable MCP backends attach to every provider allowed by their `providers` and `exclude_providers`
+scopes. Other brands use the `browser_use` array in the same `host-tools.json` file:
 
 ```json
 {
   "schema_version": 1,
   "browser_use_selection": {
-    "claude_code": "browser-use",
-    "codex": "openai-browser"
+    "*": "browser-use"
   },
   "browser_use": [
     {
@@ -230,10 +228,11 @@ control and materialize credentials at deploy time instead of committing them:
 }
 ```
 
-`browser_use_selection` has the same per-provider and `"*"` fallback semantics as Computer Use.
-Configured MCP backends are portable; provider-native tools remain provider-owned. Existing
-sessions keep their startup MCP snapshot, so start a new session after changing a Browser Use
-backend.
+`browser_use_selection` uses only the global `"*"` entry, matching Computer Use. Legacy
+provider-specific entries are ignored and the next Settings change replaces them with the global
+entry. Configured MCP backends are portable but still honor their provider scopes; provider-native
+tools remain provider-owned. Existing sessions keep their startup MCP snapshot, so start a new
+session after changing a Browser Use backend.
 
 MCP servers are fixed when an ACP session starts. Every surface resolves them through the same Bun
 Tool Broker:

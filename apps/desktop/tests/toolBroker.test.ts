@@ -56,7 +56,7 @@ const context: BrokerContext = {
       excludeProviders: [],
       server: { name: "playwright", command: "/usr/local/bin/playwright-mcp", args: [], env: [] },
     }],
-    browserUseSelections: { claude_code: "playwright" },
+    browserUseSelections: { "*": "playwright" },
     browserUseBackends: [
       {
         id: "openai-browser",

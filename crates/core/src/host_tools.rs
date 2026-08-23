@@ -210,16 +210,15 @@ impl HostToolDiscovery {
         provider: &str,
         backend: &str,
     ) -> Result<ComputerUseSettings, String> {
-        let catalog = select(data_dir.as_ref(), "computer_use", provider, backend)?;
+        let catalog = select(data_dir.as_ref(), "computer_use", Some(provider), backend)?;
         Ok(catalog.computer_use)
     }
 
     pub fn select_browser_use_backend(
         data_dir: impl AsRef<Path>,
-        provider: &str,
         backend: &str,
     ) -> Result<BrowserUseSettings, String> {
-        let catalog = select(data_dir.as_ref(), "browser_use", provider, backend)?;
+        let catalog = select(data_dir.as_ref(), "browser_use", None, backend)?;
         Ok(catalog.browser_use)
     }
 
@@ -245,18 +244,18 @@ impl HostToolDiscovery {
 fn select(
     data_dir: &Path,
     kind: &str,
-    provider: &str,
+    provider: Option<&str>,
     backend: &str,
 ) -> Result<BrokerCatalog, String> {
-    BrokerCommand::locate()?.call(
-        "selection.set",
-        json!({
-            "data_dir": data_dir,
-            "kind": kind,
-            "provider_id": provider,
-            "backend_id": backend,
-        }),
-    )
+    let mut params = json!({
+        "data_dir": data_dir,
+        "kind": kind,
+        "backend_id": backend,
+    });
+    if let Some(provider) = provider {
+        params["provider_id"] = json!(provider);
+    }
+    BrokerCommand::locate()?.call("selection.set", params)
 }
 
 fn failed_catalog(error: String) -> BrokerCatalog {

@@ -10,7 +10,7 @@ fn rust_adapter_consumes_the_bun_broker_plan() {
         directory.path().join("host-tools.json"),
         serde_json::to_vec(&serde_json::json!({
             "schema_version": 1,
-            "computer_use_selection": { "claude_code": "cua" },
+            "computer_use_selection": { "*": "cua" },
             "computer_use": [{
                 "id": "cua",
                 "enabled": false,
@@ -18,7 +18,7 @@ fn rust_adapter_consumes_the_bun_broker_plan() {
                 "providers": ["claude_code"],
                 "server": { "name": "cua-driver", "command": executable },
             }],
-            "browser_use_selection": { "claude_code": "playwright" },
+            "browser_use_selection": { "*": "playwright" },
             "browser_use": [{
                 "id": "playwright",
                 "enabled": false,

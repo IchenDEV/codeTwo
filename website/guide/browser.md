@@ -25,7 +25,8 @@ A rendered context block looks like:
 Beyond passing context, you can give the *agent* a browser tool in **Settings → Browser Use**. Codex
 can use the discovered **OpenAI Browser / Chrome** runtime. Any compatible provider can instead use
 a Browser Use, Playwright, Chrome DevTools, or other standard MCP backend registered in
-`host-tools.json`. The choice is per provider and is attached when a new session starts; see
+`host-tools.json`. One global choice is resolved against each provider's compatibility when a new
+session starts; see
 [Providers → Configure Browser Use](/guide/providers#configure-browser-use-or-another-browser-mcp).
 
 ::: info Limits

@@ -340,11 +340,12 @@ describe("provider capability wire compatibility", () => {
     }
   });
 
-  test("selects OpenAI Browser or a configured browser MCP independently per provider", () => {
+  test("persists one Browser Use choice and resolves it across compatible providers", () => {
     const directory = mkdtempSync(join(tmpdir(), "codetwo-browser-tools-selection-"));
     try {
       writeFileSync(join(directory, "host-tools.json"), JSON.stringify({
         schema_version: 1,
+        browser_use_selection: { claude_code: "playwright" },
         browser_use: [{
           id: "playwright",
           enabled: false,
@@ -354,46 +355,46 @@ describe("provider capability wire compatibility", () => {
       }));
 
       const configured = loadConfiguredBrowserUse(directory);
+      expect(configured.selections).toEqual({});
       const evidence = {
         ...readyEvidence,
         configuredBrowserUse: configured.bridges,
         browserUseSelections: configured.selections,
         browserUseBackends: [...readyEvidence.browserUseBackends, ...configured.backends],
       };
-      saveBrowserUseSelection(directory, "claude_code", "playwright", evidence);
+      saveBrowserUseSelection(directory, "playwright", evidence);
       const selected = loadConfiguredBrowserUse(directory);
-      const custom = projectProviderToolset({
+      const selectedEvidence = {
         ...evidence,
         configuredBrowserUse: selected.bridges,
         browserUseSelections: selected.selections,
-      }, "claude_code");
-      expect(custom.mcpServers.map((server) => server.name)).toEqual([
+      };
+      const claude = projectProviderToolset(selectedEvidence, "claude_code");
+      const grok = projectProviderToolset(selectedEvidence, "grok");
+      expect(selected.selections).toEqual({ "*": "playwright" });
+      expect(claude.mcpServers.map((server) => server.name)).toEqual([
         "codetwo-openai-computer-use",
         "playwright",
       ]);
-      expect(custom.capabilities.find((item) => item.id === "chrome_browser")?.reason)
+      expect(grok.mcpServers.map((server) => server.name)).toContain("playwright");
+      expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.reason)
         .toContain("Playwright MCP");
 
-      expect(() => saveBrowserUseSelection(directory, "claude_code", "openai-browser", {
-        ...evidence,
-        configuredBrowserUse: selected.bridges,
-        browserUseSelections: selected.selections,
-      })).toThrow("is not configured for provider");
-
-      saveBrowserUseSelection(directory, "codex", "openai-browser", {
-        ...evidence,
-        configuredBrowserUse: selected.bridges,
-        browserUseSelections: selected.selections,
-      });
+      saveBrowserUseSelection(directory, "openai-browser", selectedEvidence);
       const openAi = loadConfiguredBrowserUse(directory);
-      const native = projectProviderToolset({
+      const openAiEvidence = {
         ...evidence,
         configuredBrowserUse: openAi.bridges,
         browserUseSelections: openAi.selections,
-      }, "codex");
+      };
+      const native = projectProviderToolset(openAiEvidence, "codex");
       expect(native.mcpServers).toEqual([]);
       expect(native.capabilities.find((item) => item.id === "chrome_browser")?.state)
         .not.toBe("unavailable");
+      const unsupported = projectProviderToolset(openAiEvidence, "claude_code");
+      expect(unsupported.mcpServers.map((server) => server.name)).not.toContain("playwright");
+      expect(unsupported.capabilities.find((item) => item.id === "chrome_browser")?.state)
+        .toBe("unavailable");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

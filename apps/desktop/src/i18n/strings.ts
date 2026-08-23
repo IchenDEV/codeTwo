@@ -784,11 +784,12 @@ export const en = {
   "settings.computerUseUnavailable": "Unavailable",
   "settings.browserUse": "Browser Use",
   "settings.browserUseHint":
-    "Choose the browser-control backend attached to each provider. OpenAI Browser / Chrome is Codex-only; portable MCP backends come from host-tools.json.",
+    "Choose one external browser-control backend for new sessions. OpenAI Browser / Chrome remains Codex-only; portable MCP backends apply to compatible providers.",
+  "settings.browserUseBackend": "External backend",
   "settings.browserUseAutomatic": "Automatic",
   "settings.browserUseDisabled": "No external backend",
   "settings.browserUseNewSession":
-    "Changes apply to new sessions. Provider-native browser tools remain owned by that provider.",
+    "Changes apply to new sessions. Existing sessions keep the backend they started with.",
   "settings.browserUseBackends": "Detected backends",
   "settings.browserUseLoading": "Loading Browser Use backends…",
   "settings.browserUseLoadFailed":
@@ -2404,11 +2405,12 @@ export const zhCN: Record<StringKey, string> = {
   "settings.computerUseUnavailable": "不可用",
   "settings.browserUse": "Browser Use",
   "settings.browserUseHint":
-    "为每个供应商选择要挂载的浏览器控制后端。OpenAI Browser / Chrome 仅供 Codex 使用；可移植 MCP 后端从 host-tools.json 读取。",
+    "为新会话统一选择一套外部浏览器控制后端。OpenAI Browser / Chrome 仍仅供 Codex 使用；可移植 MCP 后端会用于兼容的供应商。",
+  "settings.browserUseBackend": "外部后端",
   "settings.browserUseAutomatic": "自动",
   "settings.browserUseDisabled": "不挂载外部后端",
   "settings.browserUseNewSession":
-    "更改会应用到新会话；供应商原生浏览器工具仍由供应商自身管理。",
+    "更改会应用到新会话；已有会话继续使用启动时的后端。",
   "settings.browserUseBackends": "已检测后端",
   "settings.browserUseLoading": "正在载入 Browser Use 后端…",
   "settings.browserUseLoadFailed": "无法更新 Browser Use 设置：{error}",

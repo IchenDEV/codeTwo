@@ -415,10 +415,13 @@ export function loadConfiguredBrowserUse(
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
-  const selections = Object.fromEntries(
+  const persistedSelections = Object.fromEntries(
     Object.entries(table(document.browser_use_selection))
       .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );
+  const selections: Record<string, string> = typeof persistedSelections["*"] === "string"
+    ? { "*": persistedSelections["*"] }
+    : {};
   if (document.schema_version !== 1) {
     return {
       bridges: [],
@@ -551,17 +554,6 @@ function cuaDriverBridge(): ConfiguredComputerUseBridge {
   };
 }
 
-function matchesProvider(
-  providers: string[],
-  excludeProviders: string[],
-  providerId: string,
-): boolean {
-  const excluded = excludeProviders.some((candidate) => candidate === "*" || candidate === providerId);
-  const included = providers.length === 0
-    || providers.some((candidate) => candidate === "*" || candidate === providerId);
-  return !excluded && included;
-}
-
 export function computerUseSettings(evidence: HostToolEvidence): ComputerUseSettings {
   return new ToolBroker().catalog({ evidence }).computerUse;
 }
@@ -586,21 +578,16 @@ export function browserUseSettings(evidence: HostToolEvidence): BrowserUseSettin
 
 export function saveBrowserUseSelection(
   dataDir: string,
-  providerId: string,
   backendId: string,
   evidence: HostToolEvidence,
 ): void {
-  if (!/^[A-Za-z0-9_.*-]+$/.test(providerId)) throw new Error(`invalid provider id ${JSON.stringify(providerId)}`);
   if (backendId !== BROWSER_USE_AUTOMATIC && backendId !== BROWSER_USE_DISABLED) {
     const backend = evidence.browserUseBackends.find((candidate) => candidate.id === backendId);
     if (!backend) throw new Error(`unknown browser-use backend ${JSON.stringify(backendId)}`);
     if (!backend.available) throw new Error(backend.reason ?? `browser-use backend ${JSON.stringify(backendId)} is unavailable`);
-    if (!matchesProvider(backend.providers, backend.excludeProviders, providerId)) {
-      throw new Error(`browser-use backend ${JSON.stringify(backendId)} is not configured for provider ${JSON.stringify(providerId)}`);
-    }
   }
 
-  new JsonSelectionStore(dataDir).set("browser_use", providerId, backendId);
+  new JsonSelectionStore(dataDir).setGlobal("browser_use", backendId);
 }
 
 export function detectHostToolEvidence(

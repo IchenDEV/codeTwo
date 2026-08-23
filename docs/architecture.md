@@ -124,7 +124,7 @@ adaptation only. `script/build_rust_hosts.sh` builds the three sibling executabl
 development the adapter can fall back to `bun toolBrokerRpc.ts`; installed hosts can also use
 `CODETWO_TOOL_BROKER` or a broker on `PATH`.
 
-`computer_use.select` and `browser_use.select` write one provider choice through the broker's
+`computer_use.select` and `browser_use.select` each write one global backend choice through the broker's
 selection seam and refresh future plans. Each session snapshots its MCP set when created or
 revived, so a settings change does not interrupt an existing session.
 
@@ -133,7 +133,8 @@ stays Codex-native because its runtime requires the active Codex turn and sessio
 its private `node_repl` endpoint to another provider. Entries in `host-tools.json` can attach Cua
 Driver, Browser Use, Playwright, Chrome DevTools, or another standard MCP computer/browser-control
 backend to compatible providers. Settings offers Automatic, no external backend, and every
-compatible configured backend.
+configured backend as one global selection; provider scopes still determine where that backend can
+actually attach.
 An explicit selection replaces C2's portable OpenAI fallback. Provider-native tools remain owned
 and enforced by their provider; a ToolPlan can select and advertise them but cannot export their
 private transport or rewrite provider policy. Image Generation
