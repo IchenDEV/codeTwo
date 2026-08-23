@@ -222,6 +222,8 @@ export interface SessionInfo {
   title_origin: "default" | "automatic" | "manual";
   /** Pinned sessions stay above the active recency list for their project. */
   pinned: boolean;
+  /** App-lifetime sessions used by side chat. They never appear in normal history/search. */
+  transient?: boolean;
   provider: string | { custom: string };
   model: string | null;
   cwd: string;
@@ -1258,6 +1260,7 @@ export async function newSession(
   worktreeBaseSha?: string | null,
   initialPolicy?: ExecutionPolicy | null,
   initialModel?: string | null,
+  transient = false,
 ): Promise<void> {
   if (inDesktop) {
     await call("engine.new_session", {
@@ -1269,8 +1272,16 @@ export async function newSession(
       request_id: requestId,
       initial_policy: initialPolicy ?? null,
       model: initialModel ?? null,
+      transient,
     });
   }
+}
+
+/** Stop and forget one app-lifetime side-chat session. Durable sessions are rejected. */
+export async function closeTransientSession(session: string): Promise<boolean> {
+  return inDesktop
+    ? call<boolean>("engine.close_transient_session", { session })
+    : true;
 }
 
 /** Resolve selectable baselines from local refs only. This command never fetches. */

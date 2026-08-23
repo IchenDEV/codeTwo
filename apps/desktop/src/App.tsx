@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   Archive,
   Check,
@@ -236,6 +244,7 @@ import {
   type SceneBannerState,
 } from "./session/SceneBanner";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { SideChatPanel, type SideChatSeed } from "./session/SideChatPanel";
 import { ProjectActionDialog } from "./session/ProjectActionDialog";
 import { projectActionBindings } from "./session/projectActions";
 import { StageTrack } from "./session/StageTrack";
@@ -623,6 +632,12 @@ export default function App() {
   const temporarySessionRef = useRef(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
+  const [sideChatOpen, setSideChatOpen] = useState(false);
+  const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
+  const [sideChatWidth, setSideChatWidth] = usePersistedNumber(
+    "codetwo.sideChatWidth",
+    440,
+  );
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
@@ -864,19 +879,30 @@ export default function App() {
   const [narrowLayout, setNarrowLayout] = useState(
     () => window.innerWidth < 720,
   );
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
   useEffect(() => {
     const measure = () => {
-      const next = window.innerWidth < 720;
+      const width = window.innerWidth;
+      const next = width < 720;
       if (next && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
       wasNarrowLayoutRef.current = next;
+      setViewportWidth(width);
       setNarrowLayout(next);
     };
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
   const displayedRailCollapsed = narrowLayout ? !narrowRailOpen : railCollapsed;
+  const appliedSideChatWidth =
+    viewportWidth < 640
+      ? viewportWidth
+      : viewportWidth < 960
+        ? Math.min(sideChatWidth, 520)
+        : viewportWidth < 1440
+          ? Math.min(sideChatWidth, 360)
+          : sideChatWidth;
   const toggleDisplayedRail = useCallback(() => {
     if (narrowLayout) setNarrowRailOpen((open) => !open);
     else toggleRail();
@@ -1202,6 +1228,7 @@ export default function App() {
   // ---- R10 dock follow ----
   useEffect(() => {
     dockTabRef.current = dockTab;
+    if (dockTab !== null) setSideChatOpen(false);
   }, [dockTab]);
 
   useEffect(() => {
@@ -2607,17 +2634,11 @@ export default function App() {
   const askSelectedTextInSideChat = useCallback(
     (text: string) => {
       const markdown = `${t("selection.askInSideChatPrompt")}\n\n${selectedExcerptMarkdown(text)}`;
-      createSession();
-      clearEditorRef.current?.();
-      setDocMode(true);
-      // `createSession` resets the active shell synchronously; insert once the surviving editor has
-      // observed that draft transition. Its transcript will then occupy the side-chat column.
-      setTimeout(() => {
-        void insertMarkdownRef.current?.(markdown, "replace");
-        focusEditorRef.current?.();
-      }, 0);
+      setSideChatSeed({ id: globalThis.crypto.randomUUID(), text: markdown });
+      setSideChatOpen(true);
+      manualDockTab(null);
     },
-    [createSession, setDocMode, t],
+    [manualDockTab, t],
   );
 
   const answer = useCallback(
@@ -5099,7 +5120,13 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
+    <div
+      className={cn(
+        "app-shell flex h-screen flex-col overflow-hidden text-foreground",
+        sideChatOpen && "workspace-with-side-chat",
+      )}
+      style={{ "--side-chat-width": `${appliedSideChatWidth}px` } as CSSProperties}
+    >
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
@@ -5688,6 +5715,7 @@ export default function App() {
               canCommit={git?.is_repo === true}
               terminalActive={terminalOpen}
               panelActive={dockTab !== null}
+              sideChatActive={sideChatOpen}
               actions={scripts}
               onRunAction={runProjectAction}
               onAddAction={() => setShowActionDialog(true)}
@@ -5700,7 +5728,15 @@ export default function App() {
               onCheckpoint={() => void doCheckpoint()}
               onPush={() => void doPush().catch(() => {})}
               onToggleTerminal={() => toggleDock("terminal")}
+              onToggleSideChat={() => {
+                setSideChatOpen((current) => {
+                  const next = !current;
+                  if (next) manualDockTab(null);
+                  return next;
+                });
+              }}
               onTogglePanel={() => {
+                setSideChatOpen(false);
                 manualDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
@@ -6152,6 +6188,25 @@ export default function App() {
         </div>
       </div>
       )}
+
+      <SideChatPanel
+        open={sideChatOpen}
+        width={appliedSideChatWidth}
+        onWidth={setSideChatWidth}
+        onClose={() => setSideChatOpen(false)}
+        provider={provider}
+        providers={providers}
+        cwd={cwd || "."}
+        model={currentModel}
+        mode={mode}
+        sandbox={sandbox}
+        seed={sideChatSeed}
+        onSeedHandled={(id) =>
+          setSideChatSeed((current) =>
+            current?.id === id ? null : current,
+          )
+        }
+      />
 
       {/* ---------------- dialogs ---------------- */}
       {showSourceControl && componentEnabled("git.surface") && (
