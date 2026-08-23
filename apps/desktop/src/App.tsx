@@ -245,6 +245,7 @@ import {
 } from "./session/SceneBanner";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
 import { SideChatPanel, type SideChatSeed } from "./session/SideChatPanel";
+import { EmptySessionStarters } from "./session/EmptySessionStarters";
 import { ProjectActionDialog } from "./session/ProjectActionDialog";
 import { projectActionBindings } from "./session/projectActions";
 import { StageTrack } from "./session/StageTrack";
@@ -5654,7 +5655,7 @@ export default function App() {
               the traffic lights and the expand button takes the wordmark's place. */}
           <header
             className={cn(
-              "electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
+              "electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 py-2.5 pr-4",
               displayedRailCollapsed ? "pl-[78px]" : "pl-4",
             )}
           >
@@ -5666,44 +5667,44 @@ export default function App() {
                   />
             )}
             {/* Breadcrumb, reference-style: project / thread. */}
-            <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            {activeProjectName && (
-              <>
-                <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
-                  {activeProjectName}
-                </span>
-                    <span className="shrink-0 text-ui text-muted-foreground/50">
-                      /
-                    </span>
-              </>
-            )}
-            {activeBoardTask ? (
-              <button
-                type="button"
-                className="rounded p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
-                aria-label={t("taskboard.open")}
-                title={activeBoardTask.id}
-                onClick={openTaskBoard}
-              >
-                <SquareKanban className="size-3.5" aria-hidden />
-              </button>
-            ) : null}
-            <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
-              {activeTitle}
-            </span>
-            {activeBoardTask && activeSessionTitle ? (
-              <>
-                <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
-                <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
-                  {activeSessionTitle}
-                </span>
-              </>
-            ) : null}
-            {!activeBoardTask && activeSession ? (
-              <span className="rounded-full bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
-                {t("rail.newTemporarySession")}
+            <div data-session-breadcrumb className="electrobun-webkit-app-region-drag flex min-w-0 items-center gap-2">
+              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+              {activeProjectName && (
+                <>
+                  <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
+                    {activeProjectName}
+                  </span>
+                  <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                </>
+              )}
+              {activeBoardTask ? (
+                <button
+                  type="button"
+                  className="rounded p-0.5 text-primary outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+                  aria-label={t("taskboard.open")}
+                  title={activeBoardTask.id}
+                  onClick={openTaskBoard}
+                >
+                  <SquareKanban className="size-3.5" aria-hidden />
+                </button>
+              ) : null}
+              <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
+                {activeTitle}
               </span>
-            ) : null}
+              {activeBoardTask && activeSessionTitle ? (
+                <>
+                  <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
+                  <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
+                    {activeSessionTitle}
+                  </span>
+                </>
+              ) : null}
+              {!activeBoardTask && activeSession ? (
+                <span className="rounded-full bg-fill-rest px-2 py-0.5 text-cap text-muted-foreground">
+                  {t("rail.newTemporarySession")}
+                </span>
+              ) : null}
+            </div>
 
             <div className="electrobun-webkit-app-region-drag flex-1" />
 
@@ -5818,61 +5819,81 @@ export default function App() {
                 Compact, the wrapper is just the composer's slot; expanded, it is the document column
                 inside the outer transcript/document row. Keep this wrapper vertical so banners and
                 plugin contributions remain above the document instead of consuming its width. An empty
-                thread is the hero state: the heading and the card sit together in the centre. */}
+                thread gives the welcome choices the quiet middle of the page while the Composer stays
+                near the bottom as the stable primary action. */}
             <div
               className={cn(
                 "flex",
                 docMode
                   ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
                   : turns.length === 0 && !sessionLoading
-                    ? "order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
+                    ? "order-2 min-h-0 flex-1 flex-col overflow-y-auto"
                     : "order-2 shrink-0 flex-col",
               )}
             >
               {/* "What should we build in <project>?" — the project name is the project switcher. */}
               {!docMode && turns.length === 0 && !sessionLoading && (
-                <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
-                  {t("transcript.greetingIn")}{" "}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <button
-                          type="button"
-                          className="rounded-(--ds-radius-micro) underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                          title={activeProject ?? undefined}
-                        >
-                          {activeProjectName ?? t("rail.noProject")}
-                        </button>
-                      }
-                    />
-                    <DropdownMenuContent side="top" align="center" className="w-60">
-                      {projects.length > 0 && (
+                <div
+                  data-empty-session-hero
+                  className="animate-rise-in flex flex-1 items-center justify-center-safe px-6 py-8"
+                >
+                  <div className="w-full max-w-3xl">
+                    <h1 className="mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
+                      {activeProjectName ? (
                         <>
-                          <DropdownMenuGroup>
-                            {projects.map((project) => (
-                              <DropdownMenuItem
-                                key={project.path}
-                                onClick={() => selectProject(project.path)}
-                              >
-                                <Folder />
-                                <span className="min-w-0 flex-1 truncate" title={project.path}>
-                                  {project.name}
-                                </span>
-                                {project.path === activeProject && <Check />}
+                          {t("transcript.greetingIn")}{" "}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="rounded-(--ds-radius-micro) underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                                  title={activeProject ?? undefined}
+                                >
+                                  {activeProjectName}
+                                </button>
+                              }
+                            />
+                            <DropdownMenuContent side="top" align="center" className="w-60">
+                              {projects.length > 0 && (
+                                <>
+                                  <DropdownMenuGroup>
+                                    {projects.map((project) => (
+                                      <DropdownMenuItem
+                                        key={project.path}
+                                        onClick={() => selectProject(project.path)}
+                                      >
+                                        <Folder />
+                                        <span className="min-w-0 flex-1 truncate" title={project.path}>
+                                          {project.name}
+                                        </span>
+                                        {project.path === activeProject && <Check />}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuGroup>
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
+                              <DropdownMenuItem onClick={() => void addProjectFolder()}>
+                                <FolderPlus />
+                                {t("rail.addProject")}
                               </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuGroup>
-                          <DropdownMenuSeparator />
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {t("transcript.greetingEnd")}
                         </>
+                      ) : (
+                        t("transcript.greeting")
                       )}
-                      <DropdownMenuItem onClick={() => void addProjectFolder()}>
-                        <FolderPlus />
-                        {t("rail.addProject")}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {t("transcript.greetingEnd")}
-                </h1>
+                    </h1>
+                    <EmptySessionStarters
+                      onSelect={(prompt) => {
+                        insertTextRef.current?.(prompt);
+                        setTimeout(() => focusEditorRef.current?.(), 0);
+                      }}
+                    />
+                  </div>
+                </div>
               )}
               {/* An archived chat reads, but doesn't run: the composer yields its slot to this notice
                   until the session is restored. The composer stays mounted (hidden) — unmounting
@@ -5941,12 +5962,14 @@ export default function App() {
                 <Composer
                   config={sessionConfig}
                   hero={turns.length === 0 && !sessionLoading}
-                  checkout={{
-                    project: activeProjectName ?? cwd,
-                    branch: git?.is_repo ? git.branch : null,
-                    dirty: git?.files.length ?? 0,
-                    onOpen: openSourceControl,
-                  }}
+                  checkout={activeProjectName
+                    ? {
+                        project: activeProjectName ?? cwd,
+                        branch: git?.is_repo ? git.branch : null,
+                        dirty: git?.files.length ?? 0,
+                        onOpen: openSourceControl,
+                      }
+                    : undefined}
                   docMode={docMode}
                   onDocMode={toggleDocMode}
                   height={composerH}

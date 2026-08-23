@@ -69,14 +69,14 @@ export function PluginUiSlot({
               type="button"
               variant="ghost"
               size="compact"
-              className="max-w-44 shrink-0"
+              className="session-header-labeled-button max-w-44 shrink-0"
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}
               onClick={() => void invoke(contribution)}
             >
               {busy === key ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Puzzle data-icon="inline-start" />}
-              <span className="truncate">{contribution.label}</span>
+              <span className="session-header-action-label truncate">{contribution.label}</span>
             </Button>
           );
         })}
@@ -159,19 +159,19 @@ export function PluginUiSlot({
             return (
               <div
                 key={key}
-                className="flex flex-wrap items-center gap-3 rounded-(--ds-radius-module) bg-card px-4 py-3 ring-1 ring-foreground/[0.07]"
+                className="flex flex-wrap items-center gap-3 rounded-(--ds-radius-module) bg-fill-quiet px-4 py-3"
               >
                 <Puzzle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <p className="text-ui font-medium">{contribution.label}</p>
                   {contribution.description ? (
-                    <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">{contribution.description}</p>
+                    <p className="plugin-contribution-description mt-0.5 text-fine leading-relaxed text-muted-foreground">{contribution.description}</p>
                   ) : null}
                 </div>
                 <Button
                   type="button"
                   size="compact"
-                  variant="secondary"
+                  variant="ghost"
                   disabled={busy !== null}
                   onClick={() => void invoke(contribution)}
                 >
