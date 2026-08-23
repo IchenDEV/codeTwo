@@ -243,6 +243,7 @@ export class PureBunHost {
     await this.plugins.shutdown();
     this.terminal.shutdown();
     this.lsp.shutdown();
+    this.database.purgeTransientSessions();
     this.database.close();
   }
 
@@ -297,6 +298,9 @@ export class PureBunHost {
     });
 
     this.register("engine.new_session", (args) => this.newSession(args));
+    this.register("engine.close_transient_session", (args) =>
+      this.closeTransientSession(string(args.session, "session")),
+    );
     this.register("engine.prompt", (args) => this.startPrompt(args));
     this.register("engine.cancel", (args) => this.cancel(string(args.session, "session")));
     this.register("engine.answer_permission", (args) => this.answerPermission(args));
@@ -606,6 +610,7 @@ export class PureBunHost {
       cwd,
       permissionMode: optionalString(policy.mode) ?? "ask",
       sandboxPolicy: optionalString(policy.sandbox) ?? "workspace_write",
+      transient: boolean(args.transient),
     });
     const id = string(session.id, "session id");
     this.runtimes.set(id, this.runtimeFromSession(session));
@@ -662,6 +667,7 @@ export class PureBunHost {
         runtime.acpSessionId,
         withProviderToolInstructions(blocks, runtime.toolset.instructions),
       ));
+      if (runtime.shuttingDown) return;
       const stopReason = optionalString(response.stopReason) ?? "end_turn";
       runtime.busy = false;
       runtime.turnId = null;
@@ -669,6 +675,7 @@ export class PureBunHost {
       this.setActivity(runtime, { kind: "idle" });
       this.emitEngine({ event: "turn_ended", session: runtime.id, stop_reason: stopReason });
     } catch (cause) {
+      if (runtime.shuttingDown) return;
       runtime.busy = false;
       const turnId = runtime.turnId;
       runtime.turnId = null;
@@ -682,6 +689,32 @@ export class PureBunHost {
       });
       this.emitEngine({ event: "error", session: runtime.id, message, terminal: true, request_id: requestId });
     }
+  }
+
+  private closeTransientSession(sessionId: string): boolean {
+    const session = this.database.getSession(sessionId);
+    if (session?.transient !== true) return false;
+
+    for (const [requestId, pending] of this.pendingPermissions) {
+      if (pending.session !== sessionId) continue;
+      pending.resolve({ outcome: "cancelled" });
+      this.pendingPermissions.delete(requestId);
+    }
+    for (const [requestId, pending] of this.pendingElicitations) {
+      if (pending.session !== sessionId) continue;
+      pending.resolve({ action: "cancel" });
+      this.pendingElicitations.delete(requestId);
+    }
+
+    const runtime = this.runtimes.get(sessionId);
+    if (runtime) {
+      runtime.shuttingDown = true;
+      if (runtime.acpSessionId) runtime.peer?.cancel(runtime.acpSessionId);
+      runtime.peer?.shutdown();
+      this.clearToolCalls(sessionId);
+      this.runtimes.delete(sessionId);
+    }
+    return this.database.deleteTransientSession(sessionId);
   }
 
   private async connect(runtime: SessionRuntime): Promise<AcpPeer> {
@@ -713,6 +746,10 @@ export class PureBunHost {
         response = object(await peer.newSession(runtime.cwd));
         runtime.acpSessionId = string(response.sessionId, "ACP session id");
       }
+      if (runtime.shuttingDown) {
+        peer.shutdown();
+        throw new Error("session closed");
+      }
       this.database.updateAcpSession(runtime.id, runtime.acpSessionId);
       const models = reportedModels(response, runtime.provider);
       const current = optionalString(object(response.models).currentModelId) ?? runtime.model ?? "";
@@ -741,6 +778,7 @@ export class PureBunHost {
   }
 
   private async onAcpNotification(runtime: SessionRuntime, method: string, params: unknown): Promise<void> {
+    if (runtime.shuttingDown) return;
     if (method !== "session/update") return;
     const update = object(object(params).update);
     const kind = optionalString(update.sessionUpdate) ?? "";
@@ -835,6 +873,11 @@ export class PureBunHost {
   }
 
   private async onAcpRequest(runtime: SessionRuntime, method: string, params: unknown): Promise<unknown> {
+    if (runtime.shuttingDown) {
+      if (method === "session/request_permission") return { outcome: { outcome: "cancelled" } };
+      if (method === "elicitation/create") return { action: "decline" };
+      throw new Error("session closed");
+    }
     if (method === "session/request_permission") return this.requestPermission(runtime, object(params));
     if (method === "elicitation/create") return this.requestElicitation(runtime, object(params));
     if (method === "fs/read_text_file") {

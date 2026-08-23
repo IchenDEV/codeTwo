@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   title_origin TEXT NOT NULL DEFAULT 'default',
   pinned INTEGER NOT NULL DEFAULT 0,
   archived INTEGER NOT NULL DEFAULT 0,
+  transient INTEGER NOT NULL DEFAULT 0,
   activity_json TEXT,
   provider TEXT NOT NULL,
   model TEXT,
@@ -188,6 +189,7 @@ export interface NewSessionInput {
   cwd: string;
   permissionMode: string;
   sandboxPolicy: string;
+  transient?: boolean;
 }
 
 export class BunDatabase {
@@ -200,7 +202,19 @@ export class BunDatabase {
     this.db = new Database(this.path, { create: true, strict: true });
     this.db.exec("PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
     this.db.exec(BASE_SCHEMA);
+    this.migrateSessionLifecycle();
     this.migrateMemoryManagement();
+  }
+
+  private migrateSessionLifecycle(): void {
+    try {
+      this.db.exec("ALTER TABLE sessions ADD COLUMN transient INTEGER NOT NULL DEFAULT 0");
+    } catch (error) {
+      if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+    }
+    // A renderer or process crash may bypass the normal host shutdown path. Side chats are
+    // intentionally app-lifetime data, so the next host start is the final cleanup boundary.
+    this.purgeTransientSessions();
   }
 
   private migrateMemoryManagement(): void {
@@ -287,10 +301,10 @@ export class BunDatabase {
     const order = archived ? "created_at DESC" : "pinned DESC,created_at DESC";
     const rows = this.db
       .query(
-        `SELECT id,title,title_origin,pinned,activity_json,provider,model,cwd,project_path,
+        `SELECT id,title,title_origin,pinned,transient,activity_json,provider,model,cwd,project_path,
                 worktree_path,worktree_baseline_json,worktree_identity_json,worktree_discarded,
                 permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,created_at
-         FROM sessions WHERE archived=? ORDER BY ${order}`,
+         FROM sessions WHERE archived=? AND transient=0 ORDER BY ${order}`,
       )
       .all(archived ? 1 : 0) as Row[];
     return rows.map((row) => this.sessionFromRow(row));
@@ -299,7 +313,7 @@ export class BunDatabase {
   getSession(id: string): Record<string, unknown> | null {
     const row = this.db
       .query(
-        `SELECT id,title,title_origin,pinned,activity_json,provider,model,cwd,project_path,
+        `SELECT id,title,title_origin,pinned,transient,activity_json,provider,model,cwd,project_path,
                 worktree_path,worktree_baseline_json,worktree_identity_json,worktree_discarded,
                 permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,created_at
          FROM sessions WHERE id=?`,
@@ -315,14 +329,15 @@ export class BunDatabase {
     this.db
       .query(
         `INSERT INTO sessions(
-         id,title,title_origin,pinned,archived,activity_json,provider,model,cwd,project_path,
+         id,title,title_origin,pinned,archived,transient,activity_json,provider,model,cwd,project_path,
            worktree_path,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
            memory_read,memory_write,created_at
-         ) VALUES(?,?,'default',0,0,?,?,?,?,?,NULL,0,?,?,NULL,'inherit','inherit',?)`,
+         ) VALUES(?,?,'default',0,0,?,?,?,?,?,?,NULL,0,?,?,NULL,'inherit','inherit',?)`,
       )
       .run(
         id,
         "Untitled session",
+        input.transient ? 1 : 0,
         JSON.stringify(activity),
         JSON.stringify(input.provider),
         input.model,
@@ -335,6 +350,30 @@ export class BunDatabase {
     const session = this.getSession(id);
     if (!session) throw new Error("could not read newly created session");
     return session;
+  }
+
+  deleteTransientSession(id: string): boolean {
+    const remove = this.db.transaction((sessionId: string) => {
+      const row = this.db
+        .query("SELECT transient FROM sessions WHERE id=?")
+        .get(sessionId) as Row | null;
+      if (!row || !bool(row.transient)) return false;
+      this.db.query("DELETE FROM memory_receipts WHERE session_id=?").run(sessionId);
+      this.db.query("DELETE FROM memories WHERE session_id=?").run(sessionId);
+      this.db.query("DELETE FROM parts WHERE session_id=?").run(sessionId);
+      return this.db.query("DELETE FROM sessions WHERE id=? AND transient=1").run(sessionId)
+        .changes > 0;
+    });
+    return remove(id);
+  }
+
+  purgeTransientSessions(): number {
+    const rows = this.db.query("SELECT id FROM sessions WHERE transient=1").all() as Row[];
+    let removed = 0;
+    for (const row of rows) {
+      if (this.deleteTransientSession(text(row.id))) removed += 1;
+    }
+    return removed;
   }
 
   updateAcpSession(id: string, acpSessionId: string): void {
@@ -393,6 +432,7 @@ export class BunDatabase {
     const rows = this.db
       .query(
         `SELECT p.session_id,p.part_json FROM parts p
+         JOIN sessions s ON s.id=p.session_id AND s.transient=0
          WHERE p.seq=(
            SELECT MAX(q.seq) FROM parts q
            WHERE q.session_id=p.session_id
@@ -455,7 +495,7 @@ export class BunDatabase {
       .query(
         `SELECT s.id AS session_id,s.title,s.cwd,s.archived,p.role,p.search_text,p.seq
          FROM parts p JOIN sessions s ON s.id=p.session_id
-         WHERE p.search_text LIKE ? ESCAPE '\\'
+         WHERE s.transient=0 AND p.search_text LIKE ? ESCAPE '\\'
          ORDER BY p.seq DESC LIMIT ?`,
       )
       .all(needle, Math.max(1, Math.min(limit, 200))) as Row[]).map((row) => ({
@@ -920,6 +960,7 @@ export class BunDatabase {
       title: text(row.title, "Untitled session"),
       title_origin: text(row.title_origin, "default"),
       pinned: bool(row.pinned),
+      transient: bool(row.transient),
       activity: jsonValue(row.activity_json, { revision: 0, state: { kind: "idle" } }),
       provider: jsonValue(row.provider, text(row.provider, "codex")),
       model: nullableText(row.model),

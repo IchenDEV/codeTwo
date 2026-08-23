@@ -184,6 +184,16 @@ export const en = {
   "header.checkpoint": "Checkpoint now",
   "header.push": "Push",
   "header.environment": "Project environment",
+  "sideChat.toggle": "Toggle side chat",
+  "sideChat.title": "Side chat",
+  "sideChat.new": "New side chat",
+  "sideChat.closeTab": "Close side chat",
+  "sideChat.hide": "Hide side chat",
+  "sideChat.resize": "Resize side chat",
+  "sideChat.temporary":
+    "Side chats are temporary and disappear when you close CodeTwo.",
+  "sideChat.placeholder": "Ask anything",
+  "sideChat.send": "Send message",
 
   // project actions
   "actionDialog.title": "Add Action",
@@ -1785,6 +1795,15 @@ export const zhCN: Record<StringKey, string> = {
   "header.checkpoint": "立即创建检查点",
   "header.push": "推送",
   "header.environment": "项目环境",
+  "sideChat.toggle": "切换侧边对话",
+  "sideChat.title": "侧边对话",
+  "sideChat.new": "新建侧边对话",
+  "sideChat.closeTab": "关闭侧边对话",
+  "sideChat.hide": "隐藏侧边对话",
+  "sideChat.resize": "调整侧边对话宽度",
+  "sideChat.temporary": "侧边对话是临时的，关闭 CodeTwo 后会自动消失。",
+  "sideChat.placeholder": "随便问点什么",
+  "sideChat.send": "发送消息",
 
   "actionDialog.title": "添加动作",
   "actionDialog.description": "动作是项目级命令，可从顶部栏或快捷键运行。",

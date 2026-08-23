@@ -31,6 +31,46 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 describe("pure Bun desktop host", () => {
+  test("keeps transient side-chat sessions out of history and only closes transient ids", async () => {
+    const value = fixture();
+    try {
+      await value.host.call(
+        "engine.new_session",
+        {
+          cwd: value.workspace,
+          provider: "codex",
+          transient: true,
+          request_id: "side-chat-create",
+          initial_policy: { mode: "ask", sandbox: "workspace_write" },
+        },
+        value.workspace,
+      );
+      const created = value.events.find(
+        (event) =>
+          event.name === "engine-event" &&
+          event.payload.event === "session_created" &&
+          event.payload.request_id === "side-chat-create",
+      );
+      if (!created || created.name !== "engine-event" || created.payload.event !== "session_created") {
+        throw new Error("transient session creation event not found");
+      }
+
+      expect(await value.host.call("sessions.list", null, null)).toEqual([]);
+      expect(await value.host.call(
+        "engine.close_transient_session",
+        { session: created.payload.session },
+        value.workspace,
+      )).toBe(true);
+      expect(await value.host.call(
+        "engine.close_transient_session",
+        { session: created.payload.session },
+        value.workspace,
+      )).toBe(false);
+    } finally {
+      await dispose(value);
+    }
+  }, 15_000);
+
   test("persists a model chosen before session creation", async () => {
     const value = fixture();
     try {
