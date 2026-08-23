@@ -509,7 +509,10 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const providers = config.providers.length > 0 ? config.providers : fallbackProviders();
+  const registry = config.providers.length > 0 ? config.providers : fallbackProviders();
+  // Disabled providers stop being new-session choices. Keep the active one visible so a resumed
+  // session still identifies the runtime it already owns.
+  const providers = registry.filter((candidate) => candidate.enabled !== false || candidate.id === config.provider);
   const active = providers.find((p) => p.id === config.provider);
   const activeLabel = active?.display_name ?? providerDisplayName(config.provider);
   const registryReady = config.providersStatus === "ready";
@@ -571,7 +574,9 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
             // The dot says installed; the line under it says what's missing, so the list itself
             // answers "why can't I use that one?" without a paragraph of warning text.
             detail={registryReady && !p.available
-              ? p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
+              ? p.enabled === false
+                ? t("settings.providerDisabled")
+                : p.needs_node ? t("settings.needsNode") : t("settings.notInstalled")
               : null}
             leading={
               <>
@@ -588,6 +593,7 @@ export function ProviderPicker({ config }: { config: SessionConfig }) {
                 />
               </>
             }
+            disabled={registryReady && !p.available}
             onClick={() => {
               config.onProvider(p.id);
               setOpen(false);

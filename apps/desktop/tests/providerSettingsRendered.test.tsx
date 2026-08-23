@@ -76,6 +76,10 @@ describe("Provider settings capabilities", () => {
     );
     await flush();
 
+    view.container.querySelector('[data-provider-disclosure="claude_code"]')?.click();
+    view.container.querySelector('[data-provider-disclosure="codex"]')?.click();
+    await flush();
+
     expect(view.container.querySelector('[data-provider-capability="claude_code:computer_use"]'))
       .not.toBeNull();
     expect(view.container.querySelector('[data-provider-capability="claude_code:image_generation"]'))
@@ -85,6 +89,101 @@ describe("Provider settings capabilities", () => {
     expect(view.container.querySelector('[data-provider-capability="codex:codetwo_browser"]'))
       .toBeNull();
     expect(view.container.querySelectorAll("[data-provider-capability]")).toHaveLength(2);
+
+    view.unmount();
+  });
+
+  test("installs, upgrades, refreshes, and enables providers from one list", async () => {
+    const actions: string[] = [];
+    const view = mount(
+      <I18nProvider>
+        <SettingsPage
+          bindings={[]}
+          capturing={null}
+          onCapture={() => {}}
+          providers={[
+            {
+              id: "codex",
+              display_name: "OpenAI Codex",
+              available: true,
+              enabled: true,
+              needs_node: true,
+              models: [],
+              capabilities: [],
+              management: {
+                installed: false,
+                version: null,
+                install_supported: true,
+                upgrade_supported: false,
+                launch_mode: "on_demand",
+              },
+            },
+            {
+              id: "grok",
+              display_name: "Grok",
+              available: true,
+              enabled: true,
+              needs_node: false,
+              models: [],
+              capabilities: [],
+              management: {
+                installed: true,
+                version: "1.0.5",
+                install_supported: false,
+                upgrade_supported: true,
+                launch_mode: "installed",
+              },
+            },
+          ]}
+          provider="codex"
+          projectPath="/workspace"
+          project={null}
+          onProjectWorktreeMode={async () => {}}
+          memoryEnabled={false}
+          initialTab="providers"
+          onClose={() => {}}
+          onReloadProviders={async () => {
+            actions.push("refresh");
+            return [];
+          }}
+          providerInstaller={async (id) => {
+            actions.push(`install:${id}`);
+            return [];
+          }}
+          providerUpgrader={async (id) => {
+            actions.push(`upgrade:${id}`);
+            return [];
+          }}
+          providerEnabledSaver={async (id, enabled) => {
+            actions.push(`enabled:${id}:${enabled}`);
+            return [];
+          }}
+        />
+      </I18nProvider>,
+    );
+    await flush();
+
+    expect(view.container.textContent).toContain("Ready on demand");
+    expect(view.container.textContent).toContain("v1.0.5");
+
+    view.container.querySelector('[data-provider-action="codex:install"]')?.click();
+    await flush();
+    view.container.querySelector('[data-provider-action="grok:upgrade"]')?.click();
+    await flush();
+    view.container.querySelector('[data-provider-toggle="codex"]')?.click();
+    await flush();
+    view.container.querySelector('[data-provider-refresh]')?.click();
+    await flush();
+
+    expect(actions).toEqual([
+      "install:codex",
+      "refresh",
+      "upgrade:grok",
+      "refresh",
+      "enabled:codex:false",
+      "refresh",
+      "refresh",
+    ]);
 
     view.unmount();
   });

@@ -5,6 +5,7 @@ import {
   projectProviderToolset,
   type AcpMcpServer,
   type HostToolEvidence,
+  type ProviderCapability,
 } from "./providerTools";
 
 export interface ProviderDefinition {
@@ -14,6 +15,19 @@ export interface ProviderDefinition {
   args: string[];
   needsNode: boolean;
   models: { id: string; name: string; description: string | null }[];
+  lifecycle: ProviderLifecycleDefinition;
+}
+
+export interface ProviderLifecycleDefinition {
+  /** Executable whose presence/version represents a locally installed provider runtime. */
+  executable: string;
+  versionArgs: string[];
+  install: string[] | null;
+  upgrade: string[] | null;
+  /** When present, prefer this executable over the on-demand ACP launch command. */
+  managedLaunchArgs?: string[];
+  /** Extra executables required by the ACP adapter at runtime. */
+  requirements?: string[];
 }
 
 const model = (id: string, name: string, description: string | null = null) => ({
@@ -29,6 +43,13 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "npx",
     args: ["-y", "@agentclientprotocol/claude-agent-acp"],
     needsNode: true,
+    lifecycle: {
+      executable: "claude-agent-acp",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "@agentclientprotocol/claude-agent-acp@latest"],
+      upgrade: ["npm", "install", "--global", "@agentclientprotocol/claude-agent-acp@latest"],
+      managedLaunchArgs: [],
+    },
     models: [
       model("default", "Default"),
       model("best", "Best available"),
@@ -44,6 +65,13 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "npx",
     args: ["-y", "@agentclientprotocol/codex-acp@1.1.14"],
     needsNode: true,
+    lifecycle: {
+      executable: "codex-acp",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "@agentclientprotocol/codex-acp@latest"],
+      upgrade: ["npm", "install", "--global", "@agentclientprotocol/codex-acp@latest"],
+      managedLaunchArgs: [],
+    },
     models: [
       model("gpt-5.6-sol", "GPT-5.6-Sol"),
       model("gpt-5.6-terra", "GPT-5.6-Terra"),
@@ -58,6 +86,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "grok",
     args: ["agent", "stdio"],
     needsNode: false,
+    lifecycle: {
+      executable: "grok",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "grok-dev@latest"],
+      upgrade: ["grok", "update"],
+    },
     models: [model("grok-4.6", "Grok 4.6")],
   },
   {
@@ -66,6 +100,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "cursor-agent",
     args: ["--acp"],
     needsNode: false,
+    lifecycle: {
+      executable: "cursor-agent",
+      versionArgs: ["--version"],
+      install: ["/bin/sh", "-c", "curl https://cursor.com/install -fsS | bash"],
+      upgrade: ["cursor-agent", "update"],
+    },
     models: [model("auto", "Auto")],
   },
   {
@@ -74,6 +114,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "opencode",
     args: ["acp"],
     needsNode: false,
+    lifecycle: {
+      executable: "opencode",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "opencode-ai@latest"],
+      upgrade: ["opencode", "upgrade"],
+    },
     models: [],
   },
   {
@@ -82,6 +128,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "opencode2",
     args: ["acp"],
     needsNode: false,
+    lifecycle: {
+      executable: "opencode2",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "@opencode-ai/cli@beta"],
+      upgrade: ["npm", "install", "--global", "@opencode-ai/cli@beta"],
+    },
     models: [],
   },
   {
@@ -90,6 +142,26 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "npx",
     args: ["-y", "pi-acp"],
     needsNode: true,
+    lifecycle: {
+      executable: "pi-acp",
+      versionArgs: ["--version"],
+      install: [
+        "npm",
+        "install",
+        "--global",
+        "@earendil-works/pi-coding-agent@latest",
+        "pi-acp@latest",
+      ],
+      upgrade: [
+        "npm",
+        "install",
+        "--global",
+        "@earendil-works/pi-coding-agent@latest",
+        "pi-acp@latest",
+      ],
+      managedLaunchArgs: [],
+      requirements: ["pi"],
+    },
     models: [],
   },
   {
@@ -98,6 +170,12 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "kimi",
     args: ["acp"],
     needsNode: false,
+    lifecycle: {
+      executable: "kimi",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "@moonshot-ai/kimi-code@latest"],
+      upgrade: ["npm", "install", "--global", "@moonshot-ai/kimi-code@latest"],
+    },
     models: [
       model("kimi-code/k3", "Kimi K3"),
       model("kimi-code/kimi-for-coding", "Kimi for Coding"),
@@ -110,11 +188,27 @@ export const PROVIDERS: ProviderDefinition[] = [
     command: "npx",
     args: ["-y", "glm-acp-agent"],
     needsNode: true,
+    lifecycle: {
+      executable: "glm-acp-agent",
+      versionArgs: ["--version"],
+      install: ["npm", "install", "--global", "glm-acp-agent@latest"],
+      upgrade: ["npm", "install", "--global", "glm-acp-agent@latest"],
+      managedLaunchArgs: [],
+    },
     models: [model("glm-5.3", "GLM-5.3"), model("glm-5-turbo", "GLM-5 Turbo")],
   },
 ];
 
-export function providerSummaries(hostTools: HostToolEvidence): unknown[] {
+export interface ProviderSummary {
+  id: string;
+  display_name: string;
+  available: boolean;
+  needs_node: boolean;
+  models: ProviderDefinition["models"];
+  capabilities: ProviderCapability[];
+}
+
+export function providerSummaries(hostTools: HostToolEvidence): ProviderSummary[] {
   return PROVIDERS.map((provider) => ({
     id: provider.id,
     display_name: provider.displayName,
@@ -189,9 +283,13 @@ export class AcpPeer {
     private readonly callbacks: AcpCallbacks,
     private readonly mcpServers: AcpMcpServer[],
   ) {
-    const executable = which(provider.command);
+    const managedExecutable = provider.lifecycle.managedLaunchArgs !== undefined
+      ? which(provider.lifecycle.executable)
+      : null;
+    const executable = managedExecutable ?? which(provider.command);
     if (!executable) throw new Error(`${provider.displayName} is not installed (${provider.command})`);
-    this.child = Bun.spawn([executable, ...provider.args], {
+    const args = managedExecutable ? provider.lifecycle.managedLaunchArgs! : provider.args;
+    this.child = Bun.spawn([executable, ...args], {
       cwd,
       env: { ...Bun.env },
       stdin: "pipe",

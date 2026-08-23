@@ -5,7 +5,6 @@ import type { DesktopEvent } from "../rpc";
 import {
   AcpPeer,
   providerById,
-  providerSummaries,
   reportedConfigOptions,
   reportedModels,
   type ProviderDefinition,
@@ -31,6 +30,7 @@ import {
   type HostToolEvidence,
   type ProviderToolset,
 } from "./providerTools";
+import { ProviderLifecycleManager } from "./providerLifecycle";
 import {
   LspManager,
   TerminalManager,
@@ -175,6 +175,7 @@ function textContent(value: unknown): string | null {
 export class PureBunHost {
   private readonly database: BunDatabase;
   private hostTools: HostToolEvidence;
+  private readonly providerLifecycle: ProviderLifecycleManager;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
   private readonly plugins: PluginRuntimeManager;
@@ -188,6 +189,7 @@ export class PureBunHost {
   constructor(dataDir: string, private readonly onEvent: (event: DesktopEvent) => void) {
     augmentGuiPath();
     this.hostTools = detectHostToolEvidence(process.env, dataDir);
+    this.providerLifecycle = new ProviderLifecycleManager(dataDir);
     this.database = new BunDatabase(dataDir);
     this.terminal = new TerminalManager((event) => this.emit(event));
     this.lsp = new LspManager((event) => this.emit(event));
@@ -261,7 +263,23 @@ export class PureBunHost {
   }
 
   private registerCommands(dataDir: string): void {
-    this.register("providers.list", () => providerSummaries(this.hostTools));
+    this.register("providers.list", () => this.providerLifecycle.list(this.hostTools));
+    this.register("providers.set_enabled", (args) => {
+      const provider = string(args.provider, "provider");
+      if (typeof args.enabled !== "boolean") throw new Error("enabled must be a boolean");
+      this.providerLifecycle.setEnabled(provider, args.enabled);
+      return this.providerLifecycle.list(this.hostTools);
+    });
+    this.register("providers.install", async (args) => {
+      await this.providerLifecycle.apply(string(args.provider, "provider"), "install");
+      this.hostTools = detectHostToolEvidence(process.env, dataDir);
+      return this.providerLifecycle.list(this.hostTools);
+    });
+    this.register("providers.upgrade", async (args) => {
+      await this.providerLifecycle.apply(string(args.provider, "provider"), "upgrade");
+      this.hostTools = detectHostToolEvidence(process.env, dataDir);
+      return this.providerLifecycle.list(this.hostTools);
+    });
     this.register("computer_use.settings", () => computerUseSettings(this.hostTools));
     this.register("computer_use.select", (args) => {
       const backend = string(args.backend, "backend");
@@ -626,6 +644,9 @@ export class PureBunHost {
     }
     const provider = providerById(providerId(args.provider));
     if (!provider) throw new Error(`unknown Pure Bun provider: ${providerId(args.provider)}`);
+    if (!this.providerLifecycle.enabled(provider.id)) {
+      throw new Error(`${provider.displayName} is disabled in Provider settings`);
+    }
     const cwd = workspacePath(string(args.cwd, "cwd"), ".");
     const policy = object(args.initial_policy);
     const model = optionalString(args.model);

@@ -1673,34 +1673,40 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = useCallback(() => {
+  const refreshProviders = useCallback(async (): Promise<ProviderInfo[]> => {
     const request = ++providerRegistryRequestRef.current;
     setProvidersStatus("loading");
-    void loadProviderRegistry(listProviders)
-      .then((list) => {
-        if (request !== providerRegistryRequestRef.current) return;
-        setProviders(list);
-        setProvidersStatus("ready");
-        // Default to a provider whose CLI is actually installed. Shipping `grok` as the default
-        // meant a machine without it failed on the first session with a raw spawn error.
-        if (!providerPinned.current) {
-          setProvider((current) => {
-            const selected = list.find((candidate) => candidate.id === current);
-            return selected?.available
-              ? current
-              : (list.find((candidate) => candidate.available)?.id ?? current);
-          });
+    try {
+      const list = await loadProviderRegistry(listProviders);
+      if (request !== providerRegistryRequestRef.current) return list;
+      setProviders(list);
+      setProvidersStatus("ready");
+      // Default to a provider whose runtime is enabled and launchable. Shipping `grok` as the
+      // default meant a machine without it failed on the first session with a raw spawn error.
+      setProvider((current) => {
+        const selected = list.find((candidate) => candidate.id === current);
+        // Explicitly disabling the selected provider must leave new sessions with a runnable
+        // choice even when that provider had previously been pinned in the Composer.
+        if (selected?.enabled === false) {
+          return list.find((candidate) => candidate.available)?.id ?? current;
         }
-      })
-      .catch((error) => {
-        if (request !== providerRegistryRequestRef.current) return;
+        if (providerPinned.current) return current;
+        return selected?.available
+          ? current
+          : (list.find((candidate) => candidate.available)?.id ?? current);
+      });
+      return list;
+    } catch (error) {
+      if (request === providerRegistryRequestRef.current) {
         console.error("Could not load the provider registry", error);
         setProvidersStatus("error");
-      });
+      }
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
-    refreshProviders();
+    void refreshProviders().catch(() => {});
     return () => {
       providerRegistryRequestRef.current += 1;
     };
@@ -5048,7 +5054,9 @@ export default function App() {
         setDefaultModel(null);
       }
     },
-    onReloadProviders: refreshProviders,
+    onReloadProviders: () => {
+      void refreshProviders().catch(() => {});
+    },
     mode,
     sandbox,
     modeChangeDisabled: policyChangeDisabled,
@@ -5162,6 +5170,7 @@ export default function App() {
           onResetAll={resetAllBindings}
           providers={providers}
           provider={provider}
+          onReloadProviders={refreshProviders}
           projectPath={activeProject ?? cwd}
           project={
             projects.find((project) => project.path === activeProject) ?? null
