@@ -132,6 +132,17 @@ async fn plugins_contribute_the_app_surface() {
 }
 
 #[tokio::test]
+async fn browser_use_selection_is_global() {
+    let (app, _dir) = boot().await;
+    let settings = app
+        .call("browser_use.select", json!({ "backend": "automatic" }))
+        .await
+        .expect("browser_use.select");
+
+    assert_eq!(settings["selections"]["*"], "automatic");
+}
+
+#[tokio::test]
 async fn a_legacy_work_automation_database_keeps_store_commands_available() {
     let dir = tempfile::tempdir().expect("tempdir");
     {

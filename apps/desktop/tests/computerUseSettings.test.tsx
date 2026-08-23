@@ -145,9 +145,9 @@ describe("Computer Use settings", () => {
 });
 
 describe("Browser Use settings", () => {
-  test("keeps OpenAI Browser Codex-only while other browser MCPs remain selectable", async () => {
+  test("lets the user choose one global backend while preserving backend compatibility metadata", async () => {
     const browserSettings = {
-      selections: { claude_code: "automatic" },
+      selections: { "*": "automatic" },
       backends: [
         {
           id: "openai-browser",
@@ -184,9 +184,9 @@ describe("Browser Use settings", () => {
           initialTab="browser-use"
           onClose={() => {}}
           browserUseSettingsLoader={async () => browserSettings}
-          browserUseSelectionSaver={async (provider, backend) => {
-            saved.push([provider, backend]);
-            return { ...browserSettings, selections: { ...browserSettings.selections, [provider]: backend } };
+          browserUseSelectionSaver={async (backend) => {
+            saved.push(backend);
+            return { ...browserSettings, selections: { "*": backend } };
           }}
         />
       </I18nProvider>,
@@ -195,25 +195,22 @@ describe("Browser Use settings", () => {
     await waitFor(() => {
       expect(view.container.textContent).toContain("OpenAI Browser / Chrome");
       expect(view.container.textContent).toContain("Playwright MCP");
-      expect(view.container.textContent).toContain("Provider-native browser tools remain owned");
+      expect(view.container.textContent).toContain("Choose one external browser-control backend");
     });
-    const trigger = view.container.querySelector('[data-browser-use-provider="claude_code"]');
+    expect(view.container.querySelectorAll("[data-browser-use-selection]")).toHaveLength(1);
+    expect(view.container.textContent).not.toContain("Claude Code");
+    expect(view.container.textContent).not.toContain("OpenAI Codex");
+    const trigger = view.container.querySelector("[data-browser-use-selection]");
     await openSelect(trigger);
-    const openAiForClaude = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
+    const openAiBrowser = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
       .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
-    expect(openAiForClaude).toBeUndefined();
+    expect(openAiBrowser).toBeDefined();
     const playwright = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
       .find((item) => item.textContent?.trim() === "Playwright MCP");
     await selectItem(playwright);
 
-    expect(saved).toEqual([["claude_code", "playwright"]]);
+    expect(saved).toEqual(["playwright"]);
     expect(trigger?.textContent).toContain("Playwright MCP");
-
-    const codexTrigger = view.container.querySelector('[data-browser-use-provider="codex"]');
-    await openSelect(codexTrigger);
-    const openAiForCodex = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
-      .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
-    expect(openAiForCodex).toBeDefined();
     view.unmount();
   });
 });

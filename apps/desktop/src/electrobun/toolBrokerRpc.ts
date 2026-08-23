@@ -106,8 +106,7 @@ function handle(request: JsonRpcRequest): unknown {
       if (kind === "computer_use") {
         saveComputerUseSelection(dataDir, backendId, evidence);
       } else if (kind === "browser_use") {
-        const providerId = requiredString(params.provider_id, "params.provider_id");
-        saveBrowserUseSelection(dataDir, providerId, backendId, evidence);
+        saveBrowserUseSelection(dataDir, backendId, evidence);
       } else {
         throw new Error(`unsupported selection kind ${JSON.stringify(kind)}`);
       }

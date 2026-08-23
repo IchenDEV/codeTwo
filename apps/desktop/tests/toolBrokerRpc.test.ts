@@ -72,5 +72,34 @@ describe("Tool Broker JSON-RPC adapter", () => {
     } finally {
       rmSync(dataDir, { recursive: true, force: true });
     }
-  });
+  }, 10_000);
+
+  test("persists Browser Use as one global selection without a provider id", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-global-browser-selection-"));
+    try {
+      const request = {
+        jsonrpc: "2.0",
+        id: 9,
+        method: "selection.set",
+        params: {
+          data_dir: dataDir,
+          kind: "browser_use",
+          backend_id: "automatic",
+          environment: {},
+        },
+      };
+      const child = Bun.spawnSync(["bun", entrypoint], {
+        stdin: new TextEncoder().encode(JSON.stringify(request)),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+
+      expect(child.exitCode).toBe(0);
+      expect(JSON.parse(child.stdout.toString()).result.browser_use.selections).toEqual({ "*": "automatic" });
+      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).browser_use_selection)
+        .toEqual({ "*": "automatic" });
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, 10_000);
 });

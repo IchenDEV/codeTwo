@@ -6,7 +6,6 @@ import { HOST_TOOLS_CONFIG_FILE } from "./contracts";
 export type SelectionKind = "computer_use" | "browser_use";
 
 export interface SelectionStorePort {
-  set(kind: SelectionKind, providerId: string, backendId: string): void;
   setGlobal(kind: SelectionKind, backendId: string): void;
 }
 
@@ -19,10 +18,6 @@ function table(value: unknown): Document {
 /** Atomic persistence seam; catalog and routing remain owned by ToolBroker. */
 export class JsonSelectionStore implements SelectionStorePort {
   constructor(private readonly dataDir: string) {}
-
-  set(kind: SelectionKind, providerId: string, backendId: string): void {
-    this.write(kind, (current) => ({ ...current, [providerId]: backendId }));
-  }
 
   setGlobal(kind: SelectionKind, backendId: string): void {
     this.write(kind, () => ({ "*": backendId }));

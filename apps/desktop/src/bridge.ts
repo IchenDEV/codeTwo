@@ -1129,13 +1129,12 @@ export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
 }
 
 export async function selectBrowserUseBackend(
-  provider: string,
   backend: string,
 ): Promise<BrowserUseSettings> {
   if (!inDesktop) return getBrowserUseSettings();
   return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
     "browser_use.select",
-    { provider, backend },
+    { backend },
   ));
 }
 

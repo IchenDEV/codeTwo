@@ -234,6 +234,10 @@ impl Plugin for ProvidersPlugin {
             provider: String,
             backend: String,
         }
+        #[derive(Deserialize)]
+        struct BrowserUseSelectionArgs {
+            backend: String,
+        }
         let selection_path = paths.data_dir.clone();
         let selected = service.clone();
         ctx.command("computer_use.select", move |args| {
@@ -264,8 +268,8 @@ impl Plugin for ProvidersPlugin {
             let path = browser_selection_path.clone();
             let selected = browser_selected.clone();
             async move {
-                let args: ComputerUseSelectionArgs = take_args(args)?;
-                HostToolDiscovery::select_browser_use_backend(&path, &args.provider, &args.backend)
+                let args: BrowserUseSelectionArgs = take_args(args)?;
+                HostToolDiscovery::select_browser_use_backend(&path, &args.backend)
                     .map_err(PluginError::new)?;
                 selected.refresh_host_tools(HostToolDiscovery::detect(&path));
                 json(selected.browser_use_settings())

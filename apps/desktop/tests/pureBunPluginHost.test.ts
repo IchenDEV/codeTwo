@@ -230,6 +230,12 @@ describe("Pure Bun process plugin host", () => {
       expect(commands).toContainEqual(expect.objectContaining({ name: "plugins.catalog", plugin: "kernel" }));
       expect(commands).toContainEqual(expect.objectContaining({ name: "computer_use.settings", plugin: "computer-use" }));
       expect(commands).toContainEqual(expect.objectContaining({ name: "browser_use.settings", plugin: "browser-use" }));
+      const browserUse = await host.call("browser_use.select", { backend: "automatic" }, null) as {
+        selections: Record<string, string>;
+      };
+      expect(browserUse.selections).toEqual({ "*": "automatic" });
+      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).browser_use_selection)
+        .toEqual({ "*": "automatic" });
       for (const component of BUILTIN_UI_COMPONENTS) {
         expect(BUILTIN_PLUGIN_BY_ID.get(component.pluginId)?.components).toContain(component.id);
       }

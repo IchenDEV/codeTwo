@@ -262,9 +262,8 @@ export class PureBunHost {
     });
     this.register("browser_use.settings", () => browserUseSettings(this.hostTools));
     this.register("browser_use.select", (args) => {
-      const provider = string(args.provider, "provider");
       const backend = string(args.backend, "backend");
-      saveBrowserUseSelection(dataDir, provider, backend, this.hostTools);
+      saveBrowserUseSelection(dataDir, backend, this.hostTools);
       this.hostTools = detectHostToolEvidence(process.env, dataDir);
       return browserUseSettings(this.hostTools);
     });

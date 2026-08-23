@@ -112,15 +112,20 @@ export class ToolBroker implements ToolBrokerPort {
       && !selectedComputerMatchesProvider;
     const portableComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED
       && !selectedComputerMatchesProvider;
-    const browserSelection = evidence.browserUseSelections[providerId]
-      ?? evidence.browserUseSelections["*"]
-      ?? null;
+    const browserSelection = evidence.browserUseSelections["*"] ?? null;
     const browserExplicitlySelected = browserSelection !== null
       && browserSelection !== BROWSER_USE_AUTOMATIC
       && browserSelection !== BROWSER_USE_DISABLED;
+    const selectedBrowserBridge = browserExplicitlySelected
+      && browserSelection !== OPENAI_BROWSER_BACKEND
+      ? evidence.configuredBrowserUse.find((bridge) => bridge.id === browserSelection) ?? null
+      : null;
+    const selectedBrowserMatchesProvider = selectedBrowserBridge !== null
+      && matchesProvider(selectedBrowserBridge, providerId);
     const nativeBrowserAllowed = browserSelection === null
       || browserSelection === BROWSER_USE_AUTOMATIC
-      || browserSelection === OPENAI_BROWSER_BACKEND;
+      || browserSelection === OPENAI_BROWSER_BACKEND
+      || !selectedBrowserMatchesProvider;
     const hostState: CapabilityState = evidence.hostVersion && VERIFIED_HOST_VERSIONS.has(evidence.hostVersion)
       ? "ready"
       : "unverified";
@@ -314,7 +319,7 @@ export class ToolBroker implements ToolBrokerPort {
       replaceCapability(capabilities, capability(
         "chrome_browser",
         "unavailable",
-        "Browser Use is disabled for this provider.",
+        "Browser Use is disabled.",
         "Choose Automatic or an available backend in Settings → Browser Use.",
       ));
     } else if (browserSelection === OPENAI_BROWSER_BACKEND && !providerBrowserReady) {
@@ -324,7 +329,9 @@ export class ToolBroker implements ToolBrokerPort {
         `The selected browser-use backend ${JSON.stringify(browserSelection)} is unavailable for ${providerId}.`,
         "Choose Automatic or an available backend in Settings → Browser Use.",
       ));
-    } else if (browserExplicitlySelected && browserSelection !== OPENAI_BROWSER_BACKEND) {
+    } else if (browserExplicitlySelected
+      && browserSelection !== OPENAI_BROWSER_BACKEND
+      && !providerBrowserReady) {
       replaceCapability(capabilities, capability(
         "chrome_browser",
         "unavailable",
