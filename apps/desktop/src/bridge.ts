@@ -51,11 +51,21 @@ export interface ProviderInfo {
   id: string;
   display_name: string;
   available: boolean;
+  enabled: boolean;
   needs_node: boolean;
   /// The core's built-in models for this provider — what the picker offers when the provider
   /// reports none of its own over ACP. Empty only for providers we ship no list for.
   models: ModelChoice[];
   capabilities: ProviderCapability[];
+  management: ProviderManagementInfo;
+}
+
+export interface ProviderManagementInfo {
+  installed: boolean;
+  version: string | null;
+  install_supported: boolean;
+  upgrade_supported: boolean;
+  launch_mode: "installed" | "on_demand" | "unavailable";
 }
 
 export type ProviderCapabilityId =
@@ -125,12 +135,25 @@ function normalizeComputerUseSettings(settings: ComputerUseSettingsWire): Comput
   };
 }
 
-type ProviderInfoWire = Omit<ProviderInfo, "capabilities"> & {
+type ProviderInfoWire = Omit<ProviderInfo, "capabilities" | "enabled" | "management"> & {
   capabilities?: ProviderCapability[] | null;
+  enabled?: boolean | null;
+  management?: ProviderManagementInfo | null;
 };
 
 export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo {
-  return { ...provider, capabilities: provider.capabilities ?? [] };
+  return {
+    ...provider,
+    enabled: provider.enabled ?? true,
+    capabilities: provider.capabilities ?? [],
+    management: provider.management ?? {
+      installed: provider.available,
+      version: null,
+      install_supported: false,
+      upgrade_supported: false,
+      launch_mode: provider.available ? "installed" : "unavailable",
+    },
+  };
 }
 
 /** One typed macro slot as `list_skills` reports it (core `SlotDef`, Agent Scenes vocabulary). */
@@ -1035,16 +1058,37 @@ export async function listExtensions(): Promise<{ running: string[]; untrusted: 
   return await call("extensions.list");
 }
 
+const fallbackProvider = (
+  id: string,
+  display_name: string,
+  needs_node: boolean,
+): ProviderInfo => ({
+  id,
+  display_name,
+  available: false,
+  enabled: true,
+  needs_node,
+  models: [],
+  capabilities: [],
+  management: {
+    installed: false,
+    version: null,
+    install_supported: false,
+    upgrade_supported: false,
+    launch_mode: "unavailable",
+  },
+});
+
 const FALLBACK_PROVIDERS: ProviderInfo[] = [
-  { id: "claude_code", display_name: "Claude Code", available: false, needs_node: true, models: [], capabilities: [] },
-  { id: "codex", display_name: "OpenAI Codex", available: false, needs_node: true, models: [], capabilities: [] },
-  { id: "grok", display_name: "Grok", available: false, needs_node: false, models: [], capabilities: [] },
-  { id: "cursor", display_name: "Cursor", available: false, needs_node: false, models: [], capabilities: [] },
-  { id: "opencode", display_name: "OpenCode", available: false, needs_node: false, models: [], capabilities: [] },
-  { id: "opencode2", display_name: "OpenCode 2 (Beta)", available: false, needs_node: false, models: [], capabilities: [] },
-  { id: "pi", display_name: "Pi", available: false, needs_node: true, models: [], capabilities: [] },
-  { id: "kimi", display_name: "Kimi", available: false, needs_node: false, models: [], capabilities: [] },
-  { id: "zcode", display_name: "ZCode (GLM)", available: false, needs_node: true, models: [], capabilities: [] },
+  fallbackProvider("claude_code", "Claude Code", true),
+  fallbackProvider("codex", "OpenAI Codex", true),
+  fallbackProvider("grok", "Grok", false),
+  fallbackProvider("cursor", "Cursor", false),
+  fallbackProvider("opencode", "OpenCode", false),
+  fallbackProvider("opencode2", "OpenCode 2 (Beta)", false),
+  fallbackProvider("pi", "Pi", true),
+  fallbackProvider("kimi", "Kimi", false),
+  fallbackProvider("zcode", "ZCode (GLM)", true),
 ];
 
 /** Stable provider identity while the desktop host is still starting or temporarily unavailable. */
@@ -1053,6 +1097,7 @@ export function fallbackProviders(): ProviderInfo[] {
     ...provider,
     models: [...provider.models],
     capabilities: [...provider.capabilities],
+    management: { ...provider.management },
   }));
 }
 
@@ -1081,6 +1126,24 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   const providers = inDesktop
     ? await call<ProviderInfoWire[]>("providers.list")
     : fallbackProviders();
+  return providers.map(normalizeProviderInfo);
+}
+
+export async function setProviderEnabled(provider: string, enabled: boolean): Promise<ProviderInfo[]> {
+  if (!inDesktop) throw new Error("Provider management is available in the C2 desktop app");
+  const providers = await call<ProviderInfoWire[]>("providers.set_enabled", { provider, enabled });
+  return providers.map(normalizeProviderInfo);
+}
+
+export async function installProvider(provider: string): Promise<ProviderInfo[]> {
+  if (!inDesktop) throw new Error("Provider installation is available in the C2 desktop app");
+  const providers = await call<ProviderInfoWire[]>("providers.install", { provider });
+  return providers.map(normalizeProviderInfo);
+}
+
+export async function upgradeProvider(provider: string): Promise<ProviderInfo[]> {
+  if (!inDesktop) throw new Error("Provider upgrades are available in the C2 desktop app");
+  const providers = await call<ProviderInfoWire[]>("providers.upgrade", { provider });
   return providers.map(normalizeProviderInfo);
 }
 

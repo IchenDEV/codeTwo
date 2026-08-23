@@ -3,12 +3,16 @@ import {
   ArrowLeft,
   BrainCircuit,
   ChartNoAxesColumn,
+  ChevronDown,
+  Download,
   Folder,
   Globe,
   Keyboard,
+  LoaderCircle,
   MousePointer2,
   Package,
   Palette,
+  RefreshCw,
   RotateCcw,
   SlidersHorizontal,
   Trash2,
@@ -37,7 +41,10 @@ import {
   type WorktreeEntryKind,
   type WorktreeStatusEntry,
   getProjectScheduling,
+  installProvider,
+  setProviderEnabled,
   setProjectScheduling,
+  upgradeProvider,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
@@ -61,6 +68,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
@@ -238,6 +246,7 @@ export function SettingsPage({
   projects = [],
   onProjectWorktreeMode,
   onOpenSession = () => {},
+  onReloadProviders,
   memoryEnabled,
   initialTab = "general",
   onClose,
@@ -247,6 +256,9 @@ export function SettingsPage({
   computerUseSelectionSaver = selectComputerUseBackend,
   browserUseSettingsLoader = getBrowserUseSettings,
   browserUseSelectionSaver = selectBrowserUseBackend,
+  providerInstaller = installProvider,
+  providerUpgrader = upgradeProvider,
+  providerEnabledSaver = setProviderEnabled,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -261,6 +273,7 @@ export function SettingsPage({
   projects?: Project[];
   onProjectWorktreeMode: (path: string, mode: ProjectWorktreeMode | null) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
+  onReloadProviders?: () => void | Promise<ProviderInfo[]>;
   memoryEnabled: boolean;
   initialTab?: SettingsTab;
   onClose: () => void;
@@ -270,6 +283,9 @@ export function SettingsPage({
   computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
   browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
   browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
+  providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
+  providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
+  providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -287,6 +303,13 @@ export function SettingsPage({
   const [browserUseSettings, setBrowserUseSettings] = useState<BrowserUseSettings | null>(null);
   const [browserUseSaving, setBrowserUseSaving] = useState<string | null>(null);
   const [browserUseError, setBrowserUseError] = useState<string | null>(null);
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => new Set());
+  const [providerOperation, setProviderOperation] = useState<{
+    id: string;
+    action: "install" | "upgrade" | "enable" | "refresh";
+  } | null>(null);
+  const [providerMessage, setProviderMessage] = useState<{ id: string; text: string } | null>(null);
+  const [providerError, setProviderError] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -499,6 +522,85 @@ export function SettingsPage({
     } finally {
       setBrowserUseSaving(null);
     }
+  };
+
+  const refreshProviderStatus = async () => {
+    if (!onReloadProviders || providerOperation) return;
+    setProviderOperation({ id: "*", action: "refresh" });
+    setProviderError(null);
+    try {
+      await onReloadProviders();
+      setProviderMessage({ id: "*", text: t("settings.providerChecked") });
+    } catch (error) {
+      setProviderError({
+        id: "*",
+        text: t("settings.providerRefreshFailed", { error: String(error) }),
+      });
+    } finally {
+      setProviderOperation(null);
+    }
+  };
+
+  const runProviderAction = async (providerId: string, action: "install" | "upgrade") => {
+    if (providerOperation) return;
+    const candidate = providers.find((item) => item.id === providerId);
+    if (!candidate) return;
+    setProviderOperation({ id: providerId, action });
+    setProviderError(null);
+    setProviderMessage(null);
+    try {
+      if (action === "install") await providerInstaller(providerId);
+      else await providerUpgrader(providerId);
+      setProviderMessage({
+        id: providerId,
+        text: action === "install"
+          ? t("settings.providerInstalled", { provider: candidate.display_name })
+          : t("settings.providerUpgraded", { provider: candidate.display_name }),
+      });
+      await onReloadProviders?.();
+    } catch (error) {
+      setProviderError({
+        id: providerId,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
+    } finally {
+      setProviderOperation(null);
+    }
+  };
+
+  const saveProviderEnabled = async (providerId: string, enabled: boolean) => {
+    if (providerOperation) return;
+    const candidate = providers.find((item) => item.id === providerId);
+    if (!candidate) return;
+    setProviderOperation({ id: providerId, action: "enable" });
+    setProviderError(null);
+    setProviderMessage(null);
+    try {
+      await providerEnabledSaver(providerId, enabled);
+      setProviderMessage({
+        id: providerId,
+        text: enabled
+          ? t("settings.providerEnabledMessage", { provider: candidate.display_name })
+          : t("settings.providerDisabledMessage", { provider: candidate.display_name }),
+      });
+      await onReloadProviders?.();
+    } catch (error) {
+      setProviderError({
+        id: providerId,
+        text: t("settings.providerActionFailed", { error: String(error) }),
+      });
+    } finally {
+      setProviderOperation(null);
+    }
+  };
+
+  const toggleProviderDetails = (providerId: string) => {
+    setExpandedProviders((current) => {
+      const next = new Set(current);
+      if (next.has(providerId)) next.delete(providerId);
+      else next.add(providerId);
+      return next;
+    });
   };
 
   const computerUseSelection = computerUseSettings?.selections["*"] ?? "automatic";
@@ -989,68 +1091,207 @@ export function SettingsPage({
 
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>
-                {providers.map((p) => (
-                  <div key={p.id} className="mb-2 rounded-(--ds-radius-module) bg-fill-quiet/40 px-3 last:mb-0">
-                    <Row
-                      icon={<ProviderIcon provider={p.id} className="size-5 shrink-0 opacity-80" />}
-                      label={p.display_name}
-                      hint={
-                        <span className="font-mono">
-                          {p.id}
-                          {p.needs_node && ` · ${t("settings.needsNode")}`}
-                        </span>
-                      }
-                    >
-                      <span className="flex items-center gap-1.5 text-fine text-muted-foreground">
-                        <span
-                          className={cn("size-1.5 rounded-full", p.available ? "bg-success" : "bg-border")}
-                        />
-                        {p.available ? t("settings.installed") : t("settings.notInstalled")}
-                      </span>
-                    </Row>
-                    {p.capabilities
-                      .filter((capability) => capability.state !== "unavailable")
-                      .map((capability) => (
-                        <div
-                          key={capability.id}
-                          data-provider-capability={`${p.id}:${capability.id}`}
-                          className="ml-8 flex items-start justify-between gap-6 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
-                              {CAPABILITY_LABELS[capability.id]}
-                              {capability.experimental && <Badge variant="outline">Experimental</Badge>}
-                              {capability.version && (
-                                <span className="font-mono text-cap text-muted-foreground">
-                                  {capability.version}
-                                </span>
-                              )}
-                            </div>
-                            {capability.reason && (
-                              <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">
-                                {capability.reason}
-                              </p>
-                            )}
-                            {capability.fix && (
-                              <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">
-                                {capability.fix}
-                              </p>
-                            )}
-                          </div>
-                          <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
-                            <span
+                <div className="mb-2 flex items-center justify-end gap-2">
+                  <span className="text-fine text-muted-foreground">
+                    {providerOperation?.action === "refresh"
+                      ? t("settings.providerChecking")
+                      : providerMessage?.id === "*"
+                        ? providerMessage.text
+                        : t("settings.providerChecked")}
+                  </span>
+                  <Button
+                    data-provider-refresh
+                    variant="ghost"
+                    size="xs"
+                    disabled={!onReloadProviders || providerOperation !== null}
+                    aria-label={t("settings.providerRefresh")}
+                    onClick={() => void refreshProviderStatus()}
+                  >
+                    <RefreshCw className={cn(providerOperation?.action === "refresh" && "animate-spin")} />
+                    {t("settings.providerRefresh")}
+                  </Button>
+                </div>
+                {providerError?.id === "*" && (
+                  <p className="mb-2 text-fine text-destructive">{providerError.text}</p>
+                )}
+                <div className="space-y-1">
+                  {providers.map((p) => {
+                    const enabled = p.enabled !== false;
+                    const management = p.management ?? {
+                      installed: p.available,
+                      version: null,
+                      install_supported: false,
+                      upgrade_supported: false,
+                      launch_mode: p.available ? "installed" as const : "unavailable" as const,
+                    };
+                    const expanded = expandedProviders.has(p.id);
+                    const operation = providerOperation?.id === p.id ? providerOperation.action : null;
+                    const status = !enabled
+                      ? t("settings.providerDisabled")
+                      : management.installed
+                        ? management.version
+                          ? t("settings.providerInstalledVersion", { version: management.version })
+                          : t("settings.installed")
+                        : management.launch_mode === "on_demand"
+                          ? t("settings.providerReadyOnDemand")
+                          : t("settings.notInstalled");
+                    return (
+                      <div
+                        key={p.id}
+                        data-provider-row={p.id}
+                        className="rounded-(--ds-radius-module) bg-fill-quiet/40 px-3 transition-colors hover:bg-fill-quiet/70"
+                      >
+                        <div className="flex min-h-14 items-center gap-2">
+                          <button
+                            type="button"
+                            data-provider-disclosure={p.id}
+                            className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                            aria-expanded={expanded}
+                            aria-controls={`provider-details-${p.id}`}
+                            onClick={() => toggleProviderDetails(p.id)}
+                          >
+                            <span className="relative shrink-0">
+                              <ProviderIcon
+                                provider={p.id}
+                                className={cn("size-5", !enabled && "opacity-40")}
+                              />
+                              <span
+                                className={cn(
+                                  "absolute -right-0.5 -top-0.5 size-1.5 rounded-full",
+                                  enabled && p.available && "bg-success",
+                                  enabled && !p.available && management.launch_mode === "on_demand" && "bg-warning",
+                                  (!enabled || management.launch_mode === "unavailable") && "bg-border",
+                                )}
+                              />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-ui font-medium">{p.display_name}</span>
+                                {management.version && (
+                                  <span className="shrink-0 font-mono text-cap text-muted-foreground">
+                                    v{management.version}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="mt-0.5 block truncate text-fine text-muted-foreground">
+                                {status}
+                              </span>
+                            </span>
+                            <ChevronDown
                               className={cn(
-                                "size-1.5 rounded-full",
-                                capability.state === "ready" && "bg-success",
-                                capability.state === "unverified" && "bg-warning",
+                                "size-4 shrink-0 text-muted-foreground transition-transform",
+                                expanded && "rotate-180",
                               )}
                             />
-                            {capability.state}
-                          </span>
+                          </button>
+                          {management.install_supported && (
+                            <Button
+                              data-provider-action={`${p.id}:install`}
+                              variant="secondary"
+                              size="xs"
+                              disabled={providerOperation !== null}
+                              onClick={() => void runProviderAction(p.id, "install")}
+                            >
+                              {operation === "install" ? <LoaderCircle className="animate-spin" /> : <Download />}
+                              {operation === "install"
+                                ? t("settings.providerInstalling")
+                                : t("settings.providerInstall")}
+                            </Button>
+                          )}
+                          {management.upgrade_supported && (
+                            <Button
+                              data-provider-action={`${p.id}:upgrade`}
+                              variant="ghost"
+                              size="xs"
+                              disabled={providerOperation !== null}
+                              onClick={() => void runProviderAction(p.id, "upgrade")}
+                            >
+                              {operation === "upgrade" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+                              {operation === "upgrade"
+                                ? t("settings.providerUpgrading")
+                                : t("settings.providerUpgrade")}
+                            </Button>
+                          )}
+                          <Switch
+                            data-provider-toggle={p.id}
+                            checked={enabled}
+                            disabled={providerOperation !== null}
+                            aria-label={enabled
+                              ? t("settings.providerDisableAria", { provider: p.display_name })
+                              : t("settings.providerEnableAria", { provider: p.display_name })}
+                            onCheckedChange={(checked) => void saveProviderEnabled(p.id, checked)}
+                          />
                         </div>
-                      ))}
-                  </div>
-                ))}
+                        {(providerMessage?.id === p.id || providerError?.id === p.id) && (
+                          <p
+                            className={cn(
+                              "ml-8 pb-2 text-fine",
+                              providerError?.id === p.id ? "text-destructive" : "text-muted-foreground",
+                            )}
+                          >
+                            {providerError?.id === p.id ? providerError.text : providerMessage?.text}
+                          </p>
+                        )}
+                        {expanded && (
+                          <div id={`provider-details-${p.id}`} className="ml-8 pb-3">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-muted-foreground">
+                              <span className="font-mono">{p.id}</span>
+                              <span>
+                                {management.launch_mode === "installed"
+                                  ? t("settings.providerLocalRuntime")
+                                  : management.launch_mode === "on_demand"
+                                    ? t("settings.providerOnDemandRuntime")
+                                    : t("settings.providerUnavailableRuntime")}
+                              </span>
+                              {p.needs_node && <span>{t("settings.needsNode")}</span>}
+                            </div>
+                            {p.capabilities
+                              .filter((capability) => capability.state !== "unavailable")
+                              .map((capability) => (
+                                <div
+                                  key={capability.id}
+                                  data-provider-capability={`${p.id}:${capability.id}`}
+                                  className="flex items-start justify-between gap-6 py-2.5"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-1.5 text-hint font-medium">
+                                      {CAPABILITY_LABELS[capability.id]}
+                                      {capability.experimental && <Badge variant="outline">Experimental</Badge>}
+                                      {capability.version && (
+                                        <span className="font-mono text-cap text-muted-foreground">
+                                          {capability.version}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {capability.reason && (
+                                      <p className="mt-0.5 text-fine leading-relaxed text-muted-foreground">
+                                        {capability.reason}
+                                      </p>
+                                    )}
+                                    {capability.fix && (
+                                      <p className="mt-0.5 text-fine leading-relaxed text-foreground/75">
+                                        {capability.fix}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="flex shrink-0 items-center gap-1.5 pt-0.5 text-fine capitalize text-muted-foreground">
+                                    <span
+                                      className={cn(
+                                        "size-1.5 rounded-full",
+                                        capability.state === "ready" && "bg-success",
+                                        capability.state === "unverified" && "bg-warning",
+                                      )}
+                                    />
+                                    {capability.state}
+                                  </span>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </Page>
             )}
 
