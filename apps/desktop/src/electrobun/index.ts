@@ -1,4 +1,4 @@
-import Electrobun, { BrowserView, BrowserWindow, Screen, Utils } from "electrobun/bun";
+import Electrobun, { BrowserView, BrowserWindow, ContextMenu, Screen, Utils } from "electrobun/bun";
 import { basename, extname, join } from "node:path";
 
 import type {
@@ -10,6 +10,7 @@ import type {
   WorkspaceOpenTarget,
 } from "./rpc";
 import { PureBunHost } from "./host";
+import { nativeContextMenuAction, nativeContextMenuConfig } from "./contextMenuHost";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 import { configureMacOSWindowEffects } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
@@ -133,6 +134,9 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         });
         return result.response === 1;
       },
+      contextMenuShow: ({ requestId, items }) => {
+        ContextMenu.showContextMenu(nativeContextMenuConfig(items, requestId));
+      },
       openExternal: ({ url }) => Utils.openExternal(url),
       openPath: ({ path }) => Utils.openPath(path),
       openWorkspace: ({ path, target }) => openWorkspace(path, target),
@@ -149,6 +153,12 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
     },
     messages: {},
   },
+});
+
+ContextMenu.on("context-menu-clicked", (event) => {
+  const action = nativeContextMenuAction(event);
+  if (!action) return;
+  rpc.send.event({ name: "native-context-menu-action", payload: action });
 });
 
 const display = Screen.getPrimaryDisplay().workArea;

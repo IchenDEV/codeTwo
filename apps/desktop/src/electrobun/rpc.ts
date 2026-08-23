@@ -23,6 +23,27 @@ export interface SaveDialogOptions {
   filters?: DialogFilter[];
 }
 
+export type NativeContextMenuItem =
+  | { type: "separator" }
+  | {
+      type: "item";
+      label: string;
+      action: string;
+      enabled?: boolean;
+      checked?: boolean;
+      submenu?: NativeContextMenuItem[];
+    };
+
+export interface NativeContextMenuRequest {
+  requestId: string;
+  items: NativeContextMenuItem[];
+}
+
+export interface NativeContextMenuAction {
+  requestId: string;
+  action: string;
+}
+
 export type WorkspaceOpenTarget = "cursor" | "antigravity" | "finder";
 
 export type AppUpdateState =
@@ -48,6 +69,7 @@ export type CodeTwoRPC = {
       dialogOpen: { params: OpenDialogOptions; response: string[] };
       dialogSave: { params: SaveDialogOptions; response: string | null };
       confirm: { params: { message: string; title?: string }; response: boolean };
+      contextMenuShow: { params: NativeContextMenuRequest; response: void };
       openExternal: { params: { url: string }; response: boolean };
       openPath: { params: { path: string }; response: boolean };
       openWorkspace: {
