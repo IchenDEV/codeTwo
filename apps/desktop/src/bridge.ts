@@ -531,6 +531,26 @@ export interface ConfigOptionInfo {
   choices: ModelChoice[];
 }
 
+export interface GoalCapabilityInfo {
+  control_method: string;
+  actions: string[];
+}
+
+export interface SessionInteractionCapabilities {
+  steering: boolean;
+  goal: GoalCapabilityInfo | null;
+}
+
+export interface GoalSnapshot {
+  objective: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+  token_budget: number | null;
+  tokens_used: number;
+  time_used_seconds: number;
+}
+
 /// Neutral document shape the editor serializes into; matches core `DocBlock` serde.
 export type DocBlock =
   | { type: "text"; text: string }
@@ -644,6 +664,26 @@ export type CoreEvent =
     }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
+  | {
+      event: "session_capabilities";
+      session: string;
+      steering: boolean;
+      goal: GoalCapabilityInfo | null;
+    }
+  | { event: "goal_changed"; session: string; goal: GoalSnapshot | null }
+  | {
+      event: "prompt_queued";
+      session: string;
+      request_id?: string | null;
+      position: number;
+    }
+  | {
+      event: "steer_accepted";
+      session: string;
+      request_id?: string | null;
+      transcript_seq?: number | null;
+      outcome: "injected" | "startedNewTurn";
+    }
   | {
       event: "execution_policy_changed";
       session: string;
@@ -1378,6 +1418,37 @@ export async function discardOrphanWorktree(
 
 export async function submitPrompt(session: string, doc: DocBlock[], requestId: string): Promise<void> {
   if (inDesktop) await call("engine.prompt", { session, doc, request_id: requestId });
+}
+
+/** Connect a durable session early so provider-native modes are available before its next turn. */
+export async function prepareSession(session: string): Promise<void> {
+  if (inDesktop) await call("engine.prepare_session", { session });
+}
+
+export async function queuePrompt(
+  session: string,
+  doc: DocBlock[],
+  requestId: string,
+): Promise<{ position: number }> {
+  return inDesktop
+    ? call<{ position: number }>("engine.queue", { session, doc, request_id: requestId })
+    : { position: 0 };
+}
+
+export async function steerPrompt(
+  session: string,
+  doc: DocBlock[],
+  requestId: string,
+): Promise<{ outcome: "injected" | "startedNewTurn" }> {
+  return call("engine.steer", { session, doc, request_id: requestId });
+}
+
+export async function controlGoal(
+  session: string,
+  action: "set" | "pause" | "resume" | "clear",
+  objective?: string,
+): Promise<void> {
+  if (inDesktop) await call("engine.goal", { session, action, objective: objective ?? null });
 }
 
 export async function listAutomations(): Promise<Automation[]> {

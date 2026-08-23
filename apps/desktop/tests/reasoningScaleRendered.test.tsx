@@ -3,7 +3,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { ModelPicker, ReasoningScale } = await import("../src/session/Composer");
+const {
+  CollaborationModePicker,
+  GoalPicker,
+  ModelPicker,
+  ReasoningScale,
+} = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -136,6 +141,58 @@ describe("ReasoningScale", () => {
     );
 
     expect(rendered.container.querySelector('button[title="Model"]')).toBeNull();
+    rendered.unmount();
+  });
+});
+
+describe("provider-native session controls", () => {
+  test("renders collaboration mode only from an advertised provider option", () => {
+    activateDom();
+    const absent = mount(
+      <CollaborationModePicker options={[]} onChange={() => {}} />,
+    );
+    expect(absent.container.querySelector("button")).toBeNull();
+    absent.unmount();
+
+    const rendered = mount(
+      <CollaborationModePicker
+        options={[{
+          id: "collaboration_mode",
+          name: "Collaboration mode",
+          category: "collaboration_mode",
+          current: "plan",
+          choices: [
+            { id: "default", name: "Default", description: null },
+            { id: "plan", name: "Plan", description: "Plan before implementation" },
+          ],
+        }]}
+        onChange={() => {}}
+      />,
+    );
+    expect(rendered.container.querySelector('button[aria-label="Collaboration mode: Plan"]')).toBeTruthy();
+    rendered.unmount();
+  });
+
+  test("renders Goal only when the provider advertises the extension", () => {
+    activateDom();
+    const absent = mount(
+      <I18nProvider>
+        <GoalPicker capability={null} goal={null} onGoal={async () => {}} />
+      </I18nProvider>,
+    );
+    expect(absent.container.querySelector("button")).toBeNull();
+    absent.unmount();
+
+    const rendered = mount(
+      <I18nProvider>
+        <GoalPicker
+          capability={{ control_method: "_session/goal", actions: ["set"] }}
+          goal={null}
+          onGoal={async () => {}}
+        />
+      </I18nProvider>,
+    );
+    expect(rendered.container.querySelector('button[aria-label="Goal"]')).toBeTruthy();
     rendered.unmount();
   });
 });

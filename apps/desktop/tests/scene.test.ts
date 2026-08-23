@@ -4,6 +4,7 @@ import {
   MEMORY_PRESET_POLICY,
   escalationNeeded,
   nextSceneInRing,
+  sceneCollaborationChoice,
   sceneCustomized,
   sceneTitle,
   softApplyPending,
@@ -79,6 +80,31 @@ describe("softApplyPending (binding matrix)", () => {
   test("a matching live value is not pending", () => {
     const s = scene({ execution: { providers: ["claude_code"], model: "m1" } });
     expect(softApplyPending(s, live)).toEqual([]);
+  });
+});
+
+describe("sceneCollaborationChoice", () => {
+  const options = [
+    {
+      id: "collaboration_mode",
+      category: "collaboration_mode",
+      choices: [{ id: "default" }, { id: "plan" }],
+    },
+  ];
+
+  test("maps scene plan posture onto the provider-native values", () => {
+    expect(sceneCollaborationChoice(options, true)).toEqual({
+      configId: "collaboration_mode",
+      value: "plan",
+    });
+    expect(sceneCollaborationChoice(options, false)).toEqual({
+      configId: "collaboration_mode",
+      value: "default",
+    });
+  });
+
+  test("fails closed when the provider does not advertise collaboration mode", () => {
+    expect(sceneCollaborationChoice([], true)).toBeNull();
   });
 });
 
