@@ -191,6 +191,7 @@ const COMMAND_OWNER_BY_PREFIX: Readonly<Record<string, string>> = {
   engine: "core",
   extensions: "kernel",
   git: "git",
+  github: "git",
   issues: "issues",
   kernel: "kernel",
   keymap: "keymap",

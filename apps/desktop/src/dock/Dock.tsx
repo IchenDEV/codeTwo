@@ -15,6 +15,7 @@ import { FilePanel } from "../files/FilePanel";
 import { FileViewer, type FileRevealTarget } from "../files/FileViewer";
 import { dirtyKey, useDirtyPaths } from "../files/dirty";
 import { onPtyTitle, ptyDump, ptyKill, type Annotation, type GitStatus } from "../bridge";
+import { GitHubPullRequestPanel } from "../git/GitHubPullRequestPanel";
 import type { StringKey } from "../i18n/strings";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -519,40 +520,49 @@ export function Dock({
             <div className="space-y-2.5 p-4 text-hint">
               {git?.is_repo ? (
                 <>
-                  <div className="flex items-center gap-2">
-                    <GitBranch className="size-3.5" />
-                    <span className="text-ui font-semibold">{git.branch || "?"}</span>
-                    {git.ahead > 0 && <span className="text-primary">↑{git.ahead}</span>}
-                    {git.behind > 0 && <span className="text-primary">↓{git.behind}</span>}
-                    <Button variant="ghost" size="sm" className="ml-auto h-6 text-fine" onClick={onRefreshGit}>
-                      {t("dock.refresh")}
-                    </Button>
-                  </div>
+                  <GitHubPullRequestPanel
+                    key={`${cwd ?? "."}:${git.branch}`}
+                    cwd={cwd ?? "."}
+                    branch={git.branch}
+                    onRefreshGit={onRefreshGit}
+                  />
 
-                  {git.files.length === 0 ? (
-                    <p className="text-muted-foreground">{t("rail.clean")}</p>
-                  ) : (
-                    <div className="space-y-0.5">
-                      {git.files.map((f) => (
-                        <div key={f.path} className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "inline-flex size-4 shrink-0 items-center justify-center rounded text-cap font-bold",
-                              f.staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
-                            )}
-                            title={f.state}
-                          >
-                            {f.state.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="truncate font-mono text-fine text-muted-foreground">{f.path}</span>
-                        </div>
-                      ))}
+                  <section className="space-y-2.5 pt-3" aria-label={t("dock.workingTree")}>
+                    <div className="flex items-center gap-2">
+                      <GitBranch className="size-3.5" />
+                      <h3 className="text-ui font-semibold">{t("dock.workingTree")}</h3>
+                      <span className="min-w-0 truncate font-mono text-cap text-muted-foreground">
+                        {git.branch || "?"}
+                      </span>
+                      {git.ahead > 0 && <span className="text-primary">↑{git.ahead}</span>}
+                      {git.behind > 0 && <span className="text-primary">↓{git.behind}</span>}
                     </div>
-                  )}
 
-                  <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
-                    {t("dock.reviewCommit")}
-                  </Button>
+                    {git.files.length === 0 ? (
+                      <p className="text-muted-foreground">{t("rail.clean")}</p>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {git.files.map((f) => (
+                          <div key={f.path} className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "inline-flex size-4 shrink-0 items-center justify-center rounded text-cap font-bold",
+                                f.staged ? "bg-success/15 text-success" : "bg-warning/15 text-warning",
+                              )}
+                              title={f.state}
+                            >
+                              {f.state.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="truncate font-mono text-fine text-muted-foreground">{f.path}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <Button size="sm" className="w-full" onClick={onOpenSourceControl}>
+                      {t("dock.reviewCommit")}
+                    </Button>
+                  </section>
                 </>
               ) : (
                 <p className="text-muted-foreground">{t("rail.notARepo")}</p>
