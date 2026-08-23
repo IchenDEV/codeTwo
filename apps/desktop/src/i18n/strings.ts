@@ -742,6 +742,9 @@ export const en = {
   // settings
   "settings.title": "Settings",
   "settings.back": "Back",
+  "settings.navPersonal": "Personal",
+  "settings.navWorkspace": "Workspace",
+  "settings.navIntegrations": "Integrations",
   "settings.general": "General",
   "settings.generalHint":
     "Language, software updates, and how the terminal renders.",
@@ -796,6 +799,7 @@ export const en = {
     "Could not update Browser Use settings: {error}",
   "settings.browserUseAvailable": "Available",
   "settings.browserUseUnavailable": "Unavailable",
+  "settings.browser": "Browser",
   "settings.installed": "Installed",
   "settings.notInstalled": "CLI not found",
   "settings.needsNode": "Needs Node",
@@ -2366,6 +2370,9 @@ export const zhCN: Record<StringKey, string> = {
 
   "settings.title": "设置",
   "settings.back": "返回",
+  "settings.navPersonal": "个人",
+  "settings.navWorkspace": "工作区",
+  "settings.navIntegrations": "集成",
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
   "settings.appearance": "外观",
@@ -2416,6 +2423,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.browserUseLoadFailed": "无法更新 Browser Use 设置：{error}",
   "settings.browserUseAvailable": "可用",
   "settings.browserUseUnavailable": "不可用",
+  "settings.browser": "浏览器",
   "settings.installed": "已安装",
   "settings.notInstalled": "未找到 CLI",
   "settings.needsNode": "需要 Node",
