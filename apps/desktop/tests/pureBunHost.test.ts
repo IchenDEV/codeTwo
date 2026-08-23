@@ -242,6 +242,67 @@ describe("pure Bun desktop host", () => {
     }
   });
 
+  test("persists project profile defaults and serves a guarded custom icon", async () => {
+    const value = fixture();
+    try {
+      await value.host.call("projects.add", { path: value.workspace }, null);
+      await value.host.call(
+        "projects.set_agent_defaults",
+        {
+          path: value.workspace,
+          provider: "codex",
+          model: "gpt-5.6-sol",
+          reasoning_effort: "low",
+        },
+        value.workspace,
+      );
+      const iconSource = join(value.workspace, "project.png");
+      writeFileSync(
+        iconSource,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      );
+      await value.host.call(
+        "projects.set_icon",
+        { path: value.workspace, source: iconSource },
+        value.workspace,
+      );
+
+      const [project] = await value.host.call("projects.list", null, null) as Array<{
+        default_provider: string | null;
+        default_model: string | null;
+        default_reasoning_effort: string | null;
+        has_icon: boolean;
+        icon_updated_at: number;
+      }>;
+      expect(project).toMatchObject({
+        default_provider: "codex",
+        default_model: "gpt-5.6-sol",
+        default_reasoning_effort: "low",
+        has_icon: true,
+      });
+      expect(project.icon_updated_at).toBeGreaterThan(0);
+      const icon = await value.host.call(
+        "projects.icon",
+        { path: value.workspace },
+        value.workspace,
+      ) as { mime_type: string; bytes: number[] };
+      expect(icon.mime_type).toBe("image/png");
+      expect(icon.bytes.slice(0, 4)).toEqual([0x89, 0x50, 0x4e, 0x47]);
+
+      await value.host.call(
+        "projects.set_icon",
+        { path: value.workspace, source: null },
+        value.workspace,
+      );
+      expect(await value.host.call("projects.icon", { path: value.workspace }, value.workspace)).toBeNull();
+    } finally {
+      await dispose(value);
+    }
+  });
+
   test("runs an interactive shell on Bun's native PTY", async () => {
     if (process.platform === "win32") return;
     const value = fixture();

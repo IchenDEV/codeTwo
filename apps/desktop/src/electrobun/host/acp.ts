@@ -40,6 +40,14 @@ export interface ProviderInteractionCapabilities {
   goal: GoalCapability | null;
 }
 
+export interface ReportedConfigOption {
+  id: string;
+  name: string;
+  category: string | null;
+  current: string;
+  choices: Array<{ id: string; name: string; description: string | null }>;
+}
+
 const model = (id: string, name: string, description: string | null = null) => ({
   id,
   name,
@@ -512,7 +520,7 @@ export function reportedModels(response: Record<string, unknown>, fallback: Prov
   });
 }
 
-export function reportedConfigOptions(response: Record<string, unknown>): unknown[] {
+export function reportedConfigOptions(response: Record<string, unknown>): ReportedConfigOption[] {
   const options = response.configOptions;
   if (!Array.isArray(options)) return [];
   return options.flatMap((value) => {
