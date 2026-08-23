@@ -73,22 +73,36 @@ describe("Appearance settings", () => {
     view.unmount();
   });
 
-  test("shows the session pet by default and persists an explicit hide", async () => {
+  test("normalizes the standalone pet settings and preserves explicit choices", () => {
     activateDom();
-    expect(normalizeAppearanceSettings({}).petEnabled).toBe(true);
-    setAppearanceSettings({ petEnabled: true });
-    const view = mount(<Harness />);
-    await flush();
-
-    const checkbox = view.container.querySelector<HTMLButtonElement>('[role="checkbox"]');
-    expect(checkbox?.hasAttribute("data-checked")).toBe(true);
-    expect(getAppearanceSettings().petEnabled).toBe(true);
-
-    checkbox?.click();
-    await flush();
-    expect(getAppearanceSettings().petEnabled).toBe(false);
-
-    view.unmount();
+    expect(normalizeAppearanceSettings({})).toMatchObject({
+      petEnabled: true,
+      petActivityEnabled: true,
+      petSize: "medium",
+      petSource: "builtin",
+      petId: "naiwa",
+      petName: "Naiwa",
+    });
+    setAppearanceSettings({
+      petEnabled: false,
+      petActivityEnabled: false,
+      petSize: "large",
+      petSource: "petshare",
+      petId: "columbina",
+      petName: "Columbina",
+    });
+    expect(getAppearanceSettings()).toMatchObject({
+      petEnabled: false,
+      petActivityEnabled: false,
+      petSize: "large",
+      petSource: "petshare",
+      petId: "columbina",
+      petName: "Columbina",
+    });
+    expect(normalizeAppearanceSettings({ petSource: "petshare", petId: "../escape" })).toMatchObject({
+      petSource: "builtin",
+      petId: "naiwa",
+    });
   });
 
   test("renders the theme library and creates an editable theme copy", async () => {

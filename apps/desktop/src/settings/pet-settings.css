@@ -1,0 +1,190 @@
+.pet-settings {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-page-section);
+  padding-top: var(--ds-space-page-section);
+}
+
+.pet-picker-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--ds-space-section);
+}
+
+.pet-picker-copy,
+.pet-catalog-copy,
+.pet-setting-copy {
+  min-width: 0;
+}
+
+.pet-picker-copy p,
+.pet-catalog-copy p,
+.pet-setting-copy > span {
+  margin: var(--ds-space-inline) 0 0;
+  color: var(--ds-color-text-muted);
+  font-size: var(--ds-type-metadata-size);
+  line-height: var(--ds-type-metadata-leading);
+}
+
+.pet-settings-heading,
+.pet-catalog-copy h3 {
+  margin: 0;
+  color: var(--ds-color-text);
+  font-size: var(--ds-type-body-size);
+  font-weight: var(--ds-font-weight-medium);
+  line-height: var(--ds-type-body-leading);
+}
+
+.pet-picker-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--ds-space-inline);
+}
+
+.pet-catalog,
+.pet-setting-list {
+  overflow: hidden;
+  background: var(--ds-color-surface);
+  border-radius: var(--ds-radius-module);
+  box-shadow: inset 0 0 0 var(--hairline-width) var(--border);
+}
+
+.pet-catalog {
+  margin-top: var(--ds-space-surface-inset);
+}
+
+.pet-catalog-row {
+  display: grid;
+  min-width: 0;
+  min-height: calc(var(--ds-control-field) + var(--ds-control-normal));
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ds-space-section);
+  padding: var(--ds-space-surface-inset) var(--ds-space-section);
+}
+
+.pet-catalog-row + .pet-catalog-row,
+.pet-catalog-state {
+  box-shadow: inset 0 var(--hairline-width) 0 var(--border);
+}
+
+.pet-catalog-avatar {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  overflow: hidden;
+  place-items: center;
+  contain: paint;
+  background: var(--ds-color-fill-rest);
+  border-radius: var(--ds-radius-control);
+}
+
+.pet-catalog-avatar .codex-pet {
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.pet-catalog-copy p {
+  max-width: 42rem;
+}
+
+.pet-selected-status {
+  display: inline-flex;
+  height: var(--ds-control-normal);
+  align-items: center;
+  gap: var(--ds-space-optical);
+  padding: 0 var(--ds-space-surface-inset);
+  color: var(--ds-color-text-muted);
+  background: var(--ds-color-fill-rest);
+  border-radius: var(--ds-radius-control);
+  font-size: var(--ds-type-metadata-size);
+  line-height: var(--ds-type-metadata-leading);
+  white-space: nowrap;
+}
+
+.pet-select-button {
+  min-width: 4.75rem;
+}
+
+.pet-catalog-state {
+  display: flex;
+  min-height: var(--ds-control-field);
+  align-items: center;
+  gap: var(--ds-space-inline);
+  padding: var(--ds-space-surface-inset) var(--ds-space-section);
+  color: var(--ds-color-text-muted);
+  font-size: var(--ds-type-metadata-size);
+  line-height: var(--ds-type-metadata-leading);
+}
+
+.pet-catalog-error {
+  color: var(--ds-color-destructive);
+}
+
+.pet-catalog-error span {
+  flex: 1;
+}
+
+.pet-setting-list {
+  margin-top: var(--ds-space-surface-inset);
+}
+
+.pet-setting-row {
+  display: flex;
+  min-height: calc(var(--ds-control-field) + var(--ds-space-surface-inset));
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-section);
+  padding: var(--ds-space-module-inset) var(--ds-space-section);
+  color: var(--ds-color-text);
+}
+
+.pet-setting-row + .pet-setting-row {
+  box-shadow: inset 0 var(--hairline-width) 0 var(--border);
+}
+
+.pet-setting-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-optical);
+  font-size: var(--ds-type-body-size);
+  line-height: var(--ds-type-body-leading);
+}
+
+.pet-setting-copy strong {
+  font-weight: var(--ds-font-weight-medium);
+}
+
+.pet-setting-copy > span {
+  margin-top: 0;
+}
+
+.pet-size-select {
+  width: 8rem;
+}
+
+@container (max-width: 30rem) {
+  .pet-picker-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pet-catalog-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pet-selected-status {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .pet-select-button {
+    grid-column: 2;
+    justify-self: end;
+  }
+}

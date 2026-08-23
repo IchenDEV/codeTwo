@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 const source = readFileSync(new URL("../src/settings/SettingsPage.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
+const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
 
 describe("Settings page layout contract", () => {
   test("places the Back action above the settings menu", () => {
@@ -48,6 +49,19 @@ describe("Settings page layout contract", () => {
     expect(source).toMatch(
       /<UsagePanel[\s\S]*?provider=\{provider\}[\s\S]*?providerNames=\{providerNames\}[\s\S]*?\/>/,
     );
+  });
+
+  test("includes Pets as a first-class settings panel", () => {
+    expect(source).toMatch(/\{ id: "pets", icon: PawPrint, labelKey: "settings\.pets" \}/);
+    expect(source).toContain('{tab === "pets" && (');
+    expect(source).toMatch(/<Page title=\{t\("settings\.pets"\)\}[\s\S]*?<PetSettings \/>/);
+  });
+
+  test("clips pet catalog previews to a compact square", () => {
+    expect(petStyles).toContain("width: 3.5rem;");
+    expect(petStyles).toContain("height: 3.5rem;");
+    expect(petStyles).toContain("overflow: hidden;");
+    expect(petStyles).toContain("contain: paint;");
   });
 
   test("removes and closes the Memory tab when its component policy is disabled", () => {

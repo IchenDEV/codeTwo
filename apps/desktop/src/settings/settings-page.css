@@ -29,6 +29,11 @@
   margin-left: auto;
 }
 
+.settings-pets-page {
+  max-width: 58rem;
+  padding: 2rem 2rem 0;
+}
+
 .settings-memory-page {
   max-width: 77.5rem;
   padding: 1.5rem 1.5rem 0;
@@ -59,7 +64,8 @@
     margin-left: 0;
   }
 
-  .settings-memory-page {
+  .settings-memory-page,
+  .settings-pets-page {
     padding: 1rem 1rem 0;
   }
 }
