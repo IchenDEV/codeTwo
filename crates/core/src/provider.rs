@@ -148,7 +148,7 @@ pub fn default_registry() -> Vec<Provider> {
 
 /// Build the registry from one startup-time discovery snapshot.
 pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provider> {
-    let mut codex_launch = LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp@1.1.14"]);
+    let mut codex_launch = LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp@1.6.2"]);
     if let Some(path) = runtime.codex_path.as_deref() {
         codex_launch
             .env
@@ -332,7 +332,7 @@ mod tests {
         let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
         assert_eq!(
             codex.launch.args,
-            vec!["-y", "@agentclientprotocol/codex-acp@1.1.14"]
+            vec!["-y", "@agentclientprotocol/codex-acp@1.6.2"]
         );
     }
 

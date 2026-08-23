@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, Copy, Download, ListChecks, Pencil, Plus, RotateCcw, Route, Settings2 } from "lucide-react";
+import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
@@ -203,16 +203,6 @@ export function SceneChip({
             />
             <ModePicker config={config} />
             {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
-            <Chip
-              title={t("config.planFirstHint")}
-              aria-pressed={config.planMode}
-              aria-label={t(config.planMode ? "config.planFirstOn" : "config.planFirstOff")}
-              className={cn(config.planMode && "text-primary hover:text-primary")}
-              onClick={() => config.onPlan(!config.planMode)}
-            >
-              <ListChecks className="size-3.5 shrink-0" />
-              <span>{t(config.planMode ? "config.planFirstOn" : "config.planFirstOff")}</span>
-            </Chip>
             <WorktreePicker config={config} />
           </div>
 

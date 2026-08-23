@@ -16,6 +16,16 @@ export interface ProviderDefinition {
   models: { id: string; name: string; description: string | null }[];
 }
 
+export interface GoalCapability {
+  controlMethod: string;
+  actions: string[];
+}
+
+export interface ProviderInteractionCapabilities {
+  steering: boolean;
+  goal: GoalCapability | null;
+}
+
 const model = (id: string, name: string, description: string | null = null) => ({
   id,
   name,
@@ -42,7 +52,7 @@ export const PROVIDERS: ProviderDefinition[] = [
     id: "codex",
     displayName: "OpenAI Codex",
     command: "npx",
-    args: ["-y", "@agentclientprotocol/codex-acp@1.1.14"],
+    args: ["-y", "@agentclientprotocol/codex-acp@1.6.2"],
     needsNode: true,
     models: [
       model("gpt-5.6-sol", "GPT-5.6-Sol"),
@@ -163,6 +173,23 @@ export function validateMcpTransports(
   }
 }
 
+/** Optional interaction extensions are enabled only when the provider advertises them. */
+export function reportedInteractionCapabilities(
+  initialized: Record<string, unknown>,
+): ProviderInteractionCapabilities {
+  const meta = object(initialized._meta);
+  const steering = object(meta.steering).supported === true;
+  const goal = object(meta.goal);
+  const controlMethod = typeof goal.controlMethod === "string" ? goal.controlMethod : "";
+  const actions = Array.isArray(goal.actions)
+    ? goal.actions.filter((action): action is string => typeof action === "string")
+    : [];
+  return {
+    steering,
+    goal: controlMethod && actions.length > 0 ? { controlMethod, actions } : null,
+  };
+}
+
 export interface AcpCallbacks {
   notification(method: string, params: unknown): void | Promise<void>;
   request(method: string, params: unknown): Promise<unknown>;
@@ -237,6 +264,23 @@ export class AcpPeer {
 
   async setConfigOption(sessionId: string, configId: string, value: string): Promise<Record<string, unknown>> {
     return this.request("session/set_config_option", { sessionId, configId, value }) as Promise<Record<string, unknown>>;
+  }
+
+  async steer(sessionId: string, prompt: unknown[]): Promise<Record<string, unknown>> {
+    return this.request("_session/steering", { sessionId, prompt }) as Promise<Record<string, unknown>>;
+  }
+
+  async controlGoal(
+    method: string,
+    sessionId: string,
+    action: string,
+    objective?: string,
+  ): Promise<Record<string, unknown>> {
+    return this.request(method, {
+      sessionId,
+      action,
+      ...(objective ? { objective } : {}),
+    }) as Promise<Record<string, unknown>>;
   }
 
   cancel(sessionId: string): void {

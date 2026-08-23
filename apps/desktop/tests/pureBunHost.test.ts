@@ -71,6 +71,61 @@ describe("pure Bun desktop host", () => {
     }
   }, 15_000);
 
+  test("queues prompts in order and fails closed for unadvertised native controls", async () => {
+    const value = fixture();
+    try {
+      await value.host.call(
+        "engine.new_session",
+        {
+          cwd: value.workspace,
+          provider: "codex",
+          initial_policy: { mode: "ask", sandbox: "workspace_write" },
+        },
+        value.workspace,
+      );
+      const [session] = await value.host.call("sessions.list", null, null) as Array<{ id: string }>;
+      const internals = value.host as unknown as {
+        runtimes: Map<string, { busy: boolean }>;
+      };
+      const runtime = internals.runtimes.get(session.id);
+      if (!runtime) throw new Error("session runtime missing");
+      runtime.busy = true;
+
+      expect(await value.host.call(
+        "engine.queue",
+        { session: session.id, request_id: "queued-1", doc: [{ type: "text", text: "first" }] },
+        value.workspace,
+      )).toEqual({ position: 1 });
+      expect(await value.host.call(
+        "engine.queue",
+        { session: session.id, request_id: "queued-2", doc: [{ type: "text", text: "second" }] },
+        value.workspace,
+      )).toEqual({ position: 2 });
+      expect(value.events).toContainEqual({
+        name: "engine-event",
+        payload: expect.objectContaining({
+          event: "prompt_queued",
+          session: session.id,
+          request_id: "queued-2",
+          position: 2,
+        }),
+      });
+
+      await expect(value.host.call(
+        "engine.steer",
+        { session: session.id, request_id: "steer-1", doc: [{ type: "text", text: "now" }] },
+        value.workspace,
+      )).rejects.toThrow("did not advertise native steering");
+      await expect(value.host.call(
+        "engine.goal",
+        { session: session.id, action: "set", objective: "Ship it" },
+        value.workspace,
+      )).rejects.toThrow("did not advertise goal action set");
+    } finally {
+      await dispose(value);
+    }
+  });
+
   test("persists a model chosen before session creation", async () => {
     const value = fixture();
     try {

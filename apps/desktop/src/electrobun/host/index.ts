@@ -7,7 +7,9 @@ import {
   providerById,
   providerSummaries,
   reportedConfigOptions,
+  reportedInteractionCapabilities,
   reportedModels,
+  type ProviderInteractionCapabilities,
   type ProviderDefinition,
 } from "./acp";
 import { BunDatabase } from "./database";
@@ -87,6 +89,13 @@ interface SessionRuntime {
   busy: boolean;
   replaying: boolean;
   turnId: string | null;
+  requestId: string | null;
+  capabilities: ProviderInteractionCapabilities;
+  configOptions: ReturnType<typeof reportedConfigOptions>;
+  queuedPrompts: Args[];
+  steering: boolean;
+  deferredStopReason: string | null;
+  externalTurn: boolean;
   shuttingDown: boolean;
 }
 
@@ -308,7 +317,11 @@ export class PureBunHost {
     this.register("engine.close_transient_session", (args) =>
       this.closeTransientSession(string(args.session, "session")),
     );
+    this.register("engine.prepare_session", (args) => this.prepareSession(args));
     this.register("engine.prompt", (args) => this.startPrompt(args));
+    this.register("engine.queue", (args) => this.queuePrompt(args));
+    this.register("engine.steer", (args) => this.steerPrompt(args));
+    this.register("engine.goal", (args) => this.controlGoal(args));
     this.register("engine.cancel", (args) => this.cancel(string(args.session, "session")));
     this.register("engine.answer_permission", (args) => this.answerPermission(args));
     this.register("engine.answer_elicitation", (args) => this.answerElicitation(args));
@@ -668,6 +681,7 @@ export class PureBunHost {
     );
     runtime.busy = true;
     runtime.turnId = crypto.randomUUID();
+    runtime.requestId = requestId;
     this.setActivity(runtime, {
       kind: "running",
       turn_id: runtime.turnId,
@@ -680,11 +694,123 @@ export class PureBunHost {
       this.database.renameSession(sessionId, title, "automatic");
       this.emitEngine({ event: "session_title_changed", session: sessionId, title });
     }
-    void this.runPrompt(runtime, compiled.blocks, requestId);
+    void this.runPrompt(runtime, compiled.blocks);
     return true;
   }
 
-  private async runPrompt(runtime: SessionRuntime, blocks: unknown[], requestId: string | null): Promise<void> {
+  private async prepareSession(args: Args): Promise<boolean> {
+    const runtime = this.runtime(string(args.session, "session"));
+    const alreadyConnected = Boolean(runtime.peer && runtime.acpSessionId);
+    await this.connect(runtime);
+    if (alreadyConnected) {
+      this.emitCapabilities(runtime);
+      if (runtime.configOptions.length > 0) {
+        this.emitEngine({
+          event: "config_options",
+          session: runtime.id,
+          options: runtime.configOptions,
+        });
+      }
+    }
+    return true;
+  }
+
+  private queuePrompt(args: Args): { position: number } {
+    const sessionId = string(args.session, "session");
+    const runtime = this.runtime(sessionId);
+    if (!runtime.busy) {
+      this.startPrompt(args);
+      return { position: 0 };
+    }
+    const doc = Array.isArray(args.doc) ? args.doc : [];
+    const compiled = this.compileDocument(runtime.cwd, doc);
+    if (!compiled.display.trim()) throw new Error("prompt is empty");
+    runtime.queuedPrompts.push({ ...args, doc });
+    const position = runtime.queuedPrompts.length;
+    this.emitEngine({
+      event: "prompt_queued",
+      session: sessionId,
+      request_id: optionalString(args.request_id),
+      position,
+    });
+    return { position };
+  }
+
+  private async steerPrompt(args: Args): Promise<{ outcome: string }> {
+    const sessionId = string(args.session, "session");
+    const runtime = this.runtime(sessionId);
+    if (!runtime.busy) throw new Error("there is no running turn to steer");
+    if (!runtime.capabilities.steering) {
+      throw new Error(`${runtime.provider.displayName} did not advertise native steering`);
+    }
+    const doc = Array.isArray(args.doc) ? args.doc : [];
+    const compiled = this.compileDocument(runtime.cwd, doc);
+    if (!compiled.display.trim()) throw new Error("prompt is empty");
+    const requestId = optionalString(args.request_id);
+    const peer = await this.connect(runtime);
+    if (!runtime.acpSessionId) throw new Error("ACP session is unavailable");
+    runtime.steering = true;
+    try {
+      const response = object(await peer.steer(
+        runtime.acpSessionId,
+        withProviderToolInstructions(compiled.blocks, runtime.toolset.instructions),
+      ));
+      const outcome = optionalString(response.outcome) ?? "failed";
+      if (outcome === "failed") throw new Error("the provider could not apply this steering message");
+      const seq = this.database.appendPart(
+        sessionId,
+        "user",
+        { kind: "prompt", text: compiled.canonical, display: compiled.display },
+        compiled.canonical,
+      );
+      runtime.requestId = requestId;
+      runtime.externalTurn = outcome === "startedNewTurn";
+      if (runtime.externalTurn) runtime.deferredStopReason = null;
+      this.setActivity(runtime, {
+        kind: "running",
+        turn_id: runtime.turnId ?? crypto.randomUUID(),
+        ...(requestId ? { prompt_request_id: requestId } : {}),
+      });
+      this.emitEngine({
+        event: "steer_accepted",
+        session: sessionId,
+        request_id: requestId,
+        transcript_seq: seq,
+        outcome,
+      });
+      return { outcome };
+    } finally {
+      runtime.steering = false;
+      if (!runtime.externalTurn && runtime.deferredStopReason) {
+        const stopReason = runtime.deferredStopReason;
+        runtime.deferredStopReason = null;
+        this.finishPrompt(runtime, stopReason);
+      }
+    }
+  }
+
+  private async controlGoal(args: Args): Promise<boolean> {
+    const runtime = this.runtime(string(args.session, "session"));
+    const action = string(args.action, "action");
+    const capability = runtime.capabilities.goal;
+    if (!capability || !capability.actions.includes(action)) {
+      throw new Error(`${runtime.provider.displayName} did not advertise goal action ${action}`);
+    }
+    const objective = optionalString(args.objective) ?? undefined;
+    if (action === "set" && !objective?.trim()) throw new Error("goal objective is required");
+    const peer = await this.connect(runtime);
+    if (!runtime.acpSessionId) throw new Error("ACP session is unavailable");
+    const response = object(await peer.controlGoal(
+      capability.controlMethod,
+      runtime.acpSessionId,
+      action,
+      objective?.trim(),
+    ));
+    if ("goal" in response) this.emitGoal(runtime.id, response.goal);
+    return true;
+  }
+
+  private async runPrompt(runtime: SessionRuntime, blocks: unknown[]): Promise<void> {
     try {
       const peer = await this.connect(runtime);
       if (!runtime.acpSessionId) throw new Error("ACP session was not created");
@@ -696,18 +822,20 @@ export class PureBunHost {
       ));
       if (runtime.shuttingDown) return;
       const stopReason = optionalString(response.stopReason) ?? "end_turn";
-      runtime.busy = false;
-      runtime.turnId = null;
-      this.clearToolCalls(runtime.id);
-      this.setActivity(runtime, { kind: "idle" });
-      this.emitEngine({ event: "turn_ended", session: runtime.id, stop_reason: stopReason });
+      if (runtime.steering) {
+        runtime.deferredStopReason = stopReason;
+      } else if (!runtime.externalTurn) {
+        this.finishPrompt(runtime, stopReason);
+      }
     } catch (cause) {
       if (runtime.shuttingDown) return;
-      runtime.busy = false;
       const turnId = runtime.turnId;
-      runtime.turnId = null;
-      this.clearToolCalls(runtime.id);
       const message = cause instanceof Error ? cause.message : String(cause);
+      runtime.busy = false;
+      runtime.turnId = null;
+      const requestId = runtime.requestId;
+      runtime.requestId = null;
+      this.clearToolCalls(runtime.id);
       this.setActivity(runtime, {
         kind: "failed",
         turn_id: turnId,
@@ -715,6 +843,7 @@ export class PureBunHost {
         message,
       });
       this.emitEngine({ event: "error", session: runtime.id, message, terminal: true, request_id: requestId });
+      this.drainPromptQueue(runtime);
     }
   }
 
@@ -744,6 +873,46 @@ export class PureBunHost {
     return this.database.deleteTransientSession(sessionId);
   }
 
+  private finishPrompt(runtime: SessionRuntime, stopReason: string): void {
+    if (!runtime.busy) return;
+    runtime.busy = false;
+    runtime.turnId = null;
+    runtime.requestId = null;
+    runtime.externalTurn = false;
+    this.clearToolCalls(runtime.id);
+    this.setActivity(runtime, { kind: "idle" });
+    this.emitEngine({ event: "turn_ended", session: runtime.id, stop_reason: stopReason });
+    this.drainPromptQueue(runtime);
+  }
+
+  private drainPromptQueue(runtime: SessionRuntime): void {
+    if (runtime.busy || runtime.steering) return;
+    const next = runtime.queuedPrompts.shift();
+    if (!next) return;
+    runtime.queuedPrompts.forEach((queued, index) => {
+      this.emitEngine({
+        event: "prompt_queued",
+        session: runtime.id,
+        request_id: optionalString(queued.request_id),
+        position: index + 1,
+      });
+    });
+    queueMicrotask(() => {
+      try {
+        this.startPrompt(next);
+      } catch (cause) {
+        this.emitEngine({
+          event: "error",
+          session: runtime.id,
+          message: cause instanceof Error ? cause.message : String(cause),
+          terminal: true,
+          request_id: optionalString(next.request_id),
+        });
+        this.drainPromptQueue(runtime);
+      }
+    });
+  }
+
   private async connect(runtime: SessionRuntime): Promise<AcpPeer> {
     if (runtime.peer && runtime.acpSessionId) return runtime.peer;
     if (runtime.connectPromise) return runtime.connectPromise;
@@ -755,6 +924,8 @@ export class PureBunHost {
       }, runtime.toolset.mcpServers);
       runtime.peer = peer;
       const initialized = object(await peer.initialize());
+      runtime.capabilities = reportedInteractionCapabilities(initialized);
+      this.emitCapabilities(runtime);
       const capabilities = object(initialized.agentCapabilities);
       let response: Record<string, unknown>;
       if (runtime.persistedAcpSessionId && capabilities.loadSession === true) {
@@ -781,8 +952,14 @@ export class PureBunHost {
       const models = reportedModels(response, runtime.provider);
       const current = optionalString(object(response.models).currentModelId) ?? runtime.model ?? "";
       this.emitEngine({ event: "models", session: runtime.id, available: models, current });
-      const options = reportedConfigOptions(response);
-      if (options.length > 0) this.emitEngine({ event: "config_options", session: runtime.id, options });
+      runtime.configOptions = reportedConfigOptions(response);
+      if (runtime.configOptions.length > 0) {
+        this.emitEngine({
+          event: "config_options",
+          session: runtime.id,
+          options: runtime.configOptions,
+        });
+      }
       if (runtime.model && current !== runtime.model) {
         try {
           await peer.setModel(runtime.acpSessionId, runtime.model);
@@ -809,8 +986,26 @@ export class PureBunHost {
     if (method !== "session/update") return;
     const update = object(object(params).update);
     const kind = optionalString(update.sessionUpdate) ?? "";
-    if (runtime.replaying && kind !== "usage_update") return;
+    if (runtime.replaying && kind !== "usage_update" && kind !== "session_info_update") return;
     const content = object(update.content);
+    if (kind === "session_info_update") {
+      const meta = object(update._meta);
+      if ("goal" in meta) this.emitGoal(runtime.id, meta.goal);
+      const status = optionalString(object(object(meta.codex).threadStatus).type);
+      if (status === "active" && !runtime.busy) {
+        // Goal continuation and steering fallbacks can start turns outside `session/prompt`.
+        // The provider's thread status is the native lifecycle boundary for those turns.
+        runtime.busy = true;
+        runtime.externalTurn = true;
+        runtime.turnId = crypto.randomUUID();
+        runtime.requestId = null;
+        this.setActivity(runtime, { kind: "running", turn_id: runtime.turnId });
+      }
+      if (runtime.externalTurn && (status === "idle" || status === "systemError")) {
+        this.finishPrompt(runtime, status === "idle" ? "end_turn" : "provider_error");
+      }
+      return;
+    }
     if (kind === "agent_message_chunk") {
       const value = textContent(content);
       if (!value) return;
@@ -1032,7 +1227,46 @@ export class PureBunHost {
     const peer = await this.connect(runtime);
     if (!runtime.acpSessionId) throw new Error("ACP session is unavailable");
     const response = object(await peer.setConfigOption(runtime.acpSessionId, configId, value));
-    this.emitEngine({ event: "config_options", session: sessionId, options: reportedConfigOptions(response) });
+    runtime.configOptions = reportedConfigOptions(response);
+    this.emitEngine({ event: "config_options", session: sessionId, options: runtime.configOptions });
+  }
+
+  private emitCapabilities(runtime: SessionRuntime): void {
+    this.emitEngine({
+      event: "session_capabilities",
+      session: runtime.id,
+      steering: runtime.capabilities.steering,
+      goal: runtime.capabilities.goal
+        ? {
+            control_method: runtime.capabilities.goal.controlMethod,
+            actions: runtime.capabilities.goal.actions,
+          }
+        : null,
+    });
+  }
+
+  private emitGoal(session: string, value: unknown): void {
+    if (value === null) {
+      this.emitEngine({ event: "goal_changed", session, goal: null });
+      return;
+    }
+    const goal = object(value);
+    const objective = optionalString(goal.objective);
+    const status = optionalString(goal.status);
+    if (!objective || !status) return;
+    this.emitEngine({
+      event: "goal_changed",
+      session,
+      goal: {
+        objective,
+        status,
+        created_at: number(goal.createdAt, 0),
+        updated_at: number(goal.updatedAt, 0),
+        token_budget: typeof goal.tokenBudget === "number" ? goal.tokenBudget : null,
+        tokens_used: number(goal.tokensUsed, 0),
+        time_used_seconds: number(goal.timeUsedSeconds, 0),
+      },
+    });
   }
 
   private setPolicy(
@@ -1085,6 +1319,13 @@ export class PureBunHost {
       busy: false,
       replaying: false,
       turnId: null,
+      requestId: null,
+      capabilities: { steering: false, goal: null },
+      configOptions: [],
+      queuedPrompts: [],
+      steering: false,
+      deferredStopReason: null,
+      externalTurn: false,
       shuttingDown: false,
     };
   }
@@ -1103,14 +1344,27 @@ export class PureBunHost {
     this.clearToolCalls(runtime.id);
     if (runtime.shuttingDown || this.shuttingDown) return;
     if (runtime.busy) {
+      const requestId = runtime.requestId;
+      const turnId = runtime.turnId;
       runtime.busy = false;
+      runtime.turnId = null;
+      runtime.requestId = null;
+      runtime.externalTurn = false;
+      runtime.deferredStopReason = null;
       this.setActivity(runtime, {
         kind: "failed",
-        turn_id: runtime.turnId,
+        turn_id: turnId,
         reason: "provider_error",
         message: error.message,
       });
-      this.emitEngine({ event: "error", session: runtime.id, message: error.message, terminal: true });
+      this.emitEngine({
+        event: "error",
+        session: runtime.id,
+        message: error.message,
+        terminal: true,
+        request_id: requestId,
+      });
+      this.drainPromptQueue(runtime);
     }
   }
 

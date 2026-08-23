@@ -27,7 +27,7 @@ brew link --force zig@0.15
 
 - **Grok** — `grok`，原生支持 ACP，最简单且不依赖 Node。
 - **Claude Code** — Node/npx；C2 会运行 `npx @agentclientprotocol/claude-agent-acp`。
-- **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.1.14`。
+- **Codex** — Node/npx；运行 `npx -y @agentclientprotocol/codex-acp@1.6.2`。
 - **Cursor** — `cursor-agent`。
 - **OpenCode 1** — `opencode`。
 - **OpenCode 2（Beta）** — `opencode2`；可与 V1 并存安装。

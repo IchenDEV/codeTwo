@@ -374,6 +374,7 @@ export const TurnCard = memo(function TurnCard({
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
   const running = isRunning(turn);
+  const queued = turn.delivery === "queued";
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
   const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
@@ -412,7 +413,7 @@ export const TurnCard = memo(function TurnCard({
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article aria-busy={running} className="animate-rise-in py-7">
+    <article aria-busy={running && !queued} className="animate-rise-in py-7">
       {/* prompt */}
       <div className="group/prompt flex items-start justify-end gap-1">
         {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
@@ -437,6 +438,13 @@ export const TurnCard = memo(function TurnCard({
         )}
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
           <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
+          {turn.delivery && (
+            <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
+              {turn.delivery === "queued"
+                ? t("turn.queued", { position: turn.queuePosition ?? 1 })
+                : t("turn.steered")}
+            </p>
+          )}
           {promptIsLong && (
             <button
               type="button"
@@ -524,7 +532,7 @@ export const TurnCard = memo(function TurnCard({
         </div>
       ) : null}
 
-      {running && !turn.text && (
+      {running && !queued && !turn.text && (
         <p
           role="status"
           aria-live="polite"
@@ -546,7 +554,7 @@ export const TurnCard = memo(function TurnCard({
       )}
 
       {/* secondary detail + outcome, on one quiet line */}
-      {(hasDetail || dur || turn.stopReason || (running && turn.text)) && (
+      {(hasDetail || dur || turn.stopReason || queued || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
           <Detail icon={Bot} label={t("turn.agents")} count={agents.length} wide>
             <div className="flex flex-col gap-1">
@@ -641,7 +649,11 @@ export const TurnCard = memo(function TurnCard({
           </Detail>
 
           <span className="ms-auto flex shrink-0 items-center gap-1.5">
-            {running ? (
+            {queued ? (
+              <Badge variant="secondary" className="text-cap uppercase">
+                {t("turn.queued", { position: turn.queuePosition ?? 1 })}
+              </Badge>
+            ) : running ? (
               <Badge variant="secondary" className="gap-1 text-cap uppercase">
                 <Loader2 className="size-2.5 animate-spin" /> {t("turn.running")}
               </Badge>

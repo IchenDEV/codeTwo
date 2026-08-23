@@ -297,6 +297,24 @@ export function sceneEffortChoice(
   return choice ? { configId: option.id, value: choice.id } : null;
 }
 
+/**
+ * Resolve a scene's plan posture through the provider-owned collaboration-mode selector.
+ * There is deliberately no fallback prompt/skill: without this native option the scene leaves
+ * `plan_first` pending instead of pretending the provider changed modes.
+ */
+export function sceneCollaborationChoice(
+  options: readonly EffortOptionLike[],
+  planFirst: boolean,
+): { configId: string; value: string } | null {
+  const option = options.find(
+    (o) => o.category === "collaboration_mode" || o.id === "collaboration_mode",
+  );
+  if (!option) return null;
+  const wanted = planFirst ? "plan" : "default";
+  const choice = option.choices.find((candidate) => candidate.id.toLowerCase() === wanted);
+  return choice ? { configId: option.id, value: choice.id } : null;
+}
+
 /** The slice of a skill listing the scene-aware `/` picker needs. */
 export interface SkillLike {
   id: string;

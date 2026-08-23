@@ -72,6 +72,28 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
+  test("renders a queued prompt as waiting instead of active work", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard
+          turn={{
+            ...runningTurn(),
+            accepted: false,
+            delivery: "queued",
+            queuePosition: 2,
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    expect(rendered.container.querySelector("article")?.getAttribute("aria-busy")).toBe("false");
+    expect(rendered.container.querySelector('[role="status"]')).toBeNull();
+    expect(rendered.container.textContent).toContain("queued #2");
+    rendered.unmount();
+  });
+
   test("renders safe Sites links without exposing non-web resource URIs", () => {
     activateDom();
     disableCanvasDrawing();
