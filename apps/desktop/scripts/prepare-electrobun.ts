@@ -48,4 +48,16 @@ if (process.platform === "darwin") {
     ],
     desktopRoot,
   );
+  run(
+    [
+      "/usr/bin/swift",
+      "build",
+      "--disable-automatic-resolution",
+      "--configuration",
+      "release",
+      "--package-path",
+      resolve(desktopRoot, "native", "cloud-sync-helper"),
+    ],
+    desktopRoot,
+  );
 }

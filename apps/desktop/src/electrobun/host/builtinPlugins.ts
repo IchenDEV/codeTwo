@@ -145,6 +145,12 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
     category: "integration",
     services: ["browser-use"],
   }),
+  plugin("device-sync", "Multi-device synchronization with shared merge and conflict rules.", {
+    origin: "host",
+    category: "integration",
+    services: ["device-sync"],
+    components: ["device-sync.settings"],
+  }),
   plugin("canvas", "Structured visual drafts, snapshots, and exports.", {
     category: "interface",
     services: ["canvas"],
@@ -226,6 +232,7 @@ const COMMAND_OWNER_BY_PREFIX: Readonly<Record<string, string>> = {
   artifacts: "artifacts",
   automation: "automation",
   browser_use: "browser-use",
+  device_sync: "device-sync",
   canvas: "canvas",
   computer_use: "computer-use",
   cost: "cost",

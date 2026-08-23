@@ -13,6 +13,7 @@ import {
   type ProviderDefinition,
 } from "./acp";
 import { BunDatabase } from "./database";
+import { DeviceSyncService } from "./deviceSync";
 import { builtinPluginForCommand } from "./builtinPlugins";
 import {
   githubCurrentPullRequest,
@@ -227,6 +228,7 @@ export class PureBunHost {
   private readonly dataDir: string;
   private readonly defaultCwd: string;
   private readonly database: BunDatabase;
+  private readonly deviceSync: DeviceSyncService;
   private hostTools: HostToolEvidence;
   private readonly providerLifecycle: ProviderLifecycleManager;
   private readonly terminal: TerminalManager;
@@ -253,6 +255,7 @@ export class PureBunHost {
     this.providerLifecycle = new ProviderLifecycleManager(dataDir);
     this.database = new BunDatabase(dataDir);
     this.handoff = new TaskHandoffManager(this.database, (sessionId) => this.quiesceForHandoff(sessionId));
+    this.deviceSync = new DeviceSyncService(this.database, dataDir, (event) => this.emit(event));
     this.terminal = new TerminalManager((event) => this.emit(event));
     this.lsp = new LspManager((event) => this.emit(event));
     this.remote = new BunRemoteServer(dataDir, (name, args) => this.call(name, args, null));
@@ -266,6 +269,10 @@ export class PureBunHost {
         if (plugin === "terminal") this.terminal.setRuntimeEnabled(enabled, projectPath);
         if (plugin === "lsp") this.lsp.setRuntimeEnabled(enabled, projectPath);
         if (plugin === "remote" && !enabled) this.remote.stop();
+        if (plugin === "device-sync") {
+          if (enabled) this.deviceSync.start();
+          else this.deviceSync.pause();
+        }
       },
       onChanged: () => {
         this.lsp.invalidateRouting();
@@ -277,6 +284,12 @@ export class PureBunHost {
     this.plugins.start();
     queueMicrotask(async () => {
       await this.plugins.ready();
+      try {
+        this.plugins.assertBuiltinEnabled("device-sync", null);
+        this.deviceSync.start();
+      } catch {
+        this.deviceSync.pause();
+      }
       this.emit({
         name: "host-ready",
         payload: { runtime: "bun", commands: this.commands() },
@@ -319,6 +332,7 @@ export class PureBunHost {
     this.terminal.shutdown();
     this.lsp.shutdown();
     this.database.purgeTransientSessions();
+    await this.deviceSync.shutdown();
     this.database.close();
   }
 
@@ -359,6 +373,9 @@ export class PureBunHost {
       this.hostTools = detectHostToolEvidence(process.env, dataDir);
       return browserUseSettings(this.hostTools);
     });
+    this.register("device_sync.status", () => this.deviceSync.status());
+    this.register("device_sync.set_enabled", (args) => this.deviceSync.setEnabled(boolean(args.enabled)));
+    this.register("device_sync.sync_now", () => this.deviceSync.syncNow());
     this.register("projects.list", () => this.database.listProjects());
     this.register("projects.add", (args) => {
       const path = string(args.path, "path");

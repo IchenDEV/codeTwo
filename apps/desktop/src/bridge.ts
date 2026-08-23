@@ -118,6 +118,53 @@ export async function onAppshotFailed(
   return inDesktop ? onDesktopAppshotFailed(cb) : () => {};
 }
 
+export type DeviceSyncState =
+  | "disabled"
+  | "ready"
+  | "syncing"
+  | "unsupported"
+  | "signed-out"
+  | "restricted"
+  | "unavailable"
+  | "error";
+
+export interface DeviceSyncStatus {
+  transport: string;
+  state: DeviceSyncState;
+  enabled: boolean;
+  available: boolean;
+  last_success_at: number | null;
+  message: string | null;
+  imported: {
+    projects: number;
+    sessions: number;
+    parts: number;
+    memories: number;
+  } | null;
+}
+
+export async function getDeviceSyncStatus(): Promise<DeviceSyncStatus> {
+  return inDesktop
+    ? call<DeviceSyncStatus>("device_sync.status")
+    : {
+        transport: "icloud",
+        state: "unsupported",
+        enabled: false,
+        available: false,
+        last_success_at: null,
+        message: null,
+        imported: null,
+      };
+}
+
+export async function setDeviceSyncEnabled(enabled: boolean): Promise<DeviceSyncStatus> {
+  return inDesktop ? call<DeviceSyncStatus>("device_sync.set_enabled", { enabled }) : getDeviceSyncStatus();
+}
+
+export async function syncDeviceDataNow(): Promise<DeviceSyncStatus> {
+  return inDesktop ? call<DeviceSyncStatus>("device_sync.sync_now") : getDeviceSyncStatus();
+}
+
 export interface ProviderInfo {
   id: string;
   display_name: string;
@@ -1571,6 +1618,13 @@ export async function onAutomationChanged(
 ): Promise<() => void> {
   if (!inDesktop) return () => {};
   return listenDesktop<string>("automation-changed", cb);
+}
+
+export async function onDeviceSyncChanged(
+  cb: (imported: NonNullable<DeviceSyncStatus["imported"]>) => void,
+): Promise<() => void> {
+  if (!inDesktop) return () => {};
+  return listenDesktop<NonNullable<DeviceSyncStatus["imported"]>>("device-sync-changed", cb);
 }
 
 export async function answerPermission(
