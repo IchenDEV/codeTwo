@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { DesktopEvent } from "../rpc";
 import {
@@ -81,6 +82,7 @@ interface SessionRuntime {
   provider: ProviderDefinition;
   toolset: ProviderToolset;
   model: string | null;
+  initialReasoningEffort: string | null;
   permissionMode: string;
   sandboxPolicy: string;
   persistedAcpSessionId: string | null;
@@ -181,6 +183,41 @@ function textContent(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const content = value as Args;
   return typeof content.text === "string" ? content.text : null;
+}
+
+const MAX_PROJECT_ICON_BYTES = 2 * 1024 * 1024;
+const PROJECT_ICON_MIME = new Map([
+  [".png", "image/png"],
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".webp", "image/webp"],
+]);
+
+function pathInside(root: string, candidate: string): boolean {
+  const rel = relative(resolve(root), resolve(candidate));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function projectIconMime(source: string, bytes: Uint8Array): string {
+  const extension = extname(source).toLowerCase();
+  const mime = PROJECT_ICON_MIME.get(extension);
+  const png = bytes.length >= 8
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+  const jpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const webp = bytes.length >= 12
+    && Buffer.from(bytes.subarray(0, 4)).toString("ascii") === "RIFF"
+    && Buffer.from(bytes.subarray(8, 12)).toString("ascii") === "WEBP";
+  if (!mime || (mime === "image/png" && !png) || (mime === "image/jpeg" && !jpeg) || (mime === "image/webp" && !webp)) {
+    throw new Error("project icon must be a PNG, JPEG, or WebP image");
+  }
+  return mime;
+}
+
+function removeStoredProjectIcon(dataDir: string, stored: string | null): void {
+  if (!stored) return;
+  const iconDir = join(dataDir, "project-icons");
+  if (pathInside(iconDir, stored)) rmSync(stored, { force: true });
 }
 
 export class PureBunHost {
@@ -314,7 +351,53 @@ export class PureBunHost {
     this.register("projects.open", (args) => this.database.touchProject(string(args.path, "path")));
     this.register("projects.rename", (args) => this.database.renameProject(string(args.path, "path"), string(args.name, "name")));
     this.register("projects.set_worktree_mode", (args) => this.database.setProjectWorktreeMode(string(args.path, "path"), optionalString(args.mode)));
-    this.register("projects.remove", (args) => this.database.removeProject(string(args.path, "path")));
+    this.register("projects.set_agent_defaults", (args) => this.database.setProjectAgentDefaults(
+      string(args.path, "path"),
+      optionalString(args.provider),
+      optionalString(args.model),
+      optionalString(args.reasoning_effort),
+    ));
+    this.register("projects.set_icon", (args) => {
+      const path = string(args.path, "path");
+      const source = optionalString(args.source);
+      const previous = this.database.projectIconPath(path);
+      if (!source) {
+        const updatedAt = this.database.setProjectIcon(path, null, Date.now());
+        removeStoredProjectIcon(dataDir, previous);
+        return updatedAt;
+      }
+
+      const info = statSync(source);
+      if (!info.isFile() || info.size <= 0 || info.size > MAX_PROJECT_ICON_BYTES) {
+        throw new Error("project icon must be a non-empty image no larger than 2 MB");
+      }
+      const bytes = readFileSync(source);
+      projectIconMime(source, bytes);
+      const iconDir = join(dataDir, "project-icons");
+      mkdirSync(iconDir, { recursive: true });
+      const key = createHash("sha256").update(path).digest("hex").slice(0, 24);
+      const destination = join(iconDir, `${key}${extname(source).toLowerCase()}`);
+      writeFileSync(destination, bytes, { mode: 0o600 });
+      const updatedAt = this.database.setProjectIcon(path, destination, Date.now());
+      if (previous !== destination) removeStoredProjectIcon(dataDir, previous);
+      return updatedAt;
+    });
+    this.register("projects.icon", (args) => {
+      const stored = this.database.projectIconPath(string(args.path, "path"));
+      if (!stored) return null;
+      const iconDir = join(dataDir, "project-icons");
+      if (!pathInside(iconDir, stored)) throw new Error("project icon path is invalid");
+      const info = statSync(stored);
+      if (!info.isFile() || info.size <= 0 || info.size > MAX_PROJECT_ICON_BYTES) return null;
+      const bytes = readFileSync(stored);
+      return { mime_type: projectIconMime(stored, bytes), bytes: Array.from(bytes) };
+    });
+    this.register("projects.remove", (args) => {
+      const path = string(args.path, "path");
+      const icon = this.database.projectIconPath(path);
+      this.database.removeProject(path);
+      removeStoredProjectIcon(dataDir, icon);
+    });
 
     this.register("sessions.list", () => this.database.listSessions(false));
     this.register("sessions.archived", () => this.database.listSessions(true));
@@ -679,7 +762,9 @@ export class PureBunHost {
       transient: boolean(args.transient),
     });
     const id = string(session.id, "session id");
-    this.runtimes.set(id, this.runtimeFromSession(session));
+    const runtime = this.runtimeFromSession(session);
+    runtime.initialReasoningEffort = optionalString(args.reasoning_effort);
+    this.runtimes.set(id, runtime);
     this.emitEngine({
       event: "session_created",
       session: id,
@@ -998,6 +1083,40 @@ export class PureBunHost {
             message: `Model ${runtime.model} could not be applied: ${error instanceof Error ? error.message : String(error)}`,
             terminal: false,
           });
+        }
+      }
+      const initialEffort = runtime.initialReasoningEffort;
+      runtime.initialReasoningEffort = null;
+      if (initialEffort) {
+        const effortOption = runtime.configOptions.find(
+          (option) => option.category === "thought_level"
+            || option.id === "effort"
+            || option.id === "reasoning_effort",
+        );
+        const effortChoice = effortOption?.choices.find(
+          (choice) => choice.id.toLowerCase() === initialEffort.toLowerCase()
+            || choice.name.toLowerCase() === initialEffort.toLowerCase(),
+        );
+        if (effortOption && effortChoice) {
+          try {
+            const applied = object(await peer.setConfigOption(
+              runtime.acpSessionId,
+              effortOption.id,
+              effortChoice.id,
+            ));
+            const appliedOptions = reportedConfigOptions(applied);
+            if (appliedOptions.length > 0) {
+              runtime.configOptions = appliedOptions;
+              this.emitEngine({ event: "config_options", session: runtime.id, options: runtime.configOptions });
+            }
+          } catch (error) {
+            this.emitEngine({
+              event: "error",
+              session: runtime.id,
+              message: `Reasoning effort ${initialEffort} could not be applied: ${error instanceof Error ? error.message : String(error)}`,
+              terminal: false,
+            });
+          }
         }
       }
       return peer;
@@ -1337,6 +1456,7 @@ export class PureBunHost {
       provider,
       toolset: projectProviderToolset(this.hostTools, provider.id),
       model: optionalString(session.model),
+      initialReasoningEffort: null,
       permissionMode: optionalString(session.permission_mode) ?? "ask",
       sandboxPolicy: optionalString(session.sandbox_policy) ?? "workspace_write",
       persistedAcpSessionId: optionalString(session.acp_session_id),

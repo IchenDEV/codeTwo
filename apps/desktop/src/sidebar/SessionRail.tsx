@@ -76,6 +76,7 @@ import { cn } from "@/lib/utils";
 import { sessionActivity, sessionProjectPath } from "../session/sessionEvents";
 import type { QuickQuotaSummary } from "../usage/quickQuota";
 import { useToast } from "../ui/toast";
+import { ProjectIcon } from "../projects/ProjectIcon";
 
 /** "3h", "2d", "5w" — the glanceable age on a row. Anything under a minute is "now". */
 function shortAge(ts: number): string {
@@ -286,7 +287,8 @@ export function SessionRail({
     [applied, onWidth],
   );
 
-  const activeProjectName = projects.find((p) => p.path === activeProject)?.name ?? null;
+  const activeProjectRecord = projects.find((p) => p.path === activeProject) ?? null;
+  const activeProjectName = activeProjectRecord?.name ?? null;
 
   // "Recent" means what it says: the active project's sessions, newest first — per group.
   const forProject = useCallback(
@@ -945,7 +947,11 @@ export function SessionRail({
                 className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
                 title={activeProject ?? undefined}
               >
-                <Folder className="size-3.5 shrink-0" />
+                {activeProjectRecord ? (
+                  <ProjectIcon project={activeProjectRecord} size={16} />
+                ) : (
+                  <Folder className="size-3.5 shrink-0" />
+                )}
                 <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
                 <ChevronDown className="size-3 shrink-0 opacity-50" />
               </button>}
@@ -954,7 +960,11 @@ export function SessionRail({
               <DropdownMenuRadioGroup value={activeProject ?? undefined} onValueChange={onSelectProject}>
                 {projects.map((p) => (
                   <DropdownMenuRadioItem key={p.path} value={p.path}>
-                    <Folder className={cn(p.path === activeProject && "text-primary")} />
+                    <ProjectIcon
+                      project={p}
+                      size={20}
+                      className={cn(p.path === activeProject && "text-primary ring-primary/35")}
+                    />
                     <DropdownMenuItemText title={p.path}>
                       <span className="truncate">{p.name}</span>
                       <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>

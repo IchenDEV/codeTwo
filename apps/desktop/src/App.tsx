@@ -113,6 +113,8 @@ import {
   setModel,
   setPluginEnabled,
   setPluginTrusted,
+  setProjectAgentDefaults,
+  setProjectIcon,
   setProjectWorktreeMode,
   type WorkspaceOpenTarget,
   setSessionMemoryPolicy,
@@ -209,6 +211,7 @@ import {
   planPluginManagerChange,
 } from "./plugins/lifecycle";
 import { SettingsPage, type SettingsTab } from "./settings/SettingsPage";
+import { ProjectIcon } from "./projects/ProjectIcon";
 import { SourceControlModal } from "./git/SourceControl";
 import { workspaceStateForCwd, type WorkspaceLoadState } from "./git/state";
 import { CommandPalette, type Command } from "./palette/CommandPalette";
@@ -396,6 +399,8 @@ interface PendingCreation {
   promptRequestId: string;
   editorSnapshot: DocBlock[];
   editorRevision: number;
+  /** Project default resolved before the provider publishes its session-owned selector id. */
+  projectReasoningEffort: string | null;
 }
 
 interface PendingPolicyRequest {
@@ -1530,6 +1535,68 @@ export default function App() {
     [t, toast],
   );
 
+  const updateProjectName = useCallback(async (path: string, name: string) => {
+    projectMutationVersionRef.current += 1;
+    try {
+      await renameProject(path, name);
+      projectMutationVersionRef.current += 1;
+      setProjects((items) => items.map((project) =>
+        project.path === path ? { ...project, name: name.trim() } : project,
+      ));
+    } catch (error) {
+      projectMutationVersionRef.current += 1;
+      throw error;
+    }
+  }, []);
+
+  const updateProjectIcon = useCallback(async (path: string, source: string | null) => {
+    projectMutationVersionRef.current += 1;
+    try {
+      const iconUpdatedAt = await setProjectIcon(path, source);
+      projectMutationVersionRef.current += 1;
+      setProjects((items) => items.map((project) =>
+        project.path === path
+          ? { ...project, has_icon: source !== null, icon_updated_at: iconUpdatedAt }
+          : project,
+      ));
+    } catch (error) {
+      projectMutationVersionRef.current += 1;
+      throw error;
+    }
+  }, []);
+
+  const updateProjectAgentDefaults = useCallback(async (
+    path: string,
+    nextProvider: string | null,
+    nextModel: string | null,
+    nextReasoningEffort: string | null,
+  ) => {
+    projectMutationVersionRef.current += 1;
+    try {
+      await setProjectAgentDefaults(path, nextProvider, nextModel, nextReasoningEffort);
+      projectMutationVersionRef.current += 1;
+      setProjects((items) => items.map((project) =>
+        project.path === path
+          ? {
+              ...project,
+              default_provider: nextProvider,
+              default_model: nextProvider ? nextModel : null,
+              default_reasoning_effort: nextProvider ? nextReasoningEffort : null,
+            }
+          : project,
+      ));
+      if (path === activeProjectRef.current && activeSessionRef.current === null) {
+        if (nextProvider) setProvider(nextProvider);
+        setCurrentModel(nextProvider ? nextModel : null);
+        setDefaultModel(null);
+        setConfigOptions([]);
+      }
+    } catch (error) {
+      projectMutationVersionRef.current += 1;
+      throw error;
+    }
+  }, []);
+
   /** Switch projects: the working directory, the conversation list and the git section all follow. */
   const selectProject = useCallback(
     (path: string) => {
@@ -1540,6 +1607,10 @@ export default function App() {
       setActiveProject(path);
       setCwd(path);
       const project = projects.find((item) => item.path === path);
+      if (project?.default_provider) setProvider(project.default_provider);
+      setCurrentModel(project?.default_provider ? project.default_model ?? null : null);
+      setDefaultModel(null);
+      setConfigOptions([]);
       setWorktreeBase(
         projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null),
       );
@@ -1558,9 +1629,6 @@ export default function App() {
       setTaskContext(null, false);
       setTurns([]);
       setModels([]);
-      setCurrentModel(null);
-      setDefaultModel(null);
-      setConfigOptions([]);
       memoryReadRef.current = "inherit";
       memoryWriteRef.current = "inherit";
       memoryReceiptsRef.current = [];
@@ -1570,6 +1638,25 @@ export default function App() {
     },
     [invalidatePendingCreation, projects, refreshProjects, setTaskContext],
   );
+
+  const removeProjectEntry = useCallback(async (path: string) => {
+    await removeProject(path);
+    try {
+      const history = loadBrowserHistory(window.localStorage);
+      saveBrowserHistory(window.localStorage, removeBrowserProject(history, path));
+    } catch {
+      // Browser history is a convenience; a blocked local store must not block removal.
+    }
+    refreshProjects();
+    if (path !== activeProjectRef.current) return;
+    const next = projects.find((project) => project.path !== path);
+    if (next) selectProject(next.path);
+    else {
+      activeProjectRef.current = null;
+      setCallProjectPath(null);
+      setActiveProject(null);
+    }
+  }, [projects, refreshProjects, selectProject]);
 
   const addProjectFolder = useCallback(async () => {
     const picked = await pickDirectory();
@@ -1616,10 +1703,11 @@ export default function App() {
   const activeWorktreeUnknown = activeWorktreeState.legacyUnknown;
 
   // The title bar's project badge — the workspace this session lives in, at a glance.
-  const activeProjectName = useMemo(
-    () => projects.find((p) => p.path === activeProject)?.name ?? null,
+  const activeProjectRecord = useMemo(
+    () => projects.find((project) => project.path === activeProject) ?? null,
     [projects, activeProject],
   );
+  const activeProjectName = activeProjectRecord?.name ?? null;
 
   const taskBoardSessions = useMemo(
     () =>
@@ -1735,6 +1823,14 @@ export default function App() {
       providerRegistryRequestRef.current += 1;
     };
   }, [refreshProviders]);
+
+  useEffect(() => {
+    if (activeSession !== null || currentModel === null) return;
+    const availableModels = providers.find((candidate) => candidate.id === provider)?.models ?? [];
+    if (availableModels.length > 0 && !availableModels.some((model) => model.id === currentModel)) {
+      setCurrentModel(null);
+    }
+  }, [activeSession, currentModel, provider, providers]);
 
   useEffect(() => {
     const activity = onBrowserAgentActivity(() => {
@@ -2119,7 +2215,7 @@ export default function App() {
                   })
                   .catch(() => {
                     sceneEffortAppliedRef.current.delete(ev.session);
-                  });
+                });
               }
             }
           }
@@ -2551,6 +2647,10 @@ export default function App() {
         promptRequestId,
         editorSnapshot,
         editorRevision,
+        projectReasoningEffort:
+          projects.find((project) =>
+            project.path === activeProjectRef.current && project.default_provider === provider
+          )?.default_reasoning_effort ?? null,
       };
       setPendingSessionRunning(true);
     }
@@ -2575,6 +2675,8 @@ export default function App() {
           worktreeBaseSha,
           { mode, sandbox },
           currentModel,
+          false,
+          pendingCreationRef.current?.projectReasoningEffort ?? null,
         );
       }
     } catch (e) {
@@ -2642,6 +2744,7 @@ export default function App() {
     markSessionStopped,
     setTaskContext,
     updateRunningSession,
+    projects,
   ]);
 
   const sendDuringTurn = useCallback(
@@ -2752,7 +2855,6 @@ export default function App() {
     setActiveSession(null);
     setTurns([]);
     setModels([]);
-    setCurrentModel(null);
     setDefaultModel(null);
     setConfigOptions([]);
     memoryReadRef.current = "inherit";
@@ -2771,14 +2873,15 @@ export default function App() {
     // selection: keep the explicit Composer choice. Leaving a durable session starts a new draft
     // and seeds that draft from the project preference or the prior session's baseline kind.
     if (currentSessionId !== null) {
-      const projectMode =
-        projects.find((project) => project.path === activeProjectRef.current)
-          ?.default_worktree_mode ?? null;
+      const project = projects.find((item) => item.path === activeProjectRef.current);
+      const projectMode = project?.default_worktree_mode ?? null;
       const baseline = nextSessionWorktreeBaseline(
         projectMode,
         sessionCreationBaseline(currentSession),
       );
       if (baseline !== undefined) setWorktreeBase(baseline);
+      if (project?.default_provider) setProvider(project.default_provider);
+      setCurrentModel(project?.default_provider ? project.default_model ?? null : null);
     }
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
@@ -5169,6 +5272,8 @@ export default function App() {
           setCallProjectPath(normalizePluginProjectPath(last.path));
           setActiveProject(last.path);
           setCwd(last.path);
+          if (last.default_provider) setProvider(last.default_provider);
+          setCurrentModel(last.default_provider ? last.default_model ?? null : null);
           setWorktreeBase(
             projectSwitchWorktreeBaseline(last.default_worktree_mode),
           );
@@ -5453,6 +5558,12 @@ export default function App() {
           }
           projects={projects}
           onProjectWorktreeMode={updateProjectWorktreeMode}
+          onProjectRename={updateProjectName}
+          onProjectIcon={updateProjectIcon}
+          onProjectAgentDefaults={updateProjectAgentDefaults}
+          onProjectRemove={removeProjectEntry}
+          projectActionsCount={scripts.length}
+          onAddProjectAction={() => setShowActionDialog(true)}
           onOpenSession={(id) => {
             setShowSettings(false);
             void selectSession(id);
@@ -5506,32 +5617,14 @@ export default function App() {
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onAddProject={() => void addProjectFolder()}
-            onRenameProject={(p, name) =>
-              void renameProject(p, name).then(refreshProjects)
-            }
-          onRemoveProject={(p) => {
-            void removeProject(p).then(() => {
-              try {
-                const history = loadBrowserHistory(window.localStorage);
-                  saveBrowserHistory(
-                    window.localStorage,
-                    removeBrowserProject(history, p),
-                  );
-              } catch {
-                // Browser history is a convenience; a blocked local store must not block removal.
-              }
-              refreshProjects();
-              // Dropping the project you were in leaves nothing selected; fall back to the next one
-              // rather than stranding the rail on a project that's no longer listed.
-              if (p === activeProject) {
-                const next = projects.find((x) => x.path !== p);
-                if (next) selectProject(next.path);
-                else {
-                  activeProjectRef.current = null;
-                  setCallProjectPath(null);
-                  setActiveProject(null);
-                }
-              }
+          onRenameProject={(path, name) => {
+            void updateProjectName(path, name).catch((error) => {
+              toast(t("settings.projectSaveFailed", { error: String(error) }), "error");
+            });
+          }}
+          onRemoveProject={(path) => {
+            void removeProjectEntry(path).catch((error) => {
+              toast(t("settings.projectSaveFailed", { error: String(error) }), "error");
             });
           }}
           sessions={sessions}
@@ -5974,7 +6067,11 @@ export default function App() {
                   />
             )}
             {/* Breadcrumb, reference-style: project / thread. */}
-            <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+            {activeProjectRecord ? (
+              <ProjectIcon project={activeProjectRecord} size={18} />
+            ) : (
+              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+            )}
             {activeProjectName && (
               <>
                 <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
