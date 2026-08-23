@@ -87,6 +87,8 @@ import {
   onBrowserAgentActivity,
   onBrowserDownloadBlocked,
   onAutoSceneChanged,
+  onAppshotCaptured,
+  onAppshotFailed,
   onPluginsChanged,
   onEngineEvent,
   openProject,
@@ -137,6 +139,7 @@ import {
   type ElicitationAnswer,
   type ExecutionPolicy,
   type Annotation,
+  type AppshotCapture,
   type GitStatus,
   type GoalSnapshot,
   type GitHubPullRequestDetail,
@@ -379,6 +382,8 @@ function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join("\n\n");
 }
 
+const EMPTY_APPSHOTS: AppshotCapture[] = [];
+
 interface PendingPromptRequest {
   requestId: string;
   /** Raw editor revision at the moment this immutable request was submitted. */
@@ -390,6 +395,8 @@ interface PendingPromptRequest {
   canvasIds: string[];
   /** Frozen immutable revisions retained for an explicit provider-error retry after Composer clear. */
   canvasRefs: Array<{ id: string; revision: number }>;
+  /** Private Appshot captures attached to this turn; removed from Composer only after acceptance. */
+  appshotIds: string[];
 }
 
 interface PendingCreation {
@@ -399,6 +406,7 @@ interface PendingCreation {
   promptRequestId: string;
   editorSnapshot: DocBlock[];
   editorRevision: number;
+  appshotIds: string[];
   /** Project default resolved before the provider publishes its session-owned selector id. */
   projectReasoningEffort: string | null;
 }
@@ -611,6 +619,7 @@ export default function App() {
     value: EMPTY_GIT_WORKSPACE,
   });
   const [bindings, setBindings] = useState<KeymapEntry[]>([]);
+  const [pendingAppshots, setPendingAppshots] = useState<Record<string, AppshotCapture[]>>({});
   // A blank tab, not a landing page: this browser's job is your localhost dev server, which you
   // type in.
   const [browserUrl, setBrowserUrl] = useState("about:blank");
@@ -820,6 +829,18 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const activeAppshotKey = activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
+  const activeAppshots = pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
+  const removePendingAppshots = useCallback((ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    const removed = new Set(ids);
+    setPendingAppshots((current) => Object.fromEntries(
+      Object.entries(current).flatMap(([key, captures]) => {
+        const retained = captures.filter((capture) => !removed.has(capture.id));
+        return retained.length > 0 ? [[key, retained]] : [];
+      }),
+    ));
+  }, []);
   const [projectBootstrapComplete, setProjectBootstrapComplete] =
     useState(false);
   useEffect(() => {
@@ -2000,6 +2021,7 @@ export default function App() {
                 ? [{ id: block.id, revision: block.frozen_revision }]
                   : [],
               ),
+              appshotIds: pending.appshotIds,
             });
             void initializePluginSessionState(ev.session)
               .then(() =>
@@ -2357,6 +2379,7 @@ export default function App() {
                 pendingRequest,
               );
             }
+            removePendingAppshots(pendingRequest.appshotIds);
             const currentEditor = getBlocksRef.current?.();
             if (
               currentEditor &&
@@ -2478,6 +2501,7 @@ export default function App() {
     refreshSessions,
     restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
+    removePendingAppshots,
     toast,
     t,
     updateRunningSession,
@@ -2553,7 +2577,15 @@ export default function App() {
     if (!getBlocks) return;
     const editorSnapshot = getBlocks();
     const editorRevision = editorRevisionRef.current;
-    let doc = editorSnapshot;
+    const appshotIds = activeAppshots.map((capture) => capture.id);
+    let doc: DocBlock[] = [
+      ...editorSnapshot,
+      ...activeAppshots.map((capture): DocBlock => ({
+        type: "appshot",
+        id: capture.id,
+        title: capture.window_title,
+      })),
+    ];
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
     if (doc.length === 0) {
@@ -2637,6 +2669,7 @@ export default function App() {
         submittedDoc: canvasRetryDoc,
         canvasIds,
         canvasRefs,
+        appshotIds,
       });
       updateRunningSession(targetSession, true);
     } else {
@@ -2647,6 +2680,7 @@ export default function App() {
         promptRequestId,
         editorSnapshot,
         editorRevision,
+        appshotIds,
         projectReasoningEffort:
           projects.find((project) =>
             project.path === activeProjectRef.current && project.default_provider === provider
@@ -2744,6 +2778,7 @@ export default function App() {
     markSessionStopped,
     setTaskContext,
     updateRunningSession,
+    activeAppshots,
     projects,
   ]);
 
@@ -2762,7 +2797,16 @@ export default function App() {
       if (!getBlocks) return;
       const editorSnapshot = getBlocks();
       const editorRevision = editorRevisionRef.current;
-      if (editorSnapshot.length === 0) {
+      const appshotIds = activeAppshots.map((capture) => capture.id);
+      let doc: DocBlock[] = [
+        ...editorSnapshot,
+        ...activeAppshots.map((capture): DocBlock => ({
+          type: "appshot",
+          id: capture.id,
+          title: capture.window_title,
+        })),
+      ];
+      if (doc.length === 0) {
         toast(t("toast.emptyDoc"));
         focusEditorRef.current?.();
         return;
@@ -2771,7 +2815,6 @@ export default function App() {
         toast(t("toast.steerUnsupported"), "error");
         return;
       }
-      let doc = editorSnapshot;
       try {
         if (freezeCanvasesRef.current) doc = await freezeCanvasesRef.current(doc);
       } catch (error) {
@@ -2793,6 +2836,7 @@ export default function App() {
             ? [{ id: block.id, revision: block.frozen_revision }]
             : [],
         ),
+        appshotIds,
       };
       pendingDeferredPromptRequestsRef.current.set(requestId, pending);
       const optimistic = newTurn(summarizeDoc(doc), requestId);
@@ -2819,7 +2863,7 @@ export default function App() {
         toast(t("toast.turnFailed", { error: String(error) }), "error");
       }
     },
-    [interactionCapabilities, sessionLoading, t, toast],
+    [activeAppshots, interactionCapabilities, sessionLoading, t, toast],
   );
 
   const createSession = useCallback(() => {
@@ -2911,6 +2955,48 @@ export default function App() {
     setTaskContext(task, false);
     createSession();
   }, [createSession, setTaskContext]);
+
+  const appshotCapturedRef = useRef<(capture: AppshotCapture) => void>(() => {});
+  const appshotFailedRef = useRef<(failure: { message: string }) => void>(() => {});
+  appshotCapturedRef.current = (capture) => {
+    const needsNewDraft = capture.destination === "new" || activeArchived;
+    if (needsNewDraft) createTaskDraft();
+    const session = needsNewDraft ? null : activeSessionRef.current;
+    const key = session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
+    setPendingAppshots((current) => {
+      const existing = current[key] ?? [];
+      return {
+        ...current,
+        [key]: [...existing.filter((candidate) => candidate.id !== capture.id), capture],
+      };
+    });
+    setShowSettings(false);
+    setCapturing(null);
+    toast(t("toast.appshotReady", { app: capture.app_name }), "success");
+    setTimeout(() => focusEditorRef.current?.(), 0);
+  };
+  appshotFailedRef.current = ({ message }) => {
+    toast(t("toast.appshotFailed", { error: message }), "error");
+  };
+
+  useEffect(() => {
+    let removeCaptured: (() => void) | null = null;
+    let removeFailed: (() => void) | null = null;
+    let active = true;
+    void onAppshotCaptured((capture) => appshotCapturedRef.current(capture)).then((dispose) => {
+      if (active) removeCaptured = dispose;
+      else dispose();
+    });
+    void onAppshotFailed((failure) => appshotFailedRef.current(failure)).then((dispose) => {
+      if (active) removeFailed = dispose;
+      else dispose();
+    });
+    return () => {
+      active = false;
+      removeCaptured?.();
+      removeFailed?.();
+    };
+  }, []);
 
   const addSelectedText = useCallback(
     (text: string) => {
@@ -6440,6 +6526,8 @@ export default function App() {
                   running={running}
                   loading={sessionLoading}
                   docEmpty={docEmpty}
+                  appshots={activeAppshots}
+                  onRemoveAppshot={(id) => removePendingAppshots([id])}
                   onRun={() => void run()}
                   onQueue={() => void sendDuringTurn("queued")}
                   onSteer={() => void sendDuringTurn("steer")}

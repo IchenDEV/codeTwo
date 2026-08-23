@@ -1,5 +1,7 @@
 import type {
   AppUpdateStatus,
+  AppshotCapture,
+  AppshotSettings,
   CodeTwoRPC,
   DesktopEvent,
   NativeContextMenuRequest,
@@ -31,6 +33,8 @@ async function createClient() {
       messages: {
         event: dispatch,
         hostStatus: (status) => dispatch({ name: "host-status", payload: status }),
+        appshotCaptured: (capture) => dispatch({ name: "appshot-captured", payload: capture }),
+        appshotFailed: (failure) => dispatch({ name: "appshot-failed", payload: failure }),
       },
     },
   });
@@ -101,6 +105,44 @@ export async function desktopOpenWorkspace(
 
 export async function desktopShowItemInFolder(path: string): Promise<boolean> {
   return (await client()).request.showItemInFolder({ path });
+}
+
+export async function desktopAppshotSettings(): Promise<AppshotSettings> {
+  return (await client()).request.appshotsSettings();
+}
+
+export async function desktopUpdateAppshotSettings(
+  patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+): Promise<AppshotSettings> {
+  return (await client()).request.appshotsUpdate(patch);
+}
+
+export async function desktopRequestAppshotPermissions(
+  kind: "screen-recording" | "accessibility",
+): Promise<AppshotSettings> {
+  return (await client()).request.appshotsRequestPermissions({ kind });
+}
+
+export async function desktopOpenAppshotPrivacySettings(
+  kind: "screen-recording" | "accessibility",
+): Promise<boolean> {
+  return (await client()).request.appshotsOpenPrivacySettings({ kind });
+}
+
+export async function desktopCaptureAppshot(): Promise<AppshotCapture> {
+  return (await client()).request.appshotsCapture();
+}
+
+export async function onDesktopAppshotCaptured(
+  listener: (capture: AppshotCapture) => void,
+): Promise<() => void> {
+  return listenDesktop("appshot-captured", listener);
+}
+
+export async function onDesktopAppshotFailed(
+  listener: (failure: { message: string }) => void,
+): Promise<() => void> {
+  return listenDesktop("appshot-failed", listener);
 }
 
 export async function desktopSetBrowserZoom(webviewId: number, factor: number): Promise<void> {

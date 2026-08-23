@@ -59,6 +59,33 @@ export interface AppUpdateStatus {
   message?: string;
 }
 
+export type AppshotHotkey = "both-command" | "command-shift-2" | "command-option-2";
+export type AppshotDestination = "automatic" | "current" | "new";
+
+export interface AppshotSettings {
+  available: boolean;
+  hotkey: AppshotHotkey;
+  destination: AppshotDestination;
+  play_sound: boolean;
+  screen_recording: boolean;
+  accessibility: boolean;
+  hotkey_registered: boolean;
+  unavailable_reason: string | null;
+}
+
+export interface AppshotCapture {
+  id: string;
+  app_name: string;
+  window_title: string;
+  captured_at: string;
+  text_length: number;
+  text_truncated: boolean;
+  width: number;
+  height: number;
+  preview_data_url: string;
+  destination: AppshotDestination;
+}
+
 export type CodeTwoRPC = {
   bun: RPCSchema<{
     requests: {
@@ -81,6 +108,20 @@ export type CodeTwoRPC = {
       openDevtools: { params: undefined; response: void };
       updateStatus: { params: undefined; response: AppUpdateStatus };
       updateCheck: { params: undefined; response: AppUpdateStatus };
+      appshotsSettings: { params: undefined; response: AppshotSettings };
+      appshotsUpdate: {
+        params: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>;
+        response: AppshotSettings;
+      };
+      appshotsRequestPermissions: {
+        params: { kind: "screen-recording" | "accessibility" };
+        response: AppshotSettings;
+      };
+      appshotsOpenPrivacySettings: {
+        params: { kind: "screen-recording" | "accessibility" };
+        response: boolean;
+      };
+      appshotsCapture: { params: undefined; response: AppshotCapture };
     };
     messages: Record<never, never>;
   }>;
@@ -89,6 +130,8 @@ export type CodeTwoRPC = {
     messages: {
       event: DesktopEvent;
       hostStatus: { ready: boolean; error?: string };
+      appshotCaptured: AppshotCapture;
+      appshotFailed: { message: string };
     };
   }>;
 };

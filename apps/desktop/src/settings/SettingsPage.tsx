@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  ScanText,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import {
   checkForAppUpdates,
   getBrowserUseSettings,
   getComputerUseSettings,
+  getAppshotSettings,
   confirmNative,
   discardOrphanWorktree,
   discardSessionWorktree,
@@ -35,6 +37,11 @@ import {
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
+  openAppshotPrivacySettings,
+  requestAppshotPermissions,
+  takeAppshot,
+  updateAppshotSettings,
+  type AppshotSettings,
   type BrowserUseSettings,
   type ComputerUseSettings,
   type AppUpdateStatus,
@@ -88,6 +95,7 @@ export type SettingsTab =
   | "keybindings"
   | "providers"
   | "computer-use"
+  | "appshots"
   | "browser-use"
   | "usage"
   | "browser";
@@ -127,6 +135,7 @@ const NAV_GROUPS: {
     items: [
       { id: "providers", icon: Package, labelKey: "settings.providers" },
       { id: "computer-use", icon: MousePointer2, labelKey: "settings.computerUse" },
+      { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
       { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
       { id: "browser", icon: Globe, labelKey: "settings.browser" },
     ],
@@ -286,6 +295,11 @@ export function SettingsPage({
   computerUseSelectionSaver = selectComputerUseBackend,
   browserUseSettingsLoader = getBrowserUseSettings,
   browserUseSelectionSaver = selectBrowserUseBackend,
+  appshotSettingsLoader = getAppshotSettings,
+  appshotSettingsSaver = updateAppshotSettings,
+  appshotPermissionRequester = requestAppshotPermissions,
+  appshotPrivacyOpener = openAppshotPrivacySettings,
+  appshotCapturer = takeAppshot,
   providerInstaller = installProvider,
   providerUpgrader = upgradeProvider,
   providerEnabledSaver = setProviderEnabled,
@@ -325,6 +339,15 @@ export function SettingsPage({
   computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
   browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
   browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
+  appshotSettingsLoader?: () => Promise<AppshotSettings>;
+  appshotSettingsSaver?: (
+    patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+  ) => Promise<AppshotSettings>;
+  appshotPermissionRequester?: (
+    kind: "screen-recording" | "accessibility",
+  ) => Promise<AppshotSettings>;
+  appshotPrivacyOpener?: (kind: "screen-recording" | "accessibility") => Promise<boolean>;
+  appshotCapturer?: () => Promise<unknown>;
   providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
   providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
   providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
@@ -345,6 +368,10 @@ export function SettingsPage({
   const [browserUseSettings, setBrowserUseSettings] = useState<BrowserUseSettings | null>(null);
   const [browserUseSaving, setBrowserUseSaving] = useState<string | null>(null);
   const [browserUseError, setBrowserUseError] = useState<string | null>(null);
+  const [appshotSettings, setAppshotSettings] = useState<AppshotSettings | null>(null);
+  const [appshotSaving, setAppshotSaving] = useState(false);
+  const [appshotCapturing, setAppshotCapturing] = useState(false);
+  const [appshotError, setAppshotError] = useState<string | null>(null);
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => new Set());
   const [providerOperation, setProviderOperation] = useState<{
     id: string;
@@ -419,6 +446,44 @@ export function SettingsPage({
       active = false;
     };
   }, [tab, browserUseSettingsLoader, t]);
+  useEffect(() => {
+    if (tab !== "appshots") return;
+    let active = true;
+    setAppshotError(null);
+    void appshotSettingsLoader()
+      .then((settings) => {
+        if (active) setAppshotSettings(settings);
+      })
+      .catch((error) => {
+        if (active) setAppshotError(t("settings.appshotsLoadFailed", { error: String(error) }));
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, appshotSettingsLoader, t]);
+  useEffect(() => {
+    if (
+      tab !== "appshots"
+      || !appshotSettings?.available
+      || (appshotSettings.screen_recording && appshotSettings.accessibility)
+    ) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void appshotSettingsLoader().then((settings) => {
+        if (active) setAppshotSettings(settings);
+      }).catch(() => {});
+    }, 1000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [
+    tab,
+    appshotSettings?.available,
+    appshotSettings?.screen_recording,
+    appshotSettings?.accessibility,
+    appshotSettingsLoader,
+  ]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(project?.name ?? "");
   const [projectProfileSaving, setProjectProfileSaving] = useState(false);
@@ -655,6 +720,44 @@ export function SettingsPage({
     }
   };
 
+  const saveAppshotSettings = async (
+    patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+  ) => {
+    setAppshotSaving(true);
+    setAppshotError(null);
+    try {
+      setAppshotSettings(await appshotSettingsSaver(patch));
+    } catch (error) {
+      setAppshotError(t("settings.appshotsSaveFailed", { error: String(error) }));
+    } finally {
+      setAppshotSaving(false);
+    }
+  };
+
+  const grantAppshotAccess = async (kind: "screen-recording" | "accessibility") => {
+    setAppshotSaving(true);
+    setAppshotError(null);
+    try {
+      setAppshotSettings(await appshotPermissionRequester(kind));
+    } catch (error) {
+      setAppshotError(t("settings.appshotsPermissionFailed", { error: String(error) }));
+    } finally {
+      setAppshotSaving(false);
+    }
+  };
+
+  const captureAppshot = async () => {
+    setAppshotCapturing(true);
+    setAppshotError(null);
+    try {
+      await appshotCapturer();
+    } catch (error) {
+      setAppshotError(t("settings.appshotsCaptureFailed", { error: String(error) }));
+    } finally {
+      setAppshotCapturing(false);
+    }
+  };
+
   const refreshProviderStatus = async () => {
     if (!onReloadProviders || providerOperation) return;
     setProviderOperation({ id: "*", action: "refresh" });
@@ -748,6 +851,16 @@ export function SettingsPage({
       ? t("settings.browserUseDisabled")
       : browserUseSettings?.backends.find((backend) => backend.id === browserUseSelection)?.display_name
         ?? browserUseSelection;
+  const appshotHotkeyLabel = appshotSettings?.hotkey === "both-command"
+    ? t("settings.appshotsHotkeyBothCommand")
+    : appshotSettings?.hotkey === "command-shift-2"
+      ? t("settings.appshotsHotkeyCommandShift2")
+      : t("settings.appshotsHotkeyCommandOption2");
+  const appshotDestinationLabel = appshotSettings?.destination === "automatic"
+    ? t("settings.appshotsDestinationAutomatic")
+    : appshotSettings?.destination === "current"
+      ? t("settings.appshotsDestinationCurrent")
+      : t("settings.appshotsDestinationNew");
   const projectDefaultProvider = project?.default_provider ?? null;
   const projectDefaultModels = projectDefaultProvider
     ? providers.find((candidate) => candidate.id === projectDefaultProvider)?.models ?? []
@@ -1426,6 +1539,147 @@ export function SettingsPage({
                         </span>
                       </Row>
                     ))}
+                  </>
+                )}
+              </Page>
+            )}
+
+            {tab === "appshots" && (
+              <Page title={t("settings.appshots")} description={t("settings.appshotsHint")}>
+                <div className="mb-3 flex items-center justify-between gap-4 rounded-(--ds-radius-module) bg-fill-quiet/60 px-3 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ScanText className="size-5 shrink-0 text-primary" aria-hidden />
+                    <div className="min-w-0">
+                      <p className="text-ui font-medium">{t("settings.appshotsFrontmost")}</p>
+                      <p className="mt-0.5 text-hint leading-relaxed text-muted-foreground">
+                        {t("settings.appshotsFrontmostHint")}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={!appshotSettings?.available || appshotCapturing}
+                    onClick={() => void captureAppshot()}
+                  >
+                    {appshotCapturing ? t("settings.appshotsCapturing") : t("settings.appshotsTakeNow")}
+                  </Button>
+                </div>
+
+                {appshotError && (
+                  <p data-appshots-error className="pb-2 text-hint leading-relaxed text-destructive">
+                    {appshotError}
+                  </p>
+                )}
+                {!appshotSettings ? (
+                  <p className="py-5 text-ui text-muted-foreground">{t("settings.appshotsLoading")}</p>
+                ) : !appshotSettings.available ? (
+                  <p className="py-5 text-ui text-muted-foreground">
+                    {appshotSettings.unavailable_reason ?? t("settings.appshotsUnavailable")}
+                  </p>
+                ) : (
+                  <>
+                    <Row label={t("settings.appshotsHotkey")} hint={t("settings.appshotsHotkeyHint")}>
+                      <Select
+                        value={appshotSettings.hotkey}
+                        disabled={appshotSaving}
+                        onValueChange={(hotkey) => {
+                          if (hotkey) void saveAppshotSettings({ hotkey: hotkey as AppshotSettings["hotkey"] });
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-48 justify-between" aria-label={t("settings.appshotsHotkey")}>
+                          <SelectValue>{appshotHotkeyLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent position="popper" align="end">
+                          <SelectItem value="both-command">{t("settings.appshotsHotkeyBothCommand")}</SelectItem>
+                          <SelectItem value="command-shift-2">{t("settings.appshotsHotkeyCommandShift2")}</SelectItem>
+                          <SelectItem value="command-option-2">{t("settings.appshotsHotkeyCommandOption2")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Row>
+
+                    <Row label={t("settings.appshotsDestination")} hint={t("settings.appshotsDestinationHint")}>
+                      <Select
+                        value={appshotSettings.destination}
+                        disabled={appshotSaving}
+                        onValueChange={(destination) => {
+                          if (destination) {
+                            void saveAppshotSettings({ destination: destination as AppshotSettings["destination"] });
+                          }
+                        }}
+                      >
+                        <SelectTrigger size="sm" className="w-48 justify-between" aria-label={t("settings.appshotsDestination")}>
+                          <SelectValue>{appshotDestinationLabel}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent position="popper" align="end">
+                          <SelectItem value="automatic">{t("settings.appshotsDestinationAutomatic")}</SelectItem>
+                          <SelectItem value="current">{t("settings.appshotsDestinationCurrent")}</SelectItem>
+                          <SelectItem value="new">{t("settings.appshotsDestinationNew")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Row>
+
+                    <Row label={t("settings.appshotsSound")}>
+                      <Switch
+                        aria-label={t("settings.appshotsSound")}
+                        checked={appshotSettings.play_sound}
+                        disabled={appshotSaving}
+                        onCheckedChange={(play_sound) => void saveAppshotSettings({ play_sound })}
+                      />
+                    </Row>
+
+                    <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
+                    <Row
+                      compact
+                      label={t("settings.appshotsScreenRecording")}
+                      hint={t("settings.appshotsScreenRecordingHint")}
+                    >
+                      {appshotSettings.screen_recording ? (
+                        <span className="text-fine text-success">{t("settings.appshotsAllowed")}</span>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void grantAppshotAccess("screen-recording")}
+                        >
+                          {t("settings.appshotsAllow")}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => void appshotPrivacyOpener("screen-recording")}
+                      >
+                        {t("settings.appshotsOpenSettings")}
+                      </Button>
+                    </Row>
+                    <Row
+                      compact
+                      label={t("settings.appshotsAccessibility")}
+                      hint={t("settings.appshotsAccessibilityHint")}
+                    >
+                      {appshotSettings.accessibility ? (
+                        <span className="text-fine text-success">{t("settings.appshotsAllowed")}</span>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void grantAppshotAccess("accessibility")}
+                        >
+                          {t("settings.appshotsAllow")}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => void appshotPrivacyOpener("accessibility")}
+                      >
+                        {t("settings.appshotsOpenSettings")}
+                      </Button>
+                    </Row>
                   </>
                 )}
               </Page>

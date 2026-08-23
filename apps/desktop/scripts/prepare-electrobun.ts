@@ -28,6 +28,8 @@ if (process.platform === "darwin") {
       "-mmacosx-version-min=14.0",
       "-framework",
       "AppKit",
+      "-framework",
+      "ApplicationServices",
       resolve(windowEffectsRoot, "CodeTwoWindowEffects.m"),
       "-o",
       resolve(windowEffectsBuild, "libCodeTwoWindowEffects.dylib"),

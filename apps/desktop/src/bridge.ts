@@ -1,5 +1,7 @@
 import {
   desktopCall,
+  desktopAppshotSettings,
+  desktopCaptureAppshot,
   desktopConfirm,
   desktopOpenDevtools,
   desktopOpenDialog,
@@ -7,12 +9,23 @@ import {
   desktopOpenPath,
   desktopOpenWorkspace,
   desktopSaveDialog,
+  desktopOpenAppshotPrivacySettings,
+  desktopRequestAppshotPermissions,
+  desktopUpdateAppshotSettings,
   desktopCheckForUpdates,
   desktopUpdateStatus,
   isElectrobun,
   listenDesktop,
 } from "./electrobun/client";
-import type { AppUpdateStatus, WorkspaceOpenTarget } from "./electrobun/rpc";
+import { onDesktopAppshotCaptured, onDesktopAppshotFailed } from "./electrobun/client";
+import type {
+  AppshotCapture,
+  AppshotDestination,
+  AppshotHotkey,
+  AppshotSettings,
+  AppUpdateStatus,
+  WorkspaceOpenTarget,
+} from "./electrobun/rpc";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -37,7 +50,14 @@ import {
 
 // Typed renderer bridge to Electrobun's in-process Bun desktop host.
 
-export type { AppUpdateStatus, WorkspaceOpenTarget };
+export type {
+  AppshotCapture,
+  AppshotDestination,
+  AppshotHotkey,
+  AppshotSettings,
+  AppUpdateStatus,
+  WorkspaceOpenTarget,
+};
 
 export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
   return desktopUpdateStatus();
@@ -45,6 +65,56 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
 
 export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
   return desktopCheckForUpdates();
+}
+
+const browserAppshotSettings: AppshotSettings = {
+  available: false,
+  hotkey: "both-command",
+  destination: "automatic",
+  play_sound: true,
+  screen_recording: false,
+  accessibility: false,
+  hotkey_registered: false,
+  unavailable_reason: "Appshots require the C2 macOS desktop app.",
+};
+
+export async function getAppshotSettings(): Promise<AppshotSettings> {
+  return inDesktop ? desktopAppshotSettings() : browserAppshotSettings;
+}
+
+export async function updateAppshotSettings(
+  patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
+): Promise<AppshotSettings> {
+  return inDesktop ? desktopUpdateAppshotSettings(patch) : { ...browserAppshotSettings, ...patch };
+}
+
+export async function requestAppshotPermissions(
+  kind: "screen-recording" | "accessibility",
+): Promise<AppshotSettings> {
+  return inDesktop ? desktopRequestAppshotPermissions(kind) : browserAppshotSettings;
+}
+
+export async function openAppshotPrivacySettings(
+  kind: "screen-recording" | "accessibility",
+): Promise<boolean> {
+  return inDesktop ? desktopOpenAppshotPrivacySettings(kind) : false;
+}
+
+export async function takeAppshot(): Promise<AppshotCapture> {
+  if (!inDesktop) throw new Error(browserAppshotSettings.unavailable_reason ?? "Appshots are unavailable.");
+  return desktopCaptureAppshot();
+}
+
+export async function onAppshotCaptured(
+  cb: (capture: AppshotCapture) => void,
+): Promise<() => void> {
+  return inDesktop ? onDesktopAppshotCaptured(cb) : () => {};
+}
+
+export async function onAppshotFailed(
+  cb: (failure: { message: string }) => void,
+): Promise<() => void> {
+  return inDesktop ? onDesktopAppshotFailed(cb) : () => {};
 }
 
 export interface ProviderInfo {
@@ -570,6 +640,7 @@ export type DocBlock =
   | { type: "skill"; skill_id: string; params: Record<string, string> }
   | { type: "file"; path: string }
   | { type: "image"; path: string }
+  | { type: "appshot"; id: string; title?: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
   | { type: "session"; session_id: string }
   // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
@@ -587,6 +658,8 @@ export function describeBlock(b: DocBlock): string {
       return `[@${b.path}]`;
     case "image":
       return `[img:${b.path}]`;
+    case "appshot":
+      return `[appshot:${b.title || b.id}]`;
     case "canvas":
       return `[canvas:${b.id}@${b.frozen_revision}]`;
     case "session":
