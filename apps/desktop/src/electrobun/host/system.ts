@@ -305,7 +305,7 @@ export function deletePath(cwd: string, path: string): void {
   rmSync(target, { recursive: true, force: false });
 }
 
-interface ProcessResult {
+export interface ProcessResult {
   stdout: string;
   stderr: string;
   exitCode: number;

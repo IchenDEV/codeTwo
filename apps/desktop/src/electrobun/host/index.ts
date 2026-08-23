@@ -12,6 +12,12 @@ import {
 } from "./acp";
 import { BunDatabase } from "./database";
 import { builtinPluginForCommand } from "./builtinPlugins";
+import {
+  githubCurrentPullRequest,
+  githubMergePullRequest,
+  githubPullRequestDiff,
+  githubReviewPullRequest,
+} from "./github";
 import { PluginRuntimeManager } from "./plugins";
 import {
   browserUseSettings,
@@ -388,6 +394,22 @@ export class PureBunHost {
     ));
     this.register("git.suggest_message", async (args) => this.suggestCommitMessage(string(args.cwd, "cwd")));
     this.register("git.create_pr", async (args) => this.createPullRequest(args));
+    this.register("github.current_pr", (args) => githubCurrentPullRequest(string(args.cwd, "cwd")));
+    this.register("github.pr_diff", (args) => githubPullRequestDiff(
+      string(args.cwd, "cwd"),
+      number(args.number, 0),
+    ));
+    this.register("github.review_pr", (args) => githubReviewPullRequest(
+      string(args.cwd, "cwd"),
+      number(args.number, 0),
+      string(args.action, "action"),
+      optionalString(args.body) ?? "",
+    ));
+    this.register("github.merge_pr", (args) => githubMergePullRequest(
+      string(args.cwd, "cwd"),
+      number(args.number, 0),
+      string(args.strategy, "strategy"),
+    ));
 
     this.register("terminal.tmux_available", () => which("tmux") !== null);
     this.register("terminal.spawn", (args, projectPath) => this.terminal.spawn(args, projectPath));

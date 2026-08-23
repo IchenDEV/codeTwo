@@ -1936,6 +1936,75 @@ export async function gitSourceControlInfo(cwd: string): Promise<SourceControlIn
   return inDesktop ? call<SourceControlInfo | null>("workspace.source_control", { cwd }) : null;
 }
 
+export interface GitHubPullRequestCheck {
+  name: string;
+  status: string | null;
+  conclusion: string | null;
+  details_url: string | null;
+  workflow_name: string | null;
+}
+
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  is_draft: boolean;
+  head_ref: string;
+  base_ref: string;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  body: string;
+  review_decision: string | null;
+  mergeable: string;
+  merge_state_status: string;
+  author: string;
+  comments_count: number;
+  reviews_count: number;
+  checks: GitHubPullRequestCheck[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitHubPullRequestDiff {
+  text: string;
+  truncated: boolean;
+}
+
+export type GitHubReviewAction = "approve" | "comment" | "request_changes";
+export type GitHubMergeStrategy = "merge" | "squash" | "rebase";
+
+export async function githubCurrentPullRequest(cwd: string): Promise<GitHubPullRequest | null> {
+  return inDesktop ? call<GitHubPullRequest | null>("github.current_pr", { cwd }) : null;
+}
+
+export async function githubPullRequestDiff(
+  cwd: string,
+  number: number,
+): Promise<GitHubPullRequestDiff> {
+  return inDesktop
+    ? call<GitHubPullRequestDiff>("github.pr_diff", { cwd, number })
+    : { text: "", truncated: false };
+}
+
+export async function githubReviewPullRequest(
+  cwd: string,
+  number: number,
+  action: GitHubReviewAction,
+  body: string,
+): Promise<void> {
+  if (inDesktop) await call("github.review_pr", { cwd, number, action, body });
+}
+
+export async function githubMergePullRequest(
+  cwd: string,
+  number: number,
+  strategy: GitHubMergeStrategy,
+): Promise<void> {
+  if (inDesktop) await call("github.merge_pr", { cwd, number, strategy });
+}
+
 export async function gitStatus(cwd: string): Promise<GitStatus> {
   return inDesktop
     ? call<GitStatus>("git.status", { cwd })
