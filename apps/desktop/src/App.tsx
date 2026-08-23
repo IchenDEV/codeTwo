@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Archive, CircleAlert, Folder, Keyboard, PanelLeft } from "lucide-react";
+import {
+  Archive,
+  Check,
+  CircleAlert,
+  Folder,
+  FolderPlus,
+  Keyboard,
+  PanelLeft,
+} from "lucide-react";
 
 import { DocEditor } from "./editor/Editor";
 import { type CanvasBlockRuntime } from "./skillInline";
@@ -320,6 +328,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Tooltip,
@@ -5620,13 +5636,48 @@ export default function App() {
                     : "order-2 shrink-0 flex-col",
               )}
             >
-              {/* "What should we build in <project>?" — the project name carries the dotted underline. */}
+              {/* "What should we build in <project>?" — the project name is the project switcher. */}
               {!docMode && turns.length === 0 && !sessionLoading && (
                 <h1 className="animate-rise-in mb-8 px-8 text-center text-[26px] font-semibold tracking-[-0.01em]">
                   {t("transcript.greetingIn")}{" "}
-                  <span className="underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px]">
-                    {activeProjectName ?? t("rail.noProject")}
-                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <button
+                          type="button"
+                          className="rounded-(--ds-radius-micro) underline decoration-muted-foreground/40 decoration-dotted underline-offset-[7px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                          title={activeProject ?? undefined}
+                        >
+                          {activeProjectName ?? t("rail.noProject")}
+                        </button>
+                      }
+                    />
+                    <DropdownMenuContent side="top" align="center" className="w-60">
+                      {projects.length > 0 && (
+                        <>
+                          <DropdownMenuGroup>
+                            {projects.map((project) => (
+                              <DropdownMenuItem
+                                key={project.path}
+                                onClick={() => selectProject(project.path)}
+                              >
+                                <Folder />
+                                <span className="min-w-0 flex-1 truncate" title={project.path}>
+                                  {project.name}
+                                </span>
+                                {project.path === activeProject && <Check />}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuGroup>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
+                      <DropdownMenuItem onClick={() => void addProjectFolder()}>
+                        <FolderPlus />
+                        {t("rail.addProject")}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   {t("transcript.greetingEnd")}
                 </h1>
               )}
