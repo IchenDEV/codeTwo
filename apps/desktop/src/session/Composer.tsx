@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
 import {
   ArrowUp,
   BrainCircuit,
@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Folder,
   GitBranch,
   ListChecks,
   Lock,
@@ -67,7 +68,7 @@ interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
   children: ReactNode;
   config: SessionConfig;
-  /** The "Current checkout" bar under the card — where the next turn runs, and its branch. */
+  /** The checkout bar under the card: execution location on the left, source control on the right. */
   checkout?: {
     project: string | null;
     branch: string | null;
@@ -134,6 +135,222 @@ interface ComposerProps {
   insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
 }
 
+function displayGitRef(reference: string | null | undefined): string | null {
+  if (!reference) return null;
+  return reference
+    .replace(/^refs\/heads\//, "")
+    .replace(/^refs\/remotes\//, "");
+}
+
+function CheckoutOptionRow({
+  selected,
+  label,
+  accessibleLabel,
+  status,
+  detail,
+  disabled = false,
+  onClick,
+}: {
+  selected: boolean;
+  label: string;
+  accessibleLabel: string;
+  status: string;
+  detail: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const detailId = useId();
+  return (
+    <button
+      type="button"
+      aria-label={accessibleLabel}
+      aria-describedby={detailId}
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      title={detail}
+      className={cn(
+        "flex h-(--ds-control-field) w-full items-center gap-3 rounded-(--ds-radius-control) px-2.5 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring",
+        selected ? "bg-foreground/[0.06] text-foreground" : "hover:bg-accent/50",
+        disabled && !selected && "cursor-not-allowed opacity-50 hover:bg-transparent",
+        disabled && selected && "cursor-default",
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate text-ui">{label}</span>
+      <span className="shrink-0 text-fine text-muted-foreground">{status}</span>
+      <span id={detailId} className="sr-only">{detail}</span>
+    </button>
+  );
+}
+
+/**
+ * The persistent checkout control. It keeps execution location separate from source control, and
+ * only presents baselines the engine can actually materialize.
+ */
+export function CheckoutBar({
+  config,
+  checkout,
+}: {
+  config: SessionConfig;
+  checkout: NonNullable<ComposerProps["checkout"]>;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const gatingReason = worktreeGatingReason(
+    config.hasSession,
+    config.worktreeOptions,
+    config.worktreeOptionsLoading,
+  );
+  const selectedKind = config.hasSession
+    ? config.activeWorktreeBaseline?.kind ?? null
+    : config.worktreeBase;
+  const selected = selectedKind == null
+    ? null
+    : config.worktreeOptions.find((option) => option.kind === selectedKind);
+  const selectedRef = displayGitRef(
+    config.hasSession
+      ? config.activeWorktreeBaseline?.ref
+      : selected?.resolved?.ref,
+  );
+  const modeLabel = config.activeWorktreeUnknown
+    ? t("checkout.legacy")
+    : selectedKind == null
+      ? t("checkout.project")
+      : config.hasSession
+        ? t("checkout.sessionWorktree")
+        : t("checkout.newWorktree");
+  const projectDetail = checkout.branch
+    ? checkout.dirty > 0
+      ? t("checkout.branchDirty", { branch: checkout.branch, count: checkout.dirty })
+      : t("checkout.branchClean", { branch: checkout.branch })
+    : t("checkout.notRepository");
+  const projectLabel = !checkout.project || checkout.project === "."
+    ? t("rail.noProject")
+    : checkout.project;
+
+  useEffect(() => {
+    if (!config.hasSession && gatingReason !== null && config.worktreeBase !== null) {
+      config.onWorktreeBase(null);
+    }
+  }, [config.hasSession, config.onWorktreeBase, config.worktreeBase, gatingReason]);
+
+  return (
+    <div
+      data-checkout-bar
+      className="relative z-0 mx-5 mt-2 flex min-h-(--ds-control-field) min-w-0 items-center rounded-(--ds-radius-module) bg-muted/30 px-1 py-1 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07]"
+    >
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={<button
+            type="button"
+            className="flex h-(--ds-control-normal) min-w-0 shrink items-center gap-1.5 rounded-(--ds-radius-control) px-2 text-left outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            title={t("checkout.choose")}
+            aria-label={`${t("checkout.title")}: ${modeLabel}`}
+            aria-expanded={open}
+          >
+            <Folder className="size-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 truncate text-ui text-foreground/85">{modeLabel}</span>
+            <ChevronDown className="size-3 shrink-0 opacity-60" aria-hidden="true" />
+          </button>}
+        />
+        <PopoverContent
+          align="start"
+          side="bottom"
+          sideOffset={10}
+          className="w-80 max-w-(--available-width) p-1.5"
+        >
+          {config.hasSession ? (
+            <>
+              <CheckoutOptionRow
+                selected
+                disabled
+                label={selectedRef ?? (selectedKind == null ? projectLabel : modeLabel)}
+                accessibleLabel={modeLabel}
+                status={t("checkout.currentBadge")}
+                detail={config.activeWorktreeUnknown
+                  ? t("worktree.legacyUnknownHint")
+                  : config.activeWorktreeBaseline?.display ?? projectDetail}
+                onClick={() => {}}
+              />
+              <p className="px-2.5 pb-1 pt-1.5 text-fine leading-relaxed text-muted-foreground">
+                {t("worktree.fixedForSession")}
+              </p>
+            </>
+          ) : (
+            <>
+              <CheckoutOptionRow
+                selected={config.worktreeBase == null}
+                label={projectLabel}
+                accessibleLabel={t("checkout.project")}
+                status={config.worktreeBase == null
+                  ? t("checkout.currentBadge")
+                  : t("checkout.projectBadge")}
+                detail={projectDetail}
+                onClick={() => {
+                  config.onWorktreeBase(null);
+                  setOpen(false);
+                }}
+              />
+
+              {WORKTREE_BASELINES.map((kind) => {
+                const option = config.worktreeOptions.find((candidate) => candidate.kind === kind);
+                const unavailable = !config.worktreeOptionsLoading && option?.resolved == null;
+                const detail = config.worktreeOptionsLoading
+                  ? t("worktree.resolving")
+                  : option?.resolved?.display
+                    ?? option?.unavailable_reason
+                    ?? gatingReason
+                    ?? t("worktree.unavailable");
+                return (
+                  <CheckoutOptionRow
+                    key={kind}
+                    selected={config.worktreeBase === kind}
+                    disabled={unavailable}
+                    label={displayGitRef(option?.resolved?.ref) ?? (kind === "current"
+                      ? t("checkout.currentRef")
+                      : t("checkout.originRef"))}
+                    accessibleLabel={kind === "current"
+                      ? t("checkout.currentRef")
+                      : t("checkout.originRef")}
+                    status={unavailable
+                      ? t("checkout.unavailableBadge")
+                      : config.worktreeBase === kind
+                        ? t("checkout.currentBadge")
+                        : t("checkout.worktreeBadge")}
+                    detail={detail}
+                    onClick={() => {
+                      config.onWorktreeBase(kind);
+                      setOpen(false);
+                    }}
+                  />
+                );
+              })}
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {checkout.branch && (
+        <button
+          type="button"
+          onClick={checkout.onOpen}
+          className="ml-auto flex h-(--ds-control-normal) shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) bg-foreground/[0.04] px-2.5 font-mono text-fine text-foreground/80 outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={t("checkout.openSourceControl", { branch: checkout.branch })}
+          title={t("checkout.openSourceControl", { branch: checkout.branch })}
+        >
+          <GitBranch className="size-3" aria-hidden="true" />
+          <span className="max-w-36 truncate">{checkout.branch}</span>
+          {checkout.dirty > 0 && (
+            <span className="text-warning" aria-label={t("checkout.changedFiles", { count: checkout.dirty })}>
+              {checkout.dirty}
+            </span>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * A status chip in the control row — reads as text, behaves as a button. Forwards its ref so it can
  * be a Radix popover trigger.
@@ -144,7 +361,7 @@ export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { t
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-hint transition-colors hover:bg-accent/50",
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) px-2 text-hint transition-colors hover:bg-accent/50",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -165,7 +382,7 @@ function MenuSection({ children }: { children: ReactNode }) {
 function DefaultBadge() {
   const t = useT();
   return (
-    <span className="shrink-0 rounded-md border bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
+    <span className="shrink-0 rounded-(--ds-radius-micro) border bg-muted/60 px-1.5 py-px text-cap text-muted-foreground">
       {t("composer.default")}
     </span>
   );
@@ -1338,7 +1555,7 @@ export function Composer({
           // The width container the control row compresses against (see the chip labels below):
           // in compact mode this is the card's own measure, expanded it's the page column — either
           // way, the width the controls actually have.
-          "@container/composer flex flex-col",
+          "@container/composer isolate flex flex-col",
           docMode
             ? "min-h-0 flex-1"
             : "mx-auto w-full max-w-3xl",
@@ -1348,11 +1565,11 @@ export function Composer({
             column, and clipping them takes the block gutter away. */}
         <div
           className={cn(
-            "composer-card flex flex-col",
+            "composer-card relative z-10 flex flex-col",
             docMode
               ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
                 // `relative` anchors the floating control bar below.
-                "relative min-h-0 flex-1"
+                "min-h-0 flex-1"
               : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
                 // shared raised shadow carry the separation without drawing a heavy box.
                 "rounded-(--ds-composer-radius) bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
@@ -1461,26 +1678,10 @@ export function Composer({
           </div>
         </div>
 
-        {/* "Current checkout" — where this document will run, and the branch it lands on. One
-            click through to source control. Compact mode only: expanded, the page is the page. */}
+        {/* Execution location and source control are adjacent but distinct: changing where a fresh
+            session runs must never be confused with inspecting the current branch. */}
         {!docMode && checkout && (
-          <button
-            onClick={checkout.onOpen}
-            className="mt-3 flex h-8 items-center gap-1.5 rounded-(--ds-radius-control) bg-muted/30 px-3 text-hint text-muted-foreground ring-[0.5px] ring-foreground/[0.07] transition-colors hover:bg-accent hover:text-foreground"
-          >
-            {/* Squeezed, the row keeps what identifies the checkout (project, dirty count) and
-                sheds the caption and branch name — both one click away. */}
-            <span className="hidden shrink-0 @md/composer:inline">{t("composer.currentCheckout")}</span>
-            <ChevronDown className="size-3 shrink-0 opacity-50" />
-            <span className="min-w-0 flex-1 truncate text-left">{checkout.project}</span>
-            {checkout.branch && (
-              <span className="flex shrink-0 items-center gap-1 font-mono text-fine">
-                <GitBranch className="size-3" />
-                <span className="hidden max-w-40 truncate @lg/composer:inline">{checkout.branch}</span>
-                {checkout.dirty > 0 && <span className="text-warning">•{checkout.dirty}</span>}
-              </span>
-            )}
-          </button>
+          <CheckoutBar config={config} checkout={checkout} />
         )}
       </div>
     </section>
