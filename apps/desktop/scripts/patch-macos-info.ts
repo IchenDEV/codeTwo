@@ -163,7 +163,18 @@ function embedCloudSyncHelper(bundle: string): void {
   const version = process.env.CODETWO_BUILD_VERSION ?? process.env.ELECTROBUN_APP_VERSION ?? "0.0.0";
   writeFileSync(join(contents, "Info.plist"), cloudSyncInfo(`${channel.identifier}.cloud-sync`, version));
 
-  if (!profile || !identity || identity === "-") return;
+  if (!identity) return;
+  // Without a provisioning profile the helper cannot hold iCloud entitlements, but it still
+  // needs a real ad-hoc bundle signature: the linker-signed executable alone seals no
+  // resources and fails `codesign --verify --deep --strict`.
+  if (!profile || identity === "-") {
+    const adHoc = Bun.spawnSync(
+      ["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", helperBundle],
+      { stdout: "inherit", stderr: "inherit" },
+    );
+    if (adHoc.exitCode !== 0) process.exit(adHoc.exitCode);
+    return;
+  }
   if (!existsSync(profile)) throw new Error(`iCloud helper provisioning profile is missing: ${profile}`);
   copyFileSync(profile, join(contents, "embedded.provisionprofile"));
   const environment = process.env.CODETWO_ICLOUD_ENVIRONMENT === "Development"
@@ -305,8 +316,13 @@ function configureUpdater(plist: string): void {
 }
 
 for (const bundle of bundles) {
-  prepareEmbeddedRuntime(bundle);
-  signEmbeddedRuntime(bundle);
+  // The wrapper bundle (postWrap) no longer contains the unpacked payload — the app resources
+  // were compressed into the update tarball after postBuild, where these were already checked
+  // and signed.
+  if (!wrapperBundle) {
+    prepareEmbeddedRuntime(bundle);
+    signEmbeddedRuntime(bundle);
+  }
   embedWindowEffects(bundle);
   embedCloudSyncHelper(bundle);
   const plist = join(bundle, "Contents", "Info.plist");
