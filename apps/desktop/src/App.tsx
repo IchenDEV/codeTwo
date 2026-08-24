@@ -6211,7 +6211,9 @@ export default function App() {
             <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
-            {activeBoardTask && activeSessionTitle ? (
+            {/* The session title trails the task title for context — unless both carry the same
+                name (a task created from a single-prompt thread), which would print it twice. */}
+            {activeBoardTask && activeSessionTitle && activeSessionTitle.trim() !== activeBoardTask.title.trim() ? (
               <>
                 <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
                 <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
