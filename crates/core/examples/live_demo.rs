@@ -94,6 +94,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: None,
+            model: None,
             initial_policy: None,
         })
         .await?;
@@ -216,6 +217,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::HookSuggestion { .. }
                 | Event::HookTurnStarted { .. }
                 | Event::SessionCost { .. }
+                | Event::SessionCapabilities { .. }
+                | Event::GoalChanged { .. }
+                | Event::PromptQueued { .. }
+                | Event::SteerAccepted { .. }
                 | Event::WorktreeDiscarded { .. } => {}
             }
         }

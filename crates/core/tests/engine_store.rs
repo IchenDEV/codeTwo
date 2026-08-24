@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use codetwo_core::acp::{AcpClient, Connection, ContentBlock, StopReason};
 use codetwo_core::permission::{PermissionMode, PermissionPolicy};
-use codetwo_core::session::{Part, Role};
+use codetwo_core::session::{Part, Role, Session};
 use codetwo_core::{Event, PermissionRouter, ProviderId, SessionHandler, Store};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
@@ -79,6 +79,9 @@ where
 #[tokio::test]
 async fn agent_output_is_persisted() {
     let store = Arc::new(Store::open_in_memory().unwrap());
+    let mut session = Session::new(ProviderId::Codex, "/tmp");
+    session.id = "s1".into();
+    store.upsert_session(&session).unwrap();
     let (events_tx, mut events_rx) = tokio::sync::mpsc::unbounded_channel();
     let router = PermissionRouter::default();
     // YOLO → auto-approve, no parking.

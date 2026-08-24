@@ -25,7 +25,7 @@ import {
   type ProviderCapabilityId,
   type ProviderToolset,
 } from "../../../../../packages/tool-broker/src";
-import { which } from "./system";
+import { which } from "./executable";
 
 export {
   BROWSER_USE_AUTOMATIC,

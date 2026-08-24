@@ -44,6 +44,39 @@ impl MemoryAccess {
     }
 }
 
+/// Durable fencing state for moving one task between C2 runtimes. Only `Active` sessions may
+/// accept provider work; `Prepared` fences the source, `Accepted` hides an uncommitted target,
+/// and `Transferred` records the archived source after the target has accepted the payload.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HandoffState {
+    #[default]
+    Active,
+    Prepared,
+    Accepted,
+    Transferred,
+}
+
+impl HandoffState {
+    pub(crate) fn as_db(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Prepared => "prepared",
+            Self::Accepted => "accepted",
+            Self::Transferred => "transferred",
+        }
+    }
+
+    pub(crate) fn from_db(value: &str) -> Self {
+        match value {
+            "prepared" => Self::Prepared,
+            "accepted" => Self::Accepted,
+            "transferred" => Self::Transferred,
+            _ => Self::Active,
+        }
+    }
+}
+
 pub const UNTITLED_SESSION_TITLE: &str = "Untitled session";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -234,6 +267,10 @@ pub struct Session {
     /// Defaulting keeps sessions serialized by older C2 versions readable.
     #[serde(default)]
     pub pinned: bool,
+    /// App-lifetime side chats are persisted only for crash-safe turn handling and never appear
+    /// in the durable rail. Startup and the explicit close command purge them.
+    #[serde(default)]
+    pub transient: bool,
     /// Durable core lifecycle projection. Older serialized sessions deserialize as idle revision 0.
     #[serde(default)]
     pub activity: SessionActivity,
@@ -293,6 +330,7 @@ impl Session {
             title: UNTITLED_SESSION_TITLE.into(),
             title_origin: SessionTitleOrigin::Default,
             pinned: false,
+            transient: false,
             activity: SessionActivity::default(),
             provider,
             model: None,

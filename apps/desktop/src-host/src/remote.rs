@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::broadcast;
 
+use crate::device_sync::DeviceSyncRuntime;
+
 pub struct RemotePlugin {
     auth_path: PathBuf,
 }
@@ -27,6 +29,7 @@ impl RemotePlugin {
 struct RemoteStatus {
     port: u16,
     endpoints: Vec<codetwo_server::PairingEndpoint>,
+    protocols: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -42,6 +45,7 @@ struct RemoteHandle {
     port: u16,
     auth: Arc<codetwo_server::AuthState>,
     task: tokio::task::JoinHandle<()>,
+    device_sync: bool,
 }
 
 impl RemoteHandle {
@@ -49,6 +53,11 @@ impl RemoteHandle {
         RemoteStatus {
             port: self.port,
             endpoints: RemoteRuntime::endpoints(self.port),
+            protocols: if self.device_sync {
+                vec!["c2", "t3", "legacy"]
+            } else {
+                vec!["t3", "legacy"]
+            },
         }
     }
 
@@ -58,6 +67,7 @@ impl RemoteHandle {
             port,
             auth: Arc::new(codetwo_server::AuthState::load(None)),
             task,
+            device_sync: false,
         }
     }
 }
@@ -171,6 +181,7 @@ struct RemoteRuntime {
     store: Arc<Store>,
     events: broadcast::Sender<Event>,
     canvas_gate: codetwo_core::CanvasFeatureGate,
+    device_sync: Option<Arc<DeviceSyncRuntime>>,
     auth_path: PathBuf,
     lifecycle: Mutex<RemoteLifecycle>,
 }
@@ -220,6 +231,7 @@ impl Plugin for RemotePlugin {
 
     fn inject(&self) -> Injection {
         Injection::required(["engine", "store", "bus", "canvas"])
+            .with_optional(["device-sync"])
     }
 
     fn description(&self) -> Option<&str> {
@@ -247,6 +259,7 @@ impl Plugin for RemotePlugin {
                 .get::<CanvasService>()
                 .ok_or_else(|| PluginError::new("canvas service is unavailable"))?
                 .gate,
+            device_sync: ctx.get::<DeviceSyncRuntime>(),
             auth_path: self.auth_path.clone(),
             lifecycle: Mutex::new(RemoteLifecycle::default()),
         });
@@ -282,13 +295,17 @@ impl Plugin for RemotePlugin {
                 let auth = Arc::new(codetwo_server::AuthState::load(Some(
                     service.auth_path.clone(),
                 )));
-                let bound = codetwo_server::bind_and_serve_with_canvas(
+                let device_sync_http = service.device_sync.clone().map(|device_sync| {
+                    device_sync as Arc<dyn codetwo_server::DeviceSyncHttp>
+                });
+                let bound = codetwo_server::bind_and_serve_with_services(
                     service.engine.clone(),
                     service.events.clone(),
                     addr,
                     auth.clone(),
                     service.store.clone(),
                     service.canvas_gate,
+                    device_sync_http,
                 )
                 .await;
                 let (local, task) = match bound {
@@ -308,6 +325,7 @@ impl Plugin for RemotePlugin {
                             port: local.port(),
                             auth,
                             task,
+                            device_sync: service.device_sync.is_some(),
                         },
                     )
                     .map_err(PluginError::new)?;
@@ -363,7 +381,9 @@ impl Plugin for RemotePlugin {
                     args.ttl_secs
                         .unwrap_or(codetwo_server::DEFAULT_PAIRING_TTL.as_secs()),
                 );
-                let token = match args.client_protocol.as_deref().unwrap_or("t3") {
+                let token = match args.client_protocol.as_deref().unwrap_or("c2") {
+                    "c2" if service.device_sync.is_some() => auth.issue_c2_pairing_token(ttl),
+                    "c2" => return Err(PluginError::new("C2 device sync is unavailable")),
                     "t3" => auth.issue_t3_pairing_token(ttl),
                     "legacy" => auth.issue_pairing_token(ttl),
                     protocol => {
@@ -391,7 +411,48 @@ impl Plugin for RemotePlugin {
         let service = runtime.clone();
         ctx.command("remote.devices", move |_| {
             let service = service.clone();
-            async move { json(service.auth().list_devices()) }
+            async move {
+                let mut devices = Vec::new();
+                for device in service.auth().list_devices() {
+                    let mut value = serde_json::to_value(device).map_err(PluginError::new)?;
+                    if let Some(object) = value.as_object_mut() {
+                        if let Some(id) = object.get("id").and_then(Value::as_str) {
+                            object.insert("id".into(), Value::String(format!("in:{id}")));
+                        }
+                    }
+                    devices.push(value);
+                }
+                if let Some(device_sync) = &service.device_sync {
+                    for device in device_sync.devices() {
+                        devices.push(serde_json::to_value(device).map_err(PluginError::new)?);
+                    }
+                }
+                Ok(Value::Array(devices))
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct PairDeviceArgs {
+            url: String,
+            #[serde(default)]
+            device_name: Option<String>,
+        }
+        let service = runtime.clone();
+        ctx.command("remote.pair_device", move |args| {
+            let service = service.clone();
+            async move {
+                let args: PairDeviceArgs = take_args(args)?;
+                let device_sync = service
+                    .device_sync
+                    .as_ref()
+                    .ok_or_else(|| PluginError::new("C2 device sync is unavailable"))?;
+                let result = device_sync
+                    .pair_device(&args.url, args.device_name.as_deref())
+                    .await
+                    .map_err(PluginError::new)?;
+                let sync = device_sync.set_enabled(true).await;
+                json(serde_json::json!({ "device": result.device, "sync": sync }))
+            }
         })?;
 
         #[derive(Deserialize)]
@@ -402,12 +463,31 @@ impl Plugin for RemotePlugin {
             let service = runtime.clone();
             async move {
                 let args: IdArgs = take_args(args)?;
-                json(
+                let revoked = if let Some(id) = args.id.strip_prefix("out:") {
+                    match &service.device_sync {
+                        Some(sync) => sync.revoke_device(id).map_err(PluginError::new)?,
+                        None => false,
+                    }
+                } else if let Some(id) = args.id.strip_prefix("in:") {
                     service
                         .auth()
-                        .try_revoke_device(&args.id)
-                        .map_err(PluginError::new)?,
-                )
+                        .try_revoke_device(id)
+                        .map_err(PluginError::new)?
+                } else if service
+                    .auth()
+                    .try_revoke_device(&args.id)
+                    .map_err(PluginError::new)?
+                {
+                    true
+                } else {
+                    match &service.device_sync {
+                        Some(sync) => sync
+                            .revoke_device(&args.id)
+                            .map_err(PluginError::new)?,
+                        None => false,
+                    }
+                };
+                json(revoked)
             }
         })?;
         Ok(())

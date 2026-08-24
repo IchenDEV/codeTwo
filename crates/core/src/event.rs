@@ -34,6 +34,10 @@ pub enum Op {
         /// Correlates a broadcast `session_created`/terminal error with the initiating client.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<String>,
+        /// Model selected before the session exists. The engine persists it with the session and
+        /// applies it when ACP creates the provider-side session on the first prompt.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
         /// Optional draft policy chosen before the session exists. The core persists and installs
         /// it before emitting `session_created`, so it mediates permission requests from the very
         /// first prompt.
@@ -224,6 +228,29 @@ pub enum Event {
         session: SessionId,
         options: Vec<ConfigOptionInfo>,
     },
+    SessionCapabilities {
+        session: SessionId,
+        steering: bool,
+        goal: Option<crate::acp::wire::GoalCapabilityInfo>,
+    },
+    GoalChanged {
+        session: SessionId,
+        goal: Option<GoalSnapshot>,
+    },
+    PromptQueued {
+        session: SessionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
+        position: usize,
+    },
+    SteerAccepted {
+        session: SessionId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        transcript_seq: Option<i64>,
+        outcome: String,
+    },
     /// Authoritative execution policy after the durable store and live permission handler have
     /// both committed the same pair. A rejected write emits a correlated [`Event::Error`] instead
     /// and never emits this success receipt.
@@ -352,6 +379,17 @@ pub struct ConfigOptionInfo {
     pub choices: Vec<ModelChoice>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GoalSnapshot {
+    pub objective: String,
+    pub status: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub token_budget: Option<u64>,
+    pub tokens_used: u64,
+    pub time_used_seconds: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Event, Op};
@@ -470,6 +508,7 @@ mod tests {
         assert!(matches!(
             legacy_create,
             Op::NewSession {
+                model: None,
                 initial_policy: None,
                 ..
             }

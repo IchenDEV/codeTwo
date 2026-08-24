@@ -467,6 +467,10 @@ impl App {
                     }
                 }
             }
+            Event::SessionCapabilities { .. }
+            | Event::GoalChanged { .. }
+            | Event::PromptQueued { .. }
+            | Event::SteerAccepted { .. } => {}
             Event::ExecutionPolicyChanged {
                 session, policy, ..
             } => {
@@ -880,6 +884,7 @@ impl App {
                         worktree_base: self.worktree_base,
                         worktree_base_sha,
                         request_id: Some(request_id.clone()),
+                        model: None,
                         initial_policy: Some(ExecutionPolicy {
                             mode: self.mode,
                             sandbox: self.sandbox,
@@ -940,6 +945,7 @@ impl App {
                 worktree_base: self.worktree_base,
                 worktree_base_sha,
                 request_id: Some(request_id.clone()),
+                model: None,
                 initial_policy: Some(ExecutionPolicy {
                     mode: self.mode,
                     sandbox: self.sandbox,
@@ -1334,6 +1340,7 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Appshot { id, .. } => format!("[appshot:{id}]"),
             DocBlock::Canvas {
                 id,
                 frozen_revision,

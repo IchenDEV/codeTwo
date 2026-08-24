@@ -5,7 +5,7 @@ import {
   detectHostToolEvidence,
   saveBrowserUseSelection,
   saveComputerUseSelection,
-} from "./host/providerTools";
+} from "./toolBroker/providerTools";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

@@ -77,6 +77,16 @@ describe("unified plugin catalog adapter", () => {
           commands: ["browser.navigate"],
           services: ["browser"],
         }),
+        entry("device-sync", {
+          metadata: {
+            origin: "host",
+            category: "integration",
+            scope_support: ["user"],
+            essential: false,
+            default_enabled: true,
+          },
+          services: ["device-sync"],
+        }),
         entry("skills"),
       ],
     };
@@ -123,6 +133,11 @@ describe("unified plugin catalog adapter", () => {
       ],
     });
     expect(model.components.find((component) => component.id === "plugin-manager.page")?.required).toBe(true);
+    expect(model.components.find((component) => component.id === "device-sync.settings")).toMatchObject({
+      pluginId: "device-sync",
+      kind: "settingsSection",
+      slot: "settings.sections",
+    });
     expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
     expect(model.components.find((component) => component.id === "skill:review-skill")?.pluginId).toBe("bundle:review");
     expect(model.marketplaceItems[0]).toMatchObject({ id: "market:browser-tool", installable: true });

@@ -1,7 +1,7 @@
 /**
  * A minimal Language Server Protocol client over the desktop host bridge.
  *
- * The Bun host owns the process and the stdio framing; what crosses the bridge is one JSON-RPC
+ * The Rust desktop LSP plugin owns the process and stdio framing; what crosses the bridge is one JSON-RPC
  * message per event. This client owns the protocol: the initialize handshake, document sync, and
  * the requests the Monaco providers in ./providers translate.
  *

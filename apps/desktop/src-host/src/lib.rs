@@ -7,6 +7,8 @@
 //! framework.
 
 mod automation;
+mod device_sync;
+mod github;
 mod host_events;
 mod lsp;
 mod remote;
@@ -133,17 +135,25 @@ pub async fn run() -> Result<(), String> {
     let mut registry = codetwo_core::app::plugins::builtin_registry();
     let host = events.clone();
     registry.register(move || automation::AutomationPlugin::new(host.clone()));
+    registry.register(|| github::GitHubPlugin);
     let host = events.clone();
     registry.register(move || lsp::LspPlugin::new(host.clone()));
     let host = events.clone();
     registry.register(move || host_events::HostEventsPlugin::new(host.clone()));
+    let device_sync_dir = data_dir.clone();
+    let host = events.clone();
+    registry.register(move || {
+        device_sync::DeviceSyncPlugin::new(device_sync_dir.clone(), host.clone())
+    });
     let remote_auth_path = data_dir.join("remote-devices.json");
     registry.register(move || remote::RemotePlugin::new(remote_auth_path.clone()));
 
     for (name, category, essential, project_scoped) in [
         ("automation", PluginCategory::Automation, false, false),
+        ("github", PluginCategory::Integration, false, false),
         ("lsp", PluginCategory::DeveloperTools, false, true),
         ("desktop-events", PluginCategory::Foundation, true, false),
+        ("device-sync", PluginCategory::Integration, false, false),
         ("remote", PluginCategory::Integration, false, false),
     ] {
         let scope_support = if project_scoped {
@@ -167,8 +177,10 @@ pub async fn run() -> Result<(), String> {
 
     let config = AppConfig::new(&data_dir)
         .with("automation", PluginEntry::default())
+        .with("github", PluginEntry::default())
         .with("desktop-events", PluginEntry::default())
         .with("lsp", PluginEntry::default())
+        .with("device-sync", PluginEntry::default())
         .with("remote", PluginEntry::default());
     let core = Arc::new(
         CoreApp::boot_with(config, registry)
@@ -179,6 +191,7 @@ pub async fn run() -> Result<(), String> {
     events.emit(
         "host-ready",
         serde_json::json!({
+            "protocol_version": 1,
             "commands": core
                 .commands()
                 .into_iter()

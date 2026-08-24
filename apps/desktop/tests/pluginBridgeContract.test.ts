@@ -1,21 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { PureBunHost } from "../src/electrobun/host";
-
 const desktop = resolve(import.meta.dir, "..");
+const repository = resolve(desktop, "../..");
+
+function rustFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? rustFiles(path) : path.endsWith(".rs") ? [path] : [];
+  });
+}
 
 describe("plugin bridge contract", () => {
-  test("keeps one typed Electrobun request backed by the in-process Bun host", () => {
+  test("keeps one typed renderer request and one versioned Plugin Kernel process boundary", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
     const client = readFileSync(resolve(desktop, "src/electrobun/client.ts"), "utf8");
     const main = readFileSync(resolve(desktop, "src/electrobun/index.ts"), "utf8");
-    const acp = readFileSync(resolve(desktop, "src/electrobun/host/acp.ts"), "utf8");
-    const host = readFileSync(resolve(desktop, "src/electrobun/host/index.ts"), "utf8");
+    const adapter = readFileSync(resolve(desktop, "src/electrobun/nativeHost.ts"), "utf8");
+    const host = readFileSync(resolve(desktop, "src-host/src/lib.rs"), "utf8");
+    const enginePlugin = readFileSync(
+      resolve(repository, "crates/core/src/app/plugins/engine.rs"),
+      "utf8",
+    );
     const config = readFileSync(resolve(desktop, "electrobun.config.ts"), "utf8");
     const prepare = readFileSync(resolve(desktop, "scripts/prepare-electrobun.ts"), "utf8");
+    const macBundlePatch = readFileSync(
+      resolve(desktop, "scripts/patch-macos-info.ts"),
+      "utf8",
+    );
+    const macPackageSigning = readFileSync(
+      resolve(desktop, "scripts/sign-macos-package.ts"),
+      "utf8",
+    );
 
     expect(bridge).toContain("return desktopCall<T>(name, args ?? null, projectPath)");
     expect(bridge).toContain("projectPath: string | null = callProjectPath");
@@ -24,31 +41,50 @@ describe("plugin bridge contract", () => {
     );
     expect(bridge).toContain('call("lsp.set_runtime_enabled", { enabled }, projectPath)');
     expect(client).toContain('rpc.request("call", { name, args, projectPath })');
-    expect(client).not.toContain("rpc.request.call(");
-    expect(main).toContain("new PureBunHost(dataDir");
+    expect(main).toContain("new NativeHost({");
+    expect(main).toContain("await host.start()");
     expect(main).toContain("host.call(name, args, projectPath)");
-    expect(`${main}\n${config}\n${prepare}`).not.toContain("codetwo-desktop-host");
-    expect(`${config}\n${prepare}`).not.toContain("cargo");
-    expect(`${bridge}\n${client}\n${main}`).not.toContain("@tauri-apps");
-    expect(acp).not.toContain("mcpServers: []");
-    expect(acp).toContain("sessionRequestParams(cwd, this.mcpServers)");
-    expect(host).toContain("runtime.toolset.mcpServers");
+    expect(adapter).toContain('return this.request("call", { name, args, project_path: projectPath })');
+    expect(adapter).toContain("DESKTOP_HOST_PROTOCOL_VERSION = 1");
+    expect(host).toContain('"protocol_version": 1');
+    expect(host.match(/if request\.method == "call"/g)).toHaveLength(1);
+    expect(bridge).toContain("model: initialModel ?? null");
+    expect(enginePlugin).toContain("model: Option<String>");
+    expect(enginePlugin).toContain("model: args.model");
+    expect(config).toContain("codetwo-desktop-host");
+    expect(config).toContain("codetwo-tool-broker");
+    expect(prepare).toContain('"cargo", "build", "--release", "-p", "codetwo-desktop-host"');
+    expect(prepare).toContain('"bun", "run", "build:tool-broker"');
+    expect(config).toContain('postPackage: "scripts/sign-macos-package.ts"');
+    expect(macBundlePatch).not.toContain('"--deep"');
+    expect(macPackageSigning).toContain('join(bundle, "Contents", "Resources", metadata)');
+    expect(macPackageSigning).toContain('"--force", "--deep", "--sign", "-"');
+    expect(`${bridge}\n${client}\n${main}\n${host}`).not.toContain("@tauri-apps");
+    expect(`${main}\n${adapter}`).not.toContain("PureBunHost");
+    for (const legacyHost of ["builtinPlugins.ts", "database.ts", "index.ts", "remote.ts"]) {
+      expect(existsSync(resolve(desktop, "src/electrobun/host", legacyHost))).toBe(false);
+    }
   });
 
-  test("registers every static command used by the bridge", async () => {
+  test("registers every static command used by the renderer bridge", () => {
     const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const pluginSources = [
+      ...rustFiles(resolve(repository, "crates/core/src/app/plugins")),
+      ...rustFiles(resolve(desktop, "src-host/src")),
+    ]
+      .map((path) => readFileSync(path, "utf8"))
+      .join("\n");
+
     const used = new Set(
       [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/g)].map((match) => match[1]),
     );
-    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-bun-contract-"));
-    const host = new PureBunHost(dataDir, () => {});
-    try {
-      const registered = new Set(host.commands());
-      expect([...used].filter((name) => !registered.has(name))).toEqual([]);
-      expect(used.size).toBeGreaterThan(170);
-    } finally {
-      await host.shutdown();
-      rmSync(dataDir, { recursive: true, force: true });
-    }
+    const registered = new Set(
+      [...pluginSources.matchAll(/ctx\.command(?:_described|_with_realm)?\(\s*"([^"]+)"/g)].map(
+        (match) => match[1],
+      ),
+    );
+
+    expect([...used].filter((name) => !registered.has(name))).toEqual([]);
+    expect(used.size).toBeGreaterThan(180);
   });
 });

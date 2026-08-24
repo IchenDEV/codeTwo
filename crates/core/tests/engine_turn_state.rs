@@ -259,6 +259,7 @@ async fn new_session_persistence_failure_emits_no_phantom_and_retains_manual_cle
             worktree_base: Some(codetwo_core::worktree::WorktreeBaseline::Current),
             worktree_base_sha: None,
             request_id: Some("locked-create".into()),
+            model: None,
             initial_policy: None,
         })
         .await
@@ -323,6 +324,7 @@ async fn provider_prompt_failure_keeps_the_prompt_correlation() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("create-failure-test".into()),
+            model: None,
             initial_policy: None,
         })
         .await
@@ -400,6 +402,7 @@ async fn a_parked_turn_rejects_concurrent_prompts_and_releases_after_completion(
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("create-turn-test".into()),
+            model: None,
             initial_policy: None,
         })
         .await

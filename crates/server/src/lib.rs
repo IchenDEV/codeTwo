@@ -39,11 +39,56 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, mpsc};
 
+use codetwo_core::device_sync::DeviceSyncDocument;
 use codetwo_core::{
     CanvasDraft, CanvasDraftUpdate, CanvasError, CanvasFeatureGate, CanvasFreezeInput,
-    CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, Op, Session, SessionId, Store,
-    TranscriptCursor, TranscriptEntry, DEFAULT_TRANSCRIPT_TURNS,
+    CanvasRevision, CanvasStaticAsset, DocBlock, Engine, Event, Op, PortableTaskHandoff, Session,
+    SessionId, Store, TaskHandoffManager, TranscriptCursor, TranscriptEntry,
+    DEFAULT_TRANSCRIPT_TURNS,
 };
+
+const MAX_HANDOFF_BODY_BYTES: usize = 384 * 1024 * 1024;
+const MAX_DEVICE_SYNC_BODY_BYTES: usize = 64 * 1024 * 1024;
+
+/// Transport-neutral device-sync surface supplied by a host plugin.
+///
+/// The HTTP server only authenticates and frames requests. Snapshot ownership and merge policy
+/// remain with the host's Core-backed device-sync plugin.
+pub trait DeviceSyncHttp: Send + Sync + 'static {
+    fn identity(&self) -> DeviceSyncIdentity;
+    fn snapshot(&self) -> Result<DeviceSyncReplica, String>;
+    fn write_snapshot(
+        &self,
+        document: &DeviceSyncDocument,
+        expected_version: &str,
+    ) -> Result<DeviceSyncWriteResult, String>;
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceSyncIdentity {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceSyncReplica {
+    pub id: String,
+    pub document: DeviceSyncDocument,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceSyncWriteState {
+    Written,
+    Conflict,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeviceSyncWriteResult {
+    pub state: DeviceSyncWriteState,
+    pub version: String,
+}
 
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -510,6 +555,8 @@ struct ServerState {
     canvas_gate: CanvasFeatureGate,
     t3: Arc<t3_compat::T3CompatState>,
     terminals: Arc<terminal::TerminalRegistry>,
+    handoff: Arc<TaskHandoffManager>,
+    device_sync: Option<Arc<dyn DeviceSyncHttp>>,
 }
 
 /// Forward the engine's single event receiver into a broadcast channel so multiple clients (and the
@@ -556,8 +603,35 @@ pub async fn bind_and_serve_with_canvas(
     store: Arc<Store>,
     canvas_gate: CanvasFeatureGate,
 ) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
+    bind_and_serve_with_services(
+        engine,
+        events,
+        addr,
+        auth,
+        store,
+        canvas_gate,
+        None,
+    )
+    .await
+}
+
+/// Bind the server with optional host-owned services. Desktop uses this entry point so the Remote
+/// plugin can expose device sync without moving that business capability into the server crate.
+pub async fn bind_and_serve_with_services(
+    engine: Arc<Engine>,
+    events: broadcast::Sender<Event>,
+    addr: SocketAddr,
+    auth: Arc<AuthState>,
+    store: Arc<Store>,
+    canvas_gate: CanvasFeatureGate,
+    device_sync: Option<Arc<dyn DeviceSyncHttp>>,
+) -> std::io::Result<(SocketAddr, tokio::task::JoinHandle<()>)> {
     let t3 = Arc::new(
         t3_compat::T3CompatState::new(engine.clone(), events.clone(), auth.clone())
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
+    );
+    let handoff = Arc::new(
+        TaskHandoffManager::new(store.clone(), engine.clone(), Some(events.clone()))
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?,
     );
     let state = Arc::new(ServerState {
@@ -568,7 +642,26 @@ pub async fn bind_and_serve_with_canvas(
         canvas_gate,
         t3: t3.clone(),
         terminals: Arc::new(terminal::TerminalRegistry::default()),
+        handoff,
+        device_sync,
     });
+    let handoff_routes = Router::new()
+        .route("/api/codetwo/handoffs", post(accept_handoff))
+        .route("/api/codetwo/handoffs/:id/activate", post(activate_handoff))
+        .route("/api/codetwo/handoffs/:id/rollback", post(rollback_handoff))
+        .with_state(state.clone())
+        .layer(DefaultBodyLimit::max(MAX_HANDOFF_BODY_BYTES));
+    let device_sync_pair_route = Router::new()
+        .route("/api/device-sync/v1/pair", post(pair_c2_device))
+        .with_state(state.clone())
+        .layer(DefaultBodyLimit::max(16 * 1024));
+    let device_sync_snapshot_routes = Router::new()
+        .route(
+            "/api/device-sync/v1/snapshot",
+            get(device_sync_snapshot).put(write_device_sync_snapshot),
+        )
+        .with_state(state.clone())
+        .layer(DefaultBodyLimit::max(MAX_DEVICE_SYNC_BODY_BYTES));
     let app = Router::new()
         .route("/", get(index))
         .route("/pair", get(index))
@@ -629,6 +722,9 @@ pub async fn bind_and_serve_with_canvas(
         .layer(DefaultBodyLimit::max(
             codetwo_core::canvas::MAX_CANVAS_TOTAL_BYTES + 4_000_000,
         ))
+        .merge(handoff_routes)
+        .merge(device_sync_pair_route)
+        .merge(device_sync_snapshot_routes)
         .layer(axum::middleware::map_response(no_store_headers));
 
     let listener = TcpListener::bind(addr).await?;
@@ -637,6 +733,112 @@ pub async fn bind_and_serve_with_canvas(
         let _ = axum::serve(listener, app.into_make_service()).await;
     });
     Ok((local, handle))
+}
+
+#[derive(Deserialize)]
+struct PairC2DeviceBody {
+    token: String,
+    device_name: String,
+    device_id: String,
+}
+
+#[derive(Serialize)]
+struct PairC2DeviceReply {
+    server_id: String,
+    server_name: String,
+    device_id: String,
+    bearer: String,
+}
+
+async fn pair_c2_device(
+    State(st): State<Arc<ServerState>>,
+    Json(body): Json<PairC2DeviceBody>,
+) -> Response {
+    let Some(device_sync) = &st.device_sync else {
+        return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
+    };
+    let paired = match st
+        .auth
+        .try_pair_c2(&body.token, &body.device_name, &body.device_id)
+    {
+        Ok(Some(paired)) => paired,
+        Ok(None) => {
+            return (StatusCode::UNAUTHORIZED, "invalid or expired pairing token")
+                .into_response()
+        }
+        Err(error) => return (StatusCode::INTERNAL_SERVER_ERROR, error).into_response(),
+    };
+    let identity = device_sync.identity();
+    Json(PairC2DeviceReply {
+        server_id: identity.id,
+        server_name: identity.name,
+        device_id: paired.device_id,
+        bearer: paired.bearer,
+    })
+    .into_response()
+}
+
+fn require_c2_device(st: &ServerState, headers: &HeaderMap) -> Result<String, Response> {
+    bearer_from(headers)
+        .and_then(|bearer| st.auth.authorize_c2_bearer(bearer))
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "invalid or revoked device credential",
+            )
+                .into_response()
+        })
+}
+
+#[derive(Serialize)]
+struct DeviceSyncSnapshotReply {
+    replica: DeviceSyncReplica,
+}
+
+async fn device_sync_snapshot(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(device_sync) = &st.device_sync else {
+        return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
+    };
+    if let Err(response) = require_c2_device(&st, &headers) {
+        return response;
+    }
+    match device_sync.snapshot() {
+        Ok(replica) => Json(DeviceSyncSnapshotReply { replica }).into_response(),
+        Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct WriteDeviceSyncSnapshotBody {
+    document: DeviceSyncDocument,
+    expected_version: String,
+}
+
+async fn write_device_sync_snapshot(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<WriteDeviceSyncSnapshotBody>,
+) -> Response {
+    let Some(device_sync) = &st.device_sync else {
+        return (StatusCode::NOT_FOUND, "C2 device sync is unavailable").into_response();
+    };
+    if let Err(response) = require_c2_device(&st, &headers) {
+        return response;
+    }
+    match device_sync.write_snapshot(&body.document, &body.expected_version) {
+        Ok(result) => {
+            let status = if result.state == DeviceSyncWriteState::Conflict {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::OK
+            };
+            (status, Json(result)).into_response()
+        }
+        Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
+    }
 }
 
 async fn no_store_headers(mut response: Response) -> Response {
@@ -657,6 +859,98 @@ fn require_device(st: &ServerState, headers: &HeaderMap) -> Result<String, Respo
     bearer_from(headers)
         .and_then(|bearer| st.auth.authorize_bearer(bearer))
         .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())
+}
+
+fn require_t3_scope(
+    st: &ServerState,
+    headers: &HeaderMap,
+    required_scope: &str,
+) -> Result<auth::BearerAuthorization, Response> {
+    let authorization = bearer_from(headers)
+        .and_then(|bearer| st.auth.authorize_bearer_profile(bearer))
+        .ok_or_else(|| (StatusCode::UNAUTHORIZED, "invalid bearer").into_response())?;
+    if !authorization
+        .scopes
+        .iter()
+        .any(|scope| scope == required_scope)
+    {
+        return Err((StatusCode::FORBIDDEN, "missing required scope").into_response());
+    }
+    Ok(authorization)
+}
+
+#[derive(Deserialize)]
+struct AcceptHandoffBody {
+    handoff: PortableTaskHandoff,
+    destination: String,
+}
+
+async fn accept_handoff(
+    State(st): State<Arc<ServerState>>,
+    headers: HeaderMap,
+    Json(body): Json<AcceptHandoffBody>,
+) -> Response {
+    if let Err(response) = require_t3_scope(&st, &headers, "orchestration:operate") {
+        return response;
+    }
+    match st.handoff.accept(&body.handoff, &body.destination) {
+        Ok(result) => Json(result).into_response(),
+        Err(error) => (StatusCode::BAD_REQUEST, error).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct ActivateHandoffBody {
+    session: String,
+    epoch: u64,
+}
+
+async fn activate_handoff(
+    State(st): State<Arc<ServerState>>,
+    Path(handoff_id): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<ActivateHandoffBody>,
+) -> Response {
+    let authorization = match require_t3_scope(&st, &headers, "orchestration:operate") {
+        Ok(authorization) => authorization,
+        Err(response) => return response,
+    };
+    match st.handoff.activate(&body.session, &handoff_id, body.epoch) {
+        Ok(()) => {
+            if authorization.ephemeral_handoff {
+                if let Err(error) = st.auth.try_revoke_device(&authorization.device_id) {
+                    tracing::warn!("revoke consumed handoff credential failed: {error}");
+                }
+            }
+            Json(serde_json::json!({ "state": "active" })).into_response()
+        }
+        Err(error) => (StatusCode::CONFLICT, error).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct RollbackHandoffBody {
+    session: String,
+    epoch: u64,
+    destination: String,
+}
+
+async fn rollback_handoff(
+    State(st): State<Arc<ServerState>>,
+    Path(handoff_id): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<RollbackHandoffBody>,
+) -> Response {
+    if let Err(response) = require_t3_scope(&st, &headers, "orchestration:operate") {
+        return response;
+    }
+    match st
+        .handoff
+        .rollback_target(&body.session, &handoff_id, body.epoch, &body.destination)
+    {
+        Ok(()) => Json(serde_json::json!({ "state": "rolled_back" })).into_response(),
+        Err(error) => (StatusCode::CONFLICT, error).into_response(),
+    }
 }
 
 fn canvas_error(error: CanvasError) -> Response {
@@ -1649,9 +1943,18 @@ const INDEX_HTML: &str = include_str!("client.html");
 
 #[cfg(test)]
 mod tests {
-    use super::{Outbound, PairingEndpoint, TranscriptCursor, TranscriptEntry};
-    use codetwo_core::{Part, Role};
+    use super::{
+        DeviceSyncHttp, DeviceSyncIdentity, DeviceSyncReplica, DeviceSyncWriteResult,
+        DeviceSyncWriteState, Outbound, PairingEndpoint, TranscriptCursor, TranscriptEntry,
+    };
+    use codetwo_core::device_sync::{device_sync_snapshot_version, DeviceSyncDocument};
+    use codetwo_core::provider::ProviderId;
+    use codetwo_core::skill::SkillLibrary;
+    use codetwo_core::{Engine, Part, Role, Session, Store, TaskHandoffManager};
     use std::net::Ipv4Addr;
+    use std::process::Command;
+    use std::sync::Arc;
+    use std::time::Duration;
 
     fn endpoint(id: &str, qr_shareable: bool) -> PairingEndpoint {
         PairingEndpoint {
@@ -1659,6 +1962,67 @@ mod tests {
             label: id.into(),
             url: format!("http://{id}.example/"),
             qr_shareable,
+        }
+    }
+
+    fn git(cwd: &std::path::Path, args: &[&str]) {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    struct TestDeviceSync {
+        store: Arc<Store>,
+        id: String,
+    }
+
+    impl DeviceSyncHttp for TestDeviceSync {
+        fn identity(&self) -> DeviceSyncIdentity {
+            DeviceSyncIdentity {
+                id: self.id.clone(),
+                name: "Server C2".into(),
+            }
+        }
+
+        fn snapshot(&self) -> Result<DeviceSyncReplica, String> {
+            let document = self
+                .store
+                .device_sync_snapshot(&self.id)
+                .map_err(|error| error.to_string())?;
+            Ok(DeviceSyncReplica {
+                id: format!("paired:{}", self.id),
+                version: device_sync_snapshot_version(&document),
+                document,
+            })
+        }
+
+        fn write_snapshot(
+            &self,
+            document: &DeviceSyncDocument,
+            expected_version: &str,
+        ) -> Result<DeviceSyncWriteResult, String> {
+            let current = self.snapshot()?;
+            if current.version != expected_version {
+                return Ok(DeviceSyncWriteResult {
+                    state: DeviceSyncWriteState::Conflict,
+                    version: current.version,
+                });
+            }
+            self.store
+                .import_device_sync_document(document)
+                .map_err(|error| error.to_string())?;
+            let written = self.snapshot()?;
+            Ok(DeviceSyncWriteResult {
+                state: DeviceSyncWriteState::Written,
+                version: written.version,
+            })
         }
     }
 
@@ -1805,5 +2169,219 @@ mod tests {
         let value = serde_json::to_value(asset).unwrap();
         assert_eq!(value["mimeType"], "image/png");
         assert!(value.get("mime_type").is_none());
+    }
+
+    #[tokio::test]
+    async fn c2_device_sync_routes_pair_conflict_and_revoke_independently() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let (engine, events) = Engine::with_store(
+            Vec::new(),
+            SkillLibrary::new(Vec::new()),
+            store.clone(),
+        );
+        let events = super::fanout(events);
+        let auth = Arc::new(super::AuthState::load(None));
+        let token = auth.issue_c2_pairing_token(Duration::from_secs(60));
+        let sync: Arc<dyn DeviceSyncHttp> = Arc::new(TestDeviceSync {
+            store: store.clone(),
+            id: "server-id".into(),
+        });
+        let (address, server) = super::bind_and_serve_with_services(
+            Arc::new(engine),
+            events,
+            "127.0.0.1:0".parse().unwrap(),
+            auth.clone(),
+            store.clone(),
+            codetwo_core::CanvasFeatureGate::default(),
+            Some(sync),
+        )
+        .await
+        .unwrap();
+        let base = format!("http://{address}/api/device-sync/v1");
+        let client = reqwest::Client::new();
+
+        let pair = client
+            .post(format!("{base}/pair"))
+            .json(&serde_json::json!({
+                "token": token,
+                "device_name": "Client C2",
+                "device_id": "stable-client-id",
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(pair.status(), reqwest::StatusCode::OK);
+        let paired: serde_json::Value = pair.json().await.unwrap();
+        assert_eq!(paired["server_id"], "server-id");
+        let device_id = paired["device_id"].as_str().unwrap().to_string();
+        let bearer = paired["bearer"].as_str().unwrap().to_string();
+
+        let replay = client
+            .post(format!("{base}/pair"))
+            .json(&serde_json::json!({
+                "token": token,
+                "device_name": "Replay",
+                "device_id": "stable-client-id",
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        let unauthorized = client
+            .get(format!("{base}/snapshot"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+
+        let snapshot = client
+            .get(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(snapshot.status(), reqwest::StatusCode::OK);
+        let stale: serde_json::Value = snapshot.json().await.unwrap();
+        store
+            .add_project("/raced", Some("Raced"), codetwo_core::session::now_millis())
+            .unwrap();
+
+        let conflict = client
+            .put(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .json(&serde_json::json!({
+                "document": stale["replica"]["document"],
+                "expected_version": stale["replica"]["version"],
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(conflict.status(), reqwest::StatusCode::CONFLICT);
+        assert_eq!(
+            conflict.json::<serde_json::Value>().await.unwrap()["state"],
+            "conflict"
+        );
+
+        let fresh = client
+            .get(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .unwrap()
+            .json::<serde_json::Value>()
+            .await
+            .unwrap();
+        let written = client
+            .put(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .json(&serde_json::json!({
+                "document": fresh["replica"]["document"],
+                "expected_version": fresh["replica"]["version"],
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(written.status(), reqwest::StatusCode::OK);
+        assert_eq!(
+            written.json::<serde_json::Value>().await.unwrap()["state"],
+            "written"
+        );
+
+        assert!(auth.revoke_device(&device_id));
+        let revoked = client
+            .get(format!("{base}/snapshot"))
+            .bearer_auth(&bearer)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(revoked.status(), reqwest::StatusCode::UNAUTHORIZED);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn authenticated_handoff_routes_move_one_writable_task() {
+        let source_workspace = tempfile::tempdir().unwrap();
+        git(source_workspace.path(), &["init", "-q"]);
+        git(
+            source_workspace.path(),
+            &["config", "user.email", "test@codetwo.local"],
+        );
+        git(source_workspace.path(), &["config", "user.name", "C2 Test"]);
+        std::fs::write(source_workspace.path().join("task.txt"), "before\n").unwrap();
+        git(source_workspace.path(), &["add", "task.txt"]);
+        git(source_workspace.path(), &["commit", "-qm", "baseline"]);
+        std::fs::write(source_workspace.path().join("task.txt"), "after\n").unwrap();
+
+        let source_data = tempfile::tempdir().unwrap();
+        let target_data = tempfile::tempdir().unwrap();
+        let source_store =
+            Arc::new(Store::open(source_data.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let target_store =
+            Arc::new(Store::open(target_data.path().join("codetwo.db").to_str().unwrap()).unwrap());
+        let session = Session::new(
+            ProviderId::Codex,
+            source_workspace.path().to_string_lossy().into_owned(),
+        );
+        source_store.upsert_session(&session).unwrap();
+        let (source_engine, _) = Engine::with_store(
+            Vec::new(),
+            SkillLibrary::new(Vec::new()),
+            source_store.clone(),
+        );
+        let (target_engine, target_events) = Engine::with_store(
+            Vec::new(),
+            SkillLibrary::new(Vec::new()),
+            target_store.clone(),
+        );
+        let target_events = super::fanout(target_events);
+        let auth = Arc::new(super::AuthState::load(None));
+        let pairing = auth.issue_t3_pairing_token(Duration::from_secs(60));
+        let paired = auth
+            .try_pair_with_profile_options(
+                &pairing,
+                "task transfer",
+                Some(Duration::from_secs(60)),
+                vec!["orchestration:operate".into()],
+                true,
+            )
+            .unwrap()
+            .unwrap();
+        let (address, server) = super::bind_and_serve_with_canvas(
+            Arc::new(target_engine),
+            target_events,
+            "127.0.0.1:0".parse().unwrap(),
+            auth.clone(),
+            target_store.clone(),
+            codetwo_core::CanvasFeatureGate::default(),
+        )
+        .await
+        .unwrap();
+        let source =
+            TaskHandoffManager::new(source_store.clone(), Arc::new(source_engine), None).unwrap();
+        let target_parent = tempfile::tempdir().unwrap();
+        let destination = target_parent.path().join("moved-task");
+        let result = source
+            .transfer(
+                &session.id,
+                &format!("http://{address}"),
+                &paired.bearer,
+                destination.to_str().unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.state, "transferred");
+        assert!(source_store.assert_session_active(&session.id).is_err());
+        assert!(target_store.assert_session_active(&session.id).is_ok());
+        assert_eq!(
+            std::fs::read_to_string(destination.join("task.txt")).unwrap(),
+            "after\n"
+        );
+        assert!(
+            auth.authorize_bearer_profile(&paired.bearer).is_none(),
+            "activation consumes the task-transfer credential"
+        );
+        server.abort();
     }
 }

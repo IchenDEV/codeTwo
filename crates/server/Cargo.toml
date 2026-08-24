@@ -15,6 +15,10 @@ path = "src/lib.rs"
 name = "codetwo-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "codetwo-agent"
+path = "src/bin/codetwo-agent.rs"
+
 [dependencies]
 codetwo-core.workspace = true
 tokio.workspace = true
@@ -32,3 +36,4 @@ tempfile = "3"
 
 [dev-dependencies]
 tokio-tungstenite = "0.21"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

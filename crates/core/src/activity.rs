@@ -145,6 +145,36 @@ impl ActivityTracker {
             .map(|tracked| tracked.activity.clone())
     }
 
+    /// Replace the live projection with a snapshot that was already committed by the store.
+    ///
+    /// Task handoff uses this after installing its durable fence. Clearing the turn first makes
+    /// any late provider completion a no-op, while cancelling parked routes ensures no permission
+    /// or elicitation remains actionable on the source device.
+    pub fn install_durable_snapshot(&self, session: &str, activity: SessionActivity) {
+        let _transition = self.inner.transitions.lock().unwrap();
+        let routes = {
+            let mut state = self.inner.state.lock().unwrap();
+            let tracked = state
+                .sessions
+                .entry(session.to_string())
+                .or_insert_with(|| TrackedSession {
+                    activity: activity.clone(),
+                    turn: None,
+                });
+            let routes = tracked
+                .turn
+                .take()
+                .map(|turn| turn.pending.into_values().collect::<Vec<_>>())
+                .unwrap_or_default();
+            tracked.activity = activity.clone();
+            routes
+        };
+        for route in routes {
+            route.reply.cancel();
+        }
+        self.emit_activity(session, activity);
+    }
+
     /// Reserve the session's one turn slot. Reservation is intentionally not a public state change;
     /// the Running revision is published only after durable prompt acceptance.
     pub fn claim(

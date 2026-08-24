@@ -7,8 +7,8 @@ import type {
   PluginInfo,
   SkillInfo,
 } from "../bridge";
-import { BUILTIN_UI_COMPONENTS } from "../electrobun/host/builtinPlugins";
 import { pluginUiComponentId } from "../pluginModel";
+import { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,

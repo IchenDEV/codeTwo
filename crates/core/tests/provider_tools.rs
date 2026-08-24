@@ -115,6 +115,7 @@ async fn projected_tools_reach_session_new_and_the_prompt() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("provider-tool-session".into()),
+            model: None,
             initial_policy: None,
         })
         .await
@@ -173,6 +174,7 @@ async fn live_tool_changes_only_affect_sessions_created_after_the_change() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("before-tool-change".into()),
+            model: None,
             initial_policy: None,
         })
         .await
@@ -201,6 +203,7 @@ async fn live_tool_changes_only_affect_sessions_created_after_the_change() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("after-tool-change".into()),
+            model: None,
             initial_policy: None,
         })
         .await

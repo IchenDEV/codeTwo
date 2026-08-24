@@ -8,7 +8,7 @@
 //! Both frontends use this identically: the desktop sidecar forwards `Op`s and streams `Event`s;
 //! the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -29,7 +29,7 @@ use crate::canvas::{
     CanvasPromptPayload, CanvasProviderImageCapability,
 };
 use crate::error::AcpError;
-use crate::event::{ConfigOptionInfo, Event, ModelChoice, Op};
+use crate::event::{ConfigOptionInfo, Event, GoalSnapshot, ModelChoice, Op};
 use crate::memory::{prompt_source, MemoryCanvasRef, MemoryCapability, MemoryTurnProvenance};
 use crate::models::{available_models, builtin_models};
 use crate::permission::{
@@ -43,10 +43,11 @@ use crate::session::{
     DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
-    canonical_doc_text, compile_with_canvas, compile_with_sessions, CompiledPrompt, DocBlock,
-    McpServer, McpTransport, SkillLibrary,
+    canonical_doc_text, compile_with_appshots, compile_with_canvas,
+    compile_with_canvas_and_appshots, compile_with_sessions, CompiledPrompt, DocBlock, McpServer,
+    McpTransport, SkillLibrary,
 };
-use crate::store::{SessionSearchHit, Store, StoreError};
+use crate::store::{PreparedSessionHandoff, SessionSearchHit, Store, StoreError};
 use crate::worktree::WorktreeBaseline;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -158,6 +159,9 @@ pub struct SessionHandler {
     /// store and the UI, so updates arriving under this flag are dropped — neither re-persisted
     /// nor re-emitted. Set/cleared by the engine around the `session/load` call.
     replaying: Arc<AtomicBool>,
+    /// Goal continuation can start a provider turn without a matching `session/prompt` future.
+    /// Retain its activity lease until a provider-owned `session_info_update` closes the turn.
+    external_turn: Mutex<Option<TurnLease>>,
 }
 
 impl SessionHandler {
@@ -181,6 +185,7 @@ impl SessionHandler {
             store,
             tool_contexts: Mutex::new(HashMap::new()),
             replaying: Arc::default(),
+            external_turn: Mutex::new(None),
         }
     }
 
@@ -201,6 +206,67 @@ impl SessionHandler {
             }
         }
         None
+    }
+
+    fn handle_session_info(&self, meta: Value) {
+        if let Some(goal) = meta.as_object().and_then(|object| object.get("goal")) {
+            let normalized = normalize_goal(goal);
+            if goal.is_null() || normalized.is_some() {
+                self.emit(Event::GoalChanged {
+                    session: self.session_id.clone(),
+                    goal: normalized,
+                });
+            }
+        }
+
+        let status = meta
+            .pointer("/codex/threadStatus/type")
+            .and_then(Value::as_str);
+        match status {
+            Some("active") => {
+                let mut external = self.external_turn.lock().unwrap();
+                if external.is_some() {
+                    return;
+                }
+                let Some(tracker) = self.router.tracker.as_ref() else {
+                    return;
+                };
+                let Some(initial) = tracker.activity(&self.session_id) else {
+                    return;
+                };
+                let Some(lease) = tracker.claim(&self.session_id, None, initial) else {
+                    // A normal prompt already owns this turn. Its future remains authoritative.
+                    return;
+                };
+                let Some((_, activity)) = lease.prepare_running() else {
+                    return;
+                };
+                if !lease.commit_running(activity, false) {
+                    return;
+                }
+                self.emit(Event::TurnStarted {
+                    session: self.session_id.clone(),
+                    request_id: None,
+                    transcript_seq: None,
+                });
+                *external = Some(lease);
+            }
+            Some("idle" | "systemError") => {
+                let Some(lease) = self.external_turn.lock().unwrap().take() else {
+                    return;
+                };
+                lease.finish_success();
+                self.emit(Event::TurnEnded {
+                    session: self.session_id.clone(),
+                    stop_reason: if status == Some("idle") {
+                        "end_turn".into()
+                    } else {
+                        "provider_error".into()
+                    },
+                });
+            }
+            _ => {}
+        }
     }
 
     fn remember_tool(&self, id: &str, context: ToolContext) {
@@ -683,6 +749,26 @@ fn canvas_history_projection(canonical: String, compiled: Option<&CompiledPrompt
     out
 }
 
+fn normalize_goal(value: &Value) -> Option<GoalSnapshot> {
+    if value.is_null() {
+        return None;
+    }
+    let objective = value.get("objective")?.as_str()?.to_string();
+    let status = value.get("status")?.as_str()?.to_string();
+    Some(GoalSnapshot {
+        objective,
+        status,
+        created_at: value.get("createdAt").and_then(Value::as_i64).unwrap_or(0),
+        updated_at: value.get("updatedAt").and_then(Value::as_i64).unwrap_or(0),
+        token_budget: value.get("tokenBudget").and_then(Value::as_u64),
+        tokens_used: value.get("tokensUsed").and_then(Value::as_u64).unwrap_or(0),
+        time_used_seconds: value
+            .get("timeUsedSeconds")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+    })
+}
+
 fn encode_mcp_servers(
     servers: &[McpServer],
     caps: AgentCaps,
@@ -1045,10 +1131,12 @@ mod usage_update_tests {
     use super::SessionHandler;
     use crate::acp::wire::{SessionNotification, SessionUpdate};
     use crate::acp::ClientHandler;
+    use crate::activity::ActivityTracker;
     use crate::engine::PermissionRouter;
     use crate::event::Event;
     use crate::permission::PermissionPolicy;
     use crate::provider::ProviderId;
+    use crate::session::{SessionActivity, SessionRunState};
     use tokio::sync::mpsc;
 
     #[tokio::test]
@@ -1108,16 +1196,95 @@ mod usage_update_tests {
             .await;
         assert!(received.try_recv().is_err());
     }
+
+    #[tokio::test]
+    async fn session_info_drives_goal_and_external_turn_lifecycle() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let tracker = ActivityTracker::new(events.clone(), None);
+        tracker.register("session-1", SessionActivity::default());
+        let handler = SessionHandler::new(
+            "session-1".into(),
+            ProviderId::Codex,
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::with_tracker(tracker.clone()),
+            None,
+        );
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session-1".into(),
+                update: SessionUpdate::SessionInfoUpdate {
+                    meta: serde_json::json!({
+                        "goal": {
+                            "objective": "Unify plugins",
+                            "status": "active",
+                            "createdAt": 10,
+                            "updatedAt": 20
+                        },
+                        "codex": {"threadStatus": {"type": "active"}}
+                    }),
+                },
+            })
+            .await;
+
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::GoalChanged { goal: Some(goal), .. })
+                if goal.objective == "Unify plugins" && goal.status == "active"
+        ));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::SessionActivityChanged { activity, .. })
+                if matches!(activity.state, SessionRunState::Running { .. })
+        ));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::TurnStarted {
+                request_id: None,
+                ..
+            })
+        ));
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session-1".into(),
+                update: SessionUpdate::SessionInfoUpdate {
+                    meta: serde_json::json!({
+                        "goal": null,
+                        "codex": {"threadStatus": {"type": "idle"}}
+                    }),
+                },
+            })
+            .await;
+
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::GoalChanged { goal: None, .. })
+        ));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::SessionActivityChanged { activity, .. })
+                if matches!(activity.state, SessionRunState::Idle)
+        ));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::TurnEnded { stop_reason, .. }) if stop_reason == "end_turn"
+        ));
+    }
 }
 
 #[async_trait]
 impl ClientHandler for SessionHandler {
     async fn session_update(&self, note: SessionNotification) {
         // History replayed by `session/load` is already persisted and rendered; drop it.
-        // Usage is provider state rather than transcript content, so it must still reach the UI
-        // while the provider replays a loaded session's history.
+        // Usage and session metadata are provider state rather than transcript content, so both
+        // must still reach the UI while the provider replays a loaded session's history.
         if self.replaying.load(Ordering::SeqCst)
-            && !matches!(&note.update, SessionUpdate::UsageUpdate { .. })
+            && !matches!(
+                &note.update,
+                SessionUpdate::UsageUpdate { .. } | SessionUpdate::SessionInfoUpdate { .. }
+            )
         {
             return;
         }
@@ -1279,6 +1446,10 @@ impl ClientHandler for SessionHandler {
                 None,
                 Vec::new(),
             ),
+            SessionUpdate::SessionInfoUpdate { meta } => {
+                self.handle_session_info(meta);
+                (None, None, Vec::new())
+            }
             SessionUpdate::UsageUpdate { used, size, cost } => {
                 // The legacy rolling-usage projection for cost tracking. ACP reports one context
                 // figure, not an input/output split, so the whole count rides `input_tokens`.
@@ -1495,6 +1666,7 @@ struct SessionRuntime {
     resume_acp_session_id: Option<String>,
     /// What the agent advertised at `initialize`.
     caps: AgentCaps,
+    interaction: crate::acp::wire::InteractionCapabilities,
     /// MCP servers already attached to the live ACP session. ACP only accepts them on session
     /// creation/load, so later turns may reuse but cannot silently add a new server.
     mcp_servers: Vec<McpServer>,
@@ -1514,6 +1686,17 @@ struct SessionRuntime {
     /// built-in choice is one the agent never advertised, so it's applied on a best-effort
     /// `session/set_model` and reported honestly when the agent won't take it.
     models_reported: bool,
+    initial_reasoning_effort: Option<String>,
+    /// Provider-only continuation context imported by a task handoff. A successful ACP
+    /// `session/load` makes it redundant; otherwise it is prepended exactly once to the first
+    /// successful prompt on this device.
+    handoff_context: Option<Value>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SessionCreationOptions {
+    transient: bool,
+    reasoning_effort: Option<String>,
 }
 
 struct EngineState {
@@ -1528,6 +1711,10 @@ struct EngineState {
     scene_artifacts: Mutex<Option<crate::scene_artifact::SceneArtifactStore>>,
     events: mpsc::UnboundedSender<Event>,
     sessions: Mutex<HashMap<SessionId, SessionRuntime>>,
+    /// Process-local half of the task-transfer fence. The durable store fence protects restarts;
+    /// this set closes the interval before and during the SQLite handoff transaction.
+    handoff_fences: Mutex<HashSet<SessionId>>,
+    pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
     starting_clients: Mutex<Vec<Arc<AcpClient>>>,
     shutting_down: AtomicBool,
@@ -1537,6 +1724,9 @@ struct EngineState {
     /// Optional because persistence and provider-neutral memory have independent lifecycles.
     memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
+    /// App-owned private attachment root. Only the plugin graph injects this; library/TUI engines
+    /// intentionally cannot resolve desktop Appshot IDs.
+    private_data_dir: RwLock<Option<std::path::PathBuf>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
@@ -1586,6 +1776,7 @@ impl DesktopMcpConfig {
 
 /// Owns the sessions and drives providers. Construct with [`Engine::new`], which also hands back the
 /// [`Event`] receiver a frontend renders.
+#[derive(Clone)]
 pub struct Engine {
     state: Arc<EngineState>,
 }
@@ -1757,6 +1948,8 @@ impl Engine {
             scene_artifacts: Mutex::new(None),
             events,
             sessions: Mutex::new(HashMap::new()),
+            handoff_fences: Mutex::new(HashSet::new()),
+            pending_creation_options: Mutex::new(HashMap::new()),
             starting_clients: Mutex::new(Vec::new()),
             shutting_down: AtomicBool::new(false),
             activity,
@@ -1764,6 +1957,7 @@ impl Engine {
             store,
             memory,
             canvas_gate,
+            private_data_dir: RwLock::new(None),
             desktop_mcp,
             provider_tools,
         });
@@ -1772,6 +1966,85 @@ impl Engine {
 
     pub fn router(&self) -> &PermissionRouter {
         &self.state.router
+    }
+
+    /// Refuse provider work while a source or not-yet-activated target is fenced for handoff.
+    pub fn assert_session_active(&self, session: &str) -> Result<(), String> {
+        if self.state.handoff_fences.lock().unwrap().contains(session) {
+            return Err(format!("session {session} is fenced by a task handoff"));
+        }
+        if let Some(store) = &self.state.store {
+            store
+                .assert_session_active(session)
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    /// Atomically fence and snapshot one durable session for transfer. Once the store commits the
+    /// fence, the local provider is detached and its live turn projection is replaced by the exact
+    /// interrupted snapshot written in that transaction.
+    pub fn prepare_handoff(
+        &self,
+        session: &str,
+        handoff_id: &str,
+    ) -> Result<PreparedSessionHandoff, String> {
+        {
+            let mut fences = self.state.handoff_fences.lock().unwrap();
+            if !fences.insert(session.to_string()) {
+                return Err(format!(
+                    "session {session} already has a handoff in progress"
+                ));
+            }
+        }
+        let result = self
+            .state
+            .store
+            .as_ref()
+            .ok_or_else(|| "task handoff requires a durable store".to_string())
+            .and_then(|store| {
+                store
+                    .prepare_handoff(session, handoff_id)
+                    .map_err(|error| error.to_string())
+            });
+        let prepared = match result {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.release_handoff_fence(session);
+                return Err(error);
+            }
+        };
+
+        self.state
+            .activity
+            .install_durable_snapshot(session, prepared.session.activity.clone());
+        if let Some(runtime) = self.state.sessions.lock().unwrap().remove(session) {
+            if let Some(acp_session_id) = runtime.acp_session_id.as_deref() {
+                let _ = runtime.client.cancel(acp_session_id);
+            }
+            runtime.client.terminate();
+        }
+        Ok(prepared)
+    }
+
+    /// Release only the process-local source fence after a durable rollback. The next operation
+    /// revives the provider from the now-active store row.
+    pub fn release_handoff_fence(&self, session: &str) {
+        self.state.handoff_fences.lock().unwrap().remove(session);
+    }
+
+    fn clear_handoff_context(&self, session: &str) -> Result<(), String> {
+        let persisted = if let Some(store) = &self.state.store {
+            store
+                .clear_handoff_context(session)
+                .map_err(|error| error.to_string())
+        } else {
+            Ok(())
+        };
+        if let Some(runtime) = self.state.sessions.lock().unwrap().get_mut(session) {
+            runtime.handoff_context = None;
+        }
+        persisted
     }
 
     fn provider_toolset(&self, provider: &ProviderId) -> ProviderToolset {
@@ -1881,6 +2154,12 @@ impl Engine {
         *self.state.skills.lock().unwrap() = library;
     }
 
+    /// Grant this engine access to app-owned private attachments. Workspace paths never flow
+    /// through this root, and non-desktop constructors leave it unavailable.
+    pub fn set_private_data_dir(&self, data_dir: impl Into<std::path::PathBuf>) {
+        *self.state.private_data_dir.write().unwrap() = Some(data_dir.into());
+    }
+
     /// Replace the resolved scene library (mirroring [`Engine::set_skills`]; the desktop's
     /// `reload_scenes` calls both). Prompts compiled afterwards see the new definitions.
     pub fn set_scenes(&self, library: Arc<crate::scene::SceneLibrary>) {
@@ -1942,15 +2221,18 @@ impl Engine {
         self.state.activity.claim(session, request_id, initial)
     }
 
-    fn preflight_canvas_document(
+    fn preflight_attachment_document(
         &self,
         doc: &[DocBlock],
         cwd: &str,
-    ) -> Result<Option<CompiledPrompt>, CanvasError> {
-        if !doc
+    ) -> Result<Option<CompiledPrompt>, String> {
+        let has_canvas = doc
             .iter()
-            .any(|block| matches!(block, DocBlock::Canvas { .. }))
-        {
+            .any(|block| matches!(block, DocBlock::Canvas { .. }));
+        let has_appshot = doc
+            .iter()
+            .any(|block| matches!(block, DocBlock::Appshot { .. }));
+        if !has_canvas && !has_appshot {
             return Ok(None);
         }
         let library = self.state.skills.lock().unwrap();
@@ -1963,16 +2245,42 @@ impl Engine {
                 .ok_or_else(|| CanvasError::NotFound(format!("{id}@{revision}")))?
                 .resolve_canvas_prompt_frozen(id, revision)
         };
-        compile_with_canvas(
-            doc,
-            &library,
-            Some(std::path::Path::new(cwd)),
-            Some(&resolve_session),
-            self.state.canvas_gate,
-            CanvasProviderImageCapability::Unknown,
-            &resolve_canvas,
-        )
-        .map(Some)
+        let data_dir = self.state.private_data_dir.read().unwrap().clone();
+        let compiled = match (has_canvas, has_appshot) {
+            (true, true) => compile_with_canvas_and_appshots(
+                doc,
+                &library,
+                Some(std::path::Path::new(cwd)),
+                Some(&resolve_session),
+                data_dir
+                    .as_deref()
+                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+                self.state.canvas_gate,
+                CanvasProviderImageCapability::Unknown,
+                &resolve_canvas,
+            )?,
+            (true, false) => compile_with_canvas(
+                doc,
+                &library,
+                Some(std::path::Path::new(cwd)),
+                Some(&resolve_session),
+                self.state.canvas_gate,
+                CanvasProviderImageCapability::Unknown,
+                &resolve_canvas,
+            )
+            .map_err(|error| error.to_string())?,
+            (false, true) => compile_with_appshots(
+                doc,
+                &library,
+                Some(std::path::Path::new(cwd)),
+                Some(&resolve_session),
+                data_dir
+                    .as_deref()
+                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+            )?,
+            (false, false) => unreachable!(),
+        };
+        Ok(Some(compiled))
     }
 
     /// A session's persisted transcript (empty if not using a store).
@@ -2430,6 +2738,7 @@ impl Engine {
                     .unwrap()
                     .values()
                     .map(|r| r.session.clone())
+                    .filter(|session| !session.transient)
                     .collect();
                 sessions.sort_by(|a, b| {
                     b.pinned
@@ -2440,6 +2749,447 @@ impl Engine {
             }
         };
         Ok(self.overlay_activities(sessions))
+    }
+
+    pub fn session_is_busy(&self, session: &str) -> bool {
+        self.state
+            .activity
+            .activity(session)
+            .is_some_and(|activity| {
+                matches!(
+                    activity.state,
+                    crate::session::SessionRunState::Running { .. }
+                        | crate::session::SessionRunState::AwaitingInput { .. }
+                )
+            })
+    }
+
+    /// Stop and forget one app-lifetime side chat. Durable sessions are deliberately refused.
+    pub fn close_transient_session(&self, session: &str) -> Result<bool, StoreError> {
+        let persisted = match &self.state.store {
+            Some(store) => store
+                .get_session(session)?
+                .is_some_and(|session| session.transient),
+            None => false,
+        };
+        let live_transient = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .is_some_and(|runtime| runtime.session.transient);
+        if !persisted && !live_transient {
+            return Ok(false);
+        }
+        self.state.activity.cancel_pending(session);
+        if let Some(runtime) = self.state.sessions.lock().unwrap().remove(session) {
+            if let Some(acp_session_id) = runtime.acp_session_id.as_deref() {
+                let _ = runtime.client.cancel(acp_session_id);
+            }
+            runtime.client.terminate();
+        }
+        match &self.state.store {
+            Some(store) => store.delete_transient_session(session),
+            None => Ok(live_transient),
+        }
+    }
+
+    /// Initialize (or revive) the provider early so provider-owned interaction modes are visible
+    /// in the composer. Deliberately defer `session/new`: document/plugin MCP servers can only be
+    /// attached there and are not known until the first prompt is compiled.
+    pub async fn prepare_session(&self, session: &str) -> Result<(), String> {
+        self.assert_session_active(session)?;
+        if !self.state.sessions.lock().unwrap().contains_key(session) {
+            self.revive_session(session).await?;
+        }
+        let (interaction, options, models, current) = {
+            let sessions = self.state.sessions.lock().unwrap();
+            let runtime = sessions
+                .get(session)
+                .ok_or_else(|| "no such session".to_string())?;
+            (
+                runtime.interaction.clone(),
+                runtime.config_options.clone(),
+                runtime.models.clone(),
+                runtime.session.model.clone().unwrap_or_default(),
+            )
+        };
+        self.emit(Event::SessionCapabilities {
+            session: session.to_string(),
+            steering: interaction.steering,
+            goal: interaction.goal,
+        });
+        if !models.is_empty() {
+            self.emit(Event::Models {
+                session: session.to_string(),
+                available: models,
+                current,
+            });
+        }
+        if !options.is_empty() {
+            self.emit(Event::ConfigOptions {
+                session: session.to_string(),
+                options,
+            });
+        }
+        Ok(())
+    }
+
+    /// Establish the provider-side session when a command (currently goal control) needs an ACP
+    /// session id before any prompt has done so.
+    async fn ensure_acp_session(&self, session: &str) -> Result<(), String> {
+        self.assert_session_active(session)?;
+        if !self.state.sessions.lock().unwrap().contains_key(session) {
+            self.revive_session(session).await?;
+        }
+        let snapshot = {
+            let sessions = self.state.sessions.lock().unwrap();
+            let runtime = sessions
+                .get(session)
+                .ok_or_else(|| "no such session".to_string())?;
+            (
+                runtime.client.clone(),
+                runtime.acp_session_id.clone(),
+                runtime.resume_acp_session_id.clone(),
+                runtime.cwd.clone(),
+                runtime.caps,
+                runtime.interaction.clone(),
+                runtime.provider_toolset.clone(),
+                runtime.session.provider.clone(),
+                runtime.session.model.clone(),
+                runtime.config_options.clone(),
+                runtime.initial_reasoning_effort.clone(),
+            )
+        };
+        let (
+            client,
+            existing,
+            resume,
+            cwd,
+            caps,
+            interaction,
+            toolset,
+            provider,
+            pending_model,
+            existing_options,
+            pending_effort,
+        ) = snapshot;
+        self.emit(Event::SessionCapabilities {
+            session: session.to_string(),
+            steering: interaction.steering,
+            goal: interaction.goal.clone(),
+        });
+        if existing.is_some() {
+            if !existing_options.is_empty() {
+                self.emit(Event::ConfigOptions {
+                    session: session.to_string(),
+                    options: existing_options,
+                });
+            }
+            return Ok(());
+        }
+
+        let mut servers = toolset.mcp_servers.clone();
+        if let Some(config) = &self.state.desktop_mcp {
+            attach_host_mcp_servers(&mut servers, [config.scene_server_for_session(session)]);
+            if provider == ProviderId::Codex {
+                attach_host_mcp_servers(&mut servers, [config.browser_server_for_session(session)]);
+            }
+        }
+        let encoded = encode_mcp_servers(&servers, caps)?;
+        let mut restored_provider_context = false;
+        let (acp_session_id, models, mut options, mut current) =
+            if let Some(resume_id) = resume.as_deref().filter(|_| caps.load_session) {
+                match client.load_session(resume_id, &cwd, encoded.clone()).await {
+                    Ok(response) => {
+                        restored_provider_context = true;
+                        let current = response
+                            .models
+                            .as_ref()
+                            .map(|models| models.current_model_id.clone())
+                            .unwrap_or_default();
+                        let options = response
+                            .config_options
+                            .as_deref()
+                            .map(|options| provider_config_option_infos(&provider, options))
+                            .unwrap_or_default();
+                        (resume_id.to_string(), response.models, options, current)
+                    }
+                    Err(_) => {
+                        let response = client
+                            .new_session_full(&cwd, encoded.clone())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        let current = response
+                            .models
+                            .as_ref()
+                            .map(|models| models.current_model_id.clone())
+                            .unwrap_or_default();
+                        let options = response
+                            .config_options
+                            .as_deref()
+                            .map(|options| provider_config_option_infos(&provider, options))
+                            .unwrap_or_default();
+                        (response.session_id, response.models, options, current)
+                    }
+                }
+            } else {
+                let response = client
+                    .new_session_full(&cwd, encoded)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let current = response
+                    .models
+                    .as_ref()
+                    .map(|models| models.current_model_id.clone())
+                    .unwrap_or_default();
+                let options = response
+                    .config_options
+                    .as_deref()
+                    .map(|options| provider_config_option_infos(&provider, options))
+                    .unwrap_or_default();
+                (response.session_id, response.models, options, current)
+            };
+
+        if let Some(model) = pending_model.as_deref().filter(|model| *model != current) {
+            match client.set_model(&acp_session_id, model).await {
+                Ok(()) => {
+                    current = model.to_string();
+                    reflect_flat_model_in_options(&mut options, model);
+                }
+                Err(error) => self.emit(Event::Error {
+                    session: Some(session.to_string()),
+                    message: format!("{model} wasn't accepted: {error}"),
+                    terminal: false,
+                    request_id: None,
+                }),
+            }
+        }
+        if let Some(effort) = pending_effort.as_deref() {
+            if let Some(option) = options.iter().find(|option| {
+                option.category.as_deref() == Some("thought_level")
+                    || matches!(option.id.as_str(), "effort" | "reasoning_effort")
+            }) {
+                options = client
+                    .set_config_option(&acp_session_id, &option.id, effort)
+                    .await
+                    .map(|options| provider_config_option_infos(&provider, &options))
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        let reported = models
+            .as_ref()
+            .map(|models| {
+                models
+                    .available_models
+                    .iter()
+                    .map(|model| ModelChoice {
+                        id: model.model_id.clone(),
+                        name: model.name.clone(),
+                        description: model.description.clone(),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        {
+            let mut sessions = self.state.sessions.lock().unwrap();
+            let runtime = sessions
+                .get_mut(session)
+                .ok_or_else(|| "session closed while connecting".to_string())?;
+            runtime.acp_session_id = Some(acp_session_id.clone());
+            runtime.resume_acp_session_id = None;
+            runtime.mcp_servers = servers;
+            runtime.config_options = options.clone();
+            runtime.initial_reasoning_effort = None;
+            runtime.session.acp_session_id = Some(acp_session_id);
+            if !current.is_empty() {
+                runtime.session.model = Some(current.clone());
+            }
+            if !reported.is_empty() {
+                runtime.models = reported.clone();
+                runtime.models_reported = true;
+            }
+            if let Some(store) = &self.state.store {
+                store
+                    .upsert_session(&runtime.session)
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        if !reported.is_empty() {
+            self.emit(Event::Models {
+                session: session.to_string(),
+                available: reported,
+                current,
+            });
+        }
+        if !options.is_empty() {
+            self.emit(Event::ConfigOptions {
+                session: session.to_string(),
+                options,
+            });
+        }
+        if restored_provider_context {
+            self.clear_handoff_context(session)?;
+        }
+        Ok(())
+    }
+
+    pub async fn steer_prompt(
+        &self,
+        session: &str,
+        doc: Vec<DocBlock>,
+        request_id: Option<String>,
+    ) -> Result<String, String> {
+        self.assert_session_active(session)?;
+        if !self.session_is_busy(session) {
+            return Err("there is no running turn to steer".into());
+        }
+        let canonical = canonical_doc_text(&doc);
+        if canonical.trim().is_empty() {
+            return Err("prompt is empty".into());
+        }
+        let (client, acp_session_id, cwd, interaction, instructions) = {
+            let sessions = self.state.sessions.lock().unwrap();
+            let runtime = sessions
+                .get(session)
+                .ok_or_else(|| "no such session".to_string())?;
+            (
+                runtime.client.clone(),
+                runtime
+                    .acp_session_id
+                    .clone()
+                    .ok_or_else(|| "ACP session is unavailable".to_string())?,
+                runtime.cwd.clone(),
+                runtime.interaction.clone(),
+                runtime.provider_toolset.instructions.clone(),
+            )
+        };
+        if !interaction.steering {
+            return Err("the provider did not advertise native steering".into());
+        }
+        let mut compiled = match self.preflight_attachment_document(&doc, &cwd)? {
+            Some(compiled) => compiled,
+            None => {
+                let resolve = |id: &str| -> Option<String> {
+                    self.referenced_session_context(id).ok().flatten()
+                };
+                let library = self.state.skills.lock().unwrap();
+                compile_with_sessions(
+                    &doc,
+                    &library,
+                    Some(std::path::Path::new(&cwd)),
+                    Some(&resolve),
+                )
+            }
+        };
+        compiled.prompt = with_provider_tool_instructions(compiled.prompt, &instructions);
+        let mut blocks = vec![ContentBlock::text(compiled.prompt)];
+        for path in &compiled.images {
+            if let Ok((mime_type, data)) =
+                crate::workspace::read_image_base64(std::path::Path::new(&cwd), path)
+            {
+                blocks.push(ContentBlock::Image { data, mime_type });
+            }
+        }
+        for appshot in &compiled.appshots {
+            blocks.push(ContentBlock::Image {
+                data: appshot.data.clone(),
+                mime_type: appshot.mime_type.clone(),
+            });
+        }
+        let response: serde_json::Value = client
+            .connection()
+            .request(
+                "_session/steering",
+                serde_json::json!({ "sessionId": acp_session_id, "prompt": blocks }),
+            )
+            .await
+            .map_err(|error| error.to_string())?;
+        let outcome = response
+            .get("outcome")
+            .and_then(Value::as_str)
+            .unwrap_or("failed");
+        if !matches!(outcome, "injected" | "startedNewTurn") {
+            return Err("the provider could not apply this steering message".into());
+        }
+        let prompt = Part::Prompt {
+            text: canonical.clone(),
+            display: canonical.chars().take(400).collect(),
+        };
+        let transcript_seq = self
+            .state
+            .store
+            .as_ref()
+            .map(|store| store.append_part(session, Role::User, &prompt))
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        self.emit(Event::SteerAccepted {
+            session: session.to_string(),
+            request_id,
+            transcript_seq,
+            outcome: outcome.to_string(),
+        });
+        Ok(outcome.to_string())
+    }
+
+    pub async fn control_goal(
+        &self,
+        session: &str,
+        action: &str,
+        objective: Option<String>,
+    ) -> Result<(), String> {
+        self.ensure_acp_session(session).await?;
+        let (client, acp_session_id, goal) = {
+            let sessions = self.state.sessions.lock().unwrap();
+            let runtime = sessions
+                .get(session)
+                .ok_or_else(|| "no such session".to_string())?;
+            (
+                runtime.client.clone(),
+                runtime
+                    .acp_session_id
+                    .clone()
+                    .ok_or_else(|| "ACP session is unavailable".to_string())?,
+                runtime.interaction.goal.clone(),
+            )
+        };
+        let goal =
+            goal.ok_or_else(|| format!("the provider did not advertise goal action {action}"))?;
+        if !goal.actions.iter().any(|candidate| candidate == action) {
+            return Err(format!(
+                "the provider did not advertise goal action {action}"
+            ));
+        }
+        let objective = objective
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        if action == "set" && objective.is_none() {
+            return Err("goal objective is required".into());
+        }
+        let mut params = Map::from_iter([
+            ("sessionId".into(), Value::String(acp_session_id)),
+            ("action".into(), Value::String(action.to_string())),
+        ]);
+        if let Some(objective) = objective {
+            params.insert("objective".into(), Value::String(objective));
+        }
+        let response: Value = client
+            .connection()
+            .request(&goal.control_method, Value::Object(params))
+            .await
+            .map_err(|error| error.to_string())?;
+        if let Some(value) = response.get("goal") {
+            let goal = normalize_goal(value);
+            if !value.is_null() && goal.is_none() {
+                return Err("the provider returned an invalid goal snapshot".into());
+            }
+            self.emit(Event::GoalChanged {
+                session: session.to_string(),
+                goal,
+            });
+        }
+        Ok(())
     }
 
     fn overlay_activities(&self, mut sessions: Vec<Session>) -> Vec<Session> {
@@ -2487,6 +3237,12 @@ impl Engine {
             .get_session(id)
             .map_err(|error| format!("couldn't read persisted session {id}: {error}"))?
             .ok_or_else(|| "no such session".to_string())?;
+        store
+            .assert_session_active(id)
+            .map_err(|error| error.to_string())?;
+        let handoff_context = store
+            .handoff_context(id)
+            .map_err(|error| format!("couldn't read handoff context for {id}: {error}"))?;
         validate_session_checkout(&sess).await?;
         let prov = self
             .state
@@ -2524,6 +3280,7 @@ impl Engine {
                 return Err(format!("couldn't relaunch {}: {error}", prov.display_name));
             }
         };
+        let interaction = init.interaction_capabilities();
 
         // The stored ACP session id becomes the resume cursor; the live id stays unset until the
         // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
@@ -2549,6 +3306,7 @@ impl Engine {
                 acp_session_id: None,
                 resume_acp_session_id: resume,
                 caps: init.caps(),
+                interaction: interaction.clone(),
                 mcp_servers: Vec::new(),
                 replaying,
                 cwd: cwd.clone(),
@@ -2556,9 +3314,16 @@ impl Engine {
                 models: models.clone(),
                 config_options: Vec::new(),
                 models_reported: false,
+                initial_reasoning_effort: None,
+                handoff_context,
             },
         );
         drop(sessions);
+        self.emit(Event::SessionCapabilities {
+            session: id.to_string(),
+            steering: interaction.steering,
+            goal: interaction.goal,
+        });
         if !models.is_empty() {
             self.emit(Event::Models {
                 session: id.to_string(),
@@ -2657,6 +3422,58 @@ impl Engine {
     }
 
     /// Process one submission. Long-running work (a prompt turn) is spawned so this returns promptly.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_session(
+        &self,
+        provider: ProviderId,
+        cwd: String,
+        use_worktree: bool,
+        worktree_base: Option<WorktreeBaseline>,
+        worktree_base_sha: Option<String>,
+        request_id: Option<String>,
+        model: Option<String>,
+        initial_policy: Option<ExecutionPolicy>,
+        transient: bool,
+        reasoning_effort: Option<String>,
+    ) -> Result<(), AcpError> {
+        if transient || reasoning_effort.is_some() {
+            let key = request_id.as_ref().ok_or_else(|| {
+                AcpError::Rpc(crate::error::RpcError::invalid_params(
+                    "advanced session creation needs a request id",
+                ))
+            })?;
+            self.state.pending_creation_options.lock().unwrap().insert(
+                key.clone(),
+                SessionCreationOptions {
+                    transient,
+                    reasoning_effort,
+                },
+            );
+        }
+        let result = self
+            .submit(Op::NewSession {
+                provider,
+                cwd,
+                use_worktree,
+                worktree_base,
+                worktree_base_sha,
+                request_id: request_id.clone(),
+                model,
+                initial_policy,
+            })
+            .await;
+        if result.is_err() {
+            if let Some(request_id) = request_id {
+                self.state
+                    .pending_creation_options
+                    .lock()
+                    .unwrap()
+                    .remove(&request_id);
+            }
+        }
+        result
+    }
+
     pub async fn submit(&self, op: Op) -> Result<(), AcpError> {
         if self.state.shutting_down.load(Ordering::Acquire) {
             return Err(AcpError::Closed);
@@ -2669,8 +3486,19 @@ impl Engine {
                 worktree_base,
                 worktree_base_sha,
                 request_id,
+                model,
                 initial_policy,
             } => {
+                let creation_options = request_id
+                    .as_ref()
+                    .and_then(|request_id| {
+                        self.state
+                            .pending_creation_options
+                            .lock()
+                            .unwrap()
+                            .remove(request_id)
+                    })
+                    .unwrap_or_default();
                 let creation_receipt = t3_session_create_receipt(request_id.as_deref());
                 if let (Some(store), Some((command_id, public_thread_id))) =
                     (&self.state.store, creation_receipt.as_ref())
@@ -2761,6 +3589,8 @@ impl Engine {
                     }
                 };
                 let mut sess = Session::new(provider, cwd.clone());
+                sess.model = model;
+                sess.transient = creation_options.transient;
                 let initial_policy = initial_policy.unwrap_or_default();
                 sess.permission_mode = initial_policy.mode;
                 sess.sandbox_policy = initial_policy.sandbox;
@@ -2790,6 +3620,7 @@ impl Engine {
                         return Err(error);
                     }
                 };
+                let interaction = init.interaction_capabilities();
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
@@ -2888,6 +3719,7 @@ impl Engine {
                 let project_path = sess.project_path.clone();
                 let worktree_path = sess.worktree_path.clone();
                 let worktree_baseline = sess.worktree_baseline.clone();
+                let current_model = sess.model.clone().unwrap_or_default();
                 self.state
                     .activity
                     .register(&session_id, sess.activity.clone());
@@ -2901,6 +3733,7 @@ impl Engine {
                         acp_session_id: None,
                         resume_acp_session_id: None,
                         caps: init.caps(),
+                        interaction: interaction.clone(),
                         mcp_servers: Vec::new(),
                         replaying,
                         cwd: cwd_stored.clone(),
@@ -2908,6 +3741,8 @@ impl Engine {
                         models: models.clone(),
                         config_options: Vec::new(),
                         models_reported: false,
+                        initial_reasoning_effort: creation_options.reasoning_effort,
+                        handoff_context: None,
                     },
                 );
                 drop(live_sessions);
@@ -2918,6 +3753,11 @@ impl Engine {
                     worktree_path,
                     worktree_baseline,
                     request_id,
+                });
+                self.emit(Event::SessionCapabilities {
+                    session: session_id.clone(),
+                    steering: interaction.steering,
+                    goal: interaction.goal,
                 });
                 for (hook, error) in hook_errors {
                     self.emit(Event::Error {
@@ -2933,7 +3773,7 @@ impl Engine {
                     self.emit(Event::Models {
                         session: session_id,
                         available: models,
-                        current: String::new(),
+                        current: current_model,
                     });
                 }
             }
@@ -2943,6 +3783,15 @@ impl Engine {
                 doc,
                 request_id,
             } => {
+                if let Err(message) = self.assert_session_active(&session) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message,
+                        terminal: true,
+                        request_id,
+                    });
+                    return Ok(());
+                }
                 // Memory observes the user's document, not its expanded files, rules, skills, or a
                 // previous memory block. Keeping this source separate prevents feedback loops.
                 let memory_source = prompt_source(&doc);
@@ -2980,21 +3829,22 @@ impl Engine {
                     });
                     return Ok(());
                 }
-                // Canvas references are resolved and validated before the turn claim and before
-                // any canonical prompt/activity row is persisted. A gate/provider/budget error
-                // therefore cannot become accepted history.
-                let canvas_preflight = match self.preflight_canvas_document(&doc, &checkout.cwd) {
-                    Ok(compiled) => compiled,
-                    Err(error) => {
-                        self.emit(Event::Error {
-                            session: Some(session),
-                            message: error.to_string(),
-                            terminal: true,
-                            request_id,
-                        });
-                        return Ok(());
-                    }
-                };
+                // App-owned attachments are resolved and validated before the turn claim and
+                // before any canonical prompt/activity row is persisted. A path, gate, provider,
+                // or budget error therefore cannot become accepted history.
+                let attachment_preflight =
+                    match self.preflight_attachment_document(&doc, &checkout.cwd) {
+                        Ok(compiled) => compiled,
+                        Err(error) => {
+                            self.emit(Event::Error {
+                                session: Some(session),
+                                message: error.to_string(),
+                                terminal: true,
+                                request_id,
+                            });
+                            return Ok(());
+                        }
+                    };
                 let turn_lease = match self.try_start_turn(&session, request_id.clone()) {
                     Some(lease) => lease,
                     None => {
@@ -3016,7 +3866,7 @@ impl Engine {
                 let canonical_user_prompt = canonical_doc_text(&doc);
                 let canonical_prompt = canvas_history_projection(
                     canonical_user_prompt.clone(),
-                    canvas_preflight.as_ref(),
+                    attachment_preflight.as_ref(),
                 );
                 let mut prompt_display: String = canonical_user_prompt.chars().take(400).collect();
                 if canonical_user_prompt.chars().count() > 400 {
@@ -3132,7 +3982,7 @@ impl Engine {
                 // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
                 let cwd_for_images = cwd.clone();
 
-                let mut compiled = match canvas_preflight {
+                let mut compiled = match attachment_preflight {
                     Some(compiled) => compiled,
                     None => {
                         let lib = self.state.skills.lock().unwrap();
@@ -3467,6 +4317,11 @@ impl Engine {
                                         options,
                                     });
                                 }
+                                if let Err(error) = self.clear_handoff_context(&session) {
+                                    tracing::warn!(
+                                        "clear provider-restored handoff context failed: {error}"
+                                    );
+                                }
                                 acp_sid = Some(resume_id);
                             }
                             Err(e) => {
@@ -3544,10 +4399,13 @@ impl Engine {
 
                             // A model chosen before this point had no ACP session to be sent to,
                             // so the choice is still only ours. Apply it below.
-                            let (models, pending) = {
+                            let (models, pending, pending_effort) = {
                                 let mut map = self.state.sessions.lock().unwrap();
                                 let pending =
                                     map.get(&session).and_then(|r| r.session.model.clone());
+                                let pending_effort = map
+                                    .get_mut(&session)
+                                    .and_then(|runtime| runtime.initial_reasoning_effort.take());
                                 let models = if let Some(r) = map.get_mut(&session) {
                                     r.acp_session_id = Some(id.clone());
                                     r.session.acp_session_id = Some(id.clone());
@@ -3568,7 +4426,7 @@ impl Engine {
                                         let _ = store.upsert_session(&r.session);
                                     }
                                 }
-                                (models, pending)
+                                (models, pending, pending_effort)
                             };
 
                             // Current Codex accepts the same flat variant ids exposed by its model
@@ -3608,6 +4466,51 @@ impl Engine {
                                 }
                             }
 
+                            if let Some(want) = pending_effort {
+                                if let Some(option) = options.iter().find(|option| {
+                                    option.category.as_deref() == Some("thought_level")
+                                        || matches!(
+                                            option.id.as_str(),
+                                            "effort" | "reasoning_effort"
+                                        )
+                                }) {
+                                    let changed = if current_provider == ProviderId::Grok
+                                        && option.id == "reasoning_effort"
+                                    {
+                                        client.set_mode(&id, &want).await.map(|()| {
+                                            let mut next = options.clone();
+                                            if let Some(option) = next
+                                                .iter_mut()
+                                                .find(|item| item.id == "reasoning_effort")
+                                            {
+                                                option.current = want.clone();
+                                            }
+                                            next
+                                        })
+                                    } else {
+                                        client.set_config_option(&id, &option.id, &want).await.map(
+                                            |options| {
+                                                provider_config_option_infos(
+                                                    &current_provider,
+                                                    &options,
+                                                )
+                                            },
+                                        )
+                                    };
+                                    match changed {
+                                        Ok(updated) => options = updated,
+                                        Err(error) => self.emit(Event::Error {
+                                            session: Some(session.clone()),
+                                            message: format!(
+                                                "reasoning effort {want} wasn't accepted: {error}"
+                                            ),
+                                            terminal: false,
+                                            request_id: request_id.clone(),
+                                        }),
+                                    }
+                                }
+                            }
+
                             if let Some(runtime) =
                                 self.state.sessions.lock().unwrap().get_mut(&session)
                             {
@@ -3643,7 +4546,24 @@ impl Engine {
                     }
                 }
                 let acp_sid = acp_sid.expect("acp session id set above");
+                let handoff_context = self
+                    .state
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .get(&session)
+                    .and_then(|runtime| runtime.handoff_context.clone());
+                let clear_handoff_after_prompt = handoff_context.is_some();
+                let provider_prompt = match handoff_context {
+                    Some(context) => format!(
+                        "The task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}\n\n{}",
+                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into()),
+                        provider_prompt
+                    ),
+                    None => provider_prompt,
+                };
                 let events = self.state.events.clone();
+                let turn_engine = self.clone();
                 let sess_for_task = session.clone();
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
@@ -3692,12 +4612,27 @@ impl Engine {
                             blocks.push(ContentBlock::Image { data, mime_type });
                         }
                     }
+                    for appshot in &compiled.appshots {
+                        blocks.push(ContentBlock::Image {
+                            data: appshot.data.clone(),
+                            mime_type: appshot.mime_type.clone(),
+                        });
+                    }
                     // Canvas exports are already normalized and ordered. Unknown provider
                     // capability intentionally attempted every image above; any provider failure
                     // remains visible through the ACP error path.
                     blocks.extend(canvas_image_blocks);
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
+                            if clear_handoff_after_prompt {
+                                if let Err(error) =
+                                    turn_engine.clear_handoff_context(&sess_for_task)
+                                {
+                                    tracing::warn!(
+                                        "clear consumed handoff context failed: {error}"
+                                    );
+                                }
+                            }
                             // A cancelled turn is intentionally incomplete; do not memorialize its
                             // partial outcome or index it as a completed answer. Other terminal stop
                             // reasons still describe a completed provider response, even when it was
@@ -5216,6 +6151,7 @@ for line in sys.stdin:
                 worktree_base: Some(WorktreeBaseline::Current),
                 worktree_base_sha: None,
                 request_id: Some("create-with-identity".into()),
+                model: None,
                 initial_policy: None,
             })
             .await
@@ -5298,6 +6234,7 @@ for line in sys.stdin:
                 worktree_base: Some(WorktreeBaseline::Current),
                 worktree_base_sha: None,
                 request_id: Some("create-then-discard".into()),
+                model: None,
                 initial_policy: None,
             })
             .await

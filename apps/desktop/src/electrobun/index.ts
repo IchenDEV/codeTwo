@@ -1,4 +1,11 @@
-import Electrobun, { BrowserView, BrowserWindow, ContextMenu, Screen, Utils } from "electrobun/bun";
+import Electrobun, {
+  BrowserView,
+  BrowserWindow,
+  ContextMenu,
+  PATHS,
+  Screen,
+  Utils,
+} from "electrobun/bun";
 import { basename, extname, join } from "node:path";
 
 import type {
@@ -9,8 +16,8 @@ import type {
   SaveDialogOptions,
   WorkspaceOpenTarget,
 } from "./rpc";
-import { PureBunHost } from "./host";
 import { nativeContextMenuAction, nativeContextMenuConfig } from "./contextMenuHost";
+import { NativeHost } from "./nativeHost";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 import { AppshotManager } from "./appshots";
 import { configureMacOSWindowEffects } from "./windowEffects";
@@ -105,10 +112,28 @@ const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 const dataDir =
   process.env.CODETWO_DATA_DIR ??
   join(Utils.paths.appData, process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev");
-const host = new PureBunHost(dataDir, (event) => {
-  if (rendererReady) rpc.send.event(event);
-  else queuedEvents.push(event);
+const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
+const host = new NativeHost({
+  executable: join(PATHS.RESOURCES_FOLDER, "app", "bin", hostExecutable),
+  dataDir,
+  onEvent: (event) => {
+    if (rendererReady) rpc.send.event(event);
+    else queuedEvents.push(event);
+  },
 });
+
+try {
+  await host.start();
+} catch (error) {
+  await Utils.showMessageBox({
+    type: "error",
+    title: `${applicationName} could not start`,
+    message: error instanceof Error ? error.message : String(error),
+    buttons: ["Quit"],
+  });
+  Utils.quit();
+  throw error;
+}
 
 rpc = BrowserView.defineRPC<CodeTwoRPC>({
   maxRequestTime: Infinity,

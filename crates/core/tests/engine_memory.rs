@@ -336,6 +336,7 @@ async fn engine_shutdown_terminates_a_provider_that_is_still_starting() {
                     worktree_base: None,
                     worktree_base_sha: None,
                     request_id: Some("starting-shutdown".into()),
+                    model: None,
                     initial_policy: None,
                 })
                 .await

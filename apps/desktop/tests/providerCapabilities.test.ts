@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { normalizeProviderInfo } from "../src/bridge";
-import { sessionRequestParams, validateMcpTransports } from "../src/electrobun/host/acp";
 import {
   detectHostToolEvidence,
   loadConfiguredBrowserUse,
@@ -17,7 +16,7 @@ import {
   withRichResponseInstructions,
   type AcpMcpServer,
   type HostToolEvidence,
-} from "../src/electrobun/host/providerTools";
+} from "../src/electrobun/toolBroker/providerTools";
 
 const computerMcp: AcpMcpServer = {
   name: "codetwo-openai-computer-use",
@@ -112,20 +111,6 @@ describe("provider capability wire compatibility", () => {
       id: "computer_use",
       state: "ready",
       version: "1.0.1000761",
-    });
-  });
-
-  test("passes provider-neutral MCP servers through the Pure Bun ACP session seam", () => {
-    const mcpServers = [computerMcp];
-
-    expect(sessionRequestParams("/tmp/project", mcpServers)).toEqual({
-      cwd: "/tmp/project",
-      mcpServers,
-    });
-    expect(sessionRequestParams("/tmp/project", mcpServers, "claude-session")).toEqual({
-      sessionId: "claude-session",
-      cwd: "/tmp/project",
-      mcpServers,
     });
   });
 
@@ -231,20 +216,6 @@ describe("provider capability wire compatibility", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
-
-  test("supports remote computer-use MCP only when the ACP provider advertises its transport", () => {
-    const server: AcpMcpServer = {
-      name: "remote-computer",
-      type: "http",
-      url: "http://127.0.0.1:8000/mcp",
-      headers: [],
-    };
-    expect(() => validateMcpTransports([server], {
-      agentCapabilities: { mcpCapabilities: { http: true } },
-    })).not.toThrow();
-    expect(() => validateMcpTransports([server], { agentCapabilities: {} }))
-      .toThrow("did not advertise");
   });
 
   test("fails the configured computer-use registry closed when any enabled backend is invalid", () => {

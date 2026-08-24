@@ -65,6 +65,34 @@ async fn a_project_context_falls_back_to_global_commands() {
 }
 
 #[tokio::test]
+async fn a_fallback_handler_can_authorize_against_the_callers_realm() {
+    let app = App::new();
+    let global = app.ctx();
+    let project_realm = CommandRealm::project("/projects/alpha");
+    let project = global.with_command_realm(project_realm.clone());
+
+    global.plugin(
+        FnPlugin::new("realm-router", |ctx: Context, _| async move {
+            ctx.command_with_realm("system.realm", |realm, _| async move {
+                Ok(serde_json::to_value(realm).unwrap())
+            })?;
+            Ok(())
+        }),
+        Value::Null,
+    );
+    app.flush().await;
+
+    assert_eq!(
+        global.call("system.realm", Value::Null).await.unwrap(),
+        "global"
+    );
+    assert_eq!(
+        project.call("system.realm", Value::Null).await.unwrap(),
+        json!({ "project": "/projects/alpha" })
+    );
+}
+
+#[tokio::test]
 async fn unloading_a_scope_removes_only_its_command_realm_contribution() {
     let app = App::new();
     let global = app.ctx();

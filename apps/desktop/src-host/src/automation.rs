@@ -220,6 +220,7 @@ impl AutomationRuntime {
                 worktree_base: automation.use_worktree.then_some(WorktreeBaseline::Current),
                 worktree_base_sha: None,
                 request_id: Some(creation_request.clone()),
+                model: None,
                 initial_policy: Some(ExecutionPolicy {
                     mode: automation.permission_mode,
                     sandbox: automation.sandbox_policy,

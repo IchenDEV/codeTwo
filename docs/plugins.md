@@ -69,6 +69,7 @@ online; unloading `engine` cancels live provider work and terminates its owned p
 | `skills` | `skills` | `skills.*` |
 | `scenes` | `scenes` | scene-library and pipeline-library commands |
 | `engine` | `engine` | `engine.*`, `sessions.*`, `worktrees.*` |
+| `handoff` | `handoff` | durable task transfer, target activation, and rollback commands |
 | `git` | — | `git.*` |
 | `memory` | `memory` | `memory.*` |
 | `market` | — | `market.*` |
@@ -295,9 +296,9 @@ CoreApp::boot_with(config, registry).await?;
 ```
 
 A full desktop adapter adds only host-owned automation, event, language-server, browser, voice, and
-remote modules; product commands remain behind the same command seam as the TUI and server. The
-current Pure Bun host implements an equivalent in-process plugin graph over that seam
-and reports its missing adapters explicitly rather than claiming the Rust runtime is present.
+remote modules; product commands remain behind the same command seam as the TUI and server. C2's
+Electrobun adapter packages that Rust graph as `codetwo-desktop-host`; Bun owns only shell-native
+window, dialog, update, and process-lifecycle operations.
 
 ## Two senses of "plugin"
 
@@ -325,16 +326,16 @@ The application migration is complete:
   it does not need through `AppConfig` rather than constructing a separate application.
 - The standalone `codetwo-server` also boots `CoreApp`, then gives the graph's engine, store,
   event-bus and canvas services to its streaming protocol adapter.
-- The Electrobun desktop registers its in-process capabilities as individually owned plugins in the
-  same runtime manager used by process bundles. Only `core` and `kernel` are essential. Every
-  non-core built-in has catalog identity, command ownership, dependencies, services, components,
-  durable user/project policy, revision-bound plan/apply/reset, and host resource cleanup. The
-  manager also reads installed Bundle records, starts only trusted and enabled external runtimes,
-  registers their JSON-RPC commands into the typed command seam, and creates isolated child
-  processes and command realms for project-capable Bundles. Remaining supported and fail-closed
-  capabilities are recorded in the [standard's host profiles](plugin-standard.md#7-host-capability-profiles).
-- The renderer exposes one typed `call` request. Electrobun dispatches it directly to the Bun host;
-  no Rust sidecar is built or bundled by the desktop package.
+- The Electrobun desktop boots that same graph in `codetwo-desktop-host`, adding individually owned
+  automation, device-sync, LSP, event, and remote plugins. `device-sync` publishes the Core-backed
+  snapshot/merge service; `remote` optionally injects it to add C2 pairing without coupling T3 or
+  browser control to synchronization. The manager reads installed Bundle records, starts only
+  trusted and enabled external runtimes, registers their JSON-RPC commands into the same command
+  seam, and creates isolated child processes and command realms for project-capable Bundles.
+- The renderer exposes one typed `call` request. Electrobun relays it to one versioned JSON-lines
+  `call` method on the bundled Rust host; host events return over the same connection. A protocol
+  mismatch or failed Kernel startup stops desktop startup instead of falling back to another
+  implementation.
 
 Desktop event envelopes remain host plumbing rather than a business API. Manual browser tabs
 persist in the renderer and render as sandboxed `<electrobun-webview>` elements.

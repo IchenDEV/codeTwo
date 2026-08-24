@@ -3,6 +3,10 @@ import type { ElectrobunConfig } from "electrobun";
 import { DESKTOP_CHANNELS, resolveDesktopChannel } from "./scripts/desktop-channel";
 
 const channel = DESKTOP_CHANNELS[resolveDesktopChannel(process.env.CODETWO_CHANNEL, process.argv)];
+const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
+const toolBrokerExecutable = process.platform === "win32" ? "codetwo-tool-broker.exe" : "codetwo-tool-broker";
+const hostBinary = `../../target/release/${hostExecutable}`;
+const toolBrokerBinary = `dist/tool-broker/${toolBrokerExecutable}`;
 
 export default {
   app: {
@@ -25,9 +29,11 @@ export default {
     },
     copy: {
       dist: "views/main",
+      [hostBinary]: `bin/${hostExecutable}`,
+      [toolBrokerBinary]: `bin/${toolBrokerExecutable}`,
     },
-    watch: ["src", "index.html", "vite.config.ts", "scripts/prepare-electrobun.ts"],
-    watchIgnore: ["dist/**"],
+    watch: ["../../crates", "src-host", "src", "index.html", "vite.config.ts", "scripts/prepare-electrobun.ts"],
+    watchIgnore: ["dist/**", "../../target/**"],
     mac: {
       createDmg: process.env.ELECTROBUN_CREATE_DMG === "1",
       codesign: process.env.ELECTROBUN_AD_HOC_SIGN === "1",
@@ -58,6 +64,7 @@ export default {
     preBuild: "scripts/prepare-electrobun.ts",
     postBuild: "scripts/patch-macos-info.ts",
     postWrap: "scripts/patch-macos-info.ts",
+    postPackage: "scripts/sign-macos-package.ts",
   },
   release: {
     generatePatch: false,

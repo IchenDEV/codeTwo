@@ -378,9 +378,34 @@ impl Context {
             self.command_realm.clone(),
             name.into(),
             description.map(str::to_string),
-            Arc::new(move |args| {
+            Arc::new(move |_realm, args| {
                 let handler = handler.clone();
                 Box::pin(async move { handler(args).await })
+            }),
+        )
+    }
+
+    /// Contribute a command whose handler must authorize or route against the caller's command
+    /// realm. Most commands should use [`Context::command`]; this form is for narrow dispatchers
+    /// such as a manifest UI action that must invoke the owning global or project plugin instance.
+    pub fn command_with_realm<F, Fut>(
+        &self,
+        name: impl Into<String>,
+        handler: F,
+    ) -> Result<(), KernelError>
+    where
+        F: Fn(CommandRealm, Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
+    {
+        let handler = Arc::new(handler);
+        self.runtime.register_command(
+            self.scope,
+            self.command_realm.clone(),
+            name.into(),
+            None,
+            Arc::new(move |realm, args| {
+                let handler = handler.clone();
+                Box::pin(async move { handler(realm, args).await })
             }),
         )
     }
@@ -405,10 +430,12 @@ impl Context {
             .runtime
             .command_handler(&self.command_realm, name)?
             .ok_or_else(|| KernelError::UnknownCommand(name.to_string()))?;
-        handler(args).await.map_err(|error| KernelError::Command {
-            name: name.to_string(),
-            message: error.0,
-        })
+        handler(self.command_realm.clone(), args)
+            .await
+            .map_err(|error| KernelError::Command {
+                name: name.to_string(),
+                message: error.0,
+            })
     }
 
     /// Invoke a command and deserialize the result.

@@ -41,6 +41,7 @@ async fn a_silent_provider_still_gets_a_model_list() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("desktop-request".into()),
+            model: Some("grok-code-fast-1".into()),
             initial_policy: None,
         })
         .await
@@ -69,6 +70,6 @@ async fn a_silent_provider_still_gets_a_model_list() {
         .map(|m| m.id)
         .collect();
     assert_eq!(ids, expected);
-    // Nothing has been chosen yet, and the CLI's own default isn't ours to guess.
-    assert_eq!(current, "");
+    // A desktop choice made before the session exists remains authoritative until ACP starts.
+    assert_eq!(current, "grok-code-fast-1");
 }

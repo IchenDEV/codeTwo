@@ -29,12 +29,14 @@ pub mod codex_runtime;
 pub mod context;
 pub mod cost;
 pub mod delegate;
+pub mod device_sync;
 pub mod elicitation;
 pub mod engine;
 pub mod error;
 pub mod event;
 pub mod git;
 pub mod github_skills;
+pub mod handoff;
 pub mod harness;
 pub mod host_tools;
 pub mod issues;
@@ -48,9 +50,10 @@ pub mod plugin;
 pub mod plugin_marketplace;
 pub mod project;
 pub mod provider;
+pub mod provider_lifecycle;
 pub mod pty;
-pub mod rules;
 pub mod risk_v2;
+pub mod rules;
 pub mod scene;
 pub mod scene_artifact;
 pub mod scene_runtime;
@@ -75,8 +78,7 @@ pub use activity::{ActivityTracker, TurnLease};
 pub use agent_skill_v2::{AgentSkillContribution, AgentSkillResolver, ResolvedAgentSkill};
 pub use artifact::{ArtifactRef, ArtifactStore, ToolOutput, ToolOutputNormalizer};
 pub use automation::{
-    next_automation_run_after, Automation, AutomationInput, AutomationRun,
-    AutomationRunStatus,
+    next_automation_run_after, Automation, AutomationInput, AutomationRun, AutomationRunStatus,
 };
 pub use browser::Annotation;
 pub use canvas::{
@@ -101,6 +103,7 @@ pub use engine::{
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};
 pub use git::{Checkpoint, GitFile, GitStatus};
+pub use handoff::{PortableTaskHandoff, TaskHandoffManager, TaskHandoffResult};
 pub use host_tools::{
     BrowserUseBackendOption, BrowserUseSettings, ComputerUseBackendOption, ComputerUseSettings,
     HostToolDiscovery,
@@ -129,9 +132,7 @@ pub use provider::{
     ProviderCapability, ProviderCapabilityId, ProviderId, ProviderToolset,
 };
 pub use pty::PtySession;
-pub use risk_v2::{
-    effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision,
-};
+pub use risk_v2::{effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision};
 pub use scene::{
     apply_execution, is_artifact_id, is_slug, memory_preset_policy, outgoing_edges, plan_apply,
     policy_session_mode, prompt_preamble, session_mode_policy, validate_pipeline, validate_scene,
@@ -154,9 +155,10 @@ pub use scene_v2::{
     SCENE_V2_SCHEMA_ID,
 };
 pub use session::{
-    MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role, RunFailureReason, Session,
-    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
-    TranscriptEntry, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS, MAX_TRANSCRIPT_TURNS,
+    HandoffState, MemoryAccess, Message, Part, PendingInput, PendingInputKind, Role,
+    RunFailureReason, Session, SessionActivity, SessionId, SessionRunState, SessionTitleOrigin,
+    TranscriptCursor, TranscriptEntry, TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+    MAX_TRANSCRIPT_TURNS,
 };
 pub use skill::{
     canonical_doc_text, compile, compile_full, compile_with_canvas, CompiledCanvas, CompiledPrompt,
@@ -174,13 +176,14 @@ pub use task::{
     OrchestrationEvent, OrchestrationEventKind, ProviderCacheMetrics, ProviderConfiguration,
     ResultContract, ResultContractRefinement, RunSnapshot, SceneOrigin, SceneRef,
     StructuralPromptReuse, Task, TaskArtifactStatus, TaskBudget, TaskBudgetState, TaskCacheReceipt,
-    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus, TaskUsageObservation,
-    WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId, WorkItemStatus,
+    TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
+    TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
+    WorkItemId, WorkItemStatus,
 };
 pub use task_capsule::{
-    compile_task_capsule, session_compatibility_key, CapabilityManifestEntry,
-    CompiledTaskCapsule, SessionCompatibilityKey, StablePromptLayer, StablePromptLayerKind,
-    TaskCapsuleContext, TaskCapsuleError,
+    compile_task_capsule, session_compatibility_key, CapabilityManifestEntry, CompiledTaskCapsule,
+    SessionCompatibilityKey, StablePromptLayer, StablePromptLayerKind, TaskCapsuleContext,
+    TaskCapsuleError,
 };
 pub use task_store::TaskRecord;
 pub use term::{Scope, TerminalConfig, TerminalHandle, TerminalOutput};

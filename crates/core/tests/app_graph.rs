@@ -71,6 +71,7 @@ async fn the_default_config_boots_every_builtin() {
         "skills",
         "scenes",
         "engine",
+        "handoff",
     ] {
         assert!(
             services.contains(&expected.to_string()),
@@ -94,6 +95,7 @@ async fn plugins_contribute_the_app_surface() {
         "document.compile",
         "engine.answer_elicitation",
         "git.status",
+        "handoff.transfer_pairing",
         "issues.delegations",
         "market.catalog",
         "memory.list",
@@ -138,7 +140,7 @@ async fn plugins_contribute_the_app_surface() {
     let record = app
         .call(
             "memory.add",
-            json!({ "project_path": "/tmp/demo", "category": "note", "content": "remember this" }),
+            json!({ "project_path": "/tmp/demo", "category": "fact", "content": "remember this" }),
         )
         .await
         .expect("memory.add");

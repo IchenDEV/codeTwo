@@ -16,7 +16,8 @@ use crate::plugin;
 use crate::plugin::{InstalledPlugin, PluginCounts, PluginScaffold};
 use crate::plugin_marketplace::{self, MarketplacePluginSource};
 use codetwo_kernel::{
-    async_trait, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
+    async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult,
+    PluginScopeSupport, WeakContext,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json as jval, Value};
@@ -165,6 +166,87 @@ impl Plugin for HubPlugin {
                         .map(PluginInfo::from)
                         .collect::<Vec<_>>(),
                 )
+            }
+        })?;
+
+        #[derive(Deserialize)]
+        struct InvokeUiArgs {
+            plugin_id: String,
+            contribution_id: String,
+            #[serde(default)]
+            context: Value,
+        }
+        let invoking = hub.clone();
+        let invoke_context = ctx.weak();
+        ctx.command_with_realm("plugins.invoke_ui", move |caller_realm, args| {
+            let hub = invoking.clone();
+            let context = invoke_context.clone();
+            async move {
+                let args: InvokeUiArgs = take_args(args)?;
+                let plugin = {
+                    let _inventory = hub.inventory.lock().await;
+                    hub.installed()
+                        .into_iter()
+                        .find(|plugin| plugin.id == args.plugin_id)
+                }
+                .ok_or_else(|| PluginError::new(format!("unknown plugin `{}`", args.plugin_id)))?;
+                if !plugin.enabled || !plugin.trusted {
+                    return Err(PluginError::new(format!(
+                        "plugin `{}` is not enabled and trusted",
+                        plugin.id
+                    )));
+                }
+                let runtime = plugin.runtime.as_ref().ok_or_else(|| {
+                    PluginError::new(format!("plugin `{}` has no process runtime", plugin.id))
+                })?;
+                let contribution = plugin
+                    .ui_contributions
+                    .iter()
+                    .find(|contribution| contribution.id == args.contribution_id)
+                    .ok_or_else(|| {
+                        PluginError::new(format!(
+                            "unknown UI contribution `{}` for plugin `{}`",
+                            args.contribution_id, plugin.id
+                        ))
+                    })?;
+                let target_realm = match caller_realm {
+                    CommandRealm::Project(project)
+                        if runtime.scope_support.contains(&PluginScopeSupport::Project) =>
+                    {
+                        CommandRealm::Project(project)
+                    }
+                    _ => CommandRealm::Global,
+                };
+                let context = context
+                    .upgrade()
+                    .ok_or_else(|| PluginError::new("plugin runtime is unavailable"))?;
+                let owner = format!("bundle:{}", plugin.id);
+                let registered = context.runtime().commands().into_iter().any(|command| {
+                    command.name == contribution.command
+                        && command.realm == target_realm
+                        && command.plugin == owner
+                });
+                if !registered {
+                    return Err(PluginError::new(format!(
+                        "UI contribution `{}` does not reference an active command owned by plugin `{}` in this scope",
+                        contribution.id, plugin.id
+                    )));
+                }
+                let activation_context = match args.context {
+                    Value::Object(context) => Value::Object(context),
+                    _ => Value::Object(Default::default()),
+                };
+                context
+                    .with_command_realm(target_realm)
+                    .call(
+                        &contribution.command,
+                        jval!({
+                            "context": activation_context,
+                            "input": contribution.input,
+                        }),
+                    )
+                    .await
+                    .map_err(PluginError::new)
             }
         })?;
 

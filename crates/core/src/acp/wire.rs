@@ -32,6 +32,21 @@ pub struct InitializeResponse {
     pub agent_capabilities: Value,
     #[serde(rename = "authMethods", default)]
     pub auth_methods: Value,
+    /// Provider-owned optional extensions such as native steering and long-running goals.
+    #[serde(rename = "_meta", default)]
+    pub meta: Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalCapabilityInfo {
+    pub control_method: String,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InteractionCapabilities {
+    pub steering: bool,
+    pub goal: Option<GoalCapabilityInfo>,
 }
 
 /// The agent capabilities we act on, lifted out of the raw `agentCapabilities` object. Everything
@@ -66,6 +81,29 @@ impl InitializeResponse {
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         }
+    }
+
+    pub fn interaction_capabilities(&self) -> InteractionCapabilities {
+        let steering = self
+            .meta
+            .pointer("/steering/supported")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let goal = self.meta.get("goal").and_then(|goal| {
+            let control_method = goal.get("controlMethod")?.as_str()?.to_string();
+            let actions = goal
+                .get("actions")?
+                .as_array()?
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>();
+            (!control_method.is_empty() && !actions.is_empty()).then_some(GoalCapabilityInfo {
+                control_method,
+                actions,
+            })
+        });
+        InteractionCapabilities { steering, goal }
     }
 }
 
@@ -330,6 +368,13 @@ pub enum SessionUpdate {
         #[serde(rename = "configOptions", default)]
         config_options: Vec<SessionConfigOption>,
     },
+    /// Provider-owned session metadata. Codex uses `_meta.goal` for live goal snapshots and
+    /// `_meta.codex.threadStatus.type` to delimit turns started outside `session/prompt` (for
+    /// example a goal continuation).
+    SessionInfoUpdate {
+        #[serde(default, rename = "_meta")]
+        meta: Value,
+    },
     /// Authoritative provider context usage/capacity for the active session. `cost` is an
     /// adapter-specific optional payload; retain it as an opaque value so newer providers remain
     /// parse-compatible without making cost part of C2's context-window contract.
@@ -546,6 +591,26 @@ mod tests {
                 assert_eq!(used, 53_000);
                 assert_eq!(size, 200_000);
                 assert_eq!(cost, Some(json!({"input": 0.01})));
+            }
+            other => panic!("unexpected update: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn session_info_update_retains_provider_metadata() {
+        let update: SessionUpdate = serde_json::from_value(json!({
+            "sessionUpdate": "session_info_update",
+            "_meta": {
+                "goal": {"objective": "Ship it", "status": "active"},
+                "codex": {"threadStatus": {"type": "active"}}
+            }
+        }))
+        .expect("session_info_update is a supported ACP session update");
+
+        match update {
+            SessionUpdate::SessionInfoUpdate { meta } => {
+                assert_eq!(meta["goal"]["objective"], "Ship it");
+                assert_eq!(meta["codex"]["threadStatus"]["type"], "active");
             }
             other => panic!("unexpected update: {other:?}"),
         }

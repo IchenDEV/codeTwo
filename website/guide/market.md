@@ -6,9 +6,9 @@ package button at the foot of the session rail, the [command palette](/guide/key
 `Mod+Shift+M`.
 
 > [!IMPORTANT]
-> The Rust core implements the complete bundle manager. The Pure Bun Electrobun desktop imports and
-> runs C2 process/LSP bundles, including their declarative UI actions. It fails closed for data-only
-> bundle import, marketplace installation, and scaffold application until those adapters exist.
+> Desktop, TUI, and server use the same Rust bundle manager and live process runtime. The desktop
+> supports installation, trust, enablement, project realms, UI actions, language servers, and live
+> lifecycle changes through its bundled Rust host.
 
 ## Installing a GitHub plugin
 

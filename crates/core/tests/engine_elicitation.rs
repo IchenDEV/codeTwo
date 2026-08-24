@@ -108,6 +108,7 @@ async fn start(store: Arc<Store>) -> (Engine, tokio::sync::mpsc::UnboundedReceiv
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("create-elicitation-test".into()),
+            model: None,
             initial_policy: None,
         })
         .await

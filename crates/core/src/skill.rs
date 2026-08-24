@@ -12,6 +12,7 @@
 //! the markdown prompt to send in ACP `session/prompt`, plus the MCP servers and agent-skills to
 //! configure on `session/new`. Keeping the compiler in the Rust core means the TUI reuses it verbatim.
 
+use base64::Engine as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 
@@ -335,14 +336,18 @@ pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
             // A `'` only opens a quote at a word boundary — apostrophes stay prose.
             let opens = b != b'\'' || i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
             let close = if opens {
-                (i + 1..bytes.len()).take_while(|&j| bytes[j] != b'\n').find(|&j| bytes[j] == b)
+                (i + 1..bytes.len())
+                    .take_while(|&j| bytes[j] != b'\n')
+                    .find(|&j| bytes[j] == b)
             } else {
                 None
             };
             if let Some(end) = close {
                 let inner = &text[i + 1..end];
                 let closes = b != b'\''
-                    || bytes.get(end + 1).is_none_or(|c| !c.is_ascii_alphanumeric());
+                    || bytes
+                        .get(end + 1)
+                        .is_none_or(|c| !c.is_ascii_alphanumeric());
                 if closes && !inner.trim().is_empty() && inner.len() <= MAX_VALUE_LEN {
                     if let Some(token) = token_for(inner, &mut slots) {
                         // Keep the delimiters: the template reads as the prompt did.
@@ -365,9 +370,7 @@ pub fn propose_macro_slots(text: &str) -> (String, Vec<SlotDef>) {
         }
         // Bare token; stop at quote/code delimiters so `path:"a/b.rs"` still finds its quote.
         let start = i;
-        while i < bytes.len()
-            && !bytes[i].is_ascii_whitespace()
-            && !matches!(bytes[i], b'`' | b'"')
+        while i < bytes.len() && !bytes[i].is_ascii_whitespace() && !matches!(bytes[i], b'`' | b'"')
         {
             i += 1;
         }
@@ -541,6 +544,13 @@ pub enum DocBlock {
     Image {
         path: String,
     },
+    /// A private desktop capture addressed only by its opaque app-owned UUID. The image and
+    /// accessibility snapshot are resolved from the application data directory at compile time.
+    Appshot {
+        id: String,
+        #[serde(default)]
+        title: Option<String>,
+    },
     /// A frozen app-owned Canvas revision.  Only the immutable reference and explicit image
     /// policy cross the document boundary; scene JSON and pixels remain in the core store.
     Canvas {
@@ -587,6 +597,7 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
             DocBlock::Skill { skill_id, .. } => format!("[skill:{skill_id}]"),
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
+            DocBlock::Appshot { id, .. } => format!("[appshot:{id}]"),
             DocBlock::Canvas {
                 id,
                 frozen_revision,
@@ -619,6 +630,9 @@ pub struct CompiledPrompt {
     pub files: Vec<String>,
     /// Attached image paths, sent as ACP image content blocks alongside the prompt.
     pub images: Vec<String>,
+    /// App-private images already resolved to bytes. These never masquerade as workspace paths.
+    #[serde(default)]
+    pub appshots: Vec<CompiledAppshot>,
     /// Resolved immutable Canvas payloads.  This is intentionally separate from workspace image
     /// paths so a provider cannot mistake an app-private asset for a workspace file.
     #[serde(default)]
@@ -639,6 +653,18 @@ pub struct CompiledCanvas {
     pub payload: CanvasPromptPayload,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CompiledAppshot {
+    pub id: String,
+    pub data: String,
+    pub mime_type: String,
+}
+
+struct ResolvedAppshot {
+    image: CompiledAppshot,
+    context: String,
+}
+
 /// Lower a document into a [`CompiledPrompt`]. Provider-agnostic: `AgentSkill` blocks contribute a
 /// reference (and inline fallback text when present) so a provider without native skills still gets
 /// the intent as prose.
@@ -656,8 +682,8 @@ pub fn compile_with_context(
     compile_with_sessions(doc, library, cwd, None)
 }
 
-/// Compile with an explicit Canvas resolver, feature gate, and provider image capability.  A
-/// A known-unsupported provider fails closed; unknown capability still attempts every ordered
+/// Compile with an explicit Canvas resolver, feature gate, and provider image capability. A
+/// known-unsupported provider fails closed; unknown capability still attempts every ordered
 /// image and surfaces a provider failure. Callers must choose `StructureOnly` when a summary-only
 /// send is intended.
 pub fn compile_with_canvas(
@@ -669,7 +695,51 @@ pub fn compile_with_canvas(
     capability: CanvasProviderImageCapability,
     resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
 ) -> Result<CompiledPrompt, crate::canvas::CanvasError> {
-    let mut out = compile_with_sessions(doc, library, cwd, resolve_session);
+    append_canvases(
+        compile_with_sessions(doc, library, cwd, resolve_session),
+        doc,
+        gate,
+        capability,
+        resolve_canvas,
+    )
+}
+
+/// Desktop compilation path for private Appshots. Only this explicit application-data root can
+/// resolve opaque capture IDs; normal workspace compilation leaves them unresolved.
+pub fn compile_with_appshots(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    data_dir: &std::path::Path,
+) -> Result<CompiledPrompt, String> {
+    let resolver = |id: &str| load_appshot(data_dir, id);
+    compile_full_resolving(doc, library, cwd, resolve_session, None, Some(&resolver))
+}
+
+/// Desktop compilation path for documents that contain both Canvas and private Appshot blocks.
+pub fn compile_with_canvas_and_appshots(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    data_dir: &std::path::Path,
+    gate: CanvasFeatureGate,
+    capability: CanvasProviderImageCapability,
+    resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
+) -> Result<CompiledPrompt, String> {
+    let compiled = compile_with_appshots(doc, library, cwd, resolve_session, data_dir)?;
+    append_canvases(compiled, doc, gate, capability, resolve_canvas)
+        .map_err(|error| error.to_string())
+}
+
+fn append_canvases(
+    mut out: CompiledPrompt,
+    doc: &[DocBlock],
+    gate: CanvasFeatureGate,
+    capability: CanvasProviderImageCapability,
+    resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
+) -> Result<CompiledPrompt, crate::canvas::CanvasError> {
     for block in doc {
         let DocBlock::Canvas {
             id,
@@ -723,6 +793,18 @@ pub fn compile_full(
     resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
     resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
 ) -> CompiledPrompt {
+    compile_full_resolving(doc, library, cwd, resolve_session, resolve_artifact, None)
+        .expect("document compilation without private resolvers cannot fail")
+}
+
+fn compile_full_resolving(
+    doc: &[DocBlock],
+    library: &SkillLibrary,
+    cwd: Option<&std::path::Path>,
+    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
+    resolve_appshot: Option<&dyn Fn(&str) -> Result<ResolvedAppshot, String>>,
+) -> Result<CompiledPrompt, String> {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
 
@@ -751,6 +833,14 @@ pub fn compile_full(
                     _ => out.unresolved.push(format!("image:{path}")),
                 }
             }
+            DocBlock::Appshot { id, .. } => match resolve_appshot {
+                Some(resolve) => {
+                    let resolved = resolve(id)?;
+                    parts.push(resolved.context);
+                    out.appshots.push(resolved.image);
+                }
+                None => out.unresolved.push(format!("appshot:{id}")),
+            },
             DocBlock::Canvas {
                 id,
                 frozen_revision,
@@ -874,7 +964,123 @@ pub fn compile_full(
     }
 
     out.prompt = parts.join("\n\n");
-    out
+    Ok(out)
+}
+
+const MAX_APPSHOT_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
+const MAX_APPSHOT_METADATA_BYTES: u64 = 1024 * 1024;
+
+fn load_appshot(data_dir: &std::path::Path, id: &str) -> Result<ResolvedAppshot, String> {
+    validate_appshot_id(id)?;
+    let requested_root = data_dir.join("appshots");
+    let root_metadata = std::fs::symlink_metadata(&requested_root)
+        .map_err(|_| "appshot capture is unavailable".to_string())?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err("appshot capture directory is invalid".into());
+    }
+    let root = requested_root
+        .canonicalize()
+        .map_err(|_| "appshot capture directory is invalid".to_string())?;
+    let image_path = private_appshot_file(&root, &format!("{id}.png"), "image")?;
+    let metadata_path = private_appshot_file(&root, &format!("{id}.json"), "metadata")?;
+
+    let image_metadata = std::fs::metadata(&image_path).map_err(|error| error.to_string())?;
+    if image_metadata.len() == 0 || image_metadata.len() > MAX_APPSHOT_IMAGE_BYTES {
+        return Err("appshot image is too large or empty".into());
+    }
+    let image = std::fs::read(&image_path).map_err(|error| error.to_string())?;
+    if !image.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("appshot image is not a PNG".into());
+    }
+
+    let metadata_metadata = std::fs::metadata(&metadata_path).map_err(|error| error.to_string())?;
+    if metadata_metadata.len() == 0 || metadata_metadata.len() > MAX_APPSHOT_METADATA_BYTES {
+        return Err("appshot metadata is too large or empty".into());
+    }
+    let metadata_bytes = std::fs::read(&metadata_path).map_err(|error| error.to_string())?;
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
+        .map_err(|_| "appshot metadata is invalid".to_string())?;
+    if metadata.get("id").and_then(serde_json::Value::as_str) != Some(id) {
+        return Err("appshot metadata does not match the capture".into());
+    }
+
+    let one_line = |key: &str, fallback: &str| {
+        metadata
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(fallback)
+            .replace(['\r', '\n'], " ")
+    };
+    let app_name = one_line("app_name", "Application");
+    let title = one_line("window_title", "Window");
+    let captured_at = one_line("captured_at", "unknown time");
+    let accessible_text = metadata
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let accessibility = if accessible_text.is_empty() {
+        "No accessible window text was available; use the attached image.".to_string()
+    } else {
+        format!(
+            "Accessible window text (may include content outside the visible scroll area):\n\n{accessible_text}"
+        )
+    };
+
+    Ok(ResolvedAppshot {
+        image: CompiledAppshot {
+            id: id.to_string(),
+            data: base64::engine::general_purpose::STANDARD.encode(image),
+            mime_type: "image/png".into(),
+        },
+        context: format!(
+            "**Appshot — {app_name}: {title}**\n\nCaptured: {captured_at}\n\n{accessibility}"
+        ),
+    })
+}
+
+fn validate_appshot_id(id: &str) -> Result<(), String> {
+    let valid_shape = id.len() == 36
+        && [8, 13, 18, 23]
+            .into_iter()
+            .all(|index| id.as_bytes().get(index) == Some(&b'-'));
+    let parsed = valid_shape
+        .then(|| uuid::Uuid::parse_str(id).ok())
+        .flatten()
+        .filter(|uuid| uuid.hyphenated().to_string().eq_ignore_ascii_case(id));
+    let version = id.as_bytes().get(14).copied();
+    let variant = id
+        .as_bytes()
+        .get(19)
+        .copied()
+        .map(|value| value.to_ascii_lowercase());
+    if parsed.is_none()
+        || !matches!(version, Some(b'1'..=b'8'))
+        || !matches!(variant, Some(b'8' | b'9' | b'a' | b'b'))
+    {
+        return Err("appshot id is invalid".into());
+    }
+    Ok(())
+}
+
+fn private_appshot_file(
+    root: &std::path::Path,
+    name: &str,
+    label: &str,
+) -> Result<std::path::PathBuf, String> {
+    let requested = root.join(name);
+    let requested_metadata = std::fs::symlink_metadata(&requested)
+        .map_err(|_| format!("appshot {label} is unavailable"))?;
+    if requested_metadata.file_type().is_symlink() || !requested_metadata.is_file() {
+        return Err(format!("appshot {label} path is invalid"));
+    }
+    let canonical = requested
+        .canonicalize()
+        .map_err(|_| format!("appshot {label} path is invalid"))?;
+    if canonical.parent() != Some(root) {
+        return Err(format!("appshot {label} path is invalid"));
+    }
+    Ok(canonical)
 }
 
 /// A few built-in skills so the `/` picker has resolvable content on first run. Shared by the GUI
@@ -1163,7 +1369,10 @@ mod tests {
         assert!(compiled.prompt.contains("- [ ] step one"));
         assert!(compiled.prompt.contains("Execute this plan."));
         assert!(compiled.unresolved.is_empty());
-        assert_eq!(canonical_doc_text(&doc), "[artifact:7]\n\nExecute this plan.");
+        assert_eq!(
+            canonical_doc_text(&doc),
+            "[artifact:7]\n\nExecute this plan."
+        );
     }
 
     #[test]
@@ -1520,6 +1729,127 @@ mod tests {
         assert_eq!(scope.kind, SlotKind::Text);
     }
 
+    fn write_appshot_fixture(data_dir: &std::path::Path, id: &str) -> Vec<u8> {
+        let captures = data_dir.join("appshots");
+        std::fs::create_dir_all(&captures).unwrap();
+        let image = b"\x89PNG\r\n\x1a\nprivate-pixels".to_vec();
+        std::fs::write(captures.join(format!("{id}.png")), &image).unwrap();
+        std::fs::write(
+            captures.join(format!("{id}.json")),
+            serde_json::to_vec(&serde_json::json!({
+                "id": id,
+                "app_name": "Notes",
+                "window_title": "Private draft",
+                "captured_at": "2026-08-24T10:00:00Z",
+                "text": "Visible and accessible content"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        image
+    }
+
+    #[test]
+    fn appshots_resolve_private_pixels_and_accessibility_text_in_document_order() {
+        use base64::Engine as _;
+
+        let data = tempfile::tempdir().unwrap();
+        let id = "550e8400-e29b-41d4-a716-446655440000";
+        let image = write_appshot_fixture(data.path(), id);
+        let doc = vec![
+            DocBlock::Text {
+                text: "Before".into(),
+            },
+            DocBlock::Appshot {
+                id: id.into(),
+                title: Some("Renderer hint is not trusted metadata".into()),
+            },
+            DocBlock::Text {
+                text: "After".into(),
+            },
+        ];
+
+        let compiled =
+            compile_with_appshots(&doc, &sample_library(), None, None, data.path()).unwrap();
+        assert!(compiled.unresolved.is_empty());
+        assert_eq!(compiled.appshots.len(), 1);
+        assert_eq!(compiled.appshots[0].id, id);
+        assert_eq!(compiled.appshots[0].mime_type, "image/png");
+        assert_eq!(
+            compiled.appshots[0].data,
+            base64::engine::general_purpose::STANDARD.encode(image)
+        );
+        let before = compiled.prompt.find("Before").unwrap();
+        let appshot = compiled
+            .prompt
+            .find("**Appshot — Notes: Private draft**")
+            .unwrap();
+        let after = compiled.prompt.find("After").unwrap();
+        assert!(before < appshot && appshot < after);
+        assert!(compiled.prompt.contains("Accessible window text"));
+        assert_eq!(
+            canonical_doc_text(&doc),
+            format!("Before\n\n[appshot:{id}]\n\nAfter")
+        );
+    }
+
+    #[test]
+    fn appshots_reject_invalid_ids_and_mismatched_metadata() {
+        let data = tempfile::tempdir().unwrap();
+        let invalid = vec![DocBlock::Appshot {
+            id: "../../secret".into(),
+            title: None,
+        }];
+        assert_eq!(
+            compile_with_appshots(&invalid, &sample_library(), None, None, data.path())
+                .unwrap_err(),
+            "appshot id is invalid"
+        );
+
+        let id = "550e8400-e29b-41d4-a716-446655440001";
+        write_appshot_fixture(data.path(), id);
+        std::fs::write(
+            data.path().join("appshots").join(format!("{id}.json")),
+            br#"{"id":"550e8400-e29b-41d4-a716-446655440002"}"#,
+        )
+        .unwrap();
+        let mismatched = vec![DocBlock::Appshot {
+            id: id.into(),
+            title: None,
+        }];
+        assert_eq!(
+            compile_with_appshots(&mismatched, &sample_library(), None, None, data.path())
+                .unwrap_err(),
+            "appshot metadata does not match the capture"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn appshots_reject_symlinked_private_files() {
+        use std::os::unix::fs::symlink;
+
+        let data = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let id = "550e8400-e29b-41d4-a716-446655440003";
+        write_appshot_fixture(data.path(), id);
+        let image = data.path().join("appshots").join(format!("{id}.png"));
+        std::fs::remove_file(&image).unwrap();
+        let escaped = outside.path().join("capture.png");
+        std::fs::write(&escaped, b"\x89PNG\r\n\x1a\nprivate-pixels").unwrap();
+        symlink(&escaped, &image).unwrap();
+
+        let doc = vec![DocBlock::Appshot {
+            id: id.into(),
+            title: None,
+        }];
+        assert!(
+            compile_with_appshots(&doc, &sample_library(), None, None, data.path())
+                .unwrap_err()
+                .contains("image path is invalid")
+        );
+    }
+
     #[test]
     fn mcp_to_acp_json_shape() {
         let server = McpServer {
@@ -1598,15 +1928,22 @@ mod tests {
     fn propose_macro_slots_dedupes_and_caps_at_six() {
         let (template, slots) = propose_macro_slots(r#""a" "b" "c" "d" "e" "f" "g" "a""#);
         assert_eq!(slots.len(), 6, "seventh distinct value stays verbatim");
-        assert!(template.ends_with(r#""g" "{{slot-1}}""#), "template was {template}");
+        assert!(
+            template.ends_with(r#""g" "{{slot-1}}""#),
+            "template was {template}"
+        );
         assert_eq!(template.matches("{{slot-1}}").count(), 2);
     }
 
     #[test]
     fn propose_macro_slots_leaves_prose_alone() {
-        let text = "Don't touch anything here; it's plain prose with a trailing URL https://a.b/c.html";
+        let text =
+            "Don't touch anything here; it's plain prose with a trailing URL https://a.b/c.html";
         let (template, slots) = propose_macro_slots(text);
         assert_eq!(template, text);
-        assert!(slots.is_empty(), "apostrophes and URLs are not slot candidates");
+        assert!(
+            slots.is_empty(),
+            "apostrophes and URLs are not slot candidates"
+        );
     }
 }

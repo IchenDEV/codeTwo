@@ -20,15 +20,15 @@ describe("Appshots desktop contract", () => {
 
   test("keeps captures in private app data and resolves only opaque UUIDs at prompt time", () => {
     const manager = source("src/electrobun/appshots.ts");
-    const host = source("src/electrobun/host/index.ts");
+    const compiler = source("../../crates/core/src/skill.rs");
 
     expect(manager).toContain('this.capturesDir = join(dataDir, "appshots")');
     expect(manager).not.toContain('join(cwd, "appshots")');
     expect(manager).toContain("chmodSync(imagePath, 0o600)");
     expect(manager).toContain("chmodSync(this.capturesDir, 0o700)");
-    expect(host).toContain('const captureDirectory = join(this.dataDir, "appshots")');
-    expect(host).toContain('throw new Error("appshot id is invalid")');
-    expect(host).toContain('Accessible window text (may include content outside the visible scroll area)');
+    expect(compiler).toContain('data_dir.join("appshots")');
+    expect(compiler).toContain('"appshot id is invalid"');
+    expect(compiler).toContain('Accessible window text (may include content outside the visible scroll area)');
   });
 
   test("uses native screen capture, Accessibility text, and a real global hotkey", () => {

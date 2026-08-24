@@ -984,6 +984,7 @@ for line in sys.stdin:
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("canvas-new".into()),
+            model: None,
             initial_policy: None,
         })
         .await

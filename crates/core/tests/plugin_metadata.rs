@@ -53,7 +53,7 @@ fn builtins_have_complete_catalog_metadata() {
         ),
         (
             PluginCategory::Integration,
-            ["extensions", "market", "skills"].as_slice(),
+            ["extensions", "handoff", "market", "skills"].as_slice(),
         ),
     ];
     let project_scoped = BTreeSet::from([

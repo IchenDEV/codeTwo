@@ -5,19 +5,33 @@ import { resolve } from "node:path";
 const desktop = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(desktop, path), "utf8");
 
-describe("Electrobun remote contract", () => {
-  test("adds C2 sync to the production Bun remote without replacing T3 or browser control", () => {
+describe("Rust Plugin Kernel remote contract", () => {
+  test("keeps C2 sync, T3, and browser pairing explicit end to end", () => {
     const bridge = read("src/bridge.ts");
-    const host = read("src/electrobun/host/index.ts");
-    const remoteHost = read("src/electrobun/host/remote.ts");
+    const remotePlugin = read("src-host/src/remote.rs");
+    const deviceSyncPlugin = read("src-host/src/device_sync.rs");
+    const server = read("../../crates/server/src/lib.rs");
 
     expect(bridge).toContain('export type RemoteClientProtocol = "c2" | "t3" | "legacy"');
     expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "c2"');
     expect(bridge).toContain("client_protocol: clientProtocol,");
-    expect(host).toContain('this.register("remote.start", (args) => this.remote.start(');
-    expect(host).toContain('this.register("remote.pair_device", async (args) => {');
-    expect(remoteHost).toContain('protocols: this.deviceSync ? ["c2", "t3", "legacy"] : ["t3", "legacy"]');
-    expect(remoteHost).toContain('url.pathname === `${DEVICE_SYNC_API_ROOT}/snapshot`');
+    expect(remotePlugin).toContain('args.client_protocol.as_deref().unwrap_or("c2")');
+    expect(remotePlugin).toContain('"c2" if service.device_sync.is_some() => auth.issue_c2_pairing_token(ttl)');
+    expect(remotePlugin).toContain('"t3" => auth.issue_t3_pairing_token(ttl)');
+    expect(remotePlugin).toContain('"legacy" => auth.issue_pairing_token(ttl)');
+    expect(remotePlugin).toContain('ctx.command("remote.pair_device"');
+    expect(deviceSyncPlugin).toContain('ctx.command("device_sync.sync_now"');
+    expect(server).toContain('"/api/device-sync/v1/snapshot"');
+  });
+
+  test("routes task transfer through the Rust handoff plugin and native agent", () => {
+    const bridge = read("src/bridge.ts");
+    const handoff = read("../../crates/core/src/app/plugins/handoff.rs");
+    const agent = read("../../crates/server/src/bin/codetwo-agent.rs");
+
+    expect(bridge).toContain('call<TaskHandoffResult>("handoff.transfer_pairing"');
+    expect(handoff).toContain('ctx.command("handoff.transfer_pairing"');
+    expect(agent).toContain("bind_and_serve_with_canvas(");
   });
 
   test("presents every protocol supported by the live remote server", () => {
@@ -32,10 +46,10 @@ describe("Electrobun remote contract", () => {
 
   test("reuses the remote server's physical LAN and Tailscale endpoints for C2 sync", () => {
     const remote = read("src/remote/Remote.tsx");
-    const remoteHost = read("src/electrobun/host/remote.ts");
+    const server = read("../../crates/server/src/lib.rs");
 
-    expect(remoteHost).toContain('id: endpointId("lan", name, address)');
-    expect(remoteHost).toContain('id: endpointId("tailnet", name, address)');
+    expect(server).toContain('id: format!("lan-{interface}-{}"');
+    expect(server).toContain('id: format!("tailnet-{interface}-{}"');
     expect(remote).toContain('endpoint.id.startsWith("tailnet-")');
     expect(remote).toContain("Verify this candidate in Tailscale");
   });

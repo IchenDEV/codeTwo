@@ -104,8 +104,8 @@ The `runtime` object has these fields:
 | `scopeSupport` | no | `user` by default. `project` is honored only when explicitly declared. |
 
 The `ui` array contains action descriptors. Every entry requires a bundle-local `id`, one supported
-`slot`, a non-empty `label`, and a namespaced `command`. `description`, JSON `input`, and integer
-`order` are optional.
+`slot`, a non-empty `label` of at most 80 characters, and a namespaced `command`. `description` (at
+most 300 characters), JSON `input`, and integer `order` from -100 through 100 are optional.
 
 | Slot | Host placement |
 | --- | --- |
@@ -245,6 +245,7 @@ Plugin boundaries for current features are fixed as follows:
 | Usage and provider quota | `usage` + provider adapter | `unsupported` and `query_failed` are first-class states, never zero usage |
 | Voice | host `voice` adapter | Native permission, entitlement, and transcription remain host-owned |
 | Remote/Tailscale | host `remote` adapter | No plugin enablement may implicitly expose a listener or hosted relay |
+| Device synchronization | host `device-sync` adapter + Core document | Transport credentials stay host-owned; snapshot validation, merge, and deletion semantics stay in Core |
 | Canvas | `canvas` + `document` | Component enablement does not bypass the production safety feature gate |
 | Browser | host `browser` adapter | Manual sandboxed tabs and authenticated agent automation are different capabilities |
 
@@ -253,32 +254,23 @@ Plugin boundaries for current features are fixed as follows:
 The Rust core is the reference C2 1.0 runtime. The TUI and server may intentionally omit UI or
 host-native plugins through configuration while retaining the same graph and command semantics.
 
-The current Pure Bun Electrobun desktop implements the renderer's typed command/event contract for
-the primary local path, including projects, sessions/ACP, constrained workspace I/O, Git, PTY, LSP,
-memory CRUD, automation CRUD, GitHub issue reads, and structured elicitation. Its in-process
-capabilities are registered as owned runtime modules: only `core` and `kernel` are essential, while
-workspace, Git, terminal, LSP, browser, provider-neutral host tools, memory, automation, scenes,
-Canvas, and the other product features use the same catalog and durable user/project policy as
-external runtimes. Disabling one removes its commands and services, makes dependents pending, and
-invokes the host adapter's resource cleanup where applicable.
+The Electrobun desktop packages the reference runtime as `codetwo-desktop-host`. That executable
+boots the same `CoreApp` and managed plugin graph used by the TUI and server, then adds desktop-owned
+automation, device-sync, language-server, event, and remote adapters. Electrobun owns windows,
+dialogs, updates, manual webviews, and one versioned command/event relay; it does not implement
+plugin lifecycle.
 
-The desktop also owns a Bun adapter for C2 process runtimes: current schema-3 installed records are
-reconciled at startup, C2 runtime or LSP bundles can be imported from GitHub, trust and
-enablement remain separate, commands register and disappear live, safe UI actions render in the five
-supported slots, and plugin language servers use the existing LSP client and lifecycle. User/project
-runtime policy uses the same revision-bound `plan_change -> apply_change` contract. Project-capable
-bundles receive a separate process, command realm, and BLAKE3-keyed data directory per project.
+Installed records are reconciled by the Rust manager at startup. Portable bundles can be imported,
+trust and enablement remain separate, commands register and disappear live, safe UI actions render
+in the five supported slots, and plugin language servers use the existing LSP client and lifecycle.
+User/project runtime policy uses the same revision-bound `plan_change -> apply_change` contract.
+Project-capable bundles receive a separate process, command realm, and BLAKE3-keyed data directory
+per project. UI invocation verifies the contribution, runtime realm, and owning bundle before the
+process command is called.
 
-The Pure Bun host is still not a conforming full replacement for every Rust-core contribution
-adapter. It currently fails closed for:
-
-- importing bundles without a C2 process runtime or supported stdio language server, local
-  marketplace installation, and scaffold application;
-- isolated worktree creation/discard;
-- background automation execution;
-- scenes, pipelines, and canvas persistence;
-- native voice transcription, remote server/pairing, and the authenticated agent-browser MCP;
-- provider quota queries and unsupported issue mutations.
+The desktop currently fails closed for the authenticated agent-browser MCP adapter. Its manual
+BrowserView tabs are a separate UI capability; the stable embedded webview surface does not expose
+the screenshot and evaluation primitives required for authenticated agent automation.
 
 A host MUST return an explicit unsupported state or error for an unavailable operation. Returning an
 empty success value is permitted only for a genuine empty collection. Frontends SHOULD use catalog
