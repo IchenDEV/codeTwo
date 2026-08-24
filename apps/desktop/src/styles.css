@@ -360,6 +360,13 @@
       transparent
     );
   }
+  /* The native material behind the glass always follows the *system* scheme. While the app scheme
+     disagrees with it (light app on a dark desktop or vice versa), translucency would let the
+     other scheme bleed through, so the glass panes go fully tinted until they agree again. */
+  .macos-window-glass.scheme-mismatch .glass-rail,
+  .macos-window-glass.scheme-mismatch .glass-panel {
+    --appearance-macos-panel-tint-opacity: 100%;
+  }
   .dock-panel-side:not(.dock-panel-dragging) {
     transition-property: width;
     transition-duration: var(--motion-slow);

@@ -28,6 +28,7 @@ const nativeWindowEffects = readFileSync(
   new URL("../native/window-effects/CodeTwoWindowEffects.m", import.meta.url),
   "utf8",
 );
+const themeSource = readFileSync(new URL("../src/theme.tsx", import.meta.url), "utf8");
 
 describe("macOS window chrome contract", () => {
   test("leaves the native macOS traffic lights entirely to the system", () => {
@@ -47,6 +48,13 @@ describe("macOS window chrome contract", () => {
     expect(appSource).toContain(
       'className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"',
     );
+  });
+
+  test("solidifies the glass panes while the app scheme disagrees with the system scheme", () => {
+    expect(styles).toMatch(
+      /\.macos-window-glass\.scheme-mismatch \.glass-rail[^}]*--appearance-macos-panel-tint-opacity:\s*100%/s,
+    );
+    expect(themeSource).toContain('root.classList.toggle("scheme-mismatch", scheme !== system)');
   });
 
   test("uses an AppKit material to blur content behind the transparent window", () => {
