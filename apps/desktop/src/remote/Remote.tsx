@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  pairRemoteDevice,
   remoteDevices,
   remotePairingLink,
   remoteRevokeDevice,
   remoteStatus,
   startRemote,
   stopRemote,
-  type RemoteDevice,
   type RemoteClientProtocol,
+  type RemoteDevice,
   type RemoteEndpoint,
   type RemotePairingLink,
   type RemoteStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
@@ -26,31 +28,38 @@ function defaultEndpointId(status: RemoteStatus | null): string | null {
   );
 }
 
+function supportedProtocols(status: RemoteStatus): RemoteClientProtocol[] {
+  return status.protocols?.length ? status.protocols : ["t3", "legacy"];
+}
+
+function protocolLabel(protocol: RemoteClientProtocol): string {
+  if (protocol === "c2") return "C2 device sync";
+  if (protocol === "t3") return "T3 Code mobile";
+  return "Browser remote";
+}
+
 function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   if (!endpoint) return "No pairing address is currently available.";
   if (!endpoint.qr_shareable) {
-    return "Works only in another browser on this computer. Other devices cannot reach 127.0.0.1, so no QR code is shown.";
+    return "Works only with another C2 instance on this Mac. Other devices cannot reach 127.0.0.1.";
   }
   if (endpoint.id.startsWith("tailnet-")) {
-    return "Best-effort 100.64/10 match. Verify this address in Tailscale; it works when both devices share the tailnet and its access policy allows this port.";
+    return "Verify this candidate in Tailscale. Both devices must share the tailnet and its access policy must allow this port.";
   }
-  return "Devices on the same network can open the generated link.";
+  return "Devices on the same network can use this address.";
 }
 
-/**
- * Remote control for C2's mobile and browser clients: toggle network access, mint
- * one-time pairing links and manage paired devices. A paired device drives the same
- * live engine/sessions as this app; pairing survives restarts, and revoking a device cuts it off
- * immediately.
- */
 export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
-  const [protocol, setProtocol] = useState<RemoteClientProtocol>("t3");
+  const [clientProtocol, setClientProtocol] = useState<RemoteClientProtocol>("c2");
+  const [pairingUrl, setPairingUrl] = useState("");
+  const [pairedMessage, setPairedMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [pairBusy, setPairBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const linkRequest = useRef(0);
@@ -61,69 +70,86 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
       if (current && next?.endpoints.some((endpoint) => endpoint.id === current)) return current;
       return defaultEndpointId(next);
     });
-    if (!next) setLink(null);
+    if (next) {
+      const protocols = supportedProtocols(next);
+      setClientProtocol((current) => protocols.includes(current) ? current : protocols[0] ?? "c2");
+    } else {
+      setLink(null);
+    }
   }, []);
 
   const refresh = useCallback(() => {
     remoteStatus().then(applyStatus).catch(() => {});
     remoteDevices().then(setDevices).catch(() => {});
   }, [applyStatus]);
+
   useEffect(refresh, [refresh]);
 
   const mintLink = useCallback(
-    async (endpointId: string | null) => {
+    async (endpointId: string | null, requestedProtocol = clientProtocol) => {
       const request = ++linkRequest.current;
       setLinkBusy(true);
       setErr(null);
       try {
-        const next = await remotePairingLink(endpointId ?? undefined, protocol);
+        const next = await remotePairingLink(endpointId ?? undefined, requestedProtocol);
         if (request !== linkRequest.current) return;
         setLink(next);
         if (next) setSelectedEndpointId(next.endpoint_id);
         setCopied(false);
-      } catch (e) {
-        if (request === linkRequest.current) setErr(String(e));
+      } catch (error) {
+        if (request === linkRequest.current) setErr(String(error));
       } finally {
         if (request === linkRequest.current) setLinkBusy(false);
       }
     },
-    [protocol],
+    [clientProtocol],
   );
 
   const turnOn = async () => {
     setBusy(true);
     setErr(null);
     try {
-      const st = await startRemote();
-      if (!st) {
-        setErr("Remote is only available in the desktop app.");
+      const next = await startRemote();
+      if (!next) {
+        setErr("Device connections are only available in the desktop app.");
       } else {
-        applyStatus(st);
-        await mintLink(defaultEndpointId(st));
+        applyStatus(next);
+        const protocol = supportedProtocols(next)[0] ?? "c2";
+        setClientProtocol(protocol);
+        await mintLink(defaultEndpointId(next), protocol);
       }
-    } catch (e) {
-      setErr(String(e));
+    } catch (error) {
+      setErr(String(error));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   const turnOff = async () => {
     setBusy(true);
+    setErr(null);
     linkRequest.current += 1;
     setLinkBusy(false);
     try {
       await stopRemote();
       applyStatus(null);
-      setLink(null);
-    } catch (e) {
-      setErr(String(e));
+    } catch (error) {
+      setErr(String(error));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   };
 
   const selectEndpoint = (endpointId: string) => {
     setSelectedEndpointId(endpointId);
     void mintLink(endpointId);
+  };
+
+  const selectClientProtocol = (protocol: string) => {
+    if (protocol !== "c2" && protocol !== "t3" && protocol !== "legacy") return;
+    setClientProtocol(protocol);
+    setLink(null);
+    if (status) void mintLink(selectedEndpointId, protocol);
   };
 
   const copy = async () => {
@@ -133,7 +159,28 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* clipboard unavailable — the URL is selectable */
+      // The URL remains selectable when clipboard permission is unavailable.
+    }
+  };
+
+  const pair = async () => {
+    if (!pairingUrl.trim()) return;
+    setPairBusy(true);
+    setErr(null);
+    setPairedMessage(null);
+    try {
+      const result = await pairRemoteDevice(pairingUrl);
+      setPairingUrl("");
+      setPairedMessage(result.sync.state === "ready"
+        ? `Paired with ${result.device.name}. First sync complete.`
+        : result.sync.state === "disabled"
+          ? `Paired with ${result.device.name}. Device Sync is off.`
+          : `Paired with ${result.device.name}. Sync will retry: ${result.sync.message ?? result.sync.state}.`);
+      setDevices(await remoteDevices());
+    } catch (error) {
+      setErr(String(error));
+    } finally {
+      setPairBusy(false);
     }
   };
 
@@ -149,50 +196,65 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
 
   const selectedEndpoint = status?.endpoints.find((endpoint) => endpoint.id === selectedEndpointId);
   const linkEndpoint = status?.endpoints.find((endpoint) => endpoint.id === link?.endpoint_id);
+  const protocols = status ? supportedProtocols(status) : ["c2" as const];
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Remote connections</DialogTitle>
+          <DialogTitle>Device connections</DialogTitle>
         </DialogHeader>
+
+        <div className="space-y-2 rounded-md border p-3">
+          <p className="text-ui font-medium">Pair this C2 with another device</p>
+          <p className="text-hint leading-relaxed text-muted-foreground">
+            Paste a one-time link created on the other C2 device. Conversations, projects, and saved memory sync after pairing.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={pairingUrl}
+              placeholder="http://device:4599/pair#token=…"
+              aria-label="C2 pairing link"
+              onChange={(event) => setPairingUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && pairingUrl.trim() && !pairBusy) void pair();
+              }}
+            />
+            <Button disabled={!pairingUrl.trim() || pairBusy} onClick={() => void pair()}>
+              {pairBusy ? "Pairing…" : "Pair"}
+            </Button>
+          </div>
+          {pairedMessage && <p className="text-hint text-foreground">{pairedMessage}</p>}
+        </div>
 
         {status ? (
           <>
             <div className="flex items-center justify-between">
               <p className="text-ui">
                 <span className="mr-2 inline-block size-2 rounded-full bg-green-500 align-middle" />
-                Network access is on — port {status.port}
+                Incoming connections are on — port {status.port}
               </p>
               <Button variant="outline" size="sm" disabled={busy} onClick={() => void turnOff()}>
                 Turn off
               </Button>
             </div>
 
-            <div className="space-y-1.5">
-              <label id="remote-client-label" className="text-ui font-medium">
-                Client
-              </label>
-              <Select
-                value={protocol}
-                onValueChange={(value) => {
-                  const next = value as RemoteClientProtocol;
-                  setProtocol(next);
-                  setLink(null);
-                }}
-              >
-                <SelectTrigger className="w-full" aria-labelledby="remote-client-label">
-                  <SelectValue>{protocol === "t3" ? "T3 Code mobile" : "Browser remote"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="t3">T3 Code mobile</SelectItem>
-                  <SelectItem value="legacy">Browser remote</SelectItem>
-                </SelectContent>
-              </Select>
+            {protocols.length > 1 && (
+              <div className="space-y-1.5">
+                <label id="remote-client-label" className="text-ui font-medium">Client</label>
+                <Select value={clientProtocol} onValueChange={(value) => value && selectClientProtocol(value)}>
+                  <SelectTrigger className="w-full" aria-labelledby="remote-client-label"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {protocols.map((protocol) => (
+                      <SelectItem key={protocol} value={protocol}>{protocolLabel(protocol)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-              <label id="remote-endpoint-label" className="text-ui font-medium">
-                Pairing target
-              </label>
+            <div className="space-y-1.5">
+              <label id="remote-endpoint-label" className="text-ui font-medium">Pairing address</label>
               <Select
                 value={selectedEndpointId ?? undefined}
                 disabled={status.endpoints.length === 0}
@@ -207,9 +269,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 </SelectTrigger>
                 <SelectContent>
                   {status.endpoints.map((endpoint) => (
-                    <SelectItem key={endpoint.id} value={endpoint.id}>
-                      {endpoint.label}
-                    </SelectItem>
+                    <SelectItem key={endpoint.id} value={endpoint.id}>{endpoint.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -221,17 +281,14 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             {link ? (
               <div className="space-y-2 rounded-md border p-3" aria-busy={linkBusy}>
                 <p className="text-hint text-muted-foreground">
-                  {protocol === "t3"
-                    ? linkEndpoint?.qr_shareable && link.qr_svg
-                      ? "Scan this code from T3 Code mobile, or open the link there. "
-                      : "Open this link in T3 Code mobile on the same network or tailnet. "
-                    : linkEndpoint?.qr_shareable
-                      ? link.qr_svg
-                        ? "Scan this code or open the link in a browser on the same network or tailnet. "
-                        : "Open this link in a browser on the same network or tailnet. "
-                      : "Copy this link into another browser on this computer. "}
-                  The link is <b>one-time</b> and expires in {Math.round(link.expires_in / 60)} minutes;
-                  the device stays paired after that.
+                  {clientProtocol === "c2"
+                    ? "Paste this complete link into Device connections on the other C2 device. "
+                    : clientProtocol === "t3"
+                      ? linkEndpoint?.qr_shareable
+                        ? "Scan this inside T3 Code mobile. "
+                        : "Choose a LAN or verified tailnet address for T3 Code mobile. "
+                      : "Open this link in the C2 browser client. "}
+                  The link is one-time and expires in {Math.round(link.expires_in / 60)} minutes.
                 </p>
                 {link.qr_svg && (
                   <div className="mx-auto w-fit rounded-md bg-white p-2">
@@ -273,12 +330,10 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Run C2 from T3 Code mobile or a browser over the same LAN or Tailscale tailnet.
-              Turning this on serves the app's live sessions on
-              all network interfaces; access requires pairing with a one-time link.
+              Allow another C2 device, T3 Code mobile, or a browser remote to connect over the same LAN or Tailscale tailnet. Access requires a short-lived, one-time link and can be revoked at any time.
             </p>
             <Button disabled={busy} onClick={() => void turnOn()}>
-              {busy ? "Starting…" : "Turn on network access"}
+              {busy ? "Starting…" : "Allow incoming connections"}
             </Button>
           </>
         )}
@@ -286,17 +341,22 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         {devices.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-ui font-medium">Paired devices</p>
-            {devices.map((d) => (
-              <div key={d.id} className="flex items-center justify-between rounded-md border px-3 py-1.5">
+            {devices.map((device) => (
+              <div key={device.id} className="flex items-center justify-between rounded-(--ds-radius-control) border px-3 py-1.5">
                 <div>
-                  <p className="text-ui">{d.name}</p>
+                  <p className="text-ui">{device.name}</p>
                   <p className="text-hint text-muted-foreground">
-                    paired {new Date(d.created_at * 1000).toLocaleDateString()} · last seen{" "}
-                    {new Date(d.last_seen * 1000).toLocaleString()}
+                    {device.direction === "outgoing"
+                      ? "Syncs with this C2"
+                      : device.protocol === "c2"
+                        ? "Can sync into this C2"
+                        : "Can control this C2"} · paired{" "}
+                    {new Date(device.created_at * 1000).toLocaleDateString()} · last seen{" "}
+                    {new Date(device.last_seen * 1000).toLocaleString()}
                   </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => void revoke(d.id)}>
-                  Revoke
+                <Button variant="outline" size="sm" onClick={() => void revoke(device.id)}>
+                  {device.direction === "outgoing" ? "Disconnect" : "Revoke"}
                 </Button>
               </div>
             ))}
@@ -306,9 +366,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         {err && <p className="text-hint text-destructive">{err}</p>}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Done
-          </Button>
+          <Button variant="outline" onClick={onClose}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

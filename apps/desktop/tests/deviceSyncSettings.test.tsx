@@ -14,7 +14,7 @@ afterEach(() => {
 
 function status(enabled: boolean) {
   return {
-    transport: "icloud",
+    transport: "paired-devices",
     state: "ready",
     enabled,
     available: true,
@@ -25,7 +25,7 @@ function status(enabled: boolean) {
 }
 
 describe("Settings device sync", () => {
-  test("enables the iCloud transport and starts a manual device sync", async () => {
+  test("enables paired-device transport and starts a manual device sync", async () => {
     let enabled = false;
     let syncs = 0;
     const rendered = mount(
@@ -57,7 +57,7 @@ describe("Settings device sync", () => {
     );
     await waitFor(() => expect(rendered.container.textContent).toContain("Ready to sync"));
 
-    const toggle = rendered.container.querySelector('[aria-label="iCloud"]');
+    const toggle = rendered.container.querySelector('[aria-label="Paired C2 devices"]');
     expect(toggle).not.toBeNull();
     await reactAct(async () => toggle.click());
     await waitFor(() => expect(button(rendered.container, "Sync now").disabled).toBe(false));
@@ -68,6 +68,7 @@ describe("Settings device sync", () => {
     expect(syncs).toBe(1);
     expect(rendered.container.textContent).toContain("Last synced");
     expect(rendered.container.textContent).toContain("Project files");
+    expect(rendered.container.textContent).not.toContain("iCloud");
     rendered.unmount();
   });
 });

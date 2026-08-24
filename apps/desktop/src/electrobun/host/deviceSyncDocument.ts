@@ -158,11 +158,11 @@ export function parseDeviceSyncDocument(value: unknown): DeviceSyncDocument {
   };
 }
 
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+export function stableDeviceSyncValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableDeviceSyncValue).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right));
-    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`;
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableDeviceSyncValue(item)}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -180,7 +180,7 @@ function mergeLatest<T extends { updated_at: number }>(
       if (
         !current ||
         item.updated_at > current.updated_at ||
-        (item.updated_at === current.updated_at && stable(item) > stable(current))
+        (item.updated_at === current.updated_at && stableDeviceSyncValue(item) > stableDeviceSyncValue(current))
       ) {
         merged.set(id, item);
       }
@@ -227,7 +227,7 @@ export function mergeDeviceSyncDocuments(
     for (const item of document.parts) {
       if (!sessions.has(item.session_id)) continue;
       const current = parts.get(item.sync_id);
-      if (!current || stable(item) > stable(current)) parts.set(item.sync_id, item);
+      if (!current || stableDeviceSyncValue(item) > stableDeviceSyncValue(current)) parts.set(item.sync_id, item);
     }
   }
 

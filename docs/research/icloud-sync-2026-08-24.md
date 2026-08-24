@@ -1,4 +1,4 @@
-# C2 设备同步方案调研：iCloud 首发与配对设备扩展
+# C2 设备同步方案调研：配对设备先行，iCloud 暂停
 
 > 日期：2026-08-24
 > 范围：当前 Electrobun macOS 桌面端；Apple 官方资料为主要依据；不代表已取得 Apple Developer 团队、容器或签名资产。
@@ -7,26 +7,26 @@
 
 ## 结论
 
-**采用“本地优先、统一合并引擎、可替换传输”的设备同步方案；iCloud 是首个传输，不是产品边界：**
+**采用“本地优先、统一合并引擎、可替换传输”的设备同步方案；当前先启用已配对 C2 设备通道，iCloud 实现保留但从产品和默认运行路径屏蔽：**
 
-1. 会话、消息和 memory 继续以本地 SQLite 为离线真相源；同步时生成可合并的 CloudKit private database 快照，不移动或上传正在使用的 `codetwo.db`；
+1. 会话、消息和 memory 继续以本地 SQLite 为离线真相源；同步时生成可合并的设备快照，不移动或传输正在使用的 `codetwo.db`；
 2. 小型、非敏感偏好以后可独立接 `NSUbiquitousKeyValueStore`（下称 KVS），但不能用 KVS 承载会话正文或 memory；
 3. iCloud Documents 仅用于用户可见、可导出的 Markdown/归档文件，不作为 live database；
 4. React/WKWebView 不直接接 iCloud。沿用现有 typed RPC，把 Apple API 放在独立签名、独立 provision 的 macOS helper；
-5. 在 Apple Developer 容器、provisioning profile 和最终产物签名验证完成前，代码和 fake transport 测试最多只能证明本地 adapter/合并逻辑，不能声称“真实 iCloud 已可用”。
-6. Remote Control 已配对设备后续复用同一个设备同步 document、tombstone 和冲突引擎；配对身份、撤销和在线状态继续由 `remote` 模块拥有，不在同步模块复制 token 或设备注册表。
+5. 在 Apple Developer 容器、provisioning profile 和最终产物签名验证完成前，不启用或展示 iCloud，同样不能声称“真实 iCloud 已可用”。
+6. Pure Bun Remote host 使用同一个设备同步 document、tombstone 和冲突引擎；配对、持久凭据、撤销和在线状态通过 `remote.*` 命令管理。
 
 Apple 对三种存储的定位本身支持这个拆分：小偏好用 KVS、文件用 iCloud Documents、复杂对象/关系用 CloudKit。[Apple：Deciding whether CloudKit is right for your app](https://developer.apple.com/documentation/cloudkit/deciding-whether-cloudkit-is-right-for-your-app) · [Apple：Configuring iCloud services](https://developer.apple.com/documentation/xcode/configuring-icloud-services)
 
 ## 本次实现
 
-本次先交付一个默认关闭的设备同步预览，并以 CloudKit private database 作为首个生产传输：
+本次交付默认关闭的设备同步预览，并把已配对 C2 设备作为当前生产传输：
 
 - 设置页由用户明确开启；启动后、每五分钟、手动点击和退出前同步；失败不阻断本地读写；
-- private database 使用单条 `CodeTwoSyncState/private-v1` record，`payload` 为 JSON `CKAsset`，并保存 `revision`、`schemaVersion`、`updatedAt`；
-- 会话和项目等可变行按各自 `updated_at` 做确定性 last-write-wins；transcript part 通过稳定 `sync_id` 组成 append-only set；项目和 memory 删除通过 tombstone 传播；CloudKit `recordChangeTag` 与 `.ifServerRecordUnchanged` 防止并发整包覆盖；
+- Remote 的一次性链接只把短期 token 放在 URL fragment；兑换后服务端只保存 bearer 的 SHA-256 hash，客户端凭据文件使用 `0600`，撤销后下一次请求立即返回 401；
+- 会话和项目等可变行按各自 `updated_at` 做确定性 last-write-wins；同时间戳继续按稳定内容排序；transcript part 通过稳定 `sync_id` 组成 append-only set；项目和 memory 删除通过 tombstone 传播；快照内容 hash 作为条件版本，陈旧写入返回 409 后由同一同步服务重读、合并并重试；
 - 同步会话、项目列表、transcript 和 L1/L2 memory；项目文件、worktree identity、ACP session、L3 派生 profile、memory evidence pointer、automation、插件、凭据和终端历史留在本机；
-- 原生 helper 是嵌入主应用 `Contents/Helpers` 的 app-like bundle，bundle ID 为 `<channel bundle id>.cloud-sync`。发布构建缺少专用 profile 或真实签名 identity 时不嵌入 helper，设置页显示不可用而不是假装同步成功。
+- iCloud/CloudKit helper、adapter 与构建能力保留，便于后续取得真实签名资产后继续验证；当前 host 不构造该 adapter，设置页也不展示 iCloud。
 
 ### 统一设备同步 seam
 
@@ -36,12 +36,18 @@ Apple 对三种存储的定位本身支持这个拆分：小偏好用 KVS、文�
 
 | adapter | replica 身份 | 当前状态 | 约束 |
 |---|---|---|---|
-| iCloud / CloudKit | `icloud:private-v1` | 本次已实现；仍需真实签名与双机验证 | private database、change tag 条件写、macOS entitlement |
-| 已配对 C2 设备 | 复用 `RemoteDevice.id`，例如 `paired:<device-id>` | 接口与多 replica 合并测试已具备；生产 adapter 未启用 | 只能接受声明支持同一 sync schema 的完整 C2 客户端；不把浏览器遥控页面误当持久副本 |
+| iCloud / CloudKit | `icloud:private-v1` | adapter 保留；产品与默认运行路径已屏蔽 | 恢复前仍需 private database、change tag、provisioning、entitlement 与真实双机验证 |
+| 已配对 C2 设备 | `paired:<server-id>` | Pure Bun 生产 HTTP adapter 已启用 | 只接受同一 sync schema 的完整 C2 客户端；不把 T3/浏览器遥控页面误当持久副本 |
 
-**[源码审计]** 当前 Electrobun Pure Bun host 对 `remote.start`、`remote.devices` 和 pairing command 仍是 fail-closed 占位，仓库的 Rust server 才有既有 pairing/auth 实现。因此本 PR 不展示假的“配对设备同步”开关，也不声称 Remote transport 已上线。恢复 Remote host adapter 后，应在 `remote` 模块完成认证、capability negotiation 和 revoke，向设备同步模块只提供已授权 replica；撤销配对必须立即让该 replica 从下一轮读取/写入目标中消失。
+**[源码审计]** Electrobun Pure Bun host 已实现 `remote.start`、`remote.devices`、`remote.pairing_link`、`remote.pair_device` 与 `remote.revoke_device`。C2 sync 作为 `c2` 协议接入现有 `BunRemoteServer`，与已经可用的 T3/legacy 共用同一个 listener、一次性 token、持久 bearer hash、撤销和端点发现；同步模块只提供当前 `BunDatabase` 的快照 handler 与出站 peer，不另起网络服务、Rust engine/store 或第二个 `codetwo.db` 所有者。用户开启网络访问后 listener 状态和端口会持久化，正常退出不把它误写成关闭。
 
 配对设备传输不得同步一次性 pairing link、bearer token、WebSocket ticket 或凭据。设备离线只是该 replica 暂时不可达；本地写继续成功，重新上线后仍通过同一 document merge 与 tombstone 传播收敛。
+
+### 已完成的真实通道验证
+
+**[验证]** 使用生产 `BunRemoteServer`、`PairedDeviceSyncRuntime` 与 `PairedDeviceSyncTransport`，在两个独立临时 data directory 和两份真实 SQLite 上通过实际 loopback TCP 完成：c2/T3/legacy capability 共存、一次性链接兑换与重放拒绝、listener 和凭据重启恢复、服务端只落 bearer hash、双向首轮同步、离线并发 transcript 合并、同时间戳确定性冲突、memory 删除传播、陈旧版本 409、撤销后 401，以及无 peer 时 fail closed。该验证没有使用 in-memory/fake transport。
+
+**[边界]** 这证明了真实网络栈和两个隔离 C2 数据实例，不等于两台物理 Mac、跨 LAN/Tailnet 防火墙、睡眠唤醒或不稳定网络已验证；这些仍列在后续设备矩阵中。当前 LAN endpoint 仍是 bearer 保护的明文 HTTP，正式承载敏感会话前必须补传输加密或只允许可信加密 overlay；loopback 结果不能证明 LAN 抗窃听/中间人安全。
 
 这个单 record/asset 设计减少了首个版本的 CloudKit schema 和恢复面，但不是无限扩展方案。上线前应设定 payload 上限；数据量接近 `CKAsset`/配额边界时，按本文后续方案迁移到 custom zone 的分实体 records 与 `CKSyncEngine`。账号切换隔离、云端副本删除和用户导出也仍是正式发布前的必需项。
 
@@ -304,6 +310,7 @@ P1 产品状态最少区分：`off`、`unavailable`、`syncing`、`upToDate`、`
 
 ### 无 Apple 账号也能做
 
+- 两个隔离 C2 data directory 通过真实 TCP 往返、重启、撤销、409 冲突和 401 鉴权；
 - fake KVS/CloudKit adapter 的 multi-device deterministic tests；
 - schema decode、unknown version、白名单、oversize、删除和 merge 单测；
 - 本地写成功 + cloud outbox 失败/重试；
@@ -346,6 +353,6 @@ xcrun stapler validate C2.app
 
 ## 最终建议
 
-先完成 iCloud P0，再做 KVS 偏好 MVP；同时保留设备同步的 transport seam，等 Electrobun Remote host adapter 恢复后接入已配对 C2 replicas。不要把 live SQLite、浏览器 tab、项目路径、插件、credential 或 memory 借“先用 iCloud”整体上传；也不要在没有 profile 和真实双机证据时把一个本地 fake adapter 命名为已启用设备同步。
+当前先继续验证配对设备通道：补两台物理 Mac 的 LAN/Tailnet、休眠/断网/重连、大数据量和版本升级矩阵。iCloud adapter 继续保留，但在 Apple Developer 资产、真实签名、CloudKit 环境和双机证据齐全前维持屏蔽。不要传输 live SQLite、浏览器 tab、插件、credential 或终端历史，也不要用 loopback 结果冒充物理双机验证。
 
 P0 若证明 Developer ID KVS 不可用，则不切到 iCloud Documents，而是直接用 CloudKit private DB 的小 `Preference` records；其余 local-first、白名单、账号隔离和 native bridge 设计保持不变。

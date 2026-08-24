@@ -147,7 +147,7 @@ export async function getDeviceSyncStatus(): Promise<DeviceSyncStatus> {
   return inDesktop
     ? call<DeviceSyncStatus>("device_sync.status")
     : {
-        transport: "icloud",
+        transport: "paired-devices",
         state: "unsupported",
         enabled: false,
         available: false,
@@ -2940,6 +2940,8 @@ export interface RemoteEndpoint {
 export interface RemoteStatus {
   port: number;
   endpoints: RemoteEndpoint[];
+  /** Older Rust hosts omit this field and support the original T3/legacy protocols. */
+  protocols?: RemoteClientProtocol[];
 }
 
 export interface RemotePairingLink {
@@ -2955,6 +2957,8 @@ export interface RemoteDevice {
   name: string;
   created_at: number;
   last_seen: number;
+  direction?: "incoming" | "outgoing";
+  protocol?: RemoteClientProtocol;
 }
 
 /** Turn on network access: serve the live engine on all interfaces (idempotent). */
@@ -2972,12 +2976,12 @@ export async function remoteStatus(): Promise<RemoteStatus | null> {
 }
 
 /** The wire protocol expected by the client consuming a pairing link. */
-export type RemoteClientProtocol = "t3" | "legacy";
+export type RemoteClientProtocol = "c2" | "t3" | "legacy";
 
 /** Mint a fresh one-time pairing link for an advertised endpoint (URL + optional QR SVG). */
 export async function remotePairingLink(
   endpointId?: string,
-  clientProtocol: RemoteClientProtocol = "legacy",
+  clientProtocol: RemoteClientProtocol = "c2",
   ttlSecs?: number,
 ): Promise<RemotePairingLink | null> {
   return inDesktop
@@ -2991,6 +2995,17 @@ export async function remotePairingLink(
 
 export async function remoteDevices(): Promise<RemoteDevice[]> {
   return inDesktop ? call<RemoteDevice[]>("remote.devices") : [];
+}
+
+export async function pairRemoteDevice(
+  url: string,
+  deviceName?: string,
+): Promise<{ device: RemoteDevice; sync: DeviceSyncStatus }> {
+  if (!inDesktop) throw new Error("Device pairing requires the C2 desktop app.");
+  return call<{ device: RemoteDevice; sync: DeviceSyncStatus }>("remote.pair_device", {
+    url,
+    device_name: deviceName ?? null,
+  });
 }
 
 export async function remoteRevokeDevice(id: string): Promise<boolean> {

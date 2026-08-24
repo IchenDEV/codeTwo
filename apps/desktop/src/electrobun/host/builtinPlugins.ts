@@ -149,7 +149,13 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
     origin: "host",
     category: "integration",
     services: ["device-sync"],
-    components: ["device-sync.settings"],
+    components: [component(
+      "device-sync.settings",
+      "Device sync",
+      "Device-sync methods, status, and data-scope controls.",
+      "settingsSection",
+      "settings.sections",
+    )],
   }),
   plugin("canvas", "Structured visual drafts, snapshots, and exports.", {
     category: "interface",

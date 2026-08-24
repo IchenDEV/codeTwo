@@ -253,7 +253,7 @@ export class DeviceSyncService {
     private readonly database: BunDatabase,
     dataDir: string,
     private readonly onEvent: (event: DesktopEvent) => void,
-    private readonly transport: DeviceSyncTransport = new ICloudCloudKitTransport(),
+    private readonly transport: DeviceSyncTransport,
   ) {
     this.settingsPath = join(dataDir, "device-sync.json");
     this.settings = this.loadSettings();

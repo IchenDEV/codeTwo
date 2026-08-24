@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 
 import {
   DEVICE_SYNC_SCHEMA_VERSION,
+  stableDeviceSyncValue,
   type DeviceSyncDocument,
   type DeviceSyncEntity,
 } from "./deviceSyncDocument";
@@ -1371,6 +1372,10 @@ export class BunDatabase {
     memories: number;
   } {
     const counts = { projects: 0, sessions: 0, parts: 0, memories: 0 };
+    const currentSnapshot = this.deviceSyncSnapshot(document.writer_device_id);
+    const currentProjects = new Map(currentSnapshot.projects.map((project) => [project.path, project]));
+    const currentSessions = new Map(currentSnapshot.sessions.map((session) => [session.id, session]));
+    const currentMemories = new Map(currentSnapshot.memories.map((memory) => [memory.id, memory]));
     const run = this.db.transaction(() => {
       for (const tombstone of document.tombstones) {
         this.recordTombstone(tombstone.entity, tombstone.id, tombstone.deleted_at);
@@ -1384,8 +1389,12 @@ export class BunDatabase {
       }
 
       for (const project of document.projects) {
-        const current = this.db.query("SELECT updated_at FROM projects WHERE path=?").get(project.path) as Row | null;
-        if (current && Number(current.updated_at ?? 0) >= project.updated_at) continue;
+        const current = currentProjects.get(project.path);
+        if (current && (
+          current.updated_at > project.updated_at
+          || (current.updated_at === project.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(project))
+        )) continue;
         this.db.query(
           `INSERT INTO projects(path,name,last_opened_at,added_at,default_worktree_mode,updated_at)
            VALUES(?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
@@ -1404,8 +1413,12 @@ export class BunDatabase {
       }
 
       for (const session of document.sessions) {
-        const current = this.db.query("SELECT updated_at FROM sessions WHERE id=?").get(session.id) as Row | null;
-        if (current && Number(current.updated_at ?? 0) >= session.updated_at) continue;
+        const current = currentSessions.get(session.id);
+        if (current && (
+          current.updated_at > session.updated_at
+          || (current.updated_at === session.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(session))
+        )) continue;
         if (current) {
           this.db.query(
             `UPDATE sessions SET title=?,title_origin=?,pinned=?,archived=?,provider=?,model=?,cwd=?,
@@ -1477,8 +1490,12 @@ export class BunDatabase {
       }
 
       for (const memory of document.memories) {
-        const current = this.db.query("SELECT updated_at FROM memories WHERE id=?").get(memory.id) as Row | null;
-        if (current && Number(current.updated_at ?? 0) >= memory.updated_at) continue;
+        const current = currentMemories.get(memory.id);
+        if (current && (
+          current.updated_at > memory.updated_at
+          || (current.updated_at === memory.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(memory))
+        )) continue;
         this.db.query(
           `INSERT INTO memories(
              id,project_path,session_id,layer,category,content,keywords_json,confidence,

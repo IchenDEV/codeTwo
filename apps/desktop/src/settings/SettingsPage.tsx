@@ -4,7 +4,6 @@ import {
   BrainCircuit,
   ChartNoAxesColumn,
   ChevronDown,
-  Cloud,
   Copy,
   Download,
   Folder,
@@ -137,7 +136,7 @@ const NAV_GROUPS: {
     items: [
       { id: "project", icon: Folder, labelKey: "settings.project" },
       { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
-      { id: "sync", icon: Cloud, labelKey: "settings.sync" },
+      { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
     ],
   },
   {
@@ -522,7 +521,7 @@ export function SettingsPage({
       .catch((error) => {
         if (active) {
           setDeviceSync({
-            transport: "icloud",
+            transport: "paired-devices",
             state: "error",
             enabled: false,
             available: false,
@@ -754,7 +753,7 @@ export function SettingsPage({
       setDeviceSync(await deviceSyncEnabledSaver(enabled));
     } catch (error) {
       setDeviceSync((current) => ({
-        transport: current?.transport ?? "icloud",
+        transport: current?.transport ?? "paired-devices",
         state: "error",
         enabled: current?.enabled ?? false,
         available: current?.available ?? false,
@@ -1187,7 +1186,7 @@ export function SettingsPage({
 
             {tab === "sync" && deviceSyncEnabled && (
               <Page title={t("settings.sync")} description={t("settings.syncHint")}>
-                <Row label={t("settings.icloudSync")} hint={deviceSyncHint}>
+                <Row label={t("settings.pairedDeviceSync")} hint={deviceSyncHint}>
                   <Switch
                     checked={deviceSync?.enabled ?? false}
                     disabled={
@@ -1196,7 +1195,7 @@ export function SettingsPage({
                       (!(deviceSync?.enabled ?? false) && !(deviceSync?.available ?? false))
                     }
                     onCheckedChange={(checked) => void saveDeviceSyncEnabled(checked)}
-                    aria-label={t("settings.icloudSync")}
+                    aria-label={t("settings.pairedDeviceSync")}
                   />
                 </Row>
 
