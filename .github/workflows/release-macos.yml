@@ -24,7 +24,7 @@ concurrency:
 jobs:
   release:
     name: Package and publish Apple Silicon DMG
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -68,7 +68,11 @@ jobs:
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
 
       - name: Verify runner architecture
-        run: test "$(uname -m)" = "arm64"
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          test "$(xcodebuild -version | awk 'NR == 1 { print $2 }' | cut -d. -f1)" -ge 26
+          xcrun --find actool >/dev/null
 
       - name: Install desktop dependencies
         working-directory: apps/desktop
@@ -120,6 +124,9 @@ jobs:
           test "$(plutil -extract CFBundleDisplayName raw -- "$info_plist")" = "C2"
           test "$(plutil -extract CFBundleIdentifier raw -- "$info_plist")" = "dev.codetwo.app"
           test "$(plutil -extract CFBundleShortVersionString raw -- "$info_plist")" = "$RELEASE_VERSION"
+          test "$(plutil -extract CFBundleIconName raw -- "$info_plist")" = "codeTwo"
+          test -f "$app/Contents/Resources/Assets.car"
+          test -f "$app/Contents/Resources/AppIcon.icns"
           codesign --verify --deep --strict "$app"
           test "$(lipo -archs "$executable")" = "arm64"
 

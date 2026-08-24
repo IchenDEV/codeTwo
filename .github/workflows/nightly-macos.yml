@@ -18,7 +18,7 @@ concurrency:
 jobs:
   package:
     name: Package Apple Silicon DMG
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,11 @@ jobs:
           version: 0.15.2
 
       - name: Verify runner architecture
-        run: test "$(uname -m)" = "arm64"
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          test "$(xcodebuild -version | awk 'NR == 1 { print $2 }' | cut -d. -f1)" -ge 26
+          xcrun --find actool >/dev/null
 
       - name: Install desktop dependencies
         working-directory: apps/desktop
@@ -77,6 +81,9 @@ jobs:
           test "$(plutil -extract CFBundleName raw -- "$app/Contents/Info.plist")" = "C2 Nightly"
           test "$(plutil -extract CFBundleDisplayName raw -- "$app/Contents/Info.plist")" = "C2 Nightly"
           test "$(plutil -extract CFBundleIdentifier raw -- "$app/Contents/Info.plist")" = "dev.codetwo.app.nightly"
+          test "$(plutil -extract CFBundleIconName raw -- "$app/Contents/Info.plist")" = "codeTwo"
+          test -f "$app/Contents/Resources/Assets.car"
+          test -f "$app/Contents/Resources/AppIcon.icns"
           test ! -e "$app/Contents/Helpers/CodeTwoUpdateHelper"
           ! plutil -extract SUFeedURL raw -- "$app/Contents/Info.plist" >/dev/null 2>&1
           codesign --verify --deep --strict "$app"
