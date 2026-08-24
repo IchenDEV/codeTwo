@@ -572,6 +572,7 @@ interface TerminalSession {
   process: Bun.Subprocess;
   terminal: Bun.Terminal;
   output: string;
+  title: string;
   projectPath: string | null;
 }
 
@@ -584,8 +585,15 @@ export class TerminalManager {
     const id = String(args.id ?? "");
     if (!id) throw new Error("terminal id is required");
     const existing = this.sessions.get(id);
-    if (existing) return { created: false, restore: existing.output };
+    if (existing) {
+      existing.terminal.resize(
+        Math.max(1, Math.floor(typeof args.cols === "number" ? args.cols : 80)),
+        Math.max(1, Math.floor(typeof args.rows === "number" ? args.rows : 24)),
+      );
+      return { created: false, restore: existing.output };
+    }
     const cwd = typeof args.cwd === "string" ? args.cwd : process.env.HOME ?? process.cwd();
+    const title = basename(cwd);
     const shell = process.env.SHELL || "/bin/zsh";
     const tmuxSession = typeof args.tmux_session === "string" ? args.tmux_session.trim() : "";
     if (tmuxSession && !/^[A-Za-z0-9_.-]+$/.test(tmuxSession)) {
@@ -616,13 +624,13 @@ export class TerminalManager {
       env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
       terminal,
     });
-    const session: TerminalSession = { process: child, terminal, output: "", projectPath };
+    const session: TerminalSession = { process: child, terminal, output: "", title, projectPath };
     this.sessions.set(id, session);
     if (pendingOutput) {
       this.appendTerminalOutput(id, session, pendingOutput);
       pendingOutput = "";
     }
-    this.emit({ name: "pty-title", payload: { id, title: basename(cwd), project_path: projectPath } });
+    this.emit({ name: "pty-title", payload: { id, title, project_path: projectPath } });
     void child.exited.then(() => {
       if (this.sessions.get(id) !== session) return;
       this.sessions.delete(id);
@@ -648,12 +656,29 @@ export class TerminalManager {
     return this.sessions.get(id)?.output ?? "";
   }
 
+  clear(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session) throw new Error(`terminal not found: ${id}`);
+    session.output = "";
+    this.emit({
+      name: "pty-output",
+      payload: { id, data: "\u001b[2J\u001b[H", project_path: session.projectPath },
+    });
+  }
+
+  list(): Array<{ id: string; title: string }> {
+    return [...this.sessions]
+      .map(([id, session]) => ({ id, title: session.title }))
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+
   kill(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
     this.sessions.delete(id);
     session.process.kill();
     session.terminal.close();
+    this.emit({ name: "pty-exit", payload: { id, project_path: session.projectPath } });
   }
 
   setRuntimeEnabled(enabled: boolean, projectPath: string | null): void {

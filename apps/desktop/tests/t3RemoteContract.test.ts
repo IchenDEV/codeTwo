@@ -5,23 +5,23 @@ import { resolve } from "node:path";
 const desktop = resolve(import.meta.dir, "..");
 const read = (path: string) => readFileSync(resolve(desktop, path), "utf8");
 
-describe("T3 mobile remote contract", () => {
-  test("keeps the renderer pairing protocol explicit and fails closed in the Bun trial", () => {
+describe("Electrobun remote contract", () => {
+  test("routes browser pairing into the live Bun remote service", () => {
     const bridge = read("src/bridge.ts");
     const host = read("src/electrobun/host/index.ts");
 
     expect(bridge).toContain('export type RemoteClientProtocol = "t3" | "legacy"');
-    expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "t3"');
+    expect(bridge).toContain('clientProtocol: RemoteClientProtocol = "legacy"');
     expect(bridge).toContain("client_protocol: clientProtocol,");
-    expect(host).toContain('this.register("remote.start", () => this.unsupported("remote.start", "remote server"))');
-    expect(host).toContain('this.register("remote.pairing_link", () => null)');
+    expect(host).toContain('this.register("remote.start", (args) => this.remote.start(');
+    expect(host).toContain('this.register("remote.pairing_link", (args) => this.remote.pairingLink(');
   });
 
-  test("exposes T3 and legacy clients without conflating their pairing codes", () => {
+  test("presents both the T3 Mobile and browser clients supported by the Electrobun runtime", () => {
     const remote = read("src/remote/Remote.tsx");
 
-    expect(remote).toContain('<SelectItem value="t3">T3 Code mobile</SelectItem>');
-    expect(remote).toContain('<SelectItem value="legacy">C2 browser</SelectItem>');
+    expect(remote).toContain("T3 Code mobile");
+    expect(remote).toContain("Browser remote");
     expect(remote).toContain("remotePairingLink(endpointId ?? undefined, protocol)");
   });
 

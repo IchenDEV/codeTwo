@@ -7,9 +7,9 @@ import {
   startRemote,
   stopRemote,
   type RemoteDevice,
+  type RemoteClientProtocol,
   type RemoteEndpoint,
   type RemotePairingLink,
-  type RemoteClientProtocol,
   type RemoteStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
@@ -34,12 +34,12 @@ function endpointHelp(endpoint: RemoteEndpoint | undefined): string {
   if (endpoint.id.startsWith("tailnet-")) {
     return "Best-effort 100.64/10 match. Verify this address in Tailscale; it works when both devices share the tailnet and its access policy allows this port.";
   }
-  return "Devices on the same network can scan this code or open the link.";
+  return "Devices on the same network can open the generated link.";
 }
 
 /**
- * Remote control for T3 Code mobile and C2's browser client: toggle network access, mint
- * one-time pairing links (URL + QR), and manage paired devices. A paired device drives the same
+ * Remote control for C2's mobile and browser clients: toggle network access, mint
+ * one-time pairing links and manage paired devices. A paired device drives the same
  * live engine/sessions as this app; pairing survives restarts, and revoking a device cuts it off
  * immediately.
  */
@@ -48,7 +48,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   const [devices, setDevices] = useState<RemoteDevice[]>([]);
   const [link, setLink] = useState<RemotePairingLink | null>(null);
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
-  const [clientProtocol, setClientProtocol] = useState<RemoteClientProtocol>("t3");
+  const [protocol, setProtocol] = useState<RemoteClientProtocol>("t3");
   const [busy, setBusy] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -71,7 +71,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   useEffect(refresh, [refresh]);
 
   const mintLink = useCallback(
-    async (endpointId: string | null, protocol: RemoteClientProtocol = clientProtocol) => {
+    async (endpointId: string | null) => {
       const request = ++linkRequest.current;
       setLinkBusy(true);
       setErr(null);
@@ -87,7 +87,7 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         if (request === linkRequest.current) setLinkBusy(false);
       }
     },
-    [clientProtocol],
+    [protocol],
   );
 
   const turnOn = async () => {
@@ -124,13 +124,6 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
   const selectEndpoint = (endpointId: string) => {
     setSelectedEndpointId(endpointId);
     void mintLink(endpointId);
-  };
-
-  const selectClientProtocol = (protocol: string) => {
-    if (protocol !== "t3" && protocol !== "legacy") return;
-    setClientProtocol(protocol);
-    setLink(null);
-    if (status) void mintLink(selectedEndpointId, protocol);
   };
 
   const copy = async () => {
@@ -180,18 +173,23 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
               <label id="remote-client-label" className="text-ui font-medium">
                 Client
               </label>
-              <Select value={clientProtocol} onValueChange={(value) => value && selectClientProtocol(value)}>
+              <Select
+                value={protocol}
+                onValueChange={(value) => {
+                  const next = value as RemoteClientProtocol;
+                  setProtocol(next);
+                  setLink(null);
+                }}
+              >
                 <SelectTrigger className="w-full" aria-labelledby="remote-client-label">
-                  <SelectValue />
+                  <SelectValue>{protocol === "t3" ? "T3 Code mobile" : "Browser remote"}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="t3">T3 Code mobile</SelectItem>
-                  <SelectItem value="legacy">C2 browser</SelectItem>
+                  <SelectItem value="legacy">Browser remote</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
 
-            <div className="space-y-1.5">
               <label id="remote-endpoint-label" className="text-ui font-medium">
                 Pairing target
               </label>
@@ -223,12 +221,14 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
             {link ? (
               <div className="space-y-2 rounded-md border p-3" aria-busy={linkBusy}>
                 <p className="text-hint text-muted-foreground">
-                  {clientProtocol === "t3"
-                    ? linkEndpoint?.qr_shareable
-                      ? "Scan this inside T3 Code mobile. "
-                      : "Loopback is not reachable from T3 Code mobile; choose a LAN or verified tailnet address. "
+                  {protocol === "t3"
+                    ? linkEndpoint?.qr_shareable && link.qr_svg
+                      ? "Scan this code from T3 Code mobile, or open the link there. "
+                      : "Open this link in T3 Code mobile on the same network or tailnet. "
                     : linkEndpoint?.qr_shareable
-                      ? "Open this link in a browser on the same network or tailnet. "
+                      ? link.qr_svg
+                        ? "Scan this code or open the link in a browser on the same network or tailnet. "
+                        : "Open this link in a browser on the same network or tailnet. "
                       : "Copy this link into another browser on this computer. "}
                   The link is <b>one-time</b> and expires in {Math.round(link.expires_in / 60)} minutes;
                   the device stays paired after that.
@@ -273,8 +273,8 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <p className="text-hint leading-relaxed text-muted-foreground">
-              Connect the T3 Code mobile app, or drive C2 from a browser on another device over
-              the same LAN or Tailscale tailnet. Turning this on serves the app's live sessions on
+              Run C2 from T3 Code mobile or a browser over the same LAN or Tailscale tailnet.
+              Turning this on serves the app's live sessions on
               all network interfaces; access requires pairing with a one-time link.
             </p>
             <Button disabled={busy} onClick={() => void turnOn()}>

@@ -2923,7 +2923,7 @@ export type RemoteClientProtocol = "t3" | "legacy";
 /** Mint a fresh one-time pairing link for an advertised endpoint (URL + optional QR SVG). */
 export async function remotePairingLink(
   endpointId?: string,
-  clientProtocol: RemoteClientProtocol = "t3",
+  clientProtocol: RemoteClientProtocol = "legacy",
   ttlSecs?: number,
 ): Promise<RemotePairingLink | null> {
   return inDesktop
@@ -2941,6 +2941,27 @@ export async function remoteDevices(): Promise<RemoteDevice[]> {
 
 export async function remoteRevokeDevice(id: string): Promise<boolean> {
   return inDesktop ? call<boolean>("remote.revoke_device", { id }) : false;
+}
+
+export interface TaskHandoffResult {
+  session: string;
+  handoff: string;
+  epoch: number;
+  destination: string;
+  state: "transferred";
+}
+
+export async function transferTaskToDevice(
+  session: string,
+  pairingUrl: string,
+  destination: string,
+): Promise<TaskHandoffResult> {
+  if (!inDesktop) throw new Error("Task transfer is only available in the desktop app");
+  return call<TaskHandoffResult>("handoff.transfer_pairing", {
+    session,
+    pairing_url: pairingUrl,
+    destination,
+  });
 }
 
 // ---- issues (F14) ----------------------------------------------------------------------------

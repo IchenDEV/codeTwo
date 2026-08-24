@@ -62,6 +62,21 @@ function partText(value: unknown): string {
   return redactMemoryEvidence(content).slice(0, 600);
 }
 
+function optionalInterruptedActivity(value: unknown): Record<string, unknown> {
+  const activity = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const revision = Number(activity.revision ?? 0) + 1;
+  return {
+    revision,
+    state: {
+      kind: "failed",
+      reason: "interrupted",
+      message: "Transferred to this device and ready to resume",
+    },
+  };
+}
+
 const BASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
@@ -86,6 +101,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   acp_session_id TEXT,
   memory_read TEXT NOT NULL DEFAULT 'inherit',
   memory_write TEXT NOT NULL DEFAULT 'inherit',
+  handoff_epoch INTEGER NOT NULL DEFAULT 0,
+  handoff_state TEXT NOT NULL DEFAULT 'active',
+  handoff_id TEXT,
+  handoff_context_json TEXT,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS parts (
@@ -210,6 +229,7 @@ export class BunDatabase {
     this.migrateSessionLifecycle();
     this.migrateProjectProfiles();
     this.migrateMemoryManagement();
+    this.migrateHandoffs();
   }
 
   private migrateSessionLifecycle(): void {
@@ -272,6 +292,22 @@ export class BunDatabase {
       END
       WHERE origin='automatic';
     `);
+  }
+
+  private migrateHandoffs(): void {
+    const additions = [
+      "ALTER TABLE sessions ADD COLUMN handoff_epoch INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE sessions ADD COLUMN handoff_state TEXT NOT NULL DEFAULT 'active'",
+      "ALTER TABLE sessions ADD COLUMN handoff_id TEXT",
+      "ALTER TABLE sessions ADD COLUMN handoff_context_json TEXT",
+    ];
+    for (const statement of additions) {
+      try {
+        this.db.exec(statement);
+      } catch (error) {
+        if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+      }
+    }
   }
 
   close(): void {
@@ -367,8 +403,9 @@ export class BunDatabase {
       .query(
         `SELECT id,title,title_origin,pinned,transient,activity_json,provider,model,cwd,project_path,
                 worktree_path,worktree_baseline_json,worktree_identity_json,worktree_discarded,
-                permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,created_at
-         FROM sessions WHERE archived=? AND transient=0 ORDER BY ${order}`,
+                permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,
+                handoff_epoch,handoff_state,handoff_id,handoff_context_json,created_at
+         FROM sessions WHERE archived=? AND transient=0 AND handoff_state!='accepted' ORDER BY ${order}`,
       )
       .all(archived ? 1 : 0) as Row[];
     return rows.map((row) => this.sessionFromRow(row));
@@ -379,7 +416,8 @@ export class BunDatabase {
       .query(
         `SELECT id,title,title_origin,pinned,transient,activity_json,provider,model,cwd,project_path,
                 worktree_path,worktree_baseline_json,worktree_identity_json,worktree_discarded,
-                permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,created_at
+                permission_mode,sandbox_policy,acp_session_id,memory_read,memory_write,
+                handoff_epoch,handoff_state,handoff_id,handoff_context_json,created_at
          FROM sessions WHERE id=?`,
       )
       .get(id) as Row | null;
@@ -465,6 +503,154 @@ export class BunDatabase {
 
   updateActivity(id: string, activity: unknown): void {
     this.db.query("UPDATE sessions SET activity_json=? WHERE id=?").run(JSON.stringify(activity), id);
+  }
+
+  assertSessionActive(id: string): void {
+    const row = this.db.query("SELECT handoff_state FROM sessions WHERE id=?").get(id) as Row | null;
+    if (!row) throw new Error(`session not found: ${id}`);
+    if (text(row.handoff_state, "active") !== "active") {
+      throw new Error(`session ${id} is fenced by a task handoff`);
+    }
+  }
+
+  prepareHandoff(id: string, handoffId: string): { epoch: number; session: Record<string, unknown>; parts: unknown[] } {
+    const prepare = this.db.transaction(() => {
+      const row = this.db
+        .query("SELECT handoff_epoch,handoff_state FROM sessions WHERE id=?")
+        .get(id) as Row | null;
+      if (!row) throw new Error(`session not found: ${id}`);
+      if (text(row.handoff_state, "active") !== "active") throw new Error("session already has a handoff in progress");
+      const epoch = Number(row.handoff_epoch ?? 0) + 1;
+      this.db
+        .query("UPDATE sessions SET handoff_epoch=?,handoff_state='prepared',handoff_id=? WHERE id=?")
+        .run(epoch, handoffId, id);
+      return epoch;
+    });
+    const epoch = prepare();
+    const session = this.getSession(id);
+    if (!session) throw new Error(`session not found after handoff prepare: ${id}`);
+    const parts = (this.db
+      .query("SELECT seq,role,part_json FROM parts WHERE session_id=? ORDER BY seq ASC")
+      .all(id) as Row[]).map((row) => ({
+      seq: Number(row.seq),
+      role: text(row.role),
+      part: jsonValue(row.part_json, { kind: "text", text: "" }),
+    }));
+    return { epoch, session, parts };
+  }
+
+  commitSourceHandoff(id: string, handoffId: string, epoch: number): void {
+    const changed = this.db
+      .query(
+        `UPDATE sessions SET handoff_state='transferred',archived=1,pinned=0
+         WHERE id=? AND handoff_id=? AND handoff_epoch=? AND handoff_state='prepared'`,
+      )
+      .run(id, handoffId, epoch).changes;
+    if (changed !== 1) throw new Error("source handoff fence no longer matches");
+  }
+
+  rollbackSourceHandoff(id: string, handoffId: string, epoch: number): void {
+    const changed = this.db
+      .query(
+        `UPDATE sessions SET handoff_state='active',handoff_id=NULL,archived=0
+         WHERE id=? AND handoff_id=? AND handoff_epoch=? AND handoff_state IN ('prepared','transferred')`,
+      )
+      .run(id, handoffId, epoch).changes;
+    if (changed !== 1) throw new Error("source handoff cannot be rolled back from its current state");
+  }
+
+  acceptHandoff(input: {
+    handoffId: string;
+    epoch: number;
+    session: Record<string, unknown>;
+    parts: unknown[];
+    cwd: string;
+    context: unknown;
+  }): void {
+    const accept = this.db.transaction(() => {
+      const id = text(input.session.id);
+      if (!id) throw new Error("handoff session id is missing");
+      const existing = this.db.query("SELECT handoff_id,handoff_epoch,handoff_state FROM sessions WHERE id=?").get(id) as Row | null;
+      if (existing) {
+        if (
+          text(existing.handoff_id) === input.handoffId
+          && Number(existing.handoff_epoch) === input.epoch
+          && text(existing.handoff_state) === "accepted"
+        ) return;
+        throw new Error(`destination already contains session ${id}`);
+      }
+      const activity = optionalInterruptedActivity(input.session.activity);
+      this.db.query(
+        `INSERT INTO sessions(
+          id,title,title_origin,pinned,archived,transient,activity_json,provider,model,cwd,project_path,
+          worktree_path,worktree_baseline_json,worktree_common_dir,worktree_git_dir,
+          worktree_identity_json,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
+          memory_read,memory_write,handoff_epoch,handoff_state,handoff_id,handoff_context_json,created_at
+        ) VALUES(?,?,?,?,0,0,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,0,?,?,?,?,?,?,'accepted',?,?,?)`,
+      ).run(
+        id,
+        text(input.session.title, "Untitled session"),
+        text(input.session.title_origin, "default"),
+        bool(input.session.pinned) ? 1 : 0,
+        JSON.stringify(activity),
+        JSON.stringify(input.session.provider ?? "codex"),
+        nullableText(input.session.model),
+        input.cwd,
+        input.cwd,
+        JSON.stringify(input.session.permission_mode ?? "ask"),
+        JSON.stringify(input.session.sandbox_policy ?? "workspace_write"),
+        nullableText(input.session.acp_session_id),
+        text(input.session.memory_read, "inherit"),
+        text(input.session.memory_write, "inherit"),
+        input.epoch,
+        input.handoffId,
+        JSON.stringify(input.context),
+        Number(input.session.created_at ?? Date.now()),
+      );
+      const insert = this.db.query(
+        "INSERT INTO parts(session_id,seq,role,part_json,search_text) VALUES(?,?,?,?,?)",
+      );
+      for (const value of input.parts) {
+        const part = value && typeof value === "object" ? value as Row : {};
+        const role = text(part.role);
+        if (role !== "user" && role !== "agent") throw new Error("handoff transcript role is invalid");
+        const payload = part.part ?? { kind: "text", text: "" };
+        insert.run(id, Number(part.seq), role, JSON.stringify(payload), partText(JSON.stringify(payload)) || null);
+      }
+    });
+    accept();
+  }
+
+  activateTargetHandoff(id: string, handoffId: string, epoch: number): void {
+    const changed = this.db
+      .query(
+        `UPDATE sessions SET handoff_state='active'
+         WHERE id=? AND handoff_id=? AND handoff_epoch=? AND handoff_state='accepted'`,
+      )
+      .run(id, handoffId, epoch).changes;
+    if (changed !== 1) {
+      const current = this.db.query("SELECT handoff_id,handoff_epoch,handoff_state FROM sessions WHERE id=?").get(id) as Row | null;
+      if (current && text(current.handoff_id) === handoffId && Number(current.handoff_epoch) === epoch && text(current.handoff_state) === "active") return;
+      throw new Error("target handoff fence no longer matches");
+    }
+  }
+
+  rollbackTargetHandoff(id: string, handoffId: string, epoch: number): void {
+    const rollback = this.db.transaction(() => {
+      const row = this.db.query("SELECT handoff_id,handoff_epoch,handoff_state FROM sessions WHERE id=?").get(id) as Row | null;
+      if (!row) return;
+      if (text(row.handoff_id) !== handoffId || Number(row.handoff_epoch) !== epoch) {
+        throw new Error("target handoff fence no longer matches");
+      }
+      if (text(row.handoff_state) !== "accepted") throw new Error("an active target handoff cannot be rolled back automatically");
+      this.db.query("DELETE FROM parts WHERE session_id=?").run(id);
+      this.db.query("DELETE FROM sessions WHERE id=?").run(id);
+    });
+    rollback();
+  }
+
+  clearHandoffContext(id: string): void {
+    this.db.query("UPDATE sessions SET handoff_context_json=NULL WHERE id=?").run(id);
   }
 
   renameSession(id: string, title: string, origin = "manual"): void {
@@ -1039,6 +1225,10 @@ export class BunDatabase {
       acp_session_id: nullableText(row.acp_session_id),
       memory_read: text(row.memory_read, "inherit"),
       memory_write: text(row.memory_write, "inherit"),
+      handoff_epoch: Number(row.handoff_epoch ?? 0),
+      handoff_state: text(row.handoff_state, "active"),
+      handoff_id: nullableText(row.handoff_id),
+      handoff_context: jsonValue(row.handoff_context_json, null),
       created_at: Number(row.created_at ?? 0),
     };
   }
