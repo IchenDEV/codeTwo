@@ -14,6 +14,9 @@ use crate::keymap::Keymap;
 use crate::memory::MemoryCapability;
 use crate::models::available_models;
 use crate::provider::{Provider, ProviderCapability, ProviderToolset};
+use crate::provider_lifecycle::{
+    ProviderLaunchMode, ProviderLifecycleManager, ProviderLifecycleStatus,
+};
 use crate::scene::SceneLibrary;
 use crate::scene_artifact::SceneArtifactStore;
 use crate::skill::{builtin_skills, Skill, SkillLibrary};
@@ -191,14 +194,17 @@ pub struct ProviderSummary {
     pub id: String,
     pub display_name: String,
     pub available: bool,
+    pub enabled: bool,
     pub needs_node: bool,
     pub models: Vec<crate::event::ModelChoice>,
     pub capabilities: Vec<ProviderCapability>,
+    pub management: ProviderLifecycleStatus,
 }
 
 /// The provider registry plus the live host-tool projection shared with the engine.
 pub struct ProviderService {
     pub providers: Vec<Provider>,
+    lifecycle: ProviderLifecycleManager,
     host_tools: RwLock<HostToolDiscovery>,
     provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
 }
@@ -208,7 +214,11 @@ impl Service for ProviderService {
 }
 
 impl ProviderService {
-    pub fn new(providers: Vec<Provider>, host_tools: HostToolDiscovery) -> Self {
+    pub fn new(
+        providers: Vec<Provider>,
+        host_tools: HostToolDiscovery,
+        lifecycle: ProviderLifecycleManager,
+    ) -> Self {
         let provider_tools = providers
             .iter()
             .map(|provider| {
@@ -220,9 +230,26 @@ impl ProviderService {
             .collect();
         Self {
             providers,
+            lifecycle,
             host_tools: RwLock::new(host_tools),
             provider_tools: Arc::new(RwLock::new(provider_tools)),
         }
+    }
+
+    pub fn runtime_providers(&self) -> Vec<Provider> {
+        self.providers
+            .iter()
+            .filter(|provider| {
+                self.lifecycle
+                    .enabled(provider.id.as_str())
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub fn lifecycle(&self) -> ProviderLifecycleManager {
+        self.lifecycle.clone()
     }
 
     pub fn toolsets(&self) -> HashMap<String, ProviderToolset> {
@@ -258,21 +285,37 @@ impl ProviderService {
 
     pub async fn summaries(&self) -> Vec<ProviderSummary> {
         let toolsets = self.toolsets();
-        let mut summaries = Vec::with_capacity(self.providers.len());
-        for provider in &self.providers {
-            summaries.push(ProviderSummary {
-                id: provider.id.as_str().to_string(),
-                display_name: provider.display_name.clone(),
-                available: provider.is_available(),
-                needs_node: provider.needs_node,
-                models: available_models(provider).await,
-                capabilities: toolsets
-                    .get(provider.id.as_str())
-                    .map(|toolset| toolset.capabilities.clone())
-                    .unwrap_or_default(),
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, provider) in self.providers.iter().cloned().enumerate() {
+            let lifecycle = self.lifecycle.clone();
+            let capabilities = toolsets
+                .get(provider.id.as_str())
+                .map(|toolset| toolset.capabilities.clone())
+                .unwrap_or_default();
+            tasks.spawn(async move {
+                let enabled = lifecycle.enabled(provider.id.as_str()).unwrap_or(false);
+                let management = lifecycle.status(&provider).await;
+                let summary = ProviderSummary {
+                    id: provider.id.as_str().to_string(),
+                    display_name: provider.display_name.clone(),
+                    available: enabled && management.launch_mode != ProviderLaunchMode::Unavailable,
+                    enabled,
+                    needs_node: provider.needs_node,
+                    models: available_models(&provider).await,
+                    capabilities,
+                    management,
+                };
+                (index, summary)
             });
         }
-        summaries
+        let mut summaries = Vec::with_capacity(self.providers.len());
+        while let Some(result) = tasks.join_next().await {
+            if let Ok(summary) = result {
+                summaries.push(summary);
+            }
+        }
+        summaries.sort_by_key(|(index, _)| *index);
+        summaries.into_iter().map(|(_, summary)| summary).collect()
     }
 }
 
@@ -441,6 +484,20 @@ impl Service for EngineService {
 impl std::ops::Deref for EngineService {
     type Target = Engine;
     fn deref(&self) -> &Engine {
+        &self.0
+    }
+}
+
+/// Durable source/target fencing plus portable workspace transfer.
+pub struct HandoffService(pub Arc<crate::handoff::TaskHandoffManager>);
+
+impl Service for HandoffService {
+    const NAME: &'static str = "handoff";
+}
+
+impl std::ops::Deref for HandoffService {
+    type Target = crate::handoff::TaskHandoffManager;
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }

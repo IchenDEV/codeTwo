@@ -886,6 +886,7 @@ impl Store {
     pub fn delete_memory(&self, id: &str) -> Result<(), StoreError> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction()?;
+        let now = now_millis();
         let affected: Option<(String, String)> = tx
             .query_row(
                 "SELECT project_path,layer FROM memories WHERE id=?1",
@@ -931,10 +932,17 @@ impl Store {
             "UPDATE memories SET conflict_with_id=NULL,conflict_reason=NULL WHERE conflict_with_id=?1",
             [id],
         )?;
+        if affected.is_some() {
+            tx.execute(
+                "INSERT INTO sync_tombstones(entity,entity_id,deleted_at) VALUES('memory',?1,?2)
+                 ON CONFLICT(entity,entity_id) DO UPDATE SET deleted_at=MAX(deleted_at,excluded.deleted_at)",
+                rusqlite::params![id, now],
+            )?;
+        }
         tx.execute("DELETE FROM memories WHERE id=?1", [id])?;
         if let Some((project_path, layer)) = affected {
             if layer == "L1" {
-                refresh_profile(&tx, &project_path, now_millis())?;
+                refresh_profile(&tx, &project_path, now)?;
             }
         }
         tx.commit()?;
@@ -1518,6 +1526,7 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
             }
             DocBlock::File { path } => lines.push(format!("Referenced file: {path}")),
             DocBlock::Image { path } => lines.push(format!("Attached image: {path}")),
+            DocBlock::Appshot { id, .. } => lines.push(format!("Attached Appshot: {id}")),
             DocBlock::Canvas {
                 id,
                 frozen_revision,

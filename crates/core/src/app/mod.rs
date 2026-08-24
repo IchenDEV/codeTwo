@@ -69,9 +69,10 @@ pub use plugin_manager::{
 };
 
 pub use service::{
-    CanvasService, CostService, EngineService, EventBus, KeymapService, LoaderService,
-    MemoryService, Paths, PluginConfigService, PluginHub, ProviderService, ProviderSummary,
-    SceneRuntimeService, SceneService, SkillService, StoreService, TerminalEvent, TerminalService,
+    CanvasService, CostService, EngineService, EventBus, HandoffService, KeymapService,
+    LoaderService, MemoryService, Paths, PluginConfigService, PluginHub, ProviderService,
+    ProviderSummary, SceneRuntimeService, SceneService, SkillService, StoreService, TerminalEvent,
+    TerminalService,
 };
 
 use codetwo_kernel::{

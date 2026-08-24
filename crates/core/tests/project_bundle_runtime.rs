@@ -60,12 +60,21 @@ done
             "scenes": 0,
             "pipelines": 0,
             "scaffolds": 0,
+            "ui": 1,
             "runtime": 1
         },
         "components": [],
         "scaffolds": [],
         "extension_components": [],
-        "ui_contributions": [],
+        "ui_contributions": [{
+            "id": "where",
+            "slot": "session.header",
+            "label": "Locate runtime",
+            "description": "Report the active runtime realm.",
+            "command": "bundle.where",
+            "input": { "mode": "fixture" },
+            "order": 0
+        }],
         "lsp_servers": [],
         "diagnostics": [],
         "runtime": runtime
@@ -193,6 +202,75 @@ async fn an_installed_process_bundle_is_a_managed_project_plugin() {
     assert!(realms.contains(&CommandRealm::Global));
     assert!(realms.contains(&CommandRealm::project(normalized_b)));
     assert!(!realms.contains(&CommandRealm::project(normalized_a)));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn manifest_ui_actions_invoke_only_the_owning_runtime_in_the_callers_realm() {
+    let data = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    install_runtime_bundle(data.path(), "fixture", true);
+    let app = boot(data.path()).await;
+
+    let listed = app.call("plugins.list", Value::Null).await.unwrap();
+    assert_eq!(listed[0]["ui_contributions"][0]["id"], "where");
+
+    let global = app
+        .call(
+            "plugins.invoke_ui",
+            json!({
+                "plugin_id": "fixture",
+                "contribution_id": "where",
+                "context": { "cwd": project.path() }
+            }),
+        )
+        .await
+        .unwrap();
+    let local = app
+        .call_in_project(
+            project.path(),
+            "plugins.invoke_ui",
+            json!({
+                "plugin_id": "fixture",
+                "contribution_id": "where",
+                "context": { "cwd": project.path() }
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(global["projectPath"], "");
+    assert_ne!(global["pid"], local["pid"]);
+    assert_eq!(
+        local["projectPath"],
+        project
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+
+    change(
+        &app,
+        "bundle:fixture",
+        PluginScope::project(project.path()),
+        PluginOverride::Disabled,
+    )
+    .await
+    .unwrap();
+    let error = app
+        .call_in_project(
+            project.path(),
+            "plugins.invoke_ui",
+            json!({
+                "plugin_id": "fixture",
+                "contribution_id": "where",
+                "context": {}
+            }),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("active command owned"));
 }
 
 #[cfg(unix)]

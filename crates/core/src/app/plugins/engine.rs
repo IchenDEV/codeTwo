@@ -11,7 +11,7 @@
 
 use crate::app::events::{EngineEvent, ScenesChanged, SkillsChanged};
 use crate::app::service::{
-    EngineService, EventBus, MemoryService, ProviderService, SceneService, SkillService,
+    EngineService, EventBus, MemoryService, Paths, ProviderService, SceneService, SkillService,
     StoreService,
 };
 use crate::app::{json, take_args};
@@ -24,7 +24,15 @@ use crate::worktree::WorktreeBaseline;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+use std::sync::Mutex;
+
+#[derive(Clone)]
+struct QueuedPrompt {
+    doc: Vec<crate::skill::DocBlock>,
+    request_id: Option<String>,
+}
 
 /// What the engine is built from. A host that needs a different construction gets these and
 /// returns an engine without forking the plugin graph.
@@ -94,7 +102,7 @@ impl Plugin for EnginePlugin {
     }
 
     fn inject(&self) -> Injection {
-        let mut injection = Injection::required(["store", "providers", "skills", "bus"])
+        let mut injection = Injection::required(["store", "providers", "skills", "bus", "paths"])
             .with_optional(["scenes", "memory"]);
         injection
             .required
@@ -107,9 +115,10 @@ impl Plugin for EnginePlugin {
         let providers = ctx.expect::<ProviderService>()?;
         let skills = ctx.expect::<SkillService>()?;
         let bus = ctx.expect::<EventBus>()?;
+        let paths = ctx.expect::<Paths>()?;
 
         let inputs = EngineInputs {
-            providers: providers.providers.clone(),
+            providers: providers.runtime_providers(),
             provider_tools: providers.toolsets(),
             skills: skills.library(),
             store: store.0.clone(),
@@ -125,6 +134,7 @@ impl Plugin for EnginePlugin {
                 providers.shared_toolsets(),
             ),
         };
+        engine.set_private_data_dir(paths.data_dir.clone());
         let engine = Arc::new(engine);
 
         // Scenes are optional: without them the engine compiles prompts against the default
@@ -167,7 +177,7 @@ impl Plugin for EnginePlugin {
         }
 
         ctx.provide(Arc::new(EngineService(engine.clone())))?;
-        register_commands(&ctx, engine.clone(), store)?;
+        register_commands(&ctx, engine.clone(), store, bus)?;
         ctx.effect(move || engine.shutdown());
         Ok(())
     }
@@ -177,6 +187,7 @@ fn register_commands(
     ctx: &Context,
     engine: Arc<Engine>,
     store: Arc<StoreService>,
+    bus: Arc<EventBus>,
 ) -> Result<(), PluginError> {
     #[derive(Deserialize)]
     struct SubmitArgs {
@@ -336,7 +347,13 @@ fn register_commands(
         #[serde(default)]
         request_id: Option<String>,
         #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
         initial_policy: Option<ExecutionPolicy>,
+        #[serde(default)]
+        transient: bool,
+        #[serde(default)]
+        reasoning_effort: Option<String>,
     }
     let new_session = engine.clone();
     ctx.command("engine.new_session", move |args| {
@@ -344,15 +361,18 @@ fn register_commands(
         async move {
             let args: NewSessionArgs = take_args(args)?;
             engine
-                .submit(Op::NewSession {
-                    provider: parse_provider(&args.provider),
-                    cwd: args.cwd,
-                    use_worktree: args.use_worktree,
-                    worktree_base: args.worktree_base,
-                    worktree_base_sha: args.worktree_base_sha,
-                    request_id: args.request_id,
-                    initial_policy: args.initial_policy,
-                })
+                .create_session(
+                    parse_provider(&args.provider),
+                    args.cwd,
+                    args.use_worktree,
+                    args.worktree_base,
+                    args.worktree_base_sha,
+                    args.request_id,
+                    args.model,
+                    args.initial_policy,
+                    args.transient,
+                    args.reasoning_effort,
+                )
                 .await
                 .map_err(PluginError::new)?;
             Ok(Value::Bool(true))
@@ -382,6 +402,168 @@ fn register_commands(
             Ok(Value::Bool(true))
         }
     })?;
+
+    let prompt_queues = Arc::new(Mutex::new(HashMap::<String, VecDeque<QueuedPrompt>>::new()));
+    let closing = engine.clone();
+    let closing_queues = prompt_queues.clone();
+    ctx.command("engine.close_transient_session", move |args| {
+        let engine = closing.clone();
+        let queues = closing_queues.clone();
+        async move {
+            let args: SessionArgs = take_args(args)?;
+            let closed = engine
+                .close_transient_session(&args.session)
+                .map_err(PluginError::new)?;
+            if closed {
+                queues.lock().unwrap().remove(&args.session);
+            }
+            json(closed)
+        }
+    })?;
+
+    let preparing = engine.clone();
+    ctx.command("engine.prepare_session", move |args| {
+        let engine = preparing.clone();
+        async move {
+            let args: SessionArgs = take_args(args)?;
+            engine
+                .prepare_session(&args.session)
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    let queueing = engine.clone();
+    let queued_bus = bus.clone();
+    let queues = prompt_queues.clone();
+    ctx.command("engine.queue", move |args| {
+        let engine = queueing.clone();
+        let bus = queued_bus.clone();
+        let queues = queues.clone();
+        async move {
+            let args: PromptArgs = take_args(args)?;
+            if crate::skill::canonical_doc_text(&args.doc)
+                .trim()
+                .is_empty()
+            {
+                return Err(PluginError::new("prompt is empty"));
+            }
+            if !engine.session_is_busy(&args.session) {
+                engine
+                    .submit(Op::Prompt {
+                        session: args.session,
+                        doc: args.doc,
+                        request_id: args.request_id,
+                    })
+                    .await
+                    .map_err(PluginError::new)?;
+                return json(serde_json::json!({ "position": 0 }));
+            }
+            let position = {
+                let mut queues = queues.lock().unwrap();
+                let queue = queues.entry(args.session.clone()).or_default();
+                queue.push_back(QueuedPrompt {
+                    doc: args.doc,
+                    request_id: args.request_id.clone(),
+                });
+                queue.len()
+            };
+            bus.publish(crate::event::Event::PromptQueued {
+                session: args.session,
+                request_id: args.request_id,
+                position,
+            });
+            json(serde_json::json!({ "position": position }))
+        }
+    })?;
+
+    let steering = engine.clone();
+    ctx.command("engine.steer", move |args| {
+        let engine = steering.clone();
+        async move {
+            let args: PromptArgs = take_args(args)?;
+            let outcome = engine
+                .steer_prompt(&args.session, args.doc, args.request_id)
+                .await
+                .map_err(PluginError::new)?;
+            json(serde_json::json!({ "outcome": outcome }))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct GoalArgs {
+        session: String,
+        action: String,
+        #[serde(default)]
+        objective: Option<String>,
+    }
+    let goals = engine.clone();
+    ctx.command("engine.goal", move |args| {
+        let engine = goals.clone();
+        async move {
+            let args: GoalArgs = take_args(args)?;
+            engine
+                .control_goal(&args.session, &args.action, args.objective)
+                .await
+                .map_err(PluginError::new)?;
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    let draining_engine = engine.clone();
+    let draining_bus = bus.clone();
+    let mut queue_events = bus.subscribe();
+    ctx.spawn(async move {
+        loop {
+            let event = match queue_events.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+            let session = match &event {
+                crate::event::Event::TurnEnded { session, .. } => Some(session.clone()),
+                crate::event::Event::Error {
+                    session: Some(session),
+                    terminal: true,
+                    ..
+                } => Some(session.clone()),
+                _ => None,
+            };
+            let Some(session) = session else { continue };
+            if draining_engine.session_is_busy(&session) {
+                continue;
+            }
+            let (next, remaining) = {
+                let mut queues = prompt_queues.lock().unwrap();
+                let Some(queue) = queues.get_mut(&session) else {
+                    continue;
+                };
+                let next = queue.pop_front();
+                let remaining = queue.iter().cloned().collect::<Vec<_>>();
+                if queue.is_empty() {
+                    queues.remove(&session);
+                }
+                (next, remaining)
+            };
+            for (index, queued) in remaining.into_iter().enumerate() {
+                draining_bus.publish(crate::event::Event::PromptQueued {
+                    session: session.clone(),
+                    request_id: queued.request_id,
+                    position: index + 1,
+                });
+            }
+            if let Some(next) = next {
+                let _ = draining_engine
+                    .submit(Op::Prompt {
+                        session,
+                        doc: next.doc,
+                        request_id: next.request_id,
+                    })
+                    .await;
+            }
+        }
+    });
 
     #[derive(Deserialize)]
     struct PermissionArgs {

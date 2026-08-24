@@ -8,6 +8,7 @@ mod canvas;
 mod engine;
 mod extensions;
 mod foundation;
+mod handoff;
 mod hub;
 mod issues;
 mod library;
@@ -23,6 +24,7 @@ pub use canvas::{CanvasPlugin, DocumentPlugin};
 pub use engine::{EngineBuilder, EngineInputs, EnginePlugin};
 pub use extensions::ExtensionsPlugin;
 pub use foundation::{BusPlugin, PathsPlugin, ProvidersPlugin, StorePlugin};
+pub use handoff::HandoffPlugin;
 pub use hub::{HubPlugin, KernelPlugin};
 pub use issues::IssuesPlugin;
 pub use library::{ScenesPlugin, SkillsPlugin};
@@ -51,6 +53,7 @@ pub const BUILTIN: &[&str] = &[
     "skills",
     "scenes",
     "engine",
+    "handoff",
     "git",
     "memory",
     "market",
@@ -83,6 +86,7 @@ pub fn builtin_registry() -> PluginRegistry {
     registry.register(|| SkillsPlugin);
     registry.register(|| ScenesPlugin);
     registry.register(EnginePlugin::new);
+    registry.register(|| HandoffPlugin);
     registry.register(|| GitPlugin);
     registry.register(|| MemoryPlugin);
     registry.register(|| MarketPlugin);
@@ -109,6 +113,7 @@ pub fn builtin_registry() -> PluginRegistry {
         ("bus", PluginCategory::Foundation),
         ("providers", PluginCategory::Foundation),
         ("engine", PluginCategory::Foundation),
+        ("handoff", PluginCategory::Integration),
         ("memory", PluginCategory::Foundation),
         ("kernel", PluginCategory::Foundation),
         ("workspace", PluginCategory::Workspace),

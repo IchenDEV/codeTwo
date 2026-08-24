@@ -52,6 +52,7 @@ const windowEffectsLibrary = join(
   ".build",
   "libCodeTwoWindowEffects.dylib",
 );
+const embeddedRuntimeExecutables = ["codetwo-desktop-host", "codetwo-tool-broker"];
 
 function setPlistString(plist: string, key: string, value: string): void {
   const replace = Bun.spawnSync(["/usr/bin/plutil", "-replace", key, "-string", value, plist]);
@@ -186,6 +187,36 @@ function embedCloudSyncHelper(bundle: string): void {
   if (result.exitCode !== 0) process.exit(result.exitCode);
 }
 
+function prepareEmbeddedRuntime(bundle: string): void {
+  const runtimeDirectory = join(bundle, "Contents", "Resources", "app", "bin");
+  for (const executable of embeddedRuntimeExecutables) {
+    const path = join(runtimeDirectory, executable);
+    if (!existsSync(path)) throw new Error(`Required desktop runtime is missing: ${path}`);
+    chmodSync(path, 0o755);
+  }
+}
+
+function signEmbeddedRuntime(bundle: string): void {
+  const identity = process.env.ELECTROBUN_DEVELOPER_ID;
+  if (!identity) return;
+
+  const runtimeDirectory = join(bundle, "Contents", "Resources", "app", "bin");
+  for (const executable of embeddedRuntimeExecutables) {
+    const path = join(runtimeDirectory, executable);
+    const command = [
+      "/usr/bin/codesign",
+      "--force",
+      "--sign",
+      identity,
+      identity === "-" ? "--timestamp=none" : "--timestamp",
+    ];
+    if (identity !== "-") command.push("--options", "runtime");
+    command.push(path);
+    const result = Bun.spawnSync(command, { stdout: "inherit", stderr: "inherit" });
+    if (result.exitCode !== 0) process.exit(result.exitCode);
+  }
+}
+
 function signUpdateComponents(bundle: string): void {
   const identity = process.env.ELECTROBUN_DEVELOPER_ID;
   if (!identity) return;
@@ -274,6 +305,8 @@ function configureUpdater(plist: string): void {
 }
 
 for (const bundle of bundles) {
+  prepareEmbeddedRuntime(bundle);
+  signEmbeddedRuntime(bundle);
   embedWindowEffects(bundle);
   embedCloudSyncHelper(bundle);
   const plist = join(bundle, "Contents", "Info.plist");

@@ -207,10 +207,9 @@ impl HostToolDiscovery {
 
     pub fn select_computer_use_backend(
         data_dir: impl AsRef<Path>,
-        provider: &str,
         backend: &str,
     ) -> Result<ComputerUseSettings, String> {
-        let catalog = select(data_dir.as_ref(), "computer_use", Some(provider), backend)?;
+        let catalog = select(data_dir.as_ref(), "computer_use", None, backend)?;
         Ok(catalog.computer_use)
     }
 

@@ -119,6 +119,7 @@ async fn main() -> std::process::ExitCode {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: None,
+            model: None,
             initial_policy: None,
         })
         .await

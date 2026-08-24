@@ -49,8 +49,9 @@ impl CommandRealm {
 }
 
 #[allow(clippy::type_complexity)]
-pub type CommandHandler =
-    Arc<dyn Fn(Value) -> BoxFuture<'static, Result<Value, PluginError>> + Send + Sync>;
+pub type CommandHandler = Arc<
+    dyn Fn(CommandRealm, Value) -> BoxFuture<'static, Result<Value, PluginError>> + Send + Sync,
+>;
 
 pub(crate) struct CommandEntry {
     pub scope: ScopeId,

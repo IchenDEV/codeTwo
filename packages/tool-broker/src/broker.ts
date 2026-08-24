@@ -156,7 +156,7 @@ export class ToolBroker implements ToolBrokerPort {
       capability(
         "codetwo_browser",
         "unavailable",
-        "The Pure Bun Electrobun host does not expose an agent Browser MCP yet.",
+        "The desktop host does not expose an authenticated C2 Browser MCP yet.",
         "Use an available Browser Use backend when browser interaction is required.",
       ),
       capability(

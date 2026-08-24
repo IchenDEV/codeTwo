@@ -40,8 +40,8 @@ whole turn, and only then send it to the agent you choose.
 - **Git-aware execution.** Use per-session worktrees, automatic checkpoints, diffs, revert, and
   explicit commit/push flows.
 - **Three surfaces.** C2 ships an Electrobun desktop app, a ratatui TUI, and a paired remote web
-  client. The experimental desktop build runs an in-process Bun host; the TUI and server retain the
-  Rust core.
+  client. All three use the same Rust core and Plugin Kernel; Electrobun is the desktop shell and
+  relays one command/event protocol to its bundled Rust host.
 
 ## How it fits together
 

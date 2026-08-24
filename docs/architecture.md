@@ -1,19 +1,19 @@
 # Architecture
 
 C2 drives existing coding CLIs (Claude Code, OpenAI Codex, Grok) over the **Agent Client
-Protocol (ACP)** and presents them through a **document-first** UI. The TUI and server use the Rust
-core; the experimental Electrobun desktop build uses an in-process TypeScript/Bun host.
+Protocol (ACP)** and presents them through a **document-first** UI. The desktop, TUI, and server all
+use the same Rust core and Plugin Kernel. Electrobun is a desktop-shell adapter, not a second
+business runtime.
 
 ## Why this shape
 
 - **ACP is the common abstraction.** JSON-RPC over stdio, with entry points for all three
   providers (Grok natively; Claude Code & Codex via official adapters). We implement the client
   loop once and treat each backend as a launch command.
-- **The Rust core remains the reference implementation.** The TUI and server link it directly.
-  The current Electrobun experiment instead implements the renderer command/event contract inside
-  Bun, so its packaged desktop artifact has no Rust executable. It covers the primary local path
-  (projects, sessions, ACP, constrained workspace I/O, Git, PTY and LSP) and fails closed for
-  capabilities that have not migrated yet.
+- **The Rust core is the single implementation.** The TUI and server link it directly. The desktop
+  packages `codetwo-desktop-host`, which boots the same `CoreApp` graph plus desktop-owned
+  automation, device-sync, event, language-server, and remote adapters. Bun owns windows, dialogs,
+  updates, and the narrow JSON-lines process transport.
 
 ## Shape: a plugin graph, not a program with hooks
 
@@ -45,25 +45,40 @@ only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-pr
                       │ links directly        │ links directly
               crates/tui (ratatui)     crates/server (Axum)
 
-   apps/desktop/src/electrobun/host  (TypeScript/Bun implementation)
-                      │ ACP + SQLite + Git + PTY + LSP
-                      │ Electrobun typed RPC
+   apps/desktop/src-host  (Rust CoreApp + desktop host plugins)
+                      │ versioned JSON-lines commands + events
+   apps/desktop/src/electrobun  (Bun window/dialog/update adapter)
+                      │ one typed Electrobun `call` RPC
    apps/desktop/src  (React + Vite + BlockNote + sandboxed webviews)
 ```
+
+## Device synchronization
+
+Device sync follows the same ownership boundary. `codetwo-core` owns the versioned document,
+SQLite snapshot/import operations, deterministic last-write-wins merge, append-only transcript
+set, and deletion tombstones. The desktop `device-sync` host plugin owns private peer credentials,
+five-minute scheduling, status/events, and the paired-device HTTP transport. The `remote` plugin
+optionally injects that service and exposes it through `/api/device-sync/v1`; disabling either
+plugin removes the corresponding commands or network protocol through normal graph teardown.
+
+C2 sync pairing tokens and bearers are cryptographically separate from T3 and legacy remote-control
+credentials. The accepting device persists only a bearer hash; the initiating device stores the raw
+peer bearer in a `0600` state file. Snapshot requests are bounded to 64 MiB and use content versions
+plus three merge retries so a concurrent writer yields an explicit conflict instead of silent loss.
 
 ## The SQ/EQ interface (`core::event`)
 
 Frontends never touch ACP directly. They push [`Op`]s (NewSession, Prompt, Cancel,
 AnswerPermission, …) and consume [`Event`]s (AgentText, ToolCall, PermissionRequest, TurnEnded, …).
-- Electrobun desktop trial: the renderer makes one typed `call` RPC to the in-process Bun host;
-  reverse event envelopes carry engine and terminal streams.
+- Electrobun desktop: the renderer makes one typed `call` RPC; Bun relays it to the bundled Rust
+  Plugin Kernel, and reverse event envelopes carry engine, terminal, automation, and LSP streams.
 - TUI: calls the same core engine in-process, renders `Event`s in its draw loop.
 
 The Rust M1 engine consumes `Op`s and, by driving `core::acp`, produces `Event`s. Its ACP
 `ClientHandler` translates `session/update` → `Event`s and routes `session/request_permission`
-through the permission engine (auto-answer or surface an `Ask`). The Bun desktop trial implements
-the renderer-facing subset independently; its displayed permission/sandbox modes are policy state,
-not an OS-enforced sandbox.
+through the permission engine (auto-answer or surface an `Ask`). Desktop permission and sandbox
+modes therefore have the same semantics as the TUI/server; a displayed policy is still not an
+OS-enforced sandbox unless the selected provider supplies one.
 
 ## ACP client (`core::acp`)
 
@@ -105,22 +120,22 @@ short routing/safety instructions. It never contains a provider-private endpoint
               catalog(context) │ resolve(request)
                              ▼
                   immutable ToolPlan + catalog
-                     ┌─────────┴─────────┐
-            in-process adapter       JSON-RPC adapter
-                     │                   │
-             ElectronBun desktop   Rust CoreApp only
-                                   ├─ ratatui TUI
-                                   └─ Axum server
+                             │
+                      JSON-RPC adapter
+                             │
+                        Rust CoreApp
+               ┌─────────────┼─────────────┐
+     Electrobun desktop   ratatui TUI   Axum server
 
  SelectionStore ── host-tools.json
        ▲                    │
        └── settings commands┘
 ```
 
-The desktop calls the broker in-process and passes its MCP specs directly to the ACP peer. TUI and
-server launch the compiled `codetwo-tool-broker` beside their Rust executable and deserialize the
-same wire plan through `crates/core/src/host_tools.rs`; that Rust file contains process and wire
-adaptation only. `script/build_rust_hosts.sh` builds the three sibling executables. During source
+Every surface launches the compiled `codetwo-tool-broker` beside its Rust executable and
+deserializes the same wire plan through `crates/core/src/host_tools.rs`; that Rust file contains
+process and wire adaptation only. The packaged desktop resolves the broker beside
+`codetwo-desktop-host`. `script/build_rust_hosts.sh` builds the sibling executables. During source
 development the adapter can fall back to `bun toolBrokerRpc.ts`; installed hosts can also use
 `CODETWO_TOOL_BROKER` or a broker on `PATH`.
 

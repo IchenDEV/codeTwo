@@ -9,6 +9,7 @@ use crate::app::service::{EventBus, Paths, ProviderService, StoreService};
 use crate::app::{json, take_args};
 use crate::host_tools::HostToolDiscovery;
 use crate::provider::default_registry;
+use crate::provider_lifecycle::{ProviderLifecycleAction, ProviderLifecycleManager};
 use crate::store::Store;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -118,6 +119,9 @@ impl Plugin for StorePlugin {
         if let Err(error) = store.interrupt_active_automation_runs(now_millis()) {
             tracing::warn!("automation startup reconciliation failed: {error}");
         }
+        if let Err(error) = store.purge_transient_sessions() {
+            tracing::warn!("transient session startup cleanup failed: {error}");
+        }
 
         ctx.provide(Arc::new(StoreService(store.clone())))?;
 
@@ -214,13 +218,77 @@ impl Plugin for ProvidersPlugin {
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let paths = ctx.expect::<Paths>()?;
         let host_tools = HostToolDiscovery::detect(&paths.data_dir);
-        let providers = default_registry();
-        let service = Arc::new(ProviderService::new(providers, host_tools));
+        let lifecycle = ProviderLifecycleManager::open(&paths.data_dir);
+        let providers = lifecycle.prepare_registry(default_registry());
+        let service = Arc::new(ProviderService::new(providers, host_tools, lifecycle));
 
         let listed = service.clone();
         ctx.command("providers.list", move |_| {
             let service = listed.clone();
             async move { json(service.summaries().await) }
+        })?;
+
+        #[derive(Deserialize)]
+        struct ProviderEnabledArgs {
+            provider: String,
+            enabled: bool,
+        }
+        #[derive(Deserialize)]
+        struct ProviderActionArgs {
+            provider: String,
+        }
+
+        let enabled_service = service.clone();
+        let enabled_context = ctx.clone();
+        ctx.command("providers.set_enabled", move |args| {
+            let service = enabled_service.clone();
+            let context = enabled_context.clone();
+            async move {
+                let args: ProviderEnabledArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .set_enabled(&args.provider, args.enabled)
+                    .map_err(PluginError::new)?;
+                let summaries = service.summaries().await;
+                context.reload();
+                json(summaries)
+            }
+        })?;
+
+        let install_service = service.clone();
+        let install_context = ctx.clone();
+        ctx.command("providers.install", move |args| {
+            let service = install_service.clone();
+            let context = install_context.clone();
+            async move {
+                let args: ProviderActionArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .apply(&args.provider, ProviderLifecycleAction::Install)
+                    .await
+                    .map_err(PluginError::new)?;
+                let summaries = service.summaries().await;
+                context.reload();
+                json(summaries)
+            }
+        })?;
+
+        let upgrade_service = service.clone();
+        let upgrade_context = ctx.clone();
+        ctx.command("providers.upgrade", move |args| {
+            let service = upgrade_service.clone();
+            let context = upgrade_context.clone();
+            async move {
+                let args: ProviderActionArgs = take_args(args)?;
+                service
+                    .lifecycle()
+                    .apply(&args.provider, ProviderLifecycleAction::Upgrade)
+                    .await
+                    .map_err(PluginError::new)?;
+                let summaries = service.summaries().await;
+                context.reload();
+                json(summaries)
+            }
         })?;
 
         let settings = service.clone();
@@ -231,7 +299,6 @@ impl Plugin for ProvidersPlugin {
 
         #[derive(Deserialize)]
         struct ComputerUseSelectionArgs {
-            provider: String,
             backend: String,
         }
         #[derive(Deserialize)]
@@ -245,12 +312,8 @@ impl Plugin for ProvidersPlugin {
             let selected = selected.clone();
             async move {
                 let args: ComputerUseSelectionArgs = take_args(args)?;
-                HostToolDiscovery::select_computer_use_backend(
-                    &path,
-                    &args.provider,
-                    &args.backend,
-                )
-                .map_err(PluginError::new)?;
+                HostToolDiscovery::select_computer_use_backend(&path, &args.backend)
+                    .map_err(PluginError::new)?;
                 selected.refresh_host_tools(HostToolDiscovery::detect(&path));
                 json(selected.computer_use_settings())
             }

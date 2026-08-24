@@ -89,9 +89,9 @@ tools with a real portable MCP boundary across providers; private provider runti
   `node_repl` requires the active Codex turn and session. Browser Use, Playwright MCP, Chrome
   DevTools MCP, and other stdio/HTTP/SSE implementations can be registered in `host-tools.json`
   for compatible non-Codex providers.
-- **C2 Browser** is not currently exposed to agents by the Pure Bun Electrobun host. The embedded
-  BrowserView UI is separate from an ACP/MCP tool surface, so C2 reports this capability as
-  unavailable instead of silently routing through the removed Rust sidecar.
+- **C2 Browser** is not currently exposed to agents by the desktop host. The embedded BrowserView
+  UI is separate from an authenticated ACP/MCP automation surface and lacks the required screenshot
+  and evaluation primitives, so C2 reports this capability as unavailable.
 - **Image Generation** and **Sites** remain provider-native until the host exposes a real portable
   MCP adapter. C2 reports them as unavailable for other providers instead of claiming false parity.
 
@@ -100,7 +100,7 @@ tools with a real portable MCP boundary across providers; private provider runti
 C2 reads `host-tools.json` from its data directory. TUI/server use
 `~/.codetwo/host-tools.json`; desktop uses the Electrobun app-data directory, or the directory in
 `CODETWO_DATA_DIR` when that environment variable is set. In **Settings → Computer Use**, choose
-Automatic, no external backend, or one backend for new sessions. Cua Driver is shown as
+one global Automatic, disabled, or compatible backend policy. Cua Driver is shown as
 a built-in catalog option and becomes selectable when `cua-driver` is on `PATH`; other brands appear
 after their MCP definition is added to this file. Selecting an entry activates it for every
 compatible provider even when its legacy `enabled` flag is false.
@@ -134,11 +134,11 @@ allow only named providers, or `exclude_providers: ["codex"]` to retain Codex's 
 other stdio MCP driver uses the same shape and can supply `env` as a string map and an optional
 `cwd`.
 
-`computer_use_selection` is normally written by Settings. `automatic` prefers the provider/native
-OpenAI bridge and falls back to the first compatible configured backend whose legacy `enabled` flag
-is true; choosing a backend by name activates that backend even when the flag is false. `disabled`
-prevents C2 from attaching an external bridge. Provider-native tools can still remain available
-because C2 does not control tools implemented inside the provider itself.
+`computer_use_selection` is normally written by Settings under the `"*"` key. `automatic` prefers
+the provider/native OpenAI bridge and falls back to the first compatible configured backend whose
+legacy `enabled` flag is true; choosing a backend by name activates that backend even when the flag
+is false. `disabled` prevents C2 from attaching an external bridge. Provider-native tools can still
+remain available because C2 does not control tools implemented inside the provider itself.
 
 A remote MCP computer server uses this `server` shape instead:
 
@@ -237,17 +237,16 @@ session after changing a Browser Use backend.
 MCP servers are fixed when an ACP session starts. Every surface resolves them through the same Bun
 Tool Broker:
 
-- packaged Electrobun desktop calls the broker in-process and does not launch a Rust sidecar;
-- TUI and server call the compiled `codetwo-tool-broker` over JSON-RPC, then the Rust core injects
-  that returned plan for both `session/new` and `session/load`;
+- packaged Electrobun desktop's Rust host invokes the compiled sibling `codetwo-tool-broker` over
+  JSON-RPC; TUI and server use the same boundary;
+- the Rust core injects the returned plan for both `session/new` and `session/load`;
 - the broker returns only native capability ids and standard MCP specs. OpenAI's private
   `node_repl` endpoint never crosses the Codex adapter boundary;
 - configured Cua, Browser Use, Playwright, Chrome DevTools, cross-OS, and remote MCP backends follow
   their own runtime requirements.
 
-After changing the selection, open a new session. The desktop and Rust hosts refresh their broker
-plan after the Settings save, but an already-live ACP session cannot add or replace MCP servers in
-place.
+After changing the selection, open a new session. The Rust host refreshes its broker plan after the
+Settings save, but an already-live ACP session cannot add or replace MCP servers in place.
 
 ## The ACP loop
 

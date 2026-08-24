@@ -49,7 +49,7 @@ import {
   type EmbeddedBrowserTab,
 } from "./browser/electrobun";
 
-// Typed renderer bridge to Electrobun's in-process Bun desktop host.
+// Typed renderer bridge to the Rust Plugin Kernel through Electrobun's desktop adapter.
 
 export type {
   AppshotCapture,

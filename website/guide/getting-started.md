@@ -1,7 +1,7 @@
 # Install & run
 
 C2 isn't published as a binary yet — you run it from source. It's a Cargo workspace plus an
-Electrobun desktop host and Bun-built React renderer.
+Electrobun desktop shell and Bun-built React renderer.
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ Electrobun desktop host and Bun-built React renderer.
 | ------------------------ | ------------------------------------------- | --------------------------------------------- |
 | **Rust** (1.82+)         | builds the core, TUI, server, and desktop sidecar | [rustup.rs](https://rustup.rs)           |
 | **Zig** (0.15.2 exactly) | builds the embedded Ghostty terminal engine | [ziglang.org](https://ziglang.org/download/)  |
-| **Bun**                  | builds the Electrobun host and desktop renderer | [bun.sh](https://bun.sh)                  |
+| **Bun**                  | builds the Electrobun shell, renderer, and Tool Broker | [bun.sh](https://bun.sh)            |
 | **git**                  | worktrees, checkpoints, source control      | usually already installed                     |
 | A **provider CLI**       | to actually drive an agent                  | at least one of the supported providers below |
 

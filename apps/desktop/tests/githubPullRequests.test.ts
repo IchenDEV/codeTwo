@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { githubPullRequestInternals } from "../src/electrobun/host/github";
-import { builtinPluginForCommand } from "../src/electrobun/host/builtinPlugins";
 import {
   filterPullRequests,
   groupPullRequests,
@@ -34,66 +32,6 @@ function summary(
     ...relation,
   };
 }
-
-describe("GitHub pull request host normalization", () => {
-  test("keeps GitHub PR commands inside the existing Git plugin", () => {
-    expect(builtinPluginForCommand("github.pull_requests").id).toBe("git");
-    expect(builtinPluginForCommand("github.pull_request").id).toBe("git");
-  });
-
-  test("accepts only canonical github.com pull request URLs", () => {
-    expect(githubPullRequestInternals.pullRequestCoordinates(
-      "https://github.com/acme/repo/pull/42",
-    )).toEqual({ owner: "acme", repo: "repo", number: 42 });
-    expect(() => githubPullRequestInternals.pullRequestCoordinates(
-      "https://github.example/acme/repo/pull/42",
-    )).toThrow("canonical github.com");
-    expect(() => githubPullRequestInternals.pullRequestCoordinates(
-      "https://github.com/acme/repo/issues/42",
-    )).toThrow("canonical github.com");
-  });
-
-  test("normalizes search relations and detailed check, reviewer, and file data", () => {
-    const row = githubPullRequestInternals.searchSummary({
-      number: 7,
-      title: "Ship it",
-      url: "https://github.com/acme/repo/pull/7",
-      repository: { name: "repo", nameWithOwner: "acme/repo" },
-      author: { login: "octocat" },
-      isDraft: false,
-      updatedAt: "2026-08-24T10:00:00Z",
-      createdAt: "2026-08-23T10:00:00Z",
-      labels: [{ name: "ui", color: "123456" }],
-      commentsCount: 2,
-    }, "reviewRequested");
-    expect(row).toMatchObject({ id: "https://github.com/acme/repo/pull/7", reviewRequested: true });
-    const detail = githubPullRequestInternals.detailFromJson({
-      title: "Ship it",
-      url: row?.url,
-      number: 7,
-      author: { login: "octocat" },
-      body: "## Change\n\n- Ready",
-      additions: 10,
-      deletions: 2,
-      changedFiles: 1,
-      baseRefName: "main",
-      headRefName: "feature",
-      state: "OPEN",
-      reviewRequests: [{ login: "reviewer" }],
-      latestReviews: [{ author: { login: "approver" }, state: "APPROVED" }],
-      statusCheckRollup: [{ name: "test", status: "COMPLETED", conclusion: "SUCCESS" }],
-      files: [{ path: "src/app.ts", additions: 10, deletions: 2, changeType: "MODIFIED" }],
-    }, row!);
-    expect(detail.reviewers).toEqual([
-      { login: "reviewer", state: "REQUESTED" },
-      { login: "approver", state: "APPROVED" },
-    ]);
-    expect(detail.files).toEqual([
-      { path: "src/app.ts", additions: 10, deletions: 2, changeType: "MODIFIED" },
-    ]);
-    expect(pullRequestCheckState(detail)).toBe("passed");
-  });
-});
 
 describe("GitHub pull request projections", () => {
   const items = [

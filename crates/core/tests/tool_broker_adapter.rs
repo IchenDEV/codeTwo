@@ -50,3 +50,21 @@ fn rust_adapter_consumes_the_bun_broker_plan() {
         Some("Configured browser-use MCP backend(s) attached: Playwright MCP. Connectivity is verified on the first real call.")
     );
 }
+
+#[tokio::test]
+async fn core_app_accepts_the_desktop_global_computer_use_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = codetwo_core::app::CoreApp::boot(codetwo_core::app::AppConfig::new(directory.path()))
+        .await
+        .unwrap();
+
+    let settings = app
+        .call(
+            "computer_use.select",
+            serde_json::json!({ "backend": "automatic" }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(settings["selections"]["*"], "automatic");
+}

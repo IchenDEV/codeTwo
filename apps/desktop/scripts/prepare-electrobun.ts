@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
+const repositoryRoot = resolve(desktopRoot, "../..");
 
 function run(command: string[], cwd: string): void {
   const result = Bun.spawnSync(command, {
@@ -14,6 +15,8 @@ function run(command: string[], cwd: string): void {
 }
 
 run(["bun", "run", "build:renderer"], desktopRoot);
+run(["bun", "run", "build:tool-broker"], desktopRoot);
+run(["cargo", "build", "--release", "-p", "codetwo-desktop-host"], repositoryRoot);
 
 if (process.platform === "darwin") {
   const windowEffectsRoot = resolve(desktopRoot, "native", "window-effects");

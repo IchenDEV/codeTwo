@@ -475,9 +475,7 @@ impl T3CompatState {
                     }
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => {
-                        break Err(
-                            "C2 event stream closed before changing execution policy".into()
-                        )
+                        break Err("C2 event stream closed before changing execution policy".into())
                     }
                 }
             }
@@ -1188,8 +1186,7 @@ impl T3CompatState {
             || create.get("branch").is_some_and(|value| !value.is_null())
         {
             return Err(
-                "C2's T3 adapter does not yet support mobile Git/worktree bootstrap options"
-                    .into(),
+                "C2's T3 adapter does not yet support mobile Git/worktree bootstrap options".into(),
             );
         }
         let model = create
@@ -1268,6 +1265,7 @@ impl T3CompatState {
                 worktree_base: None,
                 worktree_base_sha: None,
                 request_id: Some(request_id.clone()),
+                model: None,
                 initial_policy: Some(ExecutionPolicy { mode, sandbox }),
             })
             .await
@@ -1459,6 +1457,7 @@ async fn oauth_token(
     } else {
         requested.iter().map(|scope| (*scope).to_string()).collect()
     };
+    let ephemeral_handoff = form.client_device_type.as_deref() == Some("handoff");
     let device_name = form
         .client_label
         .filter(|label| !label.trim().is_empty())
@@ -1467,13 +1466,14 @@ async fn oauth_token(
             let os = form.client_os.unwrap_or_else(|| "unknown".into());
             format!("T3 Code {kind} ({os})")
         });
-    let paired = match state.auth.try_pair_with_profile(
+    let paired = match state.auth.try_pair_with_profile_options(
         &form.subject_token,
         &device_name,
         Some(StdDuration::from_secs(
             Duration::days(ACCESS_TOKEN_TTL_DAYS).num_seconds() as u64,
         )),
         scopes.clone(),
+        ephemeral_handoff,
     ) {
         Ok(Some(paired)) => paired,
         Ok(None) => {

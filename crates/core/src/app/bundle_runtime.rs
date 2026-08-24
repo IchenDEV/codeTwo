@@ -203,6 +203,7 @@ mod tests {
             "id": "fixture",
             "name": "Fixture",
             "version": "1.2.3",
+            "author": "C2 Test",
             "description": "A fixture process",
             "source": "local-test",
             "repository": "fixture",

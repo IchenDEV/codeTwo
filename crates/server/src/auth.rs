@@ -64,11 +64,19 @@ pub struct Device {
     // old unbounded credentials belong to the original C2 browser protocol.
     #[serde(default)]
     protocol: Option<CredentialProtocol>,
+    /// Stable identity supplied by another C2 instance. Used to replace a re-pair instead of
+    /// accumulating credentials for the same peer.
+    #[serde(default)]
+    peer_id: Option<String>,
+    /// A task-transfer credential is revoked immediately after target activation.
+    #[serde(default)]
+    ephemeral_handoff: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum CredentialProtocol {
+    C2,
     Legacy,
     T3,
 }
@@ -92,6 +100,8 @@ pub struct DeviceInfo {
     pub name: String,
     pub created_at: u64,
     pub last_seen: u64,
+    pub direction: &'static str,
+    pub protocol: &'static str,
 }
 
 /// Result of a successful pairing: the raw bearer is returned exactly once.
@@ -120,6 +130,7 @@ pub(crate) struct BearerAuthorization {
     pub device_id: String,
     pub expires_at: Option<u64>,
     pub scopes: Vec<String>,
+    pub ephemeral_handoff: bool,
 }
 
 pub(crate) struct TicketAuthorization {
@@ -212,6 +223,11 @@ impl AuthState {
         self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::T3)
     }
 
+    /// Mint a token usable only by the paired-C2 synchronization protocol.
+    pub fn issue_c2_pairing_token(&self, ttl: Duration) -> String {
+        self.issue_pairing_token_for_protocol(ttl, CredentialProtocol::C2)
+    }
+
     fn issue_pairing_token_for_protocol(
         &self,
         ttl: Duration,
@@ -243,6 +259,28 @@ impl AuthState {
             None,
             Vec::new(),
             CredentialProtocol::Legacy,
+            false,
+            None,
+        )
+    }
+
+    pub fn try_pair_c2(
+        &self,
+        token: &str,
+        device_name: &str,
+        peer_id: &str,
+    ) -> Result<Option<Paired>, String> {
+        if peer_id.trim().is_empty() {
+            return Ok(None);
+        }
+        self.pair_with_protocol(
+            token,
+            device_name,
+            None,
+            Vec::new(),
+            CredentialProtocol::C2,
+            false,
+            Some(peer_id.trim().to_string()),
         )
     }
 
@@ -260,6 +298,7 @@ impl AuthState {
             .flatten()
     }
 
+    #[cfg(test)]
     pub(crate) fn try_pair_with_profile(
         &self,
         token: &str,
@@ -267,7 +306,26 @@ impl AuthState {
         ttl: Option<Duration>,
         scopes: Vec<String>,
     ) -> Result<Option<Paired>, String> {
-        self.pair_with_protocol(token, device_name, ttl, scopes, CredentialProtocol::T3)
+        self.try_pair_with_profile_options(token, device_name, ttl, scopes, false)
+    }
+
+    pub(crate) fn try_pair_with_profile_options(
+        &self,
+        token: &str,
+        device_name: &str,
+        ttl: Option<Duration>,
+        scopes: Vec<String>,
+        ephemeral_handoff: bool,
+    ) -> Result<Option<Paired>, String> {
+        self.pair_with_protocol(
+            token,
+            device_name,
+            ttl,
+            scopes,
+            CredentialProtocol::T3,
+            ephemeral_handoff,
+            None,
+        )
     }
 
     fn pair_with_protocol(
@@ -277,6 +335,8 @@ impl AuthState {
         ttl: Option<Duration>,
         scopes: Vec<String>,
         protocol: CredentialProtocol,
+        ephemeral_handoff: bool,
+        peer_id: Option<String>,
     ) -> Result<Option<Paired>, String> {
         let now = now_secs();
         let token_hash = hash(token);
@@ -302,10 +362,19 @@ impl AuthState {
             expires_at: ttl.map(|ttl| now.saturating_add(ttl.as_secs())),
             scopes,
             protocol: Some(protocol),
+            peer_id: peer_id.clone(),
+            ephemeral_handoff,
         };
         let device_id = device.id.clone();
         let mut devices = self.devices.lock().unwrap();
         let mut updated = devices.clone();
+        if protocol == CredentialProtocol::C2 {
+            updated.retain(|device| {
+                device.effective_protocol() != CredentialProtocol::C2
+                    || peer_id.is_none()
+                    || device.peer_id != peer_id
+            });
+        }
         updated.push(device);
         self.persist(&updated)?;
         *devices = updated;
@@ -321,6 +390,11 @@ impl AuthState {
 
     pub(crate) fn authorize_bearer_profile(&self, bearer: &str) -> Option<BearerAuthorization> {
         self.authorize_bearer_for_protocol(bearer, CredentialProtocol::T3)
+    }
+
+    pub fn authorize_c2_bearer(&self, bearer: &str) -> Option<String> {
+        self.authorize_bearer_for_protocol(bearer, CredentialProtocol::C2)
+            .map(|authorization| authorization.device_id)
     }
 
     fn authorize_bearer_for_protocol(
@@ -350,6 +424,7 @@ impl AuthState {
             device_id: dev.id.clone(),
             expires_at: dev.expires_at,
             scopes: dev.scopes.clone(),
+            ephemeral_handoff: dev.ephemeral_handoff,
         };
         if let Err(error) = self.persist(&devices) {
             tracing::warn!("persist remote device last-seen failed: {error}");
@@ -452,6 +527,12 @@ impl AuthState {
                 name: d.name.clone(),
                 created_at: d.created_at,
                 last_seen: d.last_seen,
+                direction: "incoming",
+                protocol: match d.effective_protocol() {
+                    CredentialProtocol::C2 => "c2",
+                    CredentialProtocol::Legacy => "legacy",
+                    CredentialProtocol::T3 => "t3",
+                },
             })
             .collect()
     }
@@ -532,6 +613,39 @@ mod tests {
             )
             .is_none());
         assert!(auth.pair(&legacy_token, "Browser").is_some());
+    }
+
+    #[test]
+    fn c2_credentials_are_protocol_bound_and_repair_replaces_the_same_peer() {
+        let auth = AuthState::load(None);
+        let token = auth.issue_c2_pairing_token(DEFAULT_PAIRING_TTL);
+        assert!(auth.pair(&token, "Downgrade attempt").is_none());
+        let paired = auth
+            .try_pair_c2(&token, "First desktop", "stable-peer")
+            .unwrap()
+            .expect("rejected cross-protocol exchange must not consume the token");
+        assert_eq!(
+            auth.authorize_c2_bearer(&paired.bearer),
+            Some(paired.device_id.clone())
+        );
+        assert!(auth.authorize_bearer(&paired.bearer).is_none());
+        assert!(auth.authorize_bearer_profile(&paired.bearer).is_none());
+
+        let replacement_token = auth.issue_c2_pairing_token(DEFAULT_PAIRING_TTL);
+        let replacement = auth
+            .try_pair_c2(&replacement_token, "Renamed desktop", "stable-peer")
+            .unwrap()
+            .unwrap();
+        assert!(auth.authorize_c2_bearer(&paired.bearer).is_none());
+        assert_eq!(
+            auth.authorize_c2_bearer(&replacement.bearer),
+            Some(replacement.device_id)
+        );
+        let devices = auth.list_devices();
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].name, "Renamed desktop");
+        assert_eq!(devices[0].direction, "incoming");
+        assert_eq!(devices[0].protocol, "c2");
     }
 
     #[test]

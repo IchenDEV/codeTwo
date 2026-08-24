@@ -115,6 +115,7 @@ async fn create_session(
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("create-activity-test".into()),
+            model: None,
             initial_policy: None,
         })
         .await
@@ -441,6 +442,7 @@ async fn initial_execution_policy_governs_the_first_turn_and_is_persisted() {
             worktree_base: None,
             worktree_base_sha: None,
             request_id: Some("create-read-only".into()),
+            model: None,
             initial_policy: Some(ExecutionPolicy {
                 mode: PermissionMode::Ask,
                 sandbox: SandboxPolicy::ReadOnly,
