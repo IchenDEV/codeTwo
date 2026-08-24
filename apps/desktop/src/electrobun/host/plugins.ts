@@ -26,46 +26,28 @@ import {
   builtinPluginScopeId,
   type BuiltinPluginDefinition,
 } from "./builtinPlugins";
+import {
+  C2_PLUGIN_STANDARD_VERSION,
+  assertUniquePluginContributionIds,
+  parsePluginContributionArray,
+  parsePluginLanguageServerContribution,
+  parsePluginRuntimeContribution,
+  parsePluginUiContribution,
+  parsePluginManifest,
+  pluginUiComponentId,
+  type PluginLanguageServerContribution,
+  type PluginRuntimeContribution,
+  type PluginUiContribution,
+} from "../../pluginModel";
 import { runProcess, which } from "./system";
 
 type JsonObject = Record<string, unknown>;
 type PluginOverride = "inherit" | "enabled" | "disabled";
 type PluginStatus = "pending" | "loading" | "active" | "failed" | "disposed";
 
-interface RuntimeSpec {
-  protocol: string;
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-  inject: string[];
-  optionalInject: string[];
-  scopeSupport: Array<"user" | "project">;
-}
-
-type PluginUiSlot =
-  | "rail.features"
-  | "session.header"
-  | "transcript.before"
-  | "composer.above"
-  | "composer.toolbar";
-
-interface UiContribution {
-  id: string;
-  slot: PluginUiSlot;
-  label: string;
-  description: string;
-  command: string;
-  input: unknown;
-  order: number;
-}
-
-interface LanguageServerContribution {
-  id: string;
-  languages: string[];
-  command: string;
-  args: string[];
-  env: Record<string, string>;
-}
+type RuntimeSpec = PluginRuntimeContribution;
+type UiContribution = PluginUiContribution;
+type LanguageServerContribution = PluginLanguageServerContribution;
 
 export interface PluginLanguageServerLaunch {
   id: string;
@@ -83,9 +65,7 @@ interface InstalledPlugin extends JsonObject {
   author: string;
   source: string;
   repository: string;
-  spec_version: string;
-  standard: "agent_plugins" | "codex" | "claude_code" | "conventional";
-  standards: Array<"agent_plugins" | "codex" | "claude_code" | "conventional">;
+  standard_version: string;
   enabled: boolean;
   trusted: boolean;
   scope: "user" | "project" | "local" | "managed";
@@ -194,15 +174,6 @@ const MAX_DEPTH = 12;
 const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 const PROCESS_EXIT_TIMEOUT_MS = 2_000;
-const AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-const C2_NAMESPACE = "dev.codetwo";
-const UI_SLOTS = new Set<PluginUiSlot>([
-  "rail.features",
-  "session.header",
-  "transcript.before",
-  "composer.above",
-  "composer.toolbar",
-]);
 function asObject(value: unknown): JsonObject {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
@@ -211,80 +182,12 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
-function stringRecord(value: unknown): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(asObject(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-  );
-}
-
 function safeId(value: string): boolean {
   return value.length > 0 && value.length <= 128 && /^[A-Za-z0-9_-]+$/.test(value);
 }
 
 function commandName(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value);
-}
-
-function uiContribution(value: unknown): UiContribution | null {
-  const raw = asObject(value);
-  if (!safeId(String(raw.id ?? "")) || !UI_SLOTS.has(raw.slot as PluginUiSlot)) return null;
-  if (typeof raw.label !== "string" || raw.label.trim().length === 0 || raw.label.length > 80) return null;
-  if (raw.description != null && (typeof raw.description !== "string" || raw.description.length > 300)) return null;
-  if (!commandName(raw.command)) return null;
-  const order = typeof raw.order === "number" && Number.isFinite(raw.order)
-    ? Math.max(-100, Math.min(100, Math.trunc(raw.order)))
-    : 0;
-  return {
-    id: String(raw.id),
-    slot: raw.slot as PluginUiSlot,
-    label: raw.label.trim(),
-    description: typeof raw.description === "string" ? raw.description.trim() : "",
-    command: raw.command,
-    input: raw.input ?? null,
-    order,
-  };
-}
-
-function languageServerContribution(value: unknown): LanguageServerContribution | null {
-  const raw = asObject(value);
-  if (!safeId(String(raw.id ?? ""))) return null;
-  if (typeof raw.command !== "string" || raw.command.trim().length === 0 || raw.command.includes("..")) return null;
-  const languages = [...new Set(stringArray(raw.languages).map((language) => language.toLocaleLowerCase()))]
-    .filter((language) => /^[a-z0-9][a-z0-9+_.-]{0,63}$/.test(language));
-  if (languages.length === 0 || languages.length > 16) return null;
-  return {
-    id: String(raw.id),
-    languages,
-    command: raw.command.trim(),
-    args: stringArray(raw.args),
-    env: stringRecord(raw.env),
-  };
-}
-
-function contributionArray<T>(
-  value: unknown,
-  parse: (entry: unknown) => T | null,
-  label: string,
-  strict: boolean,
-): T[] {
-  if (value == null) return [];
-  if (!Array.isArray(value)) {
-    if (strict) throw new Error(`${label} must be an array`);
-    return [];
-  }
-  const parsed = value.map(parse);
-  const invalid = parsed.findIndex((entry) => entry === null);
-  if (strict && invalid >= 0) throw new Error(`${label}[${invalid}] is invalid`);
-  return parsed.filter((entry): entry is T => entry !== null);
-}
-
-function assertUniqueContributionIds(
-  contributions: Array<{ id: string }>,
-  label: string,
-): void {
-  if (contributions.length !== new Set(contributions.map((contribution) => contribution.id)).size) {
-    throw new Error(`${label} contains duplicate ids`);
-  }
 }
 
 function pathInside(root: string, candidate: string): boolean {
@@ -330,69 +233,66 @@ function resolveOverride(value: PluginOverride | undefined, inherited: boolean):
   return inherited;
 }
 
-function runtimeSpec(value: unknown): RuntimeSpec | null {
-  const raw = asObject(value);
-  if (typeof raw.command !== "string" || raw.command.trim().length === 0 || raw.command.includes("..")) {
-    return null;
-  }
-  const declaredScopes = stringArray(raw.scopeSupport).filter(
-    (scope): scope is "user" | "project" => scope === "user" || scope === "project",
-  );
-  const scopeSupport = declaredScopes.length > 0 ? [...new Set(declaredScopes)] : ["user" as const];
-  if (!scopeSupport.includes("user")) scopeSupport.unshift("user");
-  return {
-    protocol: typeof raw.protocol === "string" ? raw.protocol : "",
-    command: raw.command.trim(),
-    args: stringArray(raw.args),
-    env: stringRecord(raw.env),
-    inject: stringArray(raw.inject),
-    optionalInject: stringArray(raw.optionalInject),
-    scopeSupport,
-  };
-}
-
 function installedPlugin(value: unknown, directoryName: string): InstalledPlugin | null {
   const raw = asObject(value);
-  if (typeof raw.id !== "string" || raw.id !== directoryName || !safeId(raw.id)) return null;
-  const runtime = raw.runtime == null ? null : runtimeSpec(raw.runtime);
-  const standard = ["agent_plugins", "codex", "claude_code", "conventional"].includes(String(raw.standard))
-    ? raw.standard as InstalledPlugin["standard"]
-    : "conventional";
-  const standards = Array.isArray(raw.standards)
-    ? raw.standards.filter((item): item is InstalledPlugin["standard"] =>
-      ["agent_plugins", "codex", "claude_code", "conventional"].includes(String(item)))
-    : [];
-  const uiContributions = contributionArray(raw.ui_contributions, uiContribution, "ui_contributions", false);
-  const lspServers = contributionArray(raw.lsp_servers, languageServerContribution, "lsp_servers", false);
-  assertUniqueContributionIds(uiContributions, "ui_contributions");
-  assertUniqueContributionIds(lspServers, "lsp_servers");
+  const fields = [
+    "schema_version", "id", "name", "version", "description", "author", "source", "repository",
+    "standard_version", "enabled", "trusted", "scope", "counts", "components", "scaffolds",
+    "extension_components", "ui_contributions", "lsp_servers", "diagnostics", "runtime",
+  ];
+  if (Object.keys(raw).some((key) => !fields.includes(key))) return null;
+  if (raw.schema_version !== 3 || typeof raw.id !== "string" || raw.id !== directoryName || !safeId(raw.id)) {
+    return null;
+  }
+  if (raw.standard_version !== C2_PLUGIN_STANDARD_VERSION) return null;
+  if (
+    typeof raw.name !== "string" || raw.name.trim().length === 0 ||
+    typeof raw.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version) ||
+    typeof raw.description !== "string" || typeof raw.author !== "string" ||
+    typeof raw.source !== "string" || typeof raw.repository !== "string" ||
+    typeof raw.enabled !== "boolean" || typeof raw.trusted !== "boolean" ||
+    !["user", "project", "local", "managed"].includes(String(raw.scope)) ||
+    !raw.counts || typeof raw.counts !== "object" || Array.isArray(raw.counts) ||
+    !Array.isArray(raw.components) || !Array.isArray(raw.scaffolds) ||
+    !Array.isArray(raw.extension_components) || !Array.isArray(raw.ui_contributions) ||
+    !Array.isArray(raw.lsp_servers) || !Array.isArray(raw.diagnostics)
+  ) return null;
+  const runtime = raw.runtime == null ? null : parsePluginRuntimeContribution(raw.runtime);
+  if (raw.runtime != null && !runtime) return null;
+  const uiContributions = parsePluginContributionArray(
+    raw.ui_contributions,
+    parsePluginUiContribution,
+    "ui_contributions",
+    true,
+  );
+  const lspServers = parsePluginContributionArray(
+    raw.lsp_servers,
+    parsePluginLanguageServerContribution,
+    "lsp_servers",
+    true,
+  );
+  assertUniquePluginContributionIds(uiContributions, "ui_contributions");
+  assertUniquePluginContributionIds(lspServers, "lsp_servers");
   return {
-    ...raw,
-    schema_version: typeof raw.schema_version === "number" ? raw.schema_version : 1,
+    schema_version: 3,
     id: raw.id,
-    name: typeof raw.name === "string" && raw.name.trim() ? raw.name : raw.id,
-    version: typeof raw.version === "string" && raw.version.trim() ? raw.version : "0.0.0",
-    description: typeof raw.description === "string" ? raw.description : "",
-    author: typeof raw.author === "string" ? raw.author : "",
-    source: typeof raw.source === "string" ? raw.source : "Plugin",
-    repository: typeof raw.repository === "string" ? raw.repository : "",
-    spec_version: typeof raw.spec_version === "string" ? raw.spec_version : "",
-    standard,
-    standards: standards.length > 0 ? standards : [standard],
-    enabled: raw.enabled !== false,
-    trusted: raw.trusted === true,
-    scope: ["user", "project", "local", "managed"].includes(String(raw.scope))
-      ? raw.scope as InstalledPlugin["scope"]
-      : "user",
+    name: raw.name as string,
+    version: raw.version as string,
+    description: raw.description as string,
+    author: raw.author as string,
+    source: raw.source as string,
+    repository: raw.repository as string,
+    standard_version: C2_PLUGIN_STANDARD_VERSION,
+    enabled: raw.enabled as boolean,
+    trusted: raw.trusted as boolean,
+    scope: raw.scope as InstalledPlugin["scope"],
     counts: asObject(raw.counts),
-    components: Array.isArray(raw.components) ? raw.components.map(asObject) : [],
-    scaffolds: Array.isArray(raw.scaffolds) ? raw.scaffolds.map(asObject) : [],
-    extension_components: Array.isArray(raw.extension_components)
-      ? raw.extension_components.map(asObject)
-      : [],
+    components: raw.components.map(asObject),
+    scaffolds: raw.scaffolds.map(asObject),
+    extension_components: raw.extension_components.map(asObject),
     ui_contributions: uiContributions,
     lsp_servers: lspServers,
-    diagnostics: Array.isArray(raw.diagnostics) ? raw.diagnostics.map(asObject) : [],
+    diagnostics: raw.diagnostics.map(asObject),
     runtime,
   };
 }
@@ -452,8 +352,8 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-function compatibleProtocol(version: string): boolean {
-  return version.trim().length === 0 || version.split(".")[0] === PROTOCOL_VERSION.split(".")[0];
+function supportedProtocol(version: string): boolean {
+  return version.trim().length > 0 && version.split(".")[0] === PROTOCOL_VERSION.split(".")[0];
 }
 
 function commandContribution(value: unknown): CommandContribution | null {
@@ -469,7 +369,7 @@ function commandContribution(value: unknown): CommandContribution | null {
 function initializeResult(value: unknown): InitializeResult {
   const raw = asObject(value);
   const protocolVersion = typeof raw.protocolVersion === "string" ? raw.protocolVersion : "";
-  if (!compatibleProtocol(protocolVersion)) {
+  if (!supportedProtocol(protocolVersion)) {
     throw new Error(`speaks plugin protocol ${protocolVersion} — this host speaks ${PROTOCOL_VERSION}`);
   }
   const commands = Array.isArray(raw.commands)
@@ -725,9 +625,7 @@ function publicPlugin(plugin: InstalledPlugin): JsonObject {
     author: plugin.author,
     source: plugin.source,
     repository: plugin.repository,
-    spec_version: plugin.spec_version,
-    standard: plugin.standard,
-    standards: plugin.standards,
+    standard_version: plugin.standard_version,
     enabled: plugin.enabled,
     trusted: plugin.trusted,
     scope: plugin.scope,
@@ -789,52 +687,47 @@ function githubSpec(value: string): GitHubSpec {
   };
 }
 
-function authorName(value: unknown): string {
-  const author = asObject(value);
-  return typeof author.name === "string" ? author.name : "";
-}
-
-function portableRuntimeManifest(root: string, source: string, identity: string): InstalledPlugin {
+function c2PluginManifest(root: string, source: string, identity: string): InstalledPlugin {
   const manifestPath = join(root, "plugin.json");
-  const raw = asObject(JSON.parse(readFileSync(manifestPath, "utf8")));
-  if (raw.$schema !== AGENT_PLUGIN_SCHEMA) throw new Error(`Unsupported Agent Plugins schema: ${String(raw.$schema ?? "")}`);
-  if (typeof raw.name !== "string" || !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(raw.name)) {
-    throw new Error("Agent Plugins name must match the 1.0.0 naming rules");
-  }
-  const extensions = asObject(raw.extensions);
-  const c2 = asObject(extensions[C2_NAMESPACE]);
-  const standardVersion = typeof c2.standardVersion === "string" ? c2.standardVersion : "";
-  if (standardVersion.split(".")[0] !== "1") throw new Error(`Unsupported C2 plugin standard: ${standardVersion || "missing"}`);
-  const runtime = runtimeSpec(c2.runtime);
-  const uiContributions = contributionArray(c2.ui, uiContribution, "extensions.dev.codetwo.ui", true);
-  const lspServers = contributionArray(
-    c2.languageServers,
-    languageServerContribution,
-    "extensions.dev.codetwo.languageServers",
-    true,
-  );
-  assertUniqueContributionIds(uiContributions, "extensions.dev.codetwo.ui");
-  assertUniqueContributionIds(lspServers, "extensions.dev.codetwo.languageServers");
-  if (uiContributions.length > 0 && !runtime) {
-    throw new Error("UI action contributions require extensions.dev.codetwo.runtime");
-  }
+  const canonicalRoot = realpathSync(root);
+  const canonicalManifest = realpathSync(manifestPath);
+  if (
+    lstatSync(manifestPath).isSymbolicLink() ||
+    !pathInside(canonicalRoot, canonicalManifest) ||
+    !statSync(canonicalManifest).isFile()
+  ) throw new Error("plugin.json must be a regular file inside the bundle root");
+  const manifest = parsePluginManifest(JSON.parse(readFileSync(manifestPath, "utf8")));
+  const { runtime, ui: uiContributions, languageServers: lspServers } = manifest;
+  const validateBundledCommand = (command: string, label: string): void => {
+    if (!command.includes("/") && !command.includes("\\")) return;
+    const commandPath = resolve(root, command);
+    let canonicalCommand: string;
+    try {
+      canonicalCommand = realpathSync(commandPath);
+    } catch {
+      throw new Error(`${label} command does not exist in the bundle: ${command}`);
+    }
+    if (!pathInside(canonicalRoot, canonicalCommand) || !statSync(canonicalCommand).isFile()) {
+      throw new Error(`${label} command escapes the bundle: ${command}`);
+    }
+  };
+  if (runtime) validateBundledCommand(runtime.command, "runtime");
+  for (const server of lspServers) validateBundledCommand(server.command, `language server ${server.id}`);
   if (!runtime && lspServers.length === 0) {
     throw new Error("This Pure Bun installer requires a process runtime or a supported languageServers contribution");
   }
-  const normalized = slug(raw.name) || "plugin";
+  const normalized = slug(manifest.name) || "plugin";
   const id = `${normalized.slice(0, 52)}-${fnv1a(identity)}`;
   return {
-    schema_version: 2,
+    schema_version: 3,
     id,
-    name: typeof raw.displayName === "string" ? raw.displayName : raw.name,
-    version: typeof raw.version === "string" && raw.version.trim() ? raw.version : "0.0.0",
-    description: typeof raw.description === "string" ? raw.description.slice(0, 500) : "",
-    author: authorName(raw.author),
+    name: manifest.name,
+    version: manifest.version,
+    description: manifest.description,
+    author: manifest.author,
     source,
-    repository: typeof raw.repository === "string" ? raw.repository : source,
-    spec_version: "1.0.0",
-    standard: "agent_plugins",
-    standards: ["agent_plugins"],
+    repository: manifest.repository || source,
+    standard_version: manifest.standardVersion,
     enabled: true,
     trusted: false,
     scope: "user",
@@ -1240,6 +1133,13 @@ export class PluginRuntimeManager {
       : { kind: "user" };
     if (scope.kind === "project") await this.enqueue(() => this.reconcileProjectLocked(scope.project_path));
     if (!this.effectiveEnabled(scope, plugin)) throw new Error(`plugin \`${pluginId}\` is disabled in this scope`);
+    if (!this.effectiveComponentEnabled(
+      scope,
+      `bundle:${plugin.id}`,
+      pluginUiComponentId(plugin.id, contribution.id),
+    )) {
+      throw new Error(`UI contribution \`${contributionId}\` is disabled in this scope`);
+    }
     const instance = this.instances.get(instanceKey(plugin.id, scope));
     if (!instance || instance.status !== "active") {
       throw new Error(instance?.error ?? `plugin \`${pluginId}\` is not active`);
@@ -1281,12 +1181,27 @@ export class PluginRuntimeManager {
     }
     const { plugin, server } = candidates[0];
     const bundleDir = join(this.pluginsDir, plugin.id, "bundle");
+    const dataDir = join(this.pluginsDir, ".data", plugin.id);
+    mkdirSync(dataDir, { recursive: true });
+    const projectDir = normalizedProject ?? "";
+    const expand = (value: string): string => value
+      .replaceAll("${PLUGIN_ROOT}", bundleDir)
+      .replaceAll("${PLUGIN_DATA}", dataDir)
+      .replaceAll("${PLUGIN_PROJECT_DIR}", projectDir);
     const executable = resolveExecutable(bundleDir, server.command);
+    const env = Object.fromEntries(
+      Object.entries(server.env)
+        .filter(([name]) => !["PLUGIN_ROOT", "PLUGIN_DATA", "PLUGIN_PROJECT_DIR"].includes(name))
+        .map(([name, value]) => [name, expand(value)]),
+    );
+    env.PLUGIN_ROOT = bundleDir;
+    env.PLUGIN_DATA = dataDir;
+    if (normalizedProject) env.PLUGIN_PROJECT_DIR = normalizedProject;
     return {
       id: `bundle:${plugin.id}:lsp:${server.id}`,
       pluginId: plugin.id,
-      command: [executable, ...server.args],
-      env: server.env,
+      command: [executable, ...server.args.map(expand)],
+      env,
     };
   }
 
@@ -1312,12 +1227,22 @@ export class PluginRuntimeManager {
       if (managed.definition.essential && !raw.component && state === "disabled") {
         throw new Error(`essential plugin \`${pluginName}\` cannot be disabled`);
       }
-      if (typeof raw.component === "string" && !managed.definition.components.includes(raw.component)) {
+      if (
+        typeof raw.component === "string" &&
+        !managed.definition.components.some((component) => component.id === raw.component)
+      ) {
         throw new Error(`component \`${raw.component}\` does not belong to plugin \`${pluginName}\``);
       }
       if (raw.component === "plugin-manager.page" && state === "disabled") {
         throw new Error("the required plugin manager component cannot be disabled");
       }
+    } else if (
+      typeof raw.component === "string" &&
+      !managed.plugin.ui_contributions.some(
+        (contribution) => pluginUiComponentId(managed.plugin.id, contribution.id) === raw.component,
+      )
+    ) {
+      throw new Error(`component \`${raw.component}\` does not belong to plugin \`${pluginName}\``);
     }
     const affected = raw.component
       ? [pluginName]
@@ -1465,12 +1390,6 @@ export class PluginRuntimeManager {
     });
   }
 
-  async setManagedEnabled(name: string, enabled: boolean): Promise<boolean> {
-    const plan = await this.plan({ plugin: name, scope: { kind: "user" }, state: enabled ? "enabled" : "disabled" });
-    await this.apply(plan.id);
-    return true;
-  }
-
   async uninstall(id: string, keepData: boolean): Promise<void> {
     await this.ready();
     await this.enqueue(async () => {
@@ -1504,7 +1423,7 @@ export class PluginRuntimeManager {
           throw new Error("GitHub plugin path escapes the repository");
         }
         const rootRelative = relative(canonicalCheckout, canonicalRoot);
-        const plugin = portableRuntimeManifest(
+        const plugin = c2PluginManifest(
           canonicalRoot,
           `GitHub · ${spec.owner}/${spec.repo}`,
           `${spec.owner}/${spec.repo}:${rootRelative}`,
@@ -1801,6 +1720,20 @@ export class PluginRuntimeManager {
     const managedId = `bundle:${plugin.id}`;
     const user = resolveOverride(this.policyFor({ kind: "user" }, managedId).state, plugin.enabled && plugin.trusted);
     return scope.kind === "user" ? user : resolveOverride(this.policyFor(scope, managedId).state, user);
+  }
+
+  private effectiveComponentEnabled(
+    scope: PluginScope,
+    managedId: string,
+    componentId: string,
+  ): boolean {
+    const user = resolveOverride(
+      this.policyFor({ kind: "user" }, managedId).components?.[componentId],
+      true,
+    );
+    return scope.kind === "user"
+      ? user
+      : resolveOverride(this.policyFor(scope, managedId).components?.[componentId], user);
   }
 
   private requireBuiltin(pluginId: string): BuiltinPluginDefinition {

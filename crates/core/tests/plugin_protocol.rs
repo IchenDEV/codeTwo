@@ -440,15 +440,25 @@ fn install_record(plugins_dir: &std::path::Path, id: &str, trusted: bool) {
     let dir = plugins_dir.join(id);
     std::fs::create_dir_all(dir.join("bundle")).unwrap();
     let record = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "id": id,
         "name": id,
         "version": "1.0.0",
+        "description": "Protocol trust fixture",
+        "author": "C2",
         "source": "github",
         "repository": "https://github.com/example/plugin",
+        "standard_version": "1.0.0",
         "enabled": true,
         "trusted": trusted,
+        "scope": "user",
         "counts": { "skills": 0, "subagents": 0, "mcp_servers": 0, "scaffolds": 0, "runtime": 1 },
+        "components": [],
+        "scaffolds": [],
+        "extension_components": [],
+        "ui_contributions": [],
+        "lsp_servers": [],
+        "diagnostics": [],
         "runtime": {
             "protocol": "1.0.0",
             // Never started in this test — the assertion is that it is not.

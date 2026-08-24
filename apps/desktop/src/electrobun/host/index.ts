@@ -618,11 +618,6 @@ export class PureBunHost {
     this.register("kernel.scopes", () => [...this.plugins.builtinScopes(), ...this.plugins.scopes()]);
     this.register("kernel.plugins", async () => this.kernelPlugins());
     this.register("kernel.services", () => this.plugins.services());
-    this.register("kernel.set_enabled", (args) => this.plugins.setManagedEnabled(
-      string(args.name, "name"),
-      boolean(args.value),
-    ));
-    this.register("kernel.configure", () => this.unsupported("kernel.configure", "dynamic host plugins"));
     this.register("plugins.catalog", (args) => this.pluginCatalog(args.scope));
     this.register("plugins.plan_change", (args) => this.plugins.plan(args));
     this.register("plugins.apply_change", (args) => this.plugins.apply(string(args.id, "id")));

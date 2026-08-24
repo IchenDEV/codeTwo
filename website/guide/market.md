@@ -6,10 +6,9 @@ package button at the foot of the session rail, the [command palette](/guide/key
 `Mod+Shift+M`.
 
 > [!IMPORTANT]
-> The Rust core implements the complete bundle manager and live process runtime. The experimental
-> Pure Bun Electrobun desktop currently shows the compatibility catalog but fails closed for bundle
-> installation, marketplace operations, and dynamic plugin lifecycle. It does not pretend that an
-> empty catalog is full support.
+> The Rust core implements the complete bundle manager. The Pure Bun Electrobun desktop imports and
+> runs C2 process/LSP bundles, including their declarative UI actions. It fails closed for data-only
+> bundle import, marketplace installation, and scaffold application until those adapters exist.
 
 ## Installing a GitHub plugin
 
@@ -19,23 +18,19 @@ Choose **Install from GitHub**, then enter one of these forms:
 - `https://github.com/owner/repository`
 - `https://github.com/owner/repository/tree/ref/path` to select one plugin in a larger repository
 
-C2 understands the portable Agent Plugins 1.0.0 root `plugin.json`,
-`.codex-plugin/plugin.json`, and `.claude-plugin/plugin.json`. Coexisting manifests are merged with
-deterministic metadata precedence: Agent Plugins, then Codex, then Claude Code. A repository with no
-manifest is treated as a conventional plugin when it contains one of the supported folders below,
-so existing skill-only repositories remain installable.
+C2 accepts one package contract: a root Agent Plugins 1.0.0 `plugin.json` with
+`extensions.dev.codetwo.standardVersion` equal to `1.0.0`. The selected GitHub directory is the
+bundle root; C2 neither searches nested directories nor infers a plugin from component folders.
 
 ```text
 my-plugin/
-├── plugin.json                  # Agent Plugins 1.0.0, when present
-├── .codex-plugin/plugin.json
-├── .claude-plugin/plugin.json
+├── plugin.json                  # Agent Plugins 1.0.0 + C2 1.0.0 extension
 ├── skills/<name>/SKILL.md
 ├── agents/<name>.md
 ├── commands/<name>.md
-├── mcp.json                     # Agent Plugins portable MCP
-├── .mcp.json
-├── .lsp.json
+├── mcp.json                     # Agent Plugins 1.0.0 MCP schema
+├── hooks/hooks.json             # inventoried, not executed
+├── monitors/monitors.json       # inventoried, not executed
 ├── scenes/<name>.scene.json
 ├── scenes/<name>.pipeline.json
 ├── scaffolds/<name>/
@@ -45,29 +40,28 @@ my-plugin/
 └── assets/
 ```
 
-Agent Plugins schema selection is local and versioned: this release accepts 1.0.0 and never fetches
-a schema while installing. Invalid portable Skills and MCP entries are isolated and reported in the
-plugin detail instead of hiding valid siblings. Native `skills`, `commands`, `agents`, `mcpServers`,
-and `lspServers` paths may be declared with `./`-relative paths. Unsupported native components are
-preserved and shown explicitly; detection alone is not reported as runtime support.
+Schema selection is local and deterministic: this release accepts exactly Agent Plugins 1.0.0 and
+C2 Plugin Standard 1.0.0 and never fetches a schema while installing. Unknown manifest fields,
+malformed declared contributions, duplicate IDs, unsafe paths, or missing bundle-relative commands
+invalidate the bundle. Files outside the canonical locations above are stored but not inferred as
+contributions.
 
 ## Components
 
 Installed packages expose these composable or runtime component types:
 
-- **Skills** — standard `SKILL.md` instructions, with an inline cross-provider fallback.
-- **Subagents** — Markdown specialist definitions from `agents/`, `subagents/`, `.codex/agents/`, or
-  `.claude/agents/`. C2 compiles a delegation contract that capable providers may hand to a
-  focused worker; the same contract is followed inline when native delegation is unavailable.
-- **MCP** — local stdio or remote HTTP/SSE servers from `.mcp.json`. Adding one to the document
+- **Skills** — `skills/<name>/SKILL.md` instructions, with an inline cross-provider fallback.
+- **Subagents** — Markdown specialist definitions from `agents/*.md`. C2 compiles a delegation
+  contract that capable providers may hand to a focused worker; the same contract is followed
+  inline when provider delegation is unavailable.
+- **MCP** — local stdio or remote HTTP/SSE servers from root `mcp.json`. Adding one to the document
   attaches it during ACP `session/new`; merely installing a plugin does not launch the server.
   Remote transports require the corresponding capability from the selected Agent, and C2 reports
   an explicit error before the turn if it is absent.
-- **Commands** — native command Markdown is compiled into the same cross-provider inline form as a
+- **Commands** — `commands/*.md` is compiled into the same cross-provider inline form as a
   Skill.
-- **LSP** — valid stdio definitions from `.lsp.json` or inline `lspServers` can replace the stock
-  language server for matching language ids after the plugin is explicitly trusted. Socket LSP is
-  inventoried but not run.
+- **LSP** — stdio definitions in `extensions.dev.codetwo.languageServers` can replace the stock
+  language server for matching language IDs after the plugin is explicitly trusted.
 - **Scenes and Pipelines** — versioned declarative scene and pipeline files are composed into the
   Rust core's scene library. Their assignment, hooks, scheduling, artifacts, and execution require
   the corresponding host capability.
@@ -125,16 +119,35 @@ state or exposes safe mode and reset through the essential management plane.
 
 ## Opening a marketplace
 
-Choose **Open marketplace** and select either `.agents/plugins/marketplace.json` or
-`.claude-plugin/marketplace.json`. C2 lists valid entries even when sibling entries are invalid.
-Relative local sources, public GitHub sources, and GitHub `git-subdir` sources are installable;
+Choose **Open marketplace** and select a C2 `marketplace.json` whose `standardVersion` is `1.0.0`.
+C2 lists valid entries even when sibling entries are invalid. Relative local sources, public GitHub
+sources, and GitHub HTTPS `git` sources are installable;
 branch, tag, and exact SHA pins are preserved. npm, archive, private/authenticated repositories, and
 non-GitHub Git sources are currently shown with an explicit unsupported diagnostic rather than
 silently falling back to another source.
 
+```json
+{
+  "standardVersion": "1.0.0",
+  "name": "team-tools",
+  "displayName": "Team Tools",
+  "plugins": [{
+    "name": "review-tools",
+    "version": "1.2.0",
+    "installationPolicy": "AVAILABLE",
+    "authenticationPolicy": "NONE",
+    "defaultEnabled": true,
+    "source": { "kind": "github", "repository": "acme/review-tools", "reference": "v1.2.0" }
+  }]
+}
+```
+
+Marketplace and bundle versions must match at installation. Unknown catalog, entry, or source
+fields are rejected; sources never fall through to another kind.
+
 ## Installing a scaffold
 
-Each direct child of `scaffolds/` or `templates/` is an installable project scaffold. An optional
+Each direct child of `scaffolds/` is an installable project scaffold. An optional
 `scaffold.json` supplies its display name and description:
 
 ```json
@@ -159,7 +172,7 @@ that package; uninstalling removes the package and all of its components.
 Installation never executes repository scripts. Plugin files, including scripts and assets, are
 preserved for the package. MCP starts only when composed into a session; plugin LSP starts only when
 the package is enabled, explicitly trusted, and a matching file is opened. Disable a package to
-remove its prompt/runtime components from new sessions, or revoke trust to block executable native
+remove its prompt/runtime components from new sessions, or revoke trust to block executable
 components. Uninstall can delete the package-owned persistent data or retain it for a later reinstall.
 
 Trust is not an OS sandbox. A trusted process has the user's filesystem, environment, and network

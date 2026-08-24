@@ -199,15 +199,17 @@ mod tests {
 
     fn installed(trusted: bool) -> InstalledPlugin {
         serde_json::from_value(json!({
-            "schema_version": 2,
+            "schema_version": 3,
             "id": "fixture",
             "name": "Fixture",
             "version": "1.2.3",
             "description": "A fixture process",
             "source": "local-test",
             "repository": "fixture",
+            "standard_version": "1.0.0",
             "enabled": true,
             "trusted": trusted,
+            "scope": "user",
             "counts": {
                 "skills": 0,
                 "subagents": 0,
@@ -215,6 +217,12 @@ mod tests {
                 "scaffolds": 0,
                 "runtime": 1
             },
+            "components": [],
+            "scaffolds": [],
+            "extension_components": [],
+            "ui_contributions": [],
+            "lsp_servers": [],
+            "diagnostics": [],
             "runtime": {
                 "protocol": "1.0.0",
                 "command": "definitely-not-a-real-binary",

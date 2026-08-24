@@ -53,7 +53,7 @@ export interface PluginManagerBundleContribution {
 export interface PluginManagerBundle {
   id: string;
   repository?: string | null;
-  standards: string[];
+  standardVersion: string;
   trusted: boolean;
   enabled: boolean;
   requiresTrust: boolean;
@@ -280,7 +280,7 @@ export interface PluginManagerPageProps {
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
-  /** Advanced compatibility tools for local marketplace manifests and scaffolds. */
+  /** Advanced tools for local marketplace manifests and scaffolds. */
   onOpenBundleTools?: () => void;
   onResetPlugin?: (
     pluginId: string,

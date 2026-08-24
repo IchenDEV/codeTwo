@@ -41,7 +41,7 @@ done
         runtime["scopeSupport"] = json!(["user", "project"]);
     }
     let record = json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "id": id,
         "name": "Project Fixture",
         "version": "1.0.0",
@@ -49,8 +49,10 @@ done
         "author": "CodeTwo",
         "source": "local-test",
         "repository": bundle_dir,
+        "standard_version": "1.0.0",
         "enabled": true,
         "trusted": true,
+        "scope": "user",
         "counts": {
             "skills": 0,
             "subagents": 0,
@@ -60,6 +62,12 @@ done
             "scaffolds": 0,
             "runtime": 1
         },
+        "components": [],
+        "scaffolds": [],
+        "extension_components": [],
+        "ui_contributions": [],
+        "lsp_servers": [],
+        "diagnostics": [],
         "runtime": runtime
     });
     std::fs::write(

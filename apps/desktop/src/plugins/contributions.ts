@@ -5,7 +5,8 @@ import {
   type PluginUiContribution,
   type PluginUiSlotId,
 } from "../bridge";
-import type { PluginManagerPlugin } from "./types";
+import { pluginUiComponentId } from "../pluginModel";
+import type { PluginManagerComponent, PluginManagerPlugin } from "./types";
 
 export interface ActivePluginUiContribution extends PluginUiContribution {
   pluginId: string;
@@ -34,13 +35,17 @@ function activeBundle(bundle: PluginInfo, plugins: PluginManagerPlugin[]): boole
 export function activePluginUiContributions(
   bundles: PluginInfo[],
   plugins: PluginManagerPlugin[],
+  components: PluginManagerComponent[] = [],
 ): ActivePluginUiContributionsBySlot {
   const bySlot = Object.fromEntries(
     PLUGIN_UI_SLOT_IDS.map((slot) => [slot, []]),
   ) as unknown as ActivePluginUiContributionsBySlot;
+  const componentById = new Map(components.map((component) => [component.id, component]));
 
   for (const bundle of bundles.filter((candidate) => activeBundle(candidate, plugins))) {
     for (const contribution of bundle.ui_contributions ?? []) {
+      const managedComponent = componentById.get(pluginUiComponentId(bundle.id, contribution.id));
+      if (managedComponent && !managedComponent.state.effectiveEnabled) continue;
       bySlot[contribution.slot].push({
         ...contribution,
         pluginId: bundle.id,

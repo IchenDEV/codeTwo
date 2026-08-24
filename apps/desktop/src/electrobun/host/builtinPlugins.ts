@@ -10,6 +10,15 @@ export type BuiltinPluginCategory =
 export type BuiltinPluginOrigin = "built_in" | "host";
 export type BuiltinPluginScope = "user" | "project";
 
+export interface BuiltinUiComponentDefinition {
+  id: string;
+  name: string;
+  description: string;
+  kind: string;
+  slot: string;
+  required?: boolean;
+}
+
 export interface BuiltinPluginDefinition {
   id: string;
   description: string;
@@ -20,8 +29,24 @@ export interface BuiltinPluginDefinition {
   defaultEnabled: boolean;
   dependencies: string[];
   services: string[];
-  components: string[];
+  components: BuiltinUiComponentDefinition[];
 }
+
+const component = (
+  id: string,
+  name: string,
+  description: string,
+  kind: string,
+  slot: string,
+  required = false,
+): BuiltinUiComponentDefinition => ({
+  id,
+  name,
+  description,
+  kind,
+  slot,
+  ...(required ? { required: true } : {}),
+});
 
 const plugin = (
   id: string,
@@ -59,32 +84,39 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
     essential: true,
     dependencies: ["core"],
     services: ["plugin-manager", "plugin-hub", "extensions-runtime"],
-    components: ["plugin-manager.page"],
+    components: [component(
+      "plugin-manager.page",
+      "Plugin manager",
+      "The required management plane used to recover and re-enable other features.",
+      "page",
+      "app.page",
+      true,
+    )],
   }),
   plugin("workspace", "Workspace files, project rules, and project scripts.", {
     category: "workspace",
     scopeSupport: ["user", "project"],
     services: ["workspace"],
-    components: ["files.surface"],
+    components: [component("files.surface", "Files", "Workspace file tree, viewer, and file browser.", "dockSurface", "dock.tabs")],
   }),
   plugin("workspace-search", "Project-wide content search.", {
     category: "workspace",
     scopeSupport: ["user", "project"],
     dependencies: ["workspace"],
-    components: ["search.modal"],
+    components: [component("search.modal", "Workspace search", "Project-wide content search and result opener.", "modal", "app.dialogs")],
   }),
   plugin("git", "Source control, checkpoints, commits, pushes, and pull requests.", {
     category: "developer_tools",
     scopeSupport: ["user", "project"],
     dependencies: ["workspace"],
-    components: ["git.surface"],
+    components: [component("git.surface", "Source control", "Git dock, source-control dialog, and related commands.", "dockSurface", "dock.tabs")],
   }),
   plugin("terminal", "Persistent project terminal sessions.", {
     origin: "host",
     category: "developer_tools",
     scopeSupport: ["user", "project"],
     services: ["terminal"],
-    components: ["terminal.dock"],
+    components: [component("terminal.dock", "Terminal dock", "Persistent terminal sessions in the side dock.", "dockSurface", "dock.tabs")],
   }),
   plugin("lsp", "Language-server discovery and project lifecycle.", {
     origin: "host",
@@ -92,11 +124,11 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
     scopeSupport: ["user", "project"],
     dependencies: ["workspace"],
     services: ["lsp"],
-    components: ["lsp.runtime"],
+    components: [component("lsp.runtime", "Language servers", "Project language-server discovery and lifecycle.", "runtime", "project.runtime")],
   }),
   plugin("automation", "Scheduled work and automation history.", {
     category: "automation",
-    components: ["automation.page"],
+    components: [component("automation.page", "Automations", "Scheduled-work page and automation entry points.", "page", "app.page")],
   }),
   plugin("artifacts", "Session artifact persistence and export.", {
     category: "workspace",
@@ -106,7 +138,7 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
   plugin("browser", "Authenticated in-app browser tools and dock surface.", {
     origin: "host",
     category: "interface",
-    components: ["browser.dock"],
+    components: [component("browser.dock", "Browser dock", "Authenticated in-app browser surface and its dock opener.", "dockSurface", "dock.tabs")],
   }),
   plugin("browser-use", "Provider-neutral browser automation backend selection.", {
     origin: "host",
@@ -116,7 +148,13 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
   plugin("canvas", "Structured visual drafts, snapshots, and exports.", {
     category: "interface",
     services: ["canvas"],
-    components: ["canvas.editor"],
+    components: [component(
+      "canvas.editor",
+      "Canvas editor",
+      "Structured visual canvas blocks. Component policy is separate from the Canvas safety feature gate; enabling this component does not open the production gate.",
+      "editorBlock",
+      "editor.blocks",
+    )],
   }),
   plugin("document", "Document compilation for structured canvas content.", {
     category: "interface",
@@ -126,7 +164,7 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
     category: "integration",
     scopeSupport: ["user", "project"],
     dependencies: ["workspace"],
-    components: ["issues.modal"],
+    components: [component("issues.modal", "Issues", "GitHub and Linear issue browser and delegation flow.", "modal", "app.dialogs")],
   }),
   plugin("keymap", "Desktop keyboard shortcuts and overrides.", {
     category: "interface",
@@ -139,18 +177,18 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
   plugin("memory", "Project memory, recall policy, and receipts.", {
     category: "automation",
     services: ["memory"],
-    components: ["memory.settings"],
+    components: [component("memory.settings", "Memory", "Memory policy controls and receipt surfaces.", "settingsSection", "settings.sections")],
   }),
   plugin("remote", "Remote-device pairing and connection management.", {
     origin: "host",
     category: "integration",
-    components: ["remote.modal"],
+    components: [component("remote.modal", "Remote control", "Remote-device pairing and connection management.", "modal", "app.dialogs")],
   }),
   plugin("scenes", "Agent scenes, pipelines, scheduling, and scene artifacts.", {
     category: "automation",
     dependencies: ["skills"],
     services: ["scenes"],
-    components: ["scenes.surface"],
+    components: [component("scenes.surface", "Agent scenes", "Scene picker, studio, banners, and pipeline controls.", "sessionSurface", "session.chrome")],
   }),
   plugin("skills", "Installed skill discovery and skill-library operations.", {
     category: "automation",
@@ -159,7 +197,7 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
   }),
   plugin("usage", "Provider quota and usage reporting.", {
     category: "other",
-    components: ["usage.settings"],
+    components: [component("usage.settings", "Usage", "Provider quota and usage settings surfaces.", "settingsSection", "settings.sections")],
   }),
   plugin("cost", "Per-session cost reporting.", {
     category: "other",
@@ -174,9 +212,13 @@ export const BUILTIN_PLUGINS: readonly BuiltinPluginDefinition[] = [
   plugin("voice", "Native dictation and structured voice input.", {
     origin: "host",
     category: "interface",
-    components: ["voice.composer"],
+    components: [component("voice.composer", "Voice input", "Composer dictation and structured voice input.", "composerAction", "composer.actions")],
   }),
 ] as const;
+
+export const BUILTIN_UI_COMPONENTS = BUILTIN_PLUGINS.flatMap((definition) =>
+  definition.components.map((entry) => ({ ...entry, pluginId: definition.id }))
+);
 
 export const BUILTIN_PLUGIN_BY_ID = new Map(BUILTIN_PLUGINS.map((definition) => [definition.id, definition]));
 

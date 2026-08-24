@@ -10,9 +10,7 @@
 
 use crate::app::events::PluginsChanged;
 use crate::app::service::{LoaderService, Paths, PluginHub};
-use crate::app::{
-    json, take_args, PluginChangeRequest, PluginManager, PluginOverride, PluginScope,
-};
+use crate::app::{json, take_args, PluginChangeRequest, PluginManager, PluginScope};
 use crate::github_skills;
 use crate::plugin;
 use crate::plugin::{InstalledPlugin, PluginCounts, PluginScaffold};
@@ -60,15 +58,15 @@ struct PluginInfo {
     author: String,
     source: String,
     repository: String,
-    spec_version: String,
-    standard: plugin::PluginStandard,
-    standards: Vec<plugin::PluginStandard>,
+    standard_version: String,
     enabled: bool,
     trusted: bool,
     scope: plugin::PluginInstallScope,
     counts: PluginCounts,
     scaffolds: Vec<PluginScaffoldInfo>,
     extension_components: Vec<plugin::PluginExtensionComponent>,
+    ui_contributions: Vec<plugin::PluginUiContribution>,
+    lsp_servers: Vec<plugin::PluginLspServer>,
     diagnostics: Vec<plugin::PluginDiagnostic>,
 }
 
@@ -82,15 +80,15 @@ impl From<InstalledPlugin> for PluginInfo {
             author: plugin.author,
             source: plugin.source,
             repository: plugin.repository,
-            spec_version: plugin.spec_version,
-            standard: plugin.standard,
-            standards: plugin.standards,
+            standard_version: plugin.standard_version,
             enabled: plugin.enabled,
             trusted: plugin.trusted,
             scope: plugin.scope,
             counts: plugin.counts,
             scaffolds: plugin.scaffolds.into_iter().map(Into::into).collect(),
             extension_components: plugin.extension_components,
+            ui_contributions: plugin.ui_contributions,
+            lsp_servers: plugin.lsp_servers,
             diagnostics: plugin.diagnostics,
         }
     }
@@ -277,11 +275,14 @@ impl Plugin for HubPlugin {
                         ))
                     }
                 };
+                if bundle.plugin.version != entry.version {
+                    return Err(PluginError::new(format!(
+                        "Marketplace version {} does not match bundle version {}",
+                        entry.version, bundle.plugin.version
+                    )));
+                }
                 bundle.plugin.source = source_label;
                 bundle.plugin.enabled = entry.default_enabled;
-                if bundle.plugin.version == "0.0.0" && !entry.version.is_empty() {
-                    bundle.plugin.version = entry.version.clone();
-                }
                 let _inventory = hub.inventory.lock().await;
                 let installed = plugin::install(&hub.dir, bundle).map_err(PluginError::new)?;
                 reconcile_and_announce(&manager, &hub, &context).await?;
@@ -443,81 +444,6 @@ impl Plugin for KernelPlugin {
                 async move {
                     let entries = loader.0.lock().unwrap().entries();
                     json(entries)
-                }
-            },
-        )?;
-
-        #[derive(Deserialize)]
-        struct EnableArgs {
-            name: String,
-            value: bool,
-        }
-        let toggled = loader.clone();
-        let legacy_manager = manager.clone();
-        ctx.command_described(
-            "kernel.set_enabled",
-            Some("Load or unload one plugin, live."),
-            move |args| {
-                let loader = toggled.clone();
-                let manager = legacy_manager.clone();
-                async move {
-                    let args: EnableArgs = take_args(args)?;
-                    // Keep the old command shape, but route it through the durable manager so a
-                    // compatibility caller cannot create a restart-only state.
-                    drop(loader);
-                    let plan = manager
-                        .plan(PluginChangeRequest {
-                            plugin: args.name,
-                            scope: PluginScope::User,
-                            state: Some(if args.value {
-                                PluginOverride::Enabled
-                            } else {
-                                PluginOverride::Disabled
-                            }),
-                            config: None,
-                            component: None,
-                        })
-                        .map_err(PluginError::new)?;
-                    let result = manager.apply(&plan.id).map_err(PluginError::new)?;
-                    manager
-                        .settle_and_mark_last_good(&result)
-                        .await
-                        .map_err(PluginError::new)?;
-                    Ok(Value::Bool(true))
-                }
-            },
-        )?;
-
-        #[derive(Deserialize)]
-        struct ConfigureArgs {
-            name: String,
-            config: Value,
-        }
-        let configured_manager = manager.clone();
-        ctx.command_described(
-            "kernel.configure",
-            Some("Replace one plugin's config; it reloads, nothing else does."),
-            move |args| {
-                let loader = loader.clone();
-                let manager = configured_manager.clone();
-                async move {
-                    let args: ConfigureArgs = take_args(args)?;
-                    drop(loader);
-                    let plan = manager
-                        .plan(PluginChangeRequest {
-                            plugin: args.name,
-                            scope: PluginScope::User,
-                            state: Some(PluginOverride::Enabled),
-                            config: Some(args.config),
-                            component: None,
-                        })
-                        .map_err(PluginError::new)?;
-                    let result = manager.apply(&plan.id).map_err(PluginError::new)?;
-                    manager
-                        .settle_and_mark_last_good(&result)
-                        .await
-                        .map_err(PluginError::new)?;
-                    Ok(Value::Bool(true))
                 }
             },
         )?;

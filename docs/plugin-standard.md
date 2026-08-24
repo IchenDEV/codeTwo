@@ -1,8 +1,9 @@
 # C2 Plugin Standard 1.0.0
 
-Status: **normative for C2-owned plugin behavior**. The portable package format remains
-[Agent Plugins 1.0.0](https://agent-plugins.org/specification); the process wire format is specified
-separately in [The C2 Plugin Protocol](plugin-protocol.md).
+Status: **normative for every C2 plugin bundle**. The root package schema is
+[Agent Plugins 1.0.0](https://agent-plugins.org/specification), extended by the mandatory
+`extensions.dev.codetwo` object defined here. The process wire format is specified separately in
+[The C2 Plugin Protocol](plugin-protocol.md).
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** describe requirements. A detected file is
 not a supported capability until a host has an adapter for it and reports that support truthfully.
@@ -14,7 +15,7 @@ code, UI, diagnostics, and documentation MUST use the precise term where ambigui
 
 | Term | Meaning | Stable interface |
 | --- | --- | --- |
-| **Bundle** | An installable, versioned directory of metadata, data, and optional code. Installation is data-only. | Agent Plugins manifest plus native overlays |
+| **Bundle** | An installable, versioned directory of metadata, data, and optional code. Installation is data-only. | One root `plugin.json` |
 | **Contribution** | Declarative content such as a Skill, MCP definition, Scene, Pipeline, scaffold, or C2-owned UI descriptor. | Component-specific schema or file convention |
 | **Runtime module** | Behavior loaded into the graph: a compiled `Plugin` or a trusted child process. | Commands, events, services, dependencies, and cleanup |
 | **Host adapter** | The narrow implementation that connects a runtime module to Rust, Electrobun/Bun, TUI, server, or a native OS service. | Host capability profile and the typed `call` boundary |
@@ -37,9 +38,10 @@ Host adapter ──capabilities and native services──┘
 
 ## 2. Bundle manifest
 
-New portable bundles MUST put identity in root `plugin.json` using Agent Plugins 1.0.0. C2-specific
-data MUST live under the reverse-domain namespace `extensions.dev.codetwo`; it MUST NOT be added as
-an unknown top-level Agent Plugins field.
+Every bundle MUST put identity in root `plugin.json` using Agent Plugins 1.0.0. C2-specific data
+MUST live under the reverse-domain namespace `extensions.dev.codetwo`; the namespace and
+`standardVersion: "1.0.0"` are required even for data-only bundles. Unknown top-level or C2 fields
+invalidate the bundle.
 
 ```json
 {
@@ -84,7 +86,7 @@ an unknown top-level Agent Plugins field.
 
 | Field | Required | Contract |
 | --- | --- | --- |
-| `standardVersion` | yes | Semantic version of this C2 extension. The host loads compatible major version 1 data and ignores unsupported majors with a diagnostic. |
+| `standardVersion` | yes | MUST equal `1.0.0`. Any other value invalidates the bundle. |
 | `runtime` | no | Declares one process runtime using the C2 Plugin Protocol. |
 | `ui` | no | Declares host-rendered action descriptors. A UI action requires `runtime` and may invoke only a command registered by that runtime. |
 | `languageServers` | no | Declares trusted stdio language-server processes selected by Monaco language ID. |
@@ -133,11 +135,36 @@ language closed until policy removes the conflict. Plugin mappings take preceden
 built-in executable mapping. Disabling, untrusting, replacing, or uninstalling a bundle terminates
 its live language servers; the editor reconnects only after the active contribution catalog changes.
 
-For native `.codex-plugin/plugin.json` and `.claude-plugin/plugin.json` overlays, C2 continues to
-read the historical top-level `runtime` field. That compatibility form MUST NOT be copied into an
-Agent Plugins root manifest. When both a portable C2 extension and a native overlay declare a
-runtime, Agent Plugins, then Codex, then Claude Code precedence applies and lower-priority entries
-are ignored with a diagnostic.
+The selected bundle directory is the manifest root. C2 does not search parent or child directories,
+merge manifests, or infer a bundle from component folders. Authors of monorepos distribute each
+plugin directory independently or link directly to its GitHub `/tree/<ref>/<path>` location.
+
+### Validate and distribute
+
+The bundle root is the distribution unit: one `plugin.json` owns its runtime, safe UI descriptors,
+language servers, and canonical Agent Plugins content. Do not publish UI descriptors as a second
+package or ship renderer code. Validate the same directory that will be committed or released:
+
+```sh
+cd apps/desktop
+bun run plugin:validate ../../packs/hello-runtime
+```
+
+The validator uses the same package model as the desktop installer. It checks the Agent Plugins
+identity, exact C2 standard version, runtime and contribution shapes, unique IDs, UI/runtime
+ownership, and bundle-relative runtime paths. A valid bundle can be installed directly from a
+GitHub repository or `/tree/<ref>/<path>` URL, so a repository folder is the preferred distribution
+artifact. Releases MAY additionally attach an archive of that exact folder; extracting it MUST
+produce `plugin.json` at the selected root.
+
+Use stable bundle-local contribution IDs. C2 derives policy identities from the installed bundle
+and contribution ID, so upgrades can preserve per-component user and project choices without an
+author coordinating generated installation IDs.
+
+A distributable catalog is a root `marketplace.json` with `standardVersion: "1.0.0"`. Every entry
+requires a semantic `version` that matches its bundle manifest and one explicit source object with
+`kind` equal to `local`, `github`, `git`, `npm`, or `archive`. Catalog, entry, and source objects are
+closed; unknown fields invalidate that object rather than falling through to another source shape.
 
 ## 3. Identity and names
 
@@ -157,7 +184,7 @@ The lifecycle is one transaction across configuration and runtime state:
 
 1. Installation validates and atomically stores a bundle. It MUST NOT run repository scripts or the
    declared runtime.
-2. A C2 process runtime and native LSP remain stopped until the bundle is both **enabled** and
+2. A C2 process runtime and plugin LSP remain stopped until the bundle is both **enabled** and
    **trusted**. MCP starts only through separate, explicit session composition; installation alone
    never starts it.
 3. `plugins.plan_change` validates scope, configuration schema, graph/config revisions, dependents,
@@ -188,15 +215,15 @@ with only essential management plugins. `plugins.reset` is the recovery operatio
 
 | Contribution | C2 1.0 status | Required behavior |
 | --- | --- | --- |
-| Agent Skills | supported | Portable discovery, invalid-sibling isolation, inline fallback across providers |
-| Subagents | supported with fallback | Native delegation when available; otherwise the same bounded contract is followed inline |
-| MCP | supported | stdio, Streamable HTTP, and SSE are capability-checked; a changed MCP config applies to new sessions |
-| Commands | supported as content | Native command Markdown compiles to the Skill fallback; runtime commands use the process protocol |
+| Agent Skills | supported | `skills/<name>/SKILL.md`; inline fallback across providers |
+| Subagents | supported with fallback | `agents/*.md`; provider delegation when available, otherwise the same bounded contract is followed inline |
+| MCP | supported | Root `mcp.json` using Agent Plugins 1.0.0; stdio, Streamable HTTP, and SSE are capability-checked |
+| Commands | supported as content | `commands/*.md` compiles to the Skill fallback; runtime commands use the process protocol |
 | Scenes and Pipelines | supported on Rust core hosts | Versioned schemas, library commands, assignment, hooks, scheduling, artifacts, and pipeline execution |
 | Scaffolds | supported | Explicit project target, complete conflict check, no overwrite |
-| LSP | stdio supported | Explicit trust, matching language mapping, owned lifecycle; socket definitions remain inventoried only |
-| Hooks, workflows, monitors | inventoried | No C2 runtime adapter yet; MUST be displayed as unsupported |
-| Apps, channels, dependencies, settings, bin, themes, output styles, user config | inventoried | Preserved as bundle data; MUST NOT be reported as active |
+| LSP | stdio supported | Declared only in `extensions.dev.codetwo.languageServers`; explicit trust, matching language mapping, owned lifecycle |
+| Hooks and monitors | inventoried | Only `hooks/hooks.json` and `monitors/monitors.json`; no runtime adapter yet, so they MUST be displayed as unsupported |
+| Other files | stored, inactive | Preserved as bundle data but MUST NOT be inferred or reported as contributions |
 | UI contributions | C2-owned descriptors only | Third-party React, HTML, or arbitrary web code MUST NOT execute in the renderer in 1.0 |
 
 An MCP server is session composition, not a live graph runtime: installing does not start it, and an
@@ -235,8 +262,8 @@ Canvas, and the other product features use the same catalog and durable user/pro
 external runtimes. Disabling one removes its commands and services, makes dependents pending, and
 invokes the host adapter's resource cleanup where applicable.
 
-The desktop also owns a native Bun adapter for C2 process runtimes: existing installed records are
-reconciled at startup, portable runtime or LSP bundles can be imported from GitHub, trust and
+The desktop also owns a Bun adapter for C2 process runtimes: current schema-3 installed records are
+reconciled at startup, C2 runtime or LSP bundles can be imported from GitHub, trust and
 enablement remain separate, commands register and disappear live, safe UI actions render in the five
 supported slots, and plugin language servers use the existing LSP client and lifecycle. User/project
 runtime policy uses the same revision-bound `plan_change -> apply_change` contract. Project-capable
@@ -255,7 +282,7 @@ adapter. It currently fails closed for:
 
 A host MUST return an explicit unsupported state or error for an unavailable operation. Returning an
 empty success value is permitted only for a genuine empty collection. Frontends SHOULD use catalog
-metadata and operation results; command name presence alone is not sufficient because a compatibility
+metadata and operation results; command name presence alone is not sufficient because a partial
 host may register a fail-closed placeholder to preserve the typed bridge.
 
 ## 8. Security and resource limits
@@ -272,20 +299,20 @@ host may register a fail-closed placeholder to preserve the typed bridge.
 - UI surfaces MUST render trusted host descriptors. Arbitrary third-party renderer code is outside
   this standard.
 
-## 9. Versioning and compatibility
+## 9. Versioning
 
 Three versions evolve independently:
 
-| Version | Location | Compatibility |
+| Version | Location | Loading rule |
 | --- | --- | --- |
 | Agent Plugins | root `$schema` | Only locally recognized schema versions load |
-| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | Same major is compatible; minor additions must be ignorable |
+| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | MUST equal `1.0.0` |
 | C2 Plugin Protocol | manifest `runtime.protocol` and `initialize.protocolVersion` | Handshake major must match; the handshake is authoritative |
 
-A standard or protocol major bump may remove or reinterpret behavior. Minor changes are additive.
-Unknown C2 fields generate a diagnostic and are ignored; portable contributions continue loading
-when the C2 standard version is unsupported or its runtime declaration is malformed. A malformed
-portable manifest follows the stricter Agent Plugins failure boundary.
+A different Agent Plugins schema or C2 standard version is a different package contract and does
+not load. Unknown fields, malformed runtime/UI/LSP declarations, duplicate contribution IDs, and
+missing required files invalidate the bundle. Protocol negotiation happens only after a valid,
+trusted bundle has been enabled and its process starts.
 
 ## 10. Conformance checklist
 
@@ -301,8 +328,8 @@ A change is plugin-conformant only when all applicable statements are true:
 - Unsupported components and host capabilities are visible and fail closed.
 - Tests prove load, command registration, unload cleanup, dependency loss, invalid input boundaries,
   and any project-scope behavior.
-- Documentation updates this standard, the protocol when wire behavior changes, and the compatibility
-  ledger when external ecosystems or host profiles change.
+- Documentation updates this standard, the protocol when wire behavior changes, and host profile
+  evidence when capabilities change.
 
 Useful validation commands:
 

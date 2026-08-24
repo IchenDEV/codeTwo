@@ -7,6 +7,8 @@ import type {
   PluginInfo,
   SkillInfo,
 } from "../bridge";
+import { BUILTIN_UI_COMPONENTS } from "../electrobun/host/builtinPlugins";
+import { pluginUiComponentId } from "../pluginModel";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,
@@ -33,129 +35,7 @@ const BUNDLE_CONTRIBUTIONS = [
   ["pipelines", "Pipelines"],
 ] as const;
 
-export const BUILTIN_UI_COMPONENTS = [
-  {
-    id: "plugin-manager.page",
-    pluginId: "kernel",
-    name: "Plugin manager",
-    description: "The required management plane used to recover and re-enable other features.",
-    kind: "page",
-    slot: "app.page",
-    required: true,
-  },
-  {
-    id: "automation.page",
-    pluginId: "automation",
-    name: "Automations",
-    description: "Scheduled-work page and automation entry points.",
-    kind: "page",
-    slot: "app.page",
-  },
-  {
-    id: "browser.dock",
-    pluginId: "browser",
-    name: "Browser dock",
-    description: "Authenticated in-app browser surface and its dock opener.",
-    kind: "dockSurface",
-    slot: "dock.tabs",
-  },
-  {
-    id: "terminal.dock",
-    pluginId: "terminal",
-    name: "Terminal dock",
-    description: "Persistent terminal sessions in the side dock.",
-    kind: "dockSurface",
-    slot: "dock.tabs",
-  },
-  {
-    id: "git.surface",
-    pluginId: "git",
-    name: "Source control",
-    description: "Git dock, source-control dialog, and related commands.",
-    kind: "dockSurface",
-    slot: "dock.tabs",
-  },
-  {
-    id: "files.surface",
-    pluginId: "workspace",
-    name: "Files",
-    description: "Workspace file tree, viewer, and file browser.",
-    kind: "dockSurface",
-    slot: "dock.tabs",
-  },
-  {
-    id: "search.modal",
-    pluginId: "workspace-search",
-    name: "Workspace search",
-    description: "Project-wide content search and result opener.",
-    kind: "modal",
-    slot: "app.dialogs",
-  },
-  {
-    id: "issues.modal",
-    pluginId: "issues",
-    name: "Issues",
-    description: "GitHub and Linear issue browser and delegation flow.",
-    kind: "modal",
-    slot: "app.dialogs",
-  },
-  {
-    id: "voice.composer",
-    pluginId: "voice",
-    name: "Voice input",
-    description: "Composer dictation and structured voice input.",
-    kind: "composerAction",
-    slot: "composer.actions",
-  },
-  {
-    id: "usage.settings",
-    pluginId: "usage",
-    name: "Usage",
-    description: "Provider quota and usage settings surfaces.",
-    kind: "settingsSection",
-    slot: "settings.sections",
-  },
-  {
-    id: "memory.settings",
-    pluginId: "memory",
-    name: "Memory",
-    description: "Memory policy controls and receipt surfaces.",
-    kind: "settingsSection",
-    slot: "settings.sections",
-  },
-  {
-    id: "scenes.surface",
-    pluginId: "scenes",
-    name: "Agent scenes",
-    description: "Scene picker, studio, banners, and pipeline controls.",
-    kind: "sessionSurface",
-    slot: "session.chrome",
-  },
-  {
-    id: "canvas.editor",
-    pluginId: "canvas",
-    name: "Canvas editor",
-    description: "Structured visual canvas blocks. Component policy is separate from the Canvas safety feature gate; enabling this component does not open the production gate.",
-    kind: "editorBlock",
-    slot: "editor.blocks",
-  },
-  {
-    id: "remote.modal",
-    pluginId: "remote",
-    name: "Remote control",
-    description: "Remote-device pairing and connection management.",
-    kind: "modal",
-    slot: "app.dialogs",
-  },
-  {
-    id: "lsp.runtime",
-    pluginId: "lsp",
-    name: "Language servers",
-    description: "Project language-server discovery and lifecycle.",
-    kind: "runtime",
-    slot: "project.runtime",
-  },
-] as const;
+export { BUILTIN_UI_COMPONENTS };
 
 export type BuiltinUiComponentId = (typeof BUILTIN_UI_COMPONENTS)[number]["id"];
 
@@ -350,7 +230,7 @@ export function buildPluginManagerCatalog({
       author: bundle.author,
       source: "bundle",
       sourceLabel: bundle.source,
-      category: policyEntry?.metadata.category ?? bundle.standard,
+      category: policyEntry?.metadata.category ?? "plugin",
       supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
       required: policyEntry?.metadata.essential ?? false,
       dependencies: policyEntry
@@ -361,9 +241,14 @@ export function buildPluginManagerCatalog({
         : undefined,
       commands: policyEntry?.commands ?? [],
       services: policyEntry?.services ?? [],
-      componentIds: bundle.extension_components.map(
-        (component) => `${id}:extension:${component.kind}:${component.name}`,
-      ),
+      componentIds: [
+        ...(bundle.ui_contributions ?? []).map((contribution) =>
+          pluginUiComponentId(bundle.id, contribution.id)
+        ),
+        ...bundle.extension_components
+          .filter((component) => component.kind !== "ui")
+          .map((component) => `${id}:extension:${component.kind}:${component.name}`),
+      ],
       state: policyEntry ? managerState(policyEntry, scope) : bundleState(bundle),
       configSchema: policyEntry?.schema ?? undefined,
       configurable:
@@ -375,7 +260,7 @@ export function buildPluginManagerCatalog({
       bundle: {
         id: bundle.id,
         repository: bundle.repository || null,
-        standards: bundle.standards,
+        standardVersion: bundle.standard_version,
         trusted: bundle.trusted,
         enabled: bundle.enabled,
         requiresTrust,
@@ -413,23 +298,47 @@ export function buildPluginManagerCatalog({
 
   const bundleComponents: PluginManagerComponent[] = bundles.flatMap((bundle) => {
     const pluginId = bundleId(bundle.id);
-    return bundle.extension_components.map((component) => {
-      const id = `${pluginId}:extension:${component.kind}:${component.name}`;
+    const policyEntry = entries.get(pluginId);
+    const userEntry = userEntries.get(pluginId);
+    const uiComponents: PluginManagerComponent[] = (bundle.ui_contributions ?? []).map((contribution) => {
+      const id = pluginUiComponentId(bundle.id, contribution.id);
       return {
         id,
         pluginId,
         pluginName: bundle.name,
-        name: component.name,
-        description: component.path,
-        kind: component.kind,
-        slot: component.path,
-        source: "bundle" as const,
+        name: contribution.label,
+        description: contribution.description,
+        kind: "uiAction",
+        slot: contribution.slot,
+        source: "bundle",
         sourceLabel: bundle.source,
-        supportedScopes: bundleScope(bundle),
-        manageable: false,
-        state: bundleState(bundle),
+        supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
+        manageable: policyEntry != null,
+        state: policyEntry
+          ? componentState(id, policyEntry, userEntry, scope)
+          : bundleState(bundle),
       };
     });
+    const inventoryComponents: PluginManagerComponent[] = bundle.extension_components
+      .filter((component) => component.kind !== "ui")
+      .map((component) => {
+        const id = `${pluginId}:extension:${component.kind}:${component.name}`;
+        return {
+          id,
+          pluginId,
+          pluginName: bundle.name,
+          name: component.name,
+          description: component.path,
+          kind: component.kind,
+          slot: component.path,
+          source: "bundle" as const,
+          sourceLabel: bundle.source,
+          supportedScopes: bundleScope(bundle),
+          manageable: false,
+          state: bundleState(bundle),
+        };
+      });
+    return [...uiComponents, ...inventoryComponents];
   });
 
   const skillComponents: PluginManagerComponent[] = skills.map((skill) => {

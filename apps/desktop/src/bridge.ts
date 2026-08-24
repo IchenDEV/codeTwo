@@ -26,6 +26,7 @@ import type {
   AppUpdateStatus,
   WorkspaceOpenTarget,
 } from "./electrobun/rpc";
+import type { PluginUiContribution } from "./pluginModel";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -997,16 +998,6 @@ export interface PluginEntry {
 
 export async function listCorePlugins(): Promise<PluginEntry[]> {
   return inDesktop ? await call<PluginEntry[]>("kernel.plugins") : [];
-}
-
-/** Load or unload one plugin, live. */
-export async function setCorePluginEnabled(name: string, value: boolean): Promise<void> {
-  await call("kernel.set_enabled", { name, value });
-}
-
-/** Replace one plugin's config; it reloads, nothing else does. */
-export async function configureCorePlugin(name: string, config: unknown): Promise<void> {
-  await call("kernel.configure", { name, config });
 }
 
 // ---- unified plugin management ---------------------------------------------------------------
@@ -2490,7 +2481,6 @@ export interface PluginCounts {
   runtime?: number;
 }
 
-export type PluginStandard = "agent_plugins" | "codex" | "claude_code" | "conventional";
 export type PluginInstallScope = "user" | "project" | "local" | "managed";
 
 export interface PluginDiagnostic {
@@ -2514,25 +2504,14 @@ export interface PluginScaffoldInfo {
   files: number;
 }
 
-export const PLUGIN_UI_SLOT_IDS = [
-  "rail.features",
-  "session.header",
-  "transcript.before",
-  "composer.above",
-  "composer.toolbar",
-] as const;
-
-export type PluginUiSlotId = (typeof PLUGIN_UI_SLOT_IDS)[number];
-
-export interface PluginUiContribution {
-  id: string;
-  slot: PluginUiSlotId;
-  label: string;
-  description: string;
-  command: string;
-  input: unknown;
-  order: number;
-}
+export {
+  PLUGIN_UI_SLOT_IDS,
+  pluginUiComponentId,
+} from "./pluginModel";
+export type {
+  PluginUiContribution,
+  PluginUiSlotId,
+} from "./pluginModel";
 
 export interface PluginLanguageServer {
   id: string;
@@ -2550,9 +2529,7 @@ export interface PluginInfo {
   author: string;
   source: string;
   repository: string;
-  spec_version: string;
-  standard: PluginStandard;
-  standards: PluginStandard[];
+  standard_version: string;
   enabled: boolean;
   trusted: boolean;
   scope: PluginInstallScope;
@@ -2589,8 +2566,7 @@ export type MarketplacePluginSource =
       version: string | null;
       registry: string | null;
     }
-  | { kind: "archive"; url: string; sha256: string | null }
-  | { kind: "unsupported"; description: string };
+  | { kind: "archive"; url: string; sha256: string | null };
 
 export interface MarketplacePlugin {
   name: string;
@@ -2618,18 +2594,16 @@ export interface PluginMarketplace {
   description: string;
   manifest_path: string;
   root: string;
-  standard: "codex" | "claude_code";
   plugins: MarketplacePlugin[];
   diagnostics: MarketplaceDiagnostic[];
 }
 
 const BROWSER_PLUGIN_MARKETPLACE: PluginMarketplace = {
   name: "code2-demo-marketplace",
-  display_name: "C2 compatibility preview",
-  description: "A browser-only preview of marketplace source support and compatibility diagnostics.",
-  manifest_path: "/demo/.claude-plugin/marketplace.json",
+  display_name: "C2 Marketplace Preview",
+  description: "A browser-only preview of C2 marketplace source support and diagnostics.",
+  manifest_path: "/demo/marketplace.json",
   root: "/demo",
-  standard: "claude_code",
   plugins: [
     {
       name: "local-review-suite",
@@ -2647,7 +2621,7 @@ const BROWSER_PLUGIN_MARKETPLACE: PluginMarketplace = {
     {
       name: "npm-observability-demo",
       display_name: "NPM Observability Demo",
-      description: "Shown for compatibility visibility; the npm source adapter is not implemented yet.",
+      description: "Catalog preview for an npm source that is not installable in this release.",
       version: "0.8.0",
       category: "monitoring",
       installation_policy: "allowed",
@@ -2685,9 +2659,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2 Community",
           source: "GitHub · example/developer-toolkit",
           repository: "https://github.com/example/developer-toolkit",
-          spec_version: "1.0.0",
-          standard: "agent_plugins",
-          standards: ["agent_plugins", "codex", "claude_code"],
+          standard_version: "1.0.0",
           enabled: true,
           trusted: false,
           scope: "user",
@@ -2708,7 +2680,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             {
               kind: "lsp",
               name: "rust",
-              path: ".lsp.json",
+              path: "plugin.json#extensions.dev.codetwo.languageServers",
               status: "requires_trust",
             },
             {
@@ -2736,9 +2708,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2",
           source: "Built-in preview",
           repository: "",
-          spec_version: "1.0.0",
-          standard: "agent_plugins",
-          standards: ["agent_plugins"],
+          standard_version: "1.0.0",
           enabled: true,
           trusted: true,
           scope: "user",

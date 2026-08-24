@@ -13,6 +13,7 @@
     "build:tool-broker": "bun build --compile src/electrobun/toolBrokerRpc.ts --outfile dist/tool-broker/codetwo-tool-broker",
     "build:renderer": "bun run check:design && tsc --noEmit && vite build",
     "build:canvas:remote": "vite build --config vite.canvas.config.ts",
+    "plugin:validate": "bun scripts/validate-plugin.ts",
     "check:design": "bun scripts/check-design-system.ts",
     "test": "bun test",
     "preview": "vite preview"
