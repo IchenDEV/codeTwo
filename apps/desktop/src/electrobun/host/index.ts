@@ -23,6 +23,8 @@ import {
   listGitHubPullRequests,
 } from "./github";
 import { PluginRuntimeManager } from "./plugins";
+import { TaskHandoffManager, type PortableTaskHandoff } from "./handoff";
+import { BunRemoteServer } from "./remote";
 import {
   browserUseSettings,
   computerUseSettings,
@@ -101,6 +103,7 @@ interface SessionRuntime {
   deferredStopReason: string | null;
   externalTurn: boolean;
   shuttingDown: boolean;
+  handoffContext: unknown | null;
 }
 
 interface PendingPermission {
@@ -222,11 +225,14 @@ function removeStoredProjectIcon(dataDir: string, stored: string | null): void {
 
 export class PureBunHost {
   private readonly dataDir: string;
+  private readonly defaultCwd: string;
   private readonly database: BunDatabase;
   private hostTools: HostToolEvidence;
   private readonly providerLifecycle: ProviderLifecycleManager;
   private readonly terminal: TerminalManager;
   private readonly lsp: LspManager;
+  private readonly remote: BunRemoteServer;
+  private readonly handoff: TaskHandoffManager;
   private readonly plugins: PluginRuntimeManager;
   private readonly handlers = new Map<string, RegisteredHandler>();
   private readonly runtimes = new Map<string, SessionRuntime>();
@@ -235,14 +241,21 @@ export class PureBunHost {
   private readonly toolCalls = new Map<string, { title: string; kind: string | null; agentInput: unknown }>();
   private shuttingDown = false;
 
-  constructor(dataDir: string, private readonly onEvent: (event: DesktopEvent) => void) {
+  constructor(
+    dataDir: string,
+    private readonly onEvent: (event: DesktopEvent) => void,
+    options: { defaultCwd?: string } = {},
+  ) {
     this.dataDir = dataDir;
+    this.defaultCwd = options.defaultCwd ? workspacePath(options.defaultCwd, ".") : process.env.HOME || process.cwd();
     augmentGuiPath();
     this.hostTools = detectHostToolEvidence(process.env, dataDir);
     this.providerLifecycle = new ProviderLifecycleManager(dataDir);
     this.database = new BunDatabase(dataDir);
+    this.handoff = new TaskHandoffManager(this.database, (sessionId) => this.quiesceForHandoff(sessionId));
     this.terminal = new TerminalManager((event) => this.emit(event));
     this.lsp = new LspManager((event) => this.emit(event));
+    this.remote = new BunRemoteServer(dataDir, (name, args) => this.call(name, args, null));
     this.plugins = new PluginRuntimeManager(dataDir, {
       hostCommands: () => [...this.handlers].map(([name, registered]) => ({
         name,
@@ -252,6 +265,7 @@ export class PureBunHost {
       reconcileBuiltin: (plugin, enabled, projectPath) => {
         if (plugin === "terminal") this.terminal.setRuntimeEnabled(enabled, projectPath);
         if (plugin === "lsp") this.lsp.setRuntimeEnabled(enabled, projectPath);
+        if (plugin === "remote" && !enabled) this.remote.stop();
       },
       onChanged: () => {
         this.lsp.invalidateRouting();
@@ -300,6 +314,7 @@ export class PureBunHost {
       runtime.peer?.shutdown();
     }
     this.runtimes.clear();
+    this.remote.stop();
     await this.plugins.shutdown();
     this.terminal.shutdown();
     this.lsp.shutdown();
@@ -418,6 +433,46 @@ export class PureBunHost {
       return session ? gitDiffStat(string(session.cwd, "cwd")) : null;
     });
 
+    this.register("handoff.prepare", (args) => this.handoff.prepare(string(args.session, "session")));
+    this.register("handoff.transfer", (args) => this.handoff.transfer({
+      session: string(args.session, "session"),
+      target_url: string(args.target_url, "target_url"),
+      bearer: string(args.bearer, "bearer"),
+      destination: string(args.destination, "destination"),
+    }));
+    this.register("handoff.transfer_pairing", (args) => this.handoff.transferPairing({
+      session: string(args.session, "session"),
+      pairing_url: string(args.pairing_url, "pairing_url"),
+      destination: string(args.destination, "destination"),
+    }));
+    this.register("handoff.accept", (args) => this.handoff.accept(
+      object(args.handoff) as unknown as PortableTaskHandoff,
+      string(args.destination, "destination"),
+    ));
+    this.register("handoff.activate", (args) => {
+      const sessionId = string(args.session, "session");
+      const handoffId = string(args.handoff, "handoff");
+      this.handoff.activate(sessionId, handoffId, number(args.epoch, 0));
+      const session = this.database.getSession(sessionId);
+      if (session) {
+        this.emitEngine({
+          event: "session_created",
+          session: sessionId,
+          cwd: string(session.cwd, "cwd"),
+          project_path: optionalString(session.project_path),
+          worktree_path: null,
+          worktree_baseline: null,
+          request_id: `handoff:${handoffId}`,
+        });
+      }
+    });
+    this.register("handoff.rollback_target", (args) => this.handoff.rollbackTarget(
+      string(args.session, "session"),
+      string(args.handoff, "handoff"),
+      number(args.epoch, 0),
+      string(args.destination, "destination"),
+    ));
+
     this.register("engine.new_session", (args) => this.newSession(args));
     this.register("engine.close_transient_session", (args) =>
       this.closeTransientSession(string(args.session, "session")),
@@ -455,7 +510,7 @@ export class PureBunHost {
       string(args.value, "value"),
     ));
 
-    this.register("workspace.default_cwd", () => process.env.HOME || process.cwd());
+    this.register("workspace.default_cwd", () => this.defaultCwd);
     this.register("workspace.list_dir", (args) => listDir(string(args.cwd, "cwd"), string(args.path, "path")));
     this.register("workspace.list_files", (args) => listFiles(string(args.cwd, "cwd"), optionalString(args.query) ?? "", number(args.limit, 50)));
     this.register("workspace.create_file", (args) => createFile(string(args.cwd, "cwd"), string(args.path, "path")));
@@ -548,6 +603,8 @@ export class PureBunHost {
       number(args.cols, 80),
     ));
     this.register("terminal.dump", (args) => this.terminal.dump(string(args.id, "id")));
+    this.register("terminal.clear", (args) => this.terminal.clear(string(args.id, "id")));
+    this.register("terminal.list", () => this.terminal.list());
     this.register("terminal.kill", (args) => this.terminal.kill(string(args.id, "id")));
 
     this.register("lsp.start", async (args, projectPath) => {
@@ -710,12 +767,18 @@ export class PureBunHost {
     this.register("cost.session", () => null);
     this.register("voice.available", () => false);
     this.register("voice.transcribe", () => this.unsupported("voice.transcribe", "native transcription"));
-    this.register("remote.status", () => null);
-    this.register("remote.devices", () => []);
-    this.register("remote.start", () => this.unsupported("remote.start", "remote server"));
-    this.register("remote.stop", () => true);
-    this.register("remote.pairing_link", () => null);
-    this.register("remote.revoke_device", () => false);
+    this.register("remote.status", () => this.remote.status());
+    this.register("remote.devices", () => this.remote.devices());
+    this.register("remote.start", (args) => this.remote.start(
+      typeof args.port === "number" ? args.port : undefined,
+    ));
+    this.register("remote.stop", () => this.remote.stop());
+    this.register("remote.pairing_link", (args) => this.remote.pairingLink(
+      optionalString(args.endpoint_id),
+      optionalString(args.client_protocol) ?? "legacy",
+      typeof args.ttl_secs === "number" ? args.ttl_secs : null,
+    ));
+    this.register("remote.revoke_device", (args) => this.remote.revokeDevice(string(args.id, "id")));
 
     this.register("issues.github_available", () => which("gh") !== null);
     this.register("issues.list_github", (args) => this.listGithubIssues(string(args.cwd, "cwd"), number(args.limit, 30)));
@@ -738,7 +801,7 @@ export class PureBunHost {
     this.register("scene_artifacts.record", () => this.unsupported("scene_artifacts.record", "scene artifacts"));
   }
 
-  private newSession(args: Args): boolean {
+  private newSession(args: Args): string {
     if (boolean(args.use_worktree)) {
       throw new Error("Pure Bun trial does not implement isolated worktrees; turn Worktree off for this session");
     }
@@ -772,11 +835,12 @@ export class PureBunHost {
       request_id: optionalString(args.request_id),
     });
     this.emitEngine({ event: "models", session: id, available: provider.models, current: model ?? "" });
-    return true;
+    return id;
   }
 
   private startPrompt(args: Args): boolean {
     const sessionId = string(args.session, "session");
+    this.database.assertSessionActive(sessionId);
     const runtime = this.runtime(sessionId);
     if (runtime.busy) throw new Error("this session already has a running turn");
     const doc = Array.isArray(args.doc) ? args.doc : [];
@@ -827,6 +891,7 @@ export class PureBunHost {
 
   private queuePrompt(args: Args): { position: number } {
     const sessionId = string(args.session, "session");
+    this.database.assertSessionActive(sessionId);
     const runtime = this.runtime(sessionId);
     if (!runtime.busy) {
       this.startPrompt(args);
@@ -848,6 +913,7 @@ export class PureBunHost {
 
   private async steerPrompt(args: Args): Promise<{ outcome: string }> {
     const sessionId = string(args.session, "session");
+    this.database.assertSessionActive(sessionId);
     const runtime = this.runtime(sessionId);
     if (!runtime.busy) throw new Error("there is no running turn to steer");
     if (!runtime.capabilities.steering) {
@@ -924,12 +990,27 @@ export class PureBunHost {
     try {
       const peer = await this.connect(runtime);
       if (!runtime.acpSessionId) throw new Error("ACP session was not created");
+      const handoffContext = runtime.handoffContext;
+      const promptBlocks = handoffContext == null ? blocks : [
+        {
+          type: "text",
+          text: [
+            "The task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.",
+            JSON.stringify(handoffContext),
+          ].join("\n\n"),
+        },
+        ...blocks,
+      ];
       const response = object(await peer.prompt(
         runtime.acpSessionId,
         withRichResponseInstructions(
-          withProviderToolInstructions(blocks, runtime.toolset.instructions),
+          withProviderToolInstructions(promptBlocks, runtime.toolset.instructions),
         ),
       ));
+      if (handoffContext != null) {
+        runtime.handoffContext = null;
+        this.database.clearHandoffContext(runtime.id);
+      }
       if (runtime.shuttingDown) return;
       const stopReason = optionalString(response.stopReason) ?? "end_turn";
       if (runtime.steering) {
@@ -1043,6 +1124,8 @@ export class PureBunHost {
           runtime.replaying = true;
           response = object(await peer.loadSession(runtime.persistedAcpSessionId, runtime.cwd));
           runtime.acpSessionId = runtime.persistedAcpSessionId;
+          runtime.handoffContext = null;
+          this.database.clearHandoffContext(runtime.id);
         } catch {
           runtime.replaying = false;
           response = object(await peer.newSession(runtime.cwd));
@@ -1472,7 +1555,46 @@ export class PureBunHost {
       deferredStopReason: null,
       externalTurn: false,
       shuttingDown: false,
+      handoffContext: session.handoff_context ?? null,
     };
+  }
+
+  private async quiesceForHandoff(sessionId: string): Promise<unknown> {
+    const session = this.database.getSession(sessionId);
+    if (!session) throw new Error(`session not found: ${sessionId}`);
+    this.database.assertSessionActive(sessionId);
+    const sourceActivity = session.activity ?? { revision: 0, state: { kind: "idle" } };
+    const runtime = this.runtimes.get(sessionId);
+    if (!runtime) return sourceActivity;
+
+    for (const [requestId, pending] of this.pendingPermissions) {
+      if (pending.session !== sessionId) continue;
+      pending.resolve({ outcome: { outcome: "cancelled" } });
+      this.pendingPermissions.delete(requestId);
+    }
+    for (const [requestId, pending] of this.pendingElicitations) {
+      if (pending.session !== sessionId) continue;
+      pending.resolve({ action: "cancel" });
+      this.pendingElicitations.delete(requestId);
+    }
+    if (runtime.busy && runtime.acpSessionId) runtime.peer?.cancel(runtime.acpSessionId);
+    const deadline = Date.now() + 10_000;
+    while (runtime.busy && Date.now() < deadline) await Bun.sleep(50);
+    if (runtime.busy) {
+      runtime.peer?.shutdown();
+      runtime.peer = null;
+      runtime.connectPromise = null;
+      runtime.busy = false;
+      runtime.turnId = null;
+      runtime.requestId = null;
+      runtime.queuedPrompts.length = 0;
+      this.setActivity(runtime, {
+        kind: "failed",
+        reason: "interrupted",
+        message: "Paused at a durable boundary for device transfer",
+      });
+    }
+    return sourceActivity;
   }
 
   private setActivity(runtime: SessionRuntime, state: Record<string, unknown>): void {
@@ -1519,6 +1641,7 @@ export class PureBunHost {
 
   private emit(event: DesktopEvent): void {
     this.onEvent(event);
+    this.remote.publish(event);
     if (event.name === "engine-event") this.plugins.publish("engine/event", event.payload);
   }
 
@@ -1599,6 +1722,21 @@ export class PureBunHost {
         const mimeType = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension || "png"}`;
         blocks.push({ type: "image", data: bytes.toString("base64"), mimeType });
         prompt.push(`**Attached image workspace path:** ${JSON.stringify(path)}`);
+        continue;
+      }
+      if (type === "image_data") {
+        const dataUrl = string(block.data_url, "image data URL");
+        if (dataUrl.length > 14_000_000) throw new Error("inline image is too large");
+        const match = dataUrl.match(/^data:(image\/(?:gif|jpeg|png|webp));base64,([A-Za-z0-9+/]+=*)$/i);
+        if (!match) throw new Error("inline image must be a base64 GIF, JPEG, PNG, or WebP data URL");
+        const data = Buffer.from(match[2], "base64");
+        if (data.byteLength === 0 || data.byteLength > 10 * 1024 * 1024) {
+          throw new Error("inline image must be between 1 byte and 10 MB");
+        }
+        const name = optionalString(block.name) ?? "mobile-image";
+        canonical.push(`[image:${name}]`);
+        blocks.push({ type: "image", data: data.toString("base64"), mimeType: match[1].toLowerCase() });
+        prompt.push(`**Attached image:** ${name}`);
         continue;
       }
       if (type === "appshot") {

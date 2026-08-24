@@ -234,6 +234,7 @@ const COMMAND_OWNER_BY_PREFIX: Readonly<Record<string, string>> = {
   extensions: "kernel",
   git: "git",
   github: "git",
+  handoff: "core",
   issues: "issues",
   kernel: "kernel",
   keymap: "keymap",

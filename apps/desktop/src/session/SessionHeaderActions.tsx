@@ -12,6 +12,7 @@ import {
   PanelRight,
   Plus,
   Play,
+  Send,
   Upload,
   type LucideIcon,
 } from "lucide-react";
@@ -102,6 +103,7 @@ export function SessionHeaderActions({
   onToggleTerminal,
   onTogglePanel,
   onToggleSideChat = () => {},
+  onMoveTask,
 }: {
   canCommit: boolean;
   terminalActive: boolean;
@@ -121,6 +123,7 @@ export function SessionHeaderActions({
   onToggleTerminal: () => void;
   onTogglePanel: () => void;
   onToggleSideChat?: () => void;
+  onMoveTask: () => void;
 }) {
   const t = useT();
 
@@ -205,6 +208,10 @@ export function SessionHeaderActions({
               <Folder aria-hidden />
               {t("header.finder")}
               {finderHint && <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onMoveTask}>
+              <Send aria-hidden />
+              Move task to device
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>

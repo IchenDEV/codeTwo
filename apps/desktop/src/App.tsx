@@ -258,6 +258,7 @@ import {
   type SceneBannerState,
 } from "./session/SceneBanner";
 import { SessionHeaderActions } from "./session/SessionHeaderActions";
+import { TaskHandoffDialog } from "./session/TaskHandoffDialog";
 import { SideChatPanel, type SideChatSeed } from "./session/SideChatPanel";
 import { ProjectActionDialog } from "./session/ProjectActionDialog";
 import { projectActionBindings } from "./session/projectActions";
@@ -638,6 +639,7 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [showRemote, setShowRemote] = useState(false);
+  const [showTaskHandoff, setShowTaskHandoff] = useState(false);
   const [showIssues, setShowIssues] = useState(false);
   const [preview, setPreview] = useState<CompiledPreview | null>(null);
   const [scripts, setScripts] = useState<ProjectScript[]>([]);
@@ -6263,6 +6265,7 @@ export default function App() {
                 manualDockTab(dockTab ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
+              onMoveTask={() => activeSession && setShowTaskHandoff(true)}
             />
           </header>
 
@@ -6803,6 +6806,17 @@ export default function App() {
       />
       {showRemote && componentEnabled("remote.modal") && (
         <RemoteModal onClose={() => setShowRemote(false)} />
+      )}
+      {showTaskHandoff && activeSession && (
+        <TaskHandoffDialog
+          session={activeSession}
+          onClose={() => setShowTaskHandoff(false)}
+          onTransferred={() => {
+            setShowTaskHandoff(false);
+            void refreshSessions();
+            toast("Task moved to the remote device.", "success");
+          }}
+        />
       )}
       {showIssues && componentEnabled("issues.modal") && (
         <IssuesModal
