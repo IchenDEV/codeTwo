@@ -2,6 +2,13 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import {
+  DEVICE_SYNC_SCHEMA_VERSION,
+  stableDeviceSyncValue,
+  type DeviceSyncDocument,
+  type DeviceSyncEntity,
+} from "./deviceSyncDocument";
+
 type Row = Record<string, unknown>;
 
 function jsonValue<T>(value: unknown, fallback: T): T {
@@ -105,14 +112,17 @@ CREATE TABLE IF NOT EXISTS sessions (
   handoff_state TEXT NOT NULL DEFAULT 'active',
   handoff_id TEXT,
   handoff_context_json TEXT,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS parts (
   session_id TEXT NOT NULL,
   seq INTEGER NOT NULL,
+  sync_id TEXT NOT NULL UNIQUE,
   role TEXT NOT NULL,
   part_json TEXT NOT NULL,
   search_text TEXT,
+  created_at INTEGER NOT NULL,
   PRIMARY KEY (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS parts_session ON parts(session_id, seq);
@@ -126,7 +136,8 @@ CREATE TABLE IF NOT EXISTS projects (
   icon_updated_at INTEGER NOT NULL DEFAULT 0,
   default_provider TEXT,
   default_model TEXT,
-  default_reasoning_effort TEXT
+  default_reasoning_effort TEXT,
+  updated_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS memory_settings (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -205,6 +216,12 @@ CREATE TABLE IF NOT EXISTS automation_runs (
   finished_at INTEGER,
   error TEXT
 );
+CREATE TABLE IF NOT EXISTS sync_tombstones (
+  entity TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  deleted_at INTEGER NOT NULL,
+  PRIMARY KEY(entity, entity_id)
+);
 `;
 
 export interface NewSessionInput {
@@ -230,6 +247,7 @@ export class BunDatabase {
     this.migrateProjectProfiles();
     this.migrateMemoryManagement();
     this.migrateHandoffs();
+    this.migrateDeviceSync();
   }
 
   private migrateSessionLifecycle(): void {
@@ -310,6 +328,37 @@ export class BunDatabase {
     }
   }
 
+  private migrateDeviceSync(): void {
+    const additions = [
+      "ALTER TABLE sessions ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE parts ADD COLUMN sync_id TEXT",
+      "ALTER TABLE parts ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE projects ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+    ];
+    for (const statement of additions) {
+      try {
+        this.db.exec(statement);
+      } catch (error) {
+        if (!String(error).toLowerCase().includes("duplicate column")) throw error;
+      }
+    }
+    this.db.exec(`
+      UPDATE sessions SET updated_at=created_at WHERE updated_at=0;
+      UPDATE projects SET updated_at=MAX(last_opened_at,added_at) WHERE updated_at=0;
+      UPDATE parts SET sync_id=session_id || ':' || seq WHERE sync_id IS NULL OR sync_id='';
+      UPDATE parts SET created_at=(
+        SELECT sessions.created_at + parts.seq FROM sessions WHERE sessions.id=parts.session_id
+      ) WHERE created_at=0;
+      CREATE UNIQUE INDEX IF NOT EXISTS parts_sync_id ON parts(sync_id);
+      CREATE TABLE IF NOT EXISTS sync_tombstones (
+        entity TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        deleted_at INTEGER NOT NULL,
+        PRIMARY KEY(entity, entity_id)
+      );
+    `);
+  }
+
   close(): void {
     this.db.close(false);
   }
@@ -339,15 +388,17 @@ export class BunDatabase {
     const now = Date.now();
     this.db
       .query(
-        `INSERT INTO projects(path,name,last_opened_at,added_at) VALUES(?,?,?,?)
-         ON CONFLICT(path) DO UPDATE SET last_opened_at=excluded.last_opened_at`,
+        `INSERT INTO projects(path,name,last_opened_at,added_at,updated_at) VALUES(?,?,?,?,?)
+         ON CONFLICT(path) DO UPDATE SET last_opened_at=excluded.last_opened_at,updated_at=excluded.updated_at`,
       )
-      .run(path, name?.trim() || basename(path) || path, now, now);
+      .run(path, name?.trim() || basename(path) || path, now, now, now);
+    this.clearTombstone("project", path);
     return path;
   }
 
   touchProject(path: string): void {
-    this.db.query("UPDATE projects SET last_opened_at=? WHERE path=?").run(Date.now(), path);
+    const now = Date.now();
+    this.db.query("UPDATE projects SET last_opened_at=?,updated_at=? WHERE path=?").run(now, now, path);
   }
 
   renameProject(path: string, name: string): void {
@@ -355,11 +406,11 @@ export class BunDatabase {
     if (!normalized || normalized.length > 80) {
       throw new Error("project name must be between 1 and 80 characters");
     }
-    this.db.query("UPDATE projects SET name=? WHERE path=?").run(normalized, path);
+    this.db.query("UPDATE projects SET name=?,updated_at=? WHERE path=?").run(normalized, Date.now(), path);
   }
 
   setProjectWorktreeMode(path: string, mode: string | null): void {
-    this.db.query("UPDATE projects SET default_worktree_mode=? WHERE path=?").run(mode, path);
+    this.db.query("UPDATE projects SET default_worktree_mode=?,updated_at=? WHERE path=?").run(mode, Date.now(), path);
   }
 
   setProjectAgentDefaults(
@@ -394,7 +445,11 @@ export class BunDatabase {
   }
 
   removeProject(path: string): void {
-    this.db.query("DELETE FROM projects WHERE path=?").run(path);
+    const run = this.db.transaction(() => {
+      this.recordTombstone("project", path);
+      this.db.query("DELETE FROM projects WHERE path=?").run(path);
+    });
+    run();
   }
 
   listSessions(archived = false): unknown[] {
@@ -433,8 +488,8 @@ export class BunDatabase {
         `INSERT INTO sessions(
          id,title,title_origin,pinned,archived,transient,activity_json,provider,model,cwd,project_path,
            worktree_path,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
-           memory_read,memory_write,created_at
-         ) VALUES(?,?,'default',0,0,?,?,?,?,?,?,NULL,0,?,?,NULL,'inherit','inherit',?)`,
+           memory_read,memory_write,created_at,updated_at
+         ) VALUES(?,?,'default',0,0,?,?,?,?,?,?,NULL,0,?,?,NULL,'inherit','inherit',?,?)`,
       )
       .run(
         id,
@@ -447,6 +502,7 @@ export class BunDatabase {
         input.cwd,
         JSON.stringify(input.permissionMode),
         JSON.stringify(input.sandboxPolicy),
+        now,
         now,
       );
     const session = this.getSession(id);
@@ -483,13 +539,13 @@ export class BunDatabase {
   }
 
   updateModel(id: string, model: string): void {
-    this.db.query("UPDATE sessions SET model=? WHERE id=?").run(model, id);
+    this.db.query("UPDATE sessions SET model=?,updated_at=? WHERE id=?").run(model, Date.now(), id);
   }
 
   updatePolicy(id: string, mode: string, sandbox: string): void {
     this.db
-      .query("UPDATE sessions SET permission_mode=?,sandbox_policy=? WHERE id=?")
-      .run(JSON.stringify(mode), JSON.stringify(sandbox), id);
+      .query("UPDATE sessions SET permission_mode=?,sandbox_policy=?,updated_at=? WHERE id=?")
+      .run(JSON.stringify(mode), JSON.stringify(sandbox), Date.now(), id);
   }
 
   setSessionMemoryPolicy(id: string, read: string, write: string): void {
@@ -497,8 +553,8 @@ export class BunDatabase {
     if (!allowed.has(read)) throw new Error("read must be inherit, allow, or deny");
     if (!allowed.has(write)) throw new Error("write must be inherit, allow, or deny");
     this.db
-      .query("UPDATE sessions SET memory_read=?,memory_write=? WHERE id=?")
-      .run(read, write, id);
+      .query("UPDATE sessions SET memory_read=?,memory_write=?,updated_at=? WHERE id=?")
+      .run(read, write, Date.now(), id);
   }
 
   updateActivity(id: string, activity: unknown): void {
@@ -585,8 +641,9 @@ export class BunDatabase {
           id,title,title_origin,pinned,archived,transient,activity_json,provider,model,cwd,project_path,
           worktree_path,worktree_baseline_json,worktree_common_dir,worktree_git_dir,
           worktree_identity_json,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
-          memory_read,memory_write,handoff_epoch,handoff_state,handoff_id,handoff_context_json,created_at
-        ) VALUES(?,?,?,?,0,0,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,0,?,?,?,?,?,?,'accepted',?,?,?)`,
+          memory_read,memory_write,handoff_epoch,handoff_state,handoff_id,handoff_context_json,
+          created_at,updated_at
+        ) VALUES(?,?,?,?,0,0,?,?,?,?,?,NULL,NULL,NULL,NULL,NULL,0,?,?,?,?,?,?,'accepted',?,?,?,?)`,
       ).run(
         id,
         text(input.session.title, "Untitled session"),
@@ -606,16 +663,26 @@ export class BunDatabase {
         input.handoffId,
         JSON.stringify(input.context),
         Number(input.session.created_at ?? Date.now()),
+        Number(input.session.updated_at ?? input.session.created_at ?? Date.now()),
       );
       const insert = this.db.query(
-        "INSERT INTO parts(session_id,seq,role,part_json,search_text) VALUES(?,?,?,?,?)",
+        "INSERT INTO parts(session_id,seq,sync_id,role,part_json,search_text,created_at) VALUES(?,?,?,?,?,?,?)",
       );
       for (const value of input.parts) {
         const part = value && typeof value === "object" ? value as Row : {};
         const role = text(part.role);
         if (role !== "user" && role !== "agent") throw new Error("handoff transcript role is invalid");
         const payload = part.part ?? { kind: "text", text: "" };
-        insert.run(id, Number(part.seq), role, JSON.stringify(payload), partText(JSON.stringify(payload)) || null);
+        const seq = Number(part.seq);
+        insert.run(
+          id,
+          seq,
+          `${id}:${seq}`,
+          role,
+          JSON.stringify(payload),
+          partText(JSON.stringify(payload)) || null,
+          Number(input.session.created_at ?? Date.now()) + seq,
+        );
       }
     });
     accept();
@@ -654,17 +721,17 @@ export class BunDatabase {
   }
 
   renameSession(id: string, title: string, origin = "manual"): void {
-    this.db.query("UPDATE sessions SET title=?,title_origin=? WHERE id=?").run(title, origin, id);
+    this.db.query("UPDATE sessions SET title=?,title_origin=?,updated_at=? WHERE id=?").run(title, origin, Date.now(), id);
   }
 
   setSessionFlag(id: string, field: "archived" | "pinned", value: boolean): void {
     if (field === "archived") {
       this.db
-        .query("UPDATE sessions SET archived=?,pinned=CASE WHEN ?=1 THEN 0 ELSE pinned END WHERE id=?")
-        .run(value ? 1 : 0, value ? 1 : 0, id);
+        .query("UPDATE sessions SET archived=?,pinned=CASE WHEN ?=1 THEN 0 ELSE pinned END,updated_at=? WHERE id=?")
+        .run(value ? 1 : 0, value ? 1 : 0, Date.now(), id);
       return;
     }
-    this.db.query("UPDATE sessions SET pinned=? WHERE id=? AND archived=0").run(value ? 1 : 0, id);
+    this.db.query("UPDATE sessions SET pinned=?,updated_at=? WHERE id=? AND archived=0").run(value ? 1 : 0, Date.now(), id);
   }
 
   appendPart(sessionId: string, role: "user" | "agent", part: unknown, searchText?: string): number {
@@ -672,9 +739,11 @@ export class BunDatabase {
       .query("SELECT COALESCE(MAX(seq),0) AS seq FROM parts WHERE session_id=?")
       .get(sessionId) as Row;
     const seq = Number(current.seq ?? 0) + 1;
+    const now = Date.now();
     this.db
-      .query("INSERT INTO parts(session_id,seq,role,part_json,search_text) VALUES(?,?,?,?,?)")
-      .run(sessionId, seq, role, JSON.stringify(part), searchText ?? null);
+      .query("INSERT INTO parts(session_id,seq,sync_id,role,part_json,search_text,created_at) VALUES(?,?,?,?,?,?,?)")
+      .run(sessionId, seq, crypto.randomUUID(), role, JSON.stringify(part), searchText ?? null, now);
+    this.db.query("UPDATE sessions SET updated_at=? WHERE id=?").run(now, sessionId);
     return seq;
   }
 
@@ -1002,6 +1071,7 @@ export class BunDatabase {
 
   deleteMemory(id: string): void {
     const run = this.db.transaction(() => {
+      this.recordTombstone("memory", id);
       const receipts = this.db
         .query("SELECT rowid,items_json FROM memory_receipts")
         .all() as Row[];
@@ -1196,6 +1266,291 @@ export class BunDatabase {
       finished_at: row.finished_at == null ? null : Number(row.finished_at),
       error: nullableText(row.error),
     }));
+  }
+
+  deviceSyncSnapshot(deviceId: string): DeviceSyncDocument {
+    const projects = (this.db.query(
+      `SELECT path,name,last_opened_at,added_at,default_worktree_mode,updated_at
+       FROM projects`,
+    ).all() as Row[]).map((row) => ({
+      path: text(row.path),
+      name: text(row.name),
+      last_opened_at: Number(row.last_opened_at ?? 0),
+      added_at: Number(row.added_at ?? 0),
+      default_worktree_mode: nullableText(row.default_worktree_mode),
+      updated_at: Number(row.updated_at ?? 0),
+    }));
+    const sessions = (this.db.query(
+      `SELECT id,title,title_origin,pinned,archived,provider,model,cwd,project_path,
+              permission_mode,sandbox_policy,memory_read,memory_write,created_at,updated_at
+       FROM sessions WHERE transient=0`,
+    ).all() as Row[]).map((row) => ({
+      id: text(row.id),
+      title: text(row.title, "Untitled session"),
+      title_origin: text(row.title_origin, "default"),
+      pinned: bool(row.pinned),
+      archived: bool(row.archived),
+      provider: text(row.provider, '"codex"'),
+      model: nullableText(row.model),
+      cwd: text(row.cwd),
+      project_path: nullableText(row.project_path),
+      permission_mode: text(row.permission_mode, '"ask"'),
+      sandbox_policy: text(row.sandbox_policy, '"workspace_write"'),
+      memory_read: text(row.memory_read, "inherit"),
+      memory_write: text(row.memory_write, "inherit"),
+      created_at: Number(row.created_at ?? 0),
+      updated_at: Number(row.updated_at ?? row.created_at ?? 0),
+    }));
+    const parts = (this.db.query(
+      `SELECT p.sync_id,p.session_id,p.seq,p.role,p.part_json,p.search_text,p.created_at
+       FROM parts p JOIN sessions s ON s.id=p.session_id WHERE s.transient=0`,
+    ).all() as Row[]).map((row) => ({
+      sync_id: text(row.sync_id),
+      session_id: text(row.session_id),
+      seq: Number(row.seq ?? 0),
+      role: text(row.role),
+      part_json: text(row.part_json, "{}"),
+      search_text: nullableText(row.search_text),
+      created_at: Number(row.created_at ?? 0),
+    }));
+    // L3 profiles and evidence receipts are derived locally. The synced copy keeps the durable
+    // memory itself, but not raw evidence pointers whose transcript sequence can diverge after an
+    // offline merge.
+    const memories = (this.db.query(
+      `SELECT id,project_path,session_id,layer,category,content,keywords_json,confidence,
+              pinned,active,created_at,updated_at,origin,forgotten_at,supersedes_id,
+              conflict_with_id,conflict_reason
+       FROM memories
+       WHERE layer!='L3' AND (
+         session_id IS NULL OR session_id IN (SELECT id FROM sessions WHERE transient=0)
+       )`,
+    ).all() as Row[]).map((row) => ({
+      id: text(row.id),
+      project_path: text(row.project_path),
+      session_id: nullableText(row.session_id),
+      layer: text(row.layer),
+      category: text(row.category),
+      content: text(row.content),
+      keywords_json: text(row.keywords_json, "[]"),
+      confidence: Number(row.confidence ?? 0),
+      pinned: bool(row.pinned),
+      active: bool(row.active),
+      created_at: Number(row.created_at ?? 0),
+      updated_at: Number(row.updated_at ?? 0),
+      origin: text(row.origin, "automatic"),
+      forgotten_at: row.forgotten_at == null ? null : Number(row.forgotten_at),
+      supersedes_id: nullableText(row.supersedes_id),
+      conflict_with_id: nullableText(row.conflict_with_id),
+      conflict_reason: nullableText(row.conflict_reason),
+    }));
+    const tombstones: DeviceSyncDocument["tombstones"] = (this.db.query(
+      "SELECT entity,entity_id,deleted_at FROM sync_tombstones",
+    ).all() as Row[]).flatMap<DeviceSyncDocument["tombstones"][number]>((row) => {
+      const entity = text(row.entity);
+      return entity === "project" || entity === "memory"
+        ? [{ entity, id: text(row.entity_id), deleted_at: Number(row.deleted_at ?? 0) }]
+        : [];
+    });
+
+    return {
+      schema_version: DEVICE_SYNC_SCHEMA_VERSION,
+      revision: 0,
+      generated_at: Date.now(),
+      writer_device_id: deviceId,
+      projects,
+      sessions,
+      parts,
+      memories,
+      tombstones,
+    };
+  }
+
+  importDeviceSyncDocument(document: DeviceSyncDocument): {
+    projects: number;
+    sessions: number;
+    parts: number;
+    memories: number;
+  } {
+    const counts = { projects: 0, sessions: 0, parts: 0, memories: 0 };
+    const currentSnapshot = this.deviceSyncSnapshot(document.writer_device_id);
+    const currentProjects = new Map(currentSnapshot.projects.map((project) => [project.path, project]));
+    const currentSessions = new Map(currentSnapshot.sessions.map((session) => [session.id, session]));
+    const currentMemories = new Map(currentSnapshot.memories.map((memory) => [memory.id, memory]));
+    const run = this.db.transaction(() => {
+      for (const tombstone of document.tombstones) {
+        this.recordTombstone(tombstone.entity, tombstone.id, tombstone.deleted_at);
+        if (tombstone.entity === "project") {
+          this.db.query("DELETE FROM projects WHERE path=? AND updated_at<=?")
+            .run(tombstone.id, tombstone.deleted_at);
+        } else {
+          this.db.query("DELETE FROM memories WHERE id=? AND updated_at<=?")
+            .run(tombstone.id, tombstone.deleted_at);
+        }
+      }
+
+      for (const project of document.projects) {
+        const current = currentProjects.get(project.path);
+        if (current && (
+          current.updated_at > project.updated_at
+          || (current.updated_at === project.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(project))
+        )) continue;
+        this.db.query(
+          `INSERT INTO projects(path,name,last_opened_at,added_at,default_worktree_mode,updated_at)
+           VALUES(?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET
+             name=excluded.name,last_opened_at=excluded.last_opened_at,added_at=excluded.added_at,
+             default_worktree_mode=excluded.default_worktree_mode,updated_at=excluded.updated_at`,
+        ).run(
+          project.path,
+          project.name,
+          project.last_opened_at,
+          project.added_at,
+          project.default_worktree_mode,
+          project.updated_at,
+        );
+        this.clearTombstoneIfOlder("project", project.path, project.updated_at);
+        counts.projects += 1;
+      }
+
+      for (const session of document.sessions) {
+        const current = currentSessions.get(session.id);
+        if (current && (
+          current.updated_at > session.updated_at
+          || (current.updated_at === session.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(session))
+        )) continue;
+        if (current) {
+          this.db.query(
+            `UPDATE sessions SET title=?,title_origin=?,pinned=?,archived=?,provider=?,model=?,cwd=?,
+               project_path=?,permission_mode=?,sandbox_policy=?,memory_read=?,memory_write=?,
+               created_at=?,updated_at=? WHERE id=?`,
+          ).run(
+            session.title,
+            session.title_origin,
+            session.pinned ? 1 : 0,
+            session.archived ? 1 : 0,
+            session.provider,
+            session.model,
+            session.cwd,
+            session.project_path,
+            session.permission_mode,
+            session.sandbox_policy,
+            session.memory_read,
+            session.memory_write,
+            session.created_at,
+            session.updated_at,
+            session.id,
+          );
+        } else {
+          this.db.query(
+            `INSERT INTO sessions(
+              id,title,title_origin,pinned,archived,activity_json,provider,model,cwd,project_path,
+              worktree_path,worktree_discarded,permission_mode,sandbox_policy,acp_session_id,
+              memory_read,memory_write,created_at,updated_at
+            ) VALUES(?,?,?,?,?,'{"revision":0,"state":{"kind":"idle"}}',?,?,?,?,NULL,0,?,?,NULL,?,?,?,?)`,
+          ).run(
+            session.id,
+            session.title,
+            session.title_origin,
+            session.pinned ? 1 : 0,
+            session.archived ? 1 : 0,
+            session.provider,
+            session.model,
+            session.cwd,
+            session.project_path,
+            session.permission_mode,
+            session.sandbox_policy,
+            session.memory_read,
+            session.memory_write,
+            session.created_at,
+            session.updated_at,
+          );
+        }
+        counts.sessions += 1;
+      }
+
+      for (const part of document.parts) {
+        if (this.db.query("SELECT 1 AS found FROM parts WHERE sync_id=?").get(part.sync_id)) continue;
+        if (!this.db.query("SELECT 1 AS found FROM sessions WHERE id=?").get(part.session_id)) continue;
+        const row = this.db.query("SELECT COALESCE(MAX(seq),0) AS seq FROM parts WHERE session_id=?")
+          .get(part.session_id) as Row;
+        this.db.query(
+          `INSERT INTO parts(session_id,seq,sync_id,role,part_json,search_text,created_at)
+           VALUES(?,?,?,?,?,?,?)`,
+        ).run(
+          part.session_id,
+          Number(row.seq ?? 0) + 1,
+          part.sync_id,
+          part.role,
+          part.part_json,
+          part.search_text,
+          part.created_at,
+        );
+        counts.parts += 1;
+      }
+
+      for (const memory of document.memories) {
+        const current = currentMemories.get(memory.id);
+        if (current && (
+          current.updated_at > memory.updated_at
+          || (current.updated_at === memory.updated_at
+            && stableDeviceSyncValue(current) >= stableDeviceSyncValue(memory))
+        )) continue;
+        this.db.query(
+          `INSERT INTO memories(
+             id,project_path,session_id,layer,category,content,keywords_json,confidence,
+             sources_json,pinned,active,created_at,updated_at,access_count,origin,forgotten_at,
+             supersedes_id,conflict_with_id,conflict_reason
+           ) VALUES(?,?,?,?,?,?,?,?,'[]',?,?,?,?,0,?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET
+             project_path=excluded.project_path,session_id=excluded.session_id,layer=excluded.layer,
+             category=excluded.category,content=excluded.content,keywords_json=excluded.keywords_json,
+             confidence=excluded.confidence,pinned=excluded.pinned,active=excluded.active,
+             created_at=excluded.created_at,updated_at=excluded.updated_at,origin=excluded.origin,
+             forgotten_at=excluded.forgotten_at,supersedes_id=excluded.supersedes_id,
+             conflict_with_id=excluded.conflict_with_id,conflict_reason=excluded.conflict_reason`,
+        ).run(
+          memory.id,
+          memory.project_path,
+          memory.session_id,
+          memory.layer,
+          memory.category,
+          memory.content,
+          memory.keywords_json,
+          memory.confidence,
+          memory.pinned ? 1 : 0,
+          memory.active ? 1 : 0,
+          memory.created_at,
+          memory.updated_at,
+          memory.origin,
+          memory.forgotten_at,
+          memory.supersedes_id,
+          memory.conflict_with_id,
+          memory.conflict_reason,
+        );
+        this.clearTombstoneIfOlder("memory", memory.id, memory.updated_at);
+        counts.memories += 1;
+      }
+    });
+    run();
+    return counts;
+  }
+
+  private recordTombstone(entity: DeviceSyncEntity, id: string, deletedAt = Date.now()): void {
+    this.db.query(
+      `INSERT INTO sync_tombstones(entity,entity_id,deleted_at) VALUES(?,?,?)
+       ON CONFLICT(entity,entity_id) DO UPDATE SET deleted_at=MAX(deleted_at,excluded.deleted_at)`,
+    ).run(entity, id, deletedAt);
+  }
+
+  private clearTombstone(entity: DeviceSyncEntity, id: string): void {
+    this.db.query("DELETE FROM sync_tombstones WHERE entity=? AND entity_id=?").run(entity, id);
+  }
+
+  private clearTombstoneIfOlder(entity: DeviceSyncEntity, id: string, updatedAt: number): void {
+    this.db.query(
+      "DELETE FROM sync_tombstones WHERE entity=? AND entity_id=? AND deleted_at<?",
+    ).run(entity, id, updatedAt);
   }
 
   private getAutomation(id: string): unknown {

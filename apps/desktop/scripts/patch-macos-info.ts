@@ -1,4 +1,13 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -34,6 +43,8 @@ const desktopRoot = join(import.meta.dir, "..");
 const updateHelperBuild = join(desktopRoot, "native", "update-helper", ".build", "release");
 const updateHelperExecutable = join(updateHelperBuild, "CodeTwoUpdateHelper");
 const sparkleFramework = join(updateHelperBuild, "Sparkle.framework");
+const cloudSyncHelperBuild = join(desktopRoot, "native", "cloud-sync-helper", ".build", "release");
+const cloudSyncHelperExecutable = join(cloudSyncHelperBuild, "CodeTwoCloudSyncHelper");
 const windowEffectsLibrary = join(
   desktopRoot,
   "native",
@@ -92,6 +103,87 @@ function embedWindowEffects(bundle: string): void {
   const destination = join(bundle, "Contents", "MacOS", "libCodeTwoWindowEffects.dylib");
   copyFileSync(windowEffectsLibrary, destination);
   chmodSync(destination, 0o755);
+}
+
+function cloudSyncEntitlements(container: string, environment: "Development" | "Production"): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.developer.icloud-container-identifiers</key>
+  <array><string>${container}</string></array>
+  <key>com.apple.developer.icloud-container-environment</key>
+  <string>${environment}</string>
+  <key>com.apple.developer.icloud-services</key>
+  <array><string>CloudKit</string></array>
+</dict></plist>
+`;
+}
+
+function cloudSyncInfo(identifier: string, version: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>C2 Cloud Sync</string>
+  <key>CFBundleExecutable</key><string>CodeTwoCloudSyncHelper</string>
+  <key>CFBundleIdentifier</key><string>${identifier}</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>CodeTwoCloudSyncHelper</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${version}</string>
+  <key>CFBundleVersion</key><string>${version}</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSUIElement</key><true/>
+</dict></plist>
+`;
+}
+
+function embedCloudSyncHelper(bundle: string): void {
+  if (!existsSync(cloudSyncHelperExecutable)) {
+    throw new Error(`Required iCloud helper is missing: ${cloudSyncHelperExecutable}`);
+  }
+  const profile = process.env.CODETWO_ICLOUD_HELPER_PROVISIONING_PROFILE;
+  const identity = process.env.CODETWO_ICLOUD_HELPER_SIGNING_IDENTITY ?? process.env.ELECTROBUN_DEVELOPER_ID;
+  const helperBundle = join(bundle, "Contents", "Helpers", "CodeTwoCloudSyncHelper.app");
+  // A release helper with restricted iCloud entitlements must be an independently provisioned
+  // app-like bundle. Leave it out rather than shipping a control that can never authorize.
+  if (channel.updatesEnabled && (!profile || !identity || identity === "-")) {
+    rmSync(helperBundle, { recursive: true, force: true });
+    return;
+  }
+
+  const contents = join(helperBundle, "Contents");
+  const executableDirectory = join(contents, "MacOS");
+  const executable = join(executableDirectory, "CodeTwoCloudSyncHelper");
+  rmSync(helperBundle, { recursive: true, force: true });
+  mkdirSync(executableDirectory, { recursive: true });
+  copyFileSync(cloudSyncHelperExecutable, executable);
+  chmodSync(executable, 0o755);
+  const version = process.env.CODETWO_BUILD_VERSION ?? process.env.ELECTROBUN_APP_VERSION ?? "0.0.0";
+  writeFileSync(join(contents, "Info.plist"), cloudSyncInfo(`${channel.identifier}.cloud-sync`, version));
+
+  if (!profile || !identity || identity === "-") return;
+  if (!existsSync(profile)) throw new Error(`iCloud helper provisioning profile is missing: ${profile}`);
+  copyFileSync(profile, join(contents, "embedded.provisionprofile"));
+  const environment = process.env.CODETWO_ICLOUD_ENVIRONMENT === "Development"
+    ? "Development"
+    : "Production";
+  const entitlements = join(cloudSyncHelperBuild, `${channelName}.entitlements.plist`);
+  writeFileSync(entitlements, cloudSyncEntitlements(`iCloud.${channel.identifier}`, environment));
+  const command = [
+    "/usr/bin/codesign",
+    "--force",
+    "--sign",
+    identity,
+    "--options",
+    "runtime",
+    "--entitlements",
+    entitlements,
+    identity === "-" ? "--timestamp=none" : "--timestamp",
+    helperBundle,
+  ];
+  const result = Bun.spawnSync(command, { stdout: "inherit", stderr: "inherit" });
+  if (result.exitCode !== 0) process.exit(result.exitCode);
 }
 
 function signUpdateComponents(bundle: string): void {
@@ -183,6 +275,7 @@ function configureUpdater(plist: string): void {
 
 for (const bundle of bundles) {
   embedWindowEffects(bundle);
+  embedCloudSyncHelper(bundle);
   const plist = join(bundle, "Contents", "Info.plist");
   setPlistString(plist, "CFBundleDisplayName", channel.displayName);
   setPlistString(plist, "CFBundleShortVersionString", process.env.ELECTROBUN_APP_VERSION ?? "0.0.0");

@@ -24,6 +24,7 @@ const DEFAULT_PAIRING_TTL_SECONDS = 15 * 60;
 const WS_TICKET_TTL_SECONDS = 5 * 60;
 const MAX_JSON_BODY_BYTES = 16 * 1024;
 const MAX_HANDOFF_BODY_BYTES = 384 * 1024 * 1024;
+const MAX_DEVICE_SYNC_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_SOCKET_MESSAGE_BYTES = 2 * 1024 * 1024;
 const DEVICE_FILE = "remote-devices.json";
 const T3_ACCESS_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -37,6 +38,7 @@ const T3_STANDARD_SCOPES = [
 const T3_TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 const T3_BOOTSTRAP_TOKEN_TYPE = "urn:t3:params:oauth:token-type:environment-bootstrap";
 const T3_ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
+const DEVICE_SYNC_API_ROOT = "/api/device-sync/v1";
 const ELECTROBUN_REMOTE_CLIENT_HTML = (remoteClientHtml as unknown as string)
   .replace(" (or scan\n        the QR code)", "");
 
@@ -55,7 +57,10 @@ export interface RemoteEndpoint {
 export interface RemoteStatus {
   port: number;
   endpoints: RemoteEndpoint[];
+  protocols: RemotePairingProtocol[];
 }
+
+export type RemotePairingProtocol = "c2" | "legacy" | "t3";
 
 export interface RemotePairingLink {
   endpoint_id: string;
@@ -70,23 +75,27 @@ export interface RemoteDeviceInfo {
   name: string;
   created_at: number;
   last_seen: number;
+  protocol: RemotePairingProtocol;
 }
 
-interface PersistedDevice extends RemoteDeviceInfo {
+interface PersistedDevice extends Omit<RemoteDeviceInfo, "protocol"> {
   token_hash: string;
   expires_at?: number | null;
   scopes?: string[];
-  protocol?: "legacy" | "t3" | null;
+  protocol?: RemotePairingProtocol | null;
+  peer_id?: string | null;
   ephemeral_handoff?: boolean;
 }
 
 interface PersistedAuth {
   devices: PersistedDevice[];
+  network_enabled?: boolean;
+  port?: number;
 }
 
 interface PairingToken {
   expiresAt: number;
-  protocol: "legacy" | "t3";
+  protocol: RemotePairingProtocol;
 }
 
 interface SocketTicket {
@@ -94,6 +103,14 @@ interface SocketTicket {
   expiresAt: number;
   protocol: "legacy" | "t3";
   scopes: string[];
+}
+
+export interface RemoteDeviceSyncServer {
+  identity(): { id: string; name: string };
+  snapshot(): unknown | Promise<unknown>;
+  writeSnapshot(body: Record<string, unknown>):
+    | { state: "written" | "conflict"; version: string }
+    | Promise<{ state: "written" | "conflict"; version: string }>;
 }
 
 type RemoteSocketData =
@@ -139,8 +156,8 @@ function terminalId(value: unknown): string {
   return id;
 }
 
-function effectiveProtocol(device: PersistedDevice): "legacy" | "t3" {
-  if (device.protocol === "legacy" || device.protocol === "t3") return device.protocol;
+function effectiveProtocol(device: PersistedDevice): RemotePairingProtocol {
+  if (device.protocol === "c2" || device.protocol === "legacy" || device.protocol === "t3") return device.protocol;
   return device.expires_at != null || (device.scopes?.length ?? 0) > 0 ? "t3" : "legacy";
 }
 
@@ -242,14 +259,25 @@ export class BunRemoteServer {
   private readonly terminalSockets = new Set<RemoteSocket>();
   private readonly socketQueues = new Map<RemoteSocket, Promise<void>>();
   private readonly t3: T3MobileAdapter;
+  private networkEnabled = false;
+  private preferredPort = DEFAULT_PORT;
 
-  constructor(dataDir: string, private readonly callHost: RemoteHostCall) {
+  constructor(
+    dataDir: string,
+    private readonly callHost: RemoteHostCall,
+    private readonly deviceSync: RemoteDeviceSyncServer | null = null,
+  ) {
     this.authPath = join(dataDir, DEVICE_FILE);
-    this.devicesState = this.loadDevices();
+    const persisted = this.loadAuth();
+    this.devicesState = persisted.devices;
+    this.networkEnabled = persisted.network_enabled === true;
+    this.preferredPort = typeof persisted.port === "number" && Number.isInteger(persisted.port)
+      ? persisted.port
+      : DEFAULT_PORT;
     this.t3 = new T3MobileAdapter(dataDir, callHost);
   }
 
-  start(port = DEFAULT_PORT): RemoteStatus {
+  start(port = this.preferredPort, persist = true): RemoteStatus {
     if (this.server) return this.status() as RemoteStatus;
     if (!Number.isInteger(port) || port < 0 || port > 65_535) throw new Error("remote port is invalid");
     this.server = Bun.serve<RemoteSocketData>({
@@ -265,34 +293,67 @@ export class BunRemoteServer {
         close: (socket) => this.closeSocket(socket),
       },
     });
-    return this.status() as RemoteStatus;
-  }
-
-  stop(): boolean {
-    if (!this.server) return true;
-    for (const socket of [...this.controlSockets, ...this.t3Sockets, ...this.terminalSockets]) {
+    const status = this.status() as RemoteStatus;
+    if (persist) {
+      const previousEnabled = this.networkEnabled;
+      const previousPort = this.preferredPort;
+      this.networkEnabled = true;
+      this.preferredPort = status.port;
       try {
-        socket.close(1001, "remote access turned off");
-      } catch {
-        // The peer may already be gone.
+        this.persistDevices(this.devicesState);
+      } catch (error) {
+        this.networkEnabled = previousEnabled;
+        this.preferredPort = previousPort;
+        this.server.stop(true);
+        this.server = null;
+        throw error;
       }
     }
-    this.controlSockets.clear();
-    this.t3Sockets.clear();
-    this.terminalSockets.clear();
-    this.socketQueues.clear();
-    this.pairing.clear();
-    this.tickets.clear();
-    this.server.stop(true);
-    this.server = null;
+    return status;
+  }
+
+  restore(): RemoteStatus | null {
+    return this.networkEnabled ? this.start(this.preferredPort, false) : null;
+  }
+
+  stop(persist = true): boolean {
+    if (this.server) {
+      for (const socket of [...this.controlSockets, ...this.t3Sockets, ...this.terminalSockets]) {
+        try {
+          socket.close(1001, "remote access turned off");
+        } catch {
+          // The peer may already be gone.
+        }
+      }
+      this.controlSockets.clear();
+      this.t3Sockets.clear();
+      this.terminalSockets.clear();
+      this.socketQueues.clear();
+      this.pairing.clear();
+      this.tickets.clear();
+      this.server.stop(true);
+      this.server = null;
+    }
+    if (persist && this.networkEnabled) {
+      this.networkEnabled = false;
+      this.persistDevices(this.devicesState);
+    }
     return true;
+  }
+
+  shutdown(): void {
+    this.stop(false);
   }
 
   status(): RemoteStatus | null {
     if (!this.server) return null;
     const port = this.server.port;
     if (port == null) throw new Error("remote listener has no bound port");
-    return { port, endpoints: pairingEndpoints(port) };
+    return {
+      port,
+      endpoints: pairingEndpoints(port),
+      protocols: this.deviceSync ? ["c2", "t3", "legacy"] : ["t3", "legacy"],
+    };
   }
 
   pairingLink(
@@ -302,7 +363,10 @@ export class BunRemoteServer {
   ): RemotePairingLink {
     const status = this.status();
     if (!status) throw new Error("remote access is turned off");
-    if (protocol !== "legacy" && protocol !== "t3") throw new Error(`unsupported remote protocol: ${protocol}`);
+    if (protocol !== "c2" && protocol !== "legacy" && protocol !== "t3") {
+      throw new Error(`unsupported remote protocol: ${protocol}`);
+    }
+    if (protocol === "c2" && !this.deviceSync) throw new Error("C2 device sync is unavailable");
     const endpoint = requestedEndpointId
       ? status.endpoints.find((candidate) => candidate.id === requestedEndpointId)
       : status.endpoints.find((candidate) => candidate.qr_shareable) ?? status.endpoints[0];
@@ -326,7 +390,13 @@ export class BunRemoteServer {
   devices(): RemoteDeviceInfo[] {
     this.pruneDevices();
     return this.devicesState
-      .map(({ id, name, created_at, last_seen }) => ({ id, name, created_at, last_seen }))
+      .map((device) => ({
+        id: device.id,
+        name: device.name,
+        created_at: device.created_at,
+        last_seen: device.last_seen,
+        protocol: effectiveProtocol(device),
+      }))
       .sort((left, right) => left.created_at - right.created_at || left.id.localeCompare(right.id));
   }
 
@@ -372,20 +442,25 @@ export class BunRemoteServer {
     }
   }
 
-  private loadDevices(): PersistedDevice[] {
-    if (!existsSync(this.authPath)) return [];
+  private loadAuth(): PersistedAuth {
+    if (!existsSync(this.authPath)) return { devices: [] };
     try {
       const parsed = JSON.parse(readFileSync(this.authPath, "utf8")) as PersistedAuth;
-      if (!Array.isArray(parsed.devices)) return [];
-      return parsed.devices.filter((device) => (
+      if (!Array.isArray(parsed.devices)) return { devices: [] };
+      const devices = parsed.devices.filter((device) => (
         typeof device?.id === "string"
         && typeof device.name === "string"
         && typeof device.token_hash === "string"
         && typeof device.created_at === "number"
         && typeof device.last_seen === "number"
       ));
+      return {
+        devices,
+        network_enabled: parsed.network_enabled === true,
+        port: typeof parsed.port === "number" && Number.isInteger(parsed.port) ? parsed.port : undefined,
+      };
     } catch {
-      return [];
+      return { devices: [] };
     }
   }
 
@@ -393,7 +468,11 @@ export class BunRemoteServer {
     mkdirSync(dirname(this.authPath), { recursive: true });
     const temporary = `${this.authPath}.${process.pid}.${randomUUID()}.tmp`;
     try {
-      writeFileSync(temporary, `${JSON.stringify({ devices }, null, 2)}\n`, { mode: 0o600 });
+      writeFileSync(temporary, `${JSON.stringify({
+        devices,
+        network_enabled: this.networkEnabled,
+        port: this.preferredPort,
+      }, null, 2)}\n`, { mode: 0o600 });
       chmodSync(temporary, 0o600);
       renameSync(temporary, this.authPath);
     } catch (error) {
@@ -425,7 +504,7 @@ export class BunRemoteServer {
     }
   }
 
-  private authorizeBearer(bearer: string, protocol: "legacy" | "t3"): PersistedDevice | null {
+  private authorizeBearer(bearer: string, protocol: RemotePairingProtocol): PersistedDevice | null {
     this.pruneDevices();
     const bearerHash = hash(bearer);
     const index = this.devicesState.findIndex((device) => (
@@ -470,7 +549,15 @@ export class BunRemoteServer {
     return object(JSON.parse(text));
   }
 
-  private requireDevice(request: Request, protocol: "legacy" | "t3"): PersistedDevice | null {
+  private async requestDeviceSyncJson(request: Request): Promise<Record<string, unknown>> {
+    const contentLength = Number(request.headers.get("content-length") ?? "0");
+    if (contentLength > MAX_DEVICE_SYNC_BODY_BYTES) throw new Error("device sync document is too large");
+    const text = await request.text();
+    if (Buffer.byteLength(text) > MAX_DEVICE_SYNC_BODY_BYTES) throw new Error("device sync document is too large");
+    return object(JSON.parse(text));
+  }
+
+  private requireDevice(request: Request, protocol: RemotePairingProtocol): PersistedDevice | null {
     const authorization = request.headers.get("authorization") ?? "";
     const match = authorization.match(/^Bearer\s+(.+)$/i);
     return match ? this.authorizeBearer(match[1].trim(), protocol) : null;
@@ -515,7 +602,24 @@ export class BunRemoteServer {
     if (request.method === "GET" && url.pathname === "/term/addon-fit.min.js") {
       return textResponse(xtermFitJs, 200, "text/javascript; charset=utf-8");
     }
-    if (request.method === "POST" && url.pathname === "/api/pair") return this.pairRequest(request);
+    if (request.method === "POST" && url.pathname === "/api/pair") return this.pairRequest(request, "legacy");
+    if (request.method === "POST" && url.pathname === `${DEVICE_SYNC_API_ROOT}/pair`) {
+      return this.pairRequest(request, "c2");
+    }
+    if (url.pathname === `${DEVICE_SYNC_API_ROOT}/snapshot`) {
+      if (!this.deviceSync) return textResponse("C2 device sync is unavailable", 404);
+      if (!this.requireDevice(request, "c2")) return textResponse("invalid or revoked device credential", 401);
+      try {
+        if (request.method === "GET") return jsonResponse(await this.deviceSync.snapshot());
+        if (request.method === "PUT") {
+          const result = await this.deviceSync.writeSnapshot(await this.requestDeviceSyncJson(request));
+          return jsonResponse(result, result.state === "conflict" ? 409 : 200);
+        }
+        return textResponse("method not allowed", 405);
+      } catch (error) {
+        return textResponse(error instanceof Error ? error.message : String(error), 400);
+      }
+    }
 
     if (request.method === "POST" && url.pathname === "/oauth/token") return this.t3TokenExchange(request);
     if (request.method === "GET" && url.pathname === "/api/auth/session") return this.t3AuthSession(request);
@@ -722,19 +826,23 @@ export class BunRemoteServer {
     return jsonResponse({ ticket, expiresAt: new Date(expiresAt * 1_000).toISOString() });
   }
 
-  private async pairRequest(request: Request): Promise<Response> {
+  private async pairRequest(request: Request, protocol: "c2" | "legacy"): Promise<Response> {
     try {
       const body = await this.requestJson(request);
       const token = typeof body.token === "string" ? body.token : "";
       const tokenHash = hash(token);
       this.pruneEphemeral();
       const pairing = this.pairing.get(tokenHash);
-      if (!pairing || pairing.protocol !== "legacy" || pairing.expiresAt <= nowSeconds()) {
+      if (!pairing || pairing.protocol !== protocol || pairing.expiresAt <= nowSeconds()) {
         return textResponse("invalid or expired pairing token", 401);
       }
+      if (protocol === "c2" && !this.deviceSync) return textResponse("C2 device sync is unavailable", 404);
       const bearer = secret();
       const now = nowSeconds();
       const rawName = typeof body.device_name === "string" ? body.device_name.trim() : "";
+      const peerId = protocol === "c2" && typeof body.device_id === "string" && body.device_id
+        ? body.device_id
+        : null;
       const device: PersistedDevice = {
         id: randomUUID(),
         name: rawName.slice(0, 100) || "Device",
@@ -743,12 +851,27 @@ export class BunRemoteServer {
         last_seen: now,
         expires_at: null,
         scopes: [],
-        protocol: "legacy",
+        protocol,
+        peer_id: peerId,
       };
-      const updated = [...this.devicesState, device];
+      const updated = [
+        ...this.devicesState.filter((candidate) => (
+          protocol !== "c2" || !peerId || effectiveProtocol(candidate) !== "c2" || candidate.peer_id !== peerId
+        )),
+        device,
+      ];
       this.persistDevices(updated);
       this.devicesState = updated;
       this.pairing.delete(tokenHash);
+      if (protocol === "c2") {
+        const identity = this.deviceSync!.identity();
+        return jsonResponse({
+          server_id: identity.id,
+          server_name: identity.name,
+          device_id: device.id,
+          bearer,
+        });
+      }
       return jsonResponse({ device_id: device.id, bearer });
     } catch (error) {
       return textResponse(error instanceof Error ? error.message : String(error), 400);

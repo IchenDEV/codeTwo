@@ -606,6 +606,9 @@ export const en = {
   "pluginManager.plugin.memory.name": "Memory",
   "pluginManager.plugin.memory.description":
     "Project memory, recall policy, and receipts.",
+  "pluginManager.plugin.deviceSync.name": "Device sync",
+  "pluginManager.plugin.deviceSync.description":
+    "Multi-device synchronization with shared merge and conflict rules.",
   "pluginManager.plugin.remote.name": "Remote",
   "pluginManager.plugin.remote.description":
     "Remote-device pairing and connection management.",
@@ -659,6 +662,9 @@ export const en = {
   "pluginManager.component.memory.name": "Memory",
   "pluginManager.component.memory.description":
     "Memory policy controls and receipt surfaces.",
+  "pluginManager.component.deviceSync.name": "Device sync",
+  "pluginManager.component.deviceSync.description":
+    "Device-sync methods, status, and data-scope controls.",
   "pluginManager.component.scenes.name": "Agent scenes",
   "pluginManager.component.scenes.description":
     "Scene picker, studio, banners, and pipeline controls.",
@@ -779,6 +785,27 @@ export const en = {
   "settings.general": "General",
   "settings.generalHint":
     "Language, software updates, and how the terminal renders.",
+  "settings.sync": "Device sync",
+  "settings.syncHint":
+    "Keep conversations and saved memory consistent with C2 devices paired through Device connections.",
+  "settings.pairedDeviceSync": "Paired C2 devices",
+  "settings.syncReady": "Ready to sync with paired C2 devices.",
+  "settings.syncLastSuccess": "Last synced {time}.",
+  "settings.syncing": "Syncing changes with paired C2 devices…",
+  "settings.syncSignedOut": "The paired device rejected this connection. Pair it again.",
+  "settings.syncRestricted":
+    "This build cannot use paired-device sync.",
+  "settings.syncUnsupported": "Paired-device sync is unavailable on this platform.",
+  "settings.syncUnavailable": "Pair another C2 device in Device connections first.",
+  "settings.syncLoading": "Checking paired devices…",
+  "settings.syncNow": "Device data",
+  "settings.syncNowHint":
+    "C2 also syncs at startup, every few minutes, and before quitting.",
+  "settings.syncNowButton": "Sync now",
+  "settings.syncingButton": "Syncing…",
+  "settings.syncScope": "Included",
+  "settings.syncScopeHint":
+    "Conversations, the project list, and saved memories sync. Project files, automation schedules, plugins, credentials, and terminal history stay on this Mac.",
   "settings.appearance": "Appearance",
   "settings.appearanceHint":
     "Choose a scheme, tune a theme, and set the typography used across C2.",
@@ -2452,6 +2479,9 @@ export const zhCN: Record<StringKey, string> = {
     "提供 Plugin Hub 的发现和安装界面。",
   "pluginManager.plugin.memory.name": "记忆",
   "pluginManager.plugin.memory.description": "管理项目记忆、召回策略和凭据。",
+  "pluginManager.plugin.deviceSync.name": "设备同步",
+  "pluginManager.plugin.deviceSync.description":
+    "使用统一的合并与冲突规则在多台设备间同步。",
   "pluginManager.plugin.remote.name": "远程控制",
   "pluginManager.plugin.remote.description": "管理远程设备配对和连接。",
   "pluginManager.plugin.scenes.name": "场景",
@@ -2496,6 +2526,9 @@ export const zhCN: Record<StringKey, string> = {
   "pluginManager.component.usage.description": "Provider 额度和用量设置界面。",
   "pluginManager.component.memory.name": "记忆",
   "pluginManager.component.memory.description": "记忆策略控制和凭据界面。",
+  "pluginManager.component.deviceSync.name": "设备同步",
+  "pluginManager.component.deviceSync.description":
+    "设备同步方式、状态和数据范围设置。",
   "pluginManager.component.scenes.name": "代理场景",
   "pluginManager.component.scenes.description":
     "场景选择器、工作室、横幅和流水线控制。",
@@ -2608,6 +2641,24 @@ export const zhCN: Record<StringKey, string> = {
   "settings.navIntegrations": "集成",
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
+  "settings.sync": "设备同步",
+  "settings.syncHint": "让通过“设备连接”配对的多台 C2 设备保持会话与已保存记忆一致。",
+  "settings.pairedDeviceSync": "已配对的 C2 设备",
+  "settings.syncReady": "已可与配对的 C2 设备同步。",
+  "settings.syncLastSuccess": "上次同步：{time}。",
+  "settings.syncing": "正在与配对的 C2 设备同步…",
+  "settings.syncSignedOut": "配对设备拒绝了连接，请重新配对。",
+  "settings.syncRestricted": "这个构建无法使用配对设备同步。",
+  "settings.syncUnsupported": "当前平台无法使用配对设备同步。",
+  "settings.syncUnavailable": "请先在“设备连接”中配对另一台 C2 设备。",
+  "settings.syncLoading": "正在检查配对设备…",
+  "settings.syncNow": "设备数据",
+  "settings.syncNowHint": "C2 还会在启动、每隔几分钟和退出前同步。",
+  "settings.syncNowButton": "立即同步",
+  "settings.syncingButton": "正在同步…",
+  "settings.syncScope": "同步内容",
+  "settings.syncScopeHint":
+    "会话、项目列表和已保存记忆会同步。项目文件、自动化计划、插件、凭据和终端历史只保存在这台 Mac 上。",
   "settings.appearance": "外观",
   "settings.appearanceHint":
     "选择配色方案、调整主题，并设置 C2 全局使用的字体。",

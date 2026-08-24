@@ -13,6 +13,8 @@ import {
   type ProviderDefinition,
 } from "./acp";
 import { BunDatabase } from "./database";
+import { DeviceSyncService } from "./deviceSync";
+import { PairedDeviceSyncRuntime } from "./pairedDeviceSync";
 import { builtinPluginForCommand } from "./builtinPlugins";
 import {
   githubCurrentPullRequest,
@@ -227,6 +229,8 @@ export class PureBunHost {
   private readonly dataDir: string;
   private readonly defaultCwd: string;
   private readonly database: BunDatabase;
+  private readonly pairedDeviceSync: PairedDeviceSyncRuntime;
+  private readonly deviceSync: DeviceSyncService;
   private hostTools: HostToolEvidence;
   private readonly providerLifecycle: ProviderLifecycleManager;
   private readonly terminal: TerminalManager;
@@ -253,9 +257,22 @@ export class PureBunHost {
     this.providerLifecycle = new ProviderLifecycleManager(dataDir);
     this.database = new BunDatabase(dataDir);
     this.handoff = new TaskHandoffManager(this.database, (sessionId) => this.quiesceForHandoff(sessionId));
+    this.pairedDeviceSync = new PairedDeviceSyncRuntime(this.database, dataDir, (imported) => {
+      this.emit({ name: "device-sync-changed", payload: imported });
+    });
+    this.deviceSync = new DeviceSyncService(
+      this.database,
+      dataDir,
+      (event) => this.emit(event),
+      this.pairedDeviceSync.transport,
+    );
     this.terminal = new TerminalManager((event) => this.emit(event));
     this.lsp = new LspManager((event) => this.emit(event));
-    this.remote = new BunRemoteServer(dataDir, (name, args) => this.call(name, args, null));
+    this.remote = new BunRemoteServer(
+      dataDir,
+      (name, args) => this.call(name, args, null),
+      this.pairedDeviceSync.server,
+    );
     this.plugins = new PluginRuntimeManager(dataDir, {
       hostCommands: () => [...this.handlers].map(([name, registered]) => ({
         name,
@@ -266,6 +283,10 @@ export class PureBunHost {
         if (plugin === "terminal") this.terminal.setRuntimeEnabled(enabled, projectPath);
         if (plugin === "lsp") this.lsp.setRuntimeEnabled(enabled, projectPath);
         if (plugin === "remote" && !enabled) this.remote.stop();
+        if (plugin === "device-sync") {
+          if (enabled) this.deviceSync.start();
+          else this.deviceSync.pause();
+        }
       },
       onChanged: () => {
         this.lsp.invalidateRouting();
@@ -277,6 +298,18 @@ export class PureBunHost {
     this.plugins.start();
     queueMicrotask(async () => {
       await this.plugins.ready();
+      try {
+        this.plugins.assertBuiltinEnabled("remote", null);
+        this.remote.restore();
+      } catch {
+        // A disabled Remote plugin or a stale occupied port leaves network access off.
+      }
+      try {
+        this.plugins.assertBuiltinEnabled("device-sync", null);
+        this.deviceSync.start();
+      } catch {
+        this.deviceSync.pause();
+      }
       this.emit({
         name: "host-ready",
         payload: { runtime: "bun", commands: this.commands() },
@@ -314,11 +347,12 @@ export class PureBunHost {
       runtime.peer?.shutdown();
     }
     this.runtimes.clear();
-    this.remote.stop();
+    this.remote.shutdown();
     await this.plugins.shutdown();
     this.terminal.shutdown();
     this.lsp.shutdown();
     this.database.purgeTransientSessions();
+    await this.deviceSync.shutdown();
     this.database.close();
   }
 
@@ -359,6 +393,9 @@ export class PureBunHost {
       this.hostTools = detectHostToolEvidence(process.env, dataDir);
       return browserUseSettings(this.hostTools);
     });
+    this.register("device_sync.status", () => this.deviceSync.status());
+    this.register("device_sync.set_enabled", (args) => this.deviceSync.setEnabled(boolean(args.enabled)));
+    this.register("device_sync.sync_now", () => this.deviceSync.syncNow());
     this.register("projects.list", () => this.database.listProjects());
     this.register("projects.add", (args) => {
       const path = string(args.path, "path");
@@ -768,17 +805,43 @@ export class PureBunHost {
     this.register("voice.available", () => false);
     this.register("voice.transcribe", () => this.unsupported("voice.transcribe", "native transcription"));
     this.register("remote.status", () => this.remote.status());
-    this.register("remote.devices", () => this.remote.devices());
+    this.register("remote.devices", () => [
+      ...this.remote.devices().map((device) => ({
+        ...device,
+        id: `in:${device.id}`,
+        direction: "incoming" as const,
+      })),
+      ...this.pairedDeviceSync.devices(),
+    ]);
     this.register("remote.start", (args) => this.remote.start(
       typeof args.port === "number" ? args.port : undefined,
     ));
     this.register("remote.stop", () => this.remote.stop());
     this.register("remote.pairing_link", (args) => this.remote.pairingLink(
       optionalString(args.endpoint_id),
-      optionalString(args.client_protocol) ?? "legacy",
+      optionalString(args.client_protocol) ?? "c2",
       typeof args.ttl_secs === "number" ? args.ttl_secs : null,
     ));
-    this.register("remote.revoke_device", (args) => this.remote.revokeDevice(string(args.id, "id")));
+    this.register("remote.pair_device", async (args) => {
+      const result = await this.pairedDeviceSync.pairDevice(
+        string(args.url, "url"),
+        optionalString(args.device_name) ?? undefined,
+      );
+      let sync = await this.deviceSync.status();
+      try {
+        this.plugins.assertBuiltinEnabled("device-sync", null);
+        sync = await this.deviceSync.setEnabled(true);
+      } catch {
+        // Pairing belongs to Remote; a disabled Device Sync plugin remains disabled by policy.
+      }
+      return { ...result, sync };
+    });
+    this.register("remote.revoke_device", (args) => {
+      const id = string(args.id, "id");
+      if (id.startsWith("out:")) return this.pairedDeviceSync.revokeDevice(id);
+      if (id.startsWith("in:")) return this.remote.revokeDevice(id.slice("in:".length));
+      return this.remote.revokeDevice(id) || this.pairedDeviceSync.revokeDevice(id);
+    });
 
     this.register("issues.github_available", () => which("gh") !== null);
     this.register("issues.list_github", (args) => this.listGithubIssues(string(args.cwd, "cwd"), number(args.limit, 30)));

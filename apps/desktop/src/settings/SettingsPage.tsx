@@ -35,6 +35,7 @@ import {
   discardOrphanWorktree,
   discardSessionWorktree,
   getAppUpdateStatus,
+  getDeviceSyncStatus,
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
@@ -59,6 +60,9 @@ import {
   setProviderEnabled,
   setProjectScheduling,
   upgradeProvider,
+  setDeviceSyncEnabled,
+  syncDeviceDataNow,
+  type DeviceSyncStatus,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
@@ -95,6 +99,7 @@ export type SettingsTab =
   | "pets"
   | "project"
   | "memory"
+  | "sync"
   | "keybindings"
   | "providers"
   | "computer-use"
@@ -131,6 +136,7 @@ const NAV_GROUPS: {
     items: [
       { id: "project", icon: Folder, labelKey: "settings.project" },
       { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
+      { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
     ],
   },
   {
@@ -293,6 +299,7 @@ export function SettingsPage({
   onOpenSession = () => {},
   onReloadProviders,
   memoryEnabled,
+  deviceSyncEnabled = true,
   initialTab = "general",
   onClose,
   updateStatusLoader = getAppUpdateStatus,
@@ -309,6 +316,9 @@ export function SettingsPage({
   providerInstaller = installProvider,
   providerUpgrader = upgradeProvider,
   providerEnabledSaver = setProviderEnabled,
+  deviceSyncStatusLoader = getDeviceSyncStatus,
+  deviceSyncEnabledSaver = setDeviceSyncEnabled,
+  deviceSyncStarter = syncDeviceDataNow,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -337,6 +347,7 @@ export function SettingsPage({
   onOpenSession?: (sessionId: string) => void;
   onReloadProviders?: () => void | Promise<ProviderInfo[]>;
   memoryEnabled: boolean;
+  deviceSyncEnabled?: boolean;
   initialTab?: SettingsTab;
   onClose: () => void;
   updateStatusLoader?: () => Promise<AppUpdateStatus>;
@@ -357,6 +368,9 @@ export function SettingsPage({
   providerInstaller?: (provider: string) => Promise<ProviderInfo[]>;
   providerUpgrader?: (provider: string) => Promise<ProviderInfo[]>;
   providerEnabledSaver?: (provider: string, enabled: boolean) => Promise<ProviderInfo[]>;
+  deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
+  deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
+  deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -385,12 +399,19 @@ export function SettingsPage({
   } | null>(null);
   const [providerMessage, setProviderMessage] = useState<{ id: string; text: string } | null>(null);
   const [providerError, setProviderError] = useState<{ id: string; text: string } | null>(null);
+  const [deviceSync, setDeviceSync] = useState<DeviceSyncStatus | null>(null);
+  const [deviceSyncSaving, setDeviceSyncSaving] = useState(false);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
       setTab((current) => current === "memory" ? "general" : current);
     }
   }, [memoryEnabled]);
+  useEffect(() => {
+    if (!deviceSyncEnabled) {
+      setTab((current) => current === "sync" ? "general" : current);
+    }
+  }, [deviceSyncEnabled]);
   useEffect(() => {
     if (tab !== "general") return;
     let active = true;
@@ -490,6 +511,30 @@ export function SettingsPage({
     appshotSettings?.accessibility,
     appshotSettingsLoader,
   ]);
+  useEffect(() => {
+    if (tab !== "sync") return;
+    let active = true;
+    void deviceSyncStatusLoader()
+      .then((status) => {
+        if (active) setDeviceSync(status);
+      })
+      .catch((error) => {
+        if (active) {
+          setDeviceSync({
+            transport: "paired-devices",
+            state: "error",
+            enabled: false,
+            available: false,
+            last_success_at: null,
+            message: String(error),
+            imported: null,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, deviceSyncStatusLoader]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(project?.name ?? "");
   const [projectProfileSaving, setProjectProfileSaving] = useState(false);
@@ -701,6 +746,59 @@ export function SettingsPage({
       setAppUpdate({ state: "unavailable", message: String(error) });
     }
   };
+
+  const saveDeviceSyncEnabled = async (enabled: boolean) => {
+    setDeviceSyncSaving(true);
+    try {
+      setDeviceSync(await deviceSyncEnabledSaver(enabled));
+    } catch (error) {
+      setDeviceSync((current) => ({
+        transport: current?.transport ?? "paired-devices",
+        state: "error",
+        enabled: current?.enabled ?? false,
+        available: current?.available ?? false,
+        last_success_at: current?.last_success_at ?? null,
+        message: String(error),
+        imported: current?.imported ?? null,
+      }));
+    } finally {
+      setDeviceSyncSaving(false);
+    }
+  };
+
+  const startDeviceSync = async () => {
+    setDeviceSync((current) => current ? { ...current, state: "syncing" } : current);
+    try {
+      setDeviceSync(await deviceSyncStarter());
+    } catch (error) {
+      setDeviceSync((current) => current ? { ...current, state: "error", message: String(error) } : current);
+    }
+  };
+
+  const deviceSyncHint = (() => {
+    switch (deviceSync?.state) {
+      case "disabled":
+        return deviceSync.available ? t("settings.syncReady") : t("settings.syncUnavailable");
+      case "ready":
+        return deviceSync.last_success_at
+          ? t("settings.syncLastSuccess", { time: new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(deviceSync.last_success_at) })
+          : t("settings.syncReady");
+      case "syncing":
+        return t("settings.syncing");
+      case "signed-out":
+        return t("settings.syncSignedOut");
+      case "restricted":
+        return t("settings.syncRestricted");
+      case "unsupported":
+        return t("settings.syncUnsupported");
+      case "unavailable":
+        return t("settings.syncUnavailable");
+      case "error":
+        return deviceSync.message || t("settings.syncUnavailable");
+      default:
+        return deviceSync?.available ? t("settings.syncReady") : t("settings.syncLoading");
+    }
+  })();
 
   const saveComputerUseSelection = async (backendId: string) => {
     setComputerUseSaving(backendId);
@@ -934,7 +1032,8 @@ export function SettingsPage({
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
         >
           {NAV_GROUPS.map((group) => {
-            const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory");
+            const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
+              .filter(({ id }) => deviceSyncEnabled || id !== "sync");
             const headingId = `settings-nav-${group.id}`;
             return (
               <section key={group.id} aria-labelledby={headingId}>
@@ -1082,6 +1181,41 @@ export function SettingsPage({
             {tab === "pets" && (
               <Page title={t("settings.pets")}>
                 <PetSettings />
+              </Page>
+            )}
+
+            {tab === "sync" && deviceSyncEnabled && (
+              <Page title={t("settings.sync")} description={t("settings.syncHint")}>
+                <Row label={t("settings.pairedDeviceSync")} hint={deviceSyncHint}>
+                  <Switch
+                    checked={deviceSync?.enabled ?? false}
+                    disabled={
+                      deviceSyncSaving ||
+                      deviceSync?.state === "syncing" ||
+                      (!(deviceSync?.enabled ?? false) && !(deviceSync?.available ?? false))
+                    }
+                    onCheckedChange={(checked) => void saveDeviceSyncEnabled(checked)}
+                    aria-label={t("settings.pairedDeviceSync")}
+                  />
+                </Row>
+
+                <Row label={t("settings.syncNow")} hint={t("settings.syncNowHint")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={!deviceSync?.enabled || deviceSync.state === "syncing" || deviceSyncSaving}
+                    onClick={() => void startDeviceSync()}
+                  >
+                    <RefreshCw className={cn("size-3.5", deviceSync?.state === "syncing" && "animate-spin")} />
+                    {deviceSync?.state === "syncing" ? t("settings.syncingButton") : t("settings.syncNowButton")}
+                  </Button>
+                </Row>
+
+                <GroupHeading>{t("settings.syncScope")}</GroupHeading>
+                <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
+                  {t("settings.syncScopeHint")}
+                </p>
               </Page>
             )}
 

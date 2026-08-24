@@ -119,6 +119,10 @@ const PLUGIN_KEYS: Record<string, { name: StringKey; description: StringKey }> =
       name: "pluginManager.plugin.memory.name",
       description: "pluginManager.plugin.memory.description",
     },
+    "device-sync": {
+      name: "pluginManager.plugin.deviceSync.name",
+      description: "pluginManager.plugin.deviceSync.description",
+    },
     remote: {
       name: "pluginManager.plugin.remote.name",
       description: "pluginManager.plugin.remote.description",
@@ -196,6 +200,10 @@ const COMPONENT_KEYS: Record<
   "memory.settings": {
     name: "pluginManager.component.memory.name",
     description: "pluginManager.component.memory.description",
+  },
+  "device-sync.settings": {
+    name: "pluginManager.component.deviceSync.name",
+    description: "pluginManager.component.deviceSync.description",
   },
   "scenes.surface": {
     name: "pluginManager.component.scenes.name",

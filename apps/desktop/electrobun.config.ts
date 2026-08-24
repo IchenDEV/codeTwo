@@ -20,6 +20,7 @@ export default {
       define: {
         "process.env.CODETWO_APP_IDENTIFIER": JSON.stringify(channel.identifier),
         "process.env.CODETWO_APP_NAME": JSON.stringify(channel.displayName),
+        "process.env.CODETWO_ICLOUD_CONTAINER_IDENTIFIER": JSON.stringify(`iCloud.${channel.identifier}`),
       },
     },
     copy: {

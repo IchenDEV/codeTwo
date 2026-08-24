@@ -89,6 +89,7 @@ import {
   onAutoSceneChanged,
   onAppshotCaptured,
   onAppshotFailed,
+  onDeviceSyncChanged,
   onPluginsChanged,
   onEngineEvent,
   openProject,
@@ -3355,6 +3356,21 @@ export default function App() {
     ],
   );
 
+  useEffect(() => {
+    let dispose: (() => void) | null = null;
+    void onDeviceSyncChanged(() => {
+      void refreshSessions();
+      refreshProjects();
+      const session = activeSessionRef.current;
+      if (session && !runningSessionsRef.current.has(session)) {
+        void selectSession(session);
+      }
+    }).then((unlisten) => {
+      dispose = unlisten;
+    });
+    return () => dispose?.();
+  }, [refreshProjects, refreshSessions, selectSession]);
+
   const loadEarlierTranscript = useCallback(async () => {
     const session = activeSessionRef.current;
     const before = transcriptNextBeforeRef.current;
@@ -3605,6 +3621,7 @@ export default function App() {
   componentEnabledRef.current = componentEnabled;
   const voiceComposerEnabled = componentEnabled("voice.composer");
   const memorySettingsEnabled = componentEnabled("memory.settings");
+  const deviceSyncSettingsEnabled = componentEnabled("device-sync.settings");
   const scenesSurfaceEnabled = componentEnabled("scenes.surface");
   const lspRuntimeEnabled = componentEnabled("lsp.runtime");
   const lspPluginEnabled =
@@ -5666,6 +5683,7 @@ export default function App() {
             void selectSession(id);
           }}
           memoryEnabled={memorySettingsEnabled}
+          deviceSyncEnabled={deviceSyncSettingsEnabled}
           onClose={() => {
             setShowSettings(false);
             setCapturing(null);
