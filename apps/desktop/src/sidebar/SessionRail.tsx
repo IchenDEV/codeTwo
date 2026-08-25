@@ -759,7 +759,7 @@ export function SessionRail({
       {/* Keep the controls centred in the same 48px title row as the main header, with enough
           clearance for the macOS traffic lights. */}
       <div
-        className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pl-24 pr-3"
+        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-3"
       >
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
         <Tooltip>

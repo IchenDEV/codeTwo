@@ -25,6 +25,8 @@ function renderActions(overrides = {}) {
     onOpenCursor: callback("cursor"),
     onOpenAntigravity: callback("antigravity"),
     onOpenFinder: callback("finder"),
+    editorLaunchersAvailable: true,
+    fileManagerLabel: "Finder",
     finderHint: "⌘O",
     onCommit: callback("commit"),
     onCheckpoint: callback("checkpoint"),
@@ -91,6 +93,29 @@ describe("SessionHeaderActions", () => {
 
     expect(button(view.container, "Commit").disabled).toBe(true);
     expect(button(view.container, "Commit · More").disabled).toBe(true);
+
+    view.unmount();
+  });
+
+  test("shows only the file manager destination off macOS", async () => {
+    activateDom();
+    const { calls, view } = renderActions({
+      editorLaunchersAvailable: false,
+      fileManagerLabel: "File manager",
+      finderHint: "Ctrl+O",
+    });
+
+    await press(button(view.container, "Open · More"));
+    expect(dom.document.body.textContent).not.toContain("Cursor");
+    expect(dom.document.body.textContent).not.toContain("Antigravity");
+    expect(dom.document.body.textContent).toContain("File manager");
+    expect(dom.document.body.textContent).toContain("Ctrl+O");
+
+    const fileManagerItem = Array.from(dom.document.body.querySelectorAll('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes("File manager"));
+    if (!fileManagerItem) throw new Error("File manager menu item not found");
+    await press(fileManagerItem);
+    expect(calls).toEqual(["finder"]);
 
     view.unmount();
   });

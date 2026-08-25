@@ -1016,7 +1016,7 @@ fn collect(dir: &Path, source: &str, cutoff_ms: i64, depth: usize, scan: &mut Us
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var("HOME").ok().map(PathBuf::from)
+    crate::provider::home_dir()
 }
 
 /// Scan every provider transcript store we know about, bounded to the largest rolling window.

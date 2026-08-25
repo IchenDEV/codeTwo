@@ -7,6 +7,9 @@ const electrobunHost = readFileSync(
 );
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const mainSource = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
+const railSource = readFileSync(new URL("../src/sidebar/SessionRail.tsx", import.meta.url), "utf8");
+const sceneStudioSource = readFileSync(new URL("../src/session/SceneStudio.tsx", import.meta.url), "utf8");
 const dockSource = readFileSync(new URL("../src/dock/Dock.tsx", import.meta.url), "utf8");
 const tabsSource = readFileSync(
   new URL("../src/components/ui/tabs.tsx", import.meta.url),
@@ -34,6 +37,17 @@ describe("macOS window chrome contract", () => {
   test("leaves the native macOS traffic lights entirely to the system", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toMatch(/trafficLightOffset|setWindowButtonPosition/);
+  });
+
+  test("reserves traffic-light space only on macOS", () => {
+    expect(mainSource).toContain("document.documentElement.dataset.platform");
+    expect(appSource).toContain('displayedRailCollapsed ? "window-controls-safe-main" : "pl-4"');
+    expect(railSource).toContain("window-controls-safe-rail");
+    expect(sceneStudioSource).toContain("window-controls-safe-scene");
+    expect(styles).toMatch(
+      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*5rem/s,
+    );
+    expect(styles).toMatch(/\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/s);
   });
 
   test("composes macOS sidebars as transparent blurred glass over an opaque workspace", () => {

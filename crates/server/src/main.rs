@@ -13,9 +13,7 @@ use codetwo_core::app::{AppConfig, CanvasService, CoreApp, EngineService, EventB
 use codetwo_server::{bind_and_serve_with_canvas, print_pairing, AuthState, DEFAULT_PAIRING_TTL};
 
 fn data_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let home = codetwo_core::provider::home_dir().unwrap_or_else(std::env::temp_dir);
     home.join(".codetwo")
 }
 

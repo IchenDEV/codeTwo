@@ -2452,7 +2452,7 @@ export const DEFAULT_KEYMAP: KeymapEntry[] = [
   ["open_source_control", "Mod+Shift+G", "Source control"],
   ["open_market", "Mod+Shift+M", "Open Plugin Hub"],
   ["open_files", "Mod+P", "Browse workspace files"],
-  ["open_finder", "Mod+O", "Open in Finder"],
+  ["open_finder", "Mod+O", "Open in file manager"],
   ["search_workspace", "Mod+Shift+F", "Search workspace contents"],
   ["open_issues", "Mod+Shift+I", "Open issues"],
   ["open_usage", "Mod+Shift+U", "Open usage"],

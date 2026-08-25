@@ -1,0 +1,130 @@
+name: Windows desktop package
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/windows-desktop.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "apps/desktop/**"
+      - "crates/**"
+      - "vendor/libghostty-vt-sys/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-desktop.yml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "apps/desktop/**"
+      - "crates/**"
+      - "vendor/libghostty-vt-sys/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build and inspect x64 installer
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
+
+      - name: Run desktop tests
+        working-directory: apps/desktop
+        run: bun test
+
+      - name: Run Windows command compatibility tests
+        run: |
+          cargo test -p codetwo-core --lib provider::tests::resolves_and_runs_windows_pathext_shims
+          cargo test -p codetwo-core --lib provider_lifecycle::tests
+          cargo test -p codetwo-core --lib project::tests::runs_scripts_and_worktree_hooks
+          cargo test -p codetwo-core --lib voice::tests
+
+      - name: Build Windows release package
+        working-directory: apps/desktop
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: bun run build:release
+
+      - name: Verify and stage Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $packages = @(Get-ChildItem "apps/desktop/artifacts" -Filter "stable-win-x64-*.zip")
+          if ($packages.Count -ne 1) {
+            throw "Expected exactly one Windows installer zip, found $($packages.Count)."
+          }
+
+          $expanded = Join-Path $env:RUNNER_TEMP "codetwo-windows-installer"
+          Expand-Archive -LiteralPath $packages[0].FullName -DestinationPath $expanded
+
+          $setup = @(Get-ChildItem $expanded -Filter "C2-Setup.exe")
+          $metadata = @(Get-ChildItem (Join-Path $expanded ".installer") -Filter "C2-Setup.metadata.json")
+          $archives = @(Get-ChildItem (Join-Path $expanded ".installer") -Filter "C2-Setup.tar.zst")
+          if ($setup.Count -ne 1 -or $metadata.Count -ne 1 -or $archives.Count -ne 1) {
+            throw "Installer zip is missing its setup, metadata, or payload archive."
+          }
+
+          $manifest = Get-Content $metadata[0].FullName -Raw | ConvertFrom-Json
+          if ($manifest.identifier -ne "dev.codetwo.app" -or $manifest.name -ne "C2") {
+            throw "Installer metadata does not identify the stable C2 application."
+          }
+
+          $payload = Join-Path $env:RUNNER_TEMP "codetwo-windows-payload"
+          New-Item -ItemType Directory -Path $payload | Out-Null
+          & tar -xf $archives[0].FullName -C $payload
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not extract the packaged Windows payload."
+          }
+
+          $hosts = @(Get-ChildItem $payload -Recurse -Filter "codetwo-desktop-host.exe")
+          $brokers = @(Get-ChildItem $payload -Recurse -Filter "codetwo-tool-broker.exe")
+          $renderers = @(Get-ChildItem $payload -Recurse -Filter "index.html" | Where-Object {
+            $_.FullName -match "[\\/]views[\\/]main[\\/]index\.html$"
+          })
+          if ($hosts.Count -ne 1 -or $brokers.Count -ne 1 -or $renderers.Count -ne 1) {
+            throw "Packaged payload is missing the native host, tool broker, or renderer."
+          }
+
+          foreach ($executable in @($setup[0], $hosts[0], $brokers[0])) {
+            $stream = [System.IO.File]::OpenRead($executable.FullName)
+            try {
+              if ($stream.ReadByte() -ne 0x4d -or $stream.ReadByte() -ne 0x5a) {
+                throw "$($executable.Name) does not have a Windows PE header."
+              }
+            } finally {
+              $stream.Dispose()
+            }
+          }
+
+          New-Item -ItemType Directory -Path "windows-package" | Out-Null
+          Copy-Item $packages[0].FullName "windows-package/C2-windows-x64.zip"
+          $hash = (Get-FileHash "windows-package/C2-windows-x64.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  C2-windows-x64.zip" | Set-Content "windows-package/C2-windows-x64.zip.sha256"
+          $env:GITHUB_SHA | Set-Content "windows-package/commit.txt"
+
+      - name: Upload verified Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: C2-windows-x64-${{ github.sha }}
+          path: windows-package/
+          if-no-files-found: error
+          retention-days: 14

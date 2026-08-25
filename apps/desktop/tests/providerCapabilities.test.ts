@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -73,6 +73,19 @@ describe("provider capability wire compatibility", () => {
         .toEqual([]);
       expect(evidence.browserUseBackends.find((backend) => backend.id === "openai-browser")?.providers)
         .toEqual(["codex"]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("loads the Codex config from USERPROFILE on Windows", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-windows-profile-"));
+    const codexHome = join(directory, ".codex");
+    try {
+      mkdirSync(codexHome);
+      writeFileSync(join(codexHome, "config.toml"), "");
+      const evidence = detectHostToolEvidence({ USERPROFILE: directory }, directory);
+      expect(evidence.configError).toBeNull();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
