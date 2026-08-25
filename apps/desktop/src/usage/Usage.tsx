@@ -16,6 +16,13 @@ import { useLanguage, type Translate } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { fmtCost, fmtReset, fmtTokens, seriesColor, stackHistory } from "./usageMath";
 
@@ -332,12 +339,16 @@ function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof us
 function ProviderQuotaSection({
   provider,
   providerName,
+  providers,
+  onProvider,
   report,
   loading,
   requestFailed,
 }: {
   provider: string;
   providerName: string;
+  providers: readonly QuotaProviderOption[];
+  onProvider: (provider: string) => void;
   report: ProviderQuotaReport | null;
   loading: boolean;
   requestFailed: boolean;
@@ -347,23 +358,52 @@ function ProviderQuotaSection({
   const unavailableReason = requestFailed ? "query_failed" : report?.reason ?? null;
   const credits = report?.credits;
   const showCredits = credits != null && (credits.has_credits || credits.unlimited);
+  let source: string | null = null;
+  if (report?.status === "available") {
+    source = report.source === "codex_app_server" ? t("quota.sourceCodex") : report.source;
+  }
 
   return (
     <section aria-labelledby="provider-quota-heading" className="space-y-3">
-      <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <ProviderIcon provider={provider} className="size-5 shrink-0" />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 id="provider-quota-heading" className="truncate text-ui font-semibold">
             {t("quota.title")}
           </h2>
-          <p className="truncate text-fine text-muted-foreground">
-            {providerName}
-            {report?.plan && <> · {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}</>}
-          </p>
+          {report?.plan && (
+            <p className="truncate text-fine text-muted-foreground">
+              {t("quota.plan", { plan: report.plan.replaceAll("_", " ") })}
+            </p>
+          )}
         </div>
-        {report?.status === "available" && (
+        {providers.length > 1 ? (
+          <Select
+            value={provider}
+            onValueChange={(value) => {
+              if (value) onProvider(value);
+            }}
+          >
+            <SelectTrigger
+              data-quota-provider-select
+              aria-label={t("quota.providerSelect")}
+              size="sm"
+              className="ml-auto w-48 max-w-full justify-between"
+            >
+              <SelectValue>{providerName}</SelectValue>
+            </SelectTrigger>
+            <SelectContent position="popper" align="end">
+              {providers.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  <ProviderIcon provider={option.id} className="size-4 opacity-80" />
+                  <span>{option.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
           <span className="ml-auto shrink-0 text-fine text-muted-foreground">
-            {report.source === "codex_app_server" ? t("quota.sourceCodex") : report.source}
+            {providerName}
           </span>
         )}
       </div>
@@ -414,6 +454,7 @@ function ProviderQuotaSection({
           )}
 
           <p className="mt-3 pt-3 text-fine text-muted-foreground">
+            {source && <>{source} · </>}
             {t("quota.updated", {
               time: new Intl.DateTimeFormat(locale, {
                 hour: "numeric",
@@ -428,8 +469,36 @@ function ProviderQuotaSection({
   );
 }
 
-export function quotaProviderFor(currentProvider: string, report: UsageReport | null): string {
-  return report?.by_source.some(([source]) => source === "codex") ? "codex" : currentProvider;
+export interface QuotaProviderOption {
+  id: string;
+  name: string;
+}
+
+/** Keep the session provider as the default while allowing Usage to inspect another account. */
+export function quotaProviderFor(
+  currentProvider: string,
+  selectedProvider: string | null,
+): string {
+  return selectedProvider ?? currentProvider;
+}
+
+/** Current provider first, followed by every provider known to the live registry. */
+export function quotaProviderOptions(
+  currentProvider: string,
+  currentProviderName: string,
+  providerNames: Record<string, string>,
+): QuotaProviderOption[] {
+  const options: QuotaProviderOption[] = [];
+  const seen = new Set<string>();
+  const append = (id: string, name: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    options.push({ id, name });
+  };
+
+  append(currentProvider, currentProviderName);
+  for (const [id, name] of Object.entries(providerNames)) append(id, name);
+  return options;
 }
 
 /** Rolling windows, provider trend, and local cost estimates shared by the settings page and modal. */
@@ -452,11 +521,15 @@ function UsageView({
   const [quota, setQuota] = useState<ProviderQuotaReport | null>(null);
   const [quotaLoading, setQuotaLoading] = useState(true);
   const [quotaFailed, setQuotaFailed] = useState(false);
+  const [selectedQuotaProvider, setSelectedQuotaProvider] = useState<string | null>(null);
   const quotaRequestRef = useRef(0);
-  const quotaProvider = quotaProviderFor(provider, report);
+  const quotaProvider = quotaProviderFor(provider, selectedQuotaProvider);
   const quotaProviderName = providerNames[quotaProvider]
     ?? (quotaProvider === provider ? providerName : quotaProvider);
-  const localReady = report != null;
+  const quotaProviders = useMemo(
+    () => quotaProviderOptions(provider, providerName, providerNames),
+    [provider, providerName, providerNames],
+  );
 
   const loadLocal = useCallback((range: 7 | 30) => {
     setLoading(true);
@@ -488,13 +561,12 @@ function UsageView({
 
   useEffect(() => loadLocal(days), [days, loadLocal]);
   useEffect(() => {
-    if (!localReady) return;
     setQuota(null);
     void loadQuota();
     return () => {
       quotaRequestRef.current += 1;
     };
-  }, [loadQuota, localReady]);
+  }, [loadQuota]);
 
   const bySource = history?.by_source ?? [];
   const refreshing = loading || quotaLoading;
@@ -552,6 +624,8 @@ function UsageView({
       <ProviderQuotaSection
         provider={quotaProvider}
         providerName={quotaProviderName}
+        providers={quotaProviders}
+        onProvider={setSelectedQuotaProvider}
         report={quota}
         loading={quotaLoading}
         requestFailed={quotaFailed}

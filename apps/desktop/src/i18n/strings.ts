@@ -253,7 +253,7 @@ export const en = {
   // usage panel
   "usage.title": "Usage",
   "usage.description":
-    "See current provider quota, remaining capacity, and local model activity.",
+    "See quota for any provider, remaining capacity, and local model activity.",
   "usage.rescan": "Rescan",
   "usage.scanning": "Scanning local transcripts…",
   "usage.localTitle": "Local activity",
@@ -285,6 +285,7 @@ export const en = {
 
   // provider quota
   "quota.title": "Provider quota",
+  "quota.providerSelect": "Choose a quota provider",
   "quota.quick": "Quota left",
   "quota.quickOpen": "Open Usage settings",
   "quota.checkingShort": "Checking quota",
@@ -2212,7 +2213,7 @@ export const zhCN: Record<StringKey, string> = {
   "environment.copyFailed": "无法复制项目路径。",
 
   "usage.title": "用量",
-  "usage.description": "查看当前 Provider 额度、剩余容量和本地模型活动。",
+  "usage.description": "查看不同 Provider 的额度、剩余容量和本地模型活动。",
   "usage.rescan": "重新扫描",
   "usage.scanning": "正在扫描本地会话记录…",
   "usage.localTitle": "本地活动",
@@ -2241,6 +2242,7 @@ export const zhCN: Record<StringKey, string> = {
   "usage.done": "完成",
 
   "quota.title": "Provider 额度",
+  "quota.providerSelect": "选择额度 Provider",
   "quota.quick": "剩余额度",
   "quota.quickOpen": "打开用量设置",
   "quota.checkingShort": "正在查询额度",
