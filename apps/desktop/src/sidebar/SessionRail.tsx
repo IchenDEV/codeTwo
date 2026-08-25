@@ -125,6 +125,7 @@ function SessionContextMenu({
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
  * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
+ * 4. Utilities — quota and settings stay reachable at the bottom while recent chats scroll.
  * The active model remains available in the composer, where it can also be changed.
  */
 export function SessionRail({
@@ -871,67 +872,7 @@ export function SessionRail({
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
         </button>
-        <button
-          data-rail-feature="usage"
-          aria-busy={quickQuotaLoading || undefined}
-          className={featureRowClass}
-          title={quickQuotaTitle}
-          onClick={onOpenUsage}
-        >
-          {quickQuota ? (
-            <span
-              data-quota-provider={quickQuota.provider}
-              className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-            >
-              <ProviderIcon provider={quickQuota.provider} className="size-4" />
-            </span>
-          ) : (
-            <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          )}
-          <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
-          {quickQuota ? (
-            <span className="flex shrink-0 items-center gap-1.5">
-              <span
-                role="progressbar"
-                aria-label={t("quota.remainingLabel", { window: quickQuotaWindow })}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={quickQuota.remainingPercent}
-                className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10"
-              >
-                <span
-                  className={cn(
-                    "block h-full rounded-full",
-                    quickQuota.remainingPercent <= 5
-                      ? "bg-destructive"
-                      : quickQuota.remainingPercent <= 20
-                        ? "bg-warning"
-                        : "bg-primary",
-                  )}
-                  style={{ width: `${quickQuota.remainingPercent}%` }}
-                />
-              </span>
-              <span className="w-7 text-right text-fine font-medium tabular-nums">
-                {quickQuota.remainingPercent}%
-              </span>
-            </span>
-          ) : (
-            <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
-              {quickQuotaLoading ? (
-                <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
-              ) : "—"}
-            </span>
-          )}
-        </button>
         {pluginActions}
-        <button
-          data-rail-feature="settings"
-          className={featureRowClass}
-          onClick={onOpenSettings}
-        >
-          <Settings className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate">{t("header.settings")}</span>
-        </button>
       </nav>
 
       {/* ---- 3 · recent chats --------------------------------------------------------------- */}
@@ -1022,7 +963,7 @@ export function SessionRail({
         )}
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
         <div data-session-list className="px-2 pb-4">
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
@@ -1075,6 +1016,69 @@ export function SessionRail({
         </div>
       </ScrollArea>
 
+      {/* ---- 4 · utilities ------------------------------------------------------------------ */}
+      <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1">
+        <button
+          data-rail-feature="usage"
+          aria-busy={quickQuotaLoading || undefined}
+          className={featureRowClass}
+          title={quickQuotaTitle}
+          onClick={onOpenUsage}
+        >
+          {quickQuota ? (
+            <span
+              data-quota-provider={quickQuota.provider}
+              className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+            >
+              <ProviderIcon provider={quickQuota.provider} className="size-4" />
+            </span>
+          ) : (
+            <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          )}
+          <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
+          {quickQuota ? (
+            <span className="flex shrink-0 items-center gap-1.5">
+              <span
+                role="progressbar"
+                aria-label={t("quota.remainingLabel", { window: quickQuotaWindow })}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={quickQuota.remainingPercent}
+                className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10"
+              >
+                <span
+                  className={cn(
+                    "block h-full rounded-full",
+                    quickQuota.remainingPercent <= 5
+                      ? "bg-destructive"
+                      : quickQuota.remainingPercent <= 20
+                        ? "bg-warning"
+                        : "bg-primary",
+                  )}
+                  style={{ width: `${quickQuota.remainingPercent}%` }}
+                />
+              </span>
+              <span className="w-7 text-right text-fine font-medium tabular-nums">
+                {quickQuota.remainingPercent}%
+              </span>
+            </span>
+          ) : (
+            <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
+              {quickQuotaLoading ? (
+                <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
+              ) : "—"}
+            </span>
+          )}
+        </button>
+        <button
+          data-rail-feature="settings"
+          className={featureRowClass}
+          onClick={onOpenSettings}
+        >
+          <Settings className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{t("header.settings")}</span>
+        </button>
+      </div>
       </div>
     </aside>
   );
