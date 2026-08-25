@@ -1,4 +1,5 @@
 import {
+  Activity,
   Box,
   ChevronDown,
   Folder,
@@ -89,6 +90,8 @@ export function SessionHeaderActions({
   terminalActive,
   panelActive,
   sideChatActive = false,
+  trajectoryActive = false,
+  trajectoryAvailable = false,
   onAddAction,
   onOpen,
   onOpenCursor,
@@ -103,12 +106,15 @@ export function SessionHeaderActions({
   onToggleTerminal,
   onTogglePanel,
   onToggleSideChat = () => {},
+  onToggleTrajectory = () => {},
   onMoveTask,
 }: {
   canCommit: boolean;
   terminalActive: boolean;
   panelActive: boolean;
   sideChatActive?: boolean;
+  trajectoryActive?: boolean;
+  trajectoryAvailable?: boolean;
   onAddAction: () => void;
   onOpen: () => void;
   onOpenCursor: () => void;
@@ -123,6 +129,7 @@ export function SessionHeaderActions({
   onToggleTerminal: () => void;
   onTogglePanel: () => void;
   onToggleSideChat?: () => void;
+  onToggleTrajectory?: () => void;
   onMoveTask: () => void;
 }) {
   const t = useT();
@@ -253,6 +260,14 @@ export function SessionHeaderActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {trajectoryAvailable ? (
+        <PanelAction
+          icon={Activity}
+          label={t(trajectoryActive ? "trajectory.hide" : "trajectory.show")}
+          active={trajectoryActive}
+          onClick={onToggleTrajectory}
+        />
+      ) : null}
       <PanelAction
         icon={MessageSquare}
         label={t("sideChat.toggle")}
