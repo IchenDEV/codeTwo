@@ -94,6 +94,87 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
+  test("groups subagents by state without repeating them as ordinary tool calls", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "Delegated checks are in progress.",
+      tools: [
+        {
+          id: "agent-active",
+          title: "spawn_agent",
+          status: "in_progress",
+          kind: "agent",
+          agentInput: {
+            agent_type: "explorer",
+            task_name: "accessibility_review",
+            message: "Check the status announcements.",
+          },
+          startedAt: Date.now() - 8_000,
+        },
+        {
+          id: "agent-complete",
+          title: "spawn_agent",
+          status: "completed",
+          kind: "agent",
+          agentInput: {
+            agent_type: "worker",
+            task_name: "narrow_layout",
+            message: "Verify the narrow transcript layout.",
+          },
+          startedAt: 1_000,
+          endedAt: 17_000,
+        },
+        {
+          id: "agent-failed",
+          title: "spawn_agent",
+          status: "failed",
+          kind: "agent",
+          agentInput: {
+            agent_type: "worker",
+            task_name: "renderer_tests",
+            message: "Run renderer tests.",
+          },
+          startedAt: 2_000,
+          endedAt: 13_000,
+        },
+        { id: "read-1", title: "Read workspace", status: "completed", kind: "read" },
+      ],
+      content: [
+        { kind: "text", text: "Delegated checks are in progress." },
+        { kind: "tool", toolId: "agent-active" },
+        { kind: "tool", toolId: "agent-complete" },
+        { kind: "tool", toolId: "agent-failed" },
+        { kind: "tool", toolId: "read-1" },
+      ],
+    };
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>,
+    );
+
+    const roster = rendered.container.querySelector("[data-agent-roster]");
+    const rosterTrigger = [...rendered.container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("agents (3)"),
+    );
+
+    expect(rosterTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(roster?.textContent).toContain("Active1");
+    expect(roster?.textContent).toContain("Finished2");
+    expect(roster?.textContent).toContain("Accessibility Review");
+    expect(roster?.textContent).toContain("running");
+    expect(roster?.textContent).toContain("Narrow Layout");
+    expect(roster?.textContent).toContain("completed16s");
+    expect(roster?.textContent).toContain("Renderer Tests");
+    expect(roster?.textContent).toContain("failed11s");
+    expect(rendered.container.querySelector('[data-tool-call="read-1"]')).not.toBeNull();
+    expect(rendered.container.querySelector('[data-tool-call="agent-active"]')).toBeNull();
+    expect(rendered.container.querySelectorAll("[data-agent-row]")).toHaveLength(3);
+    rendered.unmount();
+  });
+
   test("renders attached prompt images instead of image placeholder text", () => {
     activateDom();
     disableCanvasDrawing();
