@@ -21,11 +21,11 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("aligns the native macOS traffic lights to the 48px titlebar", () => {
+  test("centers the native macOS traffic lights in the 48px titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toContain("trafficLightOffset");
     expect(electrobunHost).toMatch(
-      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(28, 19\);[\s\S]*?\}\s*rendererReady = true;/,
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 17\);[\s\S]*?\}\s*rendererReady = true;/,
     );
   });
 
