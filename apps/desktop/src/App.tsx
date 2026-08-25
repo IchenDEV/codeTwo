@@ -44,6 +44,7 @@ import {
   canvasTombstone,
   canvasUpdateDraft,
   cancelTurn,
+  call,
   compileDoc,
   confirmNative,
   controlGoal,
@@ -342,6 +343,7 @@ import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { PullRequestsPage } from "./github/PullRequestsPage";
+import { DockerPage, type DockerCommandCaller } from "./docker/DockerPage";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 import {
   associateTaskSession,
@@ -662,6 +664,7 @@ export default function App() {
   const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
   const [showPluginManager, setShowPluginManager] = useState(false);
+  const [showDocker, setShowDocker] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
   const [localPluginMarketplace, setLocalPluginMarketplace] =
     useState<PluginMarketplace | null>(null);
@@ -1002,6 +1005,7 @@ export default function App() {
     setShowAutomations(false);
     setShowPluginManager(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     setShowTaskBoard(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -2946,6 +2950,7 @@ export default function App() {
     invalidatePendingCreation();
     setShowTaskBoard(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     sessionLoadSeq.current += 1;
     setSessionLoading(false);
     setPendingSessionRunning(false);
@@ -3279,6 +3284,7 @@ export default function App() {
       // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
       setShowTaskBoard(false);
       setShowPullRequests(false);
+      setShowDocker(false);
       invalidatePendingCreation();
       const stored =
         sessions.find((s) => s.id === id) ??
@@ -3734,6 +3740,18 @@ export default function App() {
       plugins,
     ],
   );
+  const dockerPlugin = useMemo(
+    () => plugins.find((plugin) => plugin.name === "docker-tools") ?? null,
+    [plugins],
+  );
+  const dockerPluginReady = Boolean(dockerPlugin?.enabled && dockerPlugin.trusted);
+  useEffect(() => {
+    if (showDocker && !dockerPlugin) setShowDocker(false);
+  }, [dockerPlugin, showDocker]);
+  const callDocker = useCallback<DockerCommandCaller>(
+    async <T,>(name: string, args?: unknown) => call<T>(name, args, null),
+    [],
+  );
   const pluginLanguageServers = useMemo(
     () =>
       activeComponentPolicyReady
@@ -4029,6 +4047,7 @@ export default function App() {
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     setShowPluginManager(true);
   }, [
     activeProject,
@@ -4131,6 +4150,7 @@ export default function App() {
     setShowTaskBoard(false);
     setShowPluginManager(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -4150,10 +4170,21 @@ export default function App() {
     setShowAutomations(false);
     setShowPluginManager(false);
     setShowTaskBoard(false);
+    setShowDocker(false);
     setShowPullRequests(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
   }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
+
+  const openDocker = useCallback(() => {
+    setShowAutomations(false);
+    setShowPluginManager(false);
+    setShowPullRequests(false);
+    setShowTaskBoard(false);
+    setShowDocker(true);
+    if (narrowLayout) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
 
   const openSourceControl = useCallback(() => {
     if (!componentEnabled("git.surface")) {
@@ -5100,6 +5131,7 @@ export default function App() {
           setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
+          setShowDocker(false);
           setSettingsInitialTab("general");
           setShowSettings(true);
           break;
@@ -5121,6 +5153,7 @@ export default function App() {
           setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
+          setShowDocker(false);
           setSettingsInitialTab("usage");
           setShowSettings(true);
           break;
@@ -5288,6 +5321,7 @@ export default function App() {
         setShowPluginManager(false);
         setShowAutomations(false);
         setShowPullRequests(false);
+        setShowDocker(false);
         setSettingsInitialTab("usage");
         setShowSettings(true);
       },
@@ -5336,6 +5370,7 @@ export default function App() {
       hint: hint("open_settings"),
       run: () => {
         setShowPullRequests(false);
+        setShowDocker(false);
         setSettingsInitialTab("general");
         setShowSettings(true);
       },
@@ -5828,6 +5863,7 @@ export default function App() {
             setShowAutomations(false);
             setShowPluginManager(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             selectProject(path);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -5894,6 +5930,7 @@ export default function App() {
             setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             setSettingsInitialTab("general");
             setShowSettings(true);
           }}
@@ -5912,6 +5949,12 @@ export default function App() {
           }}
           automationsOpen={showAutomations}
           pluginManagerOpen={showPluginManager}
+          dockerAvailable={dockerPlugin !== null}
+          dockerOpen={showDocker}
+          onOpenDocker={() => {
+            if (showDocker) setShowDocker(false);
+            else openDocker();
+          }}
           quickQuota={railQuickQuota}
           quickQuotaLoading={quickQuotaLoading}
           quickQuotaProviderName={quickQuotaProviderName}
@@ -5920,6 +5963,7 @@ export default function App() {
             setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
@@ -5934,6 +5978,15 @@ export default function App() {
             />
             }
         />
+
+          {showDocker && dockerPlugin ? (
+            <DockerPage
+              enabled={dockerPluginReady}
+              callCommand={callDocker}
+              onOpenPluginManager={openPluginManager}
+              headerLeadingAction={railExpandAction}
+            />
+          ) : null}
 
           {showPullRequests && (
             <PullRequestsPage
@@ -6106,13 +6159,15 @@ export default function App() {
             showPluginManager ||
             showAutomations ||
             showPullRequests ||
+            showDocker ||
             undefined
           }
           className={
             showTaskBoard ||
             showPluginManager ||
             showAutomations ||
-            showPullRequests
+            showPullRequests ||
+            showDocker
               ? "hidden"
               : "contents"
           }

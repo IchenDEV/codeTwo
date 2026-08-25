@@ -18,6 +18,7 @@ import {
   ChartNoAxesColumn,
   Check,
   CircleAlert,
+  Container,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -165,6 +166,9 @@ export function SessionRail({
   onOpenPullRequests,
   automationsOpen,
   pluginManagerOpen,
+  dockerAvailable,
+  dockerOpen,
+  onOpenDocker,
   quickQuota,
   quickQuotaLoading,
   quickQuotaProviderName,
@@ -221,6 +225,9 @@ export function SessionRail({
   onOpenPullRequests: () => void;
   automationsOpen: boolean;
   pluginManagerOpen: boolean;
+  dockerAvailable: boolean;
+  dockerOpen: boolean;
+  onOpenDocker: () => void;
   /** Most constrained provider-owned quota window, for the glanceable rail meter. */
   quickQuota: QuickQuotaSummary | null;
   quickQuotaLoading: boolean;
@@ -872,6 +879,17 @@ export function SessionRail({
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
         </button>
+        {dockerAvailable ? (
+          <button
+            data-rail-feature="docker"
+            aria-current={dockerOpen ? "page" : undefined}
+            className={cn(featureRowClass, dockerOpen && "bg-accent font-medium text-foreground")}
+            onClick={onOpenDocker}
+          >
+            <Container className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t("docker.title")}</span>
+          </button>
+        ) : null}
         {pluginActions}
       </nav>
 

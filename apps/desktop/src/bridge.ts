@@ -993,6 +993,166 @@ export function setCallProjectPath(path: string | null): void {
   callProjectPath = path;
 }
 
+const BROWSER_DOCKER_CONTAINERS = [
+  {
+    id: "8f4c2e9133ef",
+    name: "api",
+    image: "ghcr.io/codetwo/api:latest",
+    command: '"bun run start"',
+    createdAt: "2026-08-25 19:21:04 +0800 SGT",
+    runningFor: "22 hours ago",
+    ports: "0.0.0.0:8080->8080/tcp",
+    state: "running",
+    status: "Up 22 hours",
+    size: "12.4kB (virtual 286MB)",
+    labels: null,
+    localVolumes: 0,
+    mounts: "",
+    networks: "bridge",
+  },
+  {
+    id: "b497581dd054",
+    name: "worker",
+    image: "ghcr.io/codetwo/worker:latest",
+    command: '"bun run worker"',
+    createdAt: "2026-08-24 08:12:01 +0800 SGT",
+    runningFor: "2 days ago",
+    ports: "",
+    state: "exited",
+    status: "Exited (0) 18 hours ago",
+    size: "8.2kB (virtual 284MB)",
+    labels: null,
+    localVolumes: 0,
+    mounts: "",
+    networks: "bridge",
+  },
+  {
+    id: "24c2830d260a",
+    name: "postgres",
+    image: "postgres:16-alpine",
+    command: '"docker-entrypoint.s…"',
+    createdAt: "2026-08-24 08:11:40 +0800 SGT",
+    runningFor: "2 days ago",
+    ports: "0.0.0.0:5432->5432/tcp",
+    state: "exited",
+    status: "Exited (0) 18 hours ago",
+    size: "63B (virtual 247MB)",
+    labels: null,
+    localVolumes: 1,
+    mounts: "codetwo_pgdata",
+    networks: "bridge",
+  },
+];
+
+const BROWSER_DOCKER_IMAGES = [
+  {
+    id: "sha256:19a3a8c9d0d8",
+    repository: "ghcr.io/codetwo/api",
+    tag: "latest",
+    digest: "sha256:6ec4ca4b0d1e",
+    createdAt: "2026-08-25 18:42:11 +0800 SGT",
+    createdSince: "22 hours ago",
+    size: "286MB",
+    sharedSize: "0B",
+    uniqueSize: "286MB",
+    containers: 1,
+  },
+  {
+    id: "sha256:f7eb244d02c9",
+    repository: "ghcr.io/codetwo/worker",
+    tag: "latest",
+    digest: "sha256:f79edcb4a1ef",
+    createdAt: "2026-08-24 07:55:03 +0800 SGT",
+    createdSince: "2 days ago",
+    size: "284MB",
+    sharedSize: "0B",
+    uniqueSize: "284MB",
+    containers: 1,
+  },
+  {
+    id: "sha256:34f2dfe3bb89",
+    repository: "postgres",
+    tag: "16-alpine",
+    digest: "sha256:3e89afe3d2c2",
+    createdAt: "2026-08-18 05:10:02 +0800 SGT",
+    createdSince: "8 days ago",
+    size: "247MB",
+    sharedSize: "0B",
+    uniqueSize: "247MB",
+    containers: 1,
+  },
+];
+
+function browserDockerCall<T>(name: string, rawArgs: unknown): T {
+  const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+    ? rawArgs as Record<string, unknown>
+    : {};
+  const container = typeof args.container === "string" ? args.container : "container";
+  const image = typeof args.image === "string" ? args.image : "image";
+  switch (name) {
+    case "docker.status":
+      return {
+        available: true,
+        clientVersion: "29.7.2",
+        serverVersion: "29.7.2",
+        context: "desktop-linux",
+        engine: {
+          name: "docker-desktop",
+          operatingSystem: "Docker Desktop",
+          architecture: "aarch64",
+          cpus: 10,
+          memoryBytes: 8_589_934_592,
+          dockerRootDir: "/var/lib/docker",
+        },
+        containers: { total: 21, running: 1, paused: 0, stopped: 20 },
+        images: 12,
+        message: "Docker 29.7.2 is running · 1 running · 20 stopped · 12 images",
+      } as T;
+    case "docker.containers":
+      return {
+        containers: BROWSER_DOCKER_CONTAINERS,
+        count: BROWSER_DOCKER_CONTAINERS.length,
+        truncated: false,
+        message: `${BROWSER_DOCKER_CONTAINERS.length} Docker containers.`,
+      } as T;
+    case "docker.images":
+      return {
+        images: BROWSER_DOCKER_IMAGES,
+        count: BROWSER_DOCKER_IMAGES.length,
+        truncated: false,
+        message: `${BROWSER_DOCKER_IMAGES.length} Docker images.`,
+      } as T;
+    case "docker.inspect":
+      return {
+        container,
+        details: {
+          Id: BROWSER_DOCKER_CONTAINERS.find((item) => item.name === container)?.id ?? container,
+          Name: `/${container}`,
+          State: { Status: container === "api" ? "running" : "exited" },
+          Config: { Image: BROWSER_DOCKER_CONTAINERS.find((item) => item.name === container)?.image },
+        },
+        message: `Inspected ${container}.`,
+      } as T;
+    case "docker.logs":
+      return {
+        container,
+        stdout: `[2026-08-26T10:31:04Z] ${container} ready\n[2026-08-26T10:31:08Z] GET /health 200`,
+        stderr: "",
+        message: `Read logs from ${container}.`,
+      } as T;
+    case "docker.start":
+    case "docker.stop":
+    case "docker.restart":
+      return { container, action: name.slice("docker.".length), output: container, message: `${name} ${container}` } as T;
+    case "docker.pull":
+      return { image, output: `Downloaded newer image for ${image}`, message: `Pulled ${image}.` } as T;
+    case "docker.remove_image":
+      return { image, output: `Untagged: ${image}`, message: `Removed ${image}.` } as T;
+    default:
+      throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  }
+}
+
 // ---- the plugin graph -------------------------------------------------------------------------
 
 /**
@@ -1007,7 +1167,7 @@ export async function call<T = unknown>(
   args?: unknown,
   projectPath: string | null = callProjectPath,
 ): Promise<T> {
-  if (!inDesktop) throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  if (!inDesktop) return browserDockerCall<T>(name, args);
   return desktopCall<T>(name, args ?? null, projectPath);
 }
 
@@ -2762,6 +2922,41 @@ export async function listPlugins(): Promise<PluginInfo[]> {
   return inDesktop
     ? call<PluginInfo[]>("plugins.list", undefined, null)
     : [
+        {
+          id: "docker-tools-preview",
+          name: "docker-tools",
+          version: "0.1.0",
+          description: "Inspect Docker and manage containers and images.",
+          author: "C2",
+          source: "Built-in renderer preview",
+          repository: "https://github.com/IchenDEV/codeTwo",
+          standard_version: "1.0.0",
+          enabled: true,
+          trusted: true,
+          scope: "user",
+          counts: {
+            skills: 0,
+            subagents: 0,
+            mcp_servers: 0,
+            scaffolds: 0,
+            commands: 10,
+            hooks: 0,
+            lsp_servers: 0,
+            monitors: 0,
+            apps: 0,
+            ui: 0,
+            scenes: 0,
+            pipelines: 0,
+            runtime: 1,
+          },
+          extension_components: [
+            { kind: "runtime", name: "docker-tools", path: "plugin.js", status: "ready" },
+          ],
+          ui_contributions: [],
+          lsp_servers: [],
+          diagnostics: [],
+          scaffolds: [],
+        },
         {
           id: "developer-toolkit-demo",
           name: "Developer Toolkit",
