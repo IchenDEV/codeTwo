@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "docker-tools",
+  "version": "0.1.0",
+  "description": "Inspect Docker and manage container lifecycle from C2.",
+  "author": { "name": "C2" },
+  "repository": "https://github.com/IchenDEV/codeTwo",
+  "license": "MIT",
+  "keywords": ["docker", "containers", "developer-tools"],
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.0.0",
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["plugin.js"],
+        "inject": []
+      }
+    }
+  }
+}
