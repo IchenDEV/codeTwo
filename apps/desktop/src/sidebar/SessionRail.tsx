@@ -333,7 +333,10 @@ export function SessionRail({
 
   /** Muted label over a group of rows — Active, Archived. */
   const groupLabel = (label: string) => (
-    <p className="px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80">
+    <p
+      data-rail-group-label
+      className="px-2 pb-1 pt-3 text-ui font-medium leading-4 text-foreground/55"
+    >
       {label}
     </p>
   );
@@ -795,41 +798,38 @@ export function SessionRail({
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
       <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-3 pb-2">
-        <div data-rail-feature="new-task" className="flex min-w-0 items-center gap-0.5">
+        <div
+          data-rail-feature="new-task"
+          role="group"
+          aria-label={t("rail.newTask")}
+          className="group/new-task flex h-(--ds-control-field) min-w-0 items-center rounded-(--ds-radius-control) text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-within:bg-accent/55 focus-within:text-foreground"
+        >
           <button
-            className={cn(featureRowClass, "min-w-0 flex-1")}
+            className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-(--ds-radius-control) pl-2.5 pr-1 text-left text-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             title={`${t("rail.newTask")} ${newHint}`}
             onClick={onNew}
           >
             <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{t("rail.newTask")}</span>
-            <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
-              <Plus className="size-2.5" aria-hidden />
-            </span>
           </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
+          <Tooltip>
+            <TooltipTrigger
               render={
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 text-muted-foreground"
-                  aria-label={t("rail.newOptions")}
+                  size="icon-xs"
+                  data-rail-quick-session
+                  className="mr-2 size-6 rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground"
+                  aria-label={t("rail.newTemporarySession")}
+                  onClick={onNewTemporary}
                 >
-                  <ChevronDown aria-hidden />
+                  <Plus className="size-3" aria-hidden />
                 </Button>
               }
             />
-            <DropdownMenuContent align="start">
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={onNewTemporary}>
-                  <SquarePen aria-hidden />
-                  {t("rail.newTemporarySession")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <TooltipContent side="right">{t("rail.newTemporarySession")}</TooltipContent>
+          </Tooltip>
         </div>
         <button
           data-rail-feature="pull-requests"
@@ -934,7 +934,10 @@ export function SessionRail({
       {/* The section header carries the project switcher: which project's chats these are, and
           every project operation, behind one chip instead of a whole tree. */}
       <div className="flex items-center gap-1 px-4 pb-1 pt-3">
-        <span className="shrink-0 px-2 text-fine font-medium uppercase tracking-wide text-muted-foreground">
+        <span
+          data-rail-section-label="recent"
+          className="shrink-0 px-2 text-ui font-medium leading-4 text-foreground/55"
+        >
           {t("rail.recent")}
         </span>
         <div className="min-w-0 flex-1" />
@@ -956,7 +959,8 @@ export function SessionRail({
           <DropdownMenu>
             <DropdownMenuTrigger
               render={<button
-                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
+                data-rail-project-switcher
+                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-ui leading-4 text-foreground/60 transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
                 title={activeProject ?? undefined}
               >
                 {activeProjectRecord ? (
@@ -1043,15 +1047,16 @@ export function SessionRail({
                   {/* Same face as a group label, but it folds — archived rows only take space
                       (and attention) when asked for. */}
                   <button
+                    data-rail-archive-toggle
                     aria-expanded={archivedOpen}
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
                     onClick={() => setArchivedOpen(!archivedOpen)}
-                    className="flex w-full items-center gap-1 rounded px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80 transition-colors hover:text-foreground"
+                    className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-3 text-ui font-medium leading-4 text-foreground/55 transition-colors hover:text-foreground"
                   >
                     <span>{t("rail.groupArchived")}</span>
-                    <span className="font-normal text-muted-foreground/60">{archived.length}</span>
+                    <span className="font-normal text-foreground/40">{archived.length}</span>
                     <ChevronRight
-                      className={cn("size-3 shrink-0 transition-transform", archivedOpen && "rotate-90")}
+                      className={cn("size-3.5 shrink-0 transition-transform", archivedOpen && "rotate-90")}
                     />
                   </button>
                   {archivedOpen && (

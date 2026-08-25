@@ -5695,6 +5695,14 @@ export default function App() {
     setSceneEditorRequest(null);
   };
 
+  const railExpandAction = displayedRailCollapsed ? (
+    <IconAction
+      icon={PanelLeft}
+      label={t("rail.expand")}
+      onClick={toggleDisplayedRail}
+    />
+  ) : undefined;
+
   return (
     <div
       className={cn(
@@ -5887,15 +5895,7 @@ export default function App() {
 
           {showPullRequests && (
             <PullRequestsPage
-              headerLeadingAction={
-                displayedRailCollapsed ? (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-                ) : undefined
-              }
+              headerLeadingAction={railExpandAction}
               onChat={chatAboutPullRequest}
             />
           )}
@@ -5911,6 +5911,7 @@ export default function App() {
               setShowAutomations(false);
               void selectSession(session);
             }}
+            headerLeadingAction={railExpandAction}
               />
             ) : null
           )}
@@ -5923,6 +5924,7 @@ export default function App() {
               void selectSession(id);
             }}
             onStartTask={startBoardTask}
+            headerLeadingAction={railExpandAction}
           />
         )}
 
@@ -5932,15 +5934,7 @@ export default function App() {
             components={localizedPluginManagerModel.components}
             marketplaceItems={localizedPluginManagerModel.marketplaceItems}
             marketplaceSources={localizedPluginManagerModel.marketplaceSources}
-            headerLeadingAction={
-              displayedRailCollapsed ? (
-                <IconAction
-                  icon={PanelLeft}
-                  label={t("rail.expand")}
-                  onClick={toggleDisplayedRail}
-                />
-              ) : undefined
-            }
+            headerLeadingAction={railExpandAction}
             labels={pluginManagerLabels}
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
@@ -6114,13 +6108,7 @@ export default function App() {
               displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
             )}
           >
-            {displayedRailCollapsed && (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-            )}
+            {railExpandAction}
             {/* Breadcrumb, reference-style: project / thread. */}
             {activeProjectRecord ? (
               <ProjectIcon project={activeProjectRecord} size={18} />

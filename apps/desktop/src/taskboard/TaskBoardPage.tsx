@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type ReactNode,
 } from "react"
 import {
   CheckCircle2,
@@ -77,6 +78,7 @@ interface TaskBoardPageProps {
   sessions?: Array<{ id: string; title: string; archived?: boolean }>
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
+  headerLeadingAction?: ReactNode
 }
 
 interface EditorState {
@@ -482,6 +484,7 @@ export function TaskBoardPage({
   sessions = [],
   onOpenSession,
   onStartTask,
+  headerLeadingAction,
 }: TaskBoardPageProps) {
   const toast = useToast()
   const [state, dispatchBase] = useReducer(boardReducer, undefined, loadBoardSnapshot)
@@ -575,14 +578,21 @@ export function TaskBoardPage({
 
   return (
     <main className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-      <header className="shrink-0 bg-background pb-6 pt-10 sm:pt-14">
+      <header className="shrink-0 bg-background pb-6 pt-6">
         <div data-page-header-content className="mx-auto w-full max-w-4xl px-6 sm:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-display font-semibold tracking-tight">任务看板</h1>
-              <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
-                规划、推进并交付你的工作
-              </p>
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              {headerLeadingAction ? (
+                <div data-taskboard-leading-action className="shrink-0 pt-0.5">
+                  {headerLeadingAction}
+                </div>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <h1 className="text-display font-semibold tracking-tight">任务看板</h1>
+                <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
+                  规划、推进并交付你的工作
+                </p>
+              </div>
             </div>
             <Button
               type="button"

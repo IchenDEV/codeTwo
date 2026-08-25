@@ -336,7 +336,8 @@
     padding-left: 0.75rem;
   }
   html[data-platform="macos"] .window-controls-safe-main {
-    padding-left: 5rem;
+    /* Keep the collapsed-sidebar control one full spacing step beyond the green traffic light. */
+    padding-left: 6rem;
   }
   html[data-platform="macos"] .window-controls-safe-rail {
     padding-left: 6rem;

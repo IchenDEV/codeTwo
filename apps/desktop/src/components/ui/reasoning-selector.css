@@ -81,6 +81,7 @@
 .reasoning-selector-header {
   display: flex;
   height: var(--ds-reasoning-selector-header-height);
+  flex: none;
   align-items: center;
   justify-content: space-between;
 }
@@ -252,6 +253,7 @@
 
 .reasoning-selector-popup--compact.reasoning-selector-popup--menu.glass-raised {
   height: auto;
+  overflow: hidden;
   padding: var(--ds-space-module-inset);
 }
 

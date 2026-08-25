@@ -15,6 +15,29 @@ afterEach(() => {
 });
 
 describe("AutomationsPage layout", () => {
+  test("renders the sidebar recovery action supplied by the persistent shell", async () => {
+    activateDom();
+    const view = mount(
+      <I18nProvider>
+        <ToastProvider>
+          <AutomationsPage
+            projects={[]}
+            providers={[]}
+            defaultProject="."
+            defaultProvider="codex"
+            onOpenSession={() => {}}
+            headerLeadingAction={<button aria-label="Expand the sidebar" />}
+          />
+        </ToastProvider>
+      </I18nProvider>,
+    );
+
+    expect(view.container.querySelector('button[aria-label="Expand the sidebar"]')).not.toBeNull();
+
+    await flush();
+    view.unmount();
+  });
+
   test("uses a centered Codex-style task center instead of a split list and detail view", async () => {
     activateDom();
     const view = mount(
@@ -65,6 +88,10 @@ describe("AutomationsPage layout", () => {
     expect(appSource).toMatch(
       /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/,
     );
+    const automationsCall = appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
+    const taskBoardCall = appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
+    expect(automationsCall).toContain("headerLeadingAction=");
+    expect(taskBoardCall).toContain("headerLeadingAction=");
   });
 
   test("keeps create and edit work in the task center instead of opening a dialog", async () => {

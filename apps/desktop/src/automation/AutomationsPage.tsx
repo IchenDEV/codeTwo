@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   CalendarClock,
   CheckCircle2,
@@ -151,12 +151,14 @@ export function AutomationsPage({
   defaultProject,
   defaultProvider,
   onOpenSession,
+  headerLeadingAction,
 }: {
   projects: Project[];
   providers: ProviderInfo[];
   defaultProject: string;
   defaultProvider: string;
   onOpenSession: (session: string) => void;
+  headerLeadingAction?: ReactNode;
 }) {
   const t = useT();
   const toast = useToast();
@@ -310,11 +312,18 @@ export function AutomationsPage({
       <ScrollArea className="min-h-0 flex-1">
         <main data-automation-task-center className="mx-auto w-full max-w-4xl px-6 pb-20 pt-10 sm:px-8 sm:pt-14">
           <header className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-display font-semibold tracking-tight">{t("automations.tasks")}</h1>
-              <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
-                {t("automations.subtitle")}
-              </p>
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              {headerLeadingAction ? (
+                <div data-automation-leading-action className="shrink-0 pt-0.5">
+                  {headerLeadingAction}
+                </div>
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <h1 className="text-display font-semibold tracking-tight">{t("automations.tasks")}</h1>
+                <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
+                  {t("automations.subtitle")}
+                </p>
+              </div>
             </div>
             {!draft && (
               <Button className="shrink-0" size="compact" onClick={() => setDraft(emptyDraft())} disabled={projects.length === 0}>
