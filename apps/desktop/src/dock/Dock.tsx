@@ -6,6 +6,7 @@ import {
   FolderTree,
   GitBranch,
   Globe,
+  MessageSquare,
   Plus,
   TerminalIcon,
   X,
@@ -63,6 +64,7 @@ export function Dock({
   open,
   tab,
   onTab,
+  onOpenSideChat,
   onClose,
   cwd,
   projectPath,
@@ -98,6 +100,8 @@ export function Dock({
   /** null while closed; the last surface stays rendered underneath the collapse animation. */
   tab: DockTab | null;
   onTab: (t: DockSurface) => void;
+  /** Opens the app-lifetime side chat from the right-panel surface picker. */
+  onOpenSideChat?: () => void;
   onClose: () => void;
   cwd: string | null;
   /** Source project identity; distinct from `cwd` for isolated worktree sessions. */
@@ -230,6 +234,22 @@ export function Dock({
     },
   });
 
+  const renderSurfaceCard = ({ id, icon: Icon, titleKey, descKey }: (typeof SURFACES)[number]) => (
+    <button
+      key={id}
+      onClick={() => onTab(id)}
+      className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+    >
+      <Icon className="size-5 text-muted-foreground" />
+      <span>
+        <span className="block text-ui font-semibold">{t(titleKey)}</span>
+        <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
+          {t(descKey)}
+        </span>
+      </span>
+    </button>
+  );
+
   return (
     <aside
       data-dock-placement="right"
@@ -286,21 +306,24 @@ export function Dock({
                 {t("dock.openSurfaceHint")}
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3">
-                {visibleSurfaces.map(({ id, icon: Icon, titleKey, descKey }) => (
+                {visibleSurfaces.slice(0, 3).map(renderSurfaceCard)}
+                {onOpenSideChat ? (
                   <button
-                    key={id}
-                    onClick={() => onTab(id)}
-                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+                    type="button"
+                    aria-label={t("sideChat.title")}
+                    onClick={onOpenSideChat}
+                    className="flex flex-col items-start gap-2.5 rounded-(--ds-radius-module) bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
                   >
-                    <Icon className="size-5 text-muted-foreground" />
+                    <MessageSquare className="size-5 text-muted-foreground" aria-hidden />
                     <span>
-                      <span className="block text-ui font-semibold">{t(titleKey)}</span>
+                      <span className="block text-ui font-semibold">{t("sideChat.title")}</span>
                       <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
-                        {t(descKey)}
+                        {t("sideChat.temporary")}
                       </span>
                     </span>
                   </button>
-                ))}
+                ) : null}
+                {visibleSurfaces.slice(3).map(renderSurfaceCard)}
               </div>
             </div>
           </div>
