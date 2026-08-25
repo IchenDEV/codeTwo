@@ -237,7 +237,7 @@ export function SessionRail({
   // usable on another.
   const applied = Math.min(420, Math.max(220, width));
   const featureRowClass =
-    "flex h-(--ds-control-field) w-full items-center gap-2.5 rounded-(--ds-radius-control) px-2.5 text-left text-ui text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+    "flex h-(--ds-control-normal) w-full items-center gap-2 rounded-(--ds-radius-control) px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
   const quickQuotaWindow = quickQuota?.windowMinutes === 300
     ? t("quota.window5h")
     : quickQuota?.windowMinutes === 10_080
@@ -335,7 +335,7 @@ export function SessionRail({
   const groupLabel = (label: string) => (
     <p
       data-rail-group-label
-      className="px-2 pb-1 pt-3 text-ui font-medium leading-4 text-foreground/55"
+      className="px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55"
     >
       {label}
     </p>
@@ -503,7 +503,7 @@ export function SessionRail({
               }
               className={cn(
                 "group relative cursor-default rounded-md px-2 py-2 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
-                s.id === activeSession && "bg-accent",
+                s.id === activeSession && "bg-fill-hover",
               )}
             >
               <Button
@@ -762,9 +762,27 @@ export function SessionRail({
       {/* Keep the controls centred in the same 48px title row as the main header, with enough
           clearance for the macOS traffic lights. */}
       <div
-        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-3"
+        data-rail-header
+        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-2"
       >
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
+              variant="ghost"
+              size="icon"
+              data-rail-search
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={t("rail.searchLabel")}
+              onClick={onOpenSearch}
+            >
+              <Search className="size-4" />
+            </Button>}
+          />
+          <TooltipContent side="bottom">
+            {t("rail.searchLabel")}{searchHint ? ` ${searchHint}` : ""}
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={<Button
@@ -781,31 +799,17 @@ export function SessionRail({
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="px-3 pb-2 pt-2">
-        <button
-          onClick={onOpenSearch}
-          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
-        >
-          <Search className="size-3.5 shrink-0" />
-          <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
-          {searchHint && (
-            <kbd className="shrink-0 rounded border bg-fill-rest px-1 py-px font-mono text-cap text-muted-foreground/80">
-              {searchHint}
-            </kbd>
-          )}
-        </button>
-      </div>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
-      <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-3 pb-2">
+      <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-2 pb-1">
         <div
           data-rail-feature="new-task"
           role="group"
           aria-label={t("rail.newTask")}
-          className="group/new-task flex h-(--ds-control-field) min-w-0 items-center rounded-(--ds-radius-control) text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-within:bg-accent/55 focus-within:text-foreground"
+          className="group/new-task flex h-(--ds-control-normal) min-w-0 items-center rounded-(--ds-radius-control) text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-within:bg-accent/55 focus-within:text-foreground"
         >
           <button
-            className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-(--ds-radius-control) pl-2.5 pr-1 text-left text-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-(--ds-radius-control) pl-2 pr-1 text-left text-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             title={`${t("rail.newTask")} ${newHint}`}
             onClick={onNew}
           >
@@ -820,7 +824,7 @@ export function SessionRail({
                   variant="ghost"
                   size="icon-xs"
                   data-rail-quick-session
-                  className="mr-2 size-6 rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground"
+                  className="mr-1 size-6 rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground"
                   aria-label={t("rail.newTemporarySession")}
                   onClick={onNewTemporary}
                 >
@@ -933,10 +937,10 @@ export function SessionRail({
       {/* ---- 3 · recent chats --------------------------------------------------------------- */}
       {/* The section header carries the project switcher: which project's chats these are, and
           every project operation, behind one chip instead of a whole tree. */}
-      <div className="flex items-center gap-1 px-4 pb-1 pt-3">
+      <div className="flex items-center gap-1 px-2 pb-1 pt-2">
         <span
           data-rail-section-label="recent"
-          className="shrink-0 px-2 text-ui font-medium leading-4 text-foreground/55"
+          className="shrink-0 px-2 text-ui font-normal leading-4 text-foreground/55"
         >
           {t("rail.recent")}
         </span>
@@ -1019,7 +1023,7 @@ export function SessionRail({
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div data-session-list className="px-4 pb-4">
+        <div data-session-list className="px-2 pb-4">
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
@@ -1051,7 +1055,7 @@ export function SessionRail({
                     aria-expanded={archivedOpen}
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
                     onClick={() => setArchivedOpen(!archivedOpen)}
-                    className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-3 text-ui font-medium leading-4 text-foreground/55 transition-colors hover:text-foreground"
+                    className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 transition-colors hover:text-foreground"
                   >
                     <span>{t("rail.groupArchived")}</span>
                     <span className="font-normal text-foreground/40">{archived.length}</span>

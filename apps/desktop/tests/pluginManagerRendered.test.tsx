@@ -317,6 +317,13 @@ describe("PluginManagerPage", () => {
       expect(action).not.toBeNull();
     }
 
+    const railAction = view.container.querySelector(
+      '[data-plugin-ui-slot="rail.features"] button',
+    );
+    expect(railAction?.className).toContain("h-(--ds-control-normal)");
+    expect(railAction?.className).toContain("text-ui");
+    expect(railAction?.className).toContain("text-foreground/75");
+
     const toolbar = view.container.querySelector('[data-plugin-ui-slot="composer.toolbar"]');
     click(toolbar.querySelector('button[aria-label="Review Tools: Action 4"]'));
     await flush();

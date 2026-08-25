@@ -24,10 +24,11 @@ import {
   parseCanvasHistoryPrompt,
   type CanvasHistoryMarker,
 } from "./promptPreview";
-import { isRunning, type ToolEntry, type Turn } from "./turns";
+import { isRunning, type PromptImage, type ToolEntry, type Turn } from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
+  getPromptImage,
   openExternal,
   revealArtifact,
   saveArtifactAs,
@@ -45,6 +46,8 @@ import {
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { MarkdownContent } from "./MarkdownContent";
+
+const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
@@ -71,6 +74,73 @@ function prettySize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function promptTextWithoutImageMarkers(prompt: string, images: readonly PromptImage[]): string {
+  let visible = prompt;
+  const markers = new Set<string>();
+  for (const image of images) {
+    markers.add(`[attachment:${image.id}]`);
+    if (image.name) markers.add(`[image:${image.name}]`);
+  }
+  for (const marker of markers) visible = visible.split(marker).join("");
+  return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+}
+
+function PromptImageThumbnail({ image }: { image: PromptImage }) {
+  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getPromptImage>> | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (image.previewDataUrl) return;
+    let alive = true;
+    void getPromptImage(image.id)
+      .then((capture) => {
+        if (alive) setLoaded(capture);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [image.id, image.previewDataUrl]);
+
+  const src = image.previewDataUrl ?? loaded?.preview_data_url;
+  const name = loaded?.window_title ?? image.name ?? "Attached image";
+  const width = image.width ?? loaded?.width;
+  const height = image.height ?? loaded?.height;
+
+  return (
+    <figure
+      data-prompt-image={image.id}
+      className="flex min-h-24 min-w-0 max-w-80 items-center justify-center overflow-hidden rounded-(--ds-radius-module) bg-background/25 ring-[0.5px] ring-foreground/10"
+    >
+      {src && !failed ? (
+        <img
+          src={src}
+          alt={name}
+          width={width || undefined}
+          height={height || undefined}
+          loading="lazy"
+          className="block max-h-80 w-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      ) : failed ? (
+        <div
+          role="img"
+          aria-label={`${name} unavailable`}
+          className="flex min-w-0 items-center gap-2 px-3 py-8 text-fine text-muted-foreground"
+        >
+          <CircleAlert className="size-4 shrink-0" aria-hidden />
+          <span className="truncate">{name}</span>
+        </div>
+      ) : (
+        <div role="status" aria-label={`Loading ${name}`} className="px-3 py-8 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        </div>
+      )}
+    </figure>
+  );
 }
 
 export function safeResourceLink(uri: string): { uri: string; host: string } | null {
@@ -379,6 +449,11 @@ export const TurnCard = memo(function TurnCard({
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
   const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
+  const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
+  const promptText = useMemo(
+    () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
+    [history.visiblePrompt, promptImages],
+  );
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
   useEffect(() => {
@@ -405,10 +480,10 @@ export const TurnCard = memo(function TurnCard({
       turn.plan.length +
       (turn.memory?.items.length ?? 0) >
     0;
-  const promptIsLong = isLongPrompt(history.visiblePrompt);
+  const promptIsLong = isLongPrompt(promptText);
   const visiblePrompt = promptIsLong && !promptExpanded
-    ? collapsedPrompt(history.visiblePrompt)
-    : history.visiblePrompt;
+    ? collapsedPrompt(promptText)
+    : promptText;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
@@ -437,7 +512,21 @@ export const TurnCard = memo(function TurnCard({
           </DropdownMenu>
         )}
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
-          <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
+          {promptImages.length > 0 && (
+            <div
+              data-prompt-images
+              className={cn(
+                "grid min-w-0 gap-1.5",
+                visiblePrompt && "mb-2",
+                promptImages.length > 1 && "grid-cols-2",
+              )}
+            >
+              {promptImages.map((image, index) => (
+                <PromptImageThumbnail key={`${image.id}-${index}`} image={image} />
+              ))}
+            </div>
+          )}
+          {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
           {turn.delivery && (
             <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
               {turn.delivery === "queued"

@@ -3353,6 +3353,12 @@ export async function importPromptImage(
   });
 }
 
+/** Reload a private prompt image for durable transcript rendering. */
+export async function getPromptImage(id: string): Promise<AppshotCapture> {
+  if (!inDesktop) throw new Error("Prompt images require the desktop app");
+  return call<AppshotCapture>("attachments.get", { id });
+}
+
 export async function canvasFreeze(
   id: string,
   expectedRevision: number,

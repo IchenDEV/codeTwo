@@ -101,12 +101,20 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
-  test("omits the sidebar wordmark while keeping the collapse control", () => {
+  test("keeps search and collapse compact in the window-controls row", () => {
     activateDom();
-    const view = renderRail();
+    const opened = [];
+    const view = renderRail({ onOpenSearch: () => opened.push("search") });
+    const header = view.container.querySelector("[data-rail-header]");
+    const search = header?.querySelector("[data-rail-search]");
 
     expect(view.container.textContent).not.toContain("C2");
-    expect(view.container.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
+    expect(search).toBeTruthy();
+    expect(header?.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
+    expect(view.container.querySelector("kbd")).toBeNull();
+
+    click(search);
+    expect(opened).toEqual(["search"]);
 
     view.unmount();
   });
@@ -151,6 +159,12 @@ describe("SessionRail row layout", () => {
       .toBe("42");
     expect(features?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
       .toBe("codex");
+    for (const feature of features?.querySelectorAll(":scope > [data-rail-feature]") ?? []) {
+      expect(feature.className).toContain("h-(--ds-control-normal)");
+      expect(feature.className).toContain(
+        feature.getAttribute("aria-current") === "page" ? "text-foreground" : "text-foreground/75",
+      );
+    }
 
     view.unmount();
   });
@@ -168,6 +182,7 @@ describe("SessionRail row layout", () => {
     const quickSession = control?.querySelector('button[data-rail-quick-session]');
 
     expect(control?.getAttribute("role")).toBe("group");
+    expect(control?.className).toContain("h-(--ds-control-normal)");
     expect(control?.className).toContain("hover:bg-accent/55");
     expect(primary?.textContent?.trim()).toBe("New task");
     expect(quickSession?.getAttribute("aria-label")).toBe("Temporary session");
@@ -193,7 +208,9 @@ describe("SessionRail row layout", () => {
 
     for (const label of [recent, activeGroup, archived]) {
       expect(label?.className).toContain("text-ui");
+      expect(label?.className).toContain("font-normal");
       expect(label?.className).toContain("text-foreground/55");
+      expect(label?.className).not.toContain("font-medium");
       expect(label?.className).not.toContain("uppercase");
       expect(label?.className).not.toContain("tracking-");
     }
@@ -307,9 +324,12 @@ describe("SessionRail row layout", () => {
     activateDom();
     const view = renderRail();
     const row = view.container.querySelector('[data-session-id="meaningful"]');
+    const activeRow = view.container.querySelector('[data-session-id="punctuation"]');
 
     expect(row?.getAttribute("data-session-density")).toBe("comfortable");
     expect(row?.parentElement?.className).toContain("gap-2");
+    expect(activeRow?.className).toContain("bg-fill-hover");
+    expect(activeRow?.className.split(/\s+/)).not.toContain("bg-accent");
 
     row?.dispatchEvent(
       new dom.window.MouseEvent("contextmenu", {
