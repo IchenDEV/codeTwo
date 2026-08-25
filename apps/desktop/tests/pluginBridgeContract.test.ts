@@ -87,4 +87,15 @@ describe("plugin bridge contract", () => {
     expect([...used].filter((name) => !registered.has(name))).toEqual([]);
     expect(used.size).toBeGreaterThan(180);
   });
+
+  test("forwards plugin changes and exposes the developer commands through the typed bridge", () => {
+    const bridge = readFileSync(resolve(desktop, "src/bridge.ts"), "utf8");
+    const hostEvents = readFileSync(resolve(desktop, "src-host/src/host_events.rs"), "utf8");
+
+    expect(bridge).toContain('call<PluginDeveloperStatus>("plugins.developer_status"');
+    expect(bridge).toContain('call<PluginDeveloperStatus>("plugins.set_developer_mode"');
+    expect(bridge).toContain('call<PluginDeveloperStatus>("plugins.reload_development"');
+    expect(hostEvents).toContain("ctx.on::<PluginsChanged");
+    expect(hostEvents).toContain('host.emit("plugins-changed", ())');
+  });
 });

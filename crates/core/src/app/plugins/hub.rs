@@ -9,6 +9,7 @@
 //! system feel like one rather than like a build-time convention.
 
 use crate::app::events::PluginsChanged;
+use crate::app::plugins::plugin_development;
 use crate::app::service::{LoaderService, Paths, PluginHub};
 use crate::app::{json, take_args, PluginChangeRequest, PluginManager, PluginScope};
 use crate::github_skills;
@@ -153,6 +154,7 @@ impl Plugin for HubPlugin {
                 .sync_installed_bundles(&hub.dir)
                 .map_err(PluginError::new)?;
         }
+        plugin_development::register(&ctx, manager.clone(), hub.clone()).await?;
         let reconcile_context = ctx.weak();
 
         let listed = hub.clone();

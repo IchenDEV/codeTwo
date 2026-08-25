@@ -1232,6 +1232,43 @@ export async function listExtensions(): Promise<{ running: string[]; untrusted: 
   return await call("extensions.list");
 }
 
+export interface PluginReloadRecord {
+  at: number;
+  plugins: string[];
+  success: boolean;
+  error?: string | null;
+}
+
+export interface PluginDeveloperStatus {
+  enabled: boolean;
+  watching: boolean;
+  plugins_dir: string;
+  last_reload: PluginReloadRecord | null;
+}
+
+const FALLBACK_PLUGIN_DEVELOPER_STATUS: PluginDeveloperStatus = {
+  enabled: false,
+  watching: false,
+  plugins_dir: "",
+  last_reload: null,
+};
+
+export async function getPluginDeveloperStatus(): Promise<PluginDeveloperStatus> {
+  return inDesktop
+    ? call<PluginDeveloperStatus>("plugins.developer_status", undefined, null)
+    : { ...FALLBACK_PLUGIN_DEVELOPER_STATUS };
+}
+
+export async function setPluginDeveloperMode(enabled: boolean): Promise<PluginDeveloperStatus> {
+  if (!inDesktop) throw new Error("Plugin development requires the C2 desktop app.");
+  return call<PluginDeveloperStatus>("plugins.set_developer_mode", { enabled }, null);
+}
+
+export async function reloadDevelopmentPlugins(): Promise<PluginDeveloperStatus> {
+  if (!inDesktop) throw new Error("Plugin reload requires the C2 desktop app.");
+  return call<PluginDeveloperStatus>("plugins.reload_development", undefined, null);
+}
+
 const fallbackProvider = (
   id: string,
   display_name: string,
@@ -1832,7 +1869,8 @@ export async function deletePath(cwd: string, path: string): Promise<void> {
 
 /** Open the webview inspector on the app's own UI. */
 export async function openDevtools(): Promise<void> {
-  if (inDesktop) await desktopOpenDevtools();
+  if (!inDesktop) throw new Error("WebView DevTools require the C2 desktop app.");
+  await desktopOpenDevtools();
 }
 
 // ---- built-in browser --------------------------------------------------------------------------

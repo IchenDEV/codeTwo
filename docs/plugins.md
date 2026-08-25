@@ -278,6 +278,26 @@ Runtime, safe UI actions, and language servers are distributed together from tha
 run `cd apps/desktop && bun run plugin:validate <bundle-root>` before publishing it or installing it
 from GitHub.
 
+### Developing an installed bundle
+
+Open **Settings → Developer** and enable **Developer mode** to watch C2's installed plugin
+directory with the platform-native file watcher. The setting persists as
+`<data-dir>/plugins/.developer-mode`, so the watcher returns after an app restart. It ignores
+private top-level directories such as `.data` and installer staging or backup directories.
+
+Changes are collected for 250 ms and mapped to the affected top-level Bundle ids. C2 then forces
+only those `bundle:<id>` factories through the existing loader in every live user/project realm;
+the ordinary `plugins-changed` event refreshes skills, scenes, descriptors, and renderer state.
+The Developer page shows the watched directory and the latest successful reload or watcher error.
+**Reload plugins** performs the same reconciliation for every installed Bundle without requiring
+Developer mode, which is useful after a generator or build step replaces several files at once.
+
+The watcher observes the **installed copy** under `<data-dir>/plugins/<id>`. It does not link an
+arbitrary source checkout or run a compiler. Build or copy generated runtime files into that
+installed directory, then let the watcher reload them. Native Rust plugins remain part of the app
+binary and still require recompilation and an app restart. **Open WebView DevTools** opens the
+existing renderer inspector for DOM, console, network, and performance debugging.
+
 The runtime appears in the managed catalog as `bundle:<id>`. Runtimes are user-only by default:
 omitting `runtime.scopeSupport` is equivalent to `["user"]`. A bundle must explicitly declare
 `["user", "project"]` before the manager will create project-scoped process instances. Those

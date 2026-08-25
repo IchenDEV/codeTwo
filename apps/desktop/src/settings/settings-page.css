@@ -2,13 +2,9 @@
   height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
 }
 
-.settings-standard-page {
-  max-width: 42.5rem;
-  padding: 2rem 2rem 0;
-}
-
-.settings-project-page {
+.settings-page {
   max-width: 48rem;
+  padding: 2rem 2rem 0;
 }
 
 .project-settings-row {
@@ -29,20 +25,9 @@
   margin-left: auto;
 }
 
-.settings-pets-page {
-  max-width: 58rem;
-  padding: 2rem 2rem 0;
-}
-
-.settings-memory-page {
-  max-width: 77.5rem;
-  padding: 1.5rem 1.5rem 0;
-}
-
 @media (max-width: 50rem) {
-  .settings-project-page {
-    padding-right: 1.25rem;
-    padding-left: 1.25rem;
+  .settings-page {
+    padding: 1rem 1rem 0;
   }
 
   .project-settings-row {
@@ -62,10 +47,5 @@
 
   .project-settings-error {
     margin-left: 0;
-  }
-
-  .settings-memory-page,
-  .settings-pets-page {
-    padding: 1rem 1rem 0;
   }
 }

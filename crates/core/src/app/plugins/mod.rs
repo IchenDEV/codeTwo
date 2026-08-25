@@ -13,6 +13,7 @@ mod hub;
 mod issues;
 mod library;
 mod memory;
+mod plugin_development;
 mod runtime;
 mod scene_commands;
 mod terminal;
