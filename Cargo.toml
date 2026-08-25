@@ -32,3 +32,9 @@ tracing = "0.1"
 # Local crates
 codetwo-kernel = { path = "crates/kernel" }
 codetwo-core = { path = "crates/core" }
+
+# Keep local builds useful for backtraces without retaining multi-gigabyte
+# debug symbols and incremental state. The test profile inherits these values.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
