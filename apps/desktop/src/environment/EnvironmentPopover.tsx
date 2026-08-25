@@ -1,31 +1,28 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  BarChart3,
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDot,
-  Copy,
   Folder,
   FolderPlus,
   GitBranch,
   GitCommitHorizontal,
-  History,
+  Globe2,
   Laptop,
-  RefreshCw,
+  Loader2,
+  Monitor,
   Settings,
   SlidersHorizontal,
   SquarePlus,
-  Store,
   type LucideIcon,
 } from "lucide-react";
 
-import type { GitStatus, Project } from "../bridge";
+import { getArtifact, type GitStatus, type Project } from "../bridge";
 import { useT } from "../i18n";
+import type { InteractiveToolPreview } from "../session/toolActivity";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useToast } from "@/ui/toast";
 import { cn } from "@/lib/utils";
 
 function EnvironmentRow({
@@ -82,6 +79,74 @@ function EnvironmentRow({
   );
 }
 
+function ToolPreview({ preview }: { preview: InteractiveToolPreview }) {
+  const t = useT();
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const label = t(preview.kind === "browser" ? "settings.browserUse" : "settings.computerUse");
+  const Icon = preview.kind === "browser" ? Globe2 : Monitor;
+
+  useEffect(() => {
+    let alive = true;
+    let objectUrl: string | null = null;
+    setUrl(null);
+    setFailed(false);
+    void getArtifact(preview.artifact.id)
+      .then((bytes) => {
+        if (!alive) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([bytes.slice().buffer as ArrayBuffer], { type: preview.artifact.mime_type }),
+        );
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [preview.artifact.id, preview.artifact.mime_type]);
+
+  return (
+    <figure
+      data-tool-preview={preview.kind}
+      data-artifact-id={preview.artifact.id}
+      className="overflow-hidden rounded-(--ds-radius-module) bg-fill-quiet"
+    >
+      <figcaption className="flex min-h-8 items-center gap-2 bg-fill-rest px-2 py-1.5 text-fine">
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="shrink-0 font-medium text-foreground">{label}</span>
+        <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">{preview.title}</span>
+      </figcaption>
+      <div className="image-checker flex min-h-32 items-center justify-center">
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={t("environment.livePreview", { tool: label })}
+            width={preview.artifact.width || undefined}
+            height={preview.artifact.height || undefined}
+            className="max-h-64 w-full object-contain"
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <span
+            role="status"
+            className={cn(
+              "flex items-center gap-2 px-3 py-8 text-fine text-muted-foreground",
+              failed && "text-destructive",
+            )}
+          >
+            {!failed && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+            {t(failed ? "environment.previewUnavailable" : "environment.previewLoading")}
+          </span>
+        )}
+      </div>
+    </figure>
+  );
+}
+
 /**
  * The project environment at a glance. It keeps the compact, frequently checked Git facts in a
  * header-anchored popover. The neighboring panel control owns the dock independently.
@@ -95,12 +160,9 @@ export function EnvironmentPopover({
   onRefresh,
   onSelectProject,
   onAddProject,
-  onCheckpoint,
   onOpenSourceControl,
-  onOpenIssues,
-  onOpenUsage,
-  onOpenMarket,
   onOpenSettings,
+  preview = null,
   suppressed = false,
 }: {
   project: string | null;
@@ -111,17 +173,13 @@ export function EnvironmentPopover({
   onRefresh: () => void;
   onSelectProject: (path: string) => void;
   onAddProject: () => void;
-  onCheckpoint: () => void;
   onOpenSourceControl: () => void;
-  onOpenIssues: () => void;
-  onOpenUsage: () => void;
-  onOpenMarket: () => void;
   onOpenSettings: () => void;
+  preview?: InteractiveToolPreview | null;
   /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
   suppressed?: boolean;
 }) {
   const t = useT();
-  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const isRepo = git?.is_repo === true;
@@ -154,21 +212,6 @@ export function EnvironmentPopover({
   const addProject = () => {
     setOpen(false);
     onAddProject();
-  };
-
-  const openTool = (action: () => void) => {
-    setOpen(false);
-    action();
-  };
-
-  const copyProjectPath = async () => {
-    if (!projectPath) return;
-    try {
-      await navigator.clipboard.writeText(projectPath);
-      toast(t("environment.pathCopied"), "success");
-    } catch {
-      toast(t("environment.copyFailed"), "error");
-    }
   };
 
   return (
@@ -207,10 +250,13 @@ export function EnvironmentPopover({
             variant="ghost"
             size="icon"
             className="size-7 text-muted-foreground"
-            aria-label={t("dock.refresh")}
-            onClick={onRefresh}
+            aria-label={t("header.settings")}
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
           >
-            <RefreshCw className="size-3.5" />
+            <Settings className="size-3.5" />
           </Button>
         </div>
 
@@ -276,44 +322,12 @@ export function EnvironmentPopover({
           onClick={openSourceControl}
           disabled={!isRepo}
         />
-        <EnvironmentRow
-          icon={History}
-          label={t("header.checkpoint")}
-          onClick={onCheckpoint}
-          disabled={!isRepo}
-        />
-        <EnvironmentRow
-          icon={Copy}
-          label={t("files.copyPath")}
-          onClick={() => void copyProjectPath()}
-          disabled={!projectPath}
-        />
 
-        <div className="mt-2 flex h-(--ds-control-field) items-center px-2 text-title font-medium text-muted-foreground">
-          {t("environment.tools")}
-        </div>
-        <div>
-          <EnvironmentRow
-            icon={CircleDot}
-            label={t("environment.issues")}
-            onClick={() => openTool(onOpenIssues)}
-          />
-          <EnvironmentRow
-            icon={BarChart3}
-            label={t("environment.usage")}
-            onClick={() => openTool(onOpenUsage)}
-          />
-          <EnvironmentRow
-            icon={Store}
-            label={t("composer.market")}
-            onClick={() => openTool(onOpenMarket)}
-          />
-          <EnvironmentRow
-            icon={Settings}
-            label={t("header.settings")}
-            onClick={() => openTool(onOpenSettings)}
-          />
-        </div>
+        {preview && (
+          <div className="mt-2">
+            <ToolPreview key={preview.artifact.id} preview={preview} />
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
