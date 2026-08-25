@@ -307,4 +307,81 @@ describe("unified plugin catalog adapter", () => {
       state: { effectiveEnabled: true, status: "active" },
     });
   });
+
+  test("includes local marketplace bundles and skill actions in the unified model", () => {
+    const model = buildPluginManagerCatalog({
+      catalog: emptyCatalog,
+      bundles: [],
+      skills: [
+        {
+          id: "release-review",
+          name: "Release review",
+          description: "Review a release.",
+          kind: "agent_skill",
+          source: "GitHub · c2/release-review",
+          icon: null,
+        },
+      ],
+      market: [
+        {
+          id: "release-review",
+          name: "Release review",
+          description: "Review a release.",
+          author: "C2",
+          tags: ["review"],
+          icon: null,
+          kind: "skill",
+          installed: true,
+        },
+      ],
+      localMarketplace: {
+        name: "local-tools",
+        display_name: "Local tools",
+        description: "Local plugin bundles.",
+        manifest_path: "/tmp/marketplace.json",
+        root: "/tmp",
+        diagnostics: [
+          { code: "preview", message: "Preview catalog", entry: null },
+        ],
+        plugins: [
+          {
+            name: "review-tools",
+            display_name: "Review Tools",
+            description: "Review bundle",
+            version: "1.0.0",
+            category: "development",
+            installation_policy: "allowed",
+            authentication_policy: "none",
+            default_enabled: true,
+            source: { kind: "local", path: "./review-tools" },
+            installable: true,
+            diagnostic: null,
+          },
+        ],
+      },
+      scope: { kind: "user" },
+    });
+
+    expect(
+      model.components.find(
+        (component) => component.id === "skill:release-review",
+      )?.skill,
+    ).toEqual({ id: "release-review", removable: true });
+    expect(model.marketplaceItems[0]).toMatchObject({
+      id: "marketplace:local-tools:review-tools",
+      name: "Review Tools",
+      marketplace: {
+        manifestPath: "/tmp/marketplace.json",
+        pluginName: "review-tools",
+      },
+    });
+    expect(model.marketplaceSources).toEqual([
+      {
+        id: "/tmp/marketplace.json",
+        name: "Local tools",
+        description: "Local plugin bundles.",
+        diagnostics: ["Preview catalog"],
+      },
+    ]);
+  });
 });

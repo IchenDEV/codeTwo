@@ -6,10 +6,12 @@ import {
   Check,
   CircleAlert,
   Download,
+  FolderDown,
   GitFork,
   Loader2,
   MonitorCog,
   Package,
+  Plus,
   RefreshCw,
   Search,
   Store,
@@ -65,6 +67,7 @@ import type {
   PluginManagerPageProps,
   PluginManagerPlugin,
   PluginManagerProject,
+  PluginManagerScaffold,
   PluginManagerScope,
   PluginManagerScopedState,
   PluginManagerSource,
@@ -97,8 +100,11 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   installed: "Installed",
   unavailable: "Unavailable",
   refresh: "Refresh",
-  bundleTools: "Bundle tools",
-  advancedBundleTools: "Advanced tools",
+  newSkill: "New skill",
+  openMarketplace: "Open marketplace",
+  use: "Use",
+  applyScaffold: "Add to project",
+  scaffoldFiles: (count) => `${count} project files`,
   installFromGithub: "Install from GitHub",
   githubRepository: "GitHub repository",
   githubHint:
@@ -107,7 +113,6 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   installingPlugin: "Installing…",
   bundleInstalled: (result) =>
     `${result.name}${result.version ? ` ${result.version}` : ""} installed. Review its source and trust requirements before enabling code.`,
-  managedInBundleTools: "Managed at bundle level",
   bundleManagement: "Bundle management",
   bundleManagementUserOnly:
     "Installation, trust, and removal are managed in User scope.",
@@ -171,6 +176,8 @@ const DEFAULT_LABELS: PluginManagerLabels = {
       ? `${state === "disabled" ? "Hide" : "Enable"} ${name} and reconcile its owning plugin.`
       : `${state === "disabled" ? "Unload" : "Load"} ${name} in the selected scope.`,
   marketplaceInstalled: "Marketplace item installed.",
+  componentUninstalled: "Component uninstalled.",
+  scaffoldApplied: (count) => `${count} project files added.`,
   settingsReset: "Plugin settings reset to defaults.",
   bundleEnabled: (name, enabled) =>
     `${name} ${enabled ? "enabled" : "disabled"}.`,
@@ -558,6 +565,66 @@ function DetailList({ title, values }: { title: string; values?: string[] }) {
   );
 }
 
+function ScaffoldList({
+  pluginId,
+  scaffolds,
+  labels,
+  busyAction,
+  onApply,
+}: {
+  pluginId: string;
+  scaffolds: PluginManagerScaffold[];
+  labels: PluginManagerLabels;
+  busyAction: string | null;
+  onApply?: (pluginId: string, scaffoldId: string) => Promise<void>;
+}) {
+  if (!scaffolds.length || !onApply) return null;
+
+  return (
+    <section className="flex flex-col gap-2" aria-label={labels.applyScaffold}>
+      <h3 className="text-hint font-medium text-muted-foreground">
+        {labels.contribution("scaffolds", "Scaffolds")}
+      </h3>
+      <div className="divide-y rounded-(--ds-radius-module) bg-fill-quiet px-3">
+        {scaffolds.map((scaffold) => {
+          const key = `scaffold:${pluginId}:${scaffold.id}`;
+          return (
+            <div
+              key={scaffold.id}
+              className="flex flex-col items-start gap-3 py-2.5 @sm/plugin-manager:flex-row @sm/plugin-manager:items-center"
+            >
+              <FolderDown
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-ui font-medium">{scaffold.name}</p>
+                <p className="text-fine text-muted-foreground">
+                  {scaffold.description || labels.scaffoldFiles(scaffold.files)}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="compact"
+                variant="outline"
+                disabled={busyAction === key}
+                onClick={() => void onApply(pluginId, scaffold.id)}
+              >
+                {busyAction === key ? (
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                ) : (
+                  <FolderDown data-icon="inline-start" />
+                )}
+                {labels.applyScaffold}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function PluginList({
   plugins,
   selectedId,
@@ -624,6 +691,7 @@ function PluginDetails({
   onSetBundleEnabled,
   onSetBundleTrusted,
   onUninstallBundle,
+  onApplyScaffold,
   onSaveConfig,
   onReset,
 }: {
@@ -636,6 +704,7 @@ function PluginDetails({
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
+  onApplyScaffold?: (pluginId: string, scaffoldId: string) => Promise<void>;
   onSaveConfig: PluginManagerPageProps["onSaveConfig"];
   onReset?: (pluginId: string, scope: PluginManagerScope) => void;
 }) {
@@ -662,7 +731,7 @@ function PluginDetails({
           !plugin.bundle.runtimeManaged &&
           !onSetBundleEnabled ? (
             <span className="text-fine text-muted-foreground">
-              {labels.managedInBundleTools}
+              {labels.bundleManagement}
             </span>
           ) : (
             <StateControl
@@ -712,15 +781,24 @@ function PluginDetails({
           </p>
         ) : null}
         {plugin.bundle ? (
-          <BundleAdministration
-            pluginName={plugin.name}
-            bundle={plugin.bundle}
-            scope={scope}
-            labels={labels}
-            busyAction={busyAction}
-            onSetTrusted={onSetBundleTrusted}
-            onUninstall={onUninstallBundle}
-          />
+          <>
+            <BundleAdministration
+              pluginName={plugin.name}
+              bundle={plugin.bundle}
+              scope={scope}
+              labels={labels}
+              busyAction={busyAction}
+              onSetTrusted={onSetBundleTrusted}
+              onUninstall={onUninstallBundle}
+            />
+            <ScaffoldList
+              pluginId={plugin.bundle.id}
+              scaffolds={plugin.bundle.scaffolds}
+              labels={labels}
+              busyAction={busyAction}
+              onApply={onApplyScaffold}
+            />
+          </>
         ) : null}
         <DetailList
           title={labels.missingDependencies}
@@ -860,13 +938,18 @@ function ComponentDetails({
   labels,
   busy,
   onRequestChange,
+  onUseSkill,
+  onUninstallSkill,
 }: {
   component: PluginManagerComponent;
   scope: PluginManagerScope;
   labels: PluginManagerLabels;
   busy: boolean;
   onRequestChange: (request: PluginManagerChangeRequest) => void;
+  onUseSkill?: (skillId: string) => void;
+  onUninstallSkill?: (skillId: string) => Promise<void>;
 }) {
+  const skill = component.skill;
   return (
     <Card data-component-details className="gap-4 py-4">
       <CardHeader className="gap-1 px-4">
@@ -882,7 +965,7 @@ function ComponentDetails({
         <CardAction>
           {component.manageable === false ? (
             <span className="text-fine text-muted-foreground">
-              {labels.managedInBundleTools}
+              {labels.bundleManagement}
             </span>
           ) : (
             <StateControl
@@ -939,7 +1022,75 @@ function ComponentDetails({
           ) : null}
         </div>
       </CardContent>
+      {skill && (onUseSkill || (skill.removable && onUninstallSkill)) ? (
+        <CardFooter className="justify-end gap-2 px-4">
+          {skill.removable && onUninstallSkill ? (
+            <Button
+              type="button"
+              size="compact"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void onUninstallSkill(skill.id)}
+            >
+              {busy ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : null}
+              {labels.uninstall}
+            </Button>
+          ) : null}
+          {onUseSkill ? (
+            <Button
+              type="button"
+              size="compact"
+              disabled={busy}
+              onClick={() => onUseSkill(skill.id)}
+            >
+              <Check data-icon="inline-start" />
+              {labels.use}
+            </Button>
+          ) : null}
+        </CardFooter>
+      ) : null}
     </Card>
+  );
+}
+
+function MarketplaceSources({
+  sources,
+}: {
+  sources: NonNullable<PluginManagerPageProps["marketplaceSources"]>;
+}) {
+  if (!sources.length) return null;
+
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      {sources.map((source) => (
+        <Card key={source.id} className="gap-2 py-3">
+          <CardHeader className="gap-1 px-4">
+            <CardTitle className="text-title">{source.name}</CardTitle>
+            {source.description ? (
+              <CardDescription>{source.description}</CardDescription>
+            ) : null}
+          </CardHeader>
+          {source.diagnostics.length ? (
+            <CardContent className="flex flex-col gap-1 px-4">
+              {source.diagnostics.map((diagnostic) => (
+                <p
+                  key={diagnostic}
+                  className="flex items-start gap-2 text-ui text-destructive"
+                >
+                  <CircleAlert
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <span>{diagnostic}</span>
+                </p>
+              ))}
+            </CardContent>
+          ) : null}
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -1133,6 +1284,7 @@ export function PluginManagerPage({
   plugins,
   components,
   marketplaceItems,
+  marketplaceSources = [],
   headerLeadingAction,
   scope,
   projects = [],
@@ -1145,11 +1297,15 @@ export function PluginManagerPage({
   onSaveConfig,
   onInstallMarketplaceItem,
   onRefreshMarketplace,
+  onOpenMarketplace,
   onImportGithub,
   onSetBundleEnabled,
   onSetBundleTrusted,
   onUninstallBundle,
-  onOpenBundleTools,
+  onApplyScaffold,
+  onUseSkill,
+  onUninstallSkill,
+  onNewSkill,
   onResetPlugin,
 }: PluginManagerPageProps) {
   const labels = useMemo(
@@ -1323,17 +1479,17 @@ export function PluginManagerPage({
     }
   };
 
-  const runBundleAction = async (
+  const runAction = async (
     key: string,
     action: () => Promise<void>,
-    success: string,
+    success?: string,
   ) => {
     setBusyTarget(key);
     setActionError(null);
     setActionNotice(null);
     try {
       await action();
-      setActionNotice(success);
+      if (success) setActionNotice(success);
       return true;
     } catch (error) {
       setActionError(error instanceof Error ? error.message : String(error));
@@ -1341,6 +1497,38 @@ export function PluginManagerPage({
     } finally {
       setBusyTarget(null);
     }
+  };
+
+  const openMarketplace = async () => {
+    if (!onOpenMarketplace || busyTarget === "marketplace-open") return;
+    await runAction("marketplace-open", onOpenMarketplace);
+  };
+
+  const applyScaffold = async (pluginId: string, scaffoldId: string) => {
+    if (!onApplyScaffold) return;
+    const key = `scaffold:${pluginId}:${scaffoldId}`;
+    setBusyTarget(key);
+    setActionError(null);
+    setActionNotice(null);
+    try {
+      const result = await onApplyScaffold(pluginId, scaffoldId);
+      setActionNotice(labels.scaffoldApplied(result.files));
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyTarget(null);
+    }
+  };
+
+  const uninstallSkill = async (skillId: string) => {
+    if (!onUninstallSkill) return;
+    const key = `component:skill:${skillId}`;
+    const removed = await runAction(
+      key,
+      () => onUninstallSkill(skillId),
+      labels.componentUninstalled,
+    );
+    if (removed) setSelectedComponentId(null);
   };
 
   const importGithub = async () => {
@@ -1421,15 +1609,15 @@ export function PluginManagerPage({
                     {labels.installFromGithub}
                   </Button>
                 ) : null}
-                {onOpenBundleTools ? (
+                {tab === "components" && onNewSkill ? (
                   <Button
                     type="button"
                     variant="secondary"
                     size="compact"
-                    onClick={onOpenBundleTools}
+                    onClick={onNewSkill}
                   >
-                    <Package data-icon="inline-start" />
-                    {labels.advancedBundleTools}
+                    <Plus data-icon="inline-start" />
+                    {labels.newSkill}
                   </Button>
                 ) : null}
                 <ScopeSelector
@@ -1502,6 +1690,22 @@ export function PluginManagerPage({
                     onClick={() => void refresh()}
                   >
                     <RefreshCw className={cn(refreshing && "animate-spin")} />
+                  </Button>
+                ) : null}
+                {tab === "marketplace" && onOpenMarketplace ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="compact"
+                    disabled={busyTarget === "marketplace-open"}
+                    onClick={() => void openMarketplace()}
+                  >
+                    {busyTarget === "marketplace-open" ? (
+                      <Loader2 data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <FolderDown data-icon="inline-start" />
+                    )}
+                    {labels.openMarketplace}
                   </Button>
                 ) : null}
               </div>
@@ -1595,7 +1799,7 @@ export function PluginManagerPage({
                         onSetBundleEnabled={
                           onSetBundleEnabled
                             ? async (pluginId, enabled) => {
-                          await runBundleAction(
+                          await runAction(
                             `bundle-enabled:${pluginId}`,
                             () => onSetBundleEnabled(pluginId, enabled),
                                   labels.bundleEnabled(
@@ -1609,7 +1813,7 @@ export function PluginManagerPage({
                         onSetBundleTrusted={
                           onSetBundleTrusted
                             ? async (pluginId, trusted) => {
-                          await runBundleAction(
+                          await runAction(
                             `bundle-trust:${pluginId}`,
                             () => onSetBundleTrusted(pluginId, trusted),
                                   labels.bundleTrusted(
@@ -1623,7 +1827,7 @@ export function PluginManagerPage({
                         onUninstallBundle={
                           onUninstallBundle
                             ? async (pluginId, keepData) => {
-                          const uninstalled = await runBundleAction(
+                          const uninstalled = await runAction(
                             `bundle-uninstall:${pluginId}`,
                             () => onUninstallBundle(pluginId, keepData),
                                   labels.bundleUninstalled(
@@ -1633,6 +1837,12 @@ export function PluginManagerPage({
                           );
                           if (uninstalled) setSelectedPluginId(null);
                               }
+                            : undefined
+                        }
+                        onApplyScaffold={
+                          onApplyScaffold
+                            ? (pluginId, scaffoldId) =>
+                                applyScaffold(pluginId, scaffoldId)
                             : undefined
                         }
                         onSaveConfig={onSaveConfig}
@@ -1676,6 +1886,10 @@ export function PluginManagerPage({
                         onRequestChange={(request) =>
                           void requestChange(request)
                         }
+                        onUseSkill={onUseSkill}
+                        onUninstallSkill={
+                          onUninstallSkill ? uninstallSkill : undefined
+                        }
                       />
                     ) : null}
                   </div>
@@ -1688,14 +1902,17 @@ export function PluginManagerPage({
             </TabsContent>
 
             <TabsContent value="marketplace" className="min-w-0">
-              {visibleMarketplace.length ? (
-                <MarketplaceList
-                  items={visibleMarketplace}
-                  scope={scope}
-                  labels={labels}
-                  busyId={installingId}
-                  onInstall={install}
-                />
+              {visibleMarketplace.length || marketplaceSources.length ? (
+                <>
+                  <MarketplaceSources sources={marketplaceSources} />
+                  <MarketplaceList
+                    items={visibleMarketplace}
+                    scope={scope}
+                    labels={labels}
+                    busyId={installingId}
+                    onInstall={install}
+                  />
+                </>
               ) : (
                 <p className="py-16 text-center text-ui text-muted-foreground">
                   {labels.noResults}

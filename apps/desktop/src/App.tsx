@@ -151,6 +151,7 @@ import {
   type MemoryReceipt,
   type ModelChoice,
   type PluginInfo,
+  type PluginMarketplace,
   type ManagedPluginCatalog,
   type Project,
   type ProjectScript,
@@ -192,7 +193,6 @@ import {
 } from "./bridge";
 import { loadProviderRegistry } from "./providers/registry";
 import { makeTranscriptHandler } from "./voice/VoiceButton";
-import { PluginHub } from "./market/Market";
 import {
   PluginManagerPage,
   PluginUiSlot,
@@ -633,9 +633,10 @@ export default function App() {
     useState<SettingsTab>("general");
   const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
-  const [showPluginHub, setShowPluginHub] = useState(false);
-  const [showBundlePluginTools, setShowBundlePluginTools] = useState(false);
+  const [showPluginManager, setShowPluginManager] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
+  const [localPluginMarketplace, setLocalPluginMarketplace] =
+    useState<PluginMarketplace | null>(null);
   const [showSourceControl, setShowSourceControl] = useState(false);
   const [checkpointWorkspace, setCheckpointWorkspace] = useState<
     WorkspaceLoadState<Checkpoint[]>
@@ -965,7 +966,7 @@ export default function App() {
   }, [narrowLayout, toggleRail]);
   const openTaskBoard = useCallback(() => {
     setShowAutomations(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowPullRequests(false);
     setShowTaskBoard(true);
     if (narrowLayout) setNarrowRailOpen(false);
@@ -3585,10 +3586,12 @@ export default function App() {
       bundles: plugins,
       skills,
       market,
+      localMarketplace: localPluginMarketplace,
       scope: pluginManagerScope,
     }),
     [
       managedUserCatalog,
+      localPluginMarketplace,
       market,
       pluginManagerScope,
       plugins,
@@ -3931,7 +3934,7 @@ export default function App() {
       });
   }, [cwd]);
 
-  const openPluginHub = useCallback(() => {
+  const openPluginManager = useCallback(() => {
     const normalizedActiveProject = activeProject
       ? normalizePluginProjectPath(activeProject)
       : null;
@@ -3943,7 +3946,7 @@ export default function App() {
         ? { kind: "project", projectPath: normalizedActiveProject }
       : { kind: "user" };
     setPluginManagerScope(scope);
-    setShowBundlePluginTools(false);
+    setLocalPluginMarketplace(null);
     marketCatalog()
       .then(setMarket)
       .catch(() => {});
@@ -3955,7 +3958,7 @@ export default function App() {
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPullRequests(false);
-    setShowPluginHub(true);
+    setShowPluginManager(true);
   }, [
     activeProject,
     pluginManagerProjects,
@@ -4055,7 +4058,7 @@ export default function App() {
       return;
     }
     setShowTaskBoard(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowPullRequests(false);
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
@@ -4074,7 +4077,7 @@ export default function App() {
       return;
     }
     setShowAutomations(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowTaskBoard(false);
     setShowPullRequests(true);
     if (narrowLayout) setNarrowRailOpen(false);
@@ -4991,7 +4994,7 @@ export default function App() {
           break;
         case "new_session":
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           createTaskDraft();
           break;
@@ -5023,7 +5026,7 @@ export default function App() {
           break;
         case "open_settings":
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
           setSettingsInitialTab("general");
@@ -5036,7 +5039,7 @@ export default function App() {
           openSourceControl();
           break;
         case "open_market":
-          openPluginHub();
+          openPluginManager();
           break;
         case "open_usage":
           if (!componentEnabled("usage.settings")) {
@@ -5044,7 +5047,7 @@ export default function App() {
             break;
           }
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
           setSettingsInitialTab("usage");
@@ -5119,7 +5122,7 @@ export default function App() {
       t,
       refreshGit,
       openSourceControl,
-      openPluginHub,
+      openPluginManager,
       openWorkingDirectory,
       toggleDock,
       manualDockTab,
@@ -5152,7 +5155,7 @@ export default function App() {
       hint: hint("new_session"),
       run: () => {
       setShowTaskBoard(false);
-      setShowPluginHub(false);
+      setShowPluginManager(false);
       setShowAutomations(false);
       createTaskDraft();
       },
@@ -5177,7 +5180,7 @@ export default function App() {
       id: "market",
       label: "Open Plugin Hub",
       hint: hint("open_market"),
-      run: openPluginHub,
+      run: openPluginManager,
     },
     { id: "automations", label: t("automations.title"), run: openAutomations },
     { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
@@ -5211,7 +5214,7 @@ export default function App() {
       hint: hint("open_usage"),
       run: () => {
         setShowTaskBoard(false);
-        setShowPluginHub(false);
+        setShowPluginManager(false);
         setShowAutomations(false);
         setShowPullRequests(false);
         setSettingsInitialTab("usage");
@@ -5738,7 +5741,7 @@ export default function App() {
           activeProject={activeProject}
           onSelectProject={(path) => {
             setShowAutomations(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowPullRequests(false);
             selectProject(path);
             if (narrowLayout) setNarrowRailOpen(false);
@@ -5761,21 +5764,21 @@ export default function App() {
           runningSessions={runningSessions}
           onSelect={(id) => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             void selectSession(id);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNew={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             createTaskDraft();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNewTemporary={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             createTemporarySession();
             if (narrowLayout) setNarrowRailOpen(false);
@@ -5793,7 +5796,7 @@ export default function App() {
           displayProvider={displayProvider}
           onOpenMarket={() => {
             setShowTaskBoard(false);
-            openPluginHub();
+            openPluginManager();
           }}
           onOpenAutomations={openAutomations}
           width={railWidth}
@@ -5803,7 +5806,7 @@ export default function App() {
           onOpenSearch={() => setShowPalette(true)}
           onOpenSettings={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
             setSettingsInitialTab("general");
@@ -5823,13 +5826,13 @@ export default function App() {
             else openPullRequests();
           }}
           automationsOpen={showAutomations}
-          pluginHubOpen={showPluginHub}
+          pluginManagerOpen={showPluginManager}
           quickQuota={railQuickQuota}
           quickQuotaLoading={quickQuotaLoading}
           quickQuotaProviderName={quickQuotaProviderName}
           onOpenUsage={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
             setSettingsInitialTab("usage");
@@ -5888,44 +5891,43 @@ export default function App() {
           />
         )}
 
-        {showPluginHub && !showBundlePluginTools && (
+        {showPluginManager && (
           <PluginManagerPage
-              plugins={localizedPluginManagerModel.plugins}
-              components={localizedPluginManagerModel.components}
-              marketplaceItems={localizedPluginManagerModel.marketplaceItems}
-              headerLeadingAction={
-                displayedRailCollapsed ? (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-                ) : undefined
-              }
-              labels={pluginManagerLabels}
+            plugins={localizedPluginManagerModel.plugins}
+            components={localizedPluginManagerModel.components}
+            marketplaceItems={localizedPluginManagerModel.marketplaceItems}
+            marketplaceSources={localizedPluginManagerModel.marketplaceSources}
+            headerLeadingAction={
+              displayedRailCollapsed ? (
+                <IconAction
+                  icon={PanelLeft}
+                  label={t("rail.expand")}
+                  onClick={toggleDisplayedRail}
+                />
+              ) : undefined
+            }
+            labels={pluginManagerLabels}
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
-              recovery={
-                (selectedManagedCatalog ?? managedUserCatalog)?.recovery
-              }
+            recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
             onScopeChange={(scope) => {
-                const normalized =
-                  scope.kind === "user"
-                ? scope
-                    : {
-                        kind: "project" as const,
-                        projectPath: normalizePluginProjectPath(
-                          scope.projectPath,
-                        ),
-                      };
+              const normalized =
+                scope.kind === "user"
+                  ? scope
+                  : {
+                      kind: "project" as const,
+                      projectPath: normalizePluginProjectPath(
+                        scope.projectPath,
+                      ),
+                    };
               setPluginManagerScope(normalized);
               void loadManagedCatalog(normalized).catch((error) => {
-                  toast(
-                    t("pluginManager.scopeLoadFailed", {
-                      error: String(error),
-                    }),
-                    "error",
-                  );
+                toast(
+                  t("pluginManager.scopeLoadFailed", {
+                    error: String(error),
+                  }),
+                  "error",
+                );
               });
             }}
             onPlanChange={planManagerChange}
@@ -5934,29 +5936,43 @@ export default function App() {
             onResetPlugin={async (pluginId, scope) => {
               await resetManagedPlugin(pluginId, toManagedPluginScope(scope));
               await refreshPluginManagerData(scope);
-                toast(pluginManagerLabels.settingsReset, "success");
+              toast(pluginManagerLabels.settingsReset, "success");
             }}
             onInstallMarketplaceItem={async ({ itemId, scope }) => {
               if (scope.kind !== "user") {
-                  throw new Error(t("pluginManager.marketplaceUserOnly"));
+                throw new Error(t("pluginManager.marketplaceUserOnly"));
               }
               const id = itemId.replace(/^market:/, "");
-              await marketInstall(id);
+              const item = pluginManagerModel.marketplaceItems.find(
+                (candidate) => candidate.id === itemId,
+              );
+              if (item?.marketplace) {
+                await installMarketplacePlugin(
+                  item.marketplace.manifestPath,
+                  item.marketplace.pluginName,
+                );
+              } else {
+                await marketInstall(id);
+              }
               await refreshPluginManagerData(scope);
               toast(t("pluginHub.componentInstalledToast"), "success");
             }}
             onRefreshMarketplace={async () => {
               await refreshPluginManagerData(pluginManagerScope);
             }}
+            onOpenMarketplace={async () => {
+              const selected = await pickPluginMarketplace();
+              if (selected) setLocalPluginMarketplace(selected);
+            }}
             onImportGithub={async (repository) => {
               const result = await githubImportPlugin(repository);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t("pluginHub.pluginInstalledToast", {
-                    name: result.plugin.name,
-                  }),
-                  "success",
-                );
+              toast(
+                t("pluginHub.pluginInstalledToast", {
+                  name: result.plugin.name,
+                }),
+                "success",
+              );
               return {
                 pluginId: result.plugin.id,
                 name: result.plugin.name,
@@ -5966,205 +5982,82 @@ export default function App() {
             onSetBundleEnabled={async (pluginId, enabled) => {
               await setPluginEnabled(pluginId, enabled);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t(
-                    enabled
-                      ? "pluginHub.pluginEnabledToast"
-                      : "pluginHub.pluginDisabledToast",
-                  ),
-                  "success",
-                );
+              toast(
+                t(
+                  enabled
+                    ? "pluginHub.pluginEnabledToast"
+                    : "pluginHub.pluginDisabledToast",
+                ),
+                "success",
+              );
             }}
             onSetBundleTrusted={async (pluginId, trusted) => {
               await setPluginTrusted(pluginId, trusted);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t(
-                    trusted
-                      ? "pluginHub.pluginTrustedToast"
-                      : "pluginHub.pluginUntrustedToast",
-                  ),
-                  "success",
-                );
+              toast(
+                t(
+                  trusted
+                    ? "pluginHub.pluginTrustedToast"
+                    : "pluginHub.pluginUntrustedToast",
+                ),
+                "success",
+              );
             }}
             onUninstallBundle={async (pluginId, keepData) => {
               await uninstallPlugin(pluginId, keepData);
               await refreshPluginManagerData(pluginManagerScope);
               toast(t("pluginHub.pluginUninstalledToast"), "success");
             }}
-            onOpenBundleTools={() => setShowBundlePluginTools(true)}
-          />
-        )}
-
-        {showPluginHub && showBundlePluginTools && (
-          <PluginHub
-            plugins={plugins}
-            skills={skills}
-            items={market}
-            cwd={cwd || "."}
-            onUse={(skill) => {
-              setShowPluginHub(false);
+            onApplyScaffold={
+              cwd
+                ? async (pluginId, scaffoldId) => {
+                    const result = await applyPluginScaffold(
+                      pluginId,
+                      scaffoldId,
+                      cwd,
+                    );
+                    toast(
+                      t("pluginHub.scaffoldInstalledToast", {
+                        count: result.files,
+                      }),
+                      "success",
+                    );
+                    return result;
+                  }
+                : undefined
+            }
+            onUseSkill={(skillId) => {
+              const skill = skills.find((candidate) => candidate.id === skillId);
+              if (!skill) return;
+              setShowPluginManager(false);
               setTimeout(() => insertSkillRef.current?.(skill), 0);
             }}
-            onInstallMarket={async (id) => {
-              try {
-                await marketInstall(id);
-                setMarket(await marketCatalog());
-                await refreshSkills();
-                toast(t("pluginHub.componentInstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.installFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
+            onUninstallSkill={async (skillId) => {
+              await deleteSkill(skillId);
+              await refreshPluginManagerData(pluginManagerScope);
+              toast(t("pluginHub.componentUninstalledToast"), "success");
             }}
-            onUninstallSkill={async (id) => {
-              try {
-                await deleteSkill(id);
-                setMarket(await marketCatalog());
-                await refreshSkills();
-                toast(t("pluginHub.componentUninstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.uninstallFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onImportGithub={async (repository) => {
-              const result = await githubImportPlugin(repository);
-              setPlugins(await listPlugins());
-              await refreshSkills();
-                toast(
-                  t("pluginHub.pluginInstalledToast", {
-                    name: result.plugin.name,
-                  }),
-                  "success",
-                );
-              return result;
-            }}
-            onOpenMarketplace={pickPluginMarketplace}
-              onInstallMarketplacePlugin={async (
-                marketplacePath,
-                pluginName,
-              ) => {
-              try {
-                  const result = await installMarketplacePlugin(
-                    marketplacePath,
-                    pluginName,
-                  );
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                  toast(
-                    t("pluginHub.pluginInstalledToast", {
-                      name: result.plugin.name,
-                    }),
-                    "success",
-                  );
-                return result;
-              } catch (error) {
-                  toast(
-                    t("pluginHub.installFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onUninstallPlugin={async (id, keepData = false) => {
-              try {
-                await uninstallPlugin(id, keepData);
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                toast(t("pluginHub.pluginUninstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.uninstallFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onSetPluginEnabled={async (id, enabled) => {
-              try {
-                await setPluginEnabled(id, enabled);
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                  toast(
-                    t(
-                      enabled
-                        ? "pluginHub.pluginEnabledToast"
-                        : "pluginHub.pluginDisabledToast",
-                    ),
-                    "success",
-                  );
-              } catch (error) {
-                  toast(
-                    t("pluginHub.stateFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onSetPluginTrusted={async (id, trusted) => {
-              try {
-                await setPluginTrusted(id, trusted);
-                setPlugins(await listPlugins());
-                  toast(
-                    t(
-                      trusted
-                        ? "pluginHub.pluginTrustedToast"
-                        : "pluginHub.pluginUntrustedToast",
-                    ),
-                    "success",
-                  );
-              } catch (error) {
-                  toast(
-                    t("pluginHub.stateFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onApplyScaffold={async (pluginId, scaffoldId) => {
-              try {
-                  const result = await applyPluginScaffold(
-                    pluginId,
-                    scaffoldId,
-                    cwd || ".",
-                  );
-                  toast(
-                    t("pluginHub.scaffoldInstalledToast", {
-                      count: result.files,
-                    }),
-                    "success",
-                  );
-                return result;
-              } catch (error) {
-                  toast(
-                    t("pluginHub.scaffoldFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onNew={() => setSkillDraft({ name: "", text: "" })}
-            onClose={() => setShowBundlePluginTools(false)}
+            onNewSkill={() => setSkillDraft({ name: "", text: "" })}
           />
         )}
 
         <div
           ref={sessionWorkspaceRef}
-            aria-hidden={
-              showTaskBoard || showPluginHub || showAutomations || showPullRequests || undefined
-            }
-            className={
-              showTaskBoard || showPluginHub || showAutomations || showPullRequests
-                ? "hidden"
-                : "contents"
-            }
+          aria-hidden={
+            showTaskBoard ||
+            showPluginManager ||
+            showAutomations ||
+            showPullRequests ||
+            undefined
+          }
+          className={
+            showTaskBoard ||
+            showPluginManager ||
+            showAutomations ||
+            showPullRequests
+              ? "hidden"
+              : "contents"
+          }
         >
           <div
             data-workspace-stack
@@ -6618,7 +6511,7 @@ export default function App() {
                           setShowIssues(true);
                     else toast("Issues are disabled in Plugins.", "info");
                   }}
-                  onOpenMarket={openPluginHub}
+                  onOpenMarket={openPluginManager}
                   onNewSkill={() => setSkillDraft({ name: "", text: "" })}
                   canvasEnabled={canvasUiEnabled}
                   onInsertCanvas={() => void insertCanvasRef.current?.()}

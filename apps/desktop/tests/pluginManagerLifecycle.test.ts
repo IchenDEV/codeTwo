@@ -71,17 +71,22 @@ describe("unified plugin manager lifecycle", () => {
     expect(applied).toEqual(["backend-plan-17"]);
   });
 
-  test("routes the unified App surface through managed plan/apply while retaining bundle tools", () => {
+  test("routes every plugin operation through the single unified App surface", () => {
     const app = readFileSync(resolve(import.meta.dir, "../src/App.tsx"), "utf8");
     const managerStart = app.indexOf("const planManagerChange");
     const managerEnd = app.indexOf("const saveManagerConfig", managerStart);
     const managerLifecycle = app.slice(managerStart, managerEnd);
-    const bundleTools = app.slice(app.indexOf("<PluginHub"));
+    const managerSurface = app.slice(app.indexOf("<PluginManagerPage"));
 
     expect(managerLifecycle).toContain("planPluginManagerChange");
     expect(managerLifecycle).toContain("applyPluginManagerChange");
     expect(managerLifecycle).not.toContain("Date.now()");
     expect(managerLifecycle).not.toContain("setPluginEnabled");
-    expect(bundleTools).toContain("setPluginEnabled(id, enabled)");
+    expect(managerSurface).toContain("setPluginEnabled(pluginId, enabled)");
+    expect(managerSurface).toContain("applyPluginScaffold");
+    expect(managerSurface).toContain("pickPluginMarketplace");
+    expect(app).not.toContain("<PluginHub");
+    expect(app).not.toContain("showBundlePluginTools");
+    expect(app).not.toContain('from "./market/Market"');
   });
 });

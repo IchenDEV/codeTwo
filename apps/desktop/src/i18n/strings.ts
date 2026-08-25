@@ -438,8 +438,6 @@ export const en = {
   "pluginManager.installed": "Installed",
   "pluginManager.unavailable": "Unavailable",
   "pluginManager.refresh": "Refresh",
-  "pluginManager.bundleTools": "Bundle tools",
-  "pluginManager.advancedBundleTools": "Advanced tools",
   "pluginManager.installFromGithub": "Install from GitHub",
   "pluginManager.githubRepository": "GitHub repository",
   "pluginManager.githubHint":
@@ -448,7 +446,6 @@ export const en = {
   "pluginManager.installingPlugin": "Installing…",
   "pluginManager.bundleInstalled":
     "{name}{version} installed. Review its source and trust requirements before enabling code.",
-  "pluginManager.managedInBundleTools": "Managed at bundle level",
   "pluginManager.bundleManagement": "Bundle management",
   "pluginManager.bundleManagementUserOnly":
     "Installation, trust, and removal are managed in User scope.",
@@ -2364,8 +2361,6 @@ export const zhCN: Record<StringKey, string> = {
   "pluginManager.installed": "已安装",
   "pluginManager.unavailable": "不可用",
   "pluginManager.refresh": "刷新",
-  "pluginManager.bundleTools": "Bundle 工具",
-  "pluginManager.advancedBundleTools": "高级工具",
   "pluginManager.installFromGithub": "从 GitHub 安装",
   "pluginManager.githubRepository": "GitHub 仓库",
   "pluginManager.githubHint":
@@ -2374,7 +2369,6 @@ export const zhCN: Record<StringKey, string> = {
   "pluginManager.installingPlugin": "正在安装…",
   "pluginManager.bundleInstalled":
     "已安装 {name}{version}。启用代码前请检查来源与信任要求。",
-  "pluginManager.managedInBundleTools": "由 Bundle 统一管理",
   "pluginManager.bundleManagement": "Bundle 管理",
   "pluginManager.bundleManagementUserOnly":
     "安装、信任和移除操作需在用户范围内管理。",

@@ -5,6 +5,7 @@ import type {
   ManagedPluginScope,
   MarketItem,
   PluginInfo,
+  PluginMarketplace,
   SkillInfo,
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
@@ -12,6 +13,7 @@ import { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,
+  PluginManagerMarketplaceSource,
   PluginManagerPlugin,
   PluginManagerScope,
   PluginManagerScopedState,
@@ -52,6 +54,7 @@ export interface PluginManagerCatalogModel {
   plugins: PluginManagerPlugin[];
   components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
+  marketplaceSources: PluginManagerMarketplaceSource[];
 }
 
 export interface PluginManagerCatalogInput {
@@ -61,6 +64,7 @@ export interface PluginManagerCatalogInput {
   bundles: PluginInfo[];
   skills: SkillInfo[];
   market: MarketItem[];
+  localMarketplace?: PluginMarketplace | null;
   scope: PluginManagerScope;
 }
 
@@ -181,6 +185,7 @@ export function buildPluginManagerCatalog({
   bundles,
   skills,
   market,
+  localMarketplace,
   scope,
 }: PluginManagerCatalogInput): PluginManagerCatalogModel {
   const entries = new Map(catalog.plugins.map((entry) => [entry.id, entry]));
@@ -274,6 +279,12 @@ export function buildPluginManagerCatalog({
           message: diagnostic.message,
           component: diagnostic.component ?? null,
         })),
+        scaffolds: bundle.scaffolds.map((scaffold) => ({
+          id: scaffold.id,
+          name: scaffold.name,
+          description: scaffold.description,
+          files: scaffold.files,
+        })),
       },
     };
   });
@@ -363,6 +374,12 @@ export function buildPluginManagerCatalog({
       supportedScopes: bundle ? bundleScope(bundle) : ownerEntry ? scopeSupport(ownerEntry) : ["user"],
       manageable: bundle ? false : undefined,
       state,
+      skill: {
+        id: skill.id,
+        removable:
+          Boolean(skill.source?.startsWith("GitHub · ")) ||
+          market.some((item) => item.id === skill.id && item.installed),
+      },
     };
   });
 
@@ -384,10 +401,45 @@ export function buildPluginManagerCatalog({
     supportedScopes: ["user"],
   }));
 
+  const localMarketplaceItems: PluginManagerMarketplaceItem[] =
+    localMarketplace?.plugins.map((entry) => ({
+      id: `marketplace:${localMarketplace.name}:${entry.name}`,
+      name: entry.display_name,
+      description: entry.description,
+      version: entry.version || null,
+      kind: entry.category || "bundle",
+      sourceLabel: `${localMarketplace.display_name} · ${entry.source.kind.replace("_", " ")}`,
+      installed: bundles.some(
+        (bundle) =>
+          bundle.name === entry.display_name || bundle.name === entry.name,
+      ),
+      installable: entry.installable,
+      supportedScopes: ["user"],
+      diagnostic: entry.diagnostic,
+      marketplace: {
+        manifestPath: localMarketplace.manifest_path,
+        pluginName: entry.name,
+      },
+    })) ?? [];
+
+  const marketplaceSources: PluginManagerMarketplaceSource[] = localMarketplace
+    ? [
+        {
+          id: localMarketplace.manifest_path,
+          name: localMarketplace.display_name,
+          description: localMarketplace.description,
+          diagnostics: localMarketplace.diagnostics.map(
+            (diagnostic) => diagnostic.message,
+          ),
+        },
+      ]
+    : [];
+
   return {
     plugins: [...managedPlugins, ...bundlePlugins],
     components: [...builtinComponents, ...bundleComponents, ...skillComponents],
-    marketplaceItems,
+    marketplaceItems: [...localMarketplaceItems, ...marketplaceItems],
+    marketplaceSources,
   };
 }
 

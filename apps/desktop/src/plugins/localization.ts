@@ -265,8 +265,11 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     installed: t("pluginManager.installed"),
     unavailable: t("pluginManager.unavailable"),
     refresh: t("pluginManager.refresh"),
-    bundleTools: t("pluginManager.bundleTools"),
-    advancedBundleTools: t("pluginManager.advancedBundleTools"),
+    newSkill: t("pluginHub.newSkill"),
+    openMarketplace: t("pluginHub.openMarketplace"),
+    use: t("pluginHub.use"),
+    applyScaffold: t("pluginHub.applyScaffold"),
+    scaffoldFiles: (count) => t("pluginHub.scaffoldFiles", { count }),
     installFromGithub: t("pluginManager.installFromGithub"),
     githubRepository: t("pluginManager.githubRepository"),
     githubHint: t("pluginManager.githubHint"),
@@ -277,7 +280,6 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
         name: result.name,
         version: result.version ? ` ${result.version}` : "",
       }),
-    managedInBundleTools: t("pluginManager.managedInBundleTools"),
     bundleManagement: t("pluginManager.bundleManagement"),
     bundleManagementUserOnly: t("pluginManager.bundleManagementUserOnly"),
     trustRequired: t("pluginManager.trustRequired"),
@@ -342,6 +344,9 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
         { name },
       ),
     marketplaceInstalled: t("pluginManager.marketplaceInstalled"),
+    componentUninstalled: t("pluginHub.componentUninstalledToast"),
+    scaffoldApplied: (count) =>
+      t("pluginHub.scaffoldInstalledToast", { count }),
     settingsReset: t("pluginManager.settingsReset"),
     bundleEnabled: (name, enabled) =>
       t(
