@@ -13,7 +13,9 @@ import "./styles.css";
 document.documentElement.dataset.platform = currentDesktopPlatform();
 
 const searchParams = new URLSearchParams(window.location.search);
-const showDesktopPet = searchParams.has("desktop-pet");
+const showDesktopPet = document.querySelector(
+  'meta[name="codetwo-surface"][content="desktop-pet"]',
+) !== null;
 const showDesignSystem =
   import.meta.env.DEV && searchParams.has("design-system");
 const showPetPreview =
