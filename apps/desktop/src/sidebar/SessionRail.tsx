@@ -70,6 +70,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
@@ -518,7 +519,8 @@ export function SessionRail({
               }
               className={cn(
                 "group relative cursor-default rounded-md px-2 py-2 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
-                s.id === activeSession && "bg-fill-hover",
+                s.id === activeSession && "font-medium",
+                s.id === activeSession && typeof ResizeObserver === "undefined" && "bg-fill-hover",
               )}
             >
               <Button
@@ -816,7 +818,14 @@ export function SessionRail({
       </div>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
-      <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-2 pb-1">
+      <LiquidSelectionGroup
+        data-rail-features
+        role="navigation"
+        aria-label={t("rail.features")}
+        activeSelector='[aria-current="page"]'
+        fill="var(--color-fill-hover)"
+        className="flex flex-col gap-0.5 px-2 pb-1"
+      >
         <div
           data-rail-feature="new-task"
           role="group"
@@ -853,7 +862,7 @@ export function SessionRail({
         <button
           data-rail-feature="pull-requests"
           aria-current={pullRequestsOpen ? "page" : undefined}
-          className={cn(featureRowClass, pullRequestsOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, pullRequestsOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenPullRequests}
         >
           <GitPullRequest className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -862,7 +871,7 @@ export function SessionRail({
         <button
           data-rail-feature="task-board"
           aria-current={taskBoardOpen ? "page" : undefined}
-          className={cn(featureRowClass, taskBoardOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, taskBoardOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenTaskBoard}
         >
           <SquareKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -871,7 +880,7 @@ export function SessionRail({
         <button
           data-rail-feature="scheduled-tasks"
           aria-current={automationsOpen ? "page" : undefined}
-          className={cn(featureRowClass, automationsOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, automationsOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenAutomations}
         >
           <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -880,7 +889,7 @@ export function SessionRail({
         <button
           data-rail-feature="plugins"
           aria-current={pluginManagerOpen ? "page" : undefined}
-          className={cn(featureRowClass, pluginManagerOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, pluginManagerOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenMarket}
         >
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -898,7 +907,7 @@ export function SessionRail({
           </button>
         ) : null}
         {pluginActions}
-      </nav>
+      </LiquidSelectionGroup>
 
       {/* ---- 3 · recent chats --------------------------------------------------------------- */}
       {/* The section header carries the project switcher: which project's chats these are, and
@@ -998,7 +1007,12 @@ export function SessionRail({
       </div>
 
       <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
-        <div data-session-list className="px-2 pb-4">
+        <LiquidSelectionGroup
+          data-session-list
+          activeSelector='[aria-current="page"]'
+          fill="var(--color-fill-hover)"
+          className="px-2 pb-4"
+        >
           {projects.length === 0 ? (
             <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
               {t("rail.projectsEmpty")}
@@ -1047,7 +1061,7 @@ export function SessionRail({
               )}
             </>
           )}
-        </div>
+        </LiquidSelectionGroup>
       </ScrollArea>
 
       {/* ---- 4 · utilities ------------------------------------------------------------------ */}

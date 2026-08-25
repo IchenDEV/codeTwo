@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { BundleAdministration } from "./BundleAdministration";
@@ -1392,7 +1393,7 @@ export function PluginManagerPage({
               {headerLeadingAction}
             </div>
           ) : null}
-          <div role="tablist" aria-label={labels.title} className="flex min-w-0 items-center gap-1 overflow-x-auto">
+          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="flex min-w-0 items-center gap-1 overflow-x-auto">
             {(["plugins", "marketplace"] as const).map((id) => (
               <button
                 key={id}
@@ -1402,13 +1403,13 @@ export function PluginManagerPage({
                 onClick={() => setTab(id)}
                 className={cn(
                   "h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  tab === id && "bg-secondary font-medium text-foreground",
+                  tab === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
                 {labels[id]} <span className="text-fine tabular-nums">{tabCounts[id]}</span>
               </button>
             ))}
-          </div>
+          </LiquidSelectionGroup>
         </header>
         <div className="flex shrink-0 items-center gap-2 px-4 py-3">
           <div className="relative min-w-0 flex-1">

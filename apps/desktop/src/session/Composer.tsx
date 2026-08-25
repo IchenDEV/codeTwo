@@ -1,4 +1,5 @@
-import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
+import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactElement, type ReactNode } from "react";
+import { Liquid } from "liquid-gooey";
 import {
   ArrowUp,
   BrainCircuit,
@@ -130,6 +131,92 @@ interface ComposerProps {
   sessionId?: string | null;
   /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
   insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
+}
+
+const LIQUID_AVAILABLE = typeof ResizeObserver !== "undefined";
+const COMPOSER_LIQUID_SHADOW =
+  "0 1px 2px color-mix(in srgb, var(--ds-color-shadow) 30%, transparent), 0 4px 16px color-mix(in srgb, var(--ds-color-shadow) 50%, transparent)";
+
+function useReducedMotionPreference() {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return reduced;
+}
+
+function ComposerLiquidSurface({
+  children,
+  docMode,
+  reducedMotion,
+}: {
+  children: ReactElement;
+  docMode: boolean;
+  reducedMotion: boolean;
+}) {
+  if (!LIQUID_AVAILABLE) return children;
+
+  return (
+    <Liquid
+      data-gooey-composer
+      blur={5.5}
+      contrast={20}
+      fill={docMode ? "transparent" : "var(--card)"}
+      filterPadding={20}
+      shadow={docMode ? undefined : COMPOSER_LIQUID_SHADOW}
+      className={cn("relative z-10", docMode && "flex min-h-0 flex-1")}
+    >
+      <Liquid.Item
+        morph={reducedMotion
+          ? undefined
+          : { shape: true, speed: 1.35, bounce: 0.2, contentBlur: 0 }}
+      >
+        {children}
+      </Liquid.Item>
+    </Liquid>
+  );
+}
+
+function LiquidActionSurface({
+  children,
+  disabled = false,
+  fill,
+  reducedMotion,
+}: {
+  children: ReactElement;
+  disabled?: boolean;
+  fill: string;
+  reducedMotion: boolean;
+}) {
+  if (!LIQUID_AVAILABLE) return children;
+
+  return (
+    <Liquid
+      data-gooey-action
+      blur={4}
+      contrast={20}
+      fill={fill}
+      filterPadding={12}
+      className={cn("shrink-0 transition-opacity", disabled && "opacity-50")}
+    >
+      <Liquid.Item
+        effect={reducedMotion ? undefined : "move"}
+        move={{ springiness: 0.72, wobble: 0.28, stretch: 0.42, trail: 0.3 }}
+      >
+        {children}
+      </Liquid.Item>
+    </Liquid>
+  );
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
@@ -1215,6 +1302,7 @@ export function Composer({
   insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+  const reducedMotion = useReducedMotionPreference();
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
@@ -1448,17 +1536,22 @@ export function Composer({
             </DropdownMenu>
           </div>
           <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="destructive"
-                size="icon"
-                className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-                onClick={onStop}
-                aria-label={t("composer.stop")}
-              >
-                <Square className="size-3.5 fill-current" />
-              </Button>}
-            />
+            <LiquidActionSurface fill="var(--destructive)" reducedMotion={reducedMotion}>
+              <TooltipTrigger
+                render={<Button
+                  variant="destructive"
+                  size="icon"
+                  className={cn(
+                    "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
+                    LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent",
+                  )}
+                  onClick={onStop}
+                  aria-label={t("composer.stop")}
+                >
+                  <Square className="size-3.5 fill-current" />
+                </Button>}
+              />
+            </LiquidActionSurface>
             <TooltipContent>{t("composer.stop")}</TooltipContent>
           </Tooltip>
         </>
@@ -1466,24 +1559,33 @@ export function Composer({
         <Tooltip>
           {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
               focuses the document and says what's missing. */}
-          <TooltipTrigger
-            render={
-            <Button
-              size="icon"
-              variant={composerEmpty ? "secondary" : "default"}
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-              onClick={onRun}
-              disabled={loading}
-              aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
-            >
-              {loading ? (
-                <ActivityOrb state="connecting" aria-hidden="true" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </Button>
-            }
-          />
+          <LiquidActionSurface
+            fill={composerEmpty ? "var(--secondary)" : "var(--primary)"}
+            disabled={loading}
+            reducedMotion={reducedMotion}
+          >
+            <TooltipTrigger
+              render={
+              <Button
+                size="icon"
+                variant={composerEmpty ? "secondary" : "default"}
+                className={cn(
+                  "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
+                  LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent disabled:opacity-100",
+                )}
+                onClick={onRun}
+                disabled={loading}
+                aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
+              >
+                {loading ? (
+                  <ActivityOrb state="connecting" aria-hidden="true" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </Button>
+              }
+            />
+          </LiquidActionSurface>
           <TooltipContent>
             {loading ? t("composer.loadingSession") : composerEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
@@ -1521,18 +1623,22 @@ export function Composer({
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. */}
-        <div
-          className={cn(
-            "composer-card relative z-10 flex flex-col",
-            docMode
-              ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
-                // `relative` anchors the floating control bar below.
-                "min-h-0 flex-1"
-              : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
-                // shared raised shadow carry the separation without drawing a heavy box.
-                "rounded-(--ds-composer-radius) bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
-          )}
-        >
+        <ComposerLiquidSurface docMode={docMode} reducedMotion={reducedMotion}>
+          <div
+            className={cn(
+              "composer-card relative z-10 flex flex-col",
+              docMode
+                ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
+                  // `relative` anchors the floating control bar below.
+                  "min-h-0 flex-1"
+                : // The renderer delegates the fill and raised shadow to liquid-gooey so its
+                  // silhouette can lag resizing without softening the editor's actual DOM.
+                  cn(
+                    "rounded-(--ds-composer-radius) ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
+                    LIQUID_AVAILABLE ? "bg-transparent" : "bg-card shadow-raised",
+                  ),
+            )}
+          >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
               document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
           <div
@@ -1653,7 +1759,8 @@ export function Composer({
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </ComposerLiquidSurface>
 
         {/* Execution location and source control are adjacent but distinct: changing where a fresh
             session runs must never be confused with inspecting the current branch. */}

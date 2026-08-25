@@ -26,6 +26,7 @@ import {
 } from "../bridge";
 import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
+import { LiquidSelectionGroup } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -462,14 +463,19 @@ export function SideChatPanel({
       />
 
       <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-2 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist">
+        <LiquidSelectionGroup
+          activeSelector='[data-selected="true"]'
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          role="tablist"
+        >
           {tabs.map((tab) => (
             <div
               key={tab.localId}
+              data-selected={tab.localId === activeTab?.localId}
               className={cn(
                 "flex max-w-48 shrink-0 items-center rounded-(--ds-radius-control) py-0.5 ps-1 transition-colors",
                 tab.localId === activeTab?.localId
-                  ? "bg-accent text-foreground"
+                  ? "text-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
             >
@@ -504,7 +510,7 @@ export function SideChatPanel({
           >
             <Plus className="size-4" aria-hidden />
           </Button>
-        </div>
+        </LiquidSelectionGroup>
         <Button
           type="button"
           variant="ghost"

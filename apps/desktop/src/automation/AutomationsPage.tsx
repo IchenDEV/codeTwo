@@ -54,6 +54,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./automations.css";
@@ -398,7 +399,7 @@ export function AutomationsPage({
       <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
           {headerLeadingAction ? <div data-automation-leading-action>{headerLeadingAction}</div> : null}
-          <div data-automation-filters role="tablist" aria-label={t("automations.filterLabel")} className="flex h-(--ds-control-normal) items-center gap-1">
+          <LiquidSelectionGroup data-automation-filters role="tablist" aria-label={t("automations.filterLabel")} className="flex h-(--ds-control-normal) items-center gap-1">
             {(["all", "active", "paused"] as const).map((value) => (
               <button
                 key={value}
@@ -407,14 +408,14 @@ export function AutomationsPage({
                 aria-selected={filter === value}
                 className={cn(
                   "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  filter === value && "bg-secondary font-medium text-foreground",
+                  filter === value && "font-medium text-foreground hover:bg-transparent",
                 )}
                 onClick={() => setFilter(value)}
               >
                 {t(`automations.filter.${value}`)}
               </button>
             ))}
-          </div>
+          </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.new")} onClick={beginCreate} disabled={projects.length === 0}><Plus className="size-3.5" /></Button>} />
@@ -493,7 +494,7 @@ export function AutomationsPage({
           {draft ? (
             <span className="text-ui font-medium">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</span>
           ) : (
-            <div role="tablist" aria-label={t("automations.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
+            <LiquidSelectionGroup role="tablist" aria-label={t("automations.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
               {(["overview", "runs"] as const).map((value) => (
                 <button
                   key={value}
@@ -504,13 +505,13 @@ export function AutomationsPage({
                   onClick={() => setDetailTab(value)}
                   className={cn(
                     "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50",
-                    detailTab === value && "bg-secondary font-medium text-foreground",
+                    detailTab === value && "font-medium text-foreground hover:bg-transparent",
                   )}
                 >
                   {t(`automations.detail.${value}`)}
                 </button>
               ))}
-            </div>
+            </LiquidSelectionGroup>
           )}
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {selected && !draft ? (
