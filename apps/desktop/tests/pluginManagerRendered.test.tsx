@@ -76,6 +76,7 @@ const plugins = [
         { id: "skills", label: "Skills", count: 2 },
       ],
       diagnostics: [{ level: "warning", message: "Trust before running." }],
+      scaffolds: [],
     },
   },
 ];
@@ -121,6 +122,11 @@ function renderManager(overrides = {}) {
     bundleEnabled: [],
     bundleTrust: [],
     uninstalls: [],
+    scaffolds: [],
+    skillUses: [],
+    skillUninstalls: [],
+    marketplaceOpens: [],
+    newSkills: [],
   };
   const view = mount(
     <PluginManagerPage
@@ -151,6 +157,14 @@ function renderManager(overrides = {}) {
       onSetBundleEnabled={async (pluginId, enabled) => calls.bundleEnabled.push({ pluginId, enabled })}
       onSetBundleTrusted={async (pluginId, trusted) => calls.bundleTrust.push({ pluginId, trusted })}
       onUninstallBundle={async (pluginId, keepData) => calls.uninstalls.push({ pluginId, keepData })}
+      onApplyScaffold={async (pluginId, scaffoldId) => {
+        calls.scaffolds.push({ pluginId, scaffoldId });
+        return { files: 2 };
+      }}
+      onUseSkill={(skillId) => calls.skillUses.push(skillId)}
+      onUninstallSkill={async (skillId) => calls.skillUninstalls.push(skillId)}
+      onOpenMarketplace={async () => calls.marketplaceOpens.push(true)}
+      onNewSkill={() => calls.newSkills.push(true)}
       {...overrides}
     />,
   );
@@ -398,6 +412,89 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
+  test("keeps skills, scaffolds, and local marketplace actions on the unified page", async () => {
+    activateDom();
+    const skill = {
+      id: "skill:release-review",
+      pluginId: "skills",
+      pluginName: "Skills",
+      name: "Release review",
+      description: "Review the current release.",
+      kind: "skill",
+      source: "builtin",
+      supportedScopes: ["user"],
+      manageable: false,
+      state: { effectiveEnabled: true, status: "active" },
+      skill: { id: "release-review", removable: true },
+    };
+    const bundleWithScaffold = {
+      ...plugins[2],
+      bundle: {
+        ...plugins[2].bundle,
+        scaffolds: [
+          {
+            id: "review-config",
+            name: "Review configuration",
+            description: "Adds review defaults.",
+            files: 2,
+          },
+        ],
+      },
+    };
+    const localItem = {
+      ...marketplaceItems[0],
+      id: "marketplace:local:review-tools",
+      marketplace: {
+        manifestPath: "/tmp/marketplace.json",
+        pluginName: "review-tools",
+      },
+    };
+    const { view, calls } = renderManager({
+      plugins: [bundleWithScaffold],
+      components: [skill],
+      marketplaceItems: [localItem],
+      marketplaceSources: [
+        {
+          id: "/tmp/marketplace.json",
+          name: "Local tools",
+          description: "Workspace-local plugin catalog.",
+          diagnostics: [],
+        },
+      ],
+    });
+    await flush();
+
+    click(button(view.container, "Add to project"));
+    await flush();
+    expect(calls.scaffolds).toEqual([
+      { pluginId: "review-tools", scaffoldId: "review-config" },
+    ]);
+    expect(view.container.textContent).toContain("2 project files added.");
+
+    click(button(view.container, "Components 1"));
+    await flush();
+    click(button(view.container, "New skill"));
+    click(button(view.container, "Use"));
+    click(button(view.container, "Uninstall"));
+    await flush();
+    expect(calls.newSkills).toEqual([true]);
+    expect(calls.skillUses).toEqual(["release-review"]);
+    expect(calls.skillUninstalls).toEqual(["release-review"]);
+
+    click(button(view.container, "Marketplace 1"));
+    await flush();
+    expect(view.container.textContent).toContain("Local tools");
+    click(button(view.container, "Open marketplace"));
+    click(button(view.container, "Install"));
+    await flush();
+    expect(calls.marketplaceOpens).toEqual([true]);
+    expect(calls.installs).toEqual([
+      { itemId: "marketplace:local:review-tools", scope: { kind: "user" } },
+    ]);
+
+    view.unmount();
+  });
+
   test("uses direct bundle lifecycle for data-only bundles instead of the managed runtime plan", async () => {
     activateDom();
     const dataOnly = {
@@ -624,7 +721,7 @@ describe("PluginManagerPage", () => {
     click(button(view.container, "Components 1"));
     await flush();
     const details = view.container.querySelector("[data-component-details]");
-    expect(details?.textContent).toContain("Managed at bundle level");
+    expect(details?.textContent).toContain("Bundle management");
     expect(details?.querySelector('[data-slot="checkbox"]')).toBeNull();
     expect(details?.querySelector('[data-slot="select-trigger"]')).toBeNull();
 

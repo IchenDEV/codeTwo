@@ -195,8 +195,9 @@ keeps reusable plugin implementations free of desktop product policy.
 The desktop's Plugins page is a data-only view over that catalog. It can show built-in plugins,
 desktop host plugins, installed bundles, C2-owned UI contributions, and marketplace entries in one
 place. Common bundle administration—GitHub import, source and trust review, install-wide enablement,
-diagnostics, and removal—also lives on this page; local marketplace files and scaffold generation
-remain available under Advanced tools. Bundle code never supplies a React renderer. Third-party
+diagnostics, and removal—also lives on this page. Local marketplace files, scaffold generation,
+and skill actions use the same catalog and details surface instead of opening a second manager.
+Bundle code never supplies a React renderer. Third-party
 contributions are descriptors that C2 renders with its own components, which preserves the
 webview's trust boundary and design system.
 

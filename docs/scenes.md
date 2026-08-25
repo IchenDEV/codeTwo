@@ -289,7 +289,7 @@ transition history — all persisted with the project.
 
 `packs/office-starter/` (in this repository) is the first office-domain scene pack: incident
 retrospective, release notes, and tech design review scenes plus the `office-delivery` pipeline.
-Install it like any plugin — point the PluginHub GitHub install at this repository's
+Install it like any plugin — point the Plugins page GitHub installer at this repository's
 `packs/office-starter` path, or copy the directory into your plugins dir — and its scenes appear
 as `office-starter:scene:<name>` alongside the builtins. Packs are pure data: installing one
 never runs anything.

@@ -163,7 +163,7 @@ export function SessionRail({
   pullRequestsOpen,
   onOpenPullRequests,
   automationsOpen,
-  pluginHubOpen,
+  pluginManagerOpen,
   quickQuota,
   quickQuotaLoading,
   quickQuotaProviderName,
@@ -219,7 +219,7 @@ export function SessionRail({
   pullRequestsOpen: boolean;
   onOpenPullRequests: () => void;
   automationsOpen: boolean;
-  pluginHubOpen: boolean;
+  pluginManagerOpen: boolean;
   /** Most constrained provider-owned quota window, for the glanceable rail meter. */
   quickQuota: QuickQuotaSummary | null;
   quickQuotaLoading: boolean;
@@ -860,8 +860,8 @@ export function SessionRail({
         </button>
         <button
           data-rail-feature="plugins"
-          aria-current={pluginHubOpen ? "page" : undefined}
-          className={cn(featureRowClass, pluginHubOpen && "bg-accent font-medium text-foreground")}
+          aria-current={pluginManagerOpen ? "page" : undefined}
+          className={cn(featureRowClass, pluginManagerOpen && "bg-accent font-medium text-foreground")}
           onClick={onOpenMarket}
         >
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />

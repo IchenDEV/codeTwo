@@ -88,7 +88,7 @@ function renderRail(overrides = {}) {
           pullRequestsOpen={false}
           onOpenPullRequests={() => {}}
           automationsOpen={false}
-          pluginHubOpen={false}
+          pluginManagerOpen={false}
           quickQuota={{ remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
           quickQuotaLoading={false}
           quickQuotaProviderName="OpenAI Codex"

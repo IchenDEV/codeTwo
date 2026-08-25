@@ -79,6 +79,7 @@ describe("plugin manager localization", () => {
           },
         ],
         marketplaceItems: [],
+        marketplaceSources: [],
       },
       t,
     );

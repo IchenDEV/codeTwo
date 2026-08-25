@@ -49,6 +49,13 @@ export interface PluginManagerBundleContribution {
   count: number;
 }
 
+export interface PluginManagerScaffold {
+  id: string;
+  name: string;
+  description?: string | null;
+  files: number;
+}
+
 /** Installation and trust metadata for a plugin backed by an on-disk bundle. */
 export interface PluginManagerBundle {
   id: string;
@@ -60,6 +67,7 @@ export interface PluginManagerBundle {
   runtimeManaged: boolean;
   contributions: PluginManagerBundleContribution[];
   diagnostics: PluginManagerBundleDiagnostic[];
+  scaffolds: PluginManagerScaffold[];
 }
 
 export interface PluginManagerPlugin {
@@ -100,6 +108,11 @@ export interface PluginManagerComponent {
   manageable?: boolean;
   required?: boolean;
   state: PluginManagerScopedState;
+  /** Actions available for a skill shown in the unified component catalog. */
+  skill?: {
+    id: string;
+    removable: boolean;
+  };
 }
 
 export interface PluginManagerMarketplaceItem {
@@ -114,6 +127,18 @@ export interface PluginManagerMarketplaceItem {
   installable: boolean;
   supportedScopes: PluginManagerScopeKind[];
   diagnostic?: string | null;
+  /** Present for bundles loaded from a local marketplace manifest. */
+  marketplace?: {
+    manifestPath: string;
+    pluginName: string;
+  };
+}
+
+export interface PluginManagerMarketplaceSource {
+  id: string;
+  name: string;
+  description?: string | null;
+  diagnostics: string[];
 }
 
 export type PluginManagerDesiredState = "inherit" | "enabled" | "disabled";
@@ -189,15 +214,17 @@ export interface PluginManagerLabels {
   installed: string;
   unavailable: string;
   refresh: string;
-  bundleTools: string;
-  advancedBundleTools: string;
+  newSkill: string;
+  openMarketplace: string;
+  use: string;
+  applyScaffold: string;
+  scaffoldFiles: (count: number) => string;
   installFromGithub: string;
   githubRepository: string;
   githubHint: string;
   closeInstaller: string;
   installingPlugin: string;
   bundleInstalled: (result: PluginManagerBundleInstallResult) => string;
-  managedInBundleTools: string;
   bundleManagement: string;
   bundleManagementUserOnly: string;
   trustRequired: string;
@@ -245,6 +272,8 @@ export interface PluginManagerLabels {
     state: PluginManagerDesiredState,
   ) => string;
   marketplaceInstalled: string;
+  componentUninstalled: string;
+  scaffoldApplied: (count: number) => string;
   settingsReset: string;
   bundleEnabled: (name: string, enabled: boolean) => string;
   bundleTrusted: (name: string, trusted: boolean) => string;
@@ -258,6 +287,7 @@ export interface PluginManagerPageProps {
   plugins: PluginManagerPlugin[];
   components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
+  marketplaceSources?: PluginManagerMarketplaceSource[];
   headerLeadingAction?: ReactNode;
   scope: PluginManagerScope;
   projects?: PluginManagerProject[];
@@ -274,14 +304,20 @@ export interface PluginManagerPageProps {
     request: PluginManagerInstallRequest,
   ) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
+  onOpenMarketplace?: () => Promise<void>;
   onImportGithub?: (
     repository: string,
   ) => Promise<PluginManagerBundleInstallResult>;
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
-  /** Advanced tools for local marketplace manifests and scaffolds. */
-  onOpenBundleTools?: () => void;
+  onApplyScaffold?: (
+    pluginId: string,
+    scaffoldId: string,
+  ) => Promise<{ files: number }>;
+  onUseSkill?: (skillId: string) => void;
+  onUninstallSkill?: (skillId: string) => Promise<void>;
+  onNewSkill?: () => void;
   onResetPlugin?: (
     pluginId: string,
     scope: PluginManagerScope,

@@ -62,7 +62,9 @@ describe("AutomationsPage layout", () => {
   test("is mounted inside the persistent session shell instead of replacing the whole window", () => {
     expect(appSource).not.toContain(") : showAutomations ? (");
     expect(appSource).toContain("{showAutomations && (");
-    expect(appSource).toContain("showTaskBoard || showPluginHub || showAutomations");
+    expect(appSource).toMatch(
+      /showTaskBoard\s*\|\|\s*showPluginManager\s*\|\|\s*showAutomations/,
+    );
   });
 
   test("keeps create and edit work in the task center instead of opening a dialog", async () => {
