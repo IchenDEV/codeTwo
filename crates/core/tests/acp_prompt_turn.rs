@@ -86,6 +86,36 @@ where
     }
 }
 
+async fn internally_failing_session_agent<R, W>(reader: R, mut writer: W)
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let mut lines = BufReader::new(reader).lines();
+    let mut session_attempts = 0;
+    while let Ok(Some(line)) = lines.next_line().await {
+        let v: Value = serde_json::from_str(&line).unwrap();
+        if v.get("method").and_then(Value::as_str) != Some("session/new") {
+            continue;
+        }
+        session_attempts += 1;
+        let id = v["id"].clone();
+        if session_attempts == 1 {
+            write_line(
+                &mut writer,
+                json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"Internal error"}}),
+            )
+            .await;
+        } else {
+            write_line(
+                &mut writer,
+                json!({"jsonrpc":"2.0","id":id,"result":{"sessionId":"sess-retried"}}),
+            )
+            .await;
+        }
+    }
+}
+
 #[tokio::test]
 async fn drives_a_full_prompt_turn() {
     let (client_end, agent_end) = tokio::io::duplex(64 * 1024);
@@ -108,4 +138,18 @@ async fn drives_a_full_prompt_turn() {
 
     assert!(handler.text().contains("Hello from agent"));
     assert_eq!(handler.permission_count(), 1);
+}
+
+#[tokio::test]
+async fn retries_one_internal_error_while_creating_a_session() {
+    let (client_end, agent_end) = tokio::io::duplex(64 * 1024);
+    let (cr, cw) = tokio::io::split(client_end);
+    let (ar, aw) = tokio::io::split(agent_end);
+    tokio::spawn(internally_failing_session_agent(ar, aw));
+
+    let conn = Connection::new(cr, cw, Arc::new(RecordingHandler::default()));
+    let client = AcpClient::new(conn, None);
+
+    let sid = client.new_session("/tmp", vec![]).await.unwrap();
+    assert_eq!(sid, "sess-retried");
 }
