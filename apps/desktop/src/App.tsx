@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Archive,
   Check,
@@ -4316,9 +4317,36 @@ export default function App() {
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
-    setDocMode(v);
-    if (v) setTimeout(() => focusEditorRef.current?.(), 0);
-  }, []);
+    const focusDocument = () => {
+      if (v) setTimeout(() => focusEditorRef.current?.(), 0);
+    };
+    const transitionDocument = document as Document & {
+      startViewTransition?: (update: () => void) => { finished: Promise<void> };
+    };
+    const startViewTransition = transitionDocument.startViewTransition?.bind(document);
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (!startViewTransition || reducedMotion) {
+      setDocMode(v);
+      focusDocument();
+      return;
+    }
+
+    document.documentElement.dataset.composerModeTransition = "";
+    try {
+      const transition = startViewTransition(() => {
+        flushSync(() => setDocMode(v));
+      });
+      void transition.finished.finally(() => {
+        delete document.documentElement.dataset.composerModeTransition;
+        focusDocument();
+      });
+    } catch {
+      delete document.documentElement.dataset.composerModeTransition;
+      setDocMode(v);
+      focusDocument();
+    }
+  }, [setDocMode]);
 
   const getCanvasAssets = useCallback(
     (id: string): readonly CanvasStaticAsset[] => {
@@ -5901,9 +5929,10 @@ export default function App() {
             onPin={(id, pinned) =>
               void pinSession(id, pinned).then(refreshSessions)
             }
-            onArchive={(id, archived) =>
-              void archiveSession(id, archived).then(refreshSessions)
-            }
+            onArchive={async (id, archived) => {
+              await archiveSession(id, archived);
+              await refreshSessions();
+            }}
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
           onOpenMarket={() => {

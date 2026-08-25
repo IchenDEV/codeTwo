@@ -1603,8 +1603,9 @@ export function Composer({
    */
   return (
     <section
+      data-composer-mode={docMode ? "document" : "compact"}
       className={cn(
-        "flex flex-col",
+        "composer-mode-transition flex flex-col",
         // min-w-0: in document mode the composer sits in a row beside the transcript panel and
         // must be able to shrink, or the panel gets pushed off the module's edge.
         docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pb-6 pt-3",

@@ -378,6 +378,30 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("finishes the archive exit before moving a session", async () => {
+    activateDom();
+    const archived = [];
+    const view = renderRail({ onArchive: (id, value) => archived.push([id, value]) });
+    const row = view.container.querySelector('[data-session-id="meaningful"]');
+    const archive = row?.querySelector('button[aria-label="Archive"]');
+
+    click(archive);
+    await waitFor(() => {
+      expect(row?.getAttribute("data-session-archive-motion")).toBe("archive");
+      expect(row?.getAttribute("aria-busy")).toBe("true");
+    });
+    expect(archived).toEqual([]);
+
+    row?.dispatchEvent(new dom.Event("animationend", { bubbles: true }));
+    await waitFor(() => expect(archived).toEqual([["meaningful", true]]));
+    await waitFor(() => {
+      expect(row?.getAttribute("data-session-archive-motion")).toBeNull();
+      expect(row?.getAttribute("aria-busy")).toBeNull();
+    });
+
+    view.unmount();
+  });
+
   test("supports keyboard selection, row navigation, and the keyboard context-menu gesture", async () => {
     activateDom();
     const selected = [];
