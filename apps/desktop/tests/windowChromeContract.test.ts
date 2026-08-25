@@ -1,37 +1,24 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const electrobunHost = readFileSync(
-  new URL("../src/electrobun/index.ts", import.meta.url),
+const source = (relativePath: string) => readFileSync(
+  new URL(relativePath, import.meta.url),
   "utf8",
-);
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-const mainSource = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
-const railSource = readFileSync(new URL("../src/sidebar/SessionRail.tsx", import.meta.url), "utf8");
-const sceneStudioSource = readFileSync(new URL("../src/session/SceneStudio.tsx", import.meta.url), "utf8");
-const dockSource = readFileSync(new URL("../src/dock/Dock.tsx", import.meta.url), "utf8");
-const tabsSource = readFileSync(
-  new URL("../src/components/ui/tabs.tsx", import.meta.url),
-  "utf8",
-);
-const electrobunConfig = readFileSync(
-  new URL("../electrobun.config.ts", import.meta.url),
-  "utf8",
-);
-const prepareElectrobun = readFileSync(
-  new URL("../scripts/prepare-electrobun.ts", import.meta.url),
-  "utf8",
-);
-const patchMacOSInfo = readFileSync(
-  new URL("../scripts/patch-macos-info.ts", import.meta.url),
-  "utf8",
-);
-const nativeWindowEffects = readFileSync(
-  new URL("../native/window-effects/CodeTwoWindowEffects.m", import.meta.url),
-  "utf8",
-);
-const themeSource = readFileSync(new URL("../src/theme.tsx", import.meta.url), "utf8");
+).replaceAll("\r\n", "\n");
+
+const electrobunHost = source("../src/electrobun/index.ts");
+const styles = source("../src/styles.css");
+const appSource = source("../src/App.tsx");
+const mainSource = source("../src/main.tsx");
+const railSource = source("../src/sidebar/SessionRail.tsx");
+const sceneStudioSource = source("../src/session/SceneStudio.tsx");
+const dockSource = source("../src/dock/Dock.tsx");
+const tabsSource = source("../src/components/ui/tabs.tsx");
+const electrobunConfig = source("../electrobun.config.ts");
+const prepareElectrobun = source("../scripts/prepare-electrobun.ts");
+const patchMacOSInfo = source("../scripts/patch-macos-info.ts");
+const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffects.m");
+const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
   test("leaves the native macOS traffic lights entirely to the system", () => {
