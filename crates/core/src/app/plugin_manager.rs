@@ -948,14 +948,16 @@ impl PluginManager {
             .ok_or(PluginManagerError::RuntimeGone)?;
 
         let Some(settle) = &result.settle else {
-            let loader = self.loader.lock().unwrap();
-            let config = self.config.lock().unwrap();
-            if loader.revision() != result.graph_revision
-                || config.snapshot().revision != result.config_revision
             {
-                return Err(PluginManagerError::StalePlan);
+                let loader = self.loader.lock().unwrap();
+                let config = self.config.lock().unwrap();
+                if loader.revision() != result.graph_revision
+                    || config.snapshot().revision != result.config_revision
+                {
+                    return Err(PluginManagerError::StalePlan);
+                }
+                config.mark_last_good()?;
             }
-            config.mark_last_good()?;
             if result.component_policy_changed {
                 context.emit(crate::app::events::PluginPolicyChanged).await;
             }
