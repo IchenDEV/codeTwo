@@ -10,11 +10,11 @@ import {
   MessageSquare,
   MessageSquareText,
   Orbit,
-  PanelBottom,
   PanelRight,
   Plus,
   Play,
   Send,
+  TerminalIcon,
   Upload,
   type LucideIcon,
 } from "lucide-react";
@@ -292,7 +292,7 @@ export function SessionHeaderActions({
         onClick={onToggleSideChat}
       />
       <PanelAction
-        icon={PanelBottom}
+        icon={TerminalIcon}
         label={t("action.toggle_terminal")}
         active={terminalActive}
         onClick={onToggleTerminal}

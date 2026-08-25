@@ -697,7 +697,6 @@ export default function App() {
   const [temporarySession, setTemporarySession] = useState(false);
   const temporarySessionRef = useRef(false);
   const [showPullRequests, setShowPullRequests] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
   const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
@@ -708,7 +707,6 @@ export default function App() {
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
-  const terminalOpenRef = useRef(false);
   const dockTabRef = useRef<DockTab | null>(null);
   const dockFollowRef = useRef<FollowState>(initialFollowState);
   const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(
@@ -959,10 +957,6 @@ export default function App() {
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440,
-  );
-  const [dockHeight, setDockHeight] = usePersistedNumber(
-    "codetwo.dockHeight",
-    280,
   );
   const [railWidth, setRailWidth] = usePersistedNumber(
     "codetwo.railWidth",
@@ -1342,20 +1336,11 @@ export default function App() {
     if (dockTab !== null) setSideChatOpen(false);
   }, [dockTab]);
 
-  useEffect(() => {
-    terminalOpenRef.current = terminalOpen;
-  }, [terminalOpen]);
-
   /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
   const followDockEvent = useCallback((event: FollowEvent) => {
     const { state, setTab } = followReduce(dockFollowRef.current, event);
     dockFollowRef.current = state;
-    if (setTab === "terminal") {
-      terminalOpenRef.current = true;
-      setTerminalOpen(true);
-    } else if (setTab) {
-      setDockTab(setTab);
-    }
+    if (setTab) setDockTab(setTab);
     if (event.kind === "tool") {
       setDockAutoHint(
         state.autoTab
@@ -1387,7 +1372,7 @@ export default function App() {
         kind: "tool",
         hint,
         now: Date.now(),
-        dockOpen: dockTabRef.current !== null || terminalOpenRef.current,
+        dockOpen: dockTabRef.current !== null,
       });
     },
     [followDockEvent],
@@ -1398,15 +1383,6 @@ export default function App() {
     (tab: DockTab | null) => {
       followDockEvent({ kind: "manual", tab });
       setDockTab(tab);
-    },
-    [followDockEvent],
-  );
-
-  const manualTerminalOpen = useCallback(
-    (open: boolean) => {
-      followDockEvent({ kind: "manual", tab: open ? "terminal" : null });
-      terminalOpenRef.current = open;
-      setTerminalOpen(open);
     },
     [followDockEvent],
   );
@@ -3837,10 +3813,6 @@ export default function App() {
     ],
     [componentEnabled],
   );
-  const availableSideDockSurfaces = useMemo(
-    () => availableDockSurfaces.filter((surface) => surface !== "terminal"),
-    [availableDockSurfaces],
-  );
 
   // A live disable removes the surface immediately, including already-open dialogs. Runtime
   // cleanup is owned by the plugin scope; this closes only renderer projections of that scope.
@@ -3851,9 +3823,6 @@ export default function App() {
       !availableDockSurfaces.includes(dockTab)
     ) {
       manualDockTab(null);
-    }
-    if (terminalOpen && !availableDockSurfaces.includes("terminal")) {
-      manualTerminalOpen(false);
     }
     if (!componentEnabled("files.surface")) setShowFiles(false);
     if (!componentEnabled("search.modal")) setShowWorkspaceSearch(false);
@@ -3878,9 +3847,7 @@ export default function App() {
     componentEnabled,
     dockTab,
     manualDockTab,
-    manualTerminalOpen,
     scenesSurfaceEnabled,
-    terminalOpen,
   ]);
 
   const refreshScenes = useCallback(async () => {
@@ -4296,14 +4263,10 @@ export default function App() {
         return;
       }
       // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
-      if (t === "terminal") {
-        manualTerminalOpen(!terminalOpenRef.current);
-      } else {
-        manualDockTab(dockTabRef.current === t ? null : t);
-      }
+      manualDockTab(dockTabRef.current === t ? null : t);
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, manualDockTab, manualTerminalOpen, toast],
+    [componentEnabled, manualDockTab, toast],
   );
 
   const runProjectAction = useCallback((script: ProjectScript) => {
@@ -6322,7 +6285,7 @@ export default function App() {
 
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
-              terminalActive={terminalOpen}
+              terminalActive={dockTab === "terminal"}
               panelActive={dockTab !== null}
               sideChatActive={sideChatOpen}
               trajectoryActive={trajectoryOpen && !docMode}
@@ -6771,56 +6734,15 @@ export default function App() {
           </div>
             </main>
 
-            {/* ---------------- bottom terminal panel ---------------- */}
-            {/* Always mounted so its shell and PTY survive close/open. Height collapses to zero. */}
-            <Dock
-              placement="bottom"
-              open={terminalOpen}
-              tab={terminalOpen ? "terminal" : null}
-              availableSurfaces={
-                availableDockSurfaces.includes("terminal") ? ["terminal"] : []
-              }
-              onTab={() => manualTerminalOpen(true)}
-              onClose={() => manualTerminalOpen(false)}
-              autoTab={dockAutoHint?.surface ?? null}
-              highlightFile={dockAutoHint?.file ?? null}
-              cwd={cwd || null}
-              projectPath={
-                activeProject ? normalizePluginProjectPath(activeProject) : null
-              }
-              sessionKey={activeSession ?? "main"}
-              git={git}
-              onRefreshGit={refreshGit}
-              onOpenSourceControl={openSourceControl}
-              browserUrl={browserUrl}
-              onNavigate={setBrowserUrl}
-              onAnnotate={(n) => void annotate(n)}
-              onInsertFile={(p) => insertFileRef.current?.(p)}
-              onSendText={(text) => insertTextRef.current?.(text)}
-              onOpenFile={openFileTab}
-              openFiles={openFiles}
-              activeFile={activeFile}
-              fileReveal={fileReveal}
-              onActiveFile={(path) => {
-                setActiveFile(path);
-                setFileReveal(null);
-              }}
-              onCloseFile={closeFileTab}
-              width={dockWidth}
-              onWidth={setDockWidth}
-              height={dockHeight}
-              onHeight={setDockHeight}
-            />
           </div>
 
-            {/* ---------------- side dock ---------------- */}
+            {/* ---------------- right work dock ---------------- */}
             {/* Always mounted: closing animates the width to zero instead of unmounting, which both
                 plays the full collapse and keeps shells alive across close/open. */}
             <Dock
-              placement="right"
               open={dockTab !== null}
               tab={dockTab}
-              availableSurfaces={availableSideDockSurfaces}
+              availableSurfaces={availableDockSurfaces}
               onTab={manualDockTab}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
@@ -6849,8 +6771,6 @@ export default function App() {
               onCloseFile={closeFileTab}
               width={dockWidth}
               onWidth={setDockWidth}
-              height={dockHeight}
-              onHeight={setDockHeight}
             />
         </div>
       </div>

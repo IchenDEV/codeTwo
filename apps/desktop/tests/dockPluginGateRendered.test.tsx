@@ -11,7 +11,7 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
-function renderDock(availableSurfaces, tab = "home", placement = "right") {
+function renderDock(availableSurfaces, tab = "home") {
   return mount(
     <I18nProvider>
       <Dock
@@ -37,28 +37,27 @@ function renderDock(availableSurfaces, tab = "home", placement = "right") {
         fileReveal={null}
         onActiveFile={() => {}}
         onCloseFile={() => {}}
-        placement={placement}
         width={440}
         onWidth={() => {}}
-        height={280}
-        onHeight={() => {}}
       />
     </I18nProvider>,
   );
 }
 
 describe("Dock plugin component gate", () => {
-  test("renders the terminal as a vertically resizable bottom panel", async () => {
+  test("advertises the terminal in the horizontally resizable right panel", async () => {
     activateDom();
-    const view = renderDock(["terminal"], "home", "bottom");
+    const view = renderDock(["terminal"], "home");
     await flush();
 
-    const panel = view.container.querySelector('[data-dock-placement="bottom"]');
+    const panel = view.container.querySelector('[data-dock-placement="right"]');
     expect(panel).not.toBeNull();
-    expect(panel?.classList.contains("dock-panel-bottom")).toBe(true);
-    expect(panel?.classList.contains("border-l")).toBe(false);
-    expect(panel?.getAttribute("style")).toContain("height: 280px");
-    expect(panel?.querySelector('[data-dock-resize="vertical"]')).not.toBeNull();
+    expect(panel?.classList.contains("dock-panel-side")).toBe(true);
+    expect(panel?.classList.contains("border-l")).toBe(true);
+    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/);
+    expect(panel?.getAttribute("style")).not.toContain("height");
+    expect(panel?.querySelector('[data-dock-resize="horizontal"]')).not.toBeNull();
+    expect(view.container.textContent).toContain("Terminal");
 
     view.unmount();
   });
