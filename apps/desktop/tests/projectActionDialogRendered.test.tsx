@@ -74,11 +74,60 @@ describe("ProjectActionDialog", () => {
     expect(saved).toEqual([{
       id: "test",
       name: "Test",
+      kind: "command",
       command: "bun test",
+      prompt: "",
       keybinding: "Mod+Shift+T",
       preview_url: "http://localhost:5173",
       run_on_worktree_create: true,
       open_preview: true,
+    }]);
+    view.unmount();
+  });
+
+  test("saves a reusable prompt without command-only options", async () => {
+    activateDom();
+    const saved = [];
+    const view = mount(
+      <I18nProvider>
+        <ProjectActionDialog
+          open
+          actions={[]}
+          bindings={[]}
+          onOpenChange={() => {}}
+          onSave={async (action) => saved.push(action)}
+        />
+      </I18nProvider>,
+    );
+
+    await flush();
+    const body = dom.document.body;
+    click(button(body, "Send prompt"));
+    await flush();
+    expect(body.querySelector("#action-command")).toBeNull();
+    expect(body.querySelectorAll('[data-slot="switch"]')).toHaveLength(0);
+
+    setValue(body.querySelector("#action-name"), "Review");
+    setValue(body.querySelector("#action-prompt"), "Review the current changes.");
+    await flush();
+    await reactAct(async () => {
+      body.querySelector("form")?.dispatchEvent(new dom.window.Event("submit", {
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+    await flush();
+
+    expect(saved).toEqual([{
+      id: "review",
+      name: "Review",
+      kind: "prompt",
+      command: "",
+      prompt: "Review the current changes.",
+      keybinding: "",
+      preview_url: "",
+      run_on_worktree_create: false,
+      open_preview: false,
     }]);
     view.unmount();
   });

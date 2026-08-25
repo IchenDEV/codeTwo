@@ -223,7 +223,12 @@ impl Plugin for WorkspacePlugin {
             cwd: String,
             id: String,
             name: String,
+            #[serde(default)]
+            kind: crate::project::ProjectActionKind,
+            #[serde(default)]
             command: String,
+            #[serde(default)]
+            prompt: String,
             #[serde(default)]
             keybinding: String,
             #[serde(default)]
@@ -240,7 +245,9 @@ impl Plugin for WorkspacePlugin {
                 &crate::project::ProjectScript {
                     id: args.id,
                     name: args.name,
+                    kind: args.kind,
                     command: args.command,
+                    prompt: args.prompt,
                     keybinding: args.keybinding,
                     preview_url: args.preview_url,
                     run_on_worktree_create: args.run_on_worktree_create,

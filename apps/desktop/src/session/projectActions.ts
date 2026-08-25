@@ -2,7 +2,9 @@ import type { KeymapEntry, ProjectScript } from "../bridge";
 
 export interface ProjectActionDraft {
   name: string;
+  kind: "command" | "prompt";
   command: string;
+  prompt: string;
   keybinding: string;
   preview_url: string;
   run_on_worktree_create: boolean;
@@ -12,6 +14,7 @@ export interface ProjectActionDraft {
 export type ProjectActionIssue =
   | "name_required"
   | "command_required"
+  | "prompt_required"
   | "preview_invalid"
   | "keybinding_conflict";
 
@@ -37,8 +40,12 @@ export function projectActionIssue(
   actions: ProjectScript[],
 ): { issue: ProjectActionIssue; conflict?: string } | null {
   if (!draft.name.trim()) return { issue: "name_required" };
-  if (!draft.command.trim()) return { issue: "command_required" };
-  if (draft.preview_url.trim()) {
+  if (draft.kind === "prompt") {
+    if (!draft.prompt.trim()) return { issue: "prompt_required" };
+  } else if (!draft.command.trim()) {
+    return { issue: "command_required" };
+  }
+  if (draft.kind === "command" && draft.preview_url.trim()) {
     try {
       const url = new URL(draft.preview_url.trim());
       if (url.protocol !== "http:" && url.protocol !== "https:") {

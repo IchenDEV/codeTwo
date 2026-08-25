@@ -9,7 +9,9 @@ import {
 
 const draft: ProjectActionDraft = {
   name: "Test",
+  kind: "command",
   command: "bun test",
+  prompt: "",
   keybinding: "Mod+Shift+T",
   preview_url: "http://localhost:5173",
   run_on_worktree_create: false,
@@ -29,6 +31,15 @@ describe("project actions", () => {
       .toEqual({ issue: "preview_invalid" });
     expect(projectActionIssue(draft, [["run", "Mod+Shift+T", "Run prompt"]], []))
       .toEqual({ issue: "keybinding_conflict", conflict: "Run prompt" });
+  });
+
+  test("validates the payload required by each action type", () => {
+    expect(projectActionIssue({ ...draft, command: "" }, [], []))
+      .toEqual({ issue: "command_required" });
+    expect(projectActionIssue({ ...draft, kind: "prompt", command: "", prompt: "Review this" }, [], []))
+      .toBeNull();
+    expect(projectActionIssue({ ...draft, kind: "prompt", command: "", prompt: "" }, [], []))
+      .toEqual({ issue: "prompt_required" });
   });
 
   test("projects action shortcuts into the shared keymap contract", () => {

@@ -426,6 +426,8 @@ interface PendingPromptRequest {
   canvasRefs: Array<{ id: string; revision: number }>;
   /** Private Appshot captures attached to this turn; removed from Composer only after acceptance. */
   appshotIds: string[];
+  /** Prompt actions submit their own document and must leave the user's Composer draft untouched. */
+  clearEditor: boolean;
 }
 
 interface PendingCreation {
@@ -436,6 +438,7 @@ interface PendingCreation {
   editorSnapshot: DocBlock[];
   editorRevision: number;
   appshotIds: string[];
+  clearEditor: boolean;
   /** Project default resolved before the provider publishes its session-owned selector id. */
   projectReasoningEffort: string | null;
 }
@@ -2083,6 +2086,7 @@ export default function App() {
                   : [],
               ),
               appshotIds: pending.appshotIds,
+              clearEditor: pending.clearEditor,
             });
             void initializePluginSessionState(ev.session)
               .then(() =>
@@ -2385,6 +2389,7 @@ export default function App() {
           if (pendingRequest) {
             const currentEditor = getBlocksRef.current?.();
             if (
+              pendingRequest.clearEditor &&
               currentEditor &&
               matchesSubmittedEditorRevision(
                 currentEditor,
@@ -2443,6 +2448,7 @@ export default function App() {
             removePendingAppshots(pendingRequest.appshotIds);
             const currentEditor = getBlocksRef.current?.();
             if (
+              pendingRequest.clearEditor &&
               currentEditor &&
               matchesSubmittedEditorRevision(
                 currentEditor,
@@ -2624,7 +2630,7 @@ export default function App() {
     }));
   }, []);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (docOverride?: DocBlock[]) => {
     if (sessionLoading) {
       toast(t("toast.sessionLoading"));
       return;
@@ -2638,10 +2644,12 @@ export default function App() {
     if (!getBlocks) return;
     const editorSnapshot = getBlocks();
     const editorRevision = editorRevisionRef.current;
-    const appshotIds = activeAppshots.map((capture) => capture.id);
-    let doc: DocBlock[] = [
+    const promptAppshots = docOverride ? EMPTY_APPSHOTS : activeAppshots;
+    const appshotIds = promptAppshots.map((capture) => capture.id);
+    const clearEditor = docOverride === undefined;
+    let doc: DocBlock[] = docOverride ?? [
       ...editorSnapshot,
-      ...activeAppshots.map(privateImageBlock),
+      ...promptAppshots.map(privateImageBlock),
     ];
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
@@ -2727,6 +2735,7 @@ export default function App() {
         canvasIds,
         canvasRefs,
         appshotIds,
+        clearEditor,
       });
       updateRunningSession(targetSession, true);
     } else {
@@ -2738,6 +2747,7 @@ export default function App() {
         editorSnapshot,
         editorRevision,
         appshotIds,
+        clearEditor,
         projectReasoningEffort:
           projects.find((project) =>
             project.path === activeProjectRef.current && project.default_provider === provider
@@ -2747,7 +2757,7 @@ export default function App() {
     }
     setTurns((prev) => [
       ...prev,
-      newTurn(summarizeDoc(doc), promptRequestId, promptImagesForTurn(activeAppshots)),
+      newTurn(summarizeDoc(doc), promptRequestId, promptImagesForTurn(promptAppshots)),
     ]);
     try {
       if (targetSession) {
@@ -2843,7 +2853,7 @@ export default function App() {
   ]);
 
   const sendDuringTurn = useCallback(
-    async (delivery: "queued" | "steer") => {
+    async (delivery: "queued" | "steer", docOverride?: DocBlock[]) => {
       if (sessionLoading) {
         toast(t("toast.sessionLoading"));
         return;
@@ -2857,10 +2867,11 @@ export default function App() {
       if (!getBlocks) return;
       const editorSnapshot = getBlocks();
       const editorRevision = editorRevisionRef.current;
-      const appshotIds = activeAppshots.map((capture) => capture.id);
-      let doc: DocBlock[] = [
+      const promptAppshots = docOverride ? EMPTY_APPSHOTS : activeAppshots;
+      const appshotIds = promptAppshots.map((capture) => capture.id);
+      let doc: DocBlock[] = docOverride ?? [
         ...editorSnapshot,
-        ...activeAppshots.map(privateImageBlock),
+        ...promptAppshots.map(privateImageBlock),
       ];
       if (doc.length === 0) {
         toast(t("toast.emptyDoc"));
@@ -2893,12 +2904,13 @@ export default function App() {
             : [],
         ),
         appshotIds,
+        clearEditor: docOverride === undefined,
       };
       pendingDeferredPromptRequestsRef.current.set(requestId, pending);
       const optimistic = newTurn(
         summarizeDoc(doc),
         requestId,
-        promptImagesForTurn(activeAppshots),
+        promptImagesForTurn(promptAppshots),
       );
       optimistic.delivery = delivery;
       optimistic.queuePosition = delivery === "queued" ? 1 : undefined;
@@ -4291,6 +4303,16 @@ export default function App() {
   );
 
   const runProjectAction = useCallback((script: ProjectScript) => {
+    if (script.kind === "prompt") {
+      const doc: DocBlock[] = [{ type: "text", text: script.prompt }];
+      const session = activeSessionRef.current;
+      if (session && runningSessionsRef.current.has(session)) {
+        void sendDuringTurn("queued", doc);
+      } else {
+        void run(doc);
+      }
+      return;
+    }
     const name = script.name || script.id;
     if (script.preview_url && script.open_preview) {
       if (componentEnabled("browser.dock")) {
@@ -4313,7 +4335,7 @@ export default function App() {
         toast(message, "success");
       })
       .catch((error) => toast(t("actionDialog.failed", { error: String(error) }), "error"));
-  }, [componentEnabled, cwd, manualDockTab, t, toast]);
+  }, [componentEnabled, cwd, manualDockTab, run, sendDuringTurn, t, toast]);
 
   const saveProjectAction = useCallback(async (script: ProjectScript) => {
     const saved = await saveProjectScript(cwd || ".", script);
@@ -5442,8 +5464,10 @@ export default function App() {
     })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
-      label: `Run script: ${s.name || s.id}`,
-      hint: s.command,
+      label: s.kind === "prompt"
+        ? `Send prompt: ${s.name || s.id}`
+        : `Run script: ${s.name || s.id}`,
+      hint: s.kind === "prompt" ? s.prompt : s.command,
       run: () => runProjectAction(s),
     })),
     ...sessions.map((s) => ({
