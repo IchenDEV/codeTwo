@@ -581,7 +581,6 @@ export function SideChatPanel({
               </span>
               <div className="min-w-0 flex-1" />
               <ModelPicker
-                compact
                 models={activeTab.models}
                 current={activeTab.currentModel}
                 defaultModel={activeTab.defaultModel}
