@@ -60,6 +60,13 @@ describe("Settings page layout contract", () => {
     );
   });
 
+  test("includes Profile as a first-class personal panel", () => {
+    expect(source).toMatch(/\{ id: "profile", icon: UserRound, labelKey: "profile\.title" \}/);
+    expect(source).toContain('{tab === "profile" && <ProfileSettings providerNames={providerNames} />}');
+    expect(styles).toContain(".settings-profile-page");
+    expect(styles).toContain(".profile-activity-grid");
+  });
+
   test("includes Pets as a first-class settings panel", () => {
     expect(source).toMatch(/\{ id: "pets", icon: PawPrint, labelKey: "settings\.pets" \}/);
     expect(source).toContain('{tab === "pets" && (');

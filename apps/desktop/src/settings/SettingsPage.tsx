@@ -23,6 +23,7 @@ import {
   ScanText,
   SlidersHorizontal,
   Trash2,
+  UserRound,
   Wrench,
 } from "lucide-react";
 
@@ -85,6 +86,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { ModelPicker } from "../session/Composer";
 import { PetSettings } from "./PetSettings";
+import { ProfileSettings } from "./ProfileSettings";
 import {
   worktreeBranchDisplay,
   worktreeDiscardRoute,
@@ -104,6 +106,7 @@ import "./settings-page.css";
 
 export type SettingsTab =
   | "general"
+  | "profile"
   | "appearance"
   | "pets"
   | "project"
@@ -134,6 +137,7 @@ const NAV_GROUPS: {
     labelKey: "settings.navPersonal",
     items: [
       { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+      { id: "profile", icon: UserRound, labelKey: "profile.title" },
       { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
       { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
       { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
@@ -1218,7 +1222,7 @@ export function SettingsPage({
           className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
         >
           <span className="electrobun-webkit-app-region-drag text-ui font-medium text-muted-foreground">
-            {t("settings.title")}
+            {tab === "profile" ? t("profile.title") : t("settings.title")}
           </span>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
@@ -1236,7 +1240,10 @@ export function SettingsPage({
 
         <ScrollArea className="min-h-0 flex-1">
           <div
-            className="settings-page mx-auto w-full pb-20"
+            className={cn(
+              "settings-page mx-auto w-full pb-20",
+              tab === "profile" && "settings-profile-page",
+            )}
           >
             {tab === "general" && (
               <Page title={t("settings.general")} description={t("settings.generalHint")}>
@@ -1312,6 +1319,8 @@ export function SettingsPage({
                 <AppearanceSettings value={theme} onChange={setTheme} />
               </Page>
             )}
+
+            {tab === "profile" && <ProfileSettings providerNames={providerNames} />}
 
             {tab === "pets" && (
               <Page title={t("settings.pets")}>
