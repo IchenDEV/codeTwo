@@ -167,7 +167,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("keeps the model and reasoning selector compact in the direct session row", () => {
+  test("shows separate model and reasoning controls in the direct session row", () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
@@ -196,7 +196,9 @@ describe("SceneChip", () => {
     const row = rendered.container.querySelector("[data-session-controls]");
     expect(row?.textContent).toContain("Develop");
     expect(row?.textContent).toContain("Grok 4.6");
-    expect(row?.querySelector(".reasoning-selector-trigger--compact")).toBeTruthy();
+    expect(row?.querySelector('button[title="Model"]')).toBeTruthy();
+    expect(row?.querySelector('button[title="Reasoning"]')?.textContent).toContain("Extra High Effort");
+    expect(row?.querySelector('input[type="range"]')).toBeNull();
     rendered.unmount();
   });
 

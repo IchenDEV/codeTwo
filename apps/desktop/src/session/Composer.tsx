@@ -3,8 +3,6 @@ import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Folder,
   GitBranch,
@@ -23,7 +21,6 @@ import {
   Ticket,
   TriangleAlert,
   X,
-  Zap,
 } from "lucide-react";
 
 import type { SessionConfig } from "./config";
@@ -62,7 +59,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import "@/components/ui/reasoning-selector.css";
 
 interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
@@ -449,62 +445,6 @@ interface PickerRow {
   isDefault: boolean;
   selected: boolean;
   select: () => void;
-}
-
-const REASONING_STEP_INSET = 26;
-const COMPACT_REASONING_STEP_INSET = 16;
-
-/** Provider-owned discrete effort choices presented through the reference's continuous slider. */
-export function ReasoningScale({
-  label,
-  rows,
-  onSelect,
-  compact = false,
-  disabled = false,
-}: {
-  label: string;
-  rows: PickerRow[];
-  onSelect: (row: PickerRow) => void;
-  compact?: boolean;
-  disabled?: boolean;
-}) {
-  const selectedIndex = Math.max(0, rows.findIndex((row) => row.selected));
-  const selected = rows[selectedIndex];
-  const progress = rows.length > 1 ? selectedIndex / (rows.length - 1) : 0;
-  const stepInset = compact ? COMPACT_REASONING_STEP_INSET : REASONING_STEP_INSET;
-  const fillAdjustment = stepInset * (1 - 2 * progress);
-  const fillWidth = `calc(${progress * 100}% + ${fillAdjustment}px)`;
-
-  return (
-    <div className={cn("reasoning-selector-scale", compact && "reasoning-selector-scale--compact")}>
-      <div className="reasoning-selector-track" aria-hidden>
-        <span className="reasoning-selector-fill" style={{ width: fillWidth }} />
-        <span className="reasoning-selector-dots">
-          {rows.map((row, index) => (
-            <span
-              key={row.key}
-              className="reasoning-selector-dot"
-              data-active={index <= selectedIndex}
-            />
-          ))}
-        </span>
-      </div>
-      <input
-        className="reasoning-selector-range"
-        type="range"
-        min={0}
-        max={Math.max(0, rows.length - 1)}
-        step={1}
-        value={selectedIndex}
-        aria-label={label}
-        aria-valuetext={selected?.label}
-        title={selected?.detail || selected?.label}
-        autoFocus={!disabled}
-        disabled={disabled}
-        onInput={(event) => onSelect(rows[Number(event.currentTarget.value)])}
-      />
-    </div>
-  );
 }
 
 /**
@@ -990,7 +930,6 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
-  compact = false,
   disabled = false,
 }: {
   models: ModelChoice[];
@@ -1001,17 +940,18 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
-  /** The always-visible session row uses desktop control density. */
-  compact?: boolean;
   /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
   disabled?: boolean;
 }) {
   const t = useT();
-  const [selectorOpen, setSelectorOpen] = useState(false);
-  const [selectorPanel, setSelectorPanel] = useState<"reasoning" | "model">("reasoning");
+  const [modelOpen, setModelOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
   const families = useMemo(() => groupModels(models), [models]);
   useEffect(() => {
-    if (disabled) setSelectorOpen(false);
+    if (disabled) {
+      setModelOpen(false);
+      setEffortOpen(false);
+    }
   }, [disabled]);
   if (!hasSession && models.length === 0) return null;
 
@@ -1081,77 +1021,37 @@ export function ModelPicker({
     }));
   }
 
-  if (effortRows.length > 1) {
-    return (
-      <Popover
-        open={selectorOpen}
-        onOpenChange={(open) => {
-          setSelectorOpen(disabled ? false : open);
-          if (!open) setSelectorPanel("reasoning");
-        }}
-      >
+  return (
+    <>
+      <Popover open={modelOpen} onOpenChange={(open) => setModelOpen(disabled ? false : open)}>
         <PopoverTrigger
           render={
-            <button
-              type="button"
-              className={cn(
-                "reasoning-selector-trigger",
-                compact && "reasoning-selector-trigger--compact",
-              )}
-              title={`${t("composer.model")}: ${modelLabel} · ${t("composer.reasoning")}: ${effortLabel}`}
-              aria-label={`${modelLabel} ${effortLabel}`}
+            <Chip
+              title={t("composer.model")}
               disabled={disabled}
               aria-busy={disabled}
+              className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             >
-              <span className="reasoning-selector-trigger-model">{modelLabel}</span>
-              <span className="reasoning-selector-trigger-effort">{effortLabel}</span>
-              <ChevronDown className="reasoning-selector-trigger-chevron" aria-hidden />
-            </button>
+              <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
+              <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
+                {modelLabel}
+              </span>
+              <ChevronDown className="size-3 shrink-0 opacity-50" />
+            </Chip>
           }
         />
         <PopoverContent
-          align="center"
+          align="start"
           side="top"
-          sideOffset={compact ? 8 : 17}
-          className={cn(
-            "reasoning-selector-popup",
-            selectorPanel === "model" && "reasoning-selector-popup--menu flex flex-col overflow-hidden",
-            compact && "reasoning-selector-popup--compact",
-          )}
+          className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
         >
-          {selectorPanel === "reasoning" ? (
-            <>
-              <div className="reasoning-selector-header">
-                <button
-                  type="button"
-                  className="reasoning-selector-header-button"
-                  onClick={() => setSelectorPanel("model")}
-                >
-                  <span>{t("composer.advanced")}</span>
-                  <ChevronRight aria-hidden />
-                </button>
-                <Zap className="reasoning-selector-header-icon" strokeWidth={2} aria-hidden />
-              </div>
-              <ReasoningScale
-                label={t("composer.reasoning")}
-                rows={effortRows}
-                onSelect={(row) => row.select()}
-                compact={compact}
-                disabled={disabled}
-              />
-            </>
+          {modelRows.length === 0 ? (
+            <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
+              {t("composer.noModels")}
+            </p>
           ) : (
             <>
-              <div className="reasoning-selector-header">
-                <button
-                  type="button"
-                  className="reasoning-selector-header-button"
-                  onClick={() => setSelectorPanel("reasoning")}
-                >
-                  <ChevronLeft aria-hidden />
-                  <span>{t("composer.model")}</span>
-                </button>
-              </div>
+              <MenuSection>{t("composer.model")}</MenuSection>
               <div
                 data-model-picker-list
                 className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
@@ -1166,8 +1066,7 @@ export function ModelPicker({
                     disabled={disabled}
                     onClick={() => {
                       r.select();
-                      setSelectorPanel("reasoning");
-                      setSelectorOpen(false);
+                      setModelOpen(false);
                     }}
                   />
                 ))}
@@ -1176,60 +1075,42 @@ export function ModelPicker({
           )}
         </PopoverContent>
       </Popover>
-    );
-  }
 
-  return (
-    <Popover open={selectorOpen} onOpenChange={(open) => setSelectorOpen(disabled ? false : open)}>
-      <PopoverTrigger
-        render={<Chip
-          title={t("composer.model")}
-          disabled={disabled}
-          aria-busy={disabled}
-          className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-        >
-          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-          <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
-            {modelLabel}
-          </span>
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>}
-      />
-      <PopoverContent
-        align="start"
-        side="top"
-        className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
-      >
-        {modelRows.length === 0 ? (
-          <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
-            {t("composer.noModels")}
-          </p>
-        ) : (
-          <>
-            <MenuSection>{t("composer.model")}</MenuSection>
-            <div
-              data-model-picker-list
-              className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
-            >
-              {modelRows.map((r) => (
-                <MenuRow
-                  key={r.key}
-                  selected={r.selected}
-                  isDefault={r.isDefault}
-                  label={r.label}
-                  detail={r.detail}
-                  disabled={disabled}
-                  onClick={() => {
-                    r.select();
-                    setSelectorOpen(false);
-                  }}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+      {effortRows.length > 1 && (
+        <Popover open={effortOpen} onOpenChange={(open) => setEffortOpen(disabled ? false : open)}>
+          <PopoverTrigger
+            render={
+              <Chip
+                title={t("composer.reasoning")}
+                disabled={disabled}
+                aria-busy={disabled}
+                className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                <span>{effortLabel}</span>
+                <ChevronDown className="size-3 shrink-0 opacity-50" />
+              </Chip>
+            }
+          />
+          <PopoverContent align="start" side="top" className="w-44 p-1.5">
+            <MenuSection>{t("composer.reasoning")}</MenuSection>
+            {effortRows.map((r) => (
+              <MenuRow
+                key={r.key}
+                selected={r.selected}
+                isDefault={r.isDefault}
+                label={r.label}
+                detail={r.detail}
+                disabled={disabled}
+                onClick={() => {
+                  r.select();
+                  setEffortOpen(false);
+                }}
+              />
+            ))}
+          </PopoverContent>
+        </Popover>
+      )}
+    </>
   );
 }
 
@@ -1266,7 +1147,6 @@ export function SessionControls({
         configOptions={configOptions}
         onConfigOption={onConfigOption}
         hasSession={config.hasSession}
-        compact
         disabled={modelChangeDisabled}
       />
       <ModePicker config={config} />

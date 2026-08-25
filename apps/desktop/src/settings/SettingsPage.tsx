@@ -1485,7 +1485,6 @@ export function SettingsPage({
                         {projectDefaultProvider && projectDefaultModels.length > 0 ? (
                           <div className="flex min-w-0 items-center rounded-(--ds-radius-control) bg-fill-rest px-1">
                             <ModelPicker
-                              compact
                               models={projectDefaultModels}
                               current={project.default_model ?? null}
                               defaultModel={null}

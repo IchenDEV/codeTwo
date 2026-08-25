@@ -245,38 +245,6 @@
   --ds-menu-padding: var(--ds-space-control-group);
   --ds-menu-elevation: var(--ds-elevation-raised);
 
-  /* Reasoning selector — reference presentation plus a nested desktop-density variant. */
-  --ds-reasoning-selector-width: 450px;
-  --ds-reasoning-selector-compact-width: 320px;
-  --ds-reasoning-selector-panel-height: 170px;
-  --ds-reasoning-selector-compact-panel-height: 104px;
-  --ds-reasoning-selector-panel-radius: 24px;
-  --ds-reasoning-selector-panel-inset: 25px;
-  --ds-reasoning-selector-header-height: 32px;
-  --ds-reasoning-selector-track-gap: 32px;
-  --ds-reasoning-selector-track-height: 48px;
-  --ds-reasoning-selector-track-radius: 24px;
-  --ds-reasoning-selector-step-inset: 26px;
-  --ds-reasoning-selector-dot-size: 8px;
-  --ds-reasoning-selector-thumb-size: 64px;
-  --ds-reasoning-selector-range-overflow: 6px;
-  --ds-reasoning-selector-trigger-height: 56px;
-  --ds-reasoning-selector-trigger-radius: 28px;
-  --ds-reasoning-selector-trigger-gap: 8px;
-  --ds-reasoning-selector-layer-gap: 17px;
-  --ds-reasoning-selector-icon-size: 28px;
-  --ds-reasoning-selector-panel: #2c2c2c;
-  --ds-reasoning-selector-panel-edge: #414141;
-  --ds-reasoning-selector-track: #3f3f3f;
-  --ds-reasoning-selector-trigger: #3b3b3b;
-  --ds-reasoning-selector-accent: #339cff;
-  --ds-reasoning-selector-active-dot: #78baff;
-  --ds-reasoning-selector-rest-dot: #6f6f6f;
-  --ds-reasoning-selector-thumb: #ffffff;
-  --ds-reasoning-selector-text: #dedede;
-  --ds-reasoning-selector-text-muted: #9b9b9b;
-  --ds-reasoning-selector-panel-shadow: 0 0 0 1px var(--ds-reasoning-selector-panel-edge);
-  --ds-reasoning-selector-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--ds-reasoning-selector-accent) 55%, transparent);
 }
 
 /* Explicit preview light mode must override an OS-driven `.dark` class on the document root. */

@@ -7,7 +7,6 @@ const {
   CollaborationModePicker,
   GoalPicker,
   ModelPicker,
-  ReasoningScale,
 } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
@@ -16,55 +15,10 @@ afterEach(() => {
   restoreDom();
 });
 
-const choices = ["Minimal", "Low", "Medium", "High", "Extra High"].map((label, index) => ({
-  key: label.toLowerCase().replaceAll(" ", "-"),
-  label,
-  detail: label === "Extra High" ? "Deepest reasoning for complex tasks" : null,
-  isDefault: label === "Medium",
-  selected: index === 3,
-  select: () => {},
-}));
-
-describe("ReasoningScale", () => {
-  test("renders the reference slider with the current provider-owned effort", () => {
+describe("ModelPicker", () => {
+  test("uses separate model and reasoning menus and forwards the provider-owned choice", async () => {
     activateDom();
-    const rendered = mount(
-      <ReasoningScale label="Reasoning" rows={choices} onSelect={() => {}} />,
-    );
-
-    const range = rendered.container.querySelector('input[type="range"]');
-    expect(range?.getAttribute("min")).toBe("0");
-    expect(range?.getAttribute("max")).toBe("4");
-    expect(range?.getAttribute("aria-valuetext")).toBe("High");
-    expect(range?.getAttribute("value")).toBe("3");
-    expect(dom.document.activeElement).toBe(range);
-    expect(rendered.container.querySelectorAll('[data-active="true"]')).toHaveLength(4);
-    expect(rendered.container.querySelector(".reasoning-selector-fill")?.getAttribute("style") ?? "").toContain("75%");
-    rendered.unmount();
-  });
-
-  test("forwards the exact provider-owned choice", () => {
-    activateDom();
-    const picked: string[] = [];
-    const rendered = mount(
-      <ReasoningScale
-        label="Reasoning"
-        rows={choices}
-        onSelect={(row) => picked.push(row.key)}
-      />,
-    );
-
-    const range = rendered.container.querySelector('input[type="range"]');
-    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(range), "value")?.set;
-    if (setter) setter.call(range, "4");
-    else range.value = "4";
-    range.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
-    expect(picked).toEqual(["extra-high"]);
-    rendered.unmount();
-  });
-
-  test("uses the compact selector when provider effort is shown in the session row", () => {
-    activateDom();
+    const selected: Array<[string, string]> = [];
     const rendered = mount(
       <I18nProvider>
         <ModelPicker
@@ -85,17 +39,28 @@ describe("ReasoningScale", () => {
               { id: "xhigh", name: "Extra High Effort", description: null },
             ],
           }]}
-          onConfigOption={() => {}}
+          onConfigOption={(configId, value) => selected.push([configId, value])}
           hasSession
-          compact
         />
       </I18nProvider>,
     );
 
-    const trigger = rendered.container.querySelector(".reasoning-selector-trigger");
-    expect(trigger?.textContent).toContain("Grok 4.6");
-    expect(trigger?.textContent).toContain("Extra High Effort");
-    expect(trigger?.classList.contains("reasoning-selector-trigger--compact")).toBe(true);
+    const modelTrigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    const effortTrigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Reasoning"]');
+    expect(modelTrigger?.textContent).toContain("Grok 4.6");
+    expect(effortTrigger?.textContent).toContain("Extra High Effort");
+    expect(rendered.container.querySelector('input[type="range"]')).toBeNull();
+
+    if (!effortTrigger) throw new Error("reasoning trigger did not render");
+    click(effortTrigger);
+    await flush();
+    const low = Array.from(
+      dom.document.body.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button'),
+    ).find((button) => button.textContent?.includes("Low Effort"));
+    if (!low) throw new Error("low effort option did not render");
+    click(low);
+    await flush();
+    expect(selected).toEqual([["reasoning_effort", "low"]]);
     rendered.unmount();
   });
 
@@ -112,7 +77,6 @@ describe("ReasoningScale", () => {
           configOptions={[]}
           onConfigOption={() => {}}
           hasSession={false}
-          compact
         />
       </I18nProvider>,
     );
@@ -135,7 +99,6 @@ describe("ReasoningScale", () => {
           configOptions={[]}
           onConfigOption={() => {}}
           hasSession={false}
-          compact
         />
       </I18nProvider>,
     );
@@ -190,7 +153,6 @@ describe("ReasoningScale", () => {
           configOptions={[]}
           onConfigOption={() => {}}
           hasSession={false}
-          compact
         />
       </I18nProvider>,
     );
