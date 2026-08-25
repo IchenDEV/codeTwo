@@ -50,7 +50,6 @@ import {
   addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
-  deleteSkill,
   describeBlock,
   discardSessionWorktree,
   fallbackProviders,
@@ -5966,7 +5965,6 @@ export default function App() {
         {showPluginManager && (
           <PluginManagerPage
             plugins={localizedPluginManagerModel.plugins}
-            components={localizedPluginManagerModel.components}
             marketplaceItems={localizedPluginManagerModel.marketplaceItems}
             marketplaceSources={localizedPluginManagerModel.marketplaceSources}
             headerLeadingAction={railExpandAction}
@@ -6090,18 +6088,6 @@ export default function App() {
                   }
                 : undefined
             }
-            onUseSkill={(skillId) => {
-              const skill = skills.find((candidate) => candidate.id === skillId);
-              if (!skill) return;
-              setShowPluginManager(false);
-              setTimeout(() => insertSkillRef.current?.(skill), 0);
-            }}
-            onUninstallSkill={async (skillId) => {
-              await deleteSkill(skillId);
-              await refreshPluginManagerData(pluginManagerScope);
-              toast(t("pluginHub.componentUninstalledToast"), "success");
-            }}
-            onNewSkill={() => setSkillDraft({ name: "", text: "" })}
           />
         )}
 

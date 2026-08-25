@@ -1171,3 +1171,35 @@ pre {
     grid-template-columns: 44px minmax(96px, 0.65fr) minmax(0, 2fr);
   }
 }
+
+/* Plugin management follows the pull-request workbench: a stable catalog rail and an open detail pane. */
+.plugin-manager-page {
+  container: plugin-manager / inline-size;
+}
+
+.plugin-manager-list-pane {
+  width: clamp(20rem, 38cqw, 31rem);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+.plugin-manager-back {
+  display: none;
+}
+
+@container plugin-manager (max-width: 44rem) {
+  .plugin-manager-list-pane {
+    width: 100%;
+  }
+
+  .plugin-manager-page[data-compact-detail="true"] .plugin-manager-list-pane {
+    display: none;
+  }
+
+  .plugin-manager-page[data-compact-detail="false"] .plugin-manager-detail-pane {
+    display: none;
+  }
+
+  .plugin-manager-back {
+    display: inline-flex;
+  }
+}
