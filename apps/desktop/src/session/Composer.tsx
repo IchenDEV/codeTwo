@@ -363,7 +363,7 @@ export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { t
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) px-2 text-hint transition-colors hover:bg-accent/50",
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-hint transition-colors hover:bg-accent/50",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -1002,7 +1002,7 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
-  /** Scene configuration nests this picker inside another popover, so it uses desktop control density. */
+  /** The always-visible session row uses desktop control density. */
   compact?: boolean;
   /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
   disabled?: boolean;
@@ -1224,6 +1224,49 @@ export function ModelPicker({
   );
 }
 
+/** High-frequency, session-scoped configuration stays one click from the prompt. */
+export function SessionControls({
+  config,
+  models,
+  currentModel,
+  defaultModel,
+  onModel,
+  configOptions,
+  onConfigOption,
+  modelChangeDisabled = false,
+}: {
+  config: SessionConfig;
+  models: ModelChoice[];
+  currentModel: string | null;
+  defaultModel: string | null;
+  onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  modelChangeDisabled?: boolean;
+}) {
+  return (
+    <div data-session-controls className="flex flex-wrap items-center gap-0.5">
+      {config.scenesEnabled ? <SceneChip config={config} /> : null}
+      <ProviderPicker config={config} />
+      <ModelPicker
+        models={models}
+        current={currentModel}
+        defaultModel={defaultModel}
+        provider={config.provider}
+        onModel={onModel}
+        configOptions={configOptions}
+        onConfigOption={onConfigOption}
+        hasSession={config.hasSession}
+        compact
+        disabled={modelChangeDisabled}
+      />
+      <ModePicker config={config} />
+      {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
+      <WorktreePicker config={config} />
+    </div>
+  );
+}
+
 /**
  * The prompt composer.
  *
@@ -1371,7 +1414,7 @@ export function Composer({
       />
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
+          render={<Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-full" aria-label={t("composer.add")}>
             <Plus className="size-4" />
           </Button>}
         />
@@ -1424,20 +1467,6 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* One scene chip replaces the posture row (docs/scenes.md §UI contract): the scene sets
-          provider/model/permissions/memory/plan-first/worktree, and opening the chip still
-          exposes each picker unchanged for manual overrides. */}
-      <SceneChip
-        config={config}
-        models={models}
-        currentModel={currentModel}
-        defaultModel={defaultModel}
-        onModel={onModel}
-        configOptions={configOptions}
-        onConfigOption={onConfigOption}
-        modelChangeDisabled={running || loading}
-      />
-
       <CollaborationModePicker options={configOptions} onChange={onConfigOption} />
       <GoalPicker capability={goalCapability} goal={goal} onGoal={onGoal} />
 
@@ -1454,7 +1483,7 @@ export function Composer({
           render={<Button
             variant="ghost"
             size="icon"
-            className="size-7 shrink-0 text-muted-foreground"
+            className="size-7 shrink-0 rounded-full text-muted-foreground"
             aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
             onClick={() => onDocMode(!docMode)}
           >
@@ -1701,32 +1730,38 @@ export function Composer({
             </div>
           )}
 
-          {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
+          {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside
               the page ended up over the run button and swallowed its clicks; floating on its own
               z-plane keeps every control clickable no matter what the layout around the page does.
-              Sized to its content (`w-fit`), not the column: a page squeezed by the panel would
-              otherwise cap the card while the non-wrapping controls spill out of it — grown to fit,
-              the card carries its own surface over the panel instead of leaking naked buttons.
+              The session configuration row wraps independently, keeping its high-frequency
+              controls visible without crowding the run, stop, voice, or document controls.
               `pointer-events-none` on the strip, `auto` on the card: the page stays clickable
               either side of the floating bar. */}
           <div className={cn(docMode && "pointer-events-none absolute inset-x-0 bottom-5 z-20 px-6")}>
             <div
               className={cn(
-                "flex items-center gap-0.5",
+                "flex flex-col gap-1",
                 docMode
-                  ? // `w-max`, not `w-fit`: fit-content clamps to the column, and a clamped box
-                    // lets the send button spill outside the card. Max-content always wraps every
-                    // control — worst case the card floats a little over whatever sits beside it,
-                    // which its own z-plane makes safe. An 8px inset around the circular 32px
-                    // submit control aligns its centre with the surface's 24px corner centre.
-                    "glass-raised pointer-events-auto mx-auto w-max rounded-(--ds-composer-radius) border p-2 shadow-raised"
+                  ? "glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-(--ds-composer-radius) border p-2 shadow-raised"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2",
               )}
             >
-              {controls}
+              <SessionControls
+                config={config}
+                models={models}
+                currentModel={currentModel}
+                defaultModel={defaultModel}
+                onModel={onModel}
+                configOptions={configOptions}
+                onConfigOption={onConfigOption}
+                modelChangeDisabled={running || loading}
+              />
+              <div className="flex items-center gap-0.5">
+                {controls}
+              </div>
             </div>
           </div>
         </div>

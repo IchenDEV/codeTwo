@@ -252,9 +252,10 @@ transition history — all persisted with the project.
 
 ## UI contract (summary)
 
-- The composer's posture chips (provider/model/effort/permission/memory/Plan First) collapse
-  behind one **scene chip**; opening it still exposes the individual controls, and manual
-  overrides mark the chip "customized" without mutating the scene definition.
+- The composer keeps scene selection and the session-scoped configuration controls in one visible,
+  wrapping row. The **scene chip** opens only scene selection; provider/model/effort/permission/
+  memory/worktree remain directly reachable, and manual overrides mark the scene chip
+  "customized" without mutating the scene definition.
 - **Shift+Tab** cycles scenes (project-configurable ring); the full picker lists all resolved
   scenes with source badges.
 - Completion banner and stage suggestions as specified under `exit`.

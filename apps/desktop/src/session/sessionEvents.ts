@@ -70,6 +70,15 @@ export function permissionsFromSessions(
     .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 }
 
+/** Project the application-wide pending-input queue onto the chat the user is viewing. */
+export function pendingInputsForSession(
+  queue: readonly PermissionQueueItem[],
+  session: string | null,
+): PermissionQueueItem[] {
+  if (!session) return [];
+  return queue.filter((request) => request.session === session);
+}
+
 /** Replace one session's pending inputs after an authoritative activity transition. */
 export function permissionQueueAfterActivity(
   queue: readonly PermissionQueueItem[],
@@ -108,7 +117,7 @@ export function enqueuePermission(
     : queue.map((item, index) => (index === existing ? request : item));
 }
 
-/** Permission prompts are globally actionable; all rendered turn state belongs to the active id. */
+/** Pending inputs are collected globally, then projected onto the active chat by the UI. */
 export function shouldRenderSessionEvent(
   event: CoreEvent,
   activeSession: string | null,

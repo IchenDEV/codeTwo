@@ -10,7 +10,6 @@ import {
 import {
   Archive,
   Check,
-  CircleAlert,
   Folder,
   FolderPlus,
   Keyboard,
@@ -280,6 +279,7 @@ import {
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
 import { QuestionDialog } from "./session/QuestionDialog";
+import { PermissionCard } from "./session/PermissionCard";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
 import { TrajectoryView } from "./session/TrajectoryView";
@@ -314,6 +314,7 @@ import {
   matchesSessionCreation,
   permissionQueueAfterAnswer,
   permissionQueueAfterActivity,
+  pendingInputsForSession,
   permissionsFromSessions,
   sessionCreationBaseline,
   sessionCreationBaselineSha,
@@ -616,7 +617,11 @@ export default function App() {
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const transcriptScroll = useTranscriptScroll(activeSession, turns);
   const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
-  const permission = permissionQueue[0] ?? null;
+  const activePendingInputs = pendingInputsForSession(
+    permissionQueue,
+    activeSession,
+  );
+  const permission = activePendingInputs[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{
     name: string;
     text: string;
@@ -6411,6 +6416,14 @@ export default function App() {
                   onInvoke={invokePluginAction}
                 />
               )}
+              {permission && !permission.form && !activeArchived && (
+                <PermissionCard
+                  key={`${permission.session}:${permission.requestId}`}
+                  request={permission}
+                  pendingCount={activePendingInputs.length}
+                  onAnswer={answer}
+                />
+              )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
                   config={sessionConfig}
@@ -6989,54 +7002,6 @@ export default function App() {
         />
       )}
 
-      {permission && !permission.form && (
-        <Dialog open onOpenChange={(o) => !o && void answer(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CircleAlert className="size-4 text-warning" /> Permission
-                requested
-              </DialogTitle>
-            </DialogHeader>
-            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">
-              {permission.title}
-            </p>
-            {permission.context && permission.context.kind !== "acp" && (
-              <div className="space-y-1 text-hint text-muted-foreground">
-                <p className="font-medium capitalize text-foreground">
-                  {permission.context.kind.replaceAll("_", " ")}
-                </p>
-                {permission.context.server && (
-                  <p>Server: {permission.context.server}</p>
-                )}
-                {permission.context.tool && (
-                  <p>Tool: {permission.context.tool}</p>
-                )}
-                {permission.context.origin && (
-                  <p>Site: {permission.context.origin}</p>
-                )}
-                {permission.context.application && (
-                  <p>Application: {permission.context.application}</p>
-                )}
-                {permission.context.risk && (
-                  <p>Risk: {permission.context.risk}</p>
-                )}
-                <p>This approval is required even in Full Access.</p>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => void answer(null)}>
-                Cancel
-              </Button>
-              {permission.options.map(([id, label]) => (
-                <Button key={id} onClick={() => void answer(id)}>
-                  {label}
-                </Button>
-              ))}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

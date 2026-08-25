@@ -134,4 +134,11 @@ describe("macOS window chrome contract", () => {
       "group-data-[variant=toolbar]/tabs-list:data-active:text-primary",
     );
   });
+
+  test("keeps the sidebar resize target invisible on hover", () => {
+    expect(styles).toMatch(
+      /\.rail-grip\s*{[^}]*width:\s*6px;[^}]*cursor:\s*col-resize;/s,
+    );
+    expect(styles).not.toMatch(/\.rail-grip(?:::after|:hover)/);
+  });
 });

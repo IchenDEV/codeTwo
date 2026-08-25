@@ -17,6 +17,7 @@ import {
   matchesSessionCreation,
   permissionQueueAfterAnswer,
   permissionQueueAfterActivity,
+  pendingInputsForSession,
   permissionsFromSessions,
   sessionCreationBaseline,
   sessionCreationBaselineSha,
@@ -127,6 +128,23 @@ describe("session event isolation", () => {
 
     expect(queue.map((request) => request.session)).toEqual(["session-a", "session-b"]);
     expect(enqueuePermission(queue, { ...first, title: "A updated" })[0].title).toBe("A updated");
+  });
+
+  test("projects pending inputs onto the active chat", () => {
+    const queue = [
+      { session: "session-a", requestId: "request-a1", title: "A1", options: [] },
+      { session: "session-b", requestId: "request-b1", title: "B1", options: [] },
+      { session: "session-a", requestId: "request-a2", title: "A2", options: [] },
+    ];
+
+    expect(pendingInputsForSession(queue, "session-a").map((item) => item.requestId)).toEqual([
+      "request-a1",
+      "request-a2",
+    ]);
+    expect(pendingInputsForSession(queue, "session-b").map((item) => item.requestId)).toEqual([
+      "request-b1",
+    ]);
+    expect(pendingInputsForSession(queue, null)).toEqual([]);
   });
 
   test("projects revisioned core activity and restores globally ordered pending input", () => {
