@@ -617,4 +617,57 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     expect(refs.getBlocksRef.current()).toEqual(documentBefore);
     view.unmount();
   });
+
+  test("takes over pasted image files without swallowing ordinary text paste", async () => {
+    activateDom();
+    const pasted: File[][] = [];
+    const view = mount(
+      <DocEditor
+        skills={[]}
+        cwd="."
+        sessionId={null}
+        getBlocksRef={{ current: null }}
+        insertTextRef={{ current: null }}
+        insertAnnotationRef={{ current: null }}
+        insertFileRef={{ current: null }}
+        focusRef={{ current: null }}
+        clearRef={{ current: null }}
+        openSkillPickerRef={{ current: null }}
+        insertSkillRef={{ current: null }}
+        canvasEnabled={false}
+        canvasRuntime={null}
+        createCanvas={async () => draft("unused", 1)}
+        insertCanvasRef={{ current: null }}
+        insertCanvasDraftRef={{ current: null }}
+        restoreCanvasDocumentRef={{ current: null }}
+        freezeCanvasesRef={{ current: null }}
+        onPasteImages={(files) => pasted.push([...files])}
+        onEmptyChange={() => {}}
+      />,
+    );
+    const editorSurface = view.container.querySelector<HTMLElement>("[data-composer-editor]");
+    expect(editorSurface).toBeTruthy();
+
+    const textPaste = new dom.window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(textPaste, "clipboardData", {
+      value: { files: [], items: [], types: ["text/plain"], getData: () => "keep this text" },
+    });
+    editorSurface?.dispatchEvent(textPaste);
+    expect(textPaste.defaultPrevented).toBe(false);
+    expect(pasted).toEqual([]);
+
+    const image = new dom.window.File([new Uint8Array([137, 80, 78, 71])], "pasted.png", {
+      type: "image/png",
+    });
+    const imagePaste = new dom.window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(imagePaste, "clipboardData", {
+      value: { files: [image], items: [], types: ["Files"], getData: () => "" },
+    });
+    editorSurface?.dispatchEvent(imagePaste);
+    await flush();
+
+    expect(imagePaste.defaultPrevented).toBe(true);
+    expect(pasted.map((files) => files.map((file) => file.name))).toEqual([["pasted.png"]]);
+    view.unmount();
+  });
 });

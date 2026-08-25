@@ -29,7 +29,16 @@ for line in sys.stdin:
     if method == "initialize":
         send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1}})
     elif method == "session/new":
-        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"agent-session"}})
+        send({"jsonrpc":"2.0","id":mid,"result":{
+            "sessionId":"agent-session",
+            "models":{
+                "availableModels":[
+                    {"modelId":"fast","name":"Fast"},
+                    {"modelId":"deep","name":"Deep"}
+                ],
+                "currentModelId":"fast"
+            }
+        }})
     elif method == "session/prompt":
         prompt_id = mid
         for request_id, title in [(1000, "First permission"), (1001, "Second permission")]:
@@ -44,6 +53,10 @@ for line in sys.stdin:
         if len(answers) == 2 and prompt_id is not None:
             send({"jsonrpc":"2.0","id":prompt_id,"result":{"stopReason":"end_turn"}})
             prompt_id = None
+    elif method == "session/set_model":
+        send({"jsonrpc":"2.0","id":mid,"result":{}})
+    elif method == "session/set_config_option":
+        send({"jsonrpc":"2.0","id":mid,"result":{"configOptions":[]}})
 "#;
 
 const CANCEL_AGENT: &str = r#"
@@ -297,6 +310,95 @@ async fn concurrent_permissions_are_revisioned_and_strictly_routed() {
         store.get_session(&session).unwrap().unwrap().activity,
         activities[5]
     );
+}
+
+#[tokio::test]
+async fn model_switch_is_rejected_while_a_turn_owns_the_session() {
+    let (engine, mut rx) = Engine::new(
+        vec![provider(TWO_PERMISSION_AGENT)],
+        SkillLibrary::new(vec![]),
+    );
+    let session = create_session(&engine, &mut rx).await;
+    engine
+        .submit(prompt(&session, "model-switch-running"))
+        .await
+        .unwrap();
+
+    loop {
+        match next_event(&mut rx).await {
+            Event::PermissionRequest {
+                session: routed, ..
+            } => {
+                assert_eq!(routed, session);
+                break;
+            }
+            Event::Error { message, .. } => panic!("unexpected prompt error: {message}"),
+            _ => {}
+        }
+    }
+
+    engine
+        .submit(Op::SetModel {
+            session: session.clone(),
+            model: "deep".into(),
+        })
+        .await
+        .unwrap();
+
+    loop {
+        match next_event(&mut rx).await {
+            Event::Error {
+                session: routed,
+                message,
+                terminal,
+                ..
+            } => {
+                assert_eq!(routed.as_deref(), Some(session.as_str()));
+                assert!(!terminal);
+                assert!(
+                    message.contains("while a turn is running"),
+                    "unexpected error: {message}"
+                );
+                break;
+            }
+            Event::Models { .. } => {
+                panic!("a running session must not send session/set_model to the provider")
+            }
+            _ => {}
+        }
+    }
+
+    engine
+        .submit(Op::SetConfigOption {
+            session: session.clone(),
+            config_id: "model".into(),
+            value: "deep".into(),
+        })
+        .await
+        .unwrap();
+
+    loop {
+        match next_event(&mut rx).await {
+            Event::Error {
+                session: routed,
+                message,
+                terminal,
+                ..
+            } => {
+                assert_eq!(routed.as_deref(), Some(session.as_str()));
+                assert!(!terminal);
+                assert!(
+                    message.contains("while a turn is running"),
+                    "unexpected error: {message}"
+                );
+                break;
+            }
+            Event::ConfigOptions { .. } => {
+                panic!("a running session must not send a model config change to the provider")
+            }
+            _ => {}
+        }
+    }
 }
 
 #[tokio::test]

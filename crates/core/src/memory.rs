@@ -1527,6 +1527,10 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
             DocBlock::File { path } => lines.push(format!("Referenced file: {path}")),
             DocBlock::Image { path } => lines.push(format!("Attached image: {path}")),
             DocBlock::Appshot { id, .. } => lines.push(format!("Attached Appshot: {id}")),
+            DocBlock::Attachment { id, name } => lines.push(format!(
+                "Attached image: {} ({id})",
+                name.as_deref().unwrap_or("Image")
+            )),
             DocBlock::Canvas {
                 id,
                 frozen_revision,

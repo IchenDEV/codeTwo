@@ -66,6 +66,7 @@ import {
   gitStatus,
   githubImportPlugin,
   installMarketplacePlugin,
+  importPromptImage,
   invokePluginUi,
   commentIssue,
   issueContext,
@@ -384,6 +385,12 @@ import { cn } from "@/lib/utils";
 
 function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join("\n\n");
+}
+
+function privateImageBlock(capture: AppshotCapture): DocBlock {
+  return capture.kind === "attachment"
+    ? { type: "attachment", id: capture.id, name: capture.window_title }
+    : { type: "appshot", id: capture.id, title: capture.window_title };
 }
 
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
@@ -2596,11 +2603,7 @@ export default function App() {
     const appshotIds = activeAppshots.map((capture) => capture.id);
     let doc: DocBlock[] = [
       ...editorSnapshot,
-      ...activeAppshots.map((capture): DocBlock => ({
-        type: "appshot",
-        id: capture.id,
-        title: capture.window_title,
-      })),
+      ...activeAppshots.map(privateImageBlock),
     ];
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
@@ -2816,11 +2819,7 @@ export default function App() {
       const appshotIds = activeAppshots.map((capture) => capture.id);
       let doc: DocBlock[] = [
         ...editorSnapshot,
-        ...activeAppshots.map((capture): DocBlock => ({
-          type: "appshot",
-          id: capture.id,
-          title: capture.window_title,
-        })),
+        ...activeAppshots.map(privateImageBlock),
       ];
       if (doc.length === 0) {
         toast(t("toast.emptyDoc"));
@@ -2994,6 +2993,37 @@ export default function App() {
   appshotFailedRef.current = ({ message }) => {
     toast(t("toast.appshotFailed", { error: message }), "error");
   };
+
+  const attachPromptImages = useCallback(async (files: readonly File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    const session = activeSessionRef.current;
+    const key = session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
+    const results = await Promise.allSettled(
+      images.map(async (file) =>
+        importPromptImage(
+          new Uint8Array(await file.arrayBuffer()),
+          file.type || null,
+          file.name || "Image.png",
+        )),
+    );
+    const captures = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    if (captures.length > 0) {
+      setPendingAppshots((current) => ({
+        ...current,
+        [key]: [...(current[key] ?? []), ...captures],
+      }));
+      setTimeout(() => focusEditorRef.current?.(), 0);
+    }
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failure) {
+      toast(t("toast.imageAttachFailed", { error: String(failure.reason) }), "error");
+    }
+  }, [cwd, t, toast]);
 
   useEffect(() => {
     let removeCaptured: (() => void) | null = null;
@@ -6412,6 +6442,10 @@ export default function App() {
                       setCurrentModel(id);
                       return;
                     }
+                    if (runningSessionsRef.current.has(session)) {
+                      toast(t("toast.modelBusy"), "error");
+                      return;
+                    }
                     // Optimistic: the engine answers with a `models` event, or an `error` if the provider
                     // doesn't implement the switch.
                     if (id !== currentModelRef.current) {
@@ -6437,6 +6471,13 @@ export default function App() {
                         const option = configOptions.find(
                           (item) => item.id === configId,
                         );
+                    if (
+                      (option?.category === "model" || configId === "model") &&
+                      runningSessionsRef.current.has(session)
+                    ) {
+                      toast(t("toast.modelBusy"), "error");
+                      return;
+                    }
                     if (
                       option?.category === "collaboration_mode" ||
                       configId === "collaboration_mode"
@@ -6505,6 +6546,7 @@ export default function App() {
                           setShowFiles(true);
                     else toast("Files are disabled in Plugins.", "info");
                   }}
+                  onAttachImages={attachPromptImages}
                   onInsertSkill={() => openSkillPickerRef.current?.()}
                   onInsertIssue={() => {
                         if (componentEnabled("issues.modal"))
@@ -6586,6 +6628,7 @@ export default function App() {
                     restoreCanvasDocumentRef={restoreCanvasDocumentRef}
                     freezeCanvasesRef={freezeCanvasesRef}
                     canvasDeliveryErrorRef={canvasDeliveryErrorRef}
+                    onPasteImages={attachPromptImages}
                     onEmptyChange={handleEditorEmptyChange}
                   />
                 </Composer>

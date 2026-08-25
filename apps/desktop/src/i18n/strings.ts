@@ -337,6 +337,9 @@ export const en = {
   "composer.add": "Add to the document",
   "composer.appshotText": "{count} characters of window text",
   "composer.removeAppshot": "Remove Appshot of {title}",
+  "composer.attachImage": "Attach image",
+  "composer.imageDimensions": "{width} × {height} px",
+  "composer.removeImage": "Remove image {title}",
   "composer.mentionFile": "Mention a file",
   "composer.insertSkill": "Insert a skill",
   "composer.insertCanvas": "Insert Canvas",
@@ -1499,6 +1502,7 @@ export const en = {
   "toast.emptyDoc": "Write a prompt first — the document is empty.",
   "toast.appshotReady": "Appshot from {app} is ready in the Composer.",
   "toast.appshotFailed": "Appshot failed: {error}",
+  "toast.imageAttachFailed": "Could not attach image: {error}",
   "toast.alreadyRunning": "A turn is already running. Stop it first.",
   "toast.notRunning": "There is no running turn.",
   "toast.steerUnsupported": "This provider does not support native steering.",
@@ -1517,6 +1521,7 @@ export const en = {
   "toast.projectDefaultFailed":
     "Could not save the project workspace default: {error}",
   "toast.modelFailed": "Could not switch model: {error}",
+  "toast.modelBusy": "Stop the current turn before switching models.",
   "toast.dismiss": "Dismiss",
 
   // keymap action labels — the core ships English ones; these override by action id, and anything
@@ -2264,6 +2269,9 @@ export const zhCN: Record<StringKey, string> = {
   "composer.add": "向文档添加内容",
   "composer.appshotText": "{count} 个窗口文本字符",
   "composer.removeAppshot": "移除「{title}」Appshot",
+  "composer.attachImage": "添加图片",
+  "composer.imageDimensions": "{width} × {height} 像素",
+  "composer.removeImage": "移除图片「{title}」",
   "composer.mentionFile": "引用文件",
   "composer.insertSkill": "插入技能",
   "composer.insertCanvas": "插入画布",
@@ -3346,6 +3354,7 @@ export const zhCN: Record<StringKey, string> = {
   "toast.emptyDoc": "先写点什么——文档现在是空的。",
   "toast.appshotReady": "已把 {app} 的 Appshot 放入输入区。",
   "toast.appshotFailed": "Appshot 失败：{error}",
+  "toast.imageAttachFailed": "无法添加图片：{error}",
   "toast.alreadyRunning": "已经有一轮在运行了，先停止它。",
   "toast.notRunning": "当前没有正在运行的轮次。",
   "toast.steerUnsupported": "这个供应商不支持原生插队。",
@@ -3363,6 +3372,7 @@ export const zhCN: Record<StringKey, string> = {
   "toast.projectFailed": "无法添加该文件夹：{error}",
   "toast.projectDefaultFailed": "无法保存项目工作区默认值：{error}",
   "toast.modelFailed": "无法切换模型：{error}",
+  "toast.modelBusy": "请先停止当前运行，再切换模型。",
   "toast.dismiss": "关闭",
 
   "action.run": "运行提示词",

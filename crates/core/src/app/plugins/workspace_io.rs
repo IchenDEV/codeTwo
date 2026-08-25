@@ -10,6 +10,7 @@ use crate::project::{self, ProjectWorktreeMode};
 use crate::workspace;
 use crate::workspace_search::{self, WorkspaceSearchCancellation, WorkspaceSearchOptions};
 use crate::worktree::{ResolvedWorktreeBaseline, WorktreeBaseline};
+use base64::Engine as _;
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult,
 };
@@ -33,10 +34,15 @@ impl Plugin for WorkspacePlugin {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Workspace files, rules, project scripts, and local worktree baselines.")
+        Some("Workspace files, private prompt attachments, rules, and local worktree baselines.")
+    }
+
+    fn inject(&self) -> Injection {
+        Injection::required(["paths"])
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
+        let paths = ctx.expect::<Paths>()?;
         #[derive(Deserialize)]
         struct ListFilesArgs {
             cwd: String,
@@ -92,6 +98,47 @@ impl Plugin for WorkspacePlugin {
             let args: WriteArgs = take_args(args)?;
             workspace::write_text(Path::new(&args.cwd), &args.path, &args.content)?;
             Ok(Value::Bool(true))
+        })?;
+
+        #[derive(Deserialize)]
+        struct ImportAttachmentArgs {
+            bytes: Vec<u8>,
+            #[serde(default)]
+            declared_mime: Option<String>,
+            #[serde(default)]
+            name: String,
+        }
+        let attachment_data_dir = paths.data_dir.clone();
+        ctx.command("attachments.import", move |args| {
+            let data_dir = attachment_data_dir.clone();
+            async move {
+                let args: ImportAttachmentArgs = take_args(args)?;
+                let attachment = crate::attachment::import_prompt_attachment(
+                    &data_dir,
+                    &args.name,
+                    args.declared_mime.as_deref(),
+                    &args.bytes,
+                    crate::session::now_millis(),
+                )
+                .map_err(PluginError::new)?;
+                json(serde_json::json!({
+                    "id": attachment.id,
+                    "kind": "attachment",
+                    "app_name": "Image",
+                    "window_title": attachment.name,
+                    "captured_at": "",
+                    "text_length": 0,
+                    "text_truncated": false,
+                    "width": attachment.width,
+                    "height": attachment.height,
+                    "preview_data_url": format!(
+                        "data:{};base64,{}",
+                        attachment.mime_type,
+                        base64::engine::general_purpose::STANDARD.encode(attachment.bytes),
+                    ),
+                    "destination": "current",
+                }))
+            }
         })?;
 
         #[derive(Deserialize)]
