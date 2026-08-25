@@ -822,6 +822,19 @@
     font-weight: 600;
   }
 
+  /* The liquid silhouette owns the composer's hairline as well as its fill and shadow. Keeping all
+     three on one measured shape prevents the border from jumping ahead while the surface settles. */
+  .composer-liquid-surface {
+    --composer-liquid-border-color: color-mix(
+      in oklch,
+      var(--foreground) 7%,
+      transparent
+    );
+  }
+  .composer-liquid-surface:focus-within {
+    --composer-liquid-border-color: color-mix(in oklch, var(--ring) 20%, transparent);
+  }
+
   /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
      stays invisible until you're near it, so the resting state reads as a plain card. */
   .composer-grip {
