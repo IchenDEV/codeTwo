@@ -37,6 +37,11 @@ function renderDock(availableSurfaces, tab = "home") {
         fileReveal={null}
         onActiveFile={() => {}}
         onCloseFile={() => {}}
+        turns={[]}
+        usage={null}
+        hasEarlier={false}
+        loadingEarlier={false}
+        onLoadEarlier={() => {}}
         width={440}
         onWidth={() => {}}
       />
@@ -74,5 +79,23 @@ describe("Dock plugin component gate", () => {
     expect(view.container.querySelector('[data-slot="tabs-content"][data-value="terminal"]')).toBeNull();
 
     view.unmount();
+  });
+
+  test("renders trajectory as a right-panel module", async () => {
+    activateDom();
+    const home = renderDock(["trajectory"], "home");
+    await flush();
+
+    expect(home.container.textContent).toContain("Execution trajectory");
+    expect(home.container.textContent).toContain("Inspect the session timeline");
+    home.unmount();
+
+    const module = renderDock(["trajectory"], "trajectory");
+    await flush();
+
+    expect(module.container.querySelector('[role="tabpanel"]')).not.toBeNull();
+    expect(module.container.querySelector('[aria-label="Execution trajectory"]')).not.toBeNull();
+    expect(module.container.textContent).toContain("No events match this view.");
+    module.unmount();
   });
 });

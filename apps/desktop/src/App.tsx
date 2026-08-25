@@ -284,7 +284,6 @@ import { QuestionDialog } from "./session/QuestionDialog";
 import { PermissionCard } from "./session/PermissionCard";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
-import { TrajectoryView } from "./session/TrajectoryView";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import { DesktopPetBridge } from "./pet/DesktopPet";
@@ -625,7 +624,6 @@ export default function App() {
     shell: SessionCreationShell;
   } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>(
     [],
   );
@@ -3807,6 +3805,7 @@ export default function App() {
   }, [activeComponentPolicyReady, lspPluginEnabled, lspProjectPath, lspRuntimeEnabled]);
   const availableDockSurfaces = useMemo<DockSurface[]>(
     () => [
+      "trajectory",
       ...(componentEnabled("browser.dock") ? ["browser" as const] : []),
       ...(componentEnabled("terminal.dock") ? ["terminal" as const] : []),
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
@@ -4250,13 +4249,14 @@ export default function App() {
 
   const toggleDock = useCallback(
     (t: DockSurface) => {
-      const component: Record<DockSurface, BuiltinUiComponentId> = {
+      const component: Partial<Record<DockSurface, BuiltinUiComponentId>> = {
         browser: "browser.dock",
         terminal: "terminal.dock",
         files: "files.surface",
         git: "git.surface",
       };
-      if (!componentEnabled(component[t])) {
+      const componentId = component[t];
+      if (componentId && !componentEnabled(componentId)) {
         toast(
           `${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`,
           "info",
@@ -6317,8 +6317,6 @@ export default function App() {
               terminalActive={dockTab === "terminal"}
               panelActive={dockTab !== null}
               sideChatActive={sideChatOpen}
-              trajectoryActive={trajectoryOpen && !docMode}
-              trajectoryAvailable={!docMode && turns.length > 0 && !sessionLoading}
               actions={scripts}
               editorLaunchersAvailable={editorLaunchersAvailable}
               fileManagerLabel={fileManagerLabel}
@@ -6342,7 +6340,6 @@ export default function App() {
                   return next;
                 });
               }}
-              onToggleTrajectory={() => setTrajectoryOpen((current) => !current)}
               onTogglePanel={() => {
                 setSideChatOpen(false);
                 manualDockTab(dockTab ? null : "home");
@@ -6370,40 +6367,31 @@ export default function App() {
               docMode ? "flex-row" : "flex-col",
             )}
           >
-            {(turns.length > 0 || running || sessionLoading) &&
-              (trajectoryOpen && !docMode && !sessionLoading && turns.length > 0 ? (
-                  <TrajectoryView
-                    turns={turns}
-                    usage={sessionUsage}
-                    hasEarlier={transcriptNextBefore !== null}
-                    loadingEarlier={loadingEarlier}
-                    onLoadEarlier={() => void loadEarlierTranscript()}
+            {(turns.length > 0 || running || sessionLoading) && (
+              <TranscriptPane
+                variant={docMode ? "side" : "main"}
+                turns={turns}
+                loading={sessionLoading}
+                hasEarlier={transcriptNextBefore !== null}
+                loadingEarlier={loadingEarlier}
+                onLoadEarlier={() => void loadEarlierTranscript()}
+                scroll={transcriptScroll}
+                onOpenPlanAsDocument={openPlanAsDocument}
+                onPinPlanArtifact={pinPlanArtifact}
+                canPinPlan={scenesSurfaceEnabled && canPinPlan}
+                onSaveTemplate={openTemplateDraft}
+                onAddSelection={addSelectedText}
+                onExplainSelection={explainSelectedText}
+                onAskSelectionInSideChat={askSelectedTextInSideChat}
+                before={
+                  <PluginUiSlot
+                    slot="transcript.before"
+                    contributions={pluginUiActions["transcript.before"]}
+                    onInvoke={invokePluginAction}
                   />
-                ) : (
-                  <TranscriptPane
-                    variant={docMode ? "side" : "main"}
-                    turns={turns}
-                    loading={sessionLoading}
-                    hasEarlier={transcriptNextBefore !== null}
-                    loadingEarlier={loadingEarlier}
-                    onLoadEarlier={() => void loadEarlierTranscript()}
-                    scroll={transcriptScroll}
-                    onOpenPlanAsDocument={openPlanAsDocument}
-                    onPinPlanArtifact={pinPlanArtifact}
-                    canPinPlan={scenesSurfaceEnabled && canPinPlan}
-                    onSaveTemplate={openTemplateDraft}
-                    onAddSelection={addSelectedText}
-                    onExplainSelection={explainSelectedText}
-                    onAskSelectionInSideChat={askSelectedTextInSideChat}
-                    before={
-                      <PluginUiSlot
-                        slot="transcript.before"
-                        contributions={pluginUiActions["transcript.before"]}
-                        onInvoke={invokePluginAction}
-                      />
-                    }
-                  />
-                ))}
+                }
+              />
+            )}
 
             {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
                 BlockNote unmounts (and takes the draft with it) if the structure around it changes.
@@ -6798,6 +6786,11 @@ export default function App() {
                 setFileReveal(null);
               }}
               onCloseFile={closeFileTab}
+              turns={turns}
+              usage={sessionUsage}
+              hasEarlier={transcriptNextBefore !== null}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={() => void loadEarlierTranscript()}
               width={dockWidth}
               onWidth={setDockWidth}
             />
