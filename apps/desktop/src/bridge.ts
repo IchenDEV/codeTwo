@@ -3687,8 +3687,8 @@ export async function runProjectScript(cwd: string, id: string): Promise<string>
 
 // ---- voice input (G11) -------------------------------------------------------------------------
 
-/// Whether the core has a local transcriber configured (CODETWO_TRANSCRIBE_CMD or an auto-detected
-/// whisper binary). The UI prefers the webview's own speech recognition when present.
+/// Whether the core has a configured local transcriber or a platform speech recognizer. The UI
+/// prefers the webview's own speech recognition when present.
 export async function voiceAvailable(): Promise<boolean> {
   return inDesktop ? call<boolean>("voice.available") : false;
 }
