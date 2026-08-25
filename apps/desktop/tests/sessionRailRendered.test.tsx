@@ -89,7 +89,7 @@ function renderRail(overrides = {}) {
           onOpenPullRequests={() => {}}
           automationsOpen={false}
           pluginManagerOpen={false}
-          quickQuota={{ remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
+          quickQuota={{ provider: "codex", remainingPercent: 42, windowMinutes: 10_080, resetsAt: null }}
           quickQuotaLoading={false}
           quickQuotaProviderName="OpenAI Codex"
           onOpenUsage={() => {}}
@@ -149,6 +149,8 @@ describe("SessionRail row layout", () => {
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
     expect(features?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
       .toBe("42");
+    expect(features?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
+      .toBe("codex");
 
     view.unmount();
   });
