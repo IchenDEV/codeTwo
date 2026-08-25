@@ -221,6 +221,7 @@
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
+  --ds-color-shadow: var(--ds-foundation-light-shadow);
 
   --ds-focus-width: var(--ds-foundation-space-2);
   --ds-focus-offset: var(--ds-foundation-space-2);
@@ -268,6 +269,7 @@
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
+  --ds-color-shadow: var(--ds-foundation-light-shadow);
   --ds-elevation-surface: 0 1px 2px var(--ds-foundation-light-shadow),
     0 4px 12px rgb(16 24 40 / 5%);
   --ds-elevation-raised: 0 2px 6px var(--ds-foundation-light-shadow),
@@ -297,6 +299,7 @@
   --ds-color-destructive-hover: var(--ds-foundation-dark-destructive-hover);
   --ds-color-focus: var(--ds-foundation-dark-focus);
   --ds-color-overlay: var(--ds-foundation-dark-overlay);
+  --ds-color-shadow: var(--ds-foundation-dark-shadow);
   --ds-elevation-surface: 0 1px 2px var(--ds-foundation-dark-shadow),
     0 6px 16px rgb(0 0 0 / 20%);
   --ds-elevation-raised: 0 3px 8px var(--ds-foundation-dark-shadow),

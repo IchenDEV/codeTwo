@@ -97,6 +97,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
@@ -1167,6 +1168,11 @@ export function SettingsPage({
           aria-label={t("settings.title")}
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
         >
+          <LiquidSelectionGroup
+            activeSelector='[aria-current="page"]'
+            fill="var(--color-fill-hover)"
+            className="space-y-6"
+          >
           {NAV_GROUPS.map((group) => {
             const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
               .filter(({ id }) => deviceSyncEnabled || id !== "sync");
@@ -1188,7 +1194,7 @@ export function SettingsPage({
                       className={cn(
                         "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
                         id === tab
-                          ? "bg-accent font-medium text-foreground"
+                          ? "font-medium text-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                       )}
                     >
@@ -1200,6 +1206,7 @@ export function SettingsPage({
               </section>
             );
           })}
+          </LiquidSelectionGroup>
         </nav>
       </aside>
 

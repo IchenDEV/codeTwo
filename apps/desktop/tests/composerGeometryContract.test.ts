@@ -19,15 +19,20 @@ describe("composer geometry contract", () => {
     expect(tokens).toContain(
       "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));",
     );
+    expect(composer).toContain("data-gooey-composer");
     expect(composer).toContain(
-      '"rounded-(--ds-composer-radius) bg-card shadow-raised',
+      ": { shape: true, speed: 1.35, bounce: 0.2, contentBlur: 0 }",
     );
+    expect(composer).toContain(
+      'LIQUID_AVAILABLE ? "bg-transparent" : "bg-card shadow-raised"',
+    );
+    expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
     expect(composer).toContain(
       '"glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-(--ds-composer-radius) border p-2 shadow-raised"',
     );
     expect(
       composer.match(
-        /className="size-8 shrink-0 rounded-full transition-transform active:scale-90"/g,
+        /"size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100"/g,
       ),
     ).toHaveLength(2);
     expect(
