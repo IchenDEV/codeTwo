@@ -223,6 +223,12 @@ pub struct TranscriptEntry {
     pub seq: i64,
     pub role: Role,
     pub part: Part,
+    /// Durable wall-clock time for this exact row. Older handoffs deserialize as unknown.
+    #[serde(default)]
+    pub created_at: i64,
+    /// Earliest update folded into this row, used by projections such as tool timelines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<i64>,
 }
 
 /// A turn-aligned slice of a transcript. `next_before` is the exclusive cursor for the next older

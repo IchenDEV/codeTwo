@@ -421,6 +421,18 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
                 *outputs = prior_outputs;
             }
         }
+        let prior_started_at = entries[index]
+            .started_at
+            .unwrap_or(entries[index].created_at);
+        if prior_started_at > 0 {
+            let terminal = &mut entries[terminal_index];
+            terminal.started_at = Some(
+                terminal
+                    .started_at
+                    .unwrap_or(terminal.created_at)
+                    .min(prior_started_at),
+            );
+        }
         keep[index] = false;
     }
 
@@ -2184,22 +2196,26 @@ impl Store {
             ));
         }
         let parts = {
-            let mut statement = tx
-                .prepare("SELECT seq,role,part_json FROM parts WHERE session_id=?1 ORDER BY seq")?;
+            let mut statement = tx.prepare(
+                "SELECT seq,role,part_json,created_at FROM parts WHERE session_id=?1 ORDER BY seq",
+            )?;
             let rows = statement.query_map([session_id], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
                 ))
             })?;
             let mut parts = Vec::new();
             for row in rows {
-                let (seq, role, part) = row?;
+                let (seq, role, part, created_at) = row?;
                 parts.push(TranscriptEntry {
                     seq,
                     role: serde_json::from_str(&role)?,
                     part: serde_json::from_str(&part)?,
+                    created_at,
+                    started_at: Some(created_at),
                 });
             }
             parts
@@ -2340,7 +2356,11 @@ impl Store {
                     serde_json::to_string(&entry.role)?,
                     serde_json::to_string(&entry.part)?,
                     search_text.as_deref(),
-                    session.created_at.saturating_add(entry.seq),
+                    if entry.created_at > 0 {
+                        entry.created_at
+                    } else {
+                        session.created_at.saturating_add(entry.seq)
+                    },
                 ],
             )?;
         }
@@ -3345,37 +3365,39 @@ impl Store {
             None => (min_seq, None),
         };
 
-        let raw_entries: Vec<(i64, String, String)> = if let Some(TranscriptCursor(cursor)) = before
+        let raw_entries: Vec<(i64, String, String, i64)> = if let Some(TranscriptCursor(cursor)) = before
         {
             let mut stmt = tx.prepare(
-                "SELECT seq,role,part_json FROM parts
+                "SELECT seq,role,part_json,created_at FROM parts
                      WHERE session_id=?1 AND seq>=?2 AND seq<?3 AND seq<=?4
                      ORDER BY seq",
             )?;
             let rows = stmt.query_map(
                 rusqlite::params![session_id, start_seq, cursor, snapshot_through],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         } else {
             let mut stmt = tx.prepare(
-                "SELECT seq,role,part_json FROM parts
+                "SELECT seq,role,part_json,created_at FROM parts
                      WHERE session_id=?1 AND seq>=?2 AND seq<=?3
                      ORDER BY seq",
             )?;
             let rows = stmt.query_map(
                 rusqlite::params![session_id, start_seq, snapshot_through],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )?;
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
 
         let mut entries = Vec::with_capacity(raw_entries.len());
-        for (seq, role, part) in raw_entries {
+        for (seq, role, part, created_at) in raw_entries {
             entries.push(TranscriptEntry {
                 seq,
                 role: serde_json::from_str(&role)?,
                 part: serde_json::from_str(&part)?,
+                created_at,
+                started_at: Some(created_at),
             });
         }
         tx.commit()?;
@@ -4767,6 +4789,11 @@ mod tests {
         assert_eq!(page_user_numbers(&latest), (35..55).collect::<Vec<_>>());
         assert_eq!(latest.entries.len(), 40);
         assert_eq!(latest.snapshot_through, Some(TranscriptCursor(109)));
+        assert!(latest.entries.iter().all(|entry| entry.created_at > 0));
+        assert!(latest
+            .entries
+            .iter()
+            .all(|entry| entry.started_at == Some(entry.created_at)));
 
         let middle = store
             .transcript_page(&session.id, latest.next_before, DEFAULT_TRANSCRIPT_TURNS)
@@ -5191,12 +5218,16 @@ mod tests {
                 agent_input: metadata.then(|| serde_json::json!({ "role": "researcher" })),
                 outputs: Vec::new(),
             },
+            created_at: 100 + seq,
+            started_at: Some(100 + seq),
         };
         let mut entries = vec![
             TranscriptEntry {
                 seq: 0,
                 role: Role::User,
                 part: Part::Text { text: "one".into() },
+                created_at: 100,
+                started_at: Some(100),
             },
             tool(1, "pending", "Delegate researcher", true),
             tool(2, "in_progress", "", false),
@@ -5207,6 +5238,8 @@ mod tests {
                 seq: 5,
                 role: Role::User,
                 part: Part::Text { text: "two".into() },
+                created_at: 105,
+                started_at: Some(105),
             },
             // A later turn cannot supersede the prior turn's row.
             tool(6, "failed", "Other turn", false),
@@ -5243,6 +5276,8 @@ mod tests {
         };
         assert_eq!(title, "Delegate researcher");
         assert_eq!(status, "completed");
+        assert_eq!(projected[1].started_at, Some(101));
+        assert_eq!(projected[1].created_at, 103);
         assert_eq!(tool_kind.as_deref(), Some("agent"));
         assert_eq!(
             agent_input,
@@ -5261,6 +5296,8 @@ mod tests {
                 seq: 0,
                 role: Role::User,
                 part: Part::Text { text: "run".into() },
+                created_at: 100,
+                started_at: Some(100),
             },
             TranscriptEntry {
                 seq: 1,
@@ -5273,6 +5310,8 @@ mod tests {
                     agent_input: None,
                     outputs: Vec::new(),
                 },
+                created_at: 101,
+                started_at: Some(101),
             },
             TranscriptEntry {
                 seq: 2,
@@ -5285,6 +5324,8 @@ mod tests {
                     agent_input: None,
                     outputs: Vec::new(),
                 },
+                created_at: 102,
+                started_at: Some(102),
             },
         ];
 

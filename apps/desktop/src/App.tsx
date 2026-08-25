@@ -281,6 +281,7 @@ import {
 import { QuestionDialog } from "./session/QuestionDialog";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
+import { TrajectoryView } from "./session/TrajectoryView";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import { petAnimationForActivity } from "./pet/state";
@@ -592,6 +593,7 @@ export default function App() {
     shell: SessionCreationShell;
   } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>(
     [],
   );
@@ -793,6 +795,8 @@ export default function App() {
   // command lands in a later wave; until then the bridge feature-detects and this stays null,
   // which hides the cost segment entirely.
   const [sessionUsage, setSessionUsage] = useState<{
+    input_tokens: number;
+    output_tokens: number;
     costUsd: number | null;
     burnRate: number | null;
   } | null>(null);
@@ -817,6 +821,8 @@ export default function App() {
       });
       if (samples.length > 16) samples.shift();
       setSessionUsage({
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
         costUsd: usage.cost_usd,
         burnRate: deriveBurnRate(samples),
       });
@@ -6259,6 +6265,8 @@ export default function App() {
               terminalActive={terminalOpen}
               panelActive={dockTab !== null}
               sideChatActive={sideChatOpen}
+              trajectoryActive={trajectoryOpen && !docMode}
+              trajectoryAvailable={!docMode && turns.length > 0 && !sessionLoading}
               actions={scripts}
               onRunAction={runProjectAction}
               onAddAction={() => setShowActionDialog(true)}
@@ -6278,6 +6286,7 @@ export default function App() {
                   return next;
                 });
               }}
+              onToggleTrajectory={() => setTrajectoryOpen((current) => !current)}
               onTogglePanel={() => {
                 setSideChatOpen(false);
                 manualDockTab(dockTab ? null : "home");
@@ -6299,40 +6308,49 @@ export default function App() {
           {/* The same transcript tree serves the main column and document side panel. Keeping the
               rendering path unified prevents the two modes from drifting, while the scroll
               controller preserves the reader's position as streamed content arrives. */}
-              <div
-                className={cn(
-                  "flex min-h-0 flex-1",
-                  docMode ? "flex-row" : "flex-col",
-                )}
-              >
-            {(turns.length > 0 || running || sessionLoading) && (
-              <TranscriptPane
-                variant={docMode ? "side" : "main"}
-                turns={turns}
-                loading={sessionLoading}
-                hasEarlier={transcriptNextBefore !== null}
-                loadingEarlier={loadingEarlier}
-                onLoadEarlier={() => void loadEarlierTranscript()}
-                scroll={transcriptScroll}
-                onOpenPlanAsDocument={openPlanAsDocument}
-                onPinPlanArtifact={pinPlanArtifact}
-                canPinPlan={scenesSurfaceEnabled && canPinPlan}
-                onSaveTemplate={openTemplateDraft}
-                petAnimation={petAnimation}
-                voiceEnabled={voiceComposerEnabled}
-                onVoiceText={(text) => insertTextRef.current?.(text)}
-                onAddSelection={addSelectedText}
-                onExplainSelection={explainSelectedText}
-                onAskSelectionInSideChat={askSelectedTextInSideChat}
-                    before={
-                  <PluginUiSlot
-                    slot="transcript.before"
-                    contributions={pluginUiActions["transcript.before"]}
-                    onInvoke={invokePluginAction}
-                  />
-                    }
-              />
+          <div
+            className={cn(
+              "flex min-h-0 flex-1",
+              docMode ? "flex-row" : "flex-col",
             )}
+          >
+            {(turns.length > 0 || running || sessionLoading) &&
+              (trajectoryOpen && !docMode && !sessionLoading && turns.length > 0 ? (
+                  <TrajectoryView
+                    turns={turns}
+                    usage={sessionUsage}
+                    hasEarlier={transcriptNextBefore !== null}
+                    loadingEarlier={loadingEarlier}
+                    onLoadEarlier={() => void loadEarlierTranscript()}
+                  />
+                ) : (
+                  <TranscriptPane
+                    variant={docMode ? "side" : "main"}
+                    turns={turns}
+                    loading={sessionLoading}
+                    hasEarlier={transcriptNextBefore !== null}
+                    loadingEarlier={loadingEarlier}
+                    onLoadEarlier={() => void loadEarlierTranscript()}
+                    scroll={transcriptScroll}
+                    onOpenPlanAsDocument={openPlanAsDocument}
+                    onPinPlanArtifact={pinPlanArtifact}
+                    canPinPlan={scenesSurfaceEnabled && canPinPlan}
+                    onSaveTemplate={openTemplateDraft}
+                    petAnimation={petAnimation}
+                    voiceEnabled={voiceComposerEnabled}
+                    onVoiceText={(text) => insertTextRef.current?.(text)}
+                    onAddSelection={addSelectedText}
+                    onExplainSelection={explainSelectedText}
+                    onAskSelectionInSideChat={askSelectedTextInSideChat}
+                    before={
+                      <PluginUiSlot
+                        slot="transcript.before"
+                        contributions={pluginUiActions["transcript.before"]}
+                        onInvoke={invokePluginAction}
+                      />
+                    }
+                  />
+                ))}
 
             {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
                 BlockNote unmounts (and takes the draft with it) if the structure around it changes.
