@@ -77,6 +77,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
@@ -310,26 +311,17 @@ export function SessionRail({
     Promise.resolve(onArchive(id, archived)).then(clearMotion, clearMotion);
   }, [archiveMotion, onArchive]);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startW = applied;
-      const onMove = (ev: MouseEvent) =>
-        onWidth(Math.round(Math.min(420, Math.max(220, startW + (ev.clientX - startX)))));
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove("resizing-h");
-        setDragging(false);
-      };
-      document.body.classList.add("resizing-h");
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    value: applied,
+    min: 220,
+    max: 420,
+    onStart: () => {
       setDragging(true);
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
     },
-    [applied, onWidth],
-  );
+    onResize: onWidth,
+    onEnd: () => setDragging(false),
+  });
 
   const activeProjectRecord = projects.find((p) => p.path === activeProject) ?? null;
   const activeProjectName = activeProjectRecord?.name ?? null;
@@ -816,7 +808,14 @@ export function SessionRail({
     >
       {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
       <div className="session-rail-content flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
-      {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
+      {!collapsed && (
+        <div
+          className="rail-grip"
+          aria-label={t("rail.resize")}
+          title={t("rail.resize")}
+          {...resizeHandle}
+        />
+      )}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
       {/* Keep the controls centred in the same 48px title row as the main header, with enough

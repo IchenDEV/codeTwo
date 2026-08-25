@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactElement, type ReactNode } from "react";
+import { forwardRef, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactElement, type ReactNode } from "react";
 import { Liquid } from "liquid-gooey";
 import {
   ArrowUp,
@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 
@@ -1368,26 +1369,14 @@ export function Composer({
   }, [boundsRef]);
   const applied = Math.min(height, maxHeight);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startY = e.clientY;
-      const startH = applied;
-      const column = boundsRef.current?.getBoundingClientRect().height ?? 720;
-      const max = Math.max(72, column - 180);
-      const onMove = (ev: MouseEvent) =>
-        onHeight(Math.round(Math.min(max, Math.max(72, startH + (startY - ev.clientY)))));
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove("resizing-v");
-      };
-      document.body.classList.add("resizing-v");
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [applied, onHeight, boundsRef],
-  );
+  const resizeHandle = useResizeHandle({
+    axis: "y",
+    direction: -1,
+    value: applied,
+    min: 72,
+    max: maxHeight,
+    onResize: onHeight,
+  });
 
   const controls = (
     <>
@@ -1660,9 +1649,10 @@ export function Composer({
               document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
           <div
             className={cn("composer-grip", docMode && "hidden")}
-            onMouseDown={startDrag}
+            aria-label={t("composer.grip")}
             onDoubleClick={() => onDocMode(true)}
             title={t("composer.grip")}
+            {...resizeHandle}
           />
 
           <div

@@ -11,11 +11,11 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
-function renderDock(availableSurfaces, tab = "home") {
+function renderDock(availableSurfaces, tab = "home", open = true) {
   return mount(
     <I18nProvider>
       <Dock
-        open
+        open={open}
         tab={tab}
         availableSurfaces={availableSurfaces}
         onTab={() => {}}
@@ -50,6 +50,18 @@ function renderDock(availableSurfaces, tab = "home") {
 }
 
 describe("Dock plugin component gate", () => {
+  test("removes its resize separator from the tab order while closed", async () => {
+    activateDom();
+    const view = renderDock(["terminal"], "home", false);
+    await flush();
+    const separator = view.container.querySelector('[role="separator"]');
+
+    expect(separator?.getAttribute("tabindex")).toBe("-1");
+    expect(separator?.getAttribute("aria-disabled")).toBe("true");
+
+    view.unmount();
+  });
+
   test("advertises the terminal in the horizontally resizable right panel", async () => {
     activateDom();
     const view = renderDock(["terminal"], "home");

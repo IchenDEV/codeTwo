@@ -4,7 +4,6 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { ArrowUp, MessageSquare, Plus, Square, X } from "lucide-react";
 
@@ -28,6 +27,7 @@ import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
 import { LiquidSelectionGroup } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
+import { useResizeHandle } from "../components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { ModelPicker } from "./Composer";
@@ -422,26 +422,16 @@ export function SideChatPanel({
     [activeTabId, onClose],
   );
 
-  const startResize = useCallback(
-    (event: ReactMouseEvent) => {
-      event.preventDefault();
-      const startX = event.clientX;
-      const startWidth = width;
-      const move = (next: MouseEvent) => {
-        const max = Math.max(360, Math.min(720, window.innerWidth - 360));
-        onWidth(Math.round(Math.min(max, Math.max(340, startWidth + startX - next.clientX))));
-      };
-      const up = () => {
-        document.body.classList.remove("resizing-h");
-        window.removeEventListener("mousemove", move);
-        window.removeEventListener("mouseup", up);
-      };
-      document.body.classList.add("resizing-h");
-      window.addEventListener("mousemove", move);
-      window.addEventListener("mouseup", up);
-    },
-    [onWidth, width],
-  );
+  const resizeMaxWidth = Math.max(360, Math.min(720, window.innerWidth - 360));
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    direction: -1,
+    value: width,
+    min: 340,
+    max: resizeMaxWidth,
+    disabled: !open,
+    onResize: onWidth,
+  });
 
   return (
     <aside
@@ -456,10 +446,8 @@ export function SideChatPanel({
     >
       <div
         className="dock-grip"
-        role="separator"
-        aria-orientation="vertical"
         aria-label={t("sideChat.resize")}
-        onMouseDown={startResize}
+        {...resizeHandle}
       />
 
       <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-2 py-2.5">
