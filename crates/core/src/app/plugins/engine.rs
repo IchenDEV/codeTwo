@@ -38,7 +38,8 @@ struct QueuedPrompt {
 /// returns an engine without forking the plugin graph.
 pub struct EngineInputs {
     pub providers: Vec<crate::provider::Provider>,
-    pub provider_tools: std::collections::HashMap<String, crate::provider::ProviderToolset>,
+    pub provider_tools:
+        Arc<std::sync::RwLock<std::collections::HashMap<String, crate::provider::ProviderToolset>>>,
     pub skills: crate::skill::SkillLibrary,
     pub store: Arc<crate::store::Store>,
     pub memory: Option<crate::memory::MemoryCapability>,
@@ -119,7 +120,7 @@ impl Plugin for EnginePlugin {
 
         let inputs = EngineInputs {
             providers: providers.runtime_providers(),
-            provider_tools: providers.toolsets(),
+            provider_tools: providers.shared_toolsets(),
             skills: skills.library(),
             store: store.0.clone(),
             memory: ctx.get::<MemoryService>().map(|memory| memory.0.clone()),
@@ -131,7 +132,7 @@ impl Plugin for EnginePlugin {
                 inputs.skills,
                 inputs.store,
                 inputs.memory,
-                providers.shared_toolsets(),
+                inputs.provider_tools,
             ),
         };
         engine.set_private_data_dir(paths.data_dir.clone());

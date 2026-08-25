@@ -12,11 +12,14 @@ mod github;
 mod host_events;
 mod lsp;
 mod remote;
+mod scene_mcp;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp};
+use codetwo_core::{CanvasFeatureGate, DesktopMcpConfig, Engine};
 use codetwo_kernel::{
     PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginScopeSupport,
 };
@@ -132,7 +135,41 @@ pub async fn run() -> Result<(), String> {
     let writer = tokio::spawn(write_output(output_rx));
     let events = EventSink::new(output_tx.clone());
 
+    #[cfg(unix)]
+    let scene_socket_path = data_dir.join("codetwo-scenes.sock");
+    #[cfg(unix)]
+    let scene_master_key = uuid::Uuid::new_v4().to_string();
+    #[cfg(unix)]
+    let scene_listener = scene_mcp::bind_broker(&scene_socket_path)?;
+    #[cfg(unix)]
+    let desktop_mcp = DesktopMcpConfig {
+        command: std::env::current_exe()
+            .map_err(|error| error.to_string())?
+            .to_string_lossy()
+            .into_owned(),
+        socket_path: scene_socket_path.to_string_lossy().into_owned(),
+        master_key: scene_master_key.clone(),
+        browser_enabled: false,
+    };
+
     let mut registry = codetwo_core::app::plugins::builtin_registry();
+    #[cfg(unix)]
+    registry.register_arc(Box::new(move || {
+        let desktop_mcp = desktop_mcp.clone();
+        Arc::new(EnginePlugin::with_builder(Arc::new(
+            move |inputs: EngineInputs| {
+                Engine::with_store_canvas_and_desktop_mcp(
+                    inputs.providers,
+                    inputs.skills,
+                    inputs.store,
+                    inputs.memory,
+                    CanvasFeatureGate::default(),
+                    desktop_mcp.clone(),
+                    inputs.provider_tools,
+                )
+            },
+        )))
+    }));
     let host = events.clone();
     registry.register(move || automation::AutomationPlugin::new(host.clone()));
     registry.register(|| github::GitHubPlugin);
@@ -187,6 +224,14 @@ pub async fn run() -> Result<(), String> {
             .await
             .map_err(|error| error.to_string())?,
     );
+
+    #[cfg(unix)]
+    let scene_broker = tokio::spawn(scene_mcp::serve_broker(
+        scene_listener,
+        core.clone(),
+        events.clone(),
+        scene_master_key,
+    ));
 
     events.emit(
         "host-ready",
@@ -251,6 +296,12 @@ pub async fn run() -> Result<(), String> {
 
     calls.abort_all();
     while calls.join_next().await.is_some() {}
+    #[cfg(unix)]
+    {
+        scene_broker.abort();
+        let _ = scene_broker.await;
+        let _ = std::fs::remove_file(scene_socket_path);
+    }
     core.stop().await;
     drop(core);
     drop(events);
@@ -259,6 +310,11 @@ pub async fn run() -> Result<(), String> {
         .await
         .map_err(|error| error.to_string())?
         .map_err(|error| error.to_string())
+}
+
+/// Private entrypoint used by the scene MCP configuration attached to provider sessions.
+pub fn run_scene_mcp() -> Result<(), String> {
+    scene_mcp::run_stdio()
 }
 
 #[cfg(test)]

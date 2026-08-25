@@ -934,24 +934,8 @@ fn auto_scene_routing_instructions(
             )
         })
         .unwrap_or_else(|| "none".into());
-    let mut catalog = String::new();
-    for entry in scenes.scenes().iter().take(50) {
-        let description = entry
-            .scene
-            .description
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let description: String = description.chars().take(240).collect();
-        catalog.push_str(&format!(
-            "- `{}` — {}: {}\n",
-            crate::scene::SceneLibrary::reference_for(entry),
-            entry.scene.title,
-            description
-        ));
-    }
     format!(
-        "[C2 Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
+        "[C2 Auto Scene]\nActive scene: {current}. If no scene is active or the task no longer fits it, call `scene_list` with a short task query, then call `scene_select` with an exact returned reference. Follow its returned instructions. Never claim a scene changed until the tool confirms it."
     )
 }
 
@@ -1823,6 +1807,8 @@ pub struct DesktopMcpConfig {
     pub command: String,
     pub socket_path: String,
     pub master_key: String,
+    /// Electrobun currently contributes only the scene surface. Browser hosts opt in separately.
+    pub browser_enabled: bool,
 }
 
 impl DesktopMcpConfig {
@@ -1836,7 +1822,10 @@ impl DesktopMcpConfig {
             cwd: None,
             transport: McpTransport::Stdio {
                 command: self.command.clone(),
-                args: vec!["--codetwo-browser-mcp".into()],
+                args: vec![match surface {
+                    "scenes" => "--codetwo-scene-mcp".into(),
+                    _ => "--codetwo-browser-mcp".into(),
+                }],
                 env: vec![
                     ("CODETWO_BROWSER_SOCKET".into(), self.socket_path.clone()),
                     ("CODETWO_BROWSER_SESSION".into(), session.to_string()),
@@ -1976,8 +1965,8 @@ impl Engine {
         )
     }
 
-    /// Desktop construction path that attaches C2's internal browser MCP to every Codex
-    /// session. Other providers and non-desktop frontends remain unchanged.
+    /// Desktop construction path that attaches C2's internal MCP surfaces. Other frontends remain
+    /// unchanged.
     #[doc(hidden)]
     pub fn with_store_canvas_and_desktop_mcp(
         providers: Vec<Provider>,
@@ -1986,6 +1975,7 @@ impl Engine {
         memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: DesktopMcpConfig,
+        provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         Self::build(
             providers,
@@ -1994,7 +1984,7 @@ impl Engine {
             memory,
             canvas_gate,
             Some(desktop_mcp),
-            Arc::new(RwLock::new(HashMap::new())),
+            provider_tools,
         )
     }
 
@@ -2978,7 +2968,7 @@ impl Engine {
         let mut servers = toolset.mcp_servers.clone();
         if let Some(config) = &self.state.desktop_mcp {
             attach_host_mcp_servers(&mut servers, [config.scene_server_for_session(session)]);
-            if provider == ProviderId::Codex {
+            if provider == ProviderId::Codex && config.browser_enabled {
                 attach_host_mcp_servers(&mut servers, [config.browser_server_for_session(session)]);
             }
         }
@@ -3359,7 +3349,10 @@ impl Engine {
             codex_launch_with_static_provider_context(
                 &prov.launch,
                 &provider_toolset.instructions,
-                self.state.desktop_mcp.is_some(),
+                self.state
+                    .desktop_mcp
+                    .as_ref()
+                    .is_some_and(|config| config.browser_enabled),
             )
             .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
         } else {
@@ -3716,7 +3709,10 @@ impl Engine {
                     codex_launch_with_static_provider_context(
                         &prov.launch,
                         &provider_toolset.instructions,
-                        self.state.desktop_mcp.is_some(),
+                        self.state
+                            .desktop_mcp
+                            .as_ref()
+                            .is_some_and(|config| config.browser_enabled),
                     )
                     .map_err(AcpError::Decode)?
                 } else {
@@ -4198,7 +4194,7 @@ impl Engine {
                     {
                         compiled.mcp_servers.push(server);
                     }
-                    if is_codex {
+                    if is_codex && config.browser_enabled {
                         let server = config.browser_server_for_session(&session);
                         if !compiled
                             .mcp_servers
@@ -4275,7 +4271,12 @@ impl Engine {
                 let provider_prompt = with_initial_provider_context(
                     provider_prompt,
                     &provider_toolset.instructions,
-                    is_codex && self.state.desktop_mcp.is_some(),
+                    is_codex
+                        && self
+                            .state
+                            .desktop_mcp
+                            .as_ref()
+                            .is_some_and(|config| config.browser_enabled),
                     is_codex,
                     inject_provider_context,
                 );
@@ -7017,6 +7018,7 @@ mod mcp_tests {
             command: "/Applications/C2.app/Contents/MacOS/C2".into(),
             socket_path: "/tmp/codetwo-browser.sock".into(),
             master_key: "launch-secret".into(),
+            browser_enabled: true,
         };
         let first = config.browser_server_for_session("session-a");
         let second = config.browser_server_for_session("session-b");
@@ -7034,16 +7036,26 @@ mod mcp_tests {
         };
         assert_ne!(env(&first), env(&second));
         assert!(!env(&first).contains("launch-secret"));
+
+        let scenes = config.scene_server_for_session("session-a");
+        match scenes.transport {
+            McpTransport::Stdio { args, .. } => {
+                assert_eq!(args, &["--codetwo-scene-mcp"])
+            }
+            _ => panic!("desktop scenes must use stdio"),
+        }
     }
 
     #[test]
-    fn auto_scene_routing_requires_a_first_selection_and_names_only_installed_scenes() {
+    fn auto_scene_routing_loads_the_catalog_only_when_needed() {
         let scenes = crate::scene::SceneLibrary::builtin();
         let instructions = auto_scene_routing_instructions(&scenes, None);
-        assert!(instructions.contains("call `scene_select` before substantive work"));
-        assert!(instructions.contains("`builtin:research`"));
-        assert!(instructions.contains("`builtin:develop`"));
-        assert!(!instructions.contains("builtin:missing"));
+        assert!(instructions.contains("If no scene is active or the task no longer fits it"));
+        assert!(instructions.contains("call `scene_list` with a short task query"));
+        assert!(instructions.contains("call `scene_select` with an exact returned reference"));
+        assert!(!instructions.contains("Available scenes:"));
+        assert!(!instructions.contains("`builtin:research`"));
+        assert!(instructions.len() < 400);
         let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
         assert!(prompt.starts_with("[C2 Auto Scene]"));
         assert!(prompt.ends_with("fix the tests"));
