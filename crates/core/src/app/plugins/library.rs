@@ -5,8 +5,12 @@
 //! be rebuilt by free functions reaching into `AppState`. Now each owns its own rebuild and
 //! announces it, and whoever cares listens.
 
-use crate::app::events::{PluginsChanged, ScenesChanged, SkillsChanged, WorkspaceChanged};
-use crate::app::service::{Paths, PluginHub, SceneService, SkillService, StoreService};
+use crate::app::events::{
+    PluginPolicyChanged, PluginsChanged, ScenesChanged, SkillsChanged, WorkspaceChanged,
+};
+use crate::app::service::{
+    Paths, PluginConfigService, PluginHub, SceneService, SkillService, StoreService,
+};
 use crate::app::{json, take_args};
 use crate::artifact::ArtifactStore;
 use crate::scene::{Pipeline, Scene, SceneLibrary, SceneSource};
@@ -172,12 +176,16 @@ impl Plugin for SkillsPlugin {
     fn inject(&self) -> Injection {
         // `plugin-hub` is optional: without it the library is simply built without plugin
         // components, and it rebuilds by itself when the hub shows up.
-        Injection::required(["paths"]).with_optional(["plugin-hub"])
+        Injection::required(["paths", "plugin-config"]).with_optional(["plugin-hub"])
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
         let paths = ctx.expect::<Paths>()?;
-        let skills = Arc::new(SkillService::new(paths));
+        let plugin_config = ctx.expect::<PluginConfigService>()?;
+        let skills = Arc::new(SkillService::with_plugin_config(
+            paths,
+            Some(plugin_config.0.clone()),
+        ));
         ctx.provide(skills.clone())?;
 
         // Announce rebuilds instead of reaching into whoever might be holding a copy.
@@ -268,8 +276,15 @@ impl Plugin for SkillsPlugin {
             None
         });
         let on_plugins = skills.clone();
+        let announce_plugins = announce.clone();
         ctx.on::<PluginsChanged, _>(move |_| {
             on_plugins.reload(None);
+            announce_plugins();
+            None
+        });
+        let on_policy = skills.clone();
+        ctx.on::<PluginPolicyChanged, _>(move |_| {
+            on_policy.reload(None);
             announce();
             None
         });

@@ -4,6 +4,7 @@ import type {
   ManagedPluginOverride,
   ManagedPluginScope,
   MarketItem,
+  PluginExtensionComponent,
   PluginInfo,
   PluginMarketplace,
   SkillInfo,
@@ -168,6 +169,44 @@ function bundleState(bundle: PluginInfo): PluginManagerScopedState {
     missingDependencies: bundle.diagnostics
       .filter((diagnostic) => diagnostic.level === "warning")
       .map((diagnostic) => diagnostic.message),
+  };
+}
+
+function extensionState(
+  bundle: PluginInfo,
+  availability: PluginExtensionComponent["status"],
+): PluginManagerScopedState {
+  const state = bundleState(bundle);
+  if (!state.effectiveEnabled) return state;
+  if (availability === "requires_auth") {
+    return { ...state, status: "requires_auth" };
+  }
+  if (availability === "unsupported") {
+    return { ...state, status: "unsupported" };
+  }
+  if (availability === "requires_trust") {
+    return { ...state, status: "pending" };
+  }
+  return state;
+}
+
+function combineSkillState(
+  policy: PluginManagerScopedState,
+  bundle: PluginInfo | undefined,
+): PluginManagerScopedState {
+  if (!bundle) return policy;
+  if (!policy.effectiveEnabled) return policy;
+  const installed = bundleState(bundle);
+  if (!installed.effectiveEnabled || installed.status !== "active") {
+    return installed;
+  }
+  return {
+    ...policy,
+    missingDependencies: [
+      ...(installed.missingDependencies ?? []),
+      ...(policy.missingDependencies ?? []),
+    ],
+    error: installed.error ?? policy.error,
   };
 }
 
@@ -346,7 +385,8 @@ export function buildPluginManagerCatalog({
           sourceLabel: bundle.source,
           supportedScopes: bundleScope(bundle),
           manageable: false,
-          state: bundleState(bundle),
+          availability: component.status,
+          state: extensionState(bundle, component.status),
         };
       });
     return [...uiComponents, ...inventoryComponents];
@@ -356,23 +396,28 @@ export function buildPluginManagerCatalog({
     const bundle = findSkillBundle(skill, bundles);
     const ownerEntry = entries.get("skills");
     const pluginId = bundle ? bundleId(bundle.id) : "skills";
-    const state = bundle
-      ? bundleState(bundle)
-      : ownerEntry
-        ? componentState(`skill:${skill.id}`, ownerEntry, userEntries.get("skills"), scope)
-        : { effectiveEnabled: true, status: "active" as const };
+    const policyState = ownerEntry
+      ? componentState(
+          `skill:${skill.id}`,
+          ownerEntry,
+          userEntries.get("skills"),
+          scope,
+        )
+      : { effectiveEnabled: true, status: "active" as const };
+    const state = combineSkillState(policyState, bundle);
     return {
       id: `skill:${skill.id}`,
       pluginId,
       pluginName: bundle?.name ?? "Skills",
+      policyPluginId: ownerEntry ? "skills" : undefined,
       name: skill.name,
       description: skill.description,
       kind: skill.kind || "skill",
       slot: "composer.skills",
       source: bundle ? "bundle" : "builtin",
       sourceLabel: skill.source,
-      supportedScopes: bundle ? bundleScope(bundle) : ownerEntry ? scopeSupport(ownerEntry) : ["user"],
-      manageable: bundle ? false : undefined,
+      supportedScopes: ownerEntry ? scopeSupport(ownerEntry) : ["user"],
+      manageable: ownerEntry != null,
       state,
       skill: {
         id: skill.id,

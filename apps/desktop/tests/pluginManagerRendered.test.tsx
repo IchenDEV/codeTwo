@@ -81,6 +81,53 @@ const plugins = [
   },
 ];
 
+const components = [
+  {
+    id: "skill:docs-search",
+    pluginId: "memory",
+    pluginName: "Memory",
+    policyPluginId: "memory",
+    name: "docs-search",
+    description: "Search the project documentation through MCP.",
+    kind: "mcp",
+    source: "builtin",
+    supportedScopes: ["user", "project"],
+    manageable: true,
+    state: { effectiveEnabled: true, status: "active" },
+    skill: { id: "docs-search", removable: false },
+  },
+  {
+    id: "skill:release-review",
+    pluginId: "review-tools",
+    pluginName: "Review Tools",
+    policyPluginId: "memory",
+    name: "Release review",
+    description: "Review a release before deployment.",
+    kind: "agent_skill",
+    source: "bundle",
+    sourceLabel: "Bundle · Review Tools",
+    supportedScopes: ["user", "project"],
+    manageable: true,
+    state: { effectiveEnabled: true, status: "active" },
+    skill: { id: "release-review", removable: false },
+  },
+  {
+    id: "review-tools:hook:session",
+    pluginId: "review-tools",
+    pluginName: "Review Tools",
+    name: "session",
+    description: "hooks/hooks.json",
+    kind: "hook",
+    slot: "hooks/hooks.json",
+    source: "bundle",
+    sourceLabel: "Bundle · Review Tools",
+    supportedScopes: ["user"],
+    manageable: false,
+    availability: "unsupported",
+    state: { effectiveEnabled: true, status: "unsupported" },
+  },
+];
+
 const marketplaceItems = [
   {
     id: "release-review",
@@ -113,6 +160,7 @@ function renderManager(overrides = {}) {
   const view = mount(
     <PluginManagerPage
       plugins={plugins}
+      components={components}
       marketplaceItems={marketplaceItems}
       scope={{ kind: "user" }}
       projects={[{ path: "/tmp/project", label: "Project · demo" }]}
@@ -316,7 +364,7 @@ describe("PluginManagerPage", () => {
     await flush();
 
     expect(view.container.querySelector("[data-plugin-manager-page]")?.tagName).toBe("MAIN");
-    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(5);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
     expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
@@ -335,15 +383,52 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
     expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
     expect(button(view.container, "Install from GitHub")).not.toBeNull();
-    expect(Array.from(view.container.querySelectorAll('[role="tab"]')).some(
-      (tab) => tab.textContent?.includes("Components"),
-    )).toBe(false);
-    expect(view.container.querySelector("[data-component-details]")).toBeNull();
+    expect(button(view.container, "MCPs 1")).not.toBeNull();
+    expect(button(view.container, "Skills 1")).not.toBeNull();
+    expect(button(view.container, "Hooks 1")).not.toBeNull();
+
+    click(button(view.container, "MCPs 1"));
+    await flush();
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("docs-search");
+    expect(view.container.querySelector("[data-plugin-manager-search]")?.getAttribute("placeholder"))
+      .toBe("Search MCP servers…");
 
     click(button(view.container, "Marketplace 1"));
     await flush();
     expect(view.container.textContent).toContain("Release Review");
     expect(button(view.container, "Install")).not.toBeNull();
+
+    view.unmount();
+  });
+
+  test("manages MCP and skill policy while routing hook management to its plugin", async () => {
+    activateDom();
+    const { view, calls } = renderManager();
+    await flush();
+
+    click(button(view.container, "MCPs 1"));
+    await flush();
+    click(view.container.ownerDocument.getElementById("component-state-skill:docs-search"));
+    await flush();
+    expect(calls.planned[0]).toMatchObject({
+      targetKind: "component",
+      targetId: "skill:docs-search",
+      desiredState: "disabled",
+      scope: { kind: "user" },
+    });
+    click(button(dom.document.body, "Cancel"));
+    await flush();
+
+    click(button(view.container, "Skills 1"));
+    await flush();
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Release review");
+
+    click(button(view.container, "Hooks 1"));
+    await flush();
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Unsupported");
+    click(button(view.container, "Manage plugin"));
+    await flush();
+    expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("Review Tools");
 
     view.unmount();
   });
@@ -683,7 +768,7 @@ describe("PluginManagerPage", () => {
     await flush();
 
     expect(view.container.querySelector("#plugin-config-json")).not.toBeNull();
-    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(2);
+    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(5);
 
     view.unmount();
   });

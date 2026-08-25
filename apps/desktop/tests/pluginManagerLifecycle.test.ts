@@ -71,6 +71,58 @@ describe("unified plugin manager lifecycle", () => {
     expect(applied).toEqual(["backend-plan-17"]);
   });
 
+  test("routes skill and MCP component policy through the skills runtime owner", async () => {
+    const requests = [];
+    const request = {
+      targetKind: "component",
+      targetId: "skill:docs-search",
+      targetName: "docs-search",
+      scope: { kind: "user" },
+      desiredState: "disabled",
+    };
+
+    await planPluginManagerChange({
+      request,
+      plugins: [{
+        id: "skills",
+        name: "Skills",
+        source: "builtin",
+        supportedScopes: ["user", "project"],
+        state: { effectiveEnabled: true, status: "active" },
+      }],
+      components: [{
+        id: "skill:docs-search",
+        pluginId: "bundle:docs",
+        pluginName: "Docs",
+        policyPluginId: "skills",
+        name: "docs-search",
+        kind: "mcp",
+        source: "bundle",
+        supportedScopes: ["user", "project"],
+        state: { effectiveEnabled: true, status: "active" },
+      }],
+      planChange: async (managedRequest) => {
+        requests.push(managedRequest);
+        return {
+          id: "skill-plan",
+          graph_revision: 1,
+          config_revision: 1,
+          request: managedRequest,
+          affected: ["skills"],
+          active_resources: [],
+          requires_confirmation: false,
+        };
+      },
+    });
+
+    expect(requests).toEqual([{
+      plugin: "skills",
+      scope: { kind: "user" },
+      state: "disabled",
+      component: "skill:docs-search",
+    }]);
+  });
+
   test("routes every plugin operation through the single unified App surface", () => {
     const app = readFileSync(resolve(import.meta.dir, "../src/App.tsx"), "utf8");
     const managerStart = app.indexOf("const planManagerChange");

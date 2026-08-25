@@ -3696,6 +3696,16 @@ export default function App() {
       skills,
     ],
   );
+  const activeSkills = useMemo(() => {
+    const enabledById = new Map(
+      activePluginModel.components
+        .filter((component) => component.skill)
+        .map((component) => [component.id, component.state.effectiveEnabled]),
+    );
+    return skills.filter(
+      (skill) => enabledById.get(`skill:${skill.id}`) ?? true,
+    );
+  }, [activePluginModel.components, skills]);
   const componentEnabled = useCallback(
     (id: BuiltinUiComponentId) =>
       pluginManagerComponentEnabled(activePluginModel.components, id, activeComponentPolicyReady),
@@ -5851,7 +5861,7 @@ export default function App() {
           }
           request={sceneEditorRequest}
           providers={providers}
-          skills={skills}
+          skills={activeSkills}
           cwd={cwd || "."}
           onRequest={setSceneEditorRequest}
           onScene={(reference) => applySceneChoice(reference)}
@@ -6046,6 +6056,7 @@ export default function App() {
         {showPluginManager && (
           <PluginManagerPage
             plugins={localizedPluginManagerModel.plugins}
+            components={localizedPluginManagerModel.components}
             marketplaceItems={localizedPluginManagerModel.marketplaceItems}
             marketplaceSources={localizedPluginManagerModel.marketplaceSources}
             headerLeadingAction={railExpandAction}
@@ -6708,7 +6719,7 @@ export default function App() {
                 >
                   <DocEditor
                     key={editorKey}
-                    skills={skills}
+                    skills={activeSkills}
                     cwd={cwd || "."}
                     sessionId={activeSession}
                     getBlocksRef={getBlocksRef}
