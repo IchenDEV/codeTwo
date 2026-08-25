@@ -285,11 +285,12 @@ async fn manifest_ui_actions_invoke_only_the_owning_runtime_in_the_callers_realm
 #[tokio::test]
 async fn installed_bundle_events_reconcile_factories_without_a_restart() {
     let data = tempfile::tempdir().unwrap();
+    install_runtime_bundle_with_command(data.path(), "existing", true, "existing.where");
     let app = boot(data.path()).await;
     let stale_plan = app
         .plugin_manager()
         .plan(PluginChangeRequest {
-            plugin: "extensions".into(),
+            plugin: "bundle:existing".into(),
             scope: PluginScope::User,
             state: Some(PluginOverride::Disabled),
             config: None,

@@ -3,15 +3,15 @@
 //!
 //! # Why this exists
 //!
-//! [`crate::app`] made C2 a plugin graph, but a Rust host can only load Rust plugins it was
-//! compiled with. That is a real ceiling: it means "plugin" describes how *we* organise our code,
-//! not something a user can add. This closes it. A plugin is a process; C2 speaks JSON-RPC to
-//! it over stdio; and what it contributes — commands, event subscriptions — lands in exactly the
-//! same registries a built-in plugin's do.
+//! [`crate::app`] made C2 an internal runtime-module graph, but a Rust host can only load modules it
+//! was compiled with. An external extension is a process; C2 speaks JSON-RPC to it over stdio; and
+//! what it contributes — commands, event subscriptions — lands in the same scoped registries as
+//! built-in modules.
 //!
-//! The consequence worth stating plainly: an out-of-process plugin is not a lesser citizen. Its
-//! commands appear in `kernel.commands`, are callable from the frontend through `call()`, and
-//! disappear the instant it unloads, because they belong to its scope like everything else.
+//! Its commands appear in `kernel.commands`, are callable from the host through `call()`, and
+//! disappear the instant it unloads. The reverse direction is narrower: an extension process may
+//! discover and invoke only commands explicitly registered as `extension_public`; ordinary Core
+//! and frontend commands are internal by default.
 //!
 //! # Trust
 //!
@@ -29,7 +29,7 @@
 //!    │                                     (host registers them in the kernel)
 //!    │  command/invoke ───────────────────▶      ← frontend called `call("foo.bar")`
 //!    │  event/emit ───────────────────────▶      ← something happened in the host
-//!    │  ◀─────────────────── command/call        ← plugin calls a host command
+//!    │  ◀─────────────────── command/call        ← plugin calls an extension-public command
 //!    │  ◀─────────────────── event/emit, log
 //!    │  (unload: process killed, registrations gone)
 //! ```
@@ -368,19 +368,9 @@ impl Plugin for ProtocolPlugin {
                 name: "code2".into(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 commands: ctx
-                    .runtime()
-                    .commands()
+                    .extension_public_commands()
                     .into_iter()
-                    .filter(|command| match (&command_realm, &command.realm) {
-                        (CommandRealm::Global, CommandRealm::Global) => true,
-                        (CommandRealm::Project(_), CommandRealm::Global) => true,
-                        (
-                            CommandRealm::Project(project),
-                            CommandRealm::Project(command_project),
-                        ) => project == command_project,
-                        (CommandRealm::Global, CommandRealm::Project(_)) => false,
-                    })
-                    .map(|c| c.name)
+                    .map(|command| command.name)
                     .collect(),
             },
             config,
@@ -409,6 +399,16 @@ impl Plugin for ProtocolPlugin {
         }
 
         for spec in &result.commands {
+            if let Some(existing) = ctx.runtime().commands().into_iter().find(|command| {
+                command.realm == CommandRealm::Global
+                    && command.name == spec.name
+                    && command.plugin != self.name
+            }) {
+                return Err(PluginError::new(format!(
+                    "extension command `{}` conflicts with global command owned by `{}`",
+                    spec.name, existing.plugin
+                )));
+            }
             let peer = peer.clone();
             let name = spec.name.clone();
             ctx.command_described(
@@ -458,7 +458,7 @@ impl Plugin for ProtocolPlugin {
     }
 }
 
-/// The host side of the protocol: what a plugin process is allowed to ask for.
+/// The host side of the protocol: what an extension process is allowed to ask for.
 struct KernelHost {
     ctx: WeakContext,
     plugin: String,
@@ -470,7 +470,7 @@ impl HostHandler for KernelHost {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err("the host is shutting down".into());
         };
-        ctx.call(name, args)
+        ctx.call_extension_public(name, args)
             .await
             .map_err(|error| error.to_string())
     }

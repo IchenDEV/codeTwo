@@ -6,20 +6,20 @@ This document defines the process wire format. Bundle terminology, manifest name
 policy, contribution support, and host capability rules are normative in the
 [C2 Plugin Standard 1.0.0](plugin-standard.md).
 
-A plugin is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the plugin declares —
-commands, event subscriptions — is registered in the same kernel registries a built-in Rust plugin
-uses. Installed runtimes have stable managed names of the form `bundle:<id>`. Their commands appear
-in `kernel.commands`, are callable from a frontend in the matching command realm, and disappear the
-instant the runtime unloads.
+An external extension runtime is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the
+extension declares — commands, event subscriptions — is registered in the same scoped kernel
+registries used by built-in Rust runtime modules. Installed runtimes have stable managed names of
+the form `bundle:<id>`. Their commands appear in `kernel.commands`, are callable from a frontend in
+the matching command realm, and disappear the instant the runtime unloads.
 
 Write one in any language that can read stdin and write stdout.
 
 ## Why a protocol at all
 
-[`docs/plugins.md`](plugins.md) made C2 a plugin graph, but a Rust host can only load Rust
-plugins it was compiled with. That ceiling means "plugin" describes how *we* organise our code, not
-something a user can add. This removes it, using the transport the app already speaks twice over
-(ACP to provider CLIs, MCP to tool servers) rather than inventing a third.
+[`docs/plugins.md`](plugins.md) defines C2's internal runtime-module graph, but a Rust host can only
+load modules it was compiled with. This protocol is the external extension seam, using the
+transport the app already speaks twice over (ACP to provider CLIs, MCP to tool servers) rather than
+inventing a third.
 
 ## Transport
 
@@ -40,7 +40,7 @@ graph. A plugin that misses the window is marked failed, by name, and everything
 ```json
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{
   "protocolVersion": "1.0.0",
-  "host": { "name": "code2", "version": "0.0.0", "commands": ["git.status", "memory.list", "…"] },
+  "host": { "name": "code2", "version": "0.0.0", "commands": ["git.status"] },
   "config": { "…": "your entry from the plugin config, verbatim" },
   "dataDir": "/home/me/.codetwo/plugins/.data/my-plugin/projects/09a7…",
   "projectPath": "/home/me/work/my-project"
@@ -70,10 +70,12 @@ Wire compatibility is by **major version**. Declaring `2.x` to a `1.x` host, or 
 runtime files. `projectPath` is the normalized project identity for that instance and is omitted
 for the user-scoped instance.
 
-`host.commands` is the callable surface visible from this realm at initialization time. A
-user-scoped instance sees global commands only. A project instance sees global commands plus
-commands registered for the same normalized project; it never receives another project's command
-list. `command/call` uses that same realm and its normal project fallback/blocking rules.
+`host.commands` is the **extension-public** callable surface visible from this realm at
+initialization time. Internal Core and frontend commands are omitted. A user-scoped instance sees
+public global commands only. A project instance sees public global commands plus public commands
+registered for the same normalized project; it never receives another project's command list.
+`command/call` rechecks the public marker and uses that same realm's normal project
+fallback/blocking rules, so guessing an internal command name does not grant access.
 
 ## Methods
 
@@ -87,6 +89,9 @@ list. `command/call` uses that same realm and its normal project fallback/blocki
 
 `command/invoke` only ever names a command you declared. Returning a JSON-RPC error turns into a
 readable failure at the caller — the frontend sees `my.greet: <your message>`.
+An extension command that collides with a global command owned by Core or another module is rejected
+during activation, so a project extension cannot shadow host dispatch. The same project-capable
+extension may register its own command name in both global and project instances.
 
 When a user activates a manifest `ui` contribution, C2 first verifies bundle ownership, trust,
 enablement, the selected user/project realm, and that the contribution's command was registered by
@@ -100,21 +105,22 @@ this process. The resulting `command/invoke` uses these args:
 ```
 
 `context` is host state for this activation; `input` is the descriptor's static JSON value. Neither
-is a capability grant. Host commands remain accessible only through the ordinary realm-aware
+is a capability grant. Host commands remain accessible only through the allowlisted, realm-aware
 `command/call` seam.
 
 ### Plugin → host
 
 | method | kind | params | result |
 |---|---|---|---|
-| `command/call` | request | `{ name, args }` | the host command's result |
+| `command/call` | request | `{ name, args }` | the extension-public command's result |
 | `event/emit` | notification | `{ name, payload }` | — |
 | `log` | notification | `{ level, message }` | — |
 
-`command/call` reaches a command visible in the process's realm, by name, through the same registry
-a Rust plugin uses. There is no privileged back door and no separate API: if `git.status` is
-visible there, you can call it; if the `git` plugin is turned off or project fallback is blocked,
-you cannot, and you get the same error everyone else does.
+`command/call` reaches an extension-public command visible in the process's realm, by name, through
+the same registry a Rust runtime module uses. Commands are internal by default and must be
+deliberately published by Core. `git.status` is the initial read-only public command; mutating Git,
+plugin management, credentials, and other Core commands stay internal. If a public command's owner
+is turned off or project fallback is blocked, the call fails through the normal command path.
 
 `level` is one of `error`, `warn`, `info`, `debug`, `trace`.
 
@@ -218,7 +224,7 @@ User and project state changes go through `plugins.catalog`, `plugins.plan_chang
 
 A complete, runnable example lives in [`packs/hello-runtime/`](../packs/hello-runtime): it
 contributes a command, calls `git.status` back through the host from inside it, feature-detects the
-host's surface, and listens for a host event — in one file with no dependencies.
+extension-public surface, and listens for a host event — in one file with no dependencies.
 
 ## A minimal plugin
 

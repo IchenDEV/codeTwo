@@ -1163,11 +1163,11 @@ function browserDockerCall<T>(name: string, rawArgs: unknown): T {
 // ---- the plugin graph -------------------------------------------------------------------------
 
 /**
- * Call a command contributed by a core plugin — `call("git.status", { cwd })`.
+ * Call a command through the trusted desktop host — `call("git.status", { cwd })`.
  *
- * This is the extension surface. A plugin that registers `foo.bar` is callable from here the
- * moment it loads, with no new desktop RPC method and no new
- * function in this file. The named wrappers below predate it and are being migrated onto it.
+ * This transport carries both internal host commands and extension-contributed commands. It is
+ * broader than the public Extension API exposed to child processes. A runtime module that
+ * registers `foo.bar` is callable from here without adding another desktop RPC method.
  */
 export async function call<T = unknown>(
   name: string,
@@ -1239,6 +1239,7 @@ export type ManagedPluginScope =
 
 export type ManagedPluginOverride = "inherit" | "enabled" | "disabled";
 export type ManagedPluginOrigin = "built_in" | "host" | "third_party";
+export type ManagedPluginRole = "core" | "built_in" | "extension";
 export type ManagedPluginCategory =
   | "foundation"
   | "workspace"
@@ -1251,6 +1252,7 @@ export type ManagedPluginScopeSupport = "user" | "project";
 
 export interface ManagedPluginMetadata {
   origin: ManagedPluginOrigin;
+  role: ManagedPluginRole;
   category: ManagedPluginCategory;
   scope_support: ManagedPluginScopeSupport[];
   essential: boolean;

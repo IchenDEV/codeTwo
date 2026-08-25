@@ -14,6 +14,7 @@ function entry(id, overrides = {}) {
     description: `${id} description`,
     metadata: {
       origin: "built_in",
+      role: "built_in",
       category: "other",
       scope_support: ["user", "project"],
       essential: false,
@@ -60,6 +61,7 @@ describe("unified plugin catalog adapter", () => {
         entry("kernel", {
           metadata: {
             origin: "built_in",
+            role: "core",
             category: "foundation",
             scope_support: ["user"],
             essential: true,
@@ -69,6 +71,7 @@ describe("unified plugin catalog adapter", () => {
         entry("browser", {
           metadata: {
             origin: "host",
+            role: "built_in",
             category: "interface",
             scope_support: ["user"],
             essential: false,
@@ -80,6 +83,7 @@ describe("unified plugin catalog adapter", () => {
         entry("device-sync", {
           metadata: {
             origin: "host",
+            role: "built_in",
             category: "integration",
             scope_support: ["user"],
             essential: false,
@@ -116,6 +120,7 @@ describe("unified plugin catalog adapter", () => {
     });
 
     expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["browser", "host"]);
+    expect(model.plugins.find((plugin) => plugin.id === "kernel")).toBeUndefined();
     expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["bundle:review", "bundle"]);
     expect(model.plugins.find((plugin) => plugin.id === "browser")).toMatchObject({
       commands: ["browser.navigate"],
@@ -132,7 +137,7 @@ describe("unified plugin catalog adapter", () => {
         { id: "skills", label: "Skills", count: 2 },
       ],
     });
-    expect(model.components.find((component) => component.id === "plugin-manager.page")?.required).toBe(true);
+    expect(model.components.find((component) => component.id === "plugin-manager.page")).toBeUndefined();
     expect(model.components.find((component) => component.id === "device-sync.settings")).toMatchObject({
       pluginId: "device-sync",
       kind: "settingsSection",
@@ -241,6 +246,7 @@ describe("unified plugin catalog adapter", () => {
     };
     const metadata = {
       origin: "third_party",
+      role: "extension",
       category: "developer_tools",
       scope_support: ["user", "project"],
       essential: false,

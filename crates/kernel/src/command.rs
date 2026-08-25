@@ -53,10 +53,24 @@ pub type CommandHandler = Arc<
     dyn Fn(CommandRealm, Value) -> BoxFuture<'static, Result<Value, PluginError>> + Send + Sync,
 >;
 
+/// Who may invoke a registered command.
+///
+/// This does not restrict trusted in-process callers such as the desktop bridge. It is the
+/// allowlist for out-of-process extension callbacks: commands are internal unless their owner
+/// deliberately publishes them as part of the extension interface.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommandVisibility {
+    #[default]
+    Internal,
+    ExtensionPublic,
+}
+
 pub(crate) struct CommandEntry {
     pub scope: ScopeId,
     pub handler: CommandHandler,
     pub description: Option<String>,
+    pub visibility: CommandVisibility,
 }
 
 /// A registered command, for introspection (`plugins.commands`, docs, a palette).
@@ -69,4 +83,6 @@ pub struct CommandInfo {
     pub plugin: String,
     pub scope: ScopeId,
     pub description: Option<String>,
+    /// Whether an out-of-process extension may discover and invoke this command.
+    pub visibility: CommandVisibility,
 }

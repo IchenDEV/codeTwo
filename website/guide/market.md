@@ -1,9 +1,9 @@
-# Plugin Hub
+# Features & Plugins
 
-**Plugin Hub** is the package manager for C2. It combines installed GitHub plugins, their
-composable components, project scaffolds, and the built-in component market. Open it from the
-package button at the foot of the session rail, the [command palette](/guide/keybindings), or with
-`Mod+Shift+M`.
+**Features & Plugins** is the package manager for C2. It combines optional built-in features,
+installed GitHub plugins, their composable components, project scaffolds, and the component market.
+Open it from the package button at the foot of the session rail, the
+[command palette](/guide/keybindings), or with `Mod+Shift+M`.
 
 > [!IMPORTANT]
 > Desktop, TUI, and server use the same Rust bundle manager and live process runtime. The desktop
@@ -68,7 +68,8 @@ Installed packages expose these composable or runtime component types:
 - **Scaffolds** — bounded project templates applied only after a complete overwrite conflict check.
 - **C2 process runtime** — a trusted child process that contributes live commands and event
   subscriptions through the C2 Plugin Protocol. It appears in the manager as `bundle:<id>` and is
-  unloaded with its commands and owned resources.
+  unloaded with its commands and owned resources. It can call back only into commands Core has
+  explicitly published through the Extension API; private Core commands are not exposed.
 
 The compiled-prompt preview lists attached Skills, Subagents, and MCP servers before a turn runs.
 
@@ -105,11 +106,12 @@ the stdio JSON-RPC messages are documented in the
 
 ## Live management and project scope
 
-The reference manager lists built-in modules, host adapters, installed process bundles, C2-owned UI
-descriptors, and marketplace entries in one catalog. A state change is always planned first: the
-plan reports dependencies and active resources and is bound to the current graph/config revision.
-Only that confirmed, unused plan can be applied. Disable, configuration changes, trust revocation,
-replacement, and uninstall reconcile live without an app restart.
+The manager lists optional built-in/host features, installed process bundles, C2-owned UI
+descriptors, and marketplace entries. Core runtime modules remain available to diagnostics but are
+not user plugin toggles. A state change is always planned first: the plan reports dependencies and
+active resources and is bound to the current graph/config revision. Only that confirmed, unused
+plan can be applied. Disable, configuration changes, trust revocation, replacement, and uninstall
+reconcile live without an app restart.
 
 A runtime is user-only unless it explicitly declares `scopeSupport: ["user", "project"]`. Project
 support creates an independent process, command realm, and data directory for each live project.
@@ -121,10 +123,10 @@ state or exposes safe mode and reset through the essential management plane.
 
 Choose **Open marketplace** and select a C2 `marketplace.json` whose `standardVersion` is `1.0.0`.
 C2 lists valid entries even when sibling entries are invalid. Relative local sources, public GitHub
-sources, and GitHub HTTPS `git` sources are installable;
-branch, tag, and exact SHA pins are preserved. npm, archive, private/authenticated repositories, and
-non-GitHub Git sources are currently shown with an explicit unsupported diagnostic rather than
-silently falling back to another source.
+sources, and GitHub HTTPS `git` sources are installable. The public `c2-plugins` catalog requires an
+exact commit SHA; local team catalogs may also preserve a branch or tag reference. npm, archive,
+private/authenticated repositories, and non-GitHub Git sources are currently shown with an explicit
+unsupported diagnostic rather than silently falling back to another source.
 
 ```json
 {
@@ -137,13 +139,18 @@ silently falling back to another source.
     "installationPolicy": "AVAILABLE",
     "authenticationPolicy": "NONE",
     "defaultEnabled": true,
-    "source": { "kind": "github", "repository": "acme/review-tools", "reference": "v1.2.0" }
+    "source": {
+      "kind": "github",
+      "repository": "acme/review-tools",
+      "reference": "v1.2.0",
+      "sha": "0123456789abcdef0123456789abcdef01234567"
+    }
   }]
 }
 ```
 
-Marketplace and bundle versions must match at installation. Unknown catalog, entry, or source
-fields are rejected; sources never fall through to another kind.
+Marketplace and bundle names and versions must match at installation. Unknown catalog, entry, or
+source fields are rejected; sources never fall through to another kind.
 
 ## Installing a scaffold
 

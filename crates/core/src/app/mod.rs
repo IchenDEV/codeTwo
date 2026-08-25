@@ -1,17 +1,17 @@
-//! C2 as a plugin graph.
+//! C2 as an internal runtime-module graph with a separate extension boundary.
 //!
 //! # What changed
 //!
 //! C2 used to *be* a program with extension points: a `setup()` that constructed subsystems in
 //! a fixed order into one `AppState` struct, plus a large hand-written command-wrapper layer that
 //! reached into it. That wrapper layer has been removed: adding or removing a feature now changes
-//! the plugin graph instead of the middle of the application.
+//! the runtime-module graph instead of the middle of the application.
 //!
-//! Following [cordis](https://github.com/cordiverse/cordis), it is now a graph. Each subsystem is
-//! a [`Plugin`](codetwo_kernel::Plugin) that publishes a [`Service`](codetwo_kernel::Service) and
-//! contributes commands. Each declares what it needs; the kernel decides the order, waits for
-//! dependencies, and tears a plugin's whole world down when it unloads. The boot sequence is a
-//! config file:
+//! Following [cordis](https://github.com/cordiverse/cordis), it is now a graph. Each subsystem uses
+//! the internal [`Plugin`](codetwo_kernel::Plugin) lifecycle to publish a
+//! [`Service`](codetwo_kernel::Service) and contribute commands. Each declares what it needs; the
+//! kernel decides the order, waits for dependencies, and tears the module's whole world down when
+//! it unloads. The boot sequence is a config file:
 //!
 //! ```text
 //! paths ──┬─→ store ──┬─→ scenes ──────┬─→ scene-commands
@@ -33,11 +33,13 @@
 //! - **Reloadability.** Reconfigure `store` and the engine — which was built against it — is torn
 //!   down and rebuilt automatically. Nothing holds a stale handle, because nothing is asked to
 //!   handle its dependencies changing.
-//! - **One extension surface.** A plugin's commands *are* the app's public API. The desktop bridge
-//!   exposes only [`CoreApp::call`]; in-process hosts can additionally consume typed services for
-//!   streaming protocols without constructing a second copy of the subsystem.
-//! - **Plugins that are not ours.** [`protocol`] lets a plugin be a process in any language, whose
-//!   commands land in the same registry. "Plugin" stops meaning "how we organised our code".
+//! - **One host transport.** The desktop bridge exposes only [`CoreApp::call`]; in-process hosts can
+//!   additionally consume typed services for streaming protocols without constructing a second
+//!   copy of the subsystem. Kernel commands remain internal unless explicitly exported through the
+//!   versioned Extension API.
+//! - **Extensions that are not ours.** [`protocol`] lets an installed extension run as a process in
+//!   any language. It shares lifecycle plumbing with Core runtime modules without inheriting Core's
+//!   private API.
 //!
 //! # Booting
 //!
@@ -77,7 +79,7 @@ pub use service::{
 
 use codetwo_kernel::{
     App, CommandInfo, CommandRealm, Context, KernelError, Loader, LoaderConfig, PluginEntry,
-    PluginError, ScopeInfo, ServiceInfo, Status,
+    PluginError, PluginRole, ScopeInfo, ServiceInfo, Status,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -323,7 +325,9 @@ impl CoreApp {
         &self.plugin_manager
     }
 
-    /// Invoke a plugin-contributed command. This is the whole app surface.
+    /// Invoke a command through the trusted host transport.
+    ///
+    /// This includes internal commands and is deliberately broader than the public Extension API.
     pub async fn call(&self, name: &str, args: Value) -> Result<Value, KernelError> {
         self.app.ctx().call(name, args).await
     }
@@ -432,6 +436,9 @@ fn apply_persisted_user_policy(
     store: &PluginConfigStore,
 ) {
     for factory in registry.factories() {
+        if factory.metadata.role == PluginRole::Core {
+            continue;
+        }
         let base = config
             .plugins
             .get(&factory.name)

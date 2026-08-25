@@ -28,18 +28,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
-/// The loader itself, published as a service so a plugin can manage the plugin graph.
+/// The loader itself, published so the Core management plane can inspect the runtime-module graph.
 ///
-/// This is the reflexive step that makes the system finished rather than merely layered: the
-/// plugin manager is not privileged infrastructure, it is a plugin that injects `loader` like
-/// anything else, and it can be turned off.
+/// The manager uses the same scoped lifecycle as other Core modules, while its product role and
+/// command visibility keep it outside user extension policy.
 pub struct LoaderService(pub Arc<Mutex<codetwo_kernel::Loader>>);
 
 impl Service for LoaderService {
     const NAME: &'static str = "loader";
 }
 
-/// Durable user and project policy for the running plugin graph.
+/// Durable user and project policy for managed built-in features and installed extensions.
 ///
 /// This is rooted beside the loader, not provided by `paths`: disabling the paths plugin must not
 /// remove the one interface capable of recovering the graph.
@@ -585,9 +584,9 @@ impl KeymapService {
 /// Installed plugin *bundles* — the data-only packages (skills, subagents, MCP servers, scenes,
 /// scaffolds) users install from GitHub.
 ///
-/// Note the two senses of "plugin" that meet here: a [`codetwo_kernel::Plugin`] is code that runs
-/// in this process, a [`crate::plugin::InstalledPlugin`] is content the app loads. This service is
-/// the bridge — a kernel plugin whose job is managing the other kind.
+/// A [`codetwo_kernel::Plugin`] is an internal runtime module; a
+/// [`crate::plugin::InstalledPlugin`] is a separately managed extension Bundle. This Core service
+/// bridges the two without making the kernel trait a public extension API.
 pub struct PluginHub {
     pub dir: PathBuf,
     /// Serializes installed-bundle mutations with the runtime factory snapshot they publish.

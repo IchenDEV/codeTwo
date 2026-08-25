@@ -21,7 +21,7 @@ use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp};
 use codetwo_core::{CanvasFeatureGate, DesktopMcpConfig, Engine};
 use codetwo_kernel::{
-    PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginScopeSupport,
+    PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginRole, PluginScopeSupport,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -154,6 +154,12 @@ pub async fn run() -> Result<(), String> {
 
     let mut registry = codetwo_core::app::plugins::builtin_registry();
     #[cfg(unix)]
+    let engine_metadata = registry
+        .get("engine")
+        .expect("built-in engine must be registered")
+        .metadata
+        .clone();
+    #[cfg(unix)]
     registry.register_arc(Box::new(move || {
         let desktop_mcp = desktop_mcp.clone();
         Arc::new(EnginePlugin::with_builder(Arc::new(
@@ -170,6 +176,10 @@ pub async fn run() -> Result<(), String> {
             },
         )))
     }));
+    #[cfg(unix)]
+    registry
+        .set_metadata("engine", engine_metadata)
+        .expect("desktop engine replacement must preserve Core metadata");
     let host = events.clone();
     registry.register(move || automation::AutomationPlugin::new(host.clone()));
     registry.register(|| github::GitHubPlugin);
@@ -203,6 +213,11 @@ pub async fn run() -> Result<(), String> {
                 name,
                 PluginMetadata {
                     origin: PluginOrigin::Host,
+                    role: if name == "desktop-events" {
+                        PluginRole::Core
+                    } else {
+                        PluginRole::BuiltIn
+                    },
                     category,
                     scope_support,
                     essential,

@@ -18,7 +18,7 @@
 //! "handle your dependency being swapped underneath you" is a correctness burden every plugin
 //! author would have to carry, and most would carry wrongly.
 
-use crate::command::{CommandEntry, CommandInfo, CommandRealm};
+use crate::command::{CommandEntry, CommandInfo, CommandRealm, CommandVisibility};
 use crate::error::{KernelError, PluginError};
 use crate::event::{Event, JsonListenerEntry, ListenerEntry};
 use crate::plugin::{Injection, Plugin};
@@ -131,6 +131,34 @@ pub struct Runtime {
     state: Mutex<State>,
     wake: Arc<Notify>,
     idle: Arc<Notify>,
+}
+
+fn resolve_command_entry<'a>(
+    state: &'a State,
+    realm: &CommandRealm,
+    name: &str,
+) -> Result<Option<(CommandRealm, &'a CommandEntry)>, KernelError> {
+    let local = (realm.clone(), name.to_string());
+    if let Some(entry) = state.commands.get(&local) {
+        return Ok(Some((realm.clone(), entry)));
+    }
+    if matches!(realm, CommandRealm::Global) {
+        return Ok(None);
+    }
+    if state
+        .command_fallback_blocks
+        .get(&local)
+        .is_some_and(|owners| !owners.is_empty())
+    {
+        return Err(KernelError::CommandFallbackBlocked {
+            realm: realm.clone(),
+            name: name.to_string(),
+        });
+    }
+    Ok(state
+        .commands
+        .get(&(CommandRealm::Global, name.to_string()))
+        .map(|entry| (CommandRealm::Global, entry)))
 }
 
 impl Runtime {
@@ -279,6 +307,7 @@ impl Runtime {
                     .unwrap_or_default(),
                 scope: entry.scope,
                 description: entry.description.clone(),
+                visibility: entry.visibility,
             })
             .collect();
         out.sort_by(|a, b| (&a.name, &a.realm).cmp(&(&b.name, &b.realm)));
@@ -423,6 +452,7 @@ impl Runtime {
         realm: CommandRealm,
         name: String,
         description: Option<String>,
+        visibility: CommandVisibility,
         handler: crate::command::CommandHandler,
     ) -> Result<(), KernelError> {
         let mut state = self.state();
@@ -439,6 +469,7 @@ impl Runtime {
                 scope,
                 handler,
                 description,
+                visibility,
             },
         );
         if let Some(entry) = state.scopes.get_mut(&scope) {
@@ -453,27 +484,59 @@ impl Runtime {
         name: &str,
     ) -> Result<Option<crate::command::CommandHandler>, KernelError> {
         let state = self.state();
-        let local = (realm.clone(), name.to_string());
-        if let Some(entry) = state.commands.get(&local) {
-            return Ok(Some(entry.handler.clone()));
-        }
-        if matches!(realm, CommandRealm::Global) {
+        Ok(resolve_command_entry(&state, realm, name)?.map(|(_, entry)| entry.handler.clone()))
+    }
+
+    pub(crate) fn extension_public_command_handler(
+        &self,
+        realm: &CommandRealm,
+        name: &str,
+    ) -> Result<Option<crate::command::CommandHandler>, KernelError> {
+        let state = self.state();
+        let Some((_, entry)) = resolve_command_entry(&state, realm, name)? else {
             return Ok(None);
+        };
+        if entry.visibility != CommandVisibility::ExtensionPublic {
+            return Err(KernelError::CommandNotExtensionPublic(name.to_string()));
         }
-        if state
-            .command_fallback_blocks
-            .get(&local)
-            .is_some_and(|owners| !owners.is_empty())
-        {
-            return Err(KernelError::CommandFallbackBlocked {
-                realm: realm.clone(),
-                name: name.to_string(),
-            });
-        }
-        Ok(state
+        Ok(Some(entry.handler.clone()))
+    }
+
+    pub(crate) fn extension_public_commands(&self, realm: &CommandRealm) -> Vec<CommandInfo> {
+        let state = self.state();
+        let names = state
             .commands
-            .get(&(CommandRealm::Global, name.to_string()))
-            .map(|entry| entry.handler.clone()))
+            .keys()
+            .filter(|(candidate_realm, _)| {
+                candidate_realm == realm
+                    || (!matches!(realm, CommandRealm::Global)
+                        && matches!(candidate_realm, CommandRealm::Global))
+            })
+            .map(|(_, name)| name.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        names
+            .into_iter()
+            .filter_map(|name| {
+                let (resolved_realm, entry) =
+                    resolve_command_entry(&state, realm, &name).ok()??;
+                if entry.visibility != CommandVisibility::ExtensionPublic {
+                    return None;
+                }
+                Some(CommandInfo {
+                    name,
+                    realm: resolved_realm,
+                    plugin: state
+                        .scopes
+                        .get(&entry.scope)
+                        .map(|scope| scope.name.clone())
+                        .unwrap_or_default(),
+                    scope: entry.scope,
+                    description: entry.description.clone(),
+                    visibility: entry.visibility,
+                })
+            })
+            .collect()
     }
 
     pub(crate) fn register_command_fallback_block(

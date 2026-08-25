@@ -1,16 +1,25 @@
-# Plugins
+# Core runtime modules and plugins
 
-C2 is a plugin graph. This document explains what that means, how to write a plugin, and how
-the core and host-specific plugins fit together.
+C2 Core is implemented as a runtime-module graph. This document explains that internal mechanism,
+how Core and host modules fit together, and where the public extension boundary begins.
 
 For the normative package, naming, lifecycle, scope, security, versioning, and host-capability
 rules, see the [C2 Plugin Standard 1.0.0](plugin-standard.md). This document focuses on the graph's
 implementation and rationale.
 
-The model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
+The internal model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
 [`crates/kernel`](../crates/kernel). Cordis' claim is that an application is not a program with
 extension points bolted on; it is a graph of plugins that happens to boot. We agree, and this is
 what taking that seriously looks like in a Rust codebase.
+
+In product language, `codetwo_kernel::Plugin` is a **runtime module**, not automatically an
+installable plugin. The catalog assigns one of three roles:
+
+- **Core** — host-owned infrastructure that extension policy cannot disable;
+- **Built-in feature** — optional C2/host behavior compiled with the product;
+- **Extension** — a separately installed bundle restricted to the public Extension API.
+
+See [ADR 0002](adr/0002-core-extension-boundary.md) for the boundary and migration rules.
 
 ## The problem it replaces
 
@@ -114,7 +123,7 @@ let config = AppConfig::new(&dir).without("scenes").without("keymap").without("m
 `AppConfig::bare()` starts from nothing. A headless host that wants `git` and `market` and no agent
 loop is a two-line config, and the commands it does not load simply do not exist.
 
-## Writing a plugin
+## Writing an internal runtime module
 
 ```rust
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginResult};
@@ -156,7 +165,8 @@ impl Plugin for IssuesPlugin {
 ```
 
 Register it in `crates/core/src/app/plugins/mod.rs` (`builtin_registry`) and add its name to
-`BUILTIN`. That is the whole integration.
+`BUILTIN`. Add it to `CORE` only when host ownership is required to preserve a product, data, or
+security invariant. That is the whole integration.
 
 ### Rules of thumb
 
@@ -164,8 +174,8 @@ Register it in `crates/core/src/app/plugins/mod.rs` (`builtin_registry`) and add
   Anything else → `ctx.effect(…)`. If the kernel cannot see it, unloading the plugin leaks it.
 - **Do not hold a dependency you did not inject.** Fetching a service without declaring it means
   you will not be reloaded when it changes, and you will be holding a corpse.
-- **Commands are `subsystem.verb`.** The name is the public API; it is what the frontend, the TUI,
-  the remote server, and other plugins all use.
+- **Commands are `subsystem.verb`.** The name is stable inside C2 hosts. It is available to process
+  extensions only when explicitly exported through the versioned Extension API.
 - **Announce, do not reach.** The engine does not know the skill library exists; it listens for
   `SkillsChanged`. Delete either plugin and the other keeps working.
 - **Capture `ctx.weak()` in anything the runtime stores.** This is the one wrinkle Rust adds to the
@@ -182,8 +192,9 @@ const status = await call("git.status", { cwd });
 const graph = await kernelScopes();       // what is loaded, and why something is pending
 ```
 
-`call` is the extension surface. A plugin that registers `foo.bar` is callable the moment it loads
-— no native command wrapper, no dispatch-table entry, no new function in `bridge.ts`.
+`call` is the host transport, not an automatic public extension surface. Internal commands are
+callable by C2 hosts. Process extensions can discover and invoke only commands explicitly exported
+through the versioned Extension API. There is no native command wrapper or second dispatch table.
 
 ## The unified plugin manager
 
@@ -192,14 +203,14 @@ category, supported configuration scopes, default state, and whether it is essen
 may declare this metadata or receive it centrally through `PluginRegistry::set_metadata`; this
 keeps reusable plugin implementations free of desktop product policy.
 
-The desktop's Plugins page is a data-only view over that catalog. It can show built-in plugins,
-desktop host plugins, installed bundles, C2-owned UI contributions, and marketplace entries in one
-place. Common bundle administration—GitHub import, source and trust review, install-wide enablement,
-diagnostics, and removal—also lives on this page. Local marketplace files, scaffold generation,
-and skill actions use the same catalog and details surface instead of opening a second manager.
-Bundle code never supplies a React renderer. Third-party
-contributions are descriptors that C2 renders with its own components, which preserves the
-webview's trust boundary and design system.
+The desktop's Features & Plugins page is a data-only view over that catalog. It shows optional
+built-in features, host features, installed bundles, C2-owned UI contributions, and marketplace
+entries in one place. Common bundle administration—GitHub import, source and trust review,
+install-wide enablement, diagnostics, and removal—also lives on this page. Local marketplace files,
+scaffold generation, and skill actions use the same catalog and details surface instead of opening
+a second manager. Bundle code never supplies a React renderer. Third-party contributions are
+descriptors that C2 renders with its own components, which preserves the webview's trust boundary
+and design system.
 
 State changes use a two-step protocol:
 
@@ -261,22 +272,25 @@ read, C2 starts in safe mode with only essential management-plane plugins. The c
 recovery state, and `plugins.reset` rewrites a valid primary document even when resetting safe mode
 to an otherwise identical default policy.
 
-## Plugins that are not Rust
+## External process extensions
 
-A Rust host can only load Rust plugins it was compiled with. If that were the end of it, "plugin"
-would describe how *we* organise our code rather than something a user can add.
+The Rust `Plugin` trait is an internal runtime-module interface for code compiled with a C2 host.
+User-installed extensions instead run as supervised child processes and speak JSON-RPC over stdio.
+Their declared commands and event subscriptions use the same lifecycle and cleanup machinery, so
+extension-owned commands appear in `kernel.commands`, are callable through `call()`, and vanish on
+unload.
 
-So a plugin can also be a **process**. C2 speaks JSON-RPC over its stdio, and what it declares —
-commands, event subscriptions — lands in the same kernel registries a built-in uses: its commands
-show up in `kernel.commands`, are callable through `call()`, and vanish when it unloads. It
-declares `inject` in its manifest and gets the same reactive contract. It is not a lesser citizen.
+That shared machinery does not expose the internal Rust interface. An extension may call back only
+into commands explicitly published through the versioned Extension API. The existing `inject` and
+`optionalInject` fields are a migration surface for known services, not general access to Core.
 
 A C2 bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
 starts only once the user marks the bundle **trusted** — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
 Runtime, safe UI actions, and language servers are distributed together from that same bundle root;
-run `cd apps/desktop && bun run plugin:validate <bundle-root>` before publishing it or installing it
-from GitHub.
+run `cargo run -p codetwo-core --example validate_bundle -- <bundle-root>` before publishing it or
+installing it from GitHub. The Bun `plugin:validate` command remains a faster manifest-only
+preflight.
 
 ### Developing an installed bundle
 
@@ -321,19 +335,20 @@ remote modules; product commands remain behind the same command seam as the TUI 
 Electrobun adapter packages that Rust graph as `codetwo-desktop-host`; Bun owns only shell-native
 window, dialog, update, and process-lifecycle operations.
 
-## Two senses of "plugin"
+## Runtime modules and installed extensions
 
-They meet in `plugin-hub`, and it is worth keeping them apart:
+They meet in `plugin-hub`, and the terms remain separate:
 
-- **Kernel plugin** (`codetwo_kernel::Plugin`) — code that runs in the graph, publishes services,
-  and contributes commands. This document. Written in Rust, or in any language over the
-  [plugin protocol](plugin-protocol.md).
+- **Runtime module** — code that runs under the internal graph lifecycle and contributes commands
+  or services. Compiled modules implement `codetwo_kernel::Plugin`; external extensions use the
+  [plugin protocol](plugin-protocol.md) and only the public Extension API.
 - **Installed bundle** (`codetwo_core::plugin::InstalledPlugin`) — a package users install from
   GitHub. Installing it executes nothing; it contributes skills, subagent definitions, MCP server
   definitions, scenes, and scaffolds. See `docs/architecture.md`.
 
 `plugin-hub` manages bundles; `extensions` turns the ones that ship a C2 process runtime into
-kernel plugins. Both are themselves kernel plugins.
+runtime modules. Both managers use the same internal lifecycle, but neither fact expands the public
+Extension API.
 
 ## Migration status
 

@@ -144,7 +144,8 @@ impl Plugin for ConfigurablePlugin {
             "additionalProperties": false,
             "required": ["label"],
             "properties": {
-                "label": { "type": "string" }
+                "label": { "type": "string" },
+                "limit": { "type": "integer", "minimum": 16 }
             }
         }))
     }
@@ -436,9 +437,34 @@ async fn plans_validate_schema_and_protect_the_management_plane() {
 }
 
 #[tokio::test]
-async fn numeric_schema_bounds_are_rejected_before_a_plugin_can_panic() {
+async fn core_runtime_modules_cannot_be_changed_through_extension_policy() {
     let data = tempfile::tempdir().unwrap();
-    let app = CoreApp::boot(AppConfig::new(data.path())).await.unwrap();
+    let mut persisted = PluginConfigStore::open(data.path()).unwrap();
+    persisted
+        .set_policy(
+            PluginScope::User,
+            "bus",
+            PluginPolicy {
+                state: PluginOverride::Disabled,
+                config: Some(json!({ "capacity": 32 })),
+                ..PluginPolicy::default()
+            },
+        )
+        .unwrap();
+    let app = CoreApp::boot(
+        AppConfig::new(data.path())
+            .with("bus", PluginEntry::with_config(json!({ "capacity": 64 }))),
+    )
+    .await
+    .unwrap();
+
+    let bus = app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.plugin == "bus")
+        .unwrap();
+    assert_eq!(bus.status, Status::Active);
+    assert_eq!(bus.config, json!({ "capacity": 64 }));
 
     let error = app
         .call(
@@ -446,7 +472,49 @@ async fn numeric_schema_bounds_are_rejected_before_a_plugin_can_panic() {
             json!({
                 "plugin": "bus",
                 "scope": { "kind": "user" },
-                "config": { "capacity": 0 }
+                "state": "disabled"
+            }),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("core module `bus`"), "{error}");
+    assert!(error.contains("host configuration"), "{error}");
+
+    let config_error = app
+        .call(
+            "plugins.plan_change",
+            json!({
+                "plugin": "bus",
+                "scope": { "kind": "user" },
+                "config": { "capacity": 32 }
+            }),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(config_error.contains("core module `bus`"), "{config_error}");
+
+    assert!(
+        app.call("providers.list", Value::Null).await.is_ok(),
+        "rejecting extension policy must leave Core running"
+    );
+}
+
+#[tokio::test]
+async fn numeric_schema_bounds_are_rejected_before_apply() {
+    let data = tempfile::tempdir().unwrap();
+    let app = CoreApp::boot_with(config(data.path()), registry())
+        .await
+        .unwrap();
+
+    let error = app
+        .call(
+            "plugins.plan_change",
+            json!({
+                "plugin": "configurable",
+                "scope": { "kind": "user" },
+                "config": { "label": "default", "limit": 0 }
             }),
         )
         .await
@@ -455,7 +523,7 @@ async fn numeric_schema_bounds_are_rejected_before_a_plugin_can_panic() {
     assert!(error.contains("at least 16"), "{error}");
 
     assert!(
-        app.call("providers.list", Value::Null).await.is_ok(),
+        app.call("configurable.value", Value::Null).await.is_ok(),
         "the live graph remains available after rejection"
     );
 }

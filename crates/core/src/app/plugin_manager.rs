@@ -11,8 +11,8 @@ use super::{
 use crate::plugin;
 use codetwo_kernel::{
     events::StatusChanged, CommandRealm, Context, FnPlugin, Fork, Injection, KernelError, Loader,
-    LoaderConfig, PluginEntry, PluginMetadata, PluginRegistry, PluginScopeSupport, Service, Status,
-    WeakContext,
+    LoaderConfig, PluginEntry, PluginMetadata, PluginRegistry, PluginRole, PluginScopeSupport,
+    Service, Status, WeakContext,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -110,6 +110,8 @@ pub struct PluginChangeResult {
 pub enum PluginManagerError {
     #[error("unknown plugin `{0}`")]
     UnknownPlugin(String),
+    #[error("core module `{0}` is owned by host configuration, not extension policy")]
+    CoreModule(String),
     #[error("plugin `{0}` does not support project scope")]
     UnsupportedProjectScope(String),
     #[error("plugin `{0}` is part of the management plane and cannot be disabled")]
@@ -668,6 +670,9 @@ impl PluginManager {
             return Err(PluginManagerError::UnsupportedProjectScope(
                 request.plugin.clone(),
             ));
+        }
+        if entry.metadata.role == PluginRole::Core {
+            return Err(PluginManagerError::CoreModule(request.plugin.clone()));
         }
         if entry.metadata.essential
             && request.component.is_none()
@@ -1340,12 +1345,16 @@ impl PluginManager {
                     .plugins
                     .entry(plugin.to_string())
                     .or_insert_with(|| default.clone());
-                target.enabled = if metadata.essential {
+                target.enabled = if metadata.essential || metadata.role == PluginRole::Core {
                     true
                 } else {
                     policy.state.resolve(default.enabled)
                 };
-                target.config = policy.config.clone().unwrap_or(default.config);
+                target.config = if metadata.role == PluginRole::Core {
+                    default.config
+                } else {
+                    policy.config.clone().unwrap_or(default.config)
+                };
                 let errors = loader.apply(next);
                 if !errors.is_empty() {
                     let _ = loader.apply(previous_global);
@@ -1523,6 +1532,10 @@ fn project_loader_config_from(
             .get(&factory.name)
             .cloned()
             .unwrap_or_else(PluginEntry::disabled);
+        if factory.metadata.role == PluginRole::Core {
+            output.plugins.insert(factory.name.clone(), default);
+            continue;
+        }
         let user_scope = PluginScope::User;
         let user = candidate_policy(config, &user_scope, &factory.name, candidate);
         let project = candidate_policy(config, scope, &factory.name, candidate);

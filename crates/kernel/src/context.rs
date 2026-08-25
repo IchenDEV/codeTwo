@@ -4,7 +4,7 @@
 //! made through it is filed under that scope, which is why unloading a plugin is exact rather than
 //! best-effort. Cordis puts it well: the context *is* the plugin's undo log.
 
-use crate::command::CommandRealm;
+use crate::command::{CommandInfo, CommandRealm, CommandVisibility};
 use crate::error::{KernelError, PluginError};
 use crate::event::{BoxFuture, Event, Handler, JsonListenerEntry, ListenerEntry};
 use crate::plugin::{FnPlugin, Injection, Plugin};
@@ -351,9 +351,11 @@ impl Context {
 
     // ---- commands ------------------------------------------------------------------------
 
-    /// Contribute a named command — a call a frontend, the TUI, or another plugin can make.
+    /// Contribute a named command to the trusted host surface.
     ///
-    /// The name is the API. Keep it `subsystem.verb` (`git.status`, `scene.apply`).
+    /// Internal runtime modules and host adapters may call it by name. Extension processes cannot
+    /// discover or invoke it unless it is registered with [`Context::command_extension_public`].
+    /// Keep names in `subsystem.verb` form (`git.status`, `scene.apply`).
     pub fn command<F, Fut>(&self, name: impl Into<String>, handler: F) -> Result<(), KernelError>
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -372,12 +374,53 @@ impl Context {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
     {
+        self.command_described_with_visibility(
+            name,
+            description,
+            CommandVisibility::Internal,
+            handler,
+        )
+    }
+
+    /// Contribute a command that an out-of-process extension may discover and invoke.
+    ///
+    /// This is deliberately separate from [`Context::command`], which stays internal by default.
+    /// Treat this method as publishing a compatibility and authorization contract.
+    pub fn command_extension_public<F, Fut>(
+        &self,
+        name: impl Into<String>,
+        handler: F,
+    ) -> Result<(), KernelError>
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
+    {
+        self.command_described_with_visibility(
+            name,
+            None,
+            CommandVisibility::ExtensionPublic,
+            handler,
+        )
+    }
+
+    fn command_described_with_visibility<F, Fut>(
+        &self,
+        name: impl Into<String>,
+        description: Option<&str>,
+        visibility: CommandVisibility,
+        handler: F,
+    ) -> Result<(), KernelError>
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
+    {
         let handler = Arc::new(handler);
         self.runtime.register_command(
             self.scope,
             self.command_realm.clone(),
             name.into(),
             description.map(str::to_string),
+            visibility,
             Arc::new(move |_realm, args| {
                 let handler = handler.clone();
                 Box::pin(async move { handler(args).await })
@@ -403,6 +446,7 @@ impl Context {
             self.command_realm.clone(),
             name.into(),
             None,
+            CommandVisibility::Internal,
             Arc::new(move |realm, args| {
                 let handler = handler.clone();
                 Box::pin(async move { handler(realm, args).await })
@@ -436,6 +480,32 @@ impl Context {
                 name: name.to_string(),
                 message: error.0,
             })
+    }
+
+    /// Invoke a command on behalf of an out-of-process extension.
+    ///
+    /// Resolution follows the same project-local then global-fallback rules as [`Context::call`],
+    /// but refuses the resolved command unless it was explicitly published for extensions.
+    pub async fn call_extension_public(
+        &self,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        let handler = self
+            .runtime
+            .extension_public_command_handler(&self.command_realm, name)?
+            .ok_or_else(|| KernelError::UnknownCommand(name.to_string()))?;
+        handler(self.command_realm.clone(), args)
+            .await
+            .map_err(|error| KernelError::Command {
+                name: name.to_string(),
+                message: error.0,
+            })
+    }
+
+    /// Commands effectively visible to an extension in this command realm.
+    pub fn extension_public_commands(&self) -> Vec<CommandInfo> {
+        self.runtime.extension_public_commands(&self.command_realm)
     }
 
     /// Invoke a command and deserialize the result.

@@ -79,9 +79,11 @@ describe("plugin bridge contract", () => {
       [...bridge.matchAll(/\bcall(?:<[^>]+>)?\(\s*"([^"]+)"/g)].map((match) => match[1]),
     );
     const registered = new Set(
-      [...pluginSources.matchAll(/ctx\.command(?:_described|_with_realm)?\(\s*"([^"]+)"/g)].map(
-        (match) => match[1],
-      ),
+      [
+        ...pluginSources.matchAll(
+          /ctx\.command(?:_described|_with_realm|_extension_public)?\(\s*"([^"]+)"/g,
+        ),
+      ].map((match) => match[1]),
     );
 
     expect([...used].filter((name) => !registered.has(name))).toEqual([]);
