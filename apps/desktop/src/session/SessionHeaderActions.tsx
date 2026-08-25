@@ -8,6 +8,7 @@ import {
   History,
   Ellipsis,
   MessageSquare,
+  MessageSquareText,
   Orbit,
   PanelBottom,
   PanelRight,
@@ -152,10 +153,14 @@ export function SessionHeaderActions({
           variant="secondary"
           size="compact"
           className="max-w-36"
-          title={action.command}
+          title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
         >
-          <Play className="size-3.5" aria-hidden />
+          {action.kind === "prompt" ? (
+            <MessageSquareText className="size-3.5" aria-hidden />
+          ) : (
+            <Play className="size-3.5" aria-hidden />
+          )}
           <span className="truncate">{action.name || action.id}</span>
         </Button>
       ))}
@@ -179,7 +184,11 @@ export function SessionHeaderActions({
             <DropdownMenuGroup>
               {actions.slice(2).map((action) => (
                 <DropdownMenuItem key={action.id} onClick={() => onRunAction?.(action)}>
-                  <Play aria-hidden />
+                  {action.kind === "prompt" ? (
+                    <MessageSquareText aria-hidden />
+                  ) : (
+                    <Play aria-hidden />
+                  )}
                   {action.name || action.id}
                   {action.keybinding && (
                     <DropdownMenuShortcut>{formatCombo(action.keybinding)}</DropdownMenuShortcut>

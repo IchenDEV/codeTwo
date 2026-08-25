@@ -127,7 +127,9 @@ describe("SessionHeaderActions", () => {
       actions: [{
         id: "test",
         name: "Test",
+        kind: "command",
         command: "bun test",
+        prompt: "",
         keybinding: "Mod+Shift+T",
         preview_url: "",
         run_on_worktree_create: false,

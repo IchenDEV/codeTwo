@@ -3664,7 +3664,9 @@ export async function setSandbox(session: string, sandbox: Sandbox): Promise<voi
 export interface ProjectScript {
   id: string;
   name: string;
+  kind: "command" | "prompt";
   command: string;
+  prompt: string;
   keybinding: string;
   preview_url: string;
   run_on_worktree_create: boolean;

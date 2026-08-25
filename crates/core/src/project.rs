@@ -1,4 +1,4 @@
-//! Per-project configuration and setup scripts (`.codetwo.json`), mirroring t3code's `t3.json`.
+//! Per-project actions and setup scripts (`.codetwo.json`), mirroring t3code's `t3.json`.
 //!
 //! A repo can declare scripts the app surfaces as one-click actions, and mark some to run
 //! automatically when a new worktree is created (install deps, copy `.env`, etc.).
@@ -44,12 +44,32 @@ impl ProjectWorktreeMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectActionKind {
+    Command,
+    Prompt,
+}
+
+impl Default for ProjectActionKind {
+    fn default() -> Self {
+        Self::Command
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProjectScript {
     pub id: String,
     #[serde(default)]
     pub name: String,
+    /// Existing configs omit this and remain command actions.
+    #[serde(default)]
+    pub kind: ProjectActionKind,
     /// Shell command, run with the platform shell in the project directory.
+    #[serde(default)]
     pub command: String,
+    /// Prompt submitted to the focused conversation without replacing its draft.
+    #[serde(default)]
+    pub prompt: String,
     /// Optional project-local shortcut in the shared canonical key syntax (`Mod+Shift+T`).
     #[serde(default)]
     pub keybinding: String,
@@ -101,6 +121,7 @@ fn normalized_script(script: &ProjectScript) -> std::io::Result<ProjectScript> {
     script.id = script.id.trim().to_string();
     script.name = script.name.trim().to_string();
     script.command = script.command.trim().to_string();
+    script.prompt = script.prompt.trim().to_string();
     script.keybinding = script.keybinding.trim().to_string();
     script.preview_url = script.preview_url.trim().to_string();
     let valid_id = !script.id.is_empty()
@@ -118,10 +139,26 @@ fn normalized_script(script: &ProjectScript) -> std::io::Result<ProjectScript> {
     if script.name.is_empty() || script.name.chars().count() > 80 {
         return Err(invalid("action name must be between 1 and 80 characters"));
     }
-    if script.command.is_empty() || script.command.len() > 32_768 {
-        return Err(invalid(
-            "action command must be between 1 and 32768 characters",
-        ));
+    match script.kind {
+        ProjectActionKind::Command => {
+            script.prompt.clear();
+            if script.command.is_empty() || script.command.len() > 32_768 {
+                return Err(invalid(
+                    "action command must be between 1 and 32768 characters",
+                ));
+            }
+        }
+        ProjectActionKind::Prompt => {
+            script.command.clear();
+            script.preview_url.clear();
+            script.run_on_worktree_create = false;
+            script.open_preview = false;
+            if script.prompt.is_empty() || script.prompt.len() > 32_768 {
+                return Err(invalid(
+                    "action prompt must be between 1 and 32768 characters",
+                ));
+            }
+        }
     }
     if script.keybinding.len() > 128 {
         return Err(invalid("action keybinding is too long"));
@@ -177,6 +214,9 @@ pub fn save_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<Projec
 
 /// Run one script in `cwd`, returning its combined output.
 pub async fn run_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<String> {
+    if script.kind != ProjectActionKind::Command {
+        return Err(invalid("only command actions can run as scripts"));
+    }
     #[cfg(windows)]
     let mut command = {
         let mut command = Command::new("cmd.exe");
@@ -209,7 +249,11 @@ pub async fn run_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<S
 pub async fn run_worktree_hooks(cwd: &Path) -> Vec<(String, Result<String, String>)> {
     let cfg = load(cwd);
     let mut out = Vec::new();
-    for s in cfg.scripts.iter().filter(|s| s.run_on_worktree_create) {
+    for s in cfg
+        .scripts
+        .iter()
+        .filter(|s| s.kind == ProjectActionKind::Command && s.run_on_worktree_create)
+    {
         let res = run_script(cwd, s).await.map_err(|e| e.to_string());
         out.push((s.id.clone(), res));
     }
@@ -286,7 +330,9 @@ mod tests {
         let bad = ProjectScript {
             id: "bad".into(),
             name: String::new(),
+            kind: ProjectActionKind::Command,
             command: "exit 3".into(),
+            prompt: String::new(),
             keybinding: String::new(),
             preview_url: String::new(),
             run_on_worktree_create: false,
@@ -307,7 +353,9 @@ mod tests {
             &ProjectScript {
                 id: "test".into(),
                 name: " Test ".into(),
+                kind: ProjectActionKind::Command,
                 command: " bun test ".into(),
+                prompt: String::new(),
                 keybinding: "Mod+Shift+T".into(),
                 preview_url: "http://localhost:5173".into(),
                 run_on_worktree_create: true,
@@ -322,6 +370,7 @@ mod tests {
         assert_eq!(document["future"]["keep"], true);
         assert_eq!(document["scripts"][0]["keybinding"], "Mod+Shift+T");
         assert_eq!(document["scripts"][0]["open_preview"], true);
+        assert_eq!(document["scripts"][0]["kind"], "command");
         assert!(save_script(
             &dir,
             &ProjectScript {
@@ -330,6 +379,55 @@ mod tests {
             }
         )
         .is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saves_prompt_actions_and_keeps_legacy_commands_compatible() {
+        let dir =
+            std::env::temp_dir().join(format!("codetwo-prompt-save-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_cfg(
+            &dir,
+            r#"{"scripts":[{"id":"legacy","name":"Legacy","command":"bun test"}]}"#,
+        );
+        assert_eq!(load(&dir).scripts[0].kind, ProjectActionKind::Command);
+
+        let saved = save_script(
+            &dir,
+            &ProjectScript {
+                id: "review".into(),
+                name: " Review ".into(),
+                kind: ProjectActionKind::Prompt,
+                command: "ignored".into(),
+                prompt: " Review the current changes. ".into(),
+                keybinding: String::new(),
+                preview_url: "http://localhost:5173".into(),
+                run_on_worktree_create: true,
+                open_preview: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.prompt, "Review the current changes.");
+        assert!(saved.command.is_empty());
+        assert!(saved.preview_url.is_empty());
+        assert!(!saved.run_on_worktree_create);
+        assert!(!saved.open_preview);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn prompt_actions_cannot_run_as_scripts_or_worktree_hooks() {
+        let dir = std::env::temp_dir().join(format!("codetwo-prompt-run-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        write_cfg(
+            &dir,
+            r#"{"scripts":[{"id":"review","name":"Review","kind":"prompt","command":"exit 99","prompt":"Review this","run_on_worktree_create":true}]}"#,
+        );
+        let script = load(&dir).scripts.remove(0);
+
+        assert!(run_script(&dir, &script).await.is_err());
+        assert!(run_worktree_hooks(&dir).await.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
