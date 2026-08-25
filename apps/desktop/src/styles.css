@@ -842,6 +842,8 @@
     flex-shrink: 0;
     cursor: row-resize;
     position: relative;
+    touch-action: none;
+    user-select: none;
   }
   .composer-grip::after {
     content: "";
@@ -873,6 +875,8 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
+    touch-action: none;
+    user-select: none;
     transition: background var(--motion-fast) ease-out;
   }
   /* The hover affordance is a slim inset line, not a filled bar — a 6px full-height fill reads
@@ -916,6 +920,14 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
+    touch-action: none;
+    user-select: none;
+  }
+  .composer-grip:focus-visible,
+  .dock-grip:focus-visible,
+  .rail-grip:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: -2px;
   }
 
   /* While a drag is live: one cursor everywhere and no text selection. The browser panel's page is

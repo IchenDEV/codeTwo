@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import { TrajectoryView } from "../session/TrajectoryView";
@@ -212,35 +213,22 @@ export function Dock({
   // anything we write in the components layer regardless of specificity.
   const [dragging, setDragging] = useState(false);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startPointer = e.clientX;
-      const startSize = applied;
-      const onMove = (ev: MouseEvent) => {
-        const pointer = ev.clientX;
-        const next = Math.round(
-          Math.min(
-            maxForPlacement(),
-            Math.max(300, startSize + (startPointer - pointer)),
-          ),
-        );
-        onWidth(next);
-      };
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove("resizing-h");
-        setDragging(false);
-        window.dispatchEvent(new Event("resize"));
-      };
-      document.body.classList.add("resizing-h");
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    direction: -1,
+    value: applied,
+    min: 300,
+    max: maxSize,
+    disabled: !open,
+    onStart: () => {
       setDragging(true);
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
     },
-    [applied, maxForPlacement, onWidth],
-  );
+    onResize: onWidth,
+    onEnd: () => {
+      setDragging(false);
+      window.dispatchEvent(new Event("resize"));
+    },
+  });
 
   return (
     <aside
@@ -268,8 +256,9 @@ export function Dock({
       <div
         data-dock-resize="horizontal"
         className="dock-grip"
-        onMouseDown={startDrag}
+        aria-label={t("dock.resize")}
         title={t("dock.resize")}
+        {...resizeHandle}
       />
 
       {/* Pin the animated dimension so panel content does not reflow while it sweeps. */}

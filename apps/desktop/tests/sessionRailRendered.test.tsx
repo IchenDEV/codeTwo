@@ -101,6 +101,71 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("keeps resize tracking native to the separator and releases it when the pointer is cancelled", () => {
+    activateDom();
+    const widths: number[] = [];
+    const view = renderRail({ onWidth: (width: number) => widths.push(width) });
+    const grip = view.container.querySelector<HTMLElement>(".rail-grip");
+    let capturedPointer: number | null = null;
+
+    expect(grip).toBeTruthy();
+    if (!grip) throw new Error("missing rail resize grip");
+    expect(grip.tabIndex).toBe(0);
+    expect(grip.getAttribute("role")).toBe("separator");
+    expect(grip.getAttribute("aria-orientation")).toBe("vertical");
+    expect(grip.getAttribute("aria-valuemin")).toBe("220");
+    expect(grip.getAttribute("aria-valuemax")).toBe("420");
+    expect(grip.getAttribute("aria-valuenow")).toBe("320");
+
+    grip.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "ArrowRight",
+      }),
+    );
+    expect(widths.at(-1)).toBe(330);
+
+    grip.setPointerCapture = (pointerId) => {
+      capturedPointer = pointerId;
+    };
+    grip.hasPointerCapture = (pointerId) => capturedPointer === pointerId;
+    grip.releasePointerCapture = (pointerId) => {
+      if (capturedPointer === pointerId) capturedPointer = null;
+    };
+
+    grip.dispatchEvent(
+      new dom.window.PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        clientX: 320,
+        pointerId: 7,
+      }),
+    );
+    expect(capturedPointer).toBe(7);
+    expect(dom.document.body.classList.contains("resizing-h")).toBe(true);
+
+    grip.dispatchEvent(
+      new dom.window.PointerEvent("pointermove", {
+        bubbles: true,
+        clientX: 360,
+        pointerId: 7,
+      }),
+    );
+    expect(widths.at(-1)).toBe(360);
+
+    grip.dispatchEvent(
+      new dom.window.PointerEvent("pointercancel", {
+        bubbles: true,
+        pointerId: 7,
+      }),
+    );
+    expect(capturedPointer).toBeNull();
+    expect(dom.document.body.classList.contains("resizing-h")).toBe(false);
+
+    view.unmount();
+  });
+
   test("keeps search and collapse compact in the window-controls row", () => {
     activateDom();
     const opened = [];
