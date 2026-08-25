@@ -5756,6 +5756,7 @@ export default function App() {
           Back row at its foot is the way home. */}
       {showSettings ? (
         <SettingsPage
+          sidebarWidth={railWidth}
           initialTab={settingsInitialTab}
           bindings={bindings}
           capturing={capturing}

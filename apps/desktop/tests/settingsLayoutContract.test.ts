@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const source = readFileSync(new URL("../src/settings/SettingsPage.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
 const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
 
@@ -25,6 +26,14 @@ describe("Settings page layout contract", () => {
     expect(source).toMatch(
       /<nav[\s\S]*?className="[^"]*\bmin-h-0\b[^"]*\boverflow-y-auto\b[^"]*"/,
     );
+  });
+
+  test("matches the settings sidebar to the persisted main rail width", () => {
+    expect(appSource).toMatch(/<SettingsPage[\s\S]*?sidebarWidth=\{railWidth\}/);
+    expect(source).toMatch(
+      /data-settings-sidebar[\s\S]*?style=\{\{ width: Math\.min\(420, Math\.max\(220, sidebarWidth\)\) \}\}/,
+    );
+    expect(source).not.toContain('className="glass-rail flex w-56');
   });
 
   test("uses a compact item rhythm inside visibly separated groups", () => {
