@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   CircleAlert,
@@ -46,7 +47,6 @@ import {
   type AutomationCadence,
   type ScheduleDraft,
 } from "./schedule";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,9 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import "./automations.css";
 
 interface Draft {
   id: string | null;
@@ -145,6 +147,59 @@ function runIcon(status: AutomationRunStatus) {
   return LoaderCircle;
 }
 
+function AutomationRow({
+  automation,
+  projectName,
+  schedule,
+  status,
+  selected,
+  onSelect,
+}: {
+  automation: Automation;
+  projectName: string;
+  schedule: string;
+  status: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={selected ? "true" : undefined}
+      onClick={onSelect}
+      className={cn(
+        "group grid w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] gap-x-2 rounded-(--ds-radius-control) px-3 py-2.5 text-left transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected && "bg-accent text-foreground",
+      )}
+    >
+      <span className="relative flex items-center justify-center text-muted-foreground">
+        <CalendarClock className="size-4" />
+        <span
+          className={cn(
+            "absolute bottom-0 right-0 size-1.5 rounded-full ring-2 ring-sidebar",
+            automation.enabled ? "bg-success" : "bg-muted-foreground",
+          )}
+        />
+      </span>
+      <span className="min-w-0 truncate text-ui font-medium">{automation.name}</span>
+      <span className="text-fine text-muted-foreground">{status}</span>
+      <span className="col-start-2 col-end-4 mt-1 flex min-w-0 items-center gap-2 text-fine text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate">{schedule}</span>
+        <span className="truncate">{projectName}</span>
+      </span>
+    </button>
+  );
+}
+
+function DetailMetric({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] items-start gap-3 text-ui">
+      <span className="flex items-center gap-2 text-muted-foreground">{icon}{label}</span>
+      <span className="min-w-0 text-foreground/90">{children}</span>
+    </div>
+  );
+}
+
 export function AutomationsPage({
   projects,
   providers,
@@ -170,6 +225,8 @@ export function AutomationsPage({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<AutomationFilter>("all");
+  const [detailTab, setDetailTab] = useState<"overview" | "runs">("overview");
+  const [compactListVisible, setCompactListVisible] = useState(true);
 
   const scheduleLabel = (cron: string): string => {
     const schedule = scheduleFromCron(cron);
@@ -193,13 +250,21 @@ export function AutomationsPage({
     });
   }, [automations, filter, query]);
 
+  const groups = useMemo(() => {
+    const active = filteredAutomations.filter((automation) => automation.enabled);
+    const paused = filteredAutomations.filter((automation) => !automation.enabled);
+    return [
+      { id: "active" as const, items: active },
+      { id: "paused" as const, items: paused },
+    ].filter((group) => group.items.length > 0);
+  }, [filteredAutomations]);
   const refresh = useCallback(async () => {
     const next = await listAutomations();
     setAutomations(next);
     setSelectedId((current) =>
       current && next.some((automation) => automation.id === current)
         ? current
-        : null,
+        : next[0]?.id ?? null,
     );
     setLoading(false);
   }, []);
@@ -226,6 +291,13 @@ export function AutomationsPage({
   useEffect(() => {
     void refreshRuns(selectedId);
   }, [refreshRuns, selectedId]);
+
+  useEffect(() => {
+    if (draft) return;
+    if (selectedId && filteredAutomations.some((automation) => automation.id === selectedId)) return;
+    setSelectedId(filteredAutomations[0]?.id ?? null);
+    setDetailTab("overview");
+  }, [draft, filteredAutomations, selectedId]);
 
   const emptyDraft = (): Draft => ({
     id: null,
@@ -305,35 +377,157 @@ export function AutomationsPage({
     }
   };
 
+  const selected = automations.find((automation) => automation.id === selectedId) ?? null;
   const activeRun = runs.find((run) => ACTIVE_RUNS.has(run.status)) ?? null;
+  const projectName = (automation: Automation) =>
+    projects.find((project) => project.path === automation.project_path)?.name ?? automation.project_path;
+
+  const beginCreate = () => {
+    setDraft(emptyDraft());
+    setDetailTab("overview");
+    setCompactListVisible(false);
+  };
 
   return (
-    <div data-automation-page className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-      <ScrollArea className="min-h-0 flex-1">
-        <main data-automation-task-center className="mx-auto w-full max-w-4xl px-6 pb-20 pt-10 sm:px-8 sm:pt-14">
-          <header className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              {headerLeadingAction ? (
-                <div data-automation-leading-action className="shrink-0 pt-0.5">
-                  {headerLeadingAction}
-                </div>
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-display font-semibold tracking-tight">{t("automations.tasks")}</h1>
-                <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
-                  {t("automations.subtitle")}
-                </p>
-              </div>
-            </div>
-            {!draft && (
-              <Button className="shrink-0" size="compact" onClick={() => setDraft(emptyDraft())} disabled={projects.length === 0}>
-                <Plus />
-                {t("automations.new")}
+    <section
+      data-automation-page
+      data-compact-detail={(selectedId !== null || draft !== null) && !compactListVisible}
+      className="automations-page animate-page-in flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
+      aria-label={t("automations.title")}
+    >
+      <div data-automation-list-pane className="automation-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
+        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
+          {headerLeadingAction ? <div data-automation-leading-action>{headerLeadingAction}</div> : null}
+          <div data-automation-filters role="tablist" aria-label={t("automations.filterLabel")} className="flex h-(--ds-control-normal) items-center gap-1">
+            {(["all", "active", "paused"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                className={cn(
+                  "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  filter === value && "bg-secondary font-medium text-foreground",
+                )}
+                onClick={() => setFilter(value)}
+              >
+                {t(`automations.filter.${value}`)}
+              </button>
+            ))}
+          </div>
+          <div className="electrobun-webkit-app-region-drag flex-1" />
+          <Tooltip>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.new")} onClick={beginCreate} disabled={projects.length === 0}><Plus className="size-3.5" /></Button>} />
+            <TooltipContent>{t("automations.new")}</TooltipContent>
+          </Tooltip>
+        </header>
+
+        <div className="flex shrink-0 items-center gap-2 px-4 py-3">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              data-automation-search
+              type="search"
+              size="compact"
+              className="pl-8 pr-8"
+              value={query}
+              placeholder={t("automations.searchPlaceholder")}
+              aria-label={t("automations.searchPlaceholder")}
+              onChange={(event) => setQuery(event.currentTarget.value)}
+            />
+            {query !== "" && (
+              <Button variant="ghost" size="icon-xs" className="absolute right-1 top-1/2 -translate-y-1/2" aria-label={t("automations.clearSearch")} onClick={() => setQuery("")}>
+                <X className="size-3.5" />
               </Button>
             )}
-          </header>
+          </div>
+        </div>
 
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="px-3 pb-4" aria-live="polite">
+            {loading && automations.length === 0 ? (
+              <div role="status" className="flex items-center justify-center gap-2 py-12 text-ui text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />{t("automations.loading")}</div>
+            ) : automations.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground">
+                <CalendarClock className="size-4" />
+                <p>{t("automations.empty")}</p>
+                <Button variant="secondary" size="compact" onClick={beginCreate} disabled={projects.length === 0}><Plus className="size-3.5" />{t("automations.new")}</Button>
+              </div>
+            ) : groups.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground"><Search className="size-4" /><p>{t("automations.noMatches")}</p></div>
+            ) : groups.map((group) => (
+              <section key={group.id} className="pt-2">
+                <h2 className="px-3 pb-1 text-fine font-medium text-muted-foreground">{t(`automations.${group.id}`)}</h2>
+                <div className="flex flex-col gap-0.5">
+                  {group.items.map((automation) => (
+                    <AutomationRow
+                      key={automation.id}
+                      automation={automation}
+                      projectName={projectName(automation)}
+                      schedule={scheduleLabel(automation.cron)}
+                      status={automation.enabled ? dateTime(automation.next_run_at) : t("automations.paused")}
+                      selected={automation.id === selectedId && draft === null}
+                      onSelect={() => { setDraft(null); setSelectedId(automation.id); setDetailTab("overview"); setCompactListVisible(false); }}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div data-automation-detail-pane className="automation-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
+          {(selectedId || draft) && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="automation-back"
+              aria-label={t("automations.backToList")}
+              onClick={() => { if (draft) setDraft(null); setCompactListVisible(true); }}
+            >
+              <ArrowLeft className="size-3.5" />
+            </Button>
+          )}
           {draft ? (
+            <span className="text-ui font-medium">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</span>
+          ) : (
+            <div role="tablist" aria-label={t("automations.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
+              {(["overview", "runs"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={detailTab === value}
+                  disabled={!selected}
+                  onClick={() => setDetailTab(value)}
+                  className={cn(
+                    "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50",
+                    detailTab === value && "bg-secondary font-medium text-foreground",
+                  )}
+                >
+                  {t(`automations.detail.${value}`)}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="electrobun-webkit-app-region-drag flex-1" />
+          {selected && !draft ? (
+            <>
+              <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.edit")} onClick={() => setDraft(editDraft(selected))}><Pencil className="size-3.5" /></Button>} /><TooltipContent>{t("automations.edit")}</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={selected.enabled ? t("automations.pause") : t("automations.resume")} onClick={() => void toggle(selected)}>{selected.enabled ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}</Button>} /><TooltipContent>{selected.enabled ? t("automations.pause") : t("automations.resume")}</TooltipContent></Tooltip>
+              <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.delete")} onClick={() => void remove(selected)}><Trash2 className="size-3.5 text-destructive" /></Button>} /><TooltipContent>{t("automations.delete")}</TooltipContent></Tooltip>
+              <Button variant="secondary" size="compact" disabled={activeRun !== null} onClick={() => void runNow(selected)}>
+                {activeRun ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
+                {activeRun ? t("automations.inProgress") : t("automations.runNow")}
+              </Button>
+            </>
+          ) : null}
+        </header>
+
+        {draft ? (
+          <ScrollArea className="min-h-0 flex-1">
             <AutomationEditor
               draft={draft}
               projects={projects}
@@ -343,202 +537,74 @@ export function AutomationsPage({
               onCancel={() => setDraft(null)}
               onSave={() => void save()}
             />
-          ) : (
-            <>
-              <div className="relative mt-8">
-                <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  data-automation-search
-                  type="search"
-                  className="h-(--ds-control-field) rounded-(--ds-radius-control) bg-background pl-10 pr-10 ring-1 ring-inset ring-border"
-                  value={query}
-                  placeholder={t("automations.searchPlaceholder")}
-                  onChange={(event) => setQuery(event.currentTarget.value)}
-                />
-                {query !== "" && (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2"
-                    aria-label={t("automations.clearSearch")}
-                    onClick={() => setQuery("")}
-                  >
-                    <X />
-                  </Button>
-                )}
-              </div>
+          </ScrollArea>
+        ) : !selected ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-ui text-muted-foreground">
+            <div><CalendarClock className="mx-auto mb-3 size-4" /><p>{t("automations.select")}</p></div>
+          </div>
+        ) : (
+          <ScrollArea className="min-h-0 flex-1">
+            {detailTab === "overview" ? (
+              <article className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-page font-semibold leading-tight text-foreground">{selected.name}</h1>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-ui text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><ProviderIcon provider={providerId(selected.provider)} className="size-4" />{providerLabel(selected.provider)}</span>
+                      <span>·</span>
+                      <span>{scheduleLabel(selected.cron)}</span>
+                      <span>·</span>
+                      <span>{selected.enabled ? t("automations.next", { time: dateTime(selected.next_run_at) }) : t("automations.paused")}</span>
+                    </div>
+                  </div>
+                  {activeRun ? <LoaderCircle className="size-4 animate-spin text-primary" /> : null}
+                </div>
 
-              <div data-automation-filters role="tablist" aria-label={t("automations.filterLabel")} className="mt-5 flex items-center gap-1">
-                {(["all", "active", "paused"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="tab"
-                    aria-selected={filter === value}
-                    className={cn(
-                      "rounded-(--ds-radius-control) px-3 py-1.5 text-hint text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      filter === value && "bg-fill-rest text-foreground",
-                    )}
-                    onClick={() => setFilter(value)}
-                  >
-                    {t(`automations.filter.${value}`)}
-                  </button>
-                ))}
-                <span className="ml-auto text-hint tabular-nums text-muted-foreground">
-                  {filteredAutomations.length}
-                </span>
-              </div>
+                <div className="mt-8 grid gap-4">
+                  <DetailMetric icon={<Folder className="size-3.5" />} label={t("automations.project")}><span title={selected.project_path}>{projectName(selected)}</span></DetailMetric>
+                  <DetailMetric icon={<ProviderIcon provider={providerId(selected.provider)} className="size-3.5" />} label={t("automations.agent")}>{providerLabel(selected.provider)}</DetailMetric>
+                  <DetailMetric icon={<Clock3 className="size-3.5" />} label={t("automations.schedule")}><span>{scheduleLabel(selected.cron)}</span><span className="ml-2 text-fine text-muted-foreground">{selected.timezone}</span></DetailMetric>
+                  <DetailMetric icon={<GitBranch className="size-3.5" />} label={t("automations.workspace")}>{selected.use_worktree ? t("automations.isolated") : t("automations.local")}</DetailMetric>
+                  <DetailMetric icon={<CalendarClock className="size-3.5" />} label={t("automations.status")}><span className="inline-flex items-center gap-1.5"><span className={cn("size-2 rounded-full", selected.enabled ? "bg-success" : "bg-muted-foreground")} />{selected.enabled ? t("automations.active") : t("automations.paused")}</span></DetailMetric>
+                </div>
 
-              <section aria-live="polite" className="mt-8">
-                {loading ? (
-                  <div className="flex items-center gap-2 py-12 text-ui text-muted-foreground">
-                    <LoaderCircle className="size-4 animate-spin" />
-                    {t("automations.loading")}
-                  </div>
-                ) : automations.length === 0 ? (
-                  <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
-                    <CalendarClock className="size-5 text-muted-foreground" />
-                    <h2 className="mt-4 text-section font-semibold">{t("automations.empty")}</h2>
-                    <p className="mt-2 max-w-md text-ui leading-relaxed text-muted-foreground">{t("automations.emptyHint")}</p>
-                    <Button className="mt-5" size="compact" onClick={() => setDraft(emptyDraft())} disabled={projects.length === 0}>
-                      <Plus />
-                      {t("automations.new")}
-                    </Button>
-                  </div>
-                ) : filteredAutomations.length === 0 ? (
-                  <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center">
-                    <Search className="size-5 text-muted-foreground" />
-                    <h2 className="mt-4 text-section font-semibold">{t("automations.noMatches")}</h2>
-                    <p className="mt-2 text-ui text-muted-foreground">{t("automations.noMatchesHint")}</p>
-                  </div>
+                <section className="mt-8">
+                  <h2 className="mb-4 text-dialog font-semibold">{t("automations.instructions")}</h2>
+                  <p className="whitespace-pre-wrap text-ui leading-relaxed text-foreground/90">{selected.prompt}</p>
+                </section>
+              </article>
+            ) : (
+              <div className="mx-auto w-full max-w-5xl px-6 pb-10 pt-5">
+                <div className="mb-4 flex items-center gap-2"><Clock3 className="size-4 text-muted-foreground" /><h1 className="text-section font-semibold">{t("automations.history")}</h1><span className="text-fine tabular-nums text-muted-foreground">{runs.length}</span></div>
+                {runs.length === 0 ? (
+                  <p className="py-8 text-ui text-muted-foreground">{t("automations.noRuns")}</p>
                 ) : (
-                  <div className="divide-y divide-border">
-                    {filteredAutomations.map((automation) => {
-                      const isSelected = automation.id === selectedId;
+                  <div className="flex flex-col gap-1">
+                    {runs.map((run) => {
+                      const Icon = runIcon(run.status);
+                      const openable = run.session_id !== null;
                       return (
-                        <article key={automation.id} className="group">
-                          <div className="flex min-w-0 items-start gap-3 py-5">
-                            <button
-                              type="button"
-                              className="flex min-w-0 flex-1 items-start gap-3 rounded-(--ds-radius-control) text-left focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                              aria-expanded={isSelected}
-                              onClick={() => setSelectedId(isSelected ? null : automation.id)}
-                            >
-                              <span className={cn("mt-1 size-3 shrink-0 rounded-full ring-2 ring-inset", automation.enabled ? "ring-success" : "ring-muted-foreground/50")} />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-ui font-medium">{automation.name}</span>
-                                <span className="mt-1 block truncate text-hint text-muted-foreground">
-                                  {scheduleLabel(automation.cron)}
-                                  <span aria-hidden> · </span>
-                                  {automation.enabled
-                                    ? t("automations.next", { time: dateTime(automation.next_run_at) })
-                                    : t("automations.paused")}
-                                </span>
-                              </span>
-                            </button>
-
-                            <div className="flex shrink-0 items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                aria-label={t("automations.runNow")}
-                                disabled={isSelected && activeRun !== null}
-                                onClick={() => {
-                                  setSelectedId(automation.id);
-                                  void runNow(automation);
-                                }}
-                              >
-                                {isSelected && activeRun ? <LoaderCircle className="animate-spin" /> : <Play />}
-                              </Button>
-                              <Button variant="ghost" size="icon-sm" aria-label={t("automations.edit")} onClick={() => setDraft(editDraft(automation))}>
-                                <Pencil />
-                              </Button>
-                              <Button variant="ghost" size="icon-sm" aria-label={automation.enabled ? t("automations.pause") : t("automations.resume")} onClick={() => void toggle(automation)}>
-                                {automation.enabled ? <Pause /> : <Play />}
-                              </Button>
-                              <Button variant="ghost" size="icon-sm" aria-label={t("automations.delete")} onClick={() => void remove(automation)}>
-                                <Trash2 className="text-destructive" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          {isSelected && (
-                            <div data-automation-inline-detail className="mb-6 ml-6 rounded-(--ds-radius-module) bg-fill-rest p-5 sm:ml-7 sm:p-6">
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-ui font-medium">{t("automations.instructions")}</h3>
-                                  <Badge variant={automation.enabled ? "secondary" : "ghost"}>
-                                    {automation.enabled ? t("automations.active") : t("automations.paused")}
-                                  </Badge>
-                                </div>
-                                <p className="mt-2 whitespace-pre-wrap text-ui leading-relaxed text-muted-foreground">{automation.prompt}</p>
-                              </div>
-
-                              <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
-                                <div>
-                                  <dt className="flex items-center gap-2 text-hint text-muted-foreground"><Folder className="size-3.5" />{t("automations.project")}</dt>
-                                  <dd className="mt-1 truncate text-ui font-medium" title={automation.project_path}>{projects.find((project) => project.path === automation.project_path)?.name ?? automation.project_path}</dd>
-                                </div>
-                                <div>
-                                  <dt className="flex items-center gap-2 text-hint text-muted-foreground"><ProviderIcon provider={providerId(automation.provider)} className="size-3.5" />{t("automations.agent")}</dt>
-                                  <dd className="mt-1 text-ui font-medium">{providerLabel(automation.provider)}</dd>
-                                </div>
-                                <div>
-                                  <dt className="flex items-center gap-2 text-hint text-muted-foreground"><Clock3 className="size-3.5" />{t("automations.schedule")}</dt>
-                                  <dd className="mt-1 text-ui font-medium">{scheduleLabel(automation.cron)}</dd>
-                                  <dd className="mt-0.5 text-fine text-muted-foreground">{automation.timezone}</dd>
-                                </div>
-                                <div>
-                                  <dt className="flex items-center gap-2 text-hint text-muted-foreground"><GitBranch className="size-3.5" />{t("automations.workspace")}</dt>
-                                  <dd className="mt-1 text-ui font-medium">{automation.use_worktree ? t("automations.isolated") : t("automations.local")}</dd>
-                                </div>
-                              </dl>
-
-                              <div className="mt-7 h-px bg-border" />
-                              <div className="mt-6 flex items-center justify-between">
-                                <h3 className="text-section font-semibold">{t("automations.history")}</h3>
-                                <span className="text-hint tabular-nums text-muted-foreground">{runs.length}</span>
-                              </div>
-                              <div className="mt-2 divide-y divide-border">
-                                {runs.length === 0 ? (
-                                  <p className="py-5 text-ui text-muted-foreground">{t("automations.noRuns")}</p>
-                                ) : (
-                                  runs.map((run) => {
-                                    const Icon = runIcon(run.status);
-                                    const openable = run.session_id !== null;
-                                    return (
-                                      <button
-                                        key={run.id}
-                                        type="button"
-                                        disabled={!openable}
-                                        className="flex w-full items-start gap-3 py-3 text-left transition-colors enabled:hover:text-primary disabled:opacity-80"
-                                        onClick={() => run.session_id && onOpenSession(run.session_id)}
-                                      >
-                                        <Icon className={cn("mt-0.5 size-4 shrink-0", SPINNING_RUNS.has(run.status) && "animate-spin text-primary", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} />
-                                        <span className="min-w-0 flex-1">
-                                          <span className="block text-ui font-medium">{t(`automations.status.${run.status}`)}</span>
-                                          <span className="mt-0.5 block text-fine text-muted-foreground">{dateTime(run.started_at)}</span>
-                                          {run.error && <span className="mt-1 block text-hint text-destructive">{run.error}</span>}
-                                        </span>
-                                        {openable && <span className="text-hint text-primary">{t("automations.openRun")}</span>}
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </article>
+                        <button
+                          key={run.id}
+                          type="button"
+                          disabled={!openable}
+                          className="grid min-h-(--ds-control-field) w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2 text-left text-ui transition-colors enabled:hover:bg-accent/60 disabled:opacity-80"
+                          onClick={() => run.session_id && onOpenSession(run.session_id)}
+                        >
+                          <Icon className={cn("size-4", SPINNING_RUNS.has(run.status) && "animate-spin text-primary", run.status === "needs_attention" && "text-warning", run.status === "succeeded" && "text-success", (run.status === "failed" || run.status === "interrupted") && "text-destructive")} />
+                          <span className="min-w-0"><span className="block font-medium">{t(`automations.status.${run.status}`)}</span><span className="block text-fine text-muted-foreground">{dateTime(run.started_at)}</span>{run.error ? <span className="mt-1 block text-hint text-destructive">{run.error}</span> : null}</span>
+                          {openable ? <span className="text-hint text-primary">{t("automations.openRun")}</span> : null}
+                        </button>
                       );
                     })}
                   </div>
                 )}
-              </section>
-            </>
-          )}
-        </main>
-      </ScrollArea>
-    </div>
+              </div>
+            )}
+          </ScrollArea>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -563,6 +629,13 @@ function AutomationEditor({
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => onChange({ ...draft, [key]: value });
   const updateSchedule = <K extends keyof ScheduleDraft>(key: K, value: ScheduleDraft[K]) =>
     update("schedule", { ...draft.schedule, [key]: value });
+  const selectedProject = projects.find((project) => project.path === draft.projectPath)?.name ?? draft.projectPath;
+  const selectedProvider = providers.find((provider) => provider.id === draft.provider)?.display_name ?? draft.provider;
+  const selectedPolicy = draft.policy === "automatic"
+    ? t("automations.permissions.auto")
+    : draft.policy === "ask"
+      ? t("automations.permissions.ask")
+      : t("automations.permissions.readOnly");
   const valid =
     draft.name.trim() !== "" &&
     draft.prompt.trim() !== "" &&
@@ -572,12 +645,11 @@ function AutomationEditor({
     cronFromSchedule(draft.schedule) !== "";
 
   return (
-    <section data-automation-editor className="mt-8">
-      <div className="mb-7 h-px bg-border" />
+    <section data-automation-editor className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-section font-semibold">{draft.id ? t("automations.editTitle") : t("automations.createTitle")}</h2>
-          <p className="mt-1 text-hint text-muted-foreground">{t("automations.formHint")}</p>
+          <h1 className="text-page font-semibold leading-tight">{draft.id ? draft.name : t("automations.createTitle")}</h1>
+          <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">{t("automations.formHint")}</p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label={t("automations.cancel")} onClick={onCancel}>
           <X />
@@ -604,7 +676,7 @@ function AutomationEditor({
             <div className="grid gap-2">
               <Label>{t("automations.project")}</Label>
               <Select value={draft.projectPath} onValueChange={(value) => value && update("projectPath", value)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{selectedProject}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {projects.map((project) => <SelectItem key={project.path} value={project.path}>{project.name}</SelectItem>)}
                 </SelectContent>
@@ -613,7 +685,7 @@ function AutomationEditor({
             <div className="grid gap-2">
               <Label>{t("automations.agent")}</Label>
               <Select value={draft.provider} onValueChange={(value) => value && update("provider", value)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{selectedProvider}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {providers.map((provider) => (
                     <SelectItem key={provider.id} value={provider.id} disabled={!provider.available}>
@@ -629,7 +701,7 @@ function AutomationEditor({
             <div className="grid gap-2">
               <Label>{t("automations.cadence")}</Label>
               <Select value={draft.schedule.cadence} onValueChange={(value) => value && updateSchedule("cadence", value as AutomationCadence)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{t(`automations.cadence.${draft.schedule.cadence}`)}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="hourly">{t("automations.cadence.hourly")}</SelectItem>
                   <SelectItem value="daily">{t("automations.cadence.daily")}</SelectItem>
@@ -656,7 +728,7 @@ function AutomationEditor({
             <div className="grid gap-2">
               <Label>{t("automations.weekday")}</Label>
               <Select value={String(draft.schedule.weekday)} onValueChange={(value) => value !== null && updateSchedule("weekday", Number(value))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{t(WEEKDAY_KEYS[draft.schedule.weekday])}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {WEEKDAY_KEYS.map((key, day) => <SelectItem key={key} value={String(day)}>{t(key)}</SelectItem>)}
                 </SelectContent>
@@ -669,7 +741,7 @@ function AutomationEditor({
             <div className="grid gap-2">
               <Label>{t("automations.permissions")}</Label>
               <Select value={draft.policy} onValueChange={(value) => value && update("policy", value as Draft["policy"])}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue>{selectedPolicy}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="automatic">{t("automations.permissions.auto")}</SelectItem>
                   <SelectItem value="ask">{t("automations.permissions.ask")}</SelectItem>
