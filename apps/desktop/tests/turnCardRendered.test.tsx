@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
+import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { TurnCard } = await import("../src/session/TurnCard");
@@ -130,7 +130,7 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
-  test("renders safe Sites links without exposing non-web resource URIs", () => {
+  test("keeps safe Sites links collapsed by default and reveals them on demand", async () => {
     activateDom();
     disableCanvasDrawing();
     const turn = {
@@ -162,8 +162,17 @@ describe("TurnCard rendered activity", () => {
         <TurnCard turn={turn} />
       </I18nProvider>,
     );
+    const trigger = rendered.container.querySelector('[data-slot="collapsible-trigger"]');
+
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(rendered.container.querySelector('[aria-label="Tool links"]')).toBeNull();
+
+    click(trigger!);
+    await flush();
+
     const links = rendered.container.querySelector('[aria-label="Tool links"]');
 
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
     expect(links?.textContent).toContain("Sites production deployment");
     expect(links?.textContent).toContain("example.sites.openai.com");
     expect(links?.textContent).not.toContain("Unsafe");
@@ -213,6 +222,59 @@ describe("TurnCard rendered activity", () => {
     expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
     expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
     expect(ordered[2].textContent).toContain("After");
+    rendered.unmount();
+  });
+
+  test("collapses adjacent tool calls into one group without hiding failures", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "BeforeAfter",
+      content: [
+        { kind: "text", text: "Before", transcriptSeq: 11 },
+        { kind: "tool", toolId: "read-1", transcriptSeq: 12 },
+        { kind: "tool", toolId: "test-1", transcriptSeq: 13 },
+        { kind: "text", text: "After", transcriptSeq: 14 },
+      ],
+      tools: [
+        {
+          id: "read-1",
+          title: "Read workspace",
+          status: "completed",
+          outputs: [{ type: "text", text: "Workspace read" }],
+        },
+        { id: "test-1", title: "Run tests", status: "failed" },
+      ],
+      endedAt: 2,
+    };
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>,
+    );
+    const group = rendered.container.querySelector("[data-tool-call-group]");
+    const trigger = group?.querySelector("button");
+    const ordered = [
+      ...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call-group]"),
+    ];
+
+    expect(ordered).toHaveLength(3);
+    expect(ordered[0].textContent).toContain("Before");
+    expect(ordered[1]).toBe(group);
+    expect(ordered[2].textContent).toContain("After");
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger?.textContent).toContain("tools (2)");
+    expect(trigger?.textContent).toContain("failed");
+    expect(group?.querySelectorAll("[data-tool-call]")).toHaveLength(0);
+
+    click(trigger!);
+    await flush();
+
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(group?.querySelectorAll("[data-tool-call]")).toHaveLength(2);
+    expect(group?.textContent).toContain("Read workspace");
+    expect(group?.textContent).toContain("Run tests");
     rendered.unmount();
   });
 

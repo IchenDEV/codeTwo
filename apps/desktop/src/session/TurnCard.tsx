@@ -244,10 +244,7 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
     return safe ? [{ ...output, ...safe }] : [];
   });
   const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
-  const [open, setOpen] = useState(
-    (tool.status !== "completed" && tool.status !== "failed") ||
-      images.length + resourceLinks.length > 0,
-  );
+  const [open, setOpen] = useState(false);
   const header = (
     <>
       <Wrench className="size-3.5 shrink-0" aria-hidden />
@@ -321,15 +318,53 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   );
 }
 
+function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
+  const t = useT();
+  let status = "completed";
+  for (const tool of tools) {
+    if (tool.status === "failed") {
+      status = tool.status;
+      break;
+    }
+    if (status === "completed" && tool.status !== "completed") status = tool.status;
+  }
+
+  return (
+    <Collapsible className="my-3 min-w-0" data-tool-call-group={tools[0].id}>
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <Wrench className="size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+          {t("turn.tools")} ({tools.length})
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5 text-fine">
+          <span className={cn("size-1.5 rounded-full", toolStatusDot(status))} aria-hidden />
+          {status}
+        </span>
+        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0 ps-4">
+        {tools.map((tool) => (
+          <ToolCallBlock key={tool.id} tool={tool} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 type RenderBlock =
   | { kind: "text"; text: string }
-  | { kind: "tool"; tool: ToolEntry };
+  | { kind: "tools"; tools: ToolEntry[] };
 
-/** Join adjacent streamed chunks while retaining tool calls at their exact event boundary. */
+/** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(turn.tools.map((tool) => [tool.id, tool]));
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
+  const appendTool = (tool: ToolEntry) => {
+    const tail = blocks[blocks.length - 1];
+    if (tail?.kind === "tools") tail.tools.push(tool);
+    else blocks.push({ kind: "tools", tools: [tool] });
+  };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
       const tail = blocks[blocks.length - 1];
@@ -340,12 +375,12 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
     const tool = tools.get(entry.toolId);
     if (!tool || seenTools.has(tool.id)) continue;
     seenTools.add(tool.id);
-    blocks.push({ kind: "tool", tool });
+    appendTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
   if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
   for (const tool of turn.tools) {
-    if (!seenTools.has(tool.id)) blocks.push({ kind: "tool", tool });
+    if (!seenTools.has(tool.id)) appendTool(tool);
   }
   return blocks;
 }
@@ -419,7 +454,8 @@ function Detail({
  *
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
- * their streamed position; thinking and plan metadata stay collapsed underneath.
+ * their streamed position, with adjacent calls sharing one disclosure; thinking and plan metadata
+ * stay collapsed underneath.
  */
 export const TurnCard = memo(function TurnCard({
   turn,
@@ -614,8 +650,10 @@ export const TurnCard = memo(function TurnCard({
                 text={block.text}
                 streaming={running && index === blocks.length - 1}
               />
+            ) : block.tools.length === 1 ? (
+              <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />
             ) : (
-              <ToolCallBlock key={block.tool.id} tool={block.tool} />
+              <ToolCallGroup key={block.tools[0].id} tools={block.tools} />
             ),
           )}
         </div>
