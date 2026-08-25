@@ -110,6 +110,7 @@ import {
   saveSkill,
   searchSessions,
   sessionPreviews,
+  setSystemBadgeCount,
   setConfigOption,
   setCallProjectPath,
   setKeymap,
@@ -335,6 +336,7 @@ import {
   type FollowState,
   type ToolSurfaceHint,
 } from "./session/toolActivity";
+import { needsMeCount } from "./sidebar/missionControl.ts";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
@@ -609,6 +611,7 @@ export default function App() {
   const [runningSessions, setRunningSessions] = useState<Set<string>>(
     () => new Set(),
   );
+  const systemBadgeCount = useMemo(() => needsMeCount(sessions), [sessions]);
   const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [transcriptNextBefore, setTranscriptNextBefore] = useState<
@@ -691,6 +694,12 @@ export default function App() {
     null,
   );
   const [docEmpty, setDocEmpty] = useState(true);
+
+  useEffect(() => {
+    void setSystemBadgeCount(systemBadgeCount).catch((error) => {
+      console.warn("Could not update the system badge", error);
+    });
+  }, [systemBadgeCount]);
   // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
   /** The active scene's canonical reference for the focused session (or the draft). */

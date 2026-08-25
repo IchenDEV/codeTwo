@@ -107,6 +107,10 @@ export async function desktopShowItemInFolder(path: string): Promise<boolean> {
   return (await client()).request.showItemInFolder({ path });
 }
 
+export async function desktopSetSystemBadgeCount(count: number): Promise<boolean> {
+  return (await client()).request.systemBadgeSet({ count });
+}
+
 export async function desktopAppshotSettings(): Promise<AppshotSettings> {
   return (await client()).request.appshotsSettings();
 }

@@ -22,7 +22,10 @@ import { NativeHost } from "./nativeHost";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 import { AppshotManager } from "./appshots";
 import { macOSApplicationMenu } from "./applicationMenu";
-import { configureMacOSWindowEffects } from "./windowEffects";
+import {
+  configureMacOSWindowEffects,
+  setMacOSSystemBadgeCount,
+} from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
@@ -176,6 +179,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         Utils.showItemInFolder(path);
         return true;
       },
+      systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count),
       browserZoom: ({ webviewId, factor }) => {
         BrowserView.getById(webviewId)?.setPageZoom(factor);
       },

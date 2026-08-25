@@ -9,6 +9,7 @@ import {
   desktopOpenPath,
   desktopOpenWorkspace,
   desktopSaveDialog,
+  desktopSetSystemBadgeCount,
   desktopOpenAppshotPrivacySettings,
   desktopRequestAppshotPermissions,
   desktopUpdateAppshotSettings,
@@ -66,6 +67,10 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
 
 export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
   return desktopCheckForUpdates();
+}
+
+export async function setSystemBadgeCount(count: number): Promise<boolean> {
+  return inDesktop ? desktopSetSystemBadgeCount(count) : false;
 }
 
 const browserAppshotSettings: AppshotSettings = {

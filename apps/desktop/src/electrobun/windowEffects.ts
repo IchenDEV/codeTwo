@@ -10,6 +10,10 @@ let windowEffects:
           args: readonly [typeof FFIType.ptr];
           returns: typeof FFIType.u32;
         };
+        codetwoSetDockBadgeCount: {
+          args: readonly [typeof FFIType.u32];
+          returns: typeof FFIType.u32;
+        };
       }>
     >
   | undefined;
@@ -21,19 +25,27 @@ export type MacOSWindowEffectsStatus = {
 
 const unavailableStatus: MacOSWindowEffectsStatus = { backdrop: false, shadow: false };
 
+function library() {
+  windowEffects ??= dlopen(join(process.cwd(), libraryName), {
+    codetwoConfigureWindowEffects: {
+      args: [FFIType.ptr],
+      returns: FFIType.u32,
+    },
+    codetwoSetDockBadgeCount: {
+      args: [FFIType.u32],
+      returns: FFIType.u32,
+    },
+  });
+  return windowEffects;
+}
+
 export function configureMacOSWindowEffects(
   windowPointer: Pointer,
 ): MacOSWindowEffectsStatus {
   if (process.platform !== "darwin") return unavailableStatus;
 
   try {
-    windowEffects ??= dlopen(join(process.cwd(), libraryName), {
-      codetwoConfigureWindowEffects: {
-        args: [FFIType.ptr],
-        returns: FFIType.u32,
-      },
-    });
-    const configuredEffects = windowEffects.symbols.codetwoConfigureWindowEffects(windowPointer);
+    const configuredEffects = library().symbols.codetwoConfigureWindowEffects(windowPointer);
     return {
       shadow: (configuredEffects & 1) !== 0,
       backdrop: (configuredEffects & 2) !== 0,
@@ -41,5 +53,19 @@ export function configureMacOSWindowEffects(
   } catch (error) {
     console.warn("Could not configure the macOS window effects", error);
     return unavailableStatus;
+  }
+}
+
+export function setMacOSSystemBadgeCount(count: number): boolean {
+  if (process.platform !== "darwin") return false;
+
+  try {
+    const normalized = Number.isFinite(count)
+      ? Math.min(Math.max(Math.trunc(count), 0), 0xffff_ffff)
+      : 0;
+    return library().symbols.codetwoSetDockBadgeCount(normalized) !== 0;
+  } catch (error) {
+    console.warn("Could not update the macOS system badge", error);
+    return false;
   }
 }

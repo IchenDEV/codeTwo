@@ -106,6 +106,7 @@ export type CodeTwoRPC = {
         response: boolean;
       };
       showItemInFolder: { params: { path: string }; response: boolean };
+      systemBadgeSet: { params: { count: number }; response: boolean };
       browserZoom: { params: { webviewId: number; factor: number }; response: void };
       openDevtools: { params: undefined; response: void };
       updateStatus: { params: undefined; response: AppUpdateStatus };
