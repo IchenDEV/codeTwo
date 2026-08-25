@@ -323,6 +323,7 @@ dependencies = [
 name = "codetwo-desktop-host"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "codetwo-core",
  "codetwo-kernel",
  "codetwo-server",
