@@ -331,6 +331,7 @@ import {
   type SessionCreationShell,
 } from "./session/sessionEvents";
 import {
+  activeInteractivePreview,
   classifyToolSurface,
   followReduce,
   initialFollowState,
@@ -341,6 +342,7 @@ import {
 import { needsMeCount } from "./sidebar/missionControl.ts";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
+import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { PullRequestsPage } from "./github/PullRequestsPage";
 import { DockerPage, type DockerCommandCaller } from "./docker/DockerPage";
@@ -906,6 +908,7 @@ export default function App() {
     EMPTY_GIT_WORKSPACE,
   );
   const git = currentGitWorkspace.value.status;
+  const diffStat = currentGitWorkspace.value.diffStat;
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
@@ -915,6 +918,7 @@ export default function App() {
   const running = activeSession
     ? runningSessions.has(activeSession)
     : pendingSessionRunning;
+  const interactivePreview = useMemo(() => activeInteractivePreview(turns), [turns]);
   const activeInteractionCapabilities = activeSession
     ? interactionCapabilities[activeSession] ?? null
     : null;
@@ -6291,6 +6295,30 @@ export default function App() {
                     : t("header.turns", { count: turns.length })}
               </button>
             )}
+
+            <EnvironmentPopover
+              suppressed={
+                showTaskBoard ||
+                showPluginManager ||
+                showAutomations ||
+                showPullRequests ||
+                showDocker
+              }
+              project={activeProjectName}
+              projectPath={activeProjectName ? activeProject : null}
+              projects={projects}
+              git={git}
+              diffStat={diffStat}
+              onRefresh={refreshGit}
+              onSelectProject={selectProject}
+              onAddProject={() => void addProjectFolder()}
+              onOpenSourceControl={openSourceControl}
+              onOpenSettings={() => {
+                setSettingsInitialTab("general");
+                setShowSettings(true);
+              }}
+              preview={interactivePreview}
+            />
 
             <SessionHeaderActions
               canCommit={git?.is_repo === true}

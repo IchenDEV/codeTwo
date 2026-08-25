@@ -322,6 +322,9 @@ export const en = {
   "environment.moreChanges": "{count} more changes",
   "environment.pathCopied": "Project path copied.",
   "environment.copyFailed": "Could not copy the project path.",
+  "environment.livePreview": "{tool} live preview",
+  "environment.previewLoading": "Loading live preview…",
+  "environment.previewUnavailable": "Live preview unavailable",
 
   // usage panel
   "usage.title": "Usage",
@@ -2379,6 +2382,9 @@ export const zhCN: Record<StringKey, string> = {
   "environment.moreChanges": "另有 {count} 个改动",
   "environment.pathCopied": "已复制项目路径。",
   "environment.copyFailed": "无法复制项目路径。",
+  "environment.livePreview": "{tool} 实时画面",
+  "environment.previewLoading": "正在载入实时画面…",
+  "environment.previewUnavailable": "实时画面不可用",
 
   "usage.title": "用量",
   "usage.description": "查看不同 Provider 的额度、剩余容量和本地模型活动。",

@@ -339,6 +339,12 @@ fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Opt
         Some("chrome_browser".into())
     } else if tool.contains("computer") || tool.contains("cua") || title.contains("computer use") {
         Some("computer_use".into())
+    } else if server == "node_repl"
+        || server.contains("browser")
+        || tool.contains("browser")
+        || title.contains("browser use")
+    {
+        Some("browser_use".into())
     } else {
         kind
     }
@@ -7101,6 +7107,29 @@ mod mcp_tests {
         assert_eq!(
             sites_permission_kind(&mutation).map(|value| value.0),
             Some(PermissionContextKind::SitesMutation)
+        );
+    }
+
+    #[test]
+    fn browser_use_tools_have_a_distinct_rich_kind() {
+        let browser_use = ToolSource {
+            server: Some("browser-use".into()),
+            tool: Some("browser_screenshot".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &browser_use, "Take screenshot"),
+            Some("browser_use".into())
+        );
+
+        let openai_browser = ToolSource {
+            server: Some("node_repl".into()),
+            tool: Some("js".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &openai_browser, "mcp.node_repl.js"),
+            Some("browser_use".into())
         );
     }
 
