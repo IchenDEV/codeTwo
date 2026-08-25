@@ -288,6 +288,7 @@ function Page({ title, description, children }: { title: string; description?: s
  * you went to, which is what earns the explicit way back.
  */
 export function SettingsPage({
+  sidebarWidth = 288,
   bindings,
   capturing,
   onCapture,
@@ -334,6 +335,8 @@ export function SettingsPage({
   pluginDeveloperReloader = reloadDevelopmentPlugins,
   devtoolsOpener = openDevtools,
 }: {
+  /** Matches the persisted width of the main session rail. */
+  sidebarWidth?: number;
   bindings: KeymapEntry[];
   capturing: string | null;
   onCapture: (action: string) => void;
@@ -1144,7 +1147,11 @@ export function SettingsPage({
   return (
     <div className="animate-page-in flex min-h-0 min-w-0 flex-1">
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
-      <aside className="glass-rail flex w-56 shrink-0 flex-col">
+      <aside
+        data-settings-sidebar
+        className="glass-rail flex shrink-0 flex-col"
+        style={{ width: Math.min(420, Math.max(220, sidebarWidth)) }}
+      >
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
         <button
