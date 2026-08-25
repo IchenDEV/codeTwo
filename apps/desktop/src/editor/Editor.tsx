@@ -97,6 +97,8 @@ interface EditorProps {
     message: string,
     kind: "provider_image" | "other",
   ) => void) | null>;
+  /** App-owned image intake. Text and other clipboard payloads remain BlockNote's responsibility. */
+  onPasteImages?: (files: readonly File[]) => void | Promise<void>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
 }
@@ -284,6 +286,7 @@ export function DocEditor({
   restoreCanvasDocumentRef,
   freezeCanvasesRef,
   canvasDeliveryErrorRef,
+  onPasteImages,
   onEmptyChange,
 }: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
@@ -707,13 +710,25 @@ export function DocEditor({
   };
 
   return (
-    <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
-      <BlockNoteView
-        editor={editor}
-        slashMenu={false}
-        theme={scheme}
-        onChange={observeDocument}
-      >
+    <div
+      data-composer-editor
+      onPasteCapture={(event) => {
+        if (!onPasteImages) return;
+        const files = Array.from(event.clipboardData.files).filter((file) =>
+          file.type.startsWith("image/"),
+        );
+        if (files.length === 0) return;
+        event.preventDefault();
+        void onPasteImages(files);
+      }}
+    >
+      <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
+        <BlockNoteView
+          editor={editor}
+          slashMenu={false}
+          theme={scheme}
+          onChange={observeDocument}
+        >
         <SuggestionMenuController
           triggerCharacter={"/"}
           getItems={async (query) =>
@@ -721,9 +736,8 @@ export function DocEditor({
               [
                 ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
                 ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
-                // Drop the media blocks: they need an upload handler this app doesn't configure, so
-                // they insert an "Add file" placeholder that can never be filled and never reaches
-                // the compiled prompt. Use `@` for files instead.
+                // Prompt images use the Composer's private attachment intake. Keep BlockNote's
+                // unrelated media placeholders out of the slash menu; use `@` for workspace files.
                 ...getDefaultReactSlashMenuItems(editor).filter(
                   (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
                 ),
@@ -758,7 +772,8 @@ export function DocEditor({
             ]);
           }}
         />
-      </BlockNoteView>
-    </CanvasBlockRuntimeContext.Provider>
+        </BlockNoteView>
+      </CanvasBlockRuntimeContext.Provider>
+    </div>
   );
 }

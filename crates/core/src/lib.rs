@@ -20,6 +20,7 @@ pub mod activity;
 pub mod agent_skill_v2;
 pub mod app;
 pub mod artifact;
+pub mod attachment;
 pub mod automation;
 pub mod brief;
 pub mod browser;

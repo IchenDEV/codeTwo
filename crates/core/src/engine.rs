@@ -1725,7 +1725,7 @@ struct EngineState {
     memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
     /// App-owned private attachment root. Only the plugin graph injects this; library/TUI engines
-    /// intentionally cannot resolve desktop Appshot IDs.
+    /// intentionally cannot resolve desktop Appshot or prompt-attachment IDs.
     private_data_dir: RwLock<Option<std::path::PathBuf>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
@@ -2229,10 +2229,13 @@ impl Engine {
         let has_canvas = doc
             .iter()
             .any(|block| matches!(block, DocBlock::Canvas { .. }));
-        let has_appshot = doc
-            .iter()
-            .any(|block| matches!(block, DocBlock::Appshot { .. }));
-        if !has_canvas && !has_appshot {
+        let has_private_image = doc.iter().any(|block| {
+            matches!(
+                block,
+                DocBlock::Appshot { .. } | DocBlock::Attachment { .. }
+            )
+        });
+        if !has_canvas && !has_private_image {
             return Ok(None);
         }
         let library = self.state.skills.lock().unwrap();
@@ -2246,15 +2249,15 @@ impl Engine {
                 .resolve_canvas_prompt_frozen(id, revision)
         };
         let data_dir = self.state.private_data_dir.read().unwrap().clone();
-        let compiled = match (has_canvas, has_appshot) {
+        let compiled = match (has_canvas, has_private_image) {
             (true, true) => compile_with_canvas_and_appshots(
                 doc,
                 &library,
                 Some(std::path::Path::new(cwd)),
                 Some(&resolve_session),
-                data_dir
-                    .as_deref()
-                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+                data_dir.as_deref().ok_or_else(|| {
+                    "private prompt images are unavailable in this host".to_string()
+                })?,
                 self.state.canvas_gate,
                 CanvasProviderImageCapability::Unknown,
                 &resolve_canvas,
@@ -2274,9 +2277,9 @@ impl Engine {
                 &library,
                 Some(std::path::Path::new(cwd)),
                 Some(&resolve_session),
-                data_dir
-                    .as_deref()
-                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+                data_dir.as_deref().ok_or_else(|| {
+                    "private prompt images are unavailable in this host".to_string()
+                })?,
             )?,
             (false, false) => unreachable!(),
         };
@@ -3096,6 +3099,12 @@ impl Engine {
             blocks.push(ContentBlock::Image {
                 data: appshot.data.clone(),
                 mime_type: appshot.mime_type.clone(),
+            });
+        }
+        for attachment in &compiled.attachments {
+            blocks.push(ContentBlock::Image {
+                data: attachment.data.clone(),
+                mime_type: attachment.mime_type.clone(),
             });
         }
         let response: serde_json::Value = client
@@ -4618,6 +4627,12 @@ impl Engine {
                             mime_type: appshot.mime_type.clone(),
                         });
                     }
+                    for attachment in &compiled.attachments {
+                        blocks.push(ContentBlock::Image {
+                            data: attachment.data.clone(),
+                            mime_type: attachment.mime_type.clone(),
+                        });
+                    }
                     // Canvas exports are already normalized and ordered. Unknown provider
                     // capability intentionally attempted every image above; any provider failure
                     // remains visible through the ACP error path.
@@ -4778,6 +4793,16 @@ impl Engine {
             }
 
             Op::SetModel { session, model } => {
+                if self.session_is_busy(&session) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: "can't switch models while a turn is running; stop it first"
+                            .into(),
+                        terminal: false,
+                        request_id: None,
+                    });
+                    return Ok(());
+                }
                 // Tell the agent, then record it. Storing it without the ACP call would leave the
                 // UI claiming a model the agent never switched to. Before the first prompt there's
                 // no ACP session to tell, so the choice is just recorded and `session/new` sends it.
@@ -4909,6 +4934,22 @@ impl Engine {
                     });
                     return Ok(());
                 };
+
+                let changes_turn_runtime = config_id == "model"
+                    || previous_options.iter().any(|option| {
+                        option.id == config_id && option.category.as_deref() == Some("model")
+                    });
+                if changes_turn_runtime && self.session_is_busy(&session) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: format!(
+                            "can't change {config_id} while a turn is running; stop it first"
+                        ),
+                        terminal: false,
+                        request_id: None,
+                    });
+                    return Ok(());
+                }
 
                 // Grok's current ACP extension advertises effort in ModelInfo metadata and uses
                 // the legacy mode method to change it. Keep the generic frontend contract while

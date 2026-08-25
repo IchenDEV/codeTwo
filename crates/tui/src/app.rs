@@ -1341,6 +1341,9 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
             DocBlock::Appshot { id, .. } => format!("[appshot:{id}]"),
+            DocBlock::Attachment { id, name } => {
+                format!("[image:{}]", name.clone().unwrap_or_else(|| short(id)))
+            }
             DocBlock::Canvas {
                 id,
                 frozen_revision,
