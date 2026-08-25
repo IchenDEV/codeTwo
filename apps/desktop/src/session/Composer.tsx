@@ -1536,10 +1536,10 @@ export function Composer({
             </DropdownMenu>
           </div>
           <Tooltip>
-            <LiquidActionSurface fill="var(--destructive)" reducedMotion={reducedMotion}>
+            <LiquidActionSurface fill="var(--secondary)" reducedMotion={reducedMotion}>
               <TooltipTrigger
                 render={<Button
-                  variant="destructive"
+                  variant="secondary"
                   size="icon"
                   className={cn(
                     "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",

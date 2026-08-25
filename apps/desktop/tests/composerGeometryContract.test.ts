@@ -42,6 +42,9 @@ describe("composer geometry contract", () => {
       '"flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-hint',
     );
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
+    expect(composer).toMatch(
+      /fill="var\(--secondary\)"[\s\S]*variant="secondary"[\s\S]*onClick=\{onStop\}/,
+    );
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"',
