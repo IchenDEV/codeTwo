@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -207,6 +208,48 @@ function prepareEmbeddedRuntime(bundle: string): void {
   }
 }
 
+function modernizeWindowChrome(bundle: string): void {
+  // The window lives in the bundled bun process, and AppKit gates the modern (macOS 26+) window
+  // chrome — full-size traffic lights in a 32pt titlebar with the current ringed artwork — on the
+  // link SDK of the process executable. Electrobun ships bun linked against SDK 15.2, so every
+  // window renders the legacy compact titlebar with flat undersized buttons instead. Bump the
+  // declared SDK so the chrome matches every other current app.
+  const runtime = join(bundle, "Contents", "MacOS", "bun");
+  if (!existsSync(runtime)) return;
+
+  const show = Bun.spawnSync(["/usr/bin/vtool", "-show-build", runtime], {
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  if (show.exitCode !== 0) process.exit(show.exitCode);
+  const buildInfo = show.stdout.toString();
+  const minos = buildInfo.match(/minos\s+(\d+(?:\.\d+)*)/)?.[1] ?? "13.0";
+  const sdk = Number(buildInfo.match(/sdk\s+(\d+(?:\.\d+)*)/)?.[1] ?? "0");
+  if (sdk >= 26) return;
+
+  const patched = `${runtime}.patched`;
+  const bump = Bun.spawnSync(
+    ["/usr/bin/vtool", "-set-build-version", "1", minos, "26.0", "-output", patched, runtime],
+    { stdout: "inherit", stderr: "inherit" },
+  );
+  if (bump.exitCode !== 0) process.exit(bump.exitCode);
+  renameSync(patched, runtime);
+  chmodSync(runtime, 0o755);
+
+  // vtool invalidates the code signature; leave a valid one for the later signing phases, matching
+  // how the embedded runtime executables are signed.
+  const identity = process.env.ELECTROBUN_DEVELOPER_ID;
+  const command = ["/usr/bin/codesign", "--force", "--sign", identity ?? "-"];
+  if (identity && identity !== "-") {
+    command.push("--options", "runtime", "--timestamp");
+  } else {
+    command.push("--timestamp=none");
+  }
+  command.push(runtime);
+  const sign = Bun.spawnSync(command, { stdout: "inherit", stderr: "inherit" });
+  if (sign.exitCode !== 0) process.exit(sign.exitCode);
+}
+
 function signEmbeddedRuntime(bundle: string): void {
   const identity = process.env.ELECTROBUN_DEVELOPER_ID;
   if (!identity) return;
@@ -322,6 +365,7 @@ for (const bundle of bundles) {
   if (!wrapperBundle) {
     prepareEmbeddedRuntime(bundle);
     signEmbeddedRuntime(bundle);
+    modernizeWindowChrome(bundle);
   }
   embedWindowEffects(bundle);
   embedCloudSyncHelper(bundle);
