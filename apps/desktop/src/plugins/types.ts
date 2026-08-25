@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type PluginManagerTab = "plugins" | "components" | "marketplace";
+export type PluginManagerTab = "plugins" | "marketplace";
 
 export type PluginManagerSource = "builtin" | "host" | "bundle";
 
@@ -285,7 +285,6 @@ export interface PluginManagerLabels {
 
 export interface PluginManagerPageProps {
   plugins: PluginManagerPlugin[];
-  components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
   marketplaceSources?: PluginManagerMarketplaceSource[];
   headerLeadingAction?: ReactNode;
@@ -315,9 +314,6 @@ export interface PluginManagerPageProps {
     pluginId: string,
     scaffoldId: string,
   ) => Promise<{ files: number }>;
-  onUseSkill?: (skillId: string) => void;
-  onUninstallSkill?: (skillId: string) => Promise<void>;
-  onNewSkill?: () => void;
   onResetPlugin?: (
     pluginId: string,
     scope: PluginManagerScope,

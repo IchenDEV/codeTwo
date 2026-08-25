@@ -81,21 +81,6 @@ const plugins = [
   },
 ];
 
-const components = [
-  {
-    id: "memory:composer-action",
-    pluginId: "memory",
-    pluginName: "Memory",
-    name: "Memory composer action",
-    description: "Adds memory context from the composer.",
-    kind: "composerAction",
-    slot: "composer.actions",
-    source: "builtin",
-    supportedScopes: ["user", "project"],
-    state: { effectiveEnabled: true, override: "inherit", status: "active" },
-  },
-];
-
 const marketplaceItems = [
   {
     id: "release-review",
@@ -123,15 +108,11 @@ function renderManager(overrides = {}) {
     bundleTrust: [],
     uninstalls: [],
     scaffolds: [],
-    skillUses: [],
-    skillUninstalls: [],
     marketplaceOpens: [],
-    newSkills: [],
   };
   const view = mount(
     <PluginManagerPage
       plugins={plugins}
-      components={components}
       marketplaceItems={marketplaceItems}
       scope={{ kind: "user" }}
       projects={[{ path: "/tmp/project", label: "Project · demo" }]}
@@ -161,10 +142,7 @@ function renderManager(overrides = {}) {
         calls.scaffolds.push({ pluginId, scaffoldId });
         return { files: 2 };
       }}
-      onUseSkill={(skillId) => calls.skillUses.push(skillId)}
-      onUninstallSkill={async (skillId) => calls.skillUninstalls.push(skillId)}
       onOpenMarketplace={async () => calls.marketplaceOpens.push(true)}
-      onNewSkill={() => calls.newSkills.push(true)}
       {...overrides}
     />,
   );
@@ -332,19 +310,21 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
-  test("renders one scoped manager for built-in, host, bundle, component, and marketplace data", async () => {
+  test("renders one scoped manager for built-in, host, bundle, and marketplace data", async () => {
     activateDom();
     const { view } = renderManager();
     await flush();
 
     expect(view.container.querySelector("[data-plugin-manager-page]")?.tagName).toBe("MAIN");
-    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(3);
-    expect(view.container.querySelector('[data-slot="tabs"]')?.classList.contains("flex-col")).toBe(true);
-    expect(view.container.querySelector('[data-slot="tabs-list"]')?.classList.contains("w-full")).toBe(true);
+    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(2);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
+    expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
+    expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
+    expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("@3xl/plugin-manager:w-72")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-details]")?.parentElement?.classList.contains("@3xl/plugin-manager:sticky")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
     expect(view.container.textContent).toContain("Built-in");
     expect(view.container.textContent).toContain("Desktop host");
@@ -355,10 +335,10 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
     expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
     expect(button(view.container, "Install from GitHub")).not.toBeNull();
-
-    click(button(view.container, "Components 1"));
-    await flush();
-    expect(view.container.querySelector("[data-component-details]")?.textContent).toContain("composer.actions");
+    expect(Array.from(view.container.querySelectorAll('[role="tab"]')).some(
+      (tab) => tab.textContent?.includes("Components"),
+    )).toBe(false);
+    expect(view.container.querySelector("[data-component-details]")).toBeNull();
 
     click(button(view.container, "Marketplace 1"));
     await flush();
@@ -419,21 +399,8 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
-  test("keeps skills, scaffolds, and local marketplace actions on the unified page", async () => {
+  test("keeps scaffolds and local marketplace actions on the unified page", async () => {
     activateDom();
-    const skill = {
-      id: "skill:release-review",
-      pluginId: "skills",
-      pluginName: "Skills",
-      name: "Release review",
-      description: "Review the current release.",
-      kind: "skill",
-      source: "builtin",
-      supportedScopes: ["user"],
-      manageable: false,
-      state: { effectiveEnabled: true, status: "active" },
-      skill: { id: "release-review", removable: true },
-    };
     const bundleWithScaffold = {
       ...plugins[2],
       bundle: {
@@ -458,7 +425,6 @@ describe("PluginManagerPage", () => {
     };
     const { view, calls } = renderManager({
       plugins: [bundleWithScaffold],
-      components: [skill],
       marketplaceItems: [localItem],
       marketplaceSources: [
         {
@@ -477,16 +443,6 @@ describe("PluginManagerPage", () => {
       { pluginId: "review-tools", scaffoldId: "review-config" },
     ]);
     expect(view.container.textContent).toContain("2 project files added.");
-
-    click(button(view.container, "Components 1"));
-    await flush();
-    click(button(view.container, "New skill"));
-    click(button(view.container, "Use"));
-    click(button(view.container, "Uninstall"));
-    await flush();
-    expect(calls.newSkills).toEqual([true]);
-    expect(calls.skillUses).toEqual(["release-review"]);
-    expect(calls.skillUninstalls).toEqual(["release-review"]);
 
     click(button(view.container, "Marketplace 1"));
     await flush();
@@ -703,38 +659,6 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
-  test("shows bundle-owned descriptors without a no-op component switch", async () => {
-    activateDom();
-    const { view } = renderManager({
-      components: [{
-        id: "bundle:review:extension:lsp:rust",
-        pluginId: "bundle:review",
-        pluginName: "Review Tools",
-        name: "rust",
-        description: "plugin.json#extensions.dev.codetwo.languageServers",
-        kind: "lsp",
-        slot: "plugin.json#extensions.dev.codetwo.languageServers",
-        source: "bundle",
-        sourceLabel: "GitHub · c2/review",
-        supportedScopes: ["user"],
-        manageable: false,
-        state: { effectiveEnabled: true, status: "active" },
-      }],
-      marketplaceItems: [],
-      scope: { kind: "user" },
-    });
-    await flush();
-
-    click(button(view.container, "Components 1"));
-    await flush();
-    const details = view.container.querySelector("[data-component-details]");
-    expect(details?.textContent).toContain("Bundle management");
-    expect(details?.querySelector('[data-slot="checkbox"]')).toBeNull();
-    expect(details?.querySelector('[data-slot="select-trigger"]')).toBeNull();
-
-    view.unmount();
-  });
-
   test("falls back to JSON when a schema contains unsupported nested structures", async () => {
     activateDom();
     const nested = {
@@ -751,7 +675,7 @@ describe("PluginManagerPage", () => {
     await flush();
 
     expect(view.container.querySelector("#plugin-config-json")).not.toBeNull();
-    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(2);
 
     view.unmount();
   });
