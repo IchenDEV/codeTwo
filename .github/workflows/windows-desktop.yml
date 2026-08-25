@@ -89,8 +89,19 @@ jobs:
           }
 
           $payload = Join-Path $env:RUNNER_TEMP "codetwo-windows-payload"
+          $payloadTar = Join-Path $env:RUNNER_TEMP "codetwo-windows-payload.tar"
+          $zstd = "apps/desktop/node_modules/electrobun/dist-win-x64/zig-zstd.exe"
+          if (-not (Test-Path $zstd)) {
+            throw "Electrobun's Windows zstd helper is missing."
+          }
+
           New-Item -ItemType Directory -Path $payload | Out-Null
-          & tar -xf $archives[0].FullName -C $payload
+          & $zstd decompress -i $archives[0].FullName -o $payloadTar
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not decompress the packaged Windows payload."
+          }
+
+          & tar -xf $payloadTar -C $payload
           if ($LASTEXITCODE -ne 0) {
             throw "Could not extract the packaged Windows payload."
           }
@@ -101,7 +112,7 @@ jobs:
             $_.FullName -match "[\\/]views[\\/]main[\\/]index\.html$"
           })
           if ($hosts.Count -ne 1 -or $brokers.Count -ne 1 -or $renderers.Count -ne 1) {
-            throw "Packaged payload is missing the native host, tool broker, or renderer."
+            throw "Packaged payload contents are incomplete (hosts=$($hosts.Count), brokers=$($brokers.Count), renderers=$($renderers.Count))."
           }
 
           foreach ($executable in @($setup[0], $hosts[0], $brokers[0])) {
