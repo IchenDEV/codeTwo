@@ -83,14 +83,19 @@ describe("macOS window chrome contract", () => {
     expect(nativeWindowEffects).toContain("dispatch_sync(dispatch_get_main_queue()");
   });
 
-  test("mounts independent bottom-terminal and right-side panel regions", () => {
-    expect(appSource).toContain('const [terminalOpen, setTerminalOpen]');
-    expect(appSource).toContain('placement="bottom"');
-    expect(appSource).toContain('placement="right"');
+  test("mounts the terminal in the shared right-side work dock", () => {
+    expect(appSource).not.toContain('const [terminalOpen, setTerminalOpen]');
+    expect(appSource).not.toContain('placement="bottom"');
+    expect(appSource).toContain('availableSurfaces={availableDockSurfaces}');
+    expect(appSource).toContain('terminalActive={dockTab === "terminal"}');
+    expect(dockSource).not.toContain('DockPlacement');
+    expect(dockSource).toContain('data-dock-placement="right"');
+    expect(dockSource).toContain('className="dock-tab-label"');
+    expect(styles).toMatch(/@container dock \(max-width: 359px\)/);
     expect(styles).toMatch(/\.glass-panel\s*{[^}]*--appearance-sidebar-opacity/s);
   });
 
-  test("keeps the empty-session hero below the titlebar when the bottom panel opens", () => {
+  test("keeps the empty-session hero safely centered in constrained window heights", () => {
     expect(appSource).toContain(
       '"order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"',
     );

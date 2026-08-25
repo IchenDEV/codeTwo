@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 export type DockSurface = "terminal" | "browser" | "files" | "git";
 /** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
-export type DockPlacement = "right" | "bottom";
 
 /** The picker's cards, in the order a coding session tends to want them. */
 const SURFACES: { id: DockSurface; icon: typeof Globe; titleKey: StringKey; descKey: StringKey }[] = [
@@ -54,11 +53,7 @@ function tabLabel(title: string | undefined, slot: number): string {
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-/**
- * A dock that can sit beside the document or below it. C2 uses the bottom placement for the
- * terminal and the right placement for browser/files/source-control surfaces. Keeping both modes
- * in one component preserves terminal sessions, tabs, and resize behavior across placements.
- */
+/** The right-side work dock shared by terminal, browser, files, and source control. */
 export function Dock({
   open,
   tab,
@@ -81,11 +76,8 @@ export function Dock({
   fileReveal,
   onActiveFile,
   onCloseFile,
-  placement = "right",
   width,
   onWidth,
-  height = 280,
-  onHeight = () => {},
   autoTab,
   highlightFile,
   availableSurfaces = ["browser", "terminal", "files", "git"],
@@ -119,14 +111,9 @@ export function Dock({
   fileReveal: FileRevealTarget | null;
   onActiveFile: (path: string) => void;
   onCloseFile: (path: string) => void;
-  /** The terminal uses a bottom panel; the remaining work surfaces stay in the right panel. */
-  placement?: DockPlacement;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
-  /** Bottom-panel height in px — dragged by the top-edge grip, persisted by the caller. */
-  height?: number;
-  onHeight?: (n: number) => void;
   /** R10 dock follow: the surface the agent is working on right now — its tab gets a subtle
       primary pulse, never a forced switch. */
   autoTab?: DockSurface | null;
@@ -187,15 +174,11 @@ export function Dock({
     return () => window.clearTimeout(id);
   }, [open]);
 
-  const bottom = placement === "bottom";
-  // Never let either placement squeeze the document below a usable measure. Persist the preferred
-  // dimension, but clamp only what is applied so it returns in full on a larger window.
+  // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
+  // but clamp only what is applied so it returns in full on a larger window.
   const maxForPlacement = useCallback(
-    () =>
-      bottom
-        ? Math.max(180, window.innerHeight - 320)
-        : Math.max(300, window.innerWidth - 620),
-    [bottom],
+    () => Math.max(300, window.innerWidth - 620),
+    [],
   );
   const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
@@ -204,7 +187,7 @@ export function Dock({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [maxForPlacement]);
-  const applied = Math.min(bottom ? height : width, maxSize);
+  const applied = Math.min(width, maxSize);
 
   // A drag must track the pointer 1:1. The open/close width transition below would ease every
   // intermediate width instead, so the edge lags the cursor and then keeps travelling after the
@@ -217,50 +200,47 @@ export function Dock({
   const startDrag = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      const startPointer = bottom ? e.clientY : e.clientX;
+      const startPointer = e.clientX;
       const startSize = applied;
       const onMove = (ev: MouseEvent) => {
-        const pointer = bottom ? ev.clientY : ev.clientX;
-        const minimum = bottom ? 180 : 300;
+        const pointer = ev.clientX;
         const next = Math.round(
           Math.min(
             maxForPlacement(),
-            Math.max(minimum, startSize + (startPointer - pointer)),
+            Math.max(300, startSize + (startPointer - pointer)),
           ),
         );
-        if (bottom) onHeight(next);
-        else onWidth(next);
+        onWidth(next);
       };
       const onUp = () => {
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove(bottom ? "resizing-v" : "resizing-h");
+        document.body.classList.remove("resizing-h");
         setDragging(false);
         window.dispatchEvent(new Event("resize"));
       };
-      document.body.classList.add(bottom ? "resizing-v" : "resizing-h");
+      document.body.classList.add("resizing-h");
       setDragging(true);
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [applied, bottom, maxForPlacement, onHeight, onWidth],
+    [applied, maxForPlacement, onWidth],
   );
 
   return (
     <aside
-      data-dock-placement={placement}
+      data-dock-placement="right"
       aria-hidden={!open}
       onTransitionEnd={(e) => {
         // Terminals and iframes fit themselves to their box — refit once the sweep lands.
         if (
           e.target === e.currentTarget &&
-          e.propertyName === (bottom ? "height" : "width")
+          e.propertyName === "width"
         )
           window.dispatchEvent(new Event("resize"));
       }}
       className={cn(
-        "glass-panel dock-panel relative flex shrink-0 flex-col overflow-hidden",
-        bottom ? "dock-panel-bottom w-full" : "dock-panel-side border-l",
+        "glass-panel dock-panel dock-panel-side relative flex shrink-0 flex-col overflow-hidden border-l",
         // The open/close sweep. Animating the real width moves the document column in the same
         // motion — the old mount-time slide left the layout to snap, which read as an animation
         // cut off halfway. It belongs to open/close only: while the grip is held, the width is the
@@ -268,15 +248,11 @@ export function Dock({
         dragging && "dock-panel-dragging",
         gone && "invisible",
       )}
-      style={
-        bottom
-          ? { height: open ? applied : 0 }
-          : { width: open ? applied : 0 }
-      }
+      style={{ width: open ? applied : 0 }}
     >
       <div
-        data-dock-resize={bottom ? "vertical" : "horizontal"}
-        className={bottom ? "dock-grip-bottom" : "dock-grip"}
+        data-dock-resize="horizontal"
+        className="dock-grip"
         onMouseDown={startDrag}
         title={t("dock.resize")}
       />
@@ -284,7 +260,7 @@ export function Dock({
       {/* Pin the animated dimension so panel content does not reflow while it sweeps. */}
       <div
         className="flex min-h-0 flex-1 flex-col"
-        style={bottom ? { height: applied } : { width: applied }}
+        style={{ width: applied }}
       >
         {shown === "home" ? (
         <>
@@ -339,9 +315,10 @@ export function Dock({
               <TabsTrigger
                 key={id}
                 value={id}
-                title={autoTab === id ? t("dockFollow.auto") : undefined}
+                title={autoTab === id ? `${t(titleKey)} · ${t("dockFollow.auto")}` : t(titleKey)}
               >
-                <Icon className="size-3.5" /> {t(titleKey)}
+                <Icon className="size-3.5" />
+                <span className="dock-tab-label">{t(titleKey)}</span>
                 {autoTab === id && (
                   <span className="size-1.5 animate-pulse rounded-full bg-primary" />
                 )}
