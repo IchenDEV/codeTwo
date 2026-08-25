@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Activity,
   CornerUpLeft,
   FileText,
   FolderTree,
@@ -23,13 +24,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import { TrajectoryView } from "../session/TrajectoryView";
+import type { Turn } from "../session/turns";
 
-export type DockSurface = "terminal" | "browser" | "files" | "git";
+export type DockSurface = "trajectory" | "terminal" | "browser" | "files" | "git";
 /** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
 
 /** The picker's cards, in the order a coding session tends to want them. */
 const SURFACES: { id: DockSurface; icon: typeof Globe; titleKey: StringKey; descKey: StringKey }[] = [
+  { id: "trajectory", icon: Activity, titleKey: "trajectory.label", descKey: "dock.trajectoryDesc" },
   { id: "browser", icon: Globe, titleKey: "dock.browser", descKey: "dock.browserDesc" },
   { id: "terminal", icon: TerminalIcon, titleKey: "dock.terminal", descKey: "dock.terminalDesc" },
   { id: "files", icon: FolderTree, titleKey: "dock.files", descKey: "dock.filesDesc" },
@@ -53,7 +57,7 @@ function tabLabel(title: string | undefined, slot: number): string {
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-/** The right-side work dock shared by terminal, browser, files, and source control. */
+/** The right-side work dock shared by trajectory, terminal, browser, files, and source control. */
 export function Dock({
   open,
   tab,
@@ -76,11 +80,16 @@ export function Dock({
   fileReveal,
   onActiveFile,
   onCloseFile,
+  turns,
+  usage,
+  hasEarlier,
+  loadingEarlier,
+  onLoadEarlier,
   width,
   onWidth,
   autoTab,
   highlightFile,
-  availableSurfaces = ["browser", "terminal", "files", "git"],
+  availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
 }: {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive and the
       collapse can actually animate — unmounting was why closing used to just blink away. */
@@ -111,6 +120,12 @@ export function Dock({
   fileReveal: FileRevealTarget | null;
   onActiveFile: (path: string) => void;
   onCloseFile: (path: string) => void;
+  /** Session execution data rendered as a module inside the right work dock. */
+  turns: readonly Turn[];
+  usage: { input_tokens: number; output_tokens: number } | null;
+  hasEarlier: boolean;
+  loadingEarlier: boolean;
+  onLoadEarlier: () => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
@@ -330,6 +345,18 @@ export function Dock({
             <X className="size-3.5" />
           </Button>
         </div>
+
+        {availableSurfaceSet.has("trajectory") && (
+          <TabsContent value="trajectory" className="m-0 flex min-h-0 flex-1">
+            <TrajectoryView
+              turns={turns}
+              usage={usage}
+              hasEarlier={hasEarlier}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={onLoadEarlier}
+            />
+          </TabsContent>
+        )}
 
         {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. The strip
             is the same h-9 bordered bar as the files tabs; the emulator below follows the app's
