@@ -21,9 +21,12 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("leaves the native macOS traffic lights entirely to the system", () => {
+  test("aligns the native macOS traffic lights to the 48px titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
-    expect(electrobunHost).not.toMatch(/trafficLightOffset|setWindowButtonPosition/);
+    expect(electrobunHost).not.toContain("trafficLightOffset");
+    expect(electrobunHost).toMatch(
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(28, 19\);[\s\S]*?\}\s*rendererReady = true;/,
+    );
   });
 
   test("reserves traffic-light space only on macOS", () => {

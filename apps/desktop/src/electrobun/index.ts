@@ -238,6 +238,8 @@ mainWindow.webview.on("dom-ready", () => {
     mainWindow.webview.executeJavascript(
       'document.documentElement.classList.add("macos-window-glass")',
     );
+    // Keep the native controls optically centered in the app's 48px title row.
+    mainWindow.setWindowButtonPosition(28, 19);
   }
   rendererReady = true;
   rpc.send.hostStatus({ ready: true });
