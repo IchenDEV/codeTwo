@@ -137,6 +137,9 @@ describe("SessionRail row layout", () => {
     const rows = [...(features?.querySelectorAll(
       ':scope > button, :scope > [data-rail-feature="new-task"] > button:first-child',
     ) ?? [])];
+    const sessionScroll = view.container.querySelector("[data-rail-session-scroll]");
+    const utilities = view.container.querySelector("[data-rail-utilities]");
+    const utilityRows = [...(utilities?.querySelectorAll(":scope > button") ?? [])];
 
     expect(rows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
       "New task",
@@ -144,22 +147,28 @@ describe("SessionRail row layout", () => {
       "Task board",
       "Scheduled tasks",
       "Plugins",
+    ]);
+    expect(utilityRows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
       "Quota left42%",
       "Settings",
     ]);
+    expect(sessionScroll?.nextElementSibling).toBe(utilities);
     expect(features?.querySelector('[data-rail-feature="task-board"]')?.getAttribute("aria-current"))
       .toBe("page");
     expect(features?.querySelector('[data-rail-feature="scheduled-tasks"]')?.getAttribute("aria-current"))
       .toBe("page");
     expect(view.container.textContent).not.toContain("gpt-5.6-sol");
-    for (const row of rows) click(row);
+    for (const row of [...rows, ...utilityRows]) click(row);
     expect(opened).toEqual(["new", "pull-requests", "tasks", "scheduled", "plugins", "usage", "settings"]);
     expect(features?.querySelector('[data-rail-feature="mission-control"]')).toBeNull();
-    expect(features?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
+    expect(utilities?.querySelector('[data-rail-feature="usage"] [role="progressbar"]')?.getAttribute("aria-valuenow"))
       .toBe("42");
-    expect(features?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
+    expect(utilities?.querySelector('[data-rail-feature="usage"] [data-quota-provider]')?.getAttribute("data-quota-provider"))
       .toBe("codex");
-    for (const feature of features?.querySelectorAll(":scope > [data-rail-feature]") ?? []) {
+    for (const feature of [
+      ...(features?.querySelectorAll(":scope > [data-rail-feature]") ?? []),
+      ...utilityRows,
+    ]) {
       expect(feature.className).toContain("h-(--ds-control-normal)");
       expect(feature.className).toContain(
         feature.getAttribute("aria-current") === "page" ? "text-foreground" : "text-foreground/75",
