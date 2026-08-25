@@ -35,7 +35,7 @@ describe("macOS window chrome contract", () => {
     expect(railSource).toContain("window-controls-safe-rail");
     expect(sceneStudioSource).toContain("window-controls-safe-scene");
     expect(styles).toMatch(
-      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*5rem/s,
+      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*6rem/s,
     );
     expect(styles).toMatch(/\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/s);
   });

@@ -155,6 +155,54 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("combines tracked and temporary creation in one source-list control", () => {
+    activateDom();
+    const created = [];
+    const view = renderRail({
+      onNew: () => created.push("task"),
+      onNewTemporary: () => created.push("temporary"),
+    });
+
+    const control = view.container.querySelector('[data-rail-feature="new-task"]');
+    const primary = control?.querySelector("button:first-of-type");
+    const quickSession = control?.querySelector('button[data-rail-quick-session]');
+
+    expect(control?.getAttribute("role")).toBe("group");
+    expect(control?.className).toContain("hover:bg-accent/55");
+    expect(primary?.textContent?.trim()).toBe("New task");
+    expect(quickSession?.getAttribute("aria-label")).toBe("Temporary session");
+
+    click(primary);
+    click(quickSession);
+    expect(created).toEqual(["task", "temporary"]);
+    expect(dom.document.body.querySelector('[role="menu"]')).toBeNull();
+
+    view.unmount();
+  });
+
+  test("uses Codex-like readable neutral hierarchy for session section controls", () => {
+    activateDom();
+    const view = renderRail({
+      archivedSessions: [session("archived", "Archived task")],
+    });
+
+    const recent = view.container.querySelector('[data-rail-section-label="recent"]');
+    const project = view.container.querySelector("[data-rail-project-switcher]");
+    const activeGroup = view.container.querySelector("[data-rail-group-label]");
+    const archived = view.container.querySelector("[data-rail-archive-toggle]");
+
+    for (const label of [recent, activeGroup, archived]) {
+      expect(label?.className).toContain("text-ui");
+      expect(label?.className).toContain("text-foreground/55");
+      expect(label?.className).not.toContain("uppercase");
+      expect(label?.className).not.toContain("tracking-");
+    }
+    expect(project?.className).toContain("text-ui");
+    expect(project?.className).toContain("text-foreground/60");
+
+    view.unmount();
+  });
+
   test("renders project choices as checked menu rows with their paths", async () => {
     activateDom();
     const selected = [];

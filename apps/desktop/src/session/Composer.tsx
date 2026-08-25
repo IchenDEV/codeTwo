@@ -59,7 +59,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
@@ -377,7 +376,7 @@ Chip.displayName = "Chip";
 
 /** Muted section header inside a picker menu — "Model", "Reasoning". */
 function MenuSection({ children }: { children: ReactNode }) {
-  return <p className="px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
+  return <p className="shrink-0 px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
 }
 
 /** The small "Default" pill on the adapter's own pick. */
@@ -1116,7 +1115,7 @@ export function ModelPicker({
           sideOffset={compact ? 8 : 17}
           className={cn(
             "reasoning-selector-popup",
-            selectorPanel === "model" && "reasoning-selector-popup--menu",
+            selectorPanel === "model" && "reasoning-selector-popup--menu flex flex-col overflow-hidden",
             compact && "reasoning-selector-popup--compact",
           )}
         >
@@ -1153,7 +1152,10 @@ export function ModelPicker({
                   <span>{t("composer.model")}</span>
                 </button>
               </div>
-              <ScrollArea className="max-h-80">
+              <div
+                data-model-picker-list
+                className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+              >
                 {modelRows.map((r) => (
                   <MenuRow
                     key={r.key}
@@ -1169,7 +1171,7 @@ export function ModelPicker({
                     }}
                   />
                 ))}
-              </ScrollArea>
+              </div>
             </>
           )}
         </PopoverContent>
@@ -1193,7 +1195,11 @@ export function ModelPicker({
           <ChevronDown className="size-3 shrink-0 opacity-50" />
         </Chip>}
       />
-      <PopoverContent align="start" side="top" className="w-64 p-1.5">
+      <PopoverContent
+        align="start"
+        side="top"
+        className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
+      >
         {modelRows.length === 0 ? (
           <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
             {t("composer.noModels")}
@@ -1201,7 +1207,10 @@ export function ModelPicker({
         ) : (
           <>
             <MenuSection>{t("composer.model")}</MenuSection>
-            <ScrollArea className="max-h-80">
+            <div
+              data-model-picker-list
+              className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+            >
               {modelRows.map((r) => (
                 <MenuRow
                   key={r.key}
@@ -1216,7 +1225,7 @@ export function ModelPicker({
                   }}
                 />
               ))}
-            </ScrollArea>
+            </div>
           </>
         )}
       </PopoverContent>

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
+import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const {
@@ -170,6 +170,44 @@ describe("ReasoningScale", () => {
     expect(trigger?.disabled).toBe(true);
     trigger?.click();
     expect(selected).toEqual([]);
+    rendered.unmount();
+  });
+
+  test("keeps a long model list inside the available popover height", async () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <ModelPicker
+          models={Array.from({ length: 40 }, (_, index) => ({
+            id: `model-${index}`,
+            name: `Model ${index}`,
+            description: null,
+          }))}
+          current={null}
+          defaultModel={null}
+          provider="opencode"
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+          hasSession={false}
+          compact
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    if (!trigger) throw new Error("model trigger did not render");
+    click(trigger);
+    await flush();
+
+    const popup = dom.document.body.querySelector('[data-slot="popover-content"]');
+    const modelList = popup?.querySelector("[data-model-picker-list]");
+    expect(popup?.className).toContain("max-h-(--available-height)");
+    expect(popup?.className).toContain("overflow-hidden");
+    expect(modelList?.className).toContain("min-h-0");
+    expect(modelList?.className).toContain("flex-1");
+    expect(modelList?.className).toContain("max-h-80");
+    expect(modelList?.className).toContain("overflow-y-auto");
     rendered.unmount();
   });
 });
