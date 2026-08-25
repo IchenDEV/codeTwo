@@ -34,6 +34,8 @@ describe("agent activity projection", () => {
         role: "Explorer",
         status: "completed",
         task: "Review the rendered interface",
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       },
     ]);
   });

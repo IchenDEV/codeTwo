@@ -6,6 +6,8 @@ import {
   ChevronRight,
   ChevronUp,
   CircleAlert,
+  CircleCheck,
+  Clock3,
   Download,
   ExternalLink,
   FolderOpen,
@@ -16,7 +18,13 @@ import {
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
-import { deriveAgentRoster } from "./agentActivity";
+import {
+  agentActivityState,
+  deriveAgentRoster,
+  isAgentActivityTool,
+  type AgentActivity,
+  type AgentActivityState,
+} from "./agentActivity";
 import {
   canvasExportDataUrl,
   collapsedPrompt,
@@ -53,15 +61,6 @@ function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
-}
-
-function agentStatusDot(status: string): string {
-  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
-  if (["completed", "done", "success", "succeeded"].includes(value)) return "bg-success";
-  if (["cancelled", "canceled", "denied", "error", "failed", "rejected"].includes(value)) {
-    return "bg-destructive";
-  }
-  return "bg-warning";
 }
 
 function toolStatusDot(status: string): string {
@@ -357,7 +356,9 @@ type RenderBlock =
 
 /** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
-  const tools = new Map(turn.tools.map((tool) => [tool.id, tool]));
+  const tools = new Map(
+    turn.tools.filter((tool) => !isAgentActivityTool(tool)).map((tool) => [tool.id, tool]),
+  );
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
   const appendTool = (tool: ToolEntry) => {
@@ -379,7 +380,7 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
   if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
-  for (const tool of turn.tools) {
+  for (const tool of tools.values()) {
     if (!seenTools.has(tool.id)) appendTool(tool);
   }
   return blocks;
@@ -429,16 +430,18 @@ function Detail({
   count,
   children,
   wide = false,
+  defaultOpen = false,
 }: {
   icon: typeof Brain;
   label: string;
   count: number;
   children: React.ReactNode;
   wide?: boolean;
+  defaultOpen?: boolean;
 }) {
   if (count === 0) return null;
   return (
-    <Collapsible className={cn("min-w-0", wide && "basis-full")}>
+    <Collapsible defaultOpen={defaultOpen} className={cn("min-w-0", wide && "basis-full")}>
       <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
@@ -446,6 +449,120 @@ function Detail({
       </CollapsibleTrigger>
       <CollapsibleContent className="py-1 ps-4">{children}</CollapsibleContent>
     </Collapsible>
+  );
+}
+
+function agentStatusLabel(state: AgentActivityState, t: ReturnType<typeof useT>): string {
+  return t(`turn.agentStatus.${state}`);
+}
+
+function agentElapsed(agent: AgentActivity, now: number): string | null {
+  if (agent.startedAt === undefined) return null;
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function AgentStateIcon({ state }: { state: AgentActivityState }) {
+  if (state === "active") {
+    return <ActivityOrb state="working" visualSize={20} aria-hidden="true" />;
+  }
+  if (state === "completed") {
+    return <CircleCheck className="size-4 text-success" aria-hidden />;
+  }
+  if (state === "failed") {
+    return <CircleAlert className="size-4 text-destructive" aria-hidden />;
+  }
+  return <Clock3 className="size-4 text-warning" aria-hidden />;
+}
+
+function AgentRosterSection({
+  agents,
+  label,
+  now,
+}: {
+  agents: readonly AgentActivity[];
+  label: string;
+  now: number;
+}) {
+  const t = useT();
+  if (agents.length === 0) return null;
+  return (
+    <div role="group" aria-label={label}>
+      <div className="flex items-center gap-2 px-2 py-1 text-cap font-medium uppercase tracking-wide text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular-nums">{agents.length}</span>
+      </div>
+      <ul className="divide-y divide-border">
+        {agents.map((agent) => {
+          const state = agentActivityState(agent.status);
+          const elapsed = agentElapsed(agent, now);
+          return (
+            <li
+              key={agent.id}
+              data-agent-row={agent.id}
+              data-agent-state={state}
+              className="flex min-w-0 items-start gap-2.5 px-2 py-2"
+            >
+              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+                <AgentStateIcon state={state} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="min-w-0 flex-1 truncate text-ui font-medium text-foreground">
+                    {agent.title}
+                  </span>
+                  <span className="shrink-0 text-cap text-muted-foreground">{agent.role}</span>
+                </div>
+                {agent.task && (
+                  <p className="mt-0.5 line-clamp-2 text-fine leading-relaxed text-muted-foreground">
+                    {agent.task}
+                  </p>
+                )}
+              </div>
+              <div className="shrink-0 text-right text-cap leading-relaxed text-muted-foreground">
+                <span className="block" aria-live="polite" aria-atomic="true">
+                  {agentStatusLabel(state, t)}
+                </span>
+                {elapsed && <time className="block tabular-nums">{elapsed}</time>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
+  const t = useT();
+  const active = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "active" || state === "pending";
+  });
+  const finished = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "completed" || state === "failed";
+  });
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (active.length === 0) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [active.length]);
+
+  return (
+    <div data-agent-roster className="flex flex-col gap-1.5">
+      <AgentRosterSection agents={active} label={t("turn.agentGroup.active")} now={now} />
+      <AgentRosterSection agents={finished} label={t("turn.agentGroup.finished")} now={now} />
+    </div>
   );
 }
 
@@ -483,6 +600,10 @@ export const TurnCard = memo(function TurnCard({
   const queued = turn.delivery === "queued";
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const activeAgentCount = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "active" || state === "pending";
+  }).length;
   const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
   const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
@@ -683,24 +804,14 @@ export const TurnCard = memo(function TurnCard({
       {/* secondary detail + outcome, on one quiet line */}
       {(hasDetail || dur || turn.stopReason || queued || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <Detail icon={Bot} label={t("turn.agents")} count={agents.length} wide>
-            <div className="flex flex-col gap-1">
-              {agents.map((agent) => (
-                <div key={agent.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
-                  <div className="flex min-w-0 items-center gap-2 text-fine">
-                    <span className={cn("size-1.5 shrink-0 rounded-full", agentStatusDot(agent.status))} />
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{agent.title}</span>
-                    <span className="shrink-0 text-cap uppercase text-muted-foreground">{agent.role}</span>
-                    <span className="shrink-0 text-muted-foreground">{agent.status}</span>
-                  </div>
-                  {agent.task && (
-                    <p className="mt-0.5 line-clamp-2 ps-3.5 text-fine leading-relaxed text-muted-foreground">
-                      {agent.task}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+          <Detail
+            icon={Bot}
+            label={t("turn.agents")}
+            count={agents.length}
+            wide
+            defaultOpen={activeAgentCount > 0}
+          >
+            <AgentRoster agents={agents} />
           </Detail>
 
           <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>

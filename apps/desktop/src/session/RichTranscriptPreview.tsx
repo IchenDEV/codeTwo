@@ -52,6 +52,47 @@ const previewTurn: Turn = {
       startedAt: previewStartedAt + 21_000,
       outputs: [],
     },
+    {
+      id: "agent-accessibility",
+      title: "spawn_agent",
+      status: "in_progress",
+      kind: "agent",
+      agentInput: {
+        agent_type: "explorer",
+        task_name: "accessibility_review",
+        message: "Check the transcript controls and status announcements.",
+      },
+      startedAt: previewStartedAt + 8_000,
+      outputs: [],
+    },
+    {
+      id: "agent-layout",
+      title: "spawn_agent",
+      status: "completed",
+      kind: "agent",
+      agentInput: {
+        agent_type: "worker",
+        task_name: "narrow_layout",
+        message: "Verify the transcript at a narrow desktop width.",
+      },
+      startedAt: previewStartedAt + 2_000,
+      endedAt: previewStartedAt + 18_000,
+      outputs: [],
+    },
+    {
+      id: "agent-tests",
+      title: "spawn_agent",
+      status: "failed",
+      kind: "agent",
+      agentInput: {
+        agent_type: "worker",
+        task_name: "renderer_tests",
+        message: "Run the renderer regression suite.",
+      },
+      startedAt: previewStartedAt + 3_000,
+      endedAt: previewStartedAt + 14_000,
+      outputs: [],
+    },
   ],
   content: [
     {
@@ -66,6 +107,9 @@ const previewTurn: Turn = {
       createdAt: previewStartedAt + 13_000,
     },
     { kind: "tool", toolId: "renderer-tests", createdAt: previewStartedAt + 21_000 },
+    { kind: "tool", toolId: "agent-accessibility", createdAt: previewStartedAt + 22_000 },
+    { kind: "tool", toolId: "agent-layout", createdAt: previewStartedAt + 23_000 },
+    { kind: "tool", toolId: "agent-tests", createdAt: previewStartedAt + 24_000 },
     {
       kind: "text",
       text:

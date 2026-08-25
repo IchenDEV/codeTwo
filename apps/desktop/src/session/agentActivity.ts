@@ -6,7 +6,11 @@ export interface AgentActivity {
   role: string;
   status: string;
   task: string | null;
+  startedAt?: number;
+  endedAt?: number;
 }
+
+export type AgentActivityState = "active" | "pending" | "completed" | "failed";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -177,13 +181,27 @@ function activityFromTool(tool: ToolEntry): AgentActivity {
     : toolTitle;
   const summary = assignment ? compact(assignment, 160) : null;
 
-  return {
+  const activity: AgentActivity = {
     id: tool.id,
     title,
     role: role ? compact(humanize(role), 36) : fallbackRole(tool),
     status: tool.status,
     task: summary && summary !== title ? summary : null,
   };
+  if (tool.startedAt !== undefined) activity.startedAt = tool.startedAt;
+  if (tool.endedAt !== undefined) activity.endedAt = tool.endedAt;
+  return activity;
+}
+
+/** Collapse provider-specific status strings into the four states the roster can explain. */
+export function agentActivityState(status: string): AgentActivityState {
+  const value = normalizeIdentifier(status);
+  if (["completed", "done", "success", "succeeded"].includes(value)) return "completed";
+  if (["cancelled", "canceled", "denied", "error", "failed", "rejected"].includes(value)) {
+    return "failed";
+  }
+  if (["pending", "queued", "scheduled", "waiting"].includes(value)) return "pending";
+  return "active";
 }
 
 /** A compact, read-only projection of the agent-like calls in a turn. */
