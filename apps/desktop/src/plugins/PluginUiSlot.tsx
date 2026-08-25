@@ -39,7 +39,7 @@ export function PluginUiSlot({
             <button
               key={key}
               type="button"
-              className="flex h-(--ds-control-field) w-full items-center gap-2.5 rounded-(--ds-radius-control) px-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+              className="flex h-(--ds-control-normal) w-full items-center gap-2 rounded-(--ds-radius-control) px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/50 hover:text-foreground"
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}

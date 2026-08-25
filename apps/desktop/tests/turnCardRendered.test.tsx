@@ -94,6 +94,42 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
+  test("renders attached prompt images instead of image placeholder text", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const rendered = mount(
+      <TurnCard
+        turn={{
+          ...runningTurn(),
+          prompt: "Improve image rendering\n\n[image:image.png]\n\n[image:image.png]",
+          promptImages: [
+            {
+              id: "image-1",
+              name: "image.png",
+              previewDataUrl: "data:image/png;base64,aW1hZ2UtMQ==",
+              width: 800,
+              height: 600,
+            },
+            {
+              id: "image-2",
+              name: "image.png",
+              previewDataUrl: "data:image/png;base64,aW1hZ2UtMg==",
+              width: 600,
+              height: 800,
+            },
+          ],
+        }}
+      />,
+    );
+
+    const images = rendered.container.querySelectorAll("[data-prompt-image] img");
+    expect(images).toHaveLength(2);
+    expect(images[0].getAttribute("alt")).toBe("image.png");
+    expect(rendered.container.textContent).toContain("Improve image rendering");
+    expect(rendered.container.textContent).not.toContain("[image:");
+    rendered.unmount();
+  });
+
   test("renders safe Sites links without exposing non-web resource URIs", () => {
     activateDom();
     disableCanvasDrawing();

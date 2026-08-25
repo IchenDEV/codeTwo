@@ -142,6 +142,37 @@ impl Plugin for WorkspacePlugin {
         })?;
 
         #[derive(Deserialize)]
+        struct GetAttachmentArgs {
+            id: String,
+        }
+        let attachment_data_dir = paths.data_dir.clone();
+        ctx.command("attachments.get", move |args| {
+            let data_dir = attachment_data_dir.clone();
+            async move {
+                let args: GetAttachmentArgs = take_args(args)?;
+                let attachment = crate::attachment::load_prompt_attachment(&data_dir, &args.id)
+                    .map_err(PluginError::new)?;
+                json(serde_json::json!({
+                    "id": attachment.id,
+                    "kind": "attachment",
+                    "app_name": "Image",
+                    "window_title": attachment.name,
+                    "captured_at": "",
+                    "text_length": 0,
+                    "text_truncated": false,
+                    "width": attachment.width,
+                    "height": attachment.height,
+                    "preview_data_url": format!(
+                        "data:{};base64,{}",
+                        attachment.mime_type,
+                        base64::engine::general_purpose::STANDARD.encode(attachment.bytes),
+                    ),
+                    "destination": "current",
+                }))
+            }
+        })?;
+
+        #[derive(Deserialize)]
         struct MoveArgs {
             cwd: String,
             from: String,

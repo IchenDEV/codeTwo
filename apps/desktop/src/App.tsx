@@ -304,6 +304,7 @@ import {
   turnsFromTranscript,
   withRunningSession,
   withoutUnacceptedTurn,
+  type PromptImage,
   type Turn,
 } from "./session/turns";
 import {
@@ -394,6 +395,18 @@ function privateImageBlock(capture: AppshotCapture): DocBlock {
   return capture.kind === "attachment"
     ? { type: "attachment", id: capture.id, name: capture.window_title }
     : { type: "appshot", id: capture.id, title: capture.window_title };
+}
+
+function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[] {
+  return captures.flatMap((capture) => capture.kind === "attachment"
+    ? [{
+        id: capture.id,
+        name: capture.window_title,
+        previewDataUrl: capture.preview_data_url,
+        width: capture.width,
+        height: capture.height,
+      }]
+    : []);
 }
 
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
@@ -2721,7 +2734,10 @@ export default function App() {
       };
       setPendingSessionRunning(true);
     }
-    setTurns((prev) => [...prev, newTurn(summarizeDoc(doc), promptRequestId)]);
+    setTurns((prev) => [
+      ...prev,
+      newTurn(summarizeDoc(doc), promptRequestId, promptImagesForTurn(activeAppshots)),
+    ]);
     try {
       if (targetSession) {
         if (componentEnabledRef.current("memory.settings")) {
@@ -2868,7 +2884,11 @@ export default function App() {
         appshotIds,
       };
       pendingDeferredPromptRequestsRef.current.set(requestId, pending);
-      const optimistic = newTurn(summarizeDoc(doc), requestId);
+      const optimistic = newTurn(
+        summarizeDoc(doc),
+        requestId,
+        promptImagesForTurn(activeAppshots),
+      );
       optimistic.delivery = delivery;
       optimistic.queuePosition = delivery === "queued" ? 1 : undefined;
       setTurns((previous) => [...previous, optimistic]);
