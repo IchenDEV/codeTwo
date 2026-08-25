@@ -838,7 +838,9 @@
     opacity: 1;
   }
 
-  /* Same affordance on the rail's right edge. */
+  /* Keep the rail's right edge as an invisible resize target. A full-height hover line is too
+     visually dominant beside the translucent sidebar, but the 6px hit area still makes dragging
+     easy and preserves the resize cursor. */
   .rail-grip {
     position: absolute;
     right: 0;
@@ -847,22 +849,6 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
-    transition: background var(--motion-fast) ease-out;
-  }
-  .rail-grip::after {
-    content: "";
-    position: absolute;
-    right: 2px;
-    top: 12px;
-    bottom: 12px;
-    width: 2px;
-    border-radius: 999px;
-    background: color-mix(in oklch, var(--primary) 55%, transparent);
-    opacity: 0;
-    transition: opacity var(--motion-fast) ease-out;
-  }
-  .rail-grip:hover::after {
-    opacity: 1;
   }
 
   /* While a drag is live: one cursor everywhere and no text selection. The browser panel's page is

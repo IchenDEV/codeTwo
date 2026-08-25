@@ -63,7 +63,7 @@ describe("ReasoningScale", () => {
     rendered.unmount();
   });
 
-  test("uses the compact nested selector when provider effort is shown in scene configuration", () => {
+  test("uses the compact selector when provider effort is shown in the session row", () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
