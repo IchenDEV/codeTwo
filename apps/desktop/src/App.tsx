@@ -286,6 +286,7 @@ import { TranscriptPane } from "./session/TranscriptPane";
 import { TrajectoryView } from "./session/TrajectoryView";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
+import { DesktopPetBridge } from "./pet/DesktopPet";
 import { petAnimationForActivity } from "./pet/state";
 import {
   applyEvent,
@@ -5720,6 +5721,11 @@ export default function App() {
       )}
       style={{ "--side-chat-width": `${appliedSideChatWidth}px` } as CSSProperties}
     >
+      <DesktopPetBridge
+        animation={petAnimation}
+        voiceEnabled={voiceComposerEnabled}
+        onVoiceText={(text) => insertTextRef.current?.(text)}
+      />
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
@@ -6273,9 +6279,6 @@ export default function App() {
                     onPinPlanArtifact={pinPlanArtifact}
                     canPinPlan={scenesSurfaceEnabled && canPinPlan}
                     onSaveTemplate={openTemplateDraft}
-                    petAnimation={petAnimation}
-                    voiceEnabled={voiceComposerEnabled}
-                    onVoiceText={(text) => insertTextRef.current?.(text)}
                     onAddSelection={addSelectedText}
                     onExplainSelection={explainSelectedText}
                     onAskSelectionInSideChat={askSelectedTextInSideChat}

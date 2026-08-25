@@ -2,7 +2,12 @@ import { PetX } from "@petx/react";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { setAppearanceSettings, useAppearanceSettings, type PetSize } from "../appearance";
+import {
+  setAppearanceSettings,
+  useAppearanceSettings,
+  type AppearanceSettings,
+  type PetSize,
+} from "../appearance";
 import { VoiceButton } from "../voice/VoiceButton";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
@@ -19,6 +24,11 @@ export const PET_SIZE_PIXELS: Record<PetSize, number> = {
   large: 136,
 };
 const WAVE_DURATION_MS = 820;
+
+export type CodeTwoPetAppearance = Pick<
+  AppearanceSettings,
+  "petActivityEnabled" | "petSize" | "petSource" | "petId" | "petName"
+>;
 
 export function CodeTwoPetSprite({
   animation,
@@ -54,13 +64,18 @@ export function CodeTwoPet({
   animation,
   voiceEnabled,
   onVoiceText,
+  appearance: providedAppearance,
+  onHide,
 }: {
   animation: CodeTwoPetAnimation;
   voiceEnabled: boolean;
   onVoiceText: (text: string) => void;
+  appearance?: CodeTwoPetAppearance;
+  onHide?: () => void;
 }) {
   const t = useT();
-  const appearance = useAppearanceSettings();
+  const storedAppearance = useAppearanceSettings();
+  const appearance = providedAppearance ?? storedAppearance;
   const [wave, setWave] = useState(0);
   const waveTimer = useRef<number>();
 
@@ -109,7 +124,7 @@ export function CodeTwoPet({
           size="icon"
           aria-label={t("pet.hide")}
           title={t("pet.hide")}
-          onClick={() => setAppearanceSettings({ petEnabled: false })}
+          onClick={onHide ?? (() => setAppearanceSettings({ petEnabled: false }))}
         >
           <ChevronDown aria-hidden />
         </Button>
