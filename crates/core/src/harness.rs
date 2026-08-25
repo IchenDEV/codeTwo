@@ -195,7 +195,7 @@ fn unquote(value: &str) -> &str {
 }
 
 fn home() -> Option<PathBuf> {
-    std::env::var("HOME").ok().map(PathBuf::from)
+    crate::provider::home_dir()
 }
 
 #[cfg(test)]

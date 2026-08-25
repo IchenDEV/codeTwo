@@ -6,7 +6,10 @@ import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { ToastProvider } from "./ui/toast";
 import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
+import { currentDesktopPlatform } from "./platform";
 import "./styles.css";
+
+document.documentElement.dataset.platform = currentDesktopPlatform();
 
 const showDesignSystem =
   import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");

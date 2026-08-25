@@ -6,7 +6,7 @@ const channel = DESKTOP_CHANNELS[resolveDesktopChannel(process.env.CODETWO_CHANN
 const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
 const toolBrokerExecutable = process.platform === "win32" ? "codetwo-tool-broker.exe" : "codetwo-tool-broker";
 const hostBinary = `../../target/release/${hostExecutable}`;
-const toolBrokerBinary = `dist/tool-broker/${toolBrokerExecutable}`;
+const toolBrokerBinary = `build/tool-broker/${toolBrokerExecutable}`;
 
 export default {
   app: {

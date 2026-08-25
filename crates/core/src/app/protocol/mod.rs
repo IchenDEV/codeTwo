@@ -126,7 +126,9 @@ fn is_executable_bundle_command(path: &Path) -> bool {
 #[async_trait]
 impl Transport for ProcessTransport {
     async fn start(&self) -> Result<Channel, PluginError> {
-        let mut command = tokio::process::Command::new(&self.command);
+        let executable =
+            crate::provider::which(&self.command).unwrap_or_else(|| self.command.clone().into());
+        let mut command = tokio::process::Command::new(executable);
         command
             .args(&self.args)
             .stdin(std::process::Stdio::piped())

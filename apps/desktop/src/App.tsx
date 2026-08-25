@@ -355,6 +355,7 @@ import {
 } from "./keys";
 import { useToast } from "./ui/toast";
 import { useLanguage, useT } from "./i18n";
+import { currentDesktopPlatform } from "./platform";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -991,6 +992,11 @@ export default function App() {
   const toast = useToast();
   const t = useT();
   const { locale } = useLanguage();
+  const desktopPlatform = currentDesktopPlatform();
+  const editorLaunchersAvailable = desktopPlatform === "macos";
+  const fileManagerLabel = editorLaunchersAvailable
+    ? t("header.finder")
+    : t("header.fileManager");
 
   const setTaskContext = useCallback((task: BoardTask | null, temporary: boolean) => {
     activeBoardTaskRef.current = task;
@@ -4089,7 +4095,7 @@ export default function App() {
         ? t("header.cursor")
         : target === "antigravity"
           ? t("header.antigravity")
-          : t("header.finder");
+          : fileManagerLabel;
     try {
       if (!(await openWorkspace(cwd || ".", target))) {
         throw new Error("Workspace launcher unavailable");
@@ -4097,7 +4103,7 @@ export default function App() {
     } catch {
       toast(t("header.openFailed", { application }), "error");
     }
-  }, [cwd, t, toast]);
+  }, [cwd, fileManagerLabel, t, toast]);
 
   const doCheckpoint = useCallback(async () => {
     try {
@@ -6177,7 +6183,7 @@ export default function App() {
           <header
             className={cn(
               "electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
-              displayedRailCollapsed ? "pl-[78px]" : "pl-4",
+              displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
             )}
           >
             {displayedRailCollapsed && (
@@ -6217,7 +6223,9 @@ export default function App() {
             <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
-            {activeBoardTask && activeSessionTitle ? (
+            {/* The session title trails the task title for context — unless both carry the same
+                name (a task created from a single-prompt thread), which would print it twice. */}
+            {activeBoardTask && activeSessionTitle && activeSessionTitle.trim() !== activeBoardTask.title.trim() ? (
               <>
                 <span className="shrink-0 text-ui text-muted-foreground/50">/</span>
                 <span className="electrobun-webkit-app-region-drag max-w-64 truncate text-fine text-muted-foreground">
@@ -6268,9 +6276,13 @@ export default function App() {
               trajectoryActive={trajectoryOpen && !docMode}
               trajectoryAvailable={!docMode && turns.length > 0 && !sessionLoading}
               actions={scripts}
+              editorLaunchersAvailable={editorLaunchersAvailable}
+              fileManagerLabel={fileManagerLabel}
               onRunAction={runProjectAction}
               onAddAction={() => setShowActionDialog(true)}
-              onOpen={() => void openWorkingDirectory("cursor")}
+              onOpen={() =>
+                void openWorkingDirectory(editorLaunchersAvailable ? "cursor" : "finder")
+              }
               onOpenCursor={() => void openWorkingDirectory("cursor")}
               onOpenAntigravity={() => void openWorkingDirectory("antigravity")}
               onOpenFinder={() => void openWorkingDirectory("finder")}

@@ -166,7 +166,7 @@ export function SceneStudio({
 
   return (
     <div className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background" data-page="scene-studio">
-      <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 py-1.5 pl-20 pr-3">
+      <header className="window-controls-safe-scene electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 py-1.5 pr-3">
         <Button type="button" variant="ghost" size="icon-sm" aria-label={request ? t("sceneStudio.backToLibrary") : t("sceneStudio.back")} onClick={goBack}>
           <ArrowLeft />
         </Button>

@@ -642,8 +642,8 @@ fn read_visualization(path: &str, realm: &CommandRealm) -> Result<String, Plugin
     }
     let target = requested.canonicalize().map_err(PluginError::new)?;
     let mut roots = Vec::new();
-    if let Some(home) = std::env::var_os("HOME") {
-        roots.push(PathBuf::from(home).join(".codex/visualizations"));
+    if let Some(home) = crate::provider::home_dir() {
+        roots.push(home.join(".codex/visualizations"));
     }
     if let Some(home) = std::env::var_os("CODEX_HOME") {
         roots.push(PathBuf::from(home).join("visualizations"));
@@ -890,7 +890,7 @@ fn resolve_known_workspace_root(cwd: &str, roots: &[String]) -> Result<PathBuf, 
 }
 
 fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
+    crate::provider::home_dir()
 }
 
 fn reveal(path: &Path) -> Result<(), String> {
@@ -899,7 +899,11 @@ fn reveal(path: &Path) -> Result<(), String> {
         .arg("-R")
         .arg(path)
         .status();
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    let status = std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", path.display()))
+        .status();
+    #[cfg(all(not(target_os = "macos"), not(windows)))]
     let status = std::process::Command::new("xdg-open")
         .arg(path.parent().unwrap_or(Path::new(".")))
         .status();

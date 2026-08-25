@@ -212,6 +212,22 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
+  test("omits previews that merely restate the session title", () => {
+    activateDom();
+    const view = renderRail({
+      sessions: [session("echo", "Paste support")],
+      previews: { echo: "Paste support" },
+      activeSession: "echo",
+    });
+    const row = view.container.querySelector('[data-session-id="echo"]');
+
+    expect(row?.querySelectorAll("[data-session-line]")).toHaveLength(3);
+    expect(row?.querySelector('[data-session-line="preview"]')).toBeNull();
+    expect(row?.getAttribute("title")).toBeNull();
+
+    view.unmount();
+  });
+
   test("uses semantic activity orbs for running sessions and sidebar loading", () => {
     activateDom();
     disableCanvasDrawing();

@@ -1,16 +1,43 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "extended-srgb:0.06275,0.09020,0.07059,1.00000",
-      "extended-srgb:0.00784,0.01569,0.01176,1.00000"
-    ]
-  },
+  "fill" : "automatic",
   "groups" : [
     {
       "layers" : [
         {
+          "glass" : true,
+          "image-name" : "c-mark-dark.svg",
+          "hidden-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "dark",
+              "value" : true
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
+          "name" : "C · Default"
+        },
+        {
+          "glass" : true,
+          "hidden-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "dark",
+              "value" : false
+            },
+            {
+              "appearance" : "tinted",
+              "value" : false
+            }
+          ],
           "image-name" : "c-mark.svg",
-          "name" : "C"
+          "name" : "C · Dark + Mono"
         }
       ],
       "name" : "Document frame",

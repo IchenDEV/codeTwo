@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const entrypoint = new URL("../src/electrobun/toolBrokerRpc.ts", import.meta.url).pathname;
+const entrypoint = fileURLToPath(new URL("../src/electrobun/toolBrokerRpc.ts", import.meta.url));
 
 describe("Tool Broker JSON-RPC adapter", () => {
   test("resolves configured MCP backends through the real subprocess boundary", () => {

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { join, posix } from "node:path";
 
 import type { AppUpdateStatus } from "./rpc";
 
@@ -14,10 +14,10 @@ let runningCheck: Promise<number> | null = null;
 const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 
 export function enclosingAppBundle(executablePath: string): string | null {
-  let candidate = resolve(executablePath);
+  let candidate = posix.resolve(executablePath);
   while (true) {
-    if (extname(candidate) === ".app") return candidate;
-    const parent = dirname(candidate);
+    if (posix.extname(candidate) === ".app") return candidate;
+    const parent = posix.dirname(candidate);
     if (parent === candidate) return null;
     candidate = parent;
   }

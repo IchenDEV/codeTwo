@@ -1,38 +1,40 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-const electrobunHost = readFileSync(
-  new URL("../src/electrobun/index.ts", import.meta.url),
+const source = (relativePath: string) => readFileSync(
+  new URL(relativePath, import.meta.url),
   "utf8",
-);
-const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
-const dockSource = readFileSync(new URL("../src/dock/Dock.tsx", import.meta.url), "utf8");
-const tabsSource = readFileSync(
-  new URL("../src/components/ui/tabs.tsx", import.meta.url),
-  "utf8",
-);
-const electrobunConfig = readFileSync(
-  new URL("../electrobun.config.ts", import.meta.url),
-  "utf8",
-);
-const prepareElectrobun = readFileSync(
-  new URL("../scripts/prepare-electrobun.ts", import.meta.url),
-  "utf8",
-);
-const patchMacOSInfo = readFileSync(
-  new URL("../scripts/patch-macos-info.ts", import.meta.url),
-  "utf8",
-);
-const nativeWindowEffects = readFileSync(
-  new URL("../native/window-effects/CodeTwoWindowEffects.m", import.meta.url),
-  "utf8",
-);
+).replaceAll("\r\n", "\n");
+
+const electrobunHost = source("../src/electrobun/index.ts");
+const styles = source("../src/styles.css");
+const appSource = source("../src/App.tsx");
+const mainSource = source("../src/main.tsx");
+const railSource = source("../src/sidebar/SessionRail.tsx");
+const sceneStudioSource = source("../src/session/SceneStudio.tsx");
+const dockSource = source("../src/dock/Dock.tsx");
+const tabsSource = source("../src/components/ui/tabs.tsx");
+const electrobunConfig = source("../electrobun.config.ts");
+const prepareElectrobun = source("../scripts/prepare-electrobun.ts");
+const patchMacOSInfo = source("../scripts/patch-macos-info.ts");
+const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffects.m");
+const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
   test("leaves the native macOS traffic lights entirely to the system", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
     expect(electrobunHost).not.toMatch(/trafficLightOffset|setWindowButtonPosition/);
+  });
+
+  test("reserves traffic-light space only on macOS", () => {
+    expect(mainSource).toContain("document.documentElement.dataset.platform");
+    expect(appSource).toContain('displayedRailCollapsed ? "window-controls-safe-main" : "pl-4"');
+    expect(railSource).toContain("window-controls-safe-rail");
+    expect(sceneStudioSource).toContain("window-controls-safe-scene");
+    expect(styles).toMatch(
+      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*5rem/s,
+    );
+    expect(styles).toMatch(/\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/s);
   });
 
   test("composes macOS sidebars as transparent blurred glass over an opaque workspace", () => {
@@ -47,6 +49,13 @@ describe("macOS window chrome contract", () => {
     expect(appSource).toContain(
       'className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"',
     );
+  });
+
+  test("solidifies the glass panes while the app scheme disagrees with the system scheme", () => {
+    expect(styles).toMatch(
+      /\.macos-window-glass\.scheme-mismatch \.glass-rail[^}]*--appearance-macos-panel-tint-opacity:\s*100%/s,
+    );
+    expect(themeSource).toContain('root.classList.toggle("scheme-mismatch", scheme !== system)');
   });
 
   test("uses an AppKit material to blur content behind the transparent window", () => {

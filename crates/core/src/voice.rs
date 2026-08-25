@@ -38,8 +38,8 @@ pub fn transcriber_command() -> Option<String> {
         }
     }
     AUTODETECT.iter().find_map(|(bin, tmpl)| {
-        // Substitute the resolved absolute path: `sh -c` gets the same `PATH` we searched, but
-        // being explicit keeps the command working if that ever stops being true.
+        // Substitute the resolved absolute path. Being explicit keeps the command working if the
+        // shell's inherited search path changes later.
         let path = crate::provider::which(bin)?;
         Some(tmpl.replacen(bin, &shell_quote(path.to_string_lossy().as_ref()), 1))
     })
@@ -63,7 +63,13 @@ fn system_recognizer_available() -> bool {
     false
 }
 
-/// Single-quote a path for `sh -c`.
+/// Quote a path for the active platform shell.
+#[cfg(windows)]
+fn shell_quote(s: &str) -> String {
+    format!("\"{}\"", s.replace('%', "%%"))
+}
+
+#[cfg(not(windows))]
 fn shell_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
@@ -77,8 +83,19 @@ pub fn build_command(template: &str, audio: &Path) -> String {
 /// without touching process-wide environment.
 pub async fn transcribe_with(template: &str, audio: &Path) -> std::io::Result<String> {
     let cmd = build_command(template, audio);
-    // `/bin/sh` by absolute path: the shell itself shouldn't depend on how the app was launched.
-    let out = Command::new("/bin/sh").arg("-c").arg(&cmd).output().await?;
+    #[cfg(windows)]
+    let mut shell = {
+        let mut shell = Command::new("cmd.exe");
+        shell.args(["/D", "/S", "/C"]);
+        shell
+    };
+    #[cfg(not(windows))]
+    let mut shell = {
+        let mut shell = Command::new("/bin/sh");
+        shell.arg("-c");
+        shell
+    };
+    let out = shell.arg(&cmd).output().await?;
     if !out.status.success() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -129,11 +146,19 @@ mod tests {
 
     #[test]
     fn builds_and_quotes_the_command() {
-        let cmd = build_command("whisper-cli -f {file} -nt", Path::new("/tmp/a b.wav"));
-        assert_eq!(cmd, "whisper-cli -f '/tmp/a b.wav' -nt");
-        // A quote in the path can't break out of the argument.
-        let tricky = build_command("t {file}", Path::new("/tmp/it's.wav"));
-        assert!(tricky.contains(r"'/tmp/it'\''s.wav'"), "got: {tricky}");
+        #[cfg(not(windows))]
+        {
+            let cmd = build_command("whisper-cli -f {file} -nt", Path::new("/tmp/a b.wav"));
+            assert_eq!(cmd, "whisper-cli -f '/tmp/a b.wav' -nt");
+            // A quote in the path can't break out of the argument.
+            let tricky = build_command("t {file}", Path::new("/tmp/it's.wav"));
+            assert!(tricky.contains(r"'/tmp/it'\''s.wav'"), "got: {tricky}");
+        }
+        #[cfg(windows)]
+        assert_eq!(
+            build_command("whisper-cli -f {file} -nt", Path::new(r"C:\Users\A B\clip.wav")),
+            r#"whisper-cli -f "C:\Users\A B\clip.wav" -nt"#,
+        );
     }
 
     #[tokio::test]

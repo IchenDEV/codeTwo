@@ -97,6 +97,8 @@ export function SessionHeaderActions({
   onOpenCursor,
   onOpenAntigravity,
   onOpenFinder,
+  editorLaunchersAvailable,
+  fileManagerLabel,
   finderHint,
   actions = [],
   onRunAction,
@@ -120,6 +122,8 @@ export function SessionHeaderActions({
   onOpenCursor: () => void;
   onOpenAntigravity: () => void;
   onOpenFinder: () => void;
+  editorLaunchersAvailable: boolean;
+  fileManagerLabel: string;
   finderHint: string;
   actions?: ProjectScript[];
   onRunAction?: (action: ProjectScript) => void;
@@ -203,17 +207,21 @@ export function SessionHeaderActions({
         </div>
         <DropdownMenuContent align="end">
           <DropdownMenuGroup>
-            <DropdownMenuItem onClick={onOpenCursor}>
-              <Box aria-hidden />
-              {t("header.cursor")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenAntigravity}>
-              <Orbit aria-hidden />
-              {t("header.antigravity")}
-            </DropdownMenuItem>
+            {editorLaunchersAvailable && (
+              <>
+                <DropdownMenuItem onClick={onOpenCursor}>
+                  <Box aria-hidden />
+                  {t("header.cursor")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenAntigravity}>
+                  <Orbit aria-hidden />
+                  {t("header.antigravity")}
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuItem onClick={onOpenFinder}>
               <Folder aria-hidden />
-              {t("header.finder")}
+              {fileManagerLabel}
               {finderHint && <DropdownMenuShortcut>{finderHint}</DropdownMenuShortcut>}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onMoveTask}>

@@ -2289,6 +2289,8 @@ mod tests {
             entries: vec![
                 TranscriptEntry {
                     seq: 1,
+                    created_at: 0,
+                    started_at: None,
                     role: Role::User,
                     part: Part::Prompt {
                         text: format!("before\n\n{marker}\n\nafter"),
@@ -2297,6 +2299,8 @@ mod tests {
                 },
                 TranscriptEntry {
                     seq: 2,
+                    created_at: 0,
+                    started_at: None,
                     role: Role::User,
                     part: Part::Prompt {
                         text: format!("keep malformed\n{malformed}"),
@@ -2305,6 +2309,8 @@ mod tests {
                 },
                 TranscriptEntry {
                     seq: 3,
+                    created_at: 0,
+                    started_at: None,
                     role: Role::Agent,
                     part: Part::Text {
                         text: "ordinary agent reply".into(),

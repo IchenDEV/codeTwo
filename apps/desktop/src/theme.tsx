@@ -55,11 +55,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", scheme === "dark");
+    // The macOS window glass lets the native desktop material show through, and that material
+    // always follows the *system* scheme. While the app disagrees with the OS the rails and dock
+    // panels go fully tinted (see `.macos-window-glass.scheme-mismatch`), or the other scheme
+    // would bleed through and read as murky gray.
+    root.classList.toggle("scheme-mismatch", scheme !== system);
     // Tells the webview to render form controls and scrollbars in the matching scheme, so the bits
     // the OS draws don't stay light while the app goes dark.
     root.style.colorScheme = scheme;
 
-  }, [scheme]);
+  }, [scheme, system]);
 
   // Palette, type, and surface settings remain independent from the resolved color scheme.
   useEffect(() => {

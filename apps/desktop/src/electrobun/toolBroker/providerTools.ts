@@ -594,12 +594,13 @@ export function detectHostToolEvidence(
   environment: NodeJS.ProcessEnv = process.env,
   dataDir?: string,
 ): HostToolEvidence {
+  const userHome = string(environment.HOME) ?? string(environment.USERPROFILE);
   const codexHome = string(environment.CODEX_HOME)
-    ?? (string(environment.HOME) ? join(string(environment.HOME)!, ".codex") : null);
+    ?? (userHome ? join(userHome, ".codex") : null);
   let config: Table = {};
   let configError: string | null = null;
   if (!codexHome) {
-    configError = "CODEX_HOME and HOME are unset";
+    configError = "CODEX_HOME, HOME, and USERPROFILE are unset";
   } else {
     try {
       config = table(Bun.TOML.parse(readFileSync(join(codexHome, "config.toml"), "utf8")));

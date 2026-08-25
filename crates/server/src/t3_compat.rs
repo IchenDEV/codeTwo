@@ -547,18 +547,20 @@ impl T3CompatState {
     }
 
     fn server_config(&self) -> Value {
-        let home = std::env::var("HOME").unwrap_or_else(|_| self.cwd.clone());
+        let home = codetwo_core::provider::home_dir().unwrap_or_else(|| PathBuf::from(&self.cwd));
+        let keybindings_config = home.join(".config/codetwo/keymap.json");
+        let logs_directory = home.join(".codetwo/logs");
         json!({
             "environment": self.descriptor(),
             "auth": self.auth_descriptor(),
             "cwd": self.cwd,
-            "keybindingsConfigPath": format!("{home}/.config/codetwo/keymap.json"),
+            "keybindingsConfigPath": keybindings_config.to_string_lossy(),
             "keybindings": [],
             "issues": [],
             "providers": self.providers(),
             "availableEditors": [],
             "observability": {
-                "logsDirectoryPath": format!("{home}/.codetwo/logs"),
+                "logsDirectoryPath": logs_directory.to_string_lossy(),
                 "localTracingEnabled": false,
                 "otlpTracesEnabled": false,
                 "otlpMetricsEnabled": false,
