@@ -10,27 +10,35 @@ use std::path::Path;
 
 #[cfg(unix)]
 fn install_runtime_bundle(data_dir: &Path, id: &str, project_capable: bool) {
+    install_runtime_bundle_with_command(data_dir, id, project_capable, "bundle.where");
+}
+
+#[cfg(unix)]
+fn install_runtime_bundle_with_command(
+    data_dir: &Path,
+    id: &str,
+    project_capable: bool,
+    command: &str,
+) {
     use std::os::unix::fs::PermissionsExt;
 
     let plugin_dir = data_dir.join("plugins").join(id);
     let bundle_dir = plugin_dir.join("bundle");
     std::fs::create_dir_all(&bundle_dir).unwrap();
     let server = bundle_dir.join("server.sh");
-    std::fs::write(
-        &server,
-        r#"#!/bin/sh
+    let script = r#"#!/bin/sh
 IFS= read -r initialize || exit 1
 initialize_id=$(printf '%s' "$initialize" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
 data_dir=$(printf '%s' "$initialize" | sed -n 's/.*"dataDir":"\([^"]*\)".*/\1/p')
 project_path=$(printf '%s' "$initialize" | sed -n 's/.*"projectPath":"\([^"]*\)".*/\1/p')
-printf '{"jsonrpc":"2.0","id":%s,"result":{"name":"fixture","version":"1.0.0","protocolVersion":"1.0.0","commands":[{"name":"bundle.where"}],"events":[]}}\n' "$initialize_id"
+printf '{"jsonrpc":"2.0","id":%s,"result":{"name":"fixture","version":"1.0.0","protocolVersion":"1.0.0","commands":[{"name":"__COMMAND__"}],"events":[]}}\n' "$initialize_id"
 while IFS= read -r request; do
   request_id=$(printf '%s' "$request" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
   printf '{"jsonrpc":"2.0","id":%s,"result":{"pid":%s,"dataDir":"%s","projectPath":"%s"}}\n' "$request_id" "$$" "$data_dir" "$project_path"
 done
-"#,
-    )
-    .unwrap();
+"#
+    .replace("__COMMAND__", command);
+    std::fs::write(&server, script).unwrap();
     std::fs::set_permissions(&server, std::fs::Permissions::from_mode(0o755)).unwrap();
 
     let mut runtime = json!({
@@ -71,7 +79,7 @@ done
             "slot": "session.header",
             "label": "Locate runtime",
             "description": "Report the active runtime realm.",
-            "command": "bundle.where",
+            "command": command,
             "input": { "mode": "fixture" },
             "order": 0
         }],
@@ -323,6 +331,138 @@ async fn installed_bundle_events_reconcile_factories_without_a_restart() {
         .iter()
         .all(|entry| entry.id != "bundle:late"));
     assert!(app.call("bundle.where", Value::Null).await.is_err());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn forced_bundle_reload_restarts_only_the_requested_bundle_in_every_realm() {
+    let data = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    install_runtime_bundle_with_command(data.path(), "alpha", true, "bundle.alpha");
+    install_runtime_bundle_with_command(data.path(), "beta", true, "bundle.beta");
+    let app = boot(data.path()).await;
+
+    let alpha_global_before = app.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    let alpha_project_before = app
+        .call_in_project(project.path(), "bundle.alpha", Value::Null)
+        .await
+        .unwrap()["pid"]
+        .clone();
+    let beta_global_before = app.call("bundle.beta", Value::Null).await.unwrap()["pid"].clone();
+    let beta_project_before = app
+        .call_in_project(project.path(), "bundle.beta", Value::Null)
+        .await
+        .unwrap()["pid"]
+        .clone();
+
+    let alpha_server = data.path().join("plugins/alpha/bundle/server.sh");
+    let mut script = std::fs::read_to_string(&alpha_server).unwrap();
+    script.push_str("\n# changed runtime content\n");
+    std::fs::write(alpha_server, script).unwrap();
+
+    app.plugin_manager()
+        .reload_installed_bundles(&data.path().join("plugins"), ["alpha"])
+        .unwrap();
+    app.flush().await;
+
+    let alpha_global_after = app.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    let alpha_project_after = app
+        .call_in_project(project.path(), "bundle.alpha", Value::Null)
+        .await
+        .unwrap()["pid"]
+        .clone();
+    let beta_global_after = app.call("bundle.beta", Value::Null).await.unwrap()["pid"].clone();
+    let beta_project_after = app
+        .call_in_project(project.path(), "bundle.beta", Value::Null)
+        .await
+        .unwrap()["pid"]
+        .clone();
+
+    assert_ne!(alpha_global_before, alpha_global_after);
+    assert_ne!(alpha_project_before, alpha_project_after);
+    assert_eq!(beta_global_before, beta_global_after);
+    assert_eq!(beta_project_before, beta_project_after);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn developer_mode_watches_installed_bundle_files_and_persists() {
+    let data = tempfile::tempdir().unwrap();
+    install_runtime_bundle_with_command(data.path(), "alpha", true, "bundle.alpha");
+    let app = boot(data.path()).await;
+    let plugins_dir = data.path().join("plugins");
+    let server = plugins_dir.join("alpha/bundle/server.sh");
+
+    let initial_status = app
+        .call("plugins.developer_status", Value::Null)
+        .await
+        .unwrap();
+    assert_eq!(initial_status["enabled"], false);
+    assert_eq!(initial_status["watching"], false);
+
+    let before_disabled_edit = app.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    let mut script = std::fs::read_to_string(&server).unwrap();
+    script.push_str("\n# ignored while disabled\n");
+    std::fs::write(&server, &script).unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    assert_eq!(
+        app.call("bundle.alpha", Value::Null).await.unwrap()["pid"],
+        before_disabled_edit
+    );
+
+    let enabled = app
+        .call("plugins.set_developer_mode", json!({ "enabled": true }))
+        .await
+        .unwrap();
+    assert_eq!(enabled["enabled"], true);
+    assert_eq!(enabled["watching"], true);
+    assert!(plugins_dir.join(".developer-mode").is_file());
+
+    let before_watched_edit = app.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    script.push_str("\n# watched runtime content\n");
+    std::fs::write(&server, script).unwrap();
+
+    let mut after_watched_edit = before_watched_edit.clone();
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        if let Ok(response) = app.call("bundle.alpha", Value::Null).await {
+            after_watched_edit = response["pid"].clone();
+            if after_watched_edit != before_watched_edit {
+                break;
+            }
+        }
+    }
+    assert_ne!(after_watched_edit, before_watched_edit);
+    let reloaded = app
+        .call("plugins.developer_status", Value::Null)
+        .await
+        .unwrap();
+    assert_eq!(reloaded["last_reload"]["success"], true);
+    assert_eq!(reloaded["last_reload"]["plugins"], json!(["alpha"]));
+
+    app.stop().await;
+    let restarted = boot(data.path()).await;
+    let persisted = restarted
+        .call("plugins.developer_status", Value::Null)
+        .await
+        .unwrap();
+    assert_eq!(persisted["enabled"], true);
+    assert_eq!(persisted["watching"], true);
+
+    let disabled = restarted
+        .call("plugins.set_developer_mode", json!({ "enabled": false }))
+        .await
+        .unwrap();
+    assert_eq!(disabled["watching"], false);
+    assert!(!plugins_dir.join(".developer-mode").exists());
+
+    let before_manual = restarted.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    restarted
+        .call("plugins.reload_development", Value::Null)
+        .await
+        .unwrap();
+    let after_manual = restarted.call("bundle.alpha", Value::Null).await.unwrap()["pid"].clone();
+    assert_ne!(after_manual, before_manual);
 }
 
 #[cfg(unix)]

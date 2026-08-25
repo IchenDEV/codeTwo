@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BrainCircuit,
+  Bug,
   ChartNoAxesColumn,
   ChevronDown,
   Copy,
@@ -22,6 +23,7 @@ import {
   ScanText,
   SlidersHorizontal,
   Trash2,
+  Wrench,
 } from "lucide-react";
 
 import {
@@ -36,6 +38,7 @@ import {
   discardSessionWorktree,
   getAppUpdateStatus,
   getDeviceSyncStatus,
+  getPluginDeveloperStatus,
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
@@ -56,13 +59,18 @@ import {
   getProjectScheduling,
   installProvider,
   openNativePath,
+  openDevtools,
+  onPluginsChanged,
   pickProjectIcon,
   setProviderEnabled,
   setProjectScheduling,
   upgradeProvider,
   setDeviceSyncEnabled,
+  setPluginDeveloperMode,
   syncDeviceDataNow,
+  reloadDevelopmentPlugins,
   type DeviceSyncStatus,
+  type PluginDeveloperStatus,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
@@ -106,6 +114,7 @@ export type SettingsTab =
   | "appshots"
   | "browser-use"
   | "usage"
+  | "developer"
   | "browser";
 
 type SettingsNavItem = {
@@ -148,6 +157,7 @@ const NAV_GROUPS: {
       { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
       { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
       { id: "browser", icon: Globe, labelKey: "settings.browser" },
+      { id: "developer", icon: Wrench, labelKey: "settings.developer" },
     ],
   },
 ];
@@ -319,6 +329,10 @@ export function SettingsPage({
   deviceSyncStatusLoader = getDeviceSyncStatus,
   deviceSyncEnabledSaver = setDeviceSyncEnabled,
   deviceSyncStarter = syncDeviceDataNow,
+  pluginDeveloperStatusLoader = getPluginDeveloperStatus,
+  pluginDeveloperModeSaver = setPluginDeveloperMode,
+  pluginDeveloperReloader = reloadDevelopmentPlugins,
+  devtoolsOpener = openDevtools,
 }: {
   bindings: KeymapEntry[];
   capturing: string | null;
@@ -371,6 +385,10 @@ export function SettingsPage({
   deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
   deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
+  pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
+  pluginDeveloperModeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
+  pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
+  devtoolsOpener?: () => Promise<void>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -401,6 +419,10 @@ export function SettingsPage({
   const [providerError, setProviderError] = useState<{ id: string; text: string } | null>(null);
   const [deviceSync, setDeviceSync] = useState<DeviceSyncStatus | null>(null);
   const [deviceSyncSaving, setDeviceSyncSaving] = useState(false);
+  const [pluginDevelopment, setPluginDevelopment] = useState<PluginDeveloperStatus | null>(null);
+  const [pluginDevelopmentSaving, setPluginDevelopmentSaving] = useState(false);
+  const [pluginDevelopmentReloading, setPluginDevelopmentReloading] = useState(false);
+  const [pluginDevelopmentError, setPluginDevelopmentError] = useState<string | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -535,6 +557,34 @@ export function SettingsPage({
       active = false;
     };
   }, [tab, deviceSyncStatusLoader]);
+  useEffect(() => {
+    if (tab !== "developer") return;
+    let active = true;
+    let unsubscribe = () => {};
+    const refresh = () => {
+      void pluginDeveloperStatusLoader()
+        .then((status) => {
+          if (active) {
+            setPluginDevelopment(status);
+            setPluginDevelopmentError(null);
+          }
+        })
+        .catch((error) => {
+          if (active) {
+            setPluginDevelopmentError(t("settings.developerLoadFailed", { error: String(error) }));
+          }
+        });
+    };
+    refresh();
+    void onPluginsChanged(refresh).then((stop) => {
+      if (active) unsubscribe = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [tab, pluginDeveloperStatusLoader, t]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(project?.name ?? "");
   const [projectProfileSaving, setProjectProfileSaving] = useState(false);
@@ -774,6 +824,61 @@ export function SettingsPage({
       setDeviceSync((current) => current ? { ...current, state: "error", message: String(error) } : current);
     }
   };
+
+  const savePluginDeveloperMode = async (enabled: boolean) => {
+    setPluginDevelopmentSaving(true);
+    setPluginDevelopmentError(null);
+    try {
+      setPluginDevelopment(await pluginDeveloperModeSaver(enabled));
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerSaveFailed", { error: String(error) }));
+    } finally {
+      setPluginDevelopmentSaving(false);
+    }
+  };
+
+  const reloadPlugins = async () => {
+    setPluginDevelopmentReloading(true);
+    setPluginDevelopmentError(null);
+    try {
+      setPluginDevelopment(await pluginDeveloperReloader());
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerReloadFailed", { error: String(error) }));
+    } finally {
+      setPluginDevelopmentReloading(false);
+    }
+  };
+
+  const showWebviewDevtools = async () => {
+    setPluginDevelopmentError(null);
+    try {
+      await devtoolsOpener();
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerDevtoolsFailed", { error: String(error) }));
+    }
+  };
+
+  const pluginDevelopmentStatus = (() => {
+    if (!pluginDevelopment) return t("settings.pluginHotReloadLoading");
+    if (!pluginDevelopment.enabled) return t("settings.pluginHotReloadOff");
+    if (!pluginDevelopment.watching) return t("settings.pluginHotReloadUnavailable");
+    return t("settings.pluginHotReloadWatching", { path: pluginDevelopment.plugins_dir });
+  })();
+
+  const pluginReloadRecord = pluginDevelopment?.last_reload;
+  const pluginReloadDetail = pluginReloadRecord?.success
+    ? t("settings.pluginHotReloadLastSuccess", {
+        plugins: pluginReloadRecord.plugins.length
+          ? pluginReloadRecord.plugins.join(", ")
+          : t("settings.allInstalledPlugins"),
+        time: new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(pluginReloadRecord.at),
+      })
+    : pluginReloadRecord?.error
+      ? t("settings.pluginHotReloadLastError", { error: pluginReloadRecord.error })
+      : null;
 
   const deviceSyncHint = (() => {
     switch (deviceSync?.state) {
@@ -1093,15 +1198,7 @@ export function SettingsPage({
 
         <ScrollArea className="min-h-0 flex-1">
           <div
-            className={cn(
-              "mx-auto w-full pb-20",
-              tab === "memory"
-                ? "settings-memory-page"
-                : tab === "pets"
-                  ? "settings-pets-page"
-                  : "settings-standard-page",
-              tab === "project" && "settings-project-page",
-            )}
+            className="settings-page mx-auto w-full pb-20"
           >
             {tab === "general" && (
               <Page title={t("settings.general")} description={t("settings.generalHint")}>
@@ -2106,6 +2203,66 @@ export function SettingsPage({
                     );
                   })}
                 </div>
+              </Page>
+            )}
+
+            {tab === "developer" && (
+              <Page title={t("settings.developer")} description={t("settings.developerHint")}>
+                <Row label={t("settings.developerMode")} hint={t("settings.developerModeHint")}>
+                  <Switch
+                    checked={pluginDevelopment?.enabled ?? false}
+                    disabled={pluginDevelopmentSaving}
+                    onCheckedChange={(checked) => void savePluginDeveloperMode(checked)}
+                    aria-label={t("settings.developerMode")}
+                  />
+                </Row>
+
+                <GroupHeading>{t("settings.pluginDevelopment")}</GroupHeading>
+
+                <Row
+                  label={t("settings.pluginHotReload")}
+                  hint={(
+                    <span aria-live="polite">
+                      <span className="block">{pluginDevelopmentStatus}</span>
+                      {pluginReloadDetail && (
+                        <span
+                          className="mt-0.5 block"
+                          role={pluginReloadRecord?.success ? undefined : "alert"}
+                        >
+                          {pluginReloadDetail}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pluginDevelopmentReloading || pluginDevelopmentSaving}
+                    onClick={() => void reloadPlugins()}
+                  >
+                    <RefreshCw
+                      data-icon="inline-start"
+                      className={cn(pluginDevelopmentReloading && "animate-spin")}
+                    />
+                    {pluginDevelopmentReloading
+                      ? t("settings.reloadingPlugins")
+                      : t("settings.reloadPlugins")}
+                  </Button>
+                </Row>
+
+                <Row label={t("settings.webviewDevtools")} hint={t("settings.webviewDevtoolsHint")}>
+                  <Button variant="outline" size="sm" onClick={() => void showWebviewDevtools()}>
+                    <Bug data-icon="inline-start" />
+                    {t("settings.openWebviewDevtools")}
+                  </Button>
+                </Row>
+
+                {pluginDevelopmentError && (
+                  <p className="pt-2 text-hint text-destructive" role="alert">
+                    {pluginDevelopmentError}
+                  </p>
+                )}
               </Page>
             )}
 

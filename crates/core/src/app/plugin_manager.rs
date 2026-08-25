@@ -342,6 +342,32 @@ impl PluginManager {
         &self,
         plugins_dir: &std::path::Path,
     ) -> Result<(), PluginManagerError> {
+        self.replace_installed_bundles(plugins_dir, BTreeSet::new())
+    }
+
+    /// Re-read the installed bundle inventory and force the named bundle runtimes through the
+    /// loader even when their manifests are unchanged.
+    pub fn reload_installed_bundles<I, S>(
+        &self,
+        plugins_dir: &std::path::Path,
+        bundle_ids: I,
+    ) -> Result<(), PluginManagerError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let forced = bundle_ids
+            .into_iter()
+            .map(|id| format!("bundle:{}", id.as_ref()))
+            .collect();
+        self.replace_installed_bundles(plugins_dir, forced)
+    }
+
+    fn replace_installed_bundles(
+        &self,
+        plugins_dir: &std::path::Path,
+        forced: BTreeSet<String>,
+    ) -> Result<(), PluginManagerError> {
         let installed = plugin::load_dir(plugins_dir)
             .map_err(|error| PluginManagerError::Loader(error.to_string()))?;
         let mut source = DynamicPluginSource::default();
@@ -358,7 +384,7 @@ impl PluginManager {
                 .fingerprints
                 .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
         }
-        self.replace_dynamic_factory_source("installed-bundles", source)
+        self.replace_dynamic_factory_source("installed-bundles", source, forced)
     }
 
     pub(crate) fn forget_installed_bundle_policy(
@@ -376,6 +402,7 @@ impl PluginManager {
         &self,
         source_name: &str,
         source: DynamicPluginSource,
+        forced: BTreeSet<String>,
     ) -> Result<(), PluginManagerError> {
         let mut loader = self.loader.lock().unwrap();
         let config = self.config.lock().unwrap();
@@ -396,7 +423,8 @@ impl PluginManager {
 
         let (combined_registry, combined_defaults) =
             combine_factory_catalog(&catalog.base_registry, &catalog.base_defaults, &sources)?;
-        let changed = changed_dynamic_factories(&previous_source, &source);
+        let mut changed = changed_dynamic_factories(&previous_source, &source);
+        changed.extend(forced);
         let previous_dynamic_names = catalog
             .sources
             .values()

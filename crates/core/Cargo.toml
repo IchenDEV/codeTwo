@@ -27,6 +27,7 @@ toml = "0.8"
 chrono = "0.4"
 chrono-tz = "0.10"
 tempfile = "3"
+notify = "8.2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # Ghostty's VT engine (parsing, scrollback, reflow) behind a C API. NOTE: this builds Ghostty from
 # source with Zig — see the terminal section of docs/architecture.md for the toolchain requirement.
