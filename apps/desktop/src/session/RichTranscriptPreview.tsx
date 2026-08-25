@@ -114,9 +114,6 @@ export function RichTranscriptPreview() {
             loadingEarlier={false}
             onLoadEarlier={() => {}}
             scroll={scroll}
-            petAnimation="running"
-            voiceEnabled={false}
-            onVoiceText={() => {}}
             onAddSelection={() => {}}
             onExplainSelection={() => {}}
             onAskSelectionInSideChat={() => {}}

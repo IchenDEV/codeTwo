@@ -7,10 +7,12 @@ import Electrobun, {
   Screen,
   Utils,
 } from "electrobun/bun";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 
 import type {
   CodeTwoRPC,
+  DesktopPetState,
   DesktopEvent,
   DialogFilter,
   OpenDialogOptions,
@@ -112,6 +114,7 @@ async function openWorkspace(path: string, target: WorkspaceOpenTarget): Promise
 const queuedEvents: DesktopEvent[] = [];
 let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
+let desktopPetRpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let appshots: AppshotManager;
 const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
 if (process.platform === "darwin") {
@@ -120,6 +123,77 @@ if (process.platform === "darwin") {
 const dataDir =
   process.env.CODETWO_DATA_DIR ??
   join(Utils.paths.appData, process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev");
+const desktopPetPositionPath = join(dataDir, "desktop-pet-window.json");
+const desktopPetWidth = 184;
+const desktopPetHeights = { small: 156, medium: 180, large: 204 } as const;
+let desktopPetState: DesktopPetState = {
+  visible: false,
+  animation: "idle",
+  voiceEnabled: false,
+  appearance: {
+    petActivityEnabled: true,
+    petSize: "medium",
+    petSource: "builtin",
+    petId: "naiwa",
+    petName: "Naiwa",
+  },
+};
+let desktopPetWindow: BrowserWindow | null = null;
+let desktopPetRendererReady = false;
+
+function desktopPetFrame() {
+  const display = Screen.getPrimaryDisplay().workArea;
+  const height = desktopPetHeights[desktopPetState.appearance.petSize];
+  const fallback = {
+    x: display.x + display.width - desktopPetWidth - 24,
+    y: display.y + display.height - height - 24,
+  };
+  try {
+    const saved = JSON.parse(readFileSync(desktopPetPositionPath, "utf8")) as {
+      x?: unknown;
+      y?: unknown;
+    };
+    if (typeof saved.x !== "number" || typeof saved.y !== "number") throw new Error("invalid");
+    const { x, y } = saved as { x: number; y: number };
+    const workArea = Screen.getAllDisplays()
+      .map((item) => item.workArea)
+      .find((area) =>
+        x >= area.x - desktopPetWidth / 2
+        && x <= area.x + area.width - desktopPetWidth / 2
+        && y >= area.y - height / 2
+        && y <= area.y + area.height - height / 2
+      );
+    if (!workArea) return { ...fallback, width: desktopPetWidth, height };
+    return {
+      x: Math.min(workArea.x + workArea.width - desktopPetWidth, Math.max(workArea.x, x)),
+      y: Math.min(workArea.y + workArea.height - height, Math.max(workArea.y, y)),
+      width: desktopPetWidth,
+      height,
+    };
+  } catch {
+    return { ...fallback, width: desktopPetWidth, height };
+  }
+}
+
+function applyDesktopPetState() {
+  if (!desktopPetWindow) return;
+  desktopPetWindow.setSize(
+    desktopPetWidth,
+    desktopPetHeights[desktopPetState.appearance.petSize],
+  );
+  if (desktopPetRendererReady && desktopPetState.visible) desktopPetWindow.showInactive();
+  else desktopPetWindow.hide();
+  desktopPetRpc.send.event({ name: "desktop-pet-state", payload: desktopPetState });
+}
+
+function persistDesktopPetPosition(x: number, y: number) {
+  try {
+    mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+    writeFileSync(desktopPetPositionPath, `${JSON.stringify({ x, y })}\n`, { mode: 0o600 });
+  } catch {
+    // A read-only app-data directory should not make the companion unusable for this run.
+  }
+}
 const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
 const host = new NativeHost({
   executable: join(PATHS.RESOURCES_FOLDER, "app", "bin", hostExecutable),
@@ -183,6 +257,10 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
       browserZoom: ({ webviewId, factor }) => {
         BrowserView.getById(webviewId)?.setPageZoom(factor);
       },
+      desktopPetUpdate: (state) => {
+        desktopPetState = state;
+        applyDesktopPetState();
+      },
       openDevtools: () => mainWindow.webview.openDevTools(),
       updateStatus: getAppUpdateStatus,
       updateCheck: startAppUpdateCheck,
@@ -195,6 +273,25 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         rpc.send.appshotCaptured(capture);
         mainWindow.show();
         return capture;
+      },
+    },
+    messages: {},
+  },
+});
+
+desktopPetRpc = BrowserView.defineRPC<CodeTwoRPC>({
+  maxRequestTime: Infinity,
+  handlers: {
+    requests: {
+      desktopPetState: () => desktopPetState,
+      desktopPetHide: () => {
+        desktopPetState = { ...desktopPetState, visible: false };
+        applyDesktopPetState();
+        rpc.send.event({ name: "desktop-pet-hidden", payload: null });
+      },
+      desktopPetVoiceText: ({ text }) => {
+        const value = text.trim().slice(0, 10_000);
+        if (value) rpc.send.event({ name: "desktop-pet-voice-text", payload: value });
       },
     },
     messages: {},
@@ -225,6 +322,41 @@ const mainWindow = new BrowserWindow({
   transparent: process.platform === "darwin",
   sandbox: false,
 });
+desktopPetWindow = new BrowserWindow({
+  title: `${applicationName} Pet`,
+  frame: desktopPetFrame(),
+  url: "views://main/index.html?desktop-pet",
+  renderer: "native",
+  rpc: desktopPetRpc,
+  titleBarStyle: "hidden",
+  transparent: true,
+  passthrough: true,
+  hidden: true,
+  activate: false,
+  styleMask: {
+    Titled: false,
+    Closable: false,
+    Miniaturizable: false,
+    Resizable: false,
+    FullSizeContentView: true,
+    UtilityWindow: true,
+    NonactivatingPanel: process.platform === "darwin",
+  },
+  sandbox: false,
+});
+desktopPetWindow.setAlwaysOnTop(true);
+desktopPetWindow.setVisibleOnAllWorkspaces(true);
+desktopPetWindow.webview.on("dom-ready", () => {
+  desktopPetRendererReady = true;
+  applyDesktopPetState();
+});
+desktopPetWindow.on("move", (event) => {
+  const position = (event as { data?: { x?: unknown; y?: unknown } }).data;
+  if (typeof position?.x === "number" && typeof position.y === "number") {
+    persistDesktopPetPosition(position.x, position.y);
+  }
+});
+mainWindow.on("close", () => desktopPetWindow?.close());
 appshots = new AppshotManager(
   dataDir,
   process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev",
