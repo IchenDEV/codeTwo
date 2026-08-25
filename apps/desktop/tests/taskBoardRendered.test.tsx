@@ -15,6 +15,7 @@ activateDom()
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const { ToastProvider } = await import("../src/ui/toast")
+const { I18nProvider } = await import("../src/i18n")
 const { Simulate } = await import("react-dom/test-utils")
 const { TASKBOARD_SNAPSHOT_VERSION, TASKBOARD_STORAGE_KEY, createBoardTask } = await import(
   "../src/taskboard/taskBoard"
@@ -49,13 +50,16 @@ afterEach(async () => {
   }
 })
 
-async function renderBoard(props = {}) {
+async function renderBoard(props = {}, locale = "zh-CN") {
   activateDom()
   installStorage()
+  dom.window.localStorage.setItem("codetwo.language", locale)
   const mounted = mount(
-    <ToastProvider>
-      <TaskBoardPage {...props} />
-    </ToastProvider>,
+    <I18nProvider>
+      <ToastProvider>
+        <TaskBoardPage {...props} />
+      </ToastProvider>
+    </I18nProvider>,
   )
   mountedRoots.push(mounted)
   await flush()
@@ -173,7 +177,8 @@ describe("TaskBoardPage rendered", () => {
     expect(content?.className).toContain("max-w-4xl")
     expect(content?.className).toContain("sm:px-8")
     expect(board?.className).not.toContain("px-6")
-    expect(boardContent?.className).toContain("max-w-4xl")
+    expect(boardContent?.className).not.toContain("max-w-4xl")
+    expect(boardContent?.className).toContain("w-full")
     expect(boardContent?.className).toContain("px-6")
     expect(boardContent?.className).toContain("sm:px-8")
     expect(controls?.className).toContain("mt-8")
@@ -187,6 +192,9 @@ describe("TaskBoardPage rendered", () => {
       "in_review",
       "done",
     ])
+    expect(columns.every((column) => column.className.includes("min-w-72"))).toBe(true)
+    expect(columns.every((column) => column.className.includes("flex-1"))).toBe(true)
+    expect(columns.every((column) => !column.className.includes("shrink-0"))).toBe(true)
     expect(columns.map((column) => column.querySelectorAll("[data-task-drop-before]").length)).toEqual([
       3,
       2,
@@ -195,6 +203,16 @@ describe("TaskBoardPage rendered", () => {
     ])
     expect(view.container.querySelectorAll('[draggable="true"]')).toHaveLength(9)
     expect(view.container.querySelectorAll("[data-task-drop-end]")).toHaveLength(4)
+    expect(view.container.textContent).not.toContain("TASK-")
+  })
+
+  test("uses the selected language for board chrome and starter content", async () => {
+    const view = await renderBoard({}, "en")
+
+    expect(view.container.querySelector("h1")?.textContent).toBe("Task board")
+    expect(view.container.textContent).toContain("Confirm the task workflow")
+    expect(view.container.textContent).toContain("In progress")
+    expect(view.container.textContent).not.toContain("任务看板")
   })
 
   test("validates, creates, renders, and persists a new task", async () => {
@@ -255,6 +273,15 @@ describe("TaskBoardPage rendered", () => {
 
     await click(button(view.container, "开始任务"))
     expect(started).toEqual(["TASK-2000"])
+  })
+
+  test("labels the primary task action for each workflow stage", async () => {
+    const view = await renderBoard({ onStartTask: () => {} })
+
+    expect(button(view.container.querySelector('[data-task-column="todo"]'), "开始任务")).toBeTruthy()
+    expect(button(view.container.querySelector('[data-task-column="in_progress"]'), "继续任务")).toBeTruthy()
+    expect(button(view.container.querySelector('[data-task-column="in_review"]'), "审阅任务")).toBeTruthy()
+    expect(button(view.container.querySelector('[data-task-column="done"]'), "重新处理")).toBeTruthy()
   })
 
   test("searches the rendered cards and preserves exactly four columns", async () => {

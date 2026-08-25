@@ -292,6 +292,7 @@ export function DocEditor({
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
   const t = useT();
+  const editorRootRef = useRef<HTMLDivElement>(null);
   // The Composer's color scheme is transient UI state. Keep it outside the Canvas envelope so a
   // live theme change updates mounted editable blocks without rewriting readonly/history data.
   const scheme = useColorScheme();
@@ -311,6 +312,14 @@ export function DocEditor({
       },
     },
   });
+
+  useEffect(() => {
+    const editable = editorRootRef.current?.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) return;
+    editable.setAttribute("role", "textbox");
+    editable.setAttribute("aria-label", t("composer.documentInput"));
+    editable.setAttribute("aria-multiline", "true");
+  }, [t]);
 
   const insertCanvasDraft = useCallback((draft: CanvasDraft, options: CanvasInsertOptions = {}) => {
     if (!canvasEnabled) return;
@@ -711,6 +720,7 @@ export function DocEditor({
 
   return (
     <div
+      ref={editorRootRef}
       data-composer-editor
       onPasteCapture={(event) => {
         if (!onPasteImages) return;

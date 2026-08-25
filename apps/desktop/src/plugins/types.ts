@@ -227,7 +227,9 @@ export interface PluginManagerLabels {
   bundleInstalled: (result: PluginManagerBundleInstallResult) => string;
   bundleManagement: string;
   bundleManagementUserOnly: string;
+  reviewSource: string;
   trustRequired: string;
+  trustBeforeEnabling: string;
   trusted: string;
   notTrusted: string;
   trustPlugin: string;

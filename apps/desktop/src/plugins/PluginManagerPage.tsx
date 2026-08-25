@@ -105,8 +105,10 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   bundleManagement: "Bundle management",
   bundleManagementUserOnly:
     "Installation, trust, and removal are managed in User scope.",
+  reviewSource: "Review source",
   trustRequired:
     "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
+  trustBeforeEnabling: "Trust required before enabling",
   trusted: "Trusted",
   notTrusted: "Not trusted",
   trustPlugin: "Trust plugin",
@@ -697,6 +699,9 @@ function PluginDetails({
   const configurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
+  const trustRequired = Boolean(
+    plugin.bundle?.requiresTrust && !plugin.bundle.trusted,
+  );
   return (
     <article data-plugin-details className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5">
       <div className="flex min-w-0 items-start justify-between gap-4">
@@ -715,7 +720,14 @@ function PluginDetails({
           </p>
         </div>
         <div className="shrink-0">
-          {plugin.bundle &&
+          {trustRequired ? (
+            <span
+              data-plugin-trust-gate
+              className="text-fine text-muted-foreground"
+            >
+              {labels.trustBeforeEnabling}
+            </span>
+          ) : plugin.bundle &&
           !plugin.bundle.runtimeManaged &&
           !onSetBundleEnabled ? (
             <span className="text-fine text-muted-foreground">
@@ -731,10 +743,7 @@ function PluginDetails({
               state={plugin.state}
               scope={scope}
               labels={labels}
-              disabled={
-                busy ||
-                Boolean(plugin.bundle?.requiresTrust && !plugin.bundle.trusted)
-              }
+              disabled={busy}
               onChange={(request) => {
                 if (
                   plugin.bundle &&
@@ -755,7 +764,9 @@ function PluginDetails({
         </div>
       </div>
       <div className="mt-8 flex flex-col gap-5">
-        <StatusSummary state={plugin.state} labels={labels} />
+        {trustRequired ? null : (
+          <StatusSummary state={plugin.state} labels={labels} />
+        )}
         {plugin.state.error ? (
           <p
             role="alert"

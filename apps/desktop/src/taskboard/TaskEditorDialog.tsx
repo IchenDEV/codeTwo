@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useT, type Translate } from "@/i18n"
 
 import {
   PRIORITIES,
@@ -50,19 +51,27 @@ interface TaskEditorDialogProps {
   onSave: (value: TaskEditorValue) => void
 }
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: "待处理",
-  in_progress: "进行中",
-  in_review: "待审阅",
-  done: "已完成",
+const STATUS_LABEL_KEYS = {
+  todo: "taskboard.status.todo",
+  in_progress: "taskboard.status.inProgress",
+  in_review: "taskboard.status.inReview",
+  done: "taskboard.status.done",
+} as const
+
+const PRIORITY_LABEL_KEYS = {
+  none: "taskboard.priority.none",
+  low: "taskboard.priority.low",
+  medium: "taskboard.priority.medium",
+  high: "taskboard.priority.high",
+  urgent: "taskboard.priority.urgent",
+} as const
+
+export function taskStatusLabel(t: Translate, status: TaskStatus): string {
+  return t(STATUS_LABEL_KEYS[status])
 }
 
-const PRIORITY_LABELS: Record<TaskPriority, string> = {
-  none: "无优先级",
-  low: "低优先级",
-  medium: "中优先级",
-  high: "高优先级",
-  urgent: "紧急",
+export function taskPriorityLabel(t: Translate, priority: TaskPriority): string {
+  return t(PRIORITY_LABEL_KEYS[priority])
 }
 
 function normalizeLabels(value: string): string[] {
@@ -83,6 +92,7 @@ export function TaskEditorDialog({
   onCancel,
   onSave,
 }: TaskEditorDialogProps) {
+  const t = useT()
   const formId = useId()
   const titleId = `${formId}-title`
   const titleErrorId = `${formId}-title-error`
@@ -118,9 +128,13 @@ export function TaskEditorDialog({
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-h-dvh overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{editing ? "编辑任务" : "新建任务"}</DialogTitle>
+          <DialogTitle>
+            {t(editing ? "taskboard.editor.editTitle" : "taskboard.editor.newTitle")}
+          </DialogTitle>
           <DialogDescription>
-            {editing ? "更新任务内容和所在阶段。" : "记录下一步工作，并把它放到合适的阶段。"}
+            {t(editing
+              ? "taskboard.editor.editDescription"
+              : "taskboard.editor.newDescription")}
           </DialogDescription>
         </DialogHeader>
 
@@ -128,7 +142,7 @@ export function TaskEditorDialog({
           <FieldGroup>
             <Field data-invalid={titleMissing || undefined}>
               <FieldLabel htmlFor={titleId}>
-                标题 <span aria-hidden className="text-destructive">*</span>
+                {t("taskboard.editor.title")} <span aria-hidden className="text-destructive">*</span>
               </FieldLabel>
               <Input
                 id={titleId}
@@ -136,21 +150,21 @@ export function TaskEditorDialog({
                 autoFocus
                 aria-invalid={titleMissing || undefined}
                 aria-describedby={titleMissing ? titleErrorId : undefined}
-                placeholder="例如：完善任务筛选体验"
+                placeholder={t("taskboard.editor.titlePlaceholder")}
                 value={title}
                 onChange={(event) => setTitle(event.currentTarget.value)}
               />
               <FieldError id={titleErrorId}>
-                {titleMissing ? "请输入任务标题" : null}
+                {titleMissing ? t("taskboard.editor.titleRequired") : null}
               </FieldError>
             </Field>
 
             <Field>
-              <FieldLabel htmlFor={descriptionId}>描述</FieldLabel>
+              <FieldLabel htmlFor={descriptionId}>{t("taskboard.editor.description")}</FieldLabel>
               <Textarea
                 id={descriptionId}
                 rows={3}
-                placeholder="补充背景、验收标准或实现提示…"
+                placeholder={t("taskboard.editor.descriptionPlaceholder")}
                 value={description}
                 onChange={(event) => setDescription(event.currentTarget.value)}
               />
@@ -158,7 +172,9 @@ export function TaskEditorDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <Field>
-                <FieldLabel id={`${formId}-status-label`}>状态</FieldLabel>
+                <FieldLabel id={`${formId}-status-label`}>
+                  {t("taskboard.editor.status")}
+                </FieldLabel>
                 <Select
                   value={status}
                   onValueChange={(value) => value && setStatus(value as TaskStatus)}
@@ -168,13 +184,13 @@ export function TaskEditorDialog({
                     className="w-full"
                     aria-labelledby={`${formId}-status-label`}
                   >
-                    <SelectValue>{STATUS_LABELS[status]}</SelectValue>
+                    <SelectValue>{taskStatusLabel(t, status)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
                       {TASK_STATUSES.map((value) => (
                         <SelectItem key={value} value={value}>
-                          {STATUS_LABELS[value]}
+                          {taskStatusLabel(t, value)}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -183,7 +199,9 @@ export function TaskEditorDialog({
               </Field>
 
               <Field>
-                <FieldLabel id={`${formId}-priority-label`}>优先级</FieldLabel>
+                <FieldLabel id={`${formId}-priority-label`}>
+                  {t("taskboard.editor.priority")}
+                </FieldLabel>
                 <Select
                   value={priority}
                   onValueChange={(value) => value && setPriority(value as TaskPriority)}
@@ -193,13 +211,13 @@ export function TaskEditorDialog({
                     className="w-full"
                     aria-labelledby={`${formId}-priority-label`}
                   >
-                    <SelectValue>{PRIORITY_LABELS[priority]}</SelectValue>
+                    <SelectValue>{taskPriorityLabel(t, priority)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
                       {PRIORITIES.map((value) => (
                         <SelectItem key={value} value={value}>
-                          {PRIORITY_LABELS[value]}
+                          {taskPriorityLabel(t, value)}
                         </SelectItem>
                       ))}
                     </SelectGroup>
@@ -209,15 +227,15 @@ export function TaskEditorDialog({
             </div>
 
             <Field>
-              <FieldLabel htmlFor={labelsId}>标签</FieldLabel>
+              <FieldLabel htmlFor={labelsId}>{t("taskboard.editor.labels")}</FieldLabel>
               <Input
                 id={labelsId}
                 size="compact"
-                placeholder="输入标签，用逗号分隔"
+                placeholder={t("taskboard.editor.labelsPlaceholder")}
                 value={labels}
                 onChange={(event) => setLabels(event.currentTarget.value)}
               />
-              <FieldDescription>相同标签会自动合并。</FieldDescription>
+              <FieldDescription>{t("taskboard.editor.labelsHint")}</FieldDescription>
             </Field>
 
           </FieldGroup>
@@ -225,15 +243,13 @@ export function TaskEditorDialog({
 
         <DialogFooter>
           <Button type="button" variant="ghost" size="compact" onClick={onCancel}>
-            取消
+            {t("taskboard.editor.cancel")}
           </Button>
           <Button type="submit" size="compact" form={formId}>
-            {editing ? "保存更改" : "创建任务"}
+            {t(editing ? "taskboard.editor.save" : "taskboard.editor.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
-
-export { PRIORITY_LABELS, STATUS_LABELS }

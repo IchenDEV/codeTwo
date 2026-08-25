@@ -64,7 +64,13 @@ mock.module("@blocknote/mantine", () => ({
     return React.createElement(
       actualCanvasRuntimeContext.Provider,
       { value: runtime },
-      React.createElement(React.Fragment, null, props.children, mountedCanvasBlock),
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement("div", { className: "ProseMirror", contentEditable: true }),
+        props.children,
+        mountedCanvasBlock,
+      ),
     );
   },
 }));
@@ -647,6 +653,10 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     );
     const editorSurface = view.container.querySelector<HTMLElement>("[data-composer-editor]");
     expect(editorSurface).toBeTruthy();
+    const contentEditable = editorSurface?.querySelector<HTMLElement>(".ProseMirror");
+    expect(contentEditable?.getAttribute("role")).toBe("textbox");
+    expect(contentEditable?.getAttribute("aria-label")).toBe("composer.documentInput");
+    expect(contentEditable?.getAttribute("aria-multiline")).toBe("true");
 
     const textPaste = new dom.window.Event("paste", { bubbles: true, cancelable: true });
     Object.defineProperty(textPaste, "clipboardData", {

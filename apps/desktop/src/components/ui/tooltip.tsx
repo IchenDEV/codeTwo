@@ -2,14 +2,19 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
 
+const TOOLTIP_FIRST_OPEN_DELAY = 600
+const TOOLTIP_INSTANT_PHASE_TIMEOUT = 400
+
 function TooltipProvider({
-  delay = 0,
+  delay = TOOLTIP_FIRST_OPEN_DELAY,
+  timeout = TOOLTIP_INSTANT_PHASE_TIMEOUT,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
     <TooltipPrimitive.Provider
       data-slot="tooltip-provider"
       delay={delay}
+      timeout={timeout}
       {...props}
     />
   )
@@ -65,4 +70,11 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export {
+  TOOLTIP_FIRST_OPEN_DELAY,
+  TOOLTIP_INSTANT_PHASE_TIMEOUT,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+}

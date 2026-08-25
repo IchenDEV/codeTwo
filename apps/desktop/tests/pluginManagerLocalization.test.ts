@@ -26,6 +26,8 @@ describe("plugin manager localization", () => {
       "进程运行时",
     );
     expect(labels.componentKind("composerAction")).toBe("输入区操作");
+    expect(labels.reviewSource).toBe("检查源码");
+    expect(labels.trustBeforeEnabling).toBe("信任后才能启用");
     expect(labels.changeApplied("记忆", "disabled")).toBe(
       "记忆 现已设为已停用。",
     );
