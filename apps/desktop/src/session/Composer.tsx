@@ -135,7 +135,7 @@ interface ComposerProps {
 
 const LIQUID_AVAILABLE = typeof ResizeObserver !== "undefined";
 const COMPOSER_LIQUID_SHADOW =
-  "0 1px 2px color-mix(in srgb, var(--ds-color-shadow) 30%, transparent), 0 4px 16px color-mix(in srgb, var(--ds-color-shadow) 50%, transparent)";
+  "0 1px 2px color-mix(in srgb, var(--ds-color-shadow) 30%, transparent), 0 4px 16px color-mix(in srgb, var(--ds-color-shadow) 50%, transparent), inset 0 0 0 0.5px var(--composer-liquid-border-color)";
 
 function useReducedMotionPreference() {
   const [reduced, setReduced] = useState(() =>
@@ -174,12 +174,26 @@ function ComposerLiquidSurface({
       fill={docMode ? "transparent" : "var(--card)"}
       filterPadding={20}
       shadow={docMode ? undefined : COMPOSER_LIQUID_SHADOW}
-      className={cn("relative z-10", docMode && "flex min-h-0 flex-1")}
+      className={cn("composer-liquid-surface relative z-10", docMode && "flex min-h-0 flex-1")}
     >
       <Liquid.Item
         morph={reducedMotion
           ? undefined
-          : { shape: true, speed: 1.35, bounce: 0.2, contentBlur: 0 }}
+          : {
+              shape: true,
+              speed: 1.1,
+              bounce: 0,
+              contentBlur: 0,
+              advanced: {
+                evolve: {
+                  roundness: 0.18,
+                  anticipation: 50,
+                  travel: 8,
+                  cornerDuration: 260,
+                  cornerEase: "cubic-bezier(0.16, 1, 0.3, 1)",
+                },
+              },
+            }}
       >
         {children}
       </Liquid.Item>
@@ -1635,8 +1649,10 @@ export function Composer({
                 : // The renderer delegates the fill and raised shadow to liquid-gooey so its
                   // silhouette can lag resizing without softening the editor's actual DOM.
                   cn(
-                    "rounded-(--ds-composer-radius) ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
-                    LIQUID_AVAILABLE ? "bg-transparent" : "bg-card shadow-raised",
+                    "rounded-(--ds-composer-radius)",
+                    LIQUID_AVAILABLE
+                      ? "bg-transparent"
+                      : "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
                   ),
             )}
           >

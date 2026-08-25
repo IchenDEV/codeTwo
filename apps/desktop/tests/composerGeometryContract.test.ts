@@ -9,6 +9,7 @@ const tokens = readFileSync(
   new URL("../src/design/tokens.css", import.meta.url),
   "utf8",
 );
+const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const voiceButton = readFileSync(
   new URL("../src/voice/VoiceButton.tsx", import.meta.url),
   "utf8",
@@ -22,11 +23,18 @@ describe("composer geometry contract", () => {
     expect(composer).toContain("data-gooey-composer");
     expect(composer).toContain('data-composer-mode={docMode ? "document" : "compact"}');
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
+    expect(composer).toContain("speed: 1.1");
+    expect(composer).toContain("bounce: 0");
+    expect(composer).toContain("roundness: 0.18");
+    expect(composer).toContain("travel: 8");
     expect(composer).toContain(
-      ": { shape: true, speed: 1.35, bounce: 0.2, contentBlur: 0 }",
+      "inset 0 0 0 0.5px var(--composer-liquid-border-color)",
     );
+    expect(composer).toContain('"composer-liquid-surface relative z-10"');
+    expect(styles).toContain(".composer-liquid-surface:focus-within");
+    expect(composer).toContain('? "bg-transparent"');
     expect(composer).toContain(
-      'LIQUID_AVAILABLE ? "bg-transparent" : "bg-card shadow-raised"',
+      ': "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07]',
     );
     expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
     expect(composer).toContain(
