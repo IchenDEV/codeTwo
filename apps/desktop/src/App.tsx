@@ -1856,11 +1856,13 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = useCallback(async (): Promise<ProviderInfo[]> => {
+  const refreshProviders = useCallback(async (checkUpdates = false): Promise<ProviderInfo[]> => {
     const request = ++providerRegistryRequestRef.current;
     setProvidersStatus("loading");
     try {
-      const list = await loadProviderRegistry(listProviders);
+      const list = checkUpdates
+        ? await listProviders(true)
+        : await loadProviderRegistry(listProviders);
       if (request !== providerRegistryRequestRef.current) return list;
       setProviders(list);
       setProvidersStatus("ready");
@@ -1887,6 +1889,11 @@ export default function App() {
       throw error;
     }
   }, []);
+
+  const refreshProviderUpdates = useCallback(
+    () => refreshProviders(true),
+    [refreshProviders],
+  );
 
   useEffect(() => {
     void refreshProviders().catch(() => {});
@@ -5757,7 +5764,7 @@ export default function App() {
           onResetAll={resetAllBindings}
           providers={providers}
           provider={provider}
-          onReloadProviders={refreshProviders}
+          onReloadProviders={refreshProviderUpdates}
           projectPath={activeProject ?? cwd}
           project={
             projects.find((project) => project.path === activeProject) ?? null

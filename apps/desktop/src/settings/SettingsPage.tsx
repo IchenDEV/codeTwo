@@ -435,6 +435,30 @@ export function SettingsPage({
     }
   }, [deviceSyncEnabled]);
   useEffect(() => {
+    if (tab !== "providers" || !onReloadProviders) return;
+    let active = true;
+    setProviderOperation({ id: "*", action: "refresh" });
+    setProviderError(null);
+    void (async () => {
+      try {
+        await onReloadProviders();
+        if (active) setProviderMessage({ id: "*", text: t("settings.providerChecked") });
+      } catch (error: unknown) {
+        if (active) {
+          setProviderError({
+            id: "*",
+            text: t("settings.providerRefreshFailed", { error: String(error) }),
+          });
+        }
+      } finally {
+        if (active) setProviderOperation(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [tab, onReloadProviders, t]);
+  useEffect(() => {
     if (tab !== "general") return;
     let active = true;
     void updateStatusLoader()
@@ -2003,13 +2027,13 @@ export function SettingsPage({
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>
                 <div className="mb-2 flex items-center justify-end gap-2">
-                  <span className="text-fine text-muted-foreground">
-                    {providerOperation?.action === "refresh"
-                      ? t("settings.providerChecking")
-                      : providerMessage?.id === "*"
-                        ? providerMessage.text
-                        : t("settings.providerChecked")}
-                  </span>
+                  {(providerOperation?.action === "refresh" || providerMessage?.id === "*") && (
+                    <span className="text-fine text-muted-foreground">
+                      {providerOperation?.action === "refresh"
+                        ? t("settings.providerChecking")
+                        : providerMessage?.text}
+                    </span>
+                  )}
                   <Button
                     data-provider-refresh
                     variant="ghost"
@@ -2031,6 +2055,9 @@ export function SettingsPage({
                     const management = p.management ?? {
                       installed: p.available,
                       version: null,
+                      latest_version: null,
+                      update_available: null,
+                      check_error: null,
                       install_supported: false,
                       upgrade_supported: false,
                       launch_mode: p.available ? "installed" as const : "unavailable" as const,
@@ -2095,7 +2122,7 @@ export function SettingsPage({
                               )}
                             />
                           </button>
-                          {management.install_supported && (
+                          {!management.installed && management.install_supported && (
                             <Button
                               data-provider-action={`${p.id}:install`}
                               variant="secondary"
@@ -2109,7 +2136,9 @@ export function SettingsPage({
                                 : t("settings.providerInstall")}
                             </Button>
                           )}
-                          {management.upgrade_supported && (
+                          {management.installed
+                            && management.upgrade_supported
+                            && management.update_available === true && (
                             <Button
                               data-provider-action={`${p.id}:upgrade`}
                               variant="ghost"
@@ -2120,7 +2149,11 @@ export function SettingsPage({
                               {operation === "upgrade" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
                               {operation === "upgrade"
                                 ? t("settings.providerUpgrading")
-                                : t("settings.providerUpgrade")}
+                                : management.latest_version
+                                  ? t("settings.providerUpgradeVersion", {
+                                    version: management.latest_version,
+                                  })
+                                  : t("settings.providerUpgrade")}
                             </Button>
                           )}
                           <Switch

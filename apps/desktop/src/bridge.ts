@@ -186,6 +186,9 @@ export interface ProviderInfo {
 export interface ProviderManagementInfo {
   installed: boolean;
   version: string | null;
+  latest_version: string | null;
+  update_available: boolean | null;
+  check_error: string | null;
   install_supported: boolean;
   upgrade_supported: boolean;
   launch_mode: "installed" | "on_demand" | "unavailable";
@@ -272,6 +275,9 @@ export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo 
     management: provider.management ?? {
       installed: provider.available,
       version: null,
+      latest_version: null,
+      update_available: null,
+      check_error: null,
       install_supported: false,
       upgrade_supported: false,
       launch_mode: provider.available ? "installed" : "unavailable",
@@ -1284,6 +1290,9 @@ const fallbackProvider = (
   management: {
     installed: false,
     version: null,
+    latest_version: null,
+    update_available: null,
+    check_error: null,
     install_supported: false,
     upgrade_supported: false,
     launch_mode: "unavailable",
@@ -1333,9 +1342,9 @@ const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "demo:mcp:docs", name: "docs-search", description: "MCP server from Developer Toolkit", icon: null, kind: "mcp", source: "Plugin · Developer Toolkit" },
 ];
 
-export async function listProviders(): Promise<ProviderInfo[]> {
+export async function listProviders(checkUpdates = false): Promise<ProviderInfo[]> {
   const providers = inDesktop
-    ? await call<ProviderInfoWire[]>("providers.list")
+    ? await call<ProviderInfoWire[]>("providers.list", { check_updates: checkUpdates })
     : fallbackProviders();
   return providers.map(normalizeProviderInfo);
 }

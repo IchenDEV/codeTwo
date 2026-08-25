@@ -284,6 +284,10 @@ impl ProviderService {
     }
 
     pub async fn summaries(&self) -> Vec<ProviderSummary> {
+        self.summaries_with_updates(false).await
+    }
+
+    pub async fn summaries_with_updates(&self, check_updates: bool) -> Vec<ProviderSummary> {
         let toolsets = self.toolsets();
         let mut tasks = tokio::task::JoinSet::new();
         for (index, provider) in self.providers.iter().cloned().enumerate() {
@@ -294,7 +298,7 @@ impl ProviderService {
                 .unwrap_or_default();
             tasks.spawn(async move {
                 let enabled = lifecycle.enabled(provider.id.as_str()).unwrap_or(false);
-                let management = lifecycle.status(&provider).await;
+                let management = lifecycle.status(&provider, check_updates).await;
                 let summary = ProviderSummary {
                     id: provider.id.as_str().to_string(),
                     display_name: provider.display_name.clone(),
