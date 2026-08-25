@@ -325,7 +325,7 @@ const mainWindow = new BrowserWindow({
 desktopPetWindow = new BrowserWindow({
   title: `${applicationName} Pet`,
   frame: desktopPetFrame(),
-  url: "views://main/index.html?desktop-pet",
+  url: "views://main/desktop-pet.html",
   renderer: "native",
   rpc: desktopPetRpc,
   titleBarStyle: "hidden",

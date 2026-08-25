@@ -19,5 +19,11 @@ export default defineConfig({
     target: "es2021",
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        desktopPet: path.resolve(__dirname, "desktop-pet.html"),
+      },
+    },
   },
 });
