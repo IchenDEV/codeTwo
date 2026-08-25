@@ -189,6 +189,8 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
         continue;
       }
       flushAssistant(true);
+      // Thinking stays transcript-level detail; it bounds a text stretch but is not a step.
+      if (entry.kind === "thought") continue;
       const tool = tools.get(entry.toolId);
       if (tool) records.push(toolRecord(tool, entry, turn, turnNumber, step, now));
       step += 1;

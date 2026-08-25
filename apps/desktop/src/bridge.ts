@@ -934,7 +934,8 @@ export interface ArtifactRef {
 export type ToolOutput =
   | { type: "text"; text: string }
   | { type: "image"; artifact: ArtifactRef }
-  | { type: "resource_link"; name: string; uri: string; mime_type?: string | null };
+  | { type: "resource_link"; name: string; uri: string; mime_type?: string | null }
+  | { type: "diff"; path: string; old_text: string; new_text: string };
 
 /** One durable transcript row. `seq` is stable within a session and orders snapshot/live merge. */
 export interface TranscriptEntry {

@@ -178,8 +178,11 @@ import {
   setIssueDelegationSession,
   getSessionScene,
   getSessionAutoScene,
+  listAutomations,
+  listAutomationRuns,
   listPipelines,
   listScenes,
+  onAutomationChanged,
   recordSceneArtifact,
   sceneSessionPlan,
   sessionPipeline,
@@ -281,6 +284,11 @@ import {
 import { QuestionDialog } from "./session/QuestionDialog";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
+import {
+  SessionNotices,
+  pushSessionNotice,
+  type SessionNotice,
+} from "./session/SessionNotices";
 import { TrajectoryView } from "./session/TrajectoryView";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
@@ -601,6 +609,9 @@ export default function App() {
   const [runningSessions, setRunningSessions] = useState<Set<string>>(
     () => new Set(),
   );
+  // Dismissible async-event notices (background session finished/failed, automation attention,
+  // off-session warnings), rendered as a card above the composer.
+  const [sessionNotices, setSessionNotices] = useState<SessionNotice[]>([]);
   const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [transcriptNextBefore, setTranscriptNextBefore] = useState<
@@ -992,6 +1003,21 @@ export default function App() {
   const toast = useToast();
   const t = useT();
   const { locale } = useLanguage();
+
+  const sessionTitlesRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    for (const session of sessions) {
+      sessionTitlesRef.current.set(session.id, session.title);
+    }
+  }, [sessions]);
+  const pushNotice = useCallback((notice: SessionNotice) => {
+    setSessionNotices((previous) => pushSessionNotice(previous, notice));
+  }, []);
+  const dismissSessionNotice = useCallback((id: string) => {
+    setSessionNotices((previous) =>
+      previous.filter((notice) => notice.id !== id),
+    );
+  }, []);
   const desktopPlatform = currentDesktopPlatform();
   const editorLaunchersAvailable = desktopPlatform === "macos";
   const fileManagerLabel = editorLaunchersAvailable
@@ -2141,6 +2167,31 @@ export default function App() {
           setPermissionQueue((previous) =>
             permissionQueueAfterActivity(previous, ev.session, ev.activity),
           );
+          // A background session's terminal transition is out of view — surface it as a
+          // dismissible notice. Only live transitions count: a first sighting (`current`
+          // undefined) is seeding, not news.
+          if (current && ev.session !== activeSessionRef.current) {
+            const title =
+              sessionTitlesRef.current.get(ev.session) ??
+              `${ev.session.slice(0, 8)}…`;
+            const state = ev.activity.state;
+            if (state.kind === "failed") {
+              pushNotice({
+                id: `session-failed-${ev.session}-${ev.activity.revision}`,
+                kind: "error",
+                title: t("notices.sessionFailed", { title }),
+                detail: state.message,
+                time: Date.now(),
+              });
+            } else if (state.kind === "idle" && activityIsBusy(current)) {
+              pushNotice({
+                id: `session-done-${ev.session}-${ev.activity.revision}`,
+                kind: "info",
+                title: t("notices.sessionDone", { title }),
+                time: Date.now(),
+              });
+            }
+          }
           return;
         }
         if (ev.event === "context_window") {
@@ -2494,6 +2545,21 @@ export default function App() {
           )
         )
           return;
+        // Warnings that belong to no visible turn (another session, or no session at all) would
+        // otherwise vanish — the active session's own warnings already render in its transcript.
+        if (
+          ev.event === "error" &&
+          !ev.terminal &&
+          ev.session !== activeSessionRef.current
+        ) {
+          pushNotice({
+            id: `warning-${ev.session ?? "app"}-${ev.message.slice(0, 64)}`,
+            kind: "warning",
+            title: t("notices.sessionWarning"),
+            detail: ev.message,
+            time: Date.now(),
+          });
+        }
         if (ev.event === "tool_call") handleDockFollow(ev);
         setTurns((prev) =>
           applyEvent(prev, ev, activeTurnRequestId ?? undefined),
@@ -2513,6 +2579,7 @@ export default function App() {
     invalidatePendingCreation,
     markSessionStarted,
     markSessionStopped,
+    pushNotice,
     refreshSessions,
     restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
@@ -2549,6 +2616,52 @@ export default function App() {
       if (unlisten) unlisten();
     };
   }, [refreshSessions, setTaskContext, t, toast]);
+
+  // Automation runs are the lightweight background-task signal: attention states surface as
+  // session notices no matter which page is open.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    const automationNames = new Map<string, string>();
+    void onAutomationChanged((automationId) => {
+      void (async () => {
+        try {
+          if (automationNames.size === 0) {
+            for (const automation of await listAutomations()) {
+              automationNames.set(automation.id, automation.name);
+            }
+          }
+          const runs = await listAutomationRuns(automationId, 5);
+          const latest = runs.reduce<(typeof runs)[number] | null>(
+            (newest, run) => (newest && newest.started_at > run.started_at ? newest : run),
+            null,
+          );
+          if (!latest) return;
+          if (latest.status !== "needs_attention" && latest.status !== "failed") return;
+          const name =
+            automationNames.get(automationId) ?? `${automationId.slice(0, 8)}…`;
+          pushNotice({
+            id: `automation-${latest.id}`,
+            kind: latest.status === "failed" ? "error" : "warning",
+            title: t(
+              latest.status === "failed"
+                ? "notices.automationFailed"
+                : "notices.automationAttention",
+              { name },
+            ),
+            detail: latest.error ?? undefined,
+            time: Date.now(),
+          });
+        } catch {
+          // Automation status is advisory; a failed lookup never interrupts the session.
+        }
+      })();
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [pushNotice, t]);
 
   // Rendered QA has no desktop event bridge in the Vite shell. This query-controlled fixture is
   // development-only and is replaced at build time, so production never gets a fake default.
@@ -6486,6 +6599,12 @@ export default function App() {
                   slot="composer.above"
                   contributions={pluginUiActions["composer.above"]}
                   onInvoke={invokePluginAction}
+                />
+              )}
+              {sessionNotices.length > 0 && (
+                <SessionNotices
+                  notices={sessionNotices}
+                  onDismiss={dismissSessionNotice}
                 />
               )}
               <div className={cn("contents", activeArchived && "hidden")}>

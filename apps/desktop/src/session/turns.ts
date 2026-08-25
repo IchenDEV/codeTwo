@@ -97,6 +97,7 @@ export interface ToolEntry {
  */
 export type TurnContentEntry =
   | { kind: "text"; text: string; transcriptSeq?: number; createdAt?: number }
+  | { kind: "thought"; text: string; transcriptSeq?: number; createdAt?: number }
   | { kind: "tool"; toolId: string; transcriptSeq?: number; createdAt?: number };
 
 /**
@@ -288,6 +289,15 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
 function mergeToolOutputs(current: ToolOutput[], incoming: ToolOutput[]): ToolOutput[] {
   const output = [...current];
   for (const item of incoming) {
+    // A refined diff for the same path replaces its earlier revision; other outputs append.
+    if (item.type === "diff") {
+      const index = output.findIndex(
+        (existing) => existing.type === "diff" && existing.path === item.path,
+      );
+      if (index >= 0) output[index] = item;
+      else output.push(item);
+      continue;
+    }
     const duplicate = output.some((existing) => {
       if (existing.type !== item.type) return false;
       if (item.type === "image" && existing.type === "image") {
@@ -301,6 +311,23 @@ function mergeToolOutputs(current: ToolOutput[], incoming: ToolOutput[]): ToolOu
     if (!duplicate) output.push(item);
   }
   return output;
+}
+
+function appendThoughtContent(
+  content: readonly TurnContentEntry[],
+  text: string,
+  transcriptSeq?: number | null,
+  createdAt?: number,
+): TurnContentEntry[] {
+  return [
+    ...content,
+    {
+      kind: "thought" as const,
+      text,
+      ...(transcriptSeq == null ? {} : { transcriptSeq }),
+      ...(createdAt == null ? {} : { createdAt }),
+    },
+  ];
 }
 
 function appendTextContent(
@@ -530,6 +557,7 @@ export function applyEvent(
         cur.pendingThoughtDeltaSkips -= 1;
       } else {
         cur.thoughts = [...cur.thoughts, ev.text];
+        cur.content = appendThoughtContent(cur.content, ev.text, ev.transcript_seq, observedAt);
       }
       break;
     case "tool_call": {
@@ -606,7 +634,7 @@ function mergeTurnContent(
     );
     const seenTools = new Set<string>();
     const deduped = ordered.filter((entry) => {
-      if (entry.kind === "text") return true;
+      if (entry.kind === "text" || entry.kind === "thought") return true;
       if (seenTools.has(entry.toolId)) return false;
       seenTools.add(entry.toolId);
       return true;
@@ -615,6 +643,7 @@ function mergeTurnContent(
     // A disabled/failed store can still produce sequence-less live output. Keep it after the
     // durable edge instead of silently dropping provider output.
     let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
+    let thoughtToSkip = snapshot.filter((entry) => entry.kind === "thought").length;
     const durableTools = new Set(
       deduped.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
     );
@@ -622,6 +651,10 @@ function mergeTurnContent(
       if (entry.transcriptSeq !== undefined) return false;
       if (entry.kind === "text" && boundaryKnown && textToSkip > 0) {
         textToSkip -= 1;
+        return false;
+      }
+      if (entry.kind === "thought" && boundaryKnown && thoughtToSkip > 0) {
+        thoughtToSkip -= 1;
         return false;
       }
       if (entry.kind === "tool") {
@@ -637,12 +670,17 @@ function mergeTurnContent(
   if (!boundaryKnown) return [...snapshot, ...live];
 
   let textToSkip = snapshot.filter((entry) => entry.kind === "text").length;
+  let thoughtToSkip = snapshot.filter((entry) => entry.kind === "thought").length;
   const seenTools = new Set(
     snapshot.flatMap((entry) => (entry.kind === "tool" ? [entry.toolId] : [])),
   );
   const tail = live.filter((entry) => {
     if (entry.kind === "text" && textToSkip > 0) {
       textToSkip -= 1;
+      return false;
+    }
+    if (entry.kind === "thought" && thoughtToSkip > 0) {
+      thoughtToSkip -= 1;
       return false;
     }
     if (entry.kind === "tool") {
@@ -761,6 +799,7 @@ export function turnsFromTranscript(
         break;
       case "reasoning":
         cur.thoughts.push(part.text);
+        cur.content = appendThoughtContent(cur.content, part.text, seq, at);
         break;
       case "tool_call":
         cur.tools = upsertTool(cur.tools, {

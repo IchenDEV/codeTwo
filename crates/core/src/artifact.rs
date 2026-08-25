@@ -47,6 +47,12 @@ pub enum ToolOutput {
         uri: String,
         mime_type: Option<String>,
     },
+    /// An ACP `diff` content block: `old_text`/`new_text` are empty on file creation/deletion.
+    Diff {
+        path: String,
+        old_text: String,
+        new_text: String,
+    },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -478,6 +484,36 @@ impl ToolOutputNormalizer {
                             });
                         }
                     }
+                    // ACP diff blocks carry file contents, so they follow the same trust gate as
+                    // text: `retain_text == false` drops them entirely.
+                    Some("diff") => {
+                        if retain_text {
+                            if let Some(path) = object.get("path").and_then(Value::as_str) {
+                                // `oldText`/`newText` are null on file creation/deletion.
+                                let old_text = object
+                                    .get("oldText")
+                                    .or_else(|| object.get("old_text"))
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default();
+                                let new_text = object
+                                    .get("newText")
+                                    .or_else(|| object.get("new_text"))
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default();
+                                result.outputs.push(ToolOutput::Diff {
+                                    path: path.chars().take(512).collect(),
+                                    old_text: old_text
+                                        .chars()
+                                        .take(MAX_TEXT_OUTPUT_CHARS)
+                                        .collect(),
+                                    new_text: new_text
+                                        .chars()
+                                        .take(MAX_TEXT_OUTPUT_CHARS)
+                                        .collect(),
+                                });
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -817,6 +853,69 @@ mod tests {
             artifacts.save_document("<html/>", "text/html", None, "s1", "t1"),
             Err(ArtifactError::UnsupportedFormat)
         ));
+    }
+
+    #[test]
+    fn diff_blocks_are_collected_with_camel_or_snake_field_names() {
+        let normalizer = ToolOutputNormalizer::new(None);
+        let content = json!([
+            {"type":"diff","path":"src/main.rs","oldText":"fn old() {}","newText":"fn new() {}"},
+            {"type":"diff","path":"src/created.rs","old_text":null,"new_text":"fn main() {}"}
+        ]);
+        let result = normalizer.normalize(
+            Some(&content),
+            None,
+            &ToolSource::default(),
+            "session-1",
+            "tool-1",
+        );
+        assert!(result.warnings.is_empty());
+        assert_eq!(
+            result.outputs,
+            vec![
+                ToolOutput::Diff {
+                    path: "src/main.rs".into(),
+                    old_text: "fn old() {}".into(),
+                    new_text: "fn new() {}".into(),
+                },
+                ToolOutput::Diff {
+                    path: "src/created.rs".into(),
+                    old_text: String::new(),
+                    new_text: "fn main() {}".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn diff_blocks_follow_the_text_trust_gate() {
+        let normalizer = ToolOutputNormalizer::new(None);
+        let content = json!([{"type":"diff","path":"src/main.rs","oldText":"a","newText":"b"}]);
+        let result = normalizer.normalize(
+            Some(&content),
+            None,
+            &ToolSource {
+                server: Some("codetwo_browser".into()),
+                ..Default::default()
+            },
+            "session-1",
+            "tool-1",
+        );
+        assert!(result.outputs.is_empty());
+    }
+
+    #[test]
+    fn diff_blocks_without_a_path_are_dropped() {
+        let normalizer = ToolOutputNormalizer::new(None);
+        let content = json!([{"type":"diff","oldText":"a","newText":"b"}]);
+        let result = normalizer.normalize(
+            Some(&content),
+            None,
+            &ToolSource::default(),
+            "session-1",
+            "tool-1",
+        );
+        assert!(result.outputs.is_empty());
     }
 
     #[test]

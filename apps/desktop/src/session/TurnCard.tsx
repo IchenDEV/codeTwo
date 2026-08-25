@@ -2,6 +2,7 @@ import {
   Bot,
   Brain,
   BrainCircuit,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -43,13 +44,38 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
+import type { StringKey } from "../i18n/strings";
 import { cn } from "@/lib/utils";
 import { MarkdownContent } from "./MarkdownContent";
+import { CopyButton } from "./CopyButton";
+import { DiffView } from "./DiffView";
+import { diffLines, diffStats, type DiffLine } from "./lineDiff";
+import { looksLikeUnifiedDiff, parseUnifiedDiff, type UnifiedDiffFile } from "./unifiedDiff";
+import { TurnChangesCard } from "./TurnChangesCard";
+
+function formatDurationSeconds(s: number): string {
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return s % 60 ? `${m}m ${s % 60}s` : `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
-  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  return formatDurationSeconds(s);
+}
+
+/** Today → HH:mm; older → short date + time, in the active locale. */
+function formatTurnTime(timestamp: number, locale: string): string {
+  const date = new Date(timestamp);
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return new Intl.DateTimeFormat(
+    locale,
+    sameDay
+      ? { hour: "2-digit", minute: "2-digit" }
+      : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" },
+  ).format(date);
 }
 
 function agentStatusDot(status: string): string {
@@ -161,22 +187,53 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
+type ToolTextOutput =
+  | { kind: "text"; text: string }
+  | { kind: "udiff"; files: UnifiedDiffFile[] };
+
+interface ParsedToolOutputs {
+  texts: ToolTextOutput[];
+  diffs: { path: string; lines: DiffLine[]; added: number; deleted: number }[];
+  images: ArtifactRef[];
+  links: ({ uri: string; host: string; name: string })[];
+}
+
+function parseToolOutputs(tool: ToolEntry): ParsedToolOutputs {
+  const texts: ToolTextOutput[] = [];
+  const diffs: ParsedToolOutputs["diffs"] = [];
+  const images: ArtifactRef[] = [];
+  const links: ParsedToolOutputs["links"] = [];
+  for (const output of tool.outputs ?? []) {
+    if (output.type === "text") {
+      if (looksLikeUnifiedDiff(output.text)) {
+        const files = parseUnifiedDiff(output.text);
+        if (files.length > 0) {
+          texts.push({ kind: "udiff", files });
+          continue;
+        }
+      }
+      texts.push({ kind: "text", text: output.text });
+    } else if (output.type === "diff") {
+      const lines = diffLines(output.old_text, output.new_text);
+      diffs.push({ path: output.path, lines, ...diffStats(lines) });
+    } else if (output.type === "image") {
+      images.push(output.artifact);
+    } else if (output.type === "resource_link") {
+      const safe = safeResourceLink(output.uri);
+      if (safe) links.push({ uri: safe.uri, host: safe.host, name: output.name });
+    }
+  }
+  return { texts, diffs, images, links };
+}
+
 function ToolCallBlock({ tool }: { tool: ToolEntry }) {
-  const textOutputs = (tool.outputs ?? []).flatMap((output) =>
-    output.type === "text" ? [output.text] : [],
-  );
-  const images = (tool.outputs ?? []).flatMap((output) =>
-    output.type === "image" ? [output.artifact] : [],
-  );
-  const resourceLinks = (tool.outputs ?? []).flatMap((output) => {
-    if (output.type !== "resource_link") return [];
-    const safe = safeResourceLink(output.uri);
-    return safe ? [{ ...output, ...safe }] : [];
-  });
-  const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
+  const t = useT();
+  const content = useMemo(() => parseToolOutputs(tool), [tool]);
+  const hasOutput =
+    content.texts.length + content.diffs.length + content.images.length + content.links.length > 0;
   const [open, setOpen] = useState(
     (tool.status !== "completed" && tool.status !== "failed") ||
-      images.length + resourceLinks.length > 0,
+      content.images.length + content.links.length > 0,
   );
   const header = (
     <>
@@ -212,24 +269,59 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
         <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
       </CollapsibleTrigger>
         <CollapsibleContent className="mt-1.5 min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
-          {textOutputs.map((output, index) => (
-            <pre
-              key={index}
-              className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code leading-relaxed"
-            >
-              <code>{output}</code>
-            </pre>
-          ))}
-          {images.length > 0 ? (
+          {content.texts.map((output, index) =>
+            output.kind === "udiff" ? (
+              <div key={index} className="flex flex-col gap-2 p-2">
+                {output.files.map((file) => (
+                  <DiffView
+                    key={file.path}
+                    path={file.path}
+                    lines={file.lines}
+                    added={file.added}
+                    deleted={file.deleted}
+                    labels={{
+                      expandLines: (count) => t("diff.expandLines", { count }),
+                      copy: t("turn.copy"),
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <pre
+                key={index}
+                className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-code leading-relaxed"
+              >
+                <code>{output.text}</code>
+              </pre>
+            ),
+          )}
+          {content.diffs.length > 0 ? (
+            <div className="flex flex-col gap-2 p-2">
+              {content.diffs.map((diff) => (
+                <DiffView
+                  key={diff.path}
+                  path={diff.path}
+                  lines={diff.lines}
+                  added={diff.added}
+                  deleted={diff.deleted}
+                  labels={{
+                    expandLines: (count) => t("diff.expandLines", { count }),
+                    copy: t("turn.copy"),
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+          {content.images.length > 0 ? (
             <div className="grid grid-cols-1 gap-2 p-2 sm:grid-cols-2" aria-label="Generated images">
-              {images.map((artifact) => (
+              {content.images.map((artifact) => (
                 <ArtifactImage key={artifact.id} artifact={artifact} />
               ))}
             </div>
           ) : null}
-          {resourceLinks.length > 0 ? (
+          {content.links.length > 0 ? (
             <div className="flex flex-col gap-1.5 p-2" aria-label="Tool links">
-              {resourceLinks.map((link) => (
+              {content.links.map((link) => (
                 <button
                   key={link.uri}
                   type="button"
@@ -251,15 +343,117 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   );
 }
 
+/** Tool kinds that get a specific rollup verb; everything else lands in the generic bucket. */
+const GROUP_KIND_KEYS: Record<string, StringKey> = {
+  read: "turn.toolsRead",
+  edit: "turn.toolsEdit",
+  execute: "turn.toolsExecute",
+  search: "turn.toolsSearch",
+  fetch: "turn.toolsFetch",
+  delete: "turn.toolsDelete",
+  move: "turn.toolsMove",
+};
+
+/**
+ * Consecutive tool calls collapse into one summary line ("Searched 2 patterns · Read 1 file")
+ * once they settle; while anything is still running the group stays expanded so live status
+ * remains visible.
+ */
+function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
+  const t = useT();
+  const anyRunning = tools.some(
+    (tool) => tool.status !== "completed" && tool.status !== "failed",
+  );
+  const anyFailed = tools.some((tool) => tool.status === "failed");
+  const [open, setOpen] = useState(anyRunning);
+  useEffect(() => {
+    if (!anyRunning) setOpen(false);
+  }, [anyRunning]);
+
+  const summary = useMemo(() => {
+    const buckets = new Map<StringKey, number>();
+    for (const tool of tools) {
+      const key = (tool.kind && GROUP_KIND_KEYS[tool.kind.toLowerCase()]) || "turn.toolsGeneric";
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+    return [...buckets.entries()].map(([key, count]) => t(key, { count })).join(" · ");
+  }, [tools, t]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="my-3 min-w-0" data-tool-group>
+      <CollapsibleTrigger
+        className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {anyRunning ? (
+          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
+        ) : anyFailed ? (
+          <CircleAlert className="size-3.5 shrink-0 text-destructive" aria-hidden />
+        ) : (
+          <Check className="size-3.5 shrink-0 text-success" aria-hidden />
+        )}
+        <span className="min-w-0 flex-1 truncate">{summary}</span>
+        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0">
+        {tools.map((tool) => (
+          <ToolCallBlock key={tool.id} tool={tool} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** One streamed reasoning stretch, inline at its arrival position. */
+function ThoughtBlock({ text, streaming }: { text: string; streaming: boolean }) {
+  const t = useT();
+  const [open, setOpen] = useState(streaming);
+  useEffect(() => {
+    if (!streaming) setOpen(false);
+  }, [streaming]);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="my-3 min-w-0" data-thought>
+      <CollapsibleTrigger
+        className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-fine text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <Brain className="size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 truncate">{t("turn.thoughtProcess")}</span>
+        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0">
+        <div className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-(--ds-radius-module) border bg-fill-quiet p-3 text-fine italic leading-relaxed text-muted-foreground">
+          {text}
+          {streaming ? (
+            <span
+              aria-hidden="true"
+              className="ms-0.5 inline-block h-3.5 w-px animate-pulse bg-muted-foreground/65 align-middle"
+            />
+          ) : null}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 type RenderBlock =
   | { kind: "text"; text: string }
-  | { kind: "tool"; tool: ToolEntry };
+  | { kind: "thought"; text: string }
+  | { kind: "toolGroup"; tools: ToolEntry[] };
 
-/** Join adjacent streamed chunks while retaining tool calls at their exact event boundary. */
+/**
+ * Join adjacent streamed chunks while retaining tool calls at their exact event boundary.
+ * Consecutive tool calls fold into a single group block so a tool-heavy stretch renders as
+ * one summary line instead of a stack of rows.
+ */
 function orderedBlocks(turn: Turn): RenderBlock[] {
   const tools = new Map(turn.tools.map((tool) => [tool.id, tool]));
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
+  let sawThought = false;
+  const pushTool = (tool: ToolEntry) => {
+    const tail = blocks[blocks.length - 1];
+    if (tail?.kind === "toolGroup") tail.tools.push(tool);
+    else blocks.push({ kind: "toolGroup", tools: [tool] });
+  };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
       const tail = blocks[blocks.length - 1];
@@ -267,15 +461,25 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
       else blocks.push({ kind: "text", text: entry.text });
       continue;
     }
+    if (entry.kind === "thought") {
+      sawThought = true;
+      const tail = blocks[blocks.length - 1];
+      if (tail?.kind === "thought") tail.text += entry.text;
+      else blocks.push({ kind: "thought", text: entry.text });
+      continue;
+    }
     const tool = tools.get(entry.toolId);
     if (!tool || seenTools.has(tool.id)) continue;
     seenTools.add(tool.id);
-    blocks.push({ kind: "tool", tool });
+    pushTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
   if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
+  if (!sawThought && turn.thoughts.length > 0) {
+    blocks.unshift({ kind: "thought", text: turn.thoughts.join("") });
+  }
   for (const tool of turn.tools) {
-    if (!seenTools.has(tool.id)) blocks.push({ kind: "tool", tool });
+    if (!seenTools.has(tool.id)) pushTool(tool);
   }
   return blocks;
 }
@@ -317,7 +521,7 @@ function requestCanvasDuplicate(canvas: CanvasHistoryMarker): void {
   );
 }
 
-/** A collapsible group of secondary detail (agents / thinking / plan / memory). */
+/** A collapsible group of secondary detail (agents / plan / memory). */
 function Detail({
   icon: Icon,
   label,
@@ -344,12 +548,25 @@ function Detail({
   );
 }
 
+/** Ticking "now" while `running`; frozen otherwise. Drives the elapsed-time header. */
+function useNow(running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+  return now;
+}
+
 /**
  * One prompt → response cycle.
  *
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
- * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
- * their streamed position; thinking and plan metadata stay collapsed underneath.
+ * transcript reads as a conversation instead of a stack of equally-weighted cards. The working
+ * process — thinking, tool calls, intermediate narration — keeps its streamed order inside a
+ * "Worked Xs" disclosure that collapses when the turn settles; the final message always stays
+ * visible underneath.
  */
 export const TurnCard = memo(function TurnCard({
   turn,
@@ -367,7 +584,7 @@ export const TurnCard = memo(function TurnCard({
   onPinPlanArtifact?: (markdown: string) => void;
   /** True when the active scene declares a `plan`-kind artifact. */
   canPinPlan?: boolean;
-  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
+  /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu hides it. */
   onSaveTemplate?: (promptText: string) => void;
 }) {
   const t = useT();
@@ -376,6 +593,7 @@ export const TurnCard = memo(function TurnCard({
   const running = isRunning(turn);
   const queued = turn.delivery === "queued";
   const dur = duration(turn);
+  const now = useNow(running);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
   const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
@@ -395,13 +613,30 @@ export const TurnCard = memo(function TurnCard({
         });
     }
     return () => {
-      cancelled = true;
+      cancelled = false;
       historySnapshots.clear();
     };
   }, [canvasSnapshotLoader, history.canvases, historySnapshots]);
+
+  // The trailing text block is the reply; everything before it (thoughts, tools, narration) is
+  // process that collapses under the elapsed-time bar once the turn settles.
+  const finalTextIndex = useMemo(() => {
+    for (let index = blocks.length - 1; index >= 0; index -= 1) {
+      if (blocks[index].kind === "text") return index;
+    }
+    return -1;
+  }, [blocks]);
+  const finalText = finalTextIndex >= 0 ? (blocks[finalTextIndex] as { kind: "text"; text: string }) : null;
+  const processBlocks = finalTextIndex >= 0 ? blocks.filter((_, i) => i !== finalTextIndex) : blocks;
+  const hasProcess = processBlocks.length > 0;
+
+  const [processOpen, setProcessOpen] = useState(running);
+  useEffect(() => {
+    if (!running) setProcessOpen(false);
+  }, [running]);
+
   const hasDetail =
     agents.length +
-      turn.thoughts.length +
       turn.plan.length +
       (turn.memory?.items.length ?? 0) >
     0;
@@ -410,32 +645,49 @@ export const TurnCard = memo(function TurnCard({
     ? collapsedPrompt(history.visiblePrompt)
     : history.visiblePrompt;
 
+  const renderBlock = (block: RenderBlock, key: string, streaming: boolean) => {
+    if (block.kind === "text") {
+      return <MarkdownContent key={key} text={block.text} streaming={streaming} />;
+    }
+    if (block.kind === "thought") {
+      return <ThoughtBlock key={key} text={block.text} streaming={streaming} />;
+    }
+    if (block.tools.length === 1) {
+      return <ToolCallBlock key={key} tool={block.tools[0]} />;
+    }
+    return <ToolCallGroup key={key} tools={block.tools} />;
+  };
+
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
-    <article aria-busy={running && !queued} className="animate-rise-in py-7">
+    <article aria-busy={running && !queued} className="group/turn animate-rise-in py-7">
       {/* prompt */}
       <div className="group/prompt flex items-start justify-end gap-1">
-        {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
-            button so future turn actions slot in beside "Save as template…". */}
-        {onSaveTemplate && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button
-                type="button"
-                aria-label={t("templateFrom.menu")}
-                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
-              >
-                <MoreHorizontal className="size-3.5" aria-hidden />
-              </button>}
-            />
-            <DropdownMenuContent align="end">
+        {/* Hover-visible turn menu (SessionRail hover-actions idiom). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<button
+              type="button"
+              aria-label={t("templateFrom.menu")}
+              className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+            >
+              <MoreHorizontal className="size-3.5" aria-hidden />
+            </button>}
+          />
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => void navigator.clipboard.writeText(history.visiblePrompt)}
+            >
+              {t("turn.copy")}
+            </DropdownMenuItem>
+            {onSaveTemplate && (
               <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
                 {t("templateFrom.saveAs")}
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
           <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
           {turn.delivery && (
@@ -515,20 +767,52 @@ export const TurnCard = memo(function TurnCard({
         </div>
       )}
 
-      {/* Streamed answer blocks keep provider order: text → tool → text → visual/chart. */}
-      {blocks.length > 0 ? (
-        <div className="mt-3.5 min-w-0">
-          {blocks.map((block, index) =>
-            block.kind === "text" ? (
-              <MarkdownContent
-                key={`text-${index}`}
-                text={block.text}
-                streaming={running && index === blocks.length - 1}
-              />
+      {/* Working process (thinking, tools, narration) under a collapsible elapsed-time bar. */}
+      {hasProcess ? (
+        <Collapsible
+          open={processOpen}
+          onOpenChange={setProcessOpen}
+          className="mt-3.5 min-w-0"
+          data-process
+        >
+          <CollapsibleTrigger
+            className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1 text-left text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {running && !queued ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />
             ) : (
-              <ToolCallBlock key={block.tool.id} tool={block.tool} />
-            ),
-          )}
+              <Check className="size-3.5 shrink-0 text-success" aria-hidden />
+            )}
+            <span className="min-w-0 flex-1 truncate">
+              {t("turn.worked", {
+                duration: formatDurationSeconds(
+                  Math.max(
+                    0,
+                    Math.round(((turn.endedAt ?? now) - turn.startedAt) / 1000),
+                  ),
+                ),
+              })}
+            </span>
+            <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="min-w-0">
+            {processBlocks.map((block, index) =>
+              renderBlock(
+                block,
+                block.kind === "toolGroup" ? (block.tools[0]?.id ?? `group-${index}`) : `process-${index}`,
+                // While the reply text streams below, nothing inside the process area carries
+                // its own cursor.
+                running && !finalText && index === processBlocks.length - 1,
+              ),
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
+
+      {/* The reply itself always stays visible outside the process disclosure. */}
+      {finalText ? (
+        <div className="mt-3.5 min-w-0">
+          <MarkdownContent text={finalText.text} streaming={running} />
         </div>
       ) : null}
 
@@ -553,6 +837,8 @@ export const TurnCard = memo(function TurnCard({
         </p>
       )}
 
+      <TurnChangesCard tools={turn.tools} />
+
       {/* secondary detail + outcome, on one quiet line */}
       {(hasDetail || dur || turn.stopReason || queued || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -572,16 +858,6 @@ export const TurnCard = memo(function TurnCard({
                     </p>
                   )}
                 </div>
-              ))}
-            </div>
-          </Detail>
-
-          <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
-            <div className="flex flex-col gap-1 text-fine italic text-muted-foreground">
-              {turn.thoughts.map((thought, i) => (
-                <p key={i} className="whitespace-pre-wrap">
-                  {thought}
-                </p>
               ))}
             </div>
           </Detail>
@@ -672,6 +948,20 @@ export const TurnCard = memo(function TurnCard({
           </span>
         </div>
       )}
+
+      {/* timestamp + copy affordance */}
+      <div className="mt-1.5 flex items-center gap-1 text-cap text-muted-foreground">
+        <time dateTime={new Date(turn.startedAt).toISOString()}>
+          {formatTurnTime(turn.startedAt, locale)}
+        </time>
+        {turn.text ? (
+          <CopyButton
+            text={turn.text}
+            label={t("turn.copy")}
+            className="opacity-0 transition-opacity group-hover/turn:opacity-100 focus-visible:opacity-100"
+          />
+        ) : null}
+      </div>
     </article>
   );
 });

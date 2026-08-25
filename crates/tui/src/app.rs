@@ -365,7 +365,10 @@ impl App {
                                     .unwrap_or_default();
                                 self.push("resource", format!("[{name}{mime}] {uri}"));
                             }
-                            codetwo_core::ToolOutput::Text { .. } => {}
+                            // Text renders inline in the transcript; diffs are drawn by the
+                            // desktop UI — the TUI keeps only the tool row for both.
+                            codetwo_core::ToolOutput::Text { .. }
+                            | codetwo_core::ToolOutput::Diff { .. } => {}
                         }
                     }
                 }
