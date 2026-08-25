@@ -725,4 +725,30 @@ mod tests {
         assert_eq!(value["priced"], true);
         assert!(value.get("burn_rate_usd_per_hour").is_none());
     }
+
+    #[test]
+    fn tool_call_diff_output_uses_the_public_wire_shape() {
+        let value = serde_json::to_value(Event::ToolCall {
+            session: "session-1".into(),
+            id: "tool-1".into(),
+            title: "Edit src/main.rs".into(),
+            status: "completed".into(),
+            kind: Some("edit".into()),
+            agent_input: None,
+            outputs: vec![crate::artifact::ToolOutput::Diff {
+                path: "src/main.rs".into(),
+                old_text: "fn old() {}".into(),
+                new_text: "fn new() {}".into(),
+            }],
+            transcript_seq: None,
+        })
+        .unwrap();
+
+        assert_eq!(value["event"], "tool_call");
+        assert_eq!(value["session"], "session-1");
+        assert_eq!(value["outputs"][0]["type"], "diff");
+        assert_eq!(value["outputs"][0]["path"], "src/main.rs");
+        assert_eq!(value["outputs"][0]["old_text"], "fn old() {}");
+        assert_eq!(value["outputs"][0]["new_text"], "fn new() {}");
+    }
 }

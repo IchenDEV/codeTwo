@@ -380,6 +380,104 @@ describe("persisted transcript projection", () => {
     expect(turns[0].tools[0].status).toBe("completed");
   });
 
+  test("interleaves thoughts with text and tools in arrival order", () => {
+    let turns = applyEvent([], {
+      event: "turn_started",
+      session: "session-a",
+      request_id: "request-1",
+    });
+    turns = applyEvent(turns, {
+      event: "agent_thought",
+      session: "session-a",
+      text: "hmm",
+      transcript_seq: 11,
+    });
+    turns = applyEvent(turns, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-1",
+      text: "Let me check.",
+      transcript_seq: 12,
+    });
+    turns = applyEvent(turns, {
+      event: "tool_call",
+      session: "session-a",
+      id: "tool-1",
+      title: "Read",
+      status: "completed",
+      transcript_seq: 13,
+    });
+    turns = applyEvent(turns, {
+      event: "agent_thought",
+      session: "session-a",
+      text: "ok",
+      transcript_seq: 14,
+    });
+    turns = applyEvent(turns, {
+      event: "agent_text",
+      session: "session-a",
+      message_id: "text-2",
+      text: "Done.",
+      transcript_seq: 15,
+    });
+
+    expect(turns[0].content).toEqual([
+      { kind: "thought", text: "hmm", transcriptSeq: 11, createdAt: expect.any(Number) },
+      { kind: "text", text: "Let me check.", transcriptSeq: 12, createdAt: expect.any(Number) },
+      { kind: "tool", toolId: "tool-1", transcriptSeq: 13, createdAt: expect.any(Number) },
+      { kind: "thought", text: "ok", transcriptSeq: 14, createdAt: expect.any(Number) },
+      { kind: "text", text: "Done.", transcriptSeq: 15, createdAt: expect.any(Number) },
+    ]);
+    expect(turns[0].thoughts).toEqual(["hmm", "ok"]);
+  });
+
+  test("rebuilds reasoning parts into inline thought entries", () => {
+    const turns = turnsFromTranscript([
+      { seq: 10, role: "user", part: { kind: "prompt", text: "q", display: "q" } },
+      { seq: 11, role: "agent", part: { kind: "reasoning", text: "thinking" } },
+      { seq: 12, role: "agent", part: { kind: "text", text: "answer" } },
+    ]);
+    expect(turns[0].content).toEqual([
+      { kind: "thought", text: "thinking", transcriptSeq: 11, createdAt: expect.any(Number) },
+      { kind: "text", text: "answer", transcriptSeq: 12, createdAt: expect.any(Number) },
+    ]);
+  });
+
+  test("dedupes thought entries by transcript sequence when merging snapshots", () => {
+    const loaded = turnsFromTranscript(
+      [
+        { seq: 10, role: "user", part: { kind: "prompt", text: "q", display: "q" } },
+        { seq: 11, role: "agent", part: { kind: "reasoning", text: "hmm" } },
+      ],
+      true,
+      "request-1",
+    );
+    let live = applyEvent([], {
+      event: "turn_started",
+      session: "session-a",
+      request_id: "request-1",
+    });
+    live = applyEvent(live, {
+      event: "agent_thought",
+      session: "session-a",
+      text: "hmm",
+      transcript_seq: 11,
+    });
+    live = applyEvent(live, {
+      event: "agent_thought",
+      session: "session-a",
+      text: "more",
+      transcript_seq: 12,
+    });
+
+    const merged = mergeLoadedTurns(loaded, live, true);
+    expect(merged[0].content).toEqual([
+      { kind: "thought", text: "hmm", transcriptSeq: 11, createdAt: expect.any(Number) },
+      { kind: "thought", text: "more", transcriptSeq: 12, createdAt: expect.any(Number) },
+    ]);
+    expect(merged[0].thoughts).toEqual(["hmm", "more"]);
+  });
+
   test("merges a durable snapshot with live tool ordering by transcript sequence", () => {
     const loaded = turnsFromTranscript(
       [

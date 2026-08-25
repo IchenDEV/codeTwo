@@ -1,11 +1,22 @@
-import { Children, isValidElement, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { openExternal } from "../bridge";
+import { useT } from "../i18n";
 import { ChartBlock, parseChartSpec } from "./ChartBlock";
+import { CopyButton } from "./CopyButton";
 import { VisualizationFrame } from "./VisualizationFrame";
 import { splitRichText } from "./visualization";
+
+/** Flatten a rendered code element's children back into raw text for the clipboard. */
+function textOf(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join("");
+  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
+  return "";
+}
 
 function safeWebLink(uri: string | undefined): string | null {
   if (!uri) return null;
@@ -24,7 +35,7 @@ function safeWebLink(uri: string | undefined): string | null {
   }
 }
 
-const components: Components = {
+const createComponents = (copyLabel: string): Components => ({
   p: ({ children }) => <p className="my-2 break-words first:mt-0 last:mb-0">{children}</p>,
   h1: ({ children }) => <h1 className="mb-2 mt-5 text-section font-medium first:mt-0">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-2 mt-5 text-ui font-medium first:mt-0">{children}</h2>,
@@ -86,6 +97,18 @@ const components: Components = {
         const spec = parseChartSpec(source);
         if (spec) return <ChartBlock spec={spec} />;
       }
+      return (
+        <div className="group/code relative my-3">
+          <pre className="max-w-full overflow-x-auto rounded-(--ds-radius-module) border bg-fill-quiet p-3 text-code leading-relaxed">
+            {children}
+          </pre>
+          <CopyButton
+            text={textOf(props.children).replace(/\n$/, "")}
+            label={copyLabel}
+            className="absolute end-2 top-2 border bg-background/80 opacity-0 backdrop-blur transition-opacity group-hover/code:opacity-100 focus-visible:opacity-100"
+          />
+        </div>
+      );
     }
     return (
       <pre className="my-3 max-w-full overflow-x-auto rounded-(--ds-radius-module) border bg-fill-quiet p-3 text-code leading-relaxed">
@@ -93,9 +116,11 @@ const components: Components = {
       </pre>
     );
   },
-};
+});
 
 export function MarkdownContent({ text, streaming = false }: { text: string; streaming?: boolean }) {
+  const t = useT();
+  const components = useMemo(() => createComponents(t("turn.copy")), [t]);
   const segments = splitRichText(text, streaming);
   return (
     <div className="codetwo-markdown min-w-0 text-ui leading-[1.7] text-foreground/90">

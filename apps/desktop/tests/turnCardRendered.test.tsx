@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, dom, mount, restoreDom } from "./domTestHarness";
+import { activateDom, click, dom, mount, restoreDom, waitFor } from "./domTestHarness";
 
 activateDom();
 const { TurnCard } = await import("../src/session/TurnCard");
@@ -135,7 +135,7 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
-  test("shows the prompt-row turn menu only when onSaveTemplate is wired", () => {
+  test("always renders the prompt-row menu; template action only when wired", async () => {
     activateDom();
     disableCanvasDrawing();
     // A leaked key-echo i18n mock can render the trigger label as its raw key; accept both.
@@ -145,8 +145,9 @@ describe("TurnCard rendered activity", () => {
         MENU_LABELS.includes(el.getAttribute("aria-label")),
       );
 
+    // Copying the prompt is always available, so the trigger renders even without onSaveTemplate.
     const without = mount(<TurnCard turn={runningTurn()} />);
-    expect(trigger(without)).toBeUndefined();
+    expect(trigger(without)).toBeTruthy();
     without.unmount();
 
     const withMenu = mount(<TurnCard turn={runningTurn()} onSaveTemplate={() => {}} />);
@@ -154,7 +155,7 @@ describe("TurnCard rendered activity", () => {
     withMenu.unmount();
   });
 
-  test("renders Markdown and keeps a tool call between streamed text segments", () => {
+  test("keeps a tool call between streamed text segments inside the process disclosure", async () => {
     activateDom();
     disableCanvasDrawing();
     const turn = {
@@ -170,13 +171,113 @@ describe("TurnCard rendered activity", () => {
       endedAt: 2,
     };
     const rendered = mount(<TurnCard turn={turn} />);
-    const ordered = [...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call]")];
+    // The final reply stays visible while the process (earlier text + tool) starts collapsed.
+    const process = rendered.container.querySelector("[data-process]");
+    expect(process).toBeTruthy();
+    expect(rendered.container.textContent).toContain("After");
+    expect(rendered.container.querySelector("[data-tool-call]")).toBeNull();
 
-    expect(ordered).toHaveLength(3);
-    expect(ordered[0].textContent).toContain("Before");
-    expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
-    expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
-    expect(ordered[2].textContent).toContain("After");
+    click(process.querySelector("button"));
+    await waitFor(() => {
+      const ordered = [
+        ...rendered.container.querySelectorAll(".codetwo-markdown, [data-tool-call]"),
+      ];
+      expect(ordered).toHaveLength(3);
+      expect(ordered[0].textContent).toContain("Before");
+      expect(ordered[0].querySelector("strong")?.textContent).toBe("Before");
+      expect(ordered[1].getAttribute("data-tool-call")).toBe("tool-1");
+      expect(ordered[2].textContent).toContain("After");
+    });
+    rendered.unmount();
+  });
+
+  test("renders thinking inline, collapsed after the turn settles", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "Answer",
+      textDeltas: ["Answer"],
+      thoughts: ["Checking constraints"],
+      content: [
+        { kind: "thought", text: "Checking constraints", transcriptSeq: 11 },
+        { kind: "text", text: "Answer", transcriptSeq: 12 },
+      ],
+      endedAt: 2,
+    };
+    const rendered = mount(<TurnCard turn={turn} />);
+    // The whole process (including thinking) starts collapsed once the turn settles.
+    expect(rendered.container.querySelector("[data-thought]")).toBeNull();
+    const process = rendered.container.querySelector("[data-process]");
+    click(process.querySelector("button"));
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-thought]")).toBeTruthy();
+    });
+    // The thought itself stays collapsed until its own header is clicked.
+    expect(rendered.container.textContent).not.toContain("Checking constraints");
+    click(rendered.container.querySelector("[data-thought] button"));
+    await waitFor(() => {
+      expect(rendered.container.textContent).toContain("Checking constraints");
+    });
+    rendered.unmount();
+  });
+
+  test("folds consecutive tool calls into one expandable summary group", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "Done",
+      textDeltas: ["Done"],
+      content: [
+        { kind: "tool", toolId: "tool-1", transcriptSeq: 11 },
+        { kind: "tool", toolId: "tool-2", transcriptSeq: 12 },
+        { kind: "text", text: "Done", transcriptSeq: 13 },
+      ],
+      tools: [
+        { id: "tool-1", title: "Grep pattern", status: "completed", kind: "search" },
+        { id: "tool-2", title: "Read engine.rs", status: "completed", kind: "read" },
+      ],
+      endedAt: 2,
+    };
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard turn={turn} />
+      </I18nProvider>,
+    );
+    const process = rendered.container.querySelector("[data-process]");
+    click(process.querySelector("button"));
+    await waitFor(() => {
+      expect(rendered.container.querySelector("[data-tool-group]")).toBeTruthy();
+    });
+    const group = rendered.container.querySelector("[data-tool-group]");
+    expect(group.textContent).toContain("Searched 1 patterns");
+    expect(group.textContent).toContain("Read 1 files");
+    // The group starts collapsed: individual tool rows mount after expanding it.
+    click(group.querySelector("button"));
+    await waitFor(() => {
+      expect(rendered.container.querySelectorAll("[data-tool-call]")).toHaveLength(2);
+    });
+    rendered.unmount();
+  });
+
+  test("shows a timestamp and a copy affordance under the settled reply", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const turn = {
+      ...runningTurn(),
+      text: "Answer",
+      textDeltas: ["Answer"],
+      content: [{ kind: "text", text: "Answer", transcriptSeq: 11 }],
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+    };
+    const rendered = mount(<TurnCard turn={turn} />);
+    expect(rendered.container.querySelector("time")).toBeTruthy();
+    const copy = [...rendered.container.querySelectorAll("button")].find((el) =>
+      ["Copy", "复制", "turn.copy"].includes(el.getAttribute("aria-label")),
+    );
+    expect(copy).toBeTruthy();
     rendered.unmount();
   });
 
