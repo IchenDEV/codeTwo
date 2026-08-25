@@ -2138,6 +2138,8 @@ mod tests {
                     text: "full\n  prompt".into(),
                     display: "full prompt".into(),
                 },
+                created_at: 123,
+                started_at: Some(123),
             }],
             next_before: Some(TranscriptCursor(7)),
             snapshot_through: Some(TranscriptCursor(7)),

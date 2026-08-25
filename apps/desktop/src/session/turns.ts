@@ -84,6 +84,8 @@ export interface ToolEntry {
   kind?: string | null;
   agentInput?: unknown;
   outputs?: ToolOutput[];
+  startedAt?: number;
+  endedAt?: number;
   /** Last durable row folded into this call; older snapshot/live updates cannot regress it. */
   lastTranscriptSeq?: number;
 }
@@ -94,8 +96,8 @@ export interface ToolEntry {
  * Repeated tool updates keep one position and update the matching ToolEntry in place.
  */
 export type TurnContentEntry =
-  | { kind: "text"; text: string; transcriptSeq?: number }
-  | { kind: "tool"; toolId: string; transcriptSeq?: number };
+  | { kind: "text"; text: string; transcriptSeq?: number; createdAt?: number }
+  | { kind: "tool"; toolId: string; transcriptSeq?: number; createdAt?: number };
 
 /**
  * One prompt → response cycle. The engine streams fragments; grouping them into turns is what makes
@@ -246,7 +248,15 @@ type ToolUpdate = {
   agentInput?: unknown;
   outputs?: ToolOutput[];
   transcriptSeq?: number | null;
+  startedAt?: number;
+  endedAt?: number;
 };
+
+function terminalToolStatus(status: string): boolean {
+  return ["completed", "failed", "cancelled", "canceled", "rejected", "denied"].includes(
+    status.trim().toLowerCase(),
+  );
+}
 
 /** Upsert a streamed/persisted tool call without dropping metadata on status-only updates. */
 function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
@@ -266,6 +276,8 @@ function upsertTool(tools: ToolEntry[], update: ToolUpdate): ToolEntry[] {
       existing?.activityTitle || (isAgentActivityTitle(update.title) ? update.title : undefined),
     status: update.status || existing?.status || "pending",
     outputs: mergeToolOutputs(existing?.outputs ?? [], update.outputs ?? []),
+    startedAt: existing?.startedAt ?? update.startedAt,
+    endedAt: update.endedAt ?? existing?.endedAt,
   };
   if (update.kind != null) entry.kind = update.kind;
   if (update.agentInput != null) entry.agentInput = update.agentInput;
@@ -295,6 +307,7 @@ function appendTextContent(
   content: readonly TurnContentEntry[],
   text: string,
   transcriptSeq?: number | null,
+  createdAt?: number,
 ): TurnContentEntry[] {
   return [
     ...content,
@@ -302,6 +315,7 @@ function appendTextContent(
       kind: "text" as const,
       text,
       ...(transcriptSeq == null ? {} : { transcriptSeq }),
+      ...(createdAt == null ? {} : { createdAt }),
     },
   ];
 }
@@ -310,6 +324,7 @@ function appendToolContent(
   content: readonly TurnContentEntry[],
   toolId: string,
   transcriptSeq?: number | null,
+  createdAt?: number,
 ): TurnContentEntry[] {
   if (content.some((entry) => entry.kind === "tool" && entry.toolId === toolId)) {
     return [...content];
@@ -320,6 +335,7 @@ function appendToolContent(
       kind: "tool" as const,
       toolId,
       ...(transcriptSeq == null ? {} : { transcriptSeq }),
+      ...(createdAt == null ? {} : { createdAt }),
     },
   ];
 }
@@ -492,6 +508,7 @@ export function applyEvent(
     i = list.length - 1;
   }
   const cur = { ...list[i] };
+  const observedAt = Date.now();
 
   switch (ev.event) {
     case "memory_context":
@@ -504,7 +521,7 @@ export function applyEvent(
       } else {
         cur.text += ev.text;
         cur.textDeltas = [...cur.textDeltas, ev.text];
-        cur.content = appendTextContent(cur.content, ev.text, ev.transcript_seq);
+        cur.content = appendTextContent(cur.content, ev.text, ev.transcript_seq, observedAt);
       }
       break;
     case "agent_thought":
@@ -524,8 +541,10 @@ export function applyEvent(
         agentInput: ev.agent_input,
         outputs: ev.outputs,
         transcriptSeq: ev.transcript_seq,
+        startedAt: observedAt,
+        endedAt: terminalToolStatus(ev.status) ? observedAt : undefined,
       });
-      cur.content = appendToolContent(cur.content, ev.id, ev.transcript_seq);
+      cur.content = appendToolContent(cur.content, ev.id, ev.transcript_seq, observedAt);
       break;
     }
     case "plan":
@@ -686,6 +705,7 @@ export function mergeLoadedTurns(loaded: Turn[], live: Turn[], running: boolean)
     plan: liveTurn.plan.length > 0 ? liveTurn.plan : loadedTail.plan,
     error: liveTurn.error ?? loadedTail.error,
     stopReason: liveTurn.stopReason ?? loadedTail.stopReason,
+    startedAt: Math.min(loadedTail.startedAt, liveTurn.startedAt),
     endedAt: running ? undefined : (liveTurn.endedAt ?? loadedTail.endedAt),
   };
   return [
@@ -705,14 +725,22 @@ export function turnsFromTranscript(
 ): Turn[] {
   const out: Turn[] = [];
   const receiptBySeq = new Map(receipts.map((receipt) => [receipt.user_part_seq, receipt]));
-  const push = (part: Part, role: string, seq?: number) => {
+  const push = (
+    part: Part,
+    role: string,
+    seq?: number,
+    createdAt?: number,
+    startedAt?: number,
+  ) => {
+    const at = createdAt && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
       out.push({
         ...newTurn(part.text),
         transcriptStartSeq: seq,
         accepted: true,
         memory: seq === undefined ? undefined : receiptBySeq.get(seq),
-        endedAt: Date.now(),
+        startedAt: at,
+        endedAt: at,
       });
       return;
     }
@@ -724,12 +752,12 @@ export function turnsFromTranscript(
       case "text":
         cur.text += part.text;
         cur.textDeltas.push(part.text);
-        cur.content = appendTextContent(cur.content, part.text, seq);
+        cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
       case "prompt":
         cur.text += part.text;
         cur.textDeltas.push(part.text);
-        cur.content = appendTextContent(cur.content, part.text, seq);
+        cur.content = appendTextContent(cur.content, part.text, seq, at);
         break;
       case "reasoning":
         cur.thoughts.push(part.text);
@@ -743,16 +771,21 @@ export function turnsFromTranscript(
           agentInput: part.agent_input,
           outputs: part.outputs,
           transcriptSeq: seq,
+          startedAt: startedAt && startedAt > 0 ? startedAt : at,
+          endedAt: terminalToolStatus(part.status) ? at : undefined,
         });
-        cur.content = appendToolContent(cur.content, part.id, seq);
+        cur.content = appendToolContent(cur.content, part.id, seq, at);
         break;
       case "plan":
         cur.plan = part.entries;
         break;
     }
+    cur.endedAt = Math.max(cur.endedAt ?? at, at);
   };
   for (const entry of entries) {
-    if ("part" in entry) push(entry.part, entry.role, entry.seq);
+    if ("part" in entry) {
+      push(entry.part, entry.role, entry.seq, entry.created_at, entry.started_at);
+    }
     else push(entry[1], entry[0]);
   }
   if (out.length > 0 && lastTurnRequestId) {

@@ -37,3 +37,9 @@ codetwo-core = { path = "crates/core" }
 # 0.2.1 links Ghostty's Windows static archive under the Unix library name. Keep the published
 # source revision and normalize the Windows artifact name locally until the upstream fix ships.
 libghostty-vt-sys = { path = "vendor/libghostty-vt-sys" }
+
+# Keep local builds useful for backtraces without retaining multi-gigabyte
+# debug symbols and incremental state. The test profile inherits these values.
+[profile.dev]
+debug = "line-tables-only"
+incremental = false

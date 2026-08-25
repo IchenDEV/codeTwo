@@ -39,6 +39,39 @@ describe("persisted transcript projection", () => {
     expect(turns[0].prompt).toBe("legacy prompt");
   });
 
+  test("projects durable row and tool timing into a loaded turn", () => {
+    const turns = turnsFromTranscript([
+      {
+        seq: 1,
+        role: "user",
+        part: { kind: "prompt", text: "inspect", display: "inspect" },
+        created_at: 1_000,
+        started_at: 1_000,
+      },
+      {
+        seq: 2,
+        role: "agent",
+        part: { kind: "text", text: "checking" },
+        created_at: 1_500,
+        started_at: 1_500,
+      },
+      {
+        seq: 3,
+        role: "agent",
+        part: { kind: "tool_call", id: "read-1", title: "Read", status: "completed" },
+        created_at: 4_000,
+        started_at: 2_000,
+      },
+    ]);
+
+    expect(turns[0]).toMatchObject({ startedAt: 1_000, endedAt: 4_000 });
+    expect(turns[0].content).toEqual([
+      { kind: "text", text: "checking", transcriptSeq: 2, createdAt: 1_500 },
+      { kind: "tool", toolId: "read-1", transcriptSeq: 3, createdAt: 4_000 },
+    ]);
+    expect(turns[0].tools[0]).toMatchObject({ startedAt: 2_000, endedAt: 4_000 });
+  });
+
   test("merges live output received while a running transcript is loading", () => {
     const loaded = turnsFromTranscript(
       [
@@ -325,9 +358,24 @@ describe("persisted transcript projection", () => {
     });
 
     expect(turns[0].content).toEqual([
-      { kind: "text", text: "Before tool.", transcriptSeq: 11 },
-      { kind: "tool", toolId: "tool-1", transcriptSeq: 12 },
-      { kind: "text", text: "After tool.", transcriptSeq: 14 },
+      {
+        kind: "text",
+        text: "Before tool.",
+        transcriptSeq: 11,
+        createdAt: expect.any(Number),
+      },
+      {
+        kind: "tool",
+        toolId: "tool-1",
+        transcriptSeq: 12,
+        createdAt: expect.any(Number),
+      },
+      {
+        kind: "text",
+        text: "After tool.",
+        transcriptSeq: 14,
+        createdAt: expect.any(Number),
+      },
     ]);
     expect(turns[0].tools[0].status).toBe("completed");
   });
@@ -390,9 +438,14 @@ describe("persisted transcript projection", () => {
 
     const merged = mergeLoadedTurns(loaded, live, true);
     expect(merged[0].content).toEqual([
-      { kind: "text", text: "Before", transcriptSeq: 11 },
-      { kind: "tool", toolId: "tool-1", transcriptSeq: 12 },
-      { kind: "text", text: "After", transcriptSeq: 14 },
+      { kind: "text", text: "Before", transcriptSeq: 11, createdAt: expect.any(Number) },
+      {
+        kind: "tool",
+        toolId: "tool-1",
+        transcriptSeq: 12,
+        createdAt: expect.any(Number),
+      },
+      { kind: "text", text: "After", transcriptSeq: 14, createdAt: expect.any(Number) },
     ]);
     expect(merged[0].tools[0].status).toBe("completed");
   });

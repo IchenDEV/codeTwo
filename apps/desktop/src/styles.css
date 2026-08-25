@@ -1109,3 +1109,78 @@ pre {
 .bn-doc-mode .bn-block-content[data-content-type="heading"][data-level="3"] .bn-inline-content {
   font-size: 17px;
 }
+
+/* Trajectory is a profiler surface: one shared time ribbon, a dense event ledger, and an
+   inspector. Structural lines are reserved for the ledger rows where exact scanning matters. */
+.trajectory-view {
+  container: trajectory / inline-size;
+}
+.trajectory-overview-grid {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  row-gap: var(--ds-space-inline);
+}
+.trajectory-lane {
+  position: relative;
+  min-height: 24px;
+  overflow: hidden;
+  border-radius: var(--ds-radius-control);
+}
+.trajectory-bar {
+  position: absolute;
+  min-width: 3px;
+  height: 8px;
+  border-radius: var(--ds-radius-micro);
+  transition-property: opacity, box-shadow;
+  transition-duration: var(--ds-motion-feedback);
+  transition-timing-function: var(--ds-ease-enter);
+}
+.trajectory-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 32%);
+  box-shadow: inset 0 1px 0 var(--border);
+}
+.trajectory-ledger-row {
+  display: grid;
+  grid-template-columns: 48px minmax(112px, 0.7fr) minmax(0, 2fr);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.trajectory-inspector {
+  box-shadow: inset 1px 0 0 var(--border);
+}
+.trajectory-timing {
+  border-radius: var(--ds-radius-control);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.trajectory-timing > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(0, 1.5fr);
+  padding: var(--ds-space-module-inset) var(--ds-space-surface-inset);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.trajectory-timing > div:last-child {
+  box-shadow: none;
+}
+.trajectory-timing dt {
+  color: var(--ds-color-text-muted);
+}
+.trajectory-timing dd {
+  overflow: hidden;
+  color: var(--ds-color-text);
+  font-family: var(--ds-font-mono);
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container trajectory (max-width: 700px) {
+  .trajectory-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(140px, 34%);
+  }
+  .trajectory-inspector {
+    box-shadow: inset 0 1px 0 var(--border);
+  }
+  .trajectory-ledger-row {
+    grid-template-columns: 44px minmax(96px, 0.65fr) minmax(0, 2fr);
+  }
+}

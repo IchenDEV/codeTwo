@@ -941,6 +941,8 @@ export interface TranscriptEntry {
   seq: number;
   role: "user" | "agent";
   part: Part;
+  created_at?: number;
+  started_at?: number;
 }
 
 /** A page never begins in the middle of a user turn. `next_before` is exclusive. */
