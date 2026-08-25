@@ -1030,6 +1030,7 @@ export const en = {
   "settings.petSizeLarge": "Large",
   "settings.colorScheme": "Color scheme",
   "settings.project": "Project",
+  "settings.worktrees": "Worktrees",
   "settings.projectHint":
     "Defaults for the project selected in the main sidebar.",
   "settings.projectProfile": "Project profile",
@@ -1443,7 +1444,7 @@ export const en = {
   "worktree.origin_default": "Local origin default",
   "worktree.localOnly": "local ref",
   "worktree.noFetch":
-    "Uses refs already on this machine. C2 never fetches or guesses main/master.",
+    "The selected ref is resolved to an exact commit before the worktree is created.",
   "worktree.resolving": "Resolving local Git refs…",
   "worktree.unavailable":
     "This baseline is unavailable in the selected project.",
@@ -1455,9 +1456,32 @@ export const en = {
   "worktree.manage": "Worktrees",
   "worktree.manageHint":
     "Isolated checkouts created under this project, including leftovers no session claims.",
+  "worktree.manageAllHint":
+    "Review isolated checkouts across your projects, reopen their conversations, and remove checkouts you no longer need.",
+  "worktree.settingsTitle": "Worktree behavior",
+  "worktree.settingsLoading": "Loading worktree settings…",
+  "worktree.settingsLoadFailed": "Could not load worktree settings: {error}",
+  "worktree.settingsSaveFailed": "Could not save worktree settings: {error}",
+  "worktree.root": "Worktree root",
+  "worktree.rootHint":
+    "Directory for new managed worktrees. Existing worktrees stay where they are; leave blank to use the project-adjacent default.",
+  "worktree.rootDefault": "Project default (.codetwo-worktrees)",
+  "worktree.fetchUpstream": "Fetch upstream before creating worktrees",
+  "worktree.fetchUpstreamHint":
+    "Fetch the repository’s configured remote, then resolve the selected baseline. Creation stops if fetch fails.",
+  "worktree.autoDelete": "Automatically delete old worktrees",
+  "worktree.autoDeleteHint":
+    "When the limit is exceeded, C2 discards the oldest archived-session worktrees. Conversations remain readable, but their checkouts cannot be restored. Active sessions and unclaimed leftovers are never removed automatically.",
+  "worktree.autoDeleteLimit": "Auto-delete limit",
+  "worktree.autoDeleteLimitHint":
+    "Maximum number of active and archived session worktrees to keep.",
   "worktree.manageLoading": "Scanning worktrees…",
   "worktree.manageEmpty": "No worktrees.",
+  "worktree.manageNoProjects": "Add a project before managing its worktrees.",
   "worktree.manageFailed": "Could not list worktrees: {error}",
+  "worktree.refresh": "Refresh",
+  "worktree.count": "Worktrees: {count}",
+  "worktree.openConversation": "Open conversation",
   "worktree.kindSession": "Session",
   "worktree.kindOrphan": "Orphan",
   "worktree.kindStale": "Stale",
@@ -3151,6 +3175,7 @@ export const zhCN: Record<StringKey, string> = {
   "settings.petSizeLarge": "大",
   "settings.colorScheme": "配色方案",
   "settings.project": "项目",
+  "settings.worktrees": "Worktree 管理",
   "settings.projectHint": "当前主侧边栏所选项目的默认设置。",
   "settings.projectProfile": "项目资料",
   "settings.projectName": "名称",
@@ -3542,7 +3567,7 @@ export const zhCN: Record<StringKey, string> = {
   "worktree.origin_default": "本地 origin 默认分支",
   "worktree.localOnly": "本地 ref",
   "worktree.noFetch":
-    "只使用本机已有 ref；C2 不会 fetch，也不会猜测 main/master。",
+    "创建 worktree 前会把所选 ref 解析为确定的 commit。",
   "worktree.resolving": "正在解析本地 Git ref…",
   "worktree.unavailable": "所选项目没有这个可用基线。",
   "worktree.fixedForSession": "该会话固定使用创建时记录的本地 ref 与 commit。",
@@ -3551,9 +3576,30 @@ export const zhCN: Record<StringKey, string> = {
     "该旧会话早于持久化目录身份字段，只能使用较窄的旧版 Git 与路径证据校验。",
   "worktree.manage": "Worktree 管理",
   "worktree.manageHint": "该项目下创建的隔离检出目录，包括没有会话认领的残留。",
+  "worktree.manageAllHint": "查看所有项目的隔离检出，打开关联会话，并清理不再需要的 worktree。",
+  "worktree.settingsTitle": "Worktree 行为",
+  "worktree.settingsLoading": "正在加载 worktree 设置…",
+  "worktree.settingsLoadFailed": "无法加载 worktree 设置：{error}",
+  "worktree.settingsSaveFailed": "无法保存 worktree 设置：{error}",
+  "worktree.root": "Worktree 根目录",
+  "worktree.rootHint":
+    "新建的托管 worktree 将存放在这里；已有 worktree 不会移动。留空则使用项目旁的默认目录。",
+  "worktree.rootDefault": "项目默认目录（.codetwo-worktrees）",
+  "worktree.fetchUpstream": "创建 worktree 前拉取上游",
+  "worktree.fetchUpstreamHint":
+    "先拉取仓库配置的远端，再解析所选基线；拉取失败时停止创建。",
+  "worktree.autoDelete": "自动删除旧 worktree",
+  "worktree.autoDeleteHint":
+    "超过上限时，仅丢弃最旧的已归档会话 worktree。会话记录仍可查看，但检出目录无法恢复；活跃会话和无主残留不会被自动删除。",
+  "worktree.autoDeleteLimit": "自动删除上限",
+  "worktree.autoDeleteLimitHint": "要保留的活跃与已归档会话 worktree 总数上限。",
   "worktree.manageLoading": "正在扫描 worktree…",
   "worktree.manageEmpty": "没有 worktree。",
+  "worktree.manageNoProjects": "请先添加项目，再管理其 worktree。",
   "worktree.manageFailed": "无法列出 worktree：{error}",
+  "worktree.refresh": "刷新",
+  "worktree.count": "Worktree：{count}",
+  "worktree.openConversation": "打开会话",
   "worktree.kindSession": "会话",
   "worktree.kindOrphan": "孤儿",
   "worktree.kindStale": "残留",

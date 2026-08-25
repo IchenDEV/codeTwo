@@ -30,6 +30,69 @@
   padding: 1.5rem 2rem 0;
 }
 
+.settings-worktrees-page {
+  max-width: 64rem;
+}
+
+.worktree-policy-card {
+  overflow: hidden;
+  margin-top: var(--ds-space-module-inset);
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.worktree-policy-row {
+  padding-right: var(--ds-space-surface-inset);
+  padding-left: var(--ds-space-surface-inset);
+}
+
+.worktree-policy-row:not(:last-child) {
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+}
+
+.worktree-root-input {
+  width: min(24rem, 36vw);
+}
+
+.worktree-limit-input {
+  width: 7rem;
+}
+
+.worktree-project-section {
+  margin-top: var(--ds-space-section);
+}
+
+.worktree-project-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ds-space-module-inset);
+  padding: 0 var(--ds-space-surface-inset) var(--ds-space-module-inset);
+}
+
+.worktree-project-card {
+  overflow: hidden;
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.worktree-settings-row {
+  gap: var(--ds-space-section);
+  padding-right: var(--ds-space-surface-inset);
+  padding-left: var(--ds-space-surface-inset);
+  transition: background-color var(--ds-motion-feedback) ease;
+}
+
+.worktree-settings-row:hover {
+  background: var(--ds-color-fill-hover);
+}
+
+.worktree-settings-actions {
+  gap: var(--ds-space-control-group);
+}
+
 .profile-page {
   display: flex;
   flex-direction: column;
@@ -142,6 +205,36 @@
 
   .settings-profile-page {
     padding: 1rem 1rem 0;
+  }
+
+  .settings-worktrees-page {
+    padding: 1rem 1rem 0;
+  }
+
+  .worktree-settings-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .worktree-policy-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .worktree-policy-row > :last-child {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .worktree-root-input {
+    width: 100%;
+  }
+
+  .worktree-settings-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .profile-stat-grid,

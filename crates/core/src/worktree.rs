@@ -6,6 +6,7 @@
 //! provider runs against an isolated branch without losing project-local configuration.
 
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Output;
@@ -63,7 +64,95 @@ pub struct ResolvedWorktreeBaseline {
 }
 
 const WORKTREE_DIR: &str = ".codetwo-worktrees";
+const WORKTREE_SETTINGS_FILE: &str = "worktree-settings.json";
 const ORIGIN_HEAD: &str = "refs/remotes/origin/HEAD";
+
+fn default_auto_delete_limit() -> usize {
+    15
+}
+
+/// Global policy for session worktrees. Defaults preserve the existing project-adjacent layout
+/// and explicit cleanup behavior until the user opts into automation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorktreeSettings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+    #[serde(default)]
+    pub fetch_upstream: bool,
+    #[serde(default)]
+    pub auto_delete: bool,
+    #[serde(default = "default_auto_delete_limit")]
+    pub auto_delete_limit: usize,
+}
+
+impl Default for WorktreeSettings {
+    fn default() -> Self {
+        Self {
+            root: None,
+            fetch_upstream: false,
+            auto_delete: false,
+            auto_delete_limit: default_auto_delete_limit(),
+        }
+    }
+}
+
+impl WorktreeSettings {
+    fn normalized(mut self) -> io::Result<Self> {
+        self.root = self
+            .root
+            .take()
+            .map(|root| root.trim().to_string())
+            .filter(|root| !root.is_empty());
+        if let Some(root) = self.root.as_deref() {
+            let path = Path::new(root);
+            if !path.is_absolute() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "worktree root must be an absolute path",
+                ));
+            }
+            if path.exists() && !path.is_dir() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "worktree root must be a directory",
+                ));
+            }
+        }
+        self.auto_delete_limit = self.auto_delete_limit.clamp(1, 1000);
+        Ok(self)
+    }
+}
+
+pub fn load_settings(data_dir: &Path) -> io::Result<WorktreeSettings> {
+    let path = data_dir.join(WORKTREE_SETTINGS_FILE);
+    match fs::read_to_string(path) {
+        Ok(contents) => serde_json::from_str::<WorktreeSettings>(&contents)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?
+            .normalized(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(WorktreeSettings::default()),
+        Err(error) => Err(error),
+    }
+}
+
+pub fn save_settings(data_dir: &Path, settings: WorktreeSettings) -> io::Result<WorktreeSettings> {
+    let settings = settings.normalized()?;
+    fs::create_dir_all(data_dir)?;
+    let path = data_dir.join(WORKTREE_SETTINGS_FILE);
+    let temporary = data_dir.join(format!(
+        ".{WORKTREE_SETTINGS_FILE}.{}.tmp",
+        std::process::id()
+    ));
+    let contents = serde_json::to_string_pretty(&settings)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    fs::write(&temporary, format!("{contents}\n"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))?;
+    }
+    fs::rename(&temporary, path)?;
+    Ok(settings)
+}
 
 fn git_command(repo: &Path) -> Command {
     let mut command = Command::new("git");
@@ -109,6 +198,13 @@ async fn run_git(repo: &Path, args: &[&OsStr]) -> io::Result<String> {
         return Err(git_failure(&out));
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+/// Refresh the repository's configured remotes before resolving a worktree baseline.
+pub async fn fetch_upstream(repo: &Path) -> io::Result<()> {
+    run_git(repo, &[OsStr::new("fetch"), OsStr::new("--prune")])
+        .await
+        .map(|_| ())
 }
 
 fn validate_resolved_sha(sha: &str) -> io::Result<()> {
@@ -747,22 +843,22 @@ async fn add_for_session_at_root(
     root: &Path,
     session_id: &str,
     baseline: &ResolvedWorktreeBaseline,
+    configured_root: Option<&Path>,
 ) -> io::Result<Worktree> {
     let branch = branch_for_session(session_id)?;
     let safe_id = branch
         .strip_prefix("codetwo/")
         .expect("session branch always has the codetwo prefix");
-    let parent = root.parent().ok_or_else(|| {
+    let repo_name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("repo");
+    let container = session_container_dir_with_root(root, configured_root).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
             "repository has no parent directory",
         )
     })?;
-    let repo_name = root
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("repo");
-    let container = parent.join(WORKTREE_DIR);
     std::fs::create_dir_all(&container)?;
     let path = container.join(format!("{repo_name}-{safe_id}"));
     match add_from_sha(root, &path, &branch, &baseline.sha).await {
@@ -811,8 +907,19 @@ pub async fn add_for_session_from_baseline(
     session_id: &str,
     baseline: &ResolvedWorktreeBaseline,
 ) -> io::Result<Worktree> {
+    add_for_session_from_baseline_in(repo, session_id, baseline, None).await
+}
+
+/// Create a session checkout under a configured global root. A stable repository subdirectory
+/// prevents two repositories with the same folder name from sharing a stale-path cleanup scope.
+pub async fn add_for_session_from_baseline_in(
+    repo: &Path,
+    session_id: &str,
+    baseline: &ResolvedWorktreeBaseline,
+    configured_root: Option<&Path>,
+) -> io::Result<Worktree> {
     let root = repo_root(repo).await?;
-    add_for_session_at_root(&root, session_id, baseline).await
+    add_for_session_at_root(&root, session_id, baseline, configured_root).await
 }
 
 /// Create the persistent isolated checkout for one session at the current checkout's `HEAD`.
@@ -884,7 +991,11 @@ pub async fn discard_session_worktree(
     branch: &str,
 ) -> io::Result<DiscardedWorktree> {
     let suffix = branch.strip_prefix(SESSION_BRANCH_PREFIX).unwrap_or("");
-    if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if suffix.is_empty()
+        || !suffix
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("refusing to discard branch {branch:?}: not a codetwo/ session branch"),
@@ -992,8 +1103,33 @@ pub async fn discard_session_worktree(
 }
 
 /// The shared container directory that holds every session checkout for `repo_root`.
+fn stable_path_hash(path: &Path) -> u64 {
+    path.as_os_str()
+        .to_string_lossy()
+        .bytes()
+        .fold(0xcbf29ce484222325, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
+        })
+}
+
+pub fn session_container_dir_with_root(
+    repo_root: &Path,
+    configured_root: Option<&Path>,
+) -> Option<PathBuf> {
+    match configured_root {
+        Some(root) => {
+            let repo_name = repo_root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("repo");
+            Some(root.join(format!("{repo_name}-{:016x}", stable_path_hash(repo_root))))
+        }
+        None => repo_root.parent().map(|parent| parent.join(WORKTREE_DIR)),
+    }
+}
+
 pub fn session_container_dir(repo_root: &Path) -> Option<PathBuf> {
-    repo_root.parent().map(|parent| parent.join(WORKTREE_DIR))
+    session_container_dir_with_root(repo_root, None)
 }
 
 /// Test-only raw removal. Production cleanup goes through [`discard_session_worktree`], which
@@ -1190,6 +1326,51 @@ mod tests {
         let value = serde_json::to_value(resolved).unwrap();
         assert_eq!(value["ref"], "trunk");
         assert!(value.get("reference").is_none());
+    }
+
+    #[test]
+    fn settings_round_trip_and_validate_the_root() {
+        let data = std::env::temp_dir().join(format!(
+            "codetwo-worktree-settings-{}",
+            uuid::Uuid::new_v4()
+        ));
+        assert_eq!(load_settings(&data).unwrap(), WorktreeSettings::default());
+
+        let root = data.join("managed");
+        let saved = save_settings(
+            &data,
+            WorktreeSettings {
+                root: Some(format!("  {}  ", root.display())),
+                fetch_upstream: true,
+                auto_delete: true,
+                auto_delete_limit: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.root.as_deref(), root.to_str());
+        assert_eq!(saved.auto_delete_limit, 1);
+        assert_eq!(load_settings(&data).unwrap(), saved);
+
+        let error = save_settings(
+            &data,
+            WorktreeSettings {
+                root: Some("relative/worktrees".into()),
+                ..WorktreeSettings::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        let _ = std::fs::remove_dir_all(data);
+    }
+
+    #[test]
+    fn configured_root_uses_a_repository_specific_container() {
+        let configured = Path::new("/tmp/codetwo-worktrees");
+        let first = session_container_dir_with_root(Path::new("/one/repo"), Some(configured));
+        let second = session_container_dir_with_root(Path::new("/two/repo"), Some(configured));
+        assert_ne!(first, second);
+        assert_eq!(first.unwrap().parent(), Some(configured));
+        assert_eq!(second.unwrap().parent(), Some(configured));
     }
 
     #[test]
@@ -1684,7 +1865,10 @@ mod tests {
         .unwrap();
 
         assert!(outcome.removed_checkout);
-        assert_eq!(outcome.deleted_branch.as_deref(), Some("codetwo/discard-me"));
+        assert_eq!(
+            outcome.deleted_branch.as_deref(),
+            Some("codetwo/discard-me")
+        );
         assert!(!created.path.exists());
         assert!(!container.exists(), "empty container should be removed");
         assert_eq!(

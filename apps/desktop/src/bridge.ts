@@ -516,6 +516,13 @@ export interface WorktreeBaselineOption {
   unavailable_reason: string | null;
 }
 
+export interface WorktreeSettings {
+  root?: string;
+  fetch_upstream: boolean;
+  auto_delete: boolean;
+  auto_delete_limit: number;
+}
+
 /** What a discard actually removed. A repeat discard is a no-op success with both fields empty. */
 export interface DiscardedWorktree {
   removed_checkout: boolean;
@@ -1743,6 +1750,26 @@ export async function discardSessionWorktree(session: string): Promise<Discarded
 /** Every checkout under a project's worktree container — session-claimed, orphan, or stale. */
 export async function listProjectWorktrees(projectPath: string): Promise<WorktreeStatusEntry[]> {
   return inDesktop ? call<WorktreeStatusEntry[]>("worktrees.list", { project_path: projectPath }) : [];
+}
+
+const browserWorktreeSettings: WorktreeSettings = {
+  fetch_upstream: false,
+  auto_delete: false,
+  auto_delete_limit: 15,
+};
+
+export async function getWorktreeSettings(): Promise<WorktreeSettings> {
+  return inDesktop
+    ? call<WorktreeSettings>("worktrees.settings", {})
+    : { ...browserWorktreeSettings };
+}
+
+export async function updateWorktreeSettings(
+  settings: WorktreeSettings,
+): Promise<WorktreeSettings> {
+  return inDesktop
+    ? call<WorktreeSettings>("worktrees.set_settings", { settings })
+    : { ...settings };
 }
 
 /** Remove an unclaimed checkout by path. The core rejects paths a session still claims. */

@@ -1793,6 +1793,9 @@ struct EngineState {
     /// App-owned private attachment root. Only the plugin graph injects this; library/TUI engines
     /// intentionally cannot resolve desktop Appshot or prompt-attachment IDs.
     private_data_dir: RwLock<Option<std::path::PathBuf>>,
+    /// Optional global parent for new session worktrees. `None` preserves the project-adjacent
+    /// `.codetwo-worktrees` layout used by older versions.
+    worktree_root: RwLock<Option<std::path::PathBuf>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
@@ -2030,6 +2033,7 @@ impl Engine {
             memory,
             canvas_gate,
             private_data_dir: RwLock::new(None),
+            worktree_root: RwLock::new(None),
             desktop_mcp,
             provider_tools,
         });
@@ -2230,6 +2234,10 @@ impl Engine {
     /// through this root, and non-desktop constructors leave it unavailable.
     pub fn set_private_data_dir(&self, data_dir: impl Into<std::path::PathBuf>) {
         *self.state.private_data_dir.write().unwrap() = Some(data_dir.into());
+    }
+
+    pub fn set_worktree_root(&self, root: Option<std::path::PathBuf>) {
+        *self.state.worktree_root.write().unwrap() = root;
     }
 
     /// Replace the resolved scene library (mirroring [`Engine::set_skills`]; the desktop's
@@ -2571,6 +2579,53 @@ impl Engine {
         Ok(outcome)
     }
 
+    /// Keep at most `limit` durable session worktrees by discarding the oldest archived ones.
+    /// Active sessions and unclaimed/stale directories are deliberately outside automatic cleanup.
+    pub async fn cleanup_old_worktrees(&self, limit: usize) -> (usize, Vec<String>) {
+        let Some(store) = &self.state.store else {
+            return (0, Vec::new());
+        };
+        let active = match store.list_sessions() {
+            Ok(sessions) => sessions,
+            Err(error) => return (0, vec![error.to_string()]),
+        };
+        let archived = match store.list_archived_sessions() {
+            Ok(sessions) => sessions,
+            Err(error) => return (0, vec![error.to_string()]),
+        };
+        let managed = active
+            .iter()
+            .chain(archived.iter())
+            .filter(|session| session.worktree_path.is_some() && !session.worktree_discarded)
+            .count();
+        let mut remaining = managed.saturating_sub(limit.max(1));
+        if remaining == 0 {
+            return (0, Vec::new());
+        }
+
+        let candidates: Vec<String> = archived
+            .iter()
+            .rev()
+            .filter(|session| session.worktree_path.is_some() && !session.worktree_discarded)
+            .map(|session| session.id.clone())
+            .collect();
+        let mut removed = 0;
+        let mut errors = Vec::new();
+        for session in candidates {
+            if remaining == 0 {
+                break;
+            }
+            match self.discard_session_worktree(&session).await {
+                Ok(_) => {
+                    removed += 1;
+                    remaining -= 1;
+                }
+                Err(error) => errors.push(format!("{session}: {error}")),
+            }
+        }
+        (removed, errors)
+    }
+
     /// Every session checkout, orphaned registration, and stale directory associated with one
     /// project's repository, for the management UI.
     pub async fn list_project_worktrees(
@@ -2583,6 +2638,7 @@ impl Engine {
         let common_dir = crate::worktree::common_dir(&root)
             .await
             .map_err(|error| format!("couldn't identify repository: {error}"))?;
+        let configured_root = self.state.worktree_root.read().unwrap().clone();
         let registrations = crate::worktree::registrations_from_common_dir(&common_dir)
             .await
             .map_err(|error| format!("couldn't list worktrees: {error}"))?;
@@ -2676,7 +2732,9 @@ impl Engine {
 
         // Directories in the shared container that Git no longer registers: leftovers from prunes,
         // failed creations, or manual deletions inside the checkout.
-        if let Some(container) = crate::worktree::session_container_dir(&root) {
+        if let Some(container) =
+            crate::worktree::session_container_dir_with_root(&root, configured_root.as_deref())
+        {
             if let Ok(read_dir) = std::fs::read_dir(&container) {
                 for entry in read_dir.flatten() {
                     let path = entry.path();
@@ -2727,8 +2785,10 @@ impl Engine {
         let common_dir = crate::worktree::common_dir(&root)
             .await
             .map_err(|error| format!("couldn't identify repository: {error}"))?;
-        let container = crate::worktree::session_container_dir(&root)
-            .ok_or_else(|| "repository has no parent directory".to_string())?;
+        let configured_root = self.state.worktree_root.read().unwrap().clone();
+        let container =
+            crate::worktree::session_container_dir_with_root(&root, configured_root.as_deref())
+                .ok_or_else(|| "repository has no parent directory".to_string())?;
         let container = std::fs::canonicalize(&container)
             .map_err(|error| format!("worktree container is unavailable: {error}"))?;
         let target_raw = std::path::PathBuf::from(worktree_path);
@@ -3742,11 +3802,13 @@ impl Engine {
                 let mut prepared_worktree = None;
                 if use_worktree {
                     let baseline = worktree_base.unwrap_or(WorktreeBaseline::Current);
+                    let configured_root = self.state.worktree_root.read().unwrap().clone();
                     match prepare_session_worktree_with_expected_sha(
                         std::path::Path::new(&cwd),
                         &mut sess,
                         baseline,
                         worktree_base_sha.as_deref(),
+                        configured_root.as_deref(),
                     )
                     .await
                     {
@@ -5172,7 +5234,7 @@ async fn prepare_session_worktree(
     baseline: WorktreeBaseline,
 ) -> std::io::Result<Vec<(String, String)>> {
     Ok(
-        prepare_session_worktree_with_expected_sha(source, session, baseline, None)
+        prepare_session_worktree_with_expected_sha(source, session, baseline, None, None)
             .await?
             .hook_errors,
     )
@@ -5183,6 +5245,7 @@ async fn prepare_session_worktree_with_expected_sha(
     session: &mut Session,
     baseline: WorktreeBaseline,
     expected_sha: Option<&str>,
+    configured_root: Option<&std::path::Path>,
 ) -> std::io::Result<PreparedSessionWorktree> {
     let source = source.canonicalize()?;
     let repo_root = crate::worktree::repo_root(&source).await?;
@@ -5209,8 +5272,13 @@ async fn prepare_session_worktree_with_expected_sha(
             ));
         }
     }
-    let worktree =
-        crate::worktree::add_for_session_from_baseline(&repo_root, &session.id, &resolved).await?;
+    let worktree = crate::worktree::add_for_session_from_baseline_in(
+        &repo_root,
+        &session.id,
+        &resolved,
+        configured_root,
+    )
+    .await?;
     let git_dir = match crate::worktree::git_dir(&worktree.path).await {
         Ok(git_dir) => git_dir,
         Err(error) => rollback_failed_worktree(&repo_root, &worktree, &resolved.sha, error).await?,
@@ -6217,6 +6285,7 @@ for line in sys.stdin:
             &mut session,
             WorktreeBaseline::Current,
             Some(&previewed),
+            None,
         )
         .await
         .unwrap_err();
