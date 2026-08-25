@@ -33,6 +33,14 @@ impl Event for PluginsChanged {
     const NAME: &'static str = "plugins/changed";
 }
 
+/// A plugin or component policy changed without necessarily rebuilding the plugin graph.
+pub struct PluginPolicyChanged;
+
+impl Event for PluginPolicyChanged {
+    type Output = ();
+    const NAME: &'static str = "plugins/policy-changed";
+}
+
 /// The frontend moved to a different workspace.
 pub struct WorkspaceChanged {
     pub cwd: PathBuf,

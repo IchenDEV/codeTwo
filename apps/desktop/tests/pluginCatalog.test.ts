@@ -139,7 +139,12 @@ describe("unified plugin catalog adapter", () => {
       slot: "settings.sections",
     });
     expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
-    expect(model.components.find((component) => component.id === "skill:review-skill")?.pluginId).toBe("bundle:review");
+    expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
+      pluginId: "bundle:review",
+      policyPluginId: "skills",
+      manageable: true,
+      supportedScopes: ["user", "project"],
+    });
     expect(model.marketplaceItems[0]).toMatchObject({ id: "market:browser-tool", installable: true });
   });
 
@@ -190,7 +195,7 @@ describe("unified plugin catalog adapter", () => {
       scope: "local",
         counts: {},
       scaffolds: [],
-      extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "ready" }],
+      extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "unsupported" }],
       diagnostics: [],
     };
     const model = buildPluginManagerCatalog({
@@ -203,6 +208,7 @@ describe("unified plugin catalog adapter", () => {
 
     expect(model.plugins[0]?.supportedScopes).toEqual(["user"]);
     expect(model.components[0]?.supportedScopes).toEqual(["user"]);
+    expect(model.components[0]?.state.status).toBe("unsupported");
   });
 
   test("uses managed project policy only for the bundle process runtime", () => {

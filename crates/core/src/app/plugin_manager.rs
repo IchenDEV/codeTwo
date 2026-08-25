@@ -101,6 +101,8 @@ pub struct PluginChangeResult {
     pub config_revision: u64,
     pub affected: Vec<String>,
     #[serde(skip)]
+    component_policy_changed: bool,
+    #[serde(skip)]
     settle: Option<Arc<PluginSettleSnapshot>>,
 }
 
@@ -790,6 +792,7 @@ impl PluginManager {
             return Err(PluginManagerError::StalePlan);
         }
         let plan = pending.plan;
+        let component_policy_changed = plan.request.component.is_some();
         let previous_document = config.snapshot();
         let previous_global = loader.config().clone();
         let previous_projects = projects
@@ -845,6 +848,7 @@ impl PluginManager {
             graph_revision: loader.revision(),
             config_revision: config.snapshot().revision,
             affected: plan.affected,
+            component_policy_changed,
             settle: Some(Arc::new(PluginSettleSnapshot {
                 previous_document,
                 previous_global,
@@ -916,6 +920,7 @@ impl PluginManager {
             graph_revision: loader.revision(),
             config_revision: config.snapshot().revision,
             affected: plan.affected,
+            component_policy_changed: true,
             settle: Some(Arc::new(PluginSettleSnapshot {
                 previous_document,
                 previous_global,
@@ -943,14 +948,19 @@ impl PluginManager {
             .ok_or(PluginManagerError::RuntimeGone)?;
 
         let Some(settle) = &result.settle else {
-            let loader = self.loader.lock().unwrap();
-            let config = self.config.lock().unwrap();
-            if loader.revision() != result.graph_revision
-                || config.snapshot().revision != result.config_revision
             {
-                return Err(PluginManagerError::StalePlan);
+                let loader = self.loader.lock().unwrap();
+                let config = self.config.lock().unwrap();
+                if loader.revision() != result.graph_revision
+                    || config.snapshot().revision != result.config_revision
+                {
+                    return Err(PluginManagerError::StalePlan);
+                }
+                config.mark_last_good()?;
             }
-            config.mark_last_good()?;
+            if result.component_policy_changed {
+                context.emit(crate::app::events::PluginPolicyChanged).await;
+            }
             return Ok(());
         };
 
@@ -1050,6 +1060,9 @@ impl PluginManager {
             }));
         }
         drop(project_leases);
+        if result.component_policy_changed {
+            context.emit(crate::app::events::PluginPolicyChanged).await;
+        }
         Ok(())
     }
 

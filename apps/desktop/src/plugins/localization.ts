@@ -13,6 +13,8 @@ const STATUS_KEYS: Record<PluginManagerStatus, StringKey> = {
   active: "pluginManager.status.active",
   failed: "pluginManager.status.failed",
   disposed: "pluginManager.status.disposed",
+  requires_auth: "pluginManager.status.requiresAuth",
+  unsupported: "pluginManager.status.unsupported",
 };
 
 const SOURCE_KEYS: Record<PluginManagerSource, StringKey> = {
@@ -47,6 +49,11 @@ const COMPONENT_KIND_KEYS: Record<string, StringKey> = {
   editorBlock: "pluginManager.kind.editorBlock",
   runtime: "pluginManager.kind.runtime",
   skill: "pluginManager.kind.skill",
+  agent_skill: "pluginManager.kind.agentSkill",
+  fragment: "pluginManager.kind.fragment",
+  macro: "pluginManager.kind.macro",
+  mcp: "pluginManager.kind.mcp",
+  hook: "pluginManager.kind.hook",
 };
 
 const PLUGIN_KEYS: Record<string, { name: StringKey; description: StringKey }> =
@@ -245,10 +252,25 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     description: t("pluginManager.description"),
     plugins: t("pluginManager.plugins"),
     components: t("pluginManager.components"),
+    mcps: t("pluginManager.mcps"),
+    skills: t("pluginManager.skills"),
+    hooks: t("pluginManager.hooks"),
     marketplace: t("pluginManager.marketplace"),
     userScope: t("pluginManager.userScope"),
     projectScope: (project) => project.label,
     search: t("pluginManager.search"),
+    searchPlaceholder: (tab) =>
+      t(
+        tab === "plugins"
+          ? "pluginManager.searchPlugins"
+          : tab === "mcps"
+            ? "pluginManager.searchMcps"
+            : tab === "skills"
+              ? "pluginManager.searchSkills"
+              : tab === "hooks"
+                ? "pluginManager.searchHooks"
+                : "pluginManager.searchMarketplace",
+      ),
     noResults: t("pluginManager.noResults"),
     enabled: t("pluginManager.enabled"),
     disabled: t("pluginManager.disabled"),
@@ -306,12 +328,24 @@ export function createPluginManagerLabels(t: Translate): PluginManagerLabels {
     scope: t("pluginManager.scope"),
     pluginList: t("pluginManager.pluginList"),
     componentList: t("pluginManager.componentList"),
+    resourceList: (tab) =>
+      t(
+        tab === "mcps"
+          ? "pluginManager.mcpList"
+          : tab === "skills"
+            ? "pluginManager.skillList"
+            : "pluginManager.hookList",
+      ),
     projectState: (name) => t("pluginManager.projectState", { name }),
     noDescription: t("pluginManager.noDescription"),
     configurationHint: t("pluginManager.configurationHint"),
     plugin: t("pluginManager.plugin"),
     source: t("pluginManager.source"),
+    identifier: t("pluginManager.identifier"),
+    definition: t("pluginManager.definition"),
     uiSlot: t("pluginManager.uiSlot"),
+    managedByPlugin: t("pluginManager.managedByPlugin"),
+    managePlugin: t("pluginManager.managePlugin"),
     affectedPlugins: t("pluginManager.affectedPlugins"),
     missingCount: (count) => t("pluginManager.missingCount", { count }),
     status,

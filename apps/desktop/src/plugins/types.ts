@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-export type PluginManagerTab = "plugins" | "marketplace";
+export type PluginManagerTab =
+  | "plugins"
+  | "mcps"
+  | "skills"
+  | "hooks"
+  | "marketplace";
 
 export type PluginManagerSource = "builtin" | "host" | "bundle";
 
@@ -17,7 +22,14 @@ export interface PluginManagerProject {
 export type PluginManagerOverride = "inherit" | "enabled" | "disabled";
 
 export type PluginManagerStatus =
-  "disabled" | "pending" | "loading" | "active" | "failed" | "disposed";
+  | "disabled"
+  | "pending"
+  | "loading"
+  | "active"
+  | "failed"
+  | "disposed"
+  | "requires_auth"
+  | "unsupported";
 
 export interface PluginManagerActiveResource {
   id: string;
@@ -97,6 +109,8 @@ export interface PluginManagerComponent {
   id: string;
   pluginId: string;
   pluginName: string;
+  /** Managed plugin whose component policy controls this resource. Defaults to pluginId. */
+  policyPluginId?: string;
   name: string;
   description?: string | null;
   kind: string;
@@ -106,6 +120,7 @@ export interface PluginManagerComponent {
   supportedScopes: PluginManagerScopeKind[];
   /** False when the descriptor is visible here but its runtime has no component-policy seam. */
   manageable?: boolean;
+  availability?: "ready" | "requires_trust" | "requires_auth" | "unsupported";
   required?: boolean;
   state: PluginManagerScopedState;
   /** Actions available for a skill shown in the unified component catalog. */
@@ -194,10 +209,14 @@ export interface PluginManagerLabels {
   description: string;
   plugins: string;
   components: string;
+  mcps: string;
+  skills: string;
+  hooks: string;
   marketplace: string;
   userScope: string;
   projectScope: (project: PluginManagerProject) => string;
   search: string;
+  searchPlaceholder: (tab: PluginManagerTab) => string;
   noResults: string;
   enabled: string;
   disabled: string;
@@ -251,12 +270,17 @@ export interface PluginManagerLabels {
   scope: string;
   pluginList: string;
   componentList: string;
+  resourceList: (tab: "mcps" | "skills" | "hooks") => string;
   projectState: (name: string) => string;
   noDescription: string;
   configurationHint: string;
   plugin: string;
   source: string;
+  identifier: string;
+  definition: string;
   uiSlot: string;
+  managedByPlugin: string;
+  managePlugin: string;
   affectedPlugins: string;
   missingCount: (count: number) => string;
   status: Record<PluginManagerStatus, string>;
@@ -287,6 +311,7 @@ export interface PluginManagerLabels {
 
 export interface PluginManagerPageProps {
   plugins: PluginManagerPlugin[];
+  components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
   marketplaceSources?: PluginManagerMarketplaceSource[];
   headerLeadingAction?: ReactNode;

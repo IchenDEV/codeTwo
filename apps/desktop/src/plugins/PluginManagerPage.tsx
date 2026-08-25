@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import {
   ArrowLeft,
+  BookOpen,
   Boxes,
   Check,
   CircleAlert,
@@ -13,7 +14,9 @@ import {
   Package,
   RefreshCw,
   Search,
+  Server,
   Store,
+  Webhook,
   X,
 } from "lucide-react";
 
@@ -50,6 +53,7 @@ import { SchemaConfigEditor } from "./SchemaConfigEditor";
 import type {
   PluginManagerChangePlan,
   PluginManagerChangeRequest,
+  PluginManagerComponent,
   PluginManagerDesiredState,
   PluginManagerLabels,
   PluginManagerMarketplaceItem,
@@ -69,10 +73,23 @@ const DEFAULT_LABELS: PluginManagerLabels = {
     "Manage built-in features, desktop host integrations, and installed bundles in one place.",
   plugins: "Plugins",
   components: "Components",
+  mcps: "MCPs",
+  skills: "Skills",
+  hooks: "Hooks",
   marketplace: "Marketplace",
   userScope: "User",
   projectScope: (project) => project.label,
   search: "Search catalog…",
+  searchPlaceholder: (tab) =>
+    tab === "plugins"
+      ? "Search plugins…"
+      : tab === "mcps"
+        ? "Search MCP servers…"
+        : tab === "skills"
+          ? "Search skills…"
+          : tab === "hooks"
+            ? "Search hooks…"
+            : "Search marketplace…",
   noResults: "No matching items.",
   enabled: "Enabled",
   disabled: "Disabled",
@@ -133,13 +150,24 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   scope: "Scope",
   pluginList: "Plugin list",
   componentList: "Component list",
+  resourceList: (tab) =>
+    tab === "mcps"
+      ? "MCP server list"
+      : tab === "skills"
+        ? "Skill list"
+        : "Hook list",
   projectState: (name) => `${name} project state`,
   noDescription: "No description provided.",
   configurationHint:
     "Changes are validated by the host before the plugin reloads.",
   plugin: "Plugin",
   source: "Source",
+  identifier: "Identifier",
+  definition: "Definition",
   uiSlot: "UI slot",
+  managedByPlugin:
+    "This resource follows the state and trust of its owning plugin.",
+  managePlugin: "Manage plugin",
   affectedPlugins: "Affected plugins",
   missingCount: (count) => `${count} missing`,
   status: {
@@ -149,6 +177,8 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   active: "Active",
   failed: "Failed",
   disposed: "Unloaded",
+  requires_auth: "Authentication required",
+  unsupported: "Unsupported",
   },
   sourceNames: {
   builtin: "Built-in",
@@ -202,14 +232,24 @@ function statusVariant(
 ): "default" | "secondary" | "destructive" | "ghost" {
   if (status === "failed") return "destructive";
   if (status === "active") return "default";
-  if (status === "disabled" || status === "disposed") return "ghost";
+  if (
+    status === "disabled" ||
+    status === "disposed" ||
+    status === "unsupported"
+  )
+    return "ghost";
   return "secondary";
 }
 
 function statusDotClass(status: PluginManagerStatus): string {
   if (status === "active") return "bg-success";
   if (status === "failed") return "bg-destructive";
-  if (status === "pending" || status === "loading") return "bg-warning";
+  if (
+    status === "pending" ||
+    status === "loading" ||
+    status === "requires_auth"
+  )
+    return "bg-warning";
   return "bg-muted-foreground/50";
 }
 
@@ -257,6 +297,39 @@ function scopeSupportsProject(
   supportedScopes: Array<"user" | "project">,
 ): boolean {
   return supportedScopes.includes("project");
+}
+
+type PluginResourceTab = "mcps" | "skills" | "hooks";
+
+function isResourceTab(tab: string): tab is PluginResourceTab {
+  return tab === "mcps" || tab === "skills" || tab === "hooks";
+}
+
+function resourceTabFor(
+  component: PluginManagerComponent,
+): PluginResourceTab | null {
+  const kind = component.kind.toLowerCase().replaceAll("-", "_");
+  if (kind === "mcp" || kind === "mcp_server" || kind === "mcpserver") {
+    return "mcps";
+  }
+  if (kind === "hook" || kind === "hooks") return "hooks";
+  if (
+    kind === "skill" ||
+    kind === "agent_skill" ||
+    kind === "agentskill" ||
+    kind === "fragment" ||
+    kind === "macro"
+  ) {
+    return "skills";
+  }
+  return null;
+}
+
+function resourceIcon(tab: PluginResourceTab) {
+  if (tab === "mcps") return <Server className="size-4" aria-hidden="true" />;
+  if (tab === "hooks")
+    return <Webhook className="size-4" aria-hidden="true" />;
+  return <BookOpen className="size-4" aria-hidden="true" />;
 }
 
 function scopeValue(
@@ -666,6 +739,170 @@ function PluginList({
         );
       })}
     </div>
+  );
+}
+
+function ResourceList({
+  resources,
+  tab,
+  selectedId,
+  labels,
+  onSelect,
+}: {
+  resources: PluginManagerComponent[];
+  tab: PluginResourceTab;
+  selectedId: string | null;
+  labels: PluginManagerLabels;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5" aria-label={labels.resourceList(tab)}>
+      {resources.map((resource) => {
+        const selected = resource.id === selectedId;
+        return (
+          <Button
+            key={resource.id}
+            type="button"
+            variant={selected ? "secondary" : "ghost"}
+            data-selected={selected ? "true" : undefined}
+            className="h-auto w-full justify-start gap-2.5 overflow-hidden px-2.5 py-2 text-left whitespace-normal"
+            aria-pressed={selected}
+            onClick={() => onSelect(resource.id)}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-(--ds-radius-control) bg-fill-quiet text-muted-foreground">
+              {resourceIcon(tab)}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {resource.name}
+                </span>
+                <CompactStatus status={resource.state.status} labels={labels} />
+              </span>
+              <span className="truncate text-fine text-muted-foreground">
+                {resource.pluginName}
+              </span>
+            </span>
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ResourceDetails({
+  resource,
+  scope,
+  labels,
+  busy,
+  canManagePlugin,
+  onRequestChange,
+  onManagePlugin,
+}: {
+  resource: PluginManagerComponent;
+  scope: PluginManagerScope;
+  labels: PluginManagerLabels;
+  busy: boolean;
+  canManagePlugin: boolean;
+  onRequestChange: (request: PluginManagerChangeRequest) => void;
+  onManagePlugin: (pluginId: string) => void;
+}) {
+  const individuallyManageable =
+    resource.manageable !== false && resource.state.status !== "unsupported";
+  const definition =
+    resource.slot && resource.slot !== "composer.skills" ? resource.slot : null;
+
+  return (
+    <article
+      data-resource-details
+      className="mx-auto w-full max-w-5xl px-8 pb-12 pt-5"
+    >
+      <div className="flex min-w-0 items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="flex min-w-0 flex-wrap items-center gap-2 text-page font-semibold leading-tight">
+            <span className="truncate">{resource.name}</span>
+            <Badge variant="secondary">
+              {labels.componentKind(resource.kind)}
+            </Badge>
+          </h1>
+          <p className="mt-2 max-w-3xl text-ui leading-relaxed text-muted-foreground">
+            {resource.description || labels.noDescription}
+          </p>
+        </div>
+        <div className="shrink-0">
+          {individuallyManageable ? (
+            <StateControl
+              id={resource.id}
+              name={resource.name}
+              kind="component"
+              required={resource.required}
+              supportedScopes={resource.supportedScopes}
+              state={resource.state}
+              scope={scope}
+              labels={labels}
+              disabled={busy}
+              onChange={onRequestChange}
+            />
+          ) : canManagePlugin ? (
+            <Button
+              type="button"
+              size="compact"
+              variant="secondary"
+              onClick={() => onManagePlugin(resource.pluginId)}
+            >
+              <Package data-icon="inline-start" />
+              {labels.managePlugin}
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-8 flex flex-col gap-5">
+        <StatusSummary state={resource.state} labels={labels} />
+        {resource.state.error ? (
+          <p role="alert" className="flex items-start gap-2 text-ui text-destructive">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <span>{resource.state.error}</span>
+          </p>
+        ) : null}
+        <dl className="grid grid-cols-1 gap-x-3 gap-y-2 text-ui sm:grid-cols-[8rem_minmax(0,1fr)]">
+          <dt className="text-muted-foreground">{labels.plugin}</dt>
+          <dd className="min-w-0 break-words">{resource.pluginName}</dd>
+          <dt className="text-muted-foreground">{labels.source}</dt>
+          <dd className="min-w-0 break-words">
+            {sourceLabel(resource.source, labels, resource.sourceLabel)}
+          </dd>
+          <dt className="text-muted-foreground">{labels.identifier}</dt>
+          <dd className="min-w-0 break-all font-mono text-fine">{resource.id}</dd>
+          {definition ? (
+            <>
+              <dt className="text-muted-foreground">{labels.definition}</dt>
+              <dd className="min-w-0 break-all font-mono text-fine">
+                {definition}
+              </dd>
+            </>
+          ) : null}
+        </dl>
+
+        {!individuallyManageable ? (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-(--ds-radius-module) bg-fill-quiet p-3">
+            <p className="max-w-2xl text-fine leading-relaxed text-muted-foreground">
+              {labels.managedByPlugin}
+            </p>
+            {canManagePlugin ? (
+              <Button
+                type="button"
+                size="compact"
+                variant="outline"
+                onClick={() => onManagePlugin(resource.pluginId)}
+              >
+                {labels.managePlugin}
+              </Button>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -1135,6 +1372,7 @@ function ChangeConfirmation({
  */
 export function PluginManagerPage({
   plugins,
+  components = [],
   marketplaceItems,
   marketplaceSources = [],
   headerLeadingAction,
@@ -1169,6 +1407,9 @@ export function PluginManagerPage({
   const [selectedMarketplaceId, setSelectedMarketplaceId] = useState<
     string | null | undefined
   >(marketplaceItems[0]?.id);
+  const [selectedResourceId, setSelectedResourceId] = useState<
+    string | null | undefined
+  >(components.find((component) => resourceTabFor(component))?.id);
   const [busyTarget, setBusyTarget] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] =
     useState<PluginManagerChangePlan | null>(null);
@@ -1210,6 +1451,34 @@ export function PluginManagerPage({
       ),
     [marketplaceItems, normalizedQuery],
   );
+  const resourcesByTab = useMemo(() => {
+    const grouped: Record<PluginResourceTab, PluginManagerComponent[]> = {
+      mcps: [],
+      skills: [],
+      hooks: [],
+    };
+    for (const component of components) {
+      const resourceTab = resourceTabFor(component);
+      if (resourceTab) grouped[resourceTab].push(component);
+    }
+    return grouped;
+  }, [components]);
+  const visibleResources = useMemo(() => {
+    if (!isResourceTab(tab)) return [];
+    return resourcesByTab[tab].filter((resource) =>
+      [
+        resource.name,
+        resource.description,
+        resource.kind,
+        resource.pluginName,
+        resource.sourceLabel,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [normalizedQuery, resourcesByTab, tab]);
 
   const selectedPlugin = selectedPluginId === null
     ? null
@@ -1220,6 +1489,11 @@ export function PluginManagerPage({
     ? null
     : visibleMarketplace.find((item) => item.id === selectedMarketplaceId) ??
       visibleMarketplace[0] ??
+      null;
+  const selectedResource = selectedResourceId === null
+    ? null
+    : visibleResources.find((resource) => resource.id === selectedResourceId) ??
+      visibleResources[0] ??
       null;
 
   const requestChange = async (request: PluginManagerChangeRequest) => {
@@ -1380,6 +1654,9 @@ export function PluginManagerPage({
 
   const tabCounts = {
     plugins: plugins.length,
+    mcps: resourcesByTab.mcps.length,
+    skills: resourcesByTab.skills.length,
+    hooks: resourcesByTab.hooks.length,
     marketplace: marketplaceItems.length,
   };
 
@@ -1391,7 +1668,9 @@ export function PluginManagerPage({
           githubInstallerOpen ||
             (tab === "plugins"
               ? selectedPlugin
-              : selectedMarketplaceItem),
+              : tab === "marketplace"
+                ? selectedMarketplaceItem
+                : selectedResource),
         )
       }
       className="plugin-manager-page @container/plugin-manager flex min-h-0 min-w-0 flex-1 bg-background text-foreground"
@@ -1404,8 +1683,8 @@ export function PluginManagerPage({
               {headerLeadingAction}
             </div>
           ) : null}
-          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="flex min-w-0 items-center gap-1 overflow-x-auto">
-            {(["plugins", "marketplace"] as const).map((id) => (
+          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+            {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
               <button
                 key={id}
                 type="button"
@@ -1413,7 +1692,7 @@ export function PluginManagerPage({
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  "h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-1.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   tab === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
@@ -1431,8 +1710,8 @@ export function PluginManagerPage({
               size="compact"
               className="w-full pl-8"
               value={query}
-              placeholder={labels.search}
-              aria-label={labels.search}
+              placeholder={labels.searchPlaceholder(tab)}
+              aria-label={labels.searchPlaceholder(tab)}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </div>
@@ -1443,8 +1722,11 @@ export function PluginManagerPage({
               visiblePlugins.length ? (
                 <PluginList plugins={visiblePlugins} selectedId={selectedPlugin?.id ?? null} labels={labels} onSelect={setSelectedPluginId} />
               ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>
-            ) : visibleMarketplace.length ? (
+            ) : tab === "marketplace" ? visibleMarketplace.length ? (
               <MarketplaceList items={visibleMarketplace} selectedId={selectedMarketplaceItem?.id ?? null} labels={labels} onSelect={setSelectedMarketplaceId} />
+            ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>
+            : isResourceTab(tab) && visibleResources.length ? (
+              <ResourceList resources={visibleResources} tab={tab} selectedId={selectedResource?.id ?? null} labels={labels} onSelect={setSelectedResourceId} />
             ) : <p className="py-12 text-center text-ui text-muted-foreground">{labels.noResults}</p>}
           </div>
         </ScrollArea>
@@ -1456,11 +1738,18 @@ export function PluginManagerPage({
             variant="ghost"
             size="icon-xs"
             className="plugin-manager-back"
-            aria-label={tab === "plugins" ? labels.pluginList : labels.marketplace}
+            aria-label={
+              tab === "plugins"
+                ? labels.pluginList
+                : tab === "marketplace"
+                  ? labels.marketplace
+                  : labels.resourceList(tab)
+            }
             onClick={() => {
               setGithubInstallerOpen(false);
               if (tab === "plugins") setSelectedPluginId(null);
-              else setSelectedMarketplaceId(null);
+              else if (tab === "marketplace") setSelectedMarketplaceId(null);
+              else setSelectedResourceId(null);
             }}
           >
             <ArrowLeft className="size-3.5" />
@@ -1631,9 +1920,27 @@ export function PluginManagerPage({
                 onInstall={install}
               />
             ) : null}
+            {isResourceTab(tab) && selectedResource ? (
+              <ResourceDetails
+                resource={selectedResource}
+                scope={scope}
+                labels={labels}
+                busy={busyTarget === `component:${selectedResource.id}`}
+                canManagePlugin={plugins.some(
+                  (plugin) => plugin.id === selectedResource.pluginId,
+                )}
+                onRequestChange={(request) => void requestChange(request)}
+                onManagePlugin={(pluginId) => {
+                  setTab("plugins");
+                  setSelectedPluginId(pluginId);
+                  setSelectedResourceId(null);
+                }}
+              />
+            ) : null}
             {!githubInstallerOpen &&
             ((tab === "plugins" && !selectedPlugin) ||
-              (tab === "marketplace" && !selectedMarketplaceItem)) ? (
+              (tab === "marketplace" && !selectedMarketplaceItem) ||
+              (isResourceTab(tab) && !selectedResource)) ? (
               <div className="flex min-h-96 items-center justify-center px-6 text-ui text-muted-foreground">
                 {labels.noResults}
               </div>
