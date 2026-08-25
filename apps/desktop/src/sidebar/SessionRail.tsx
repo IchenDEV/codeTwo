@@ -297,6 +297,13 @@ export function SessionRail({
 
   const activeProjectRecord = projects.find((p) => p.path === activeProject) ?? null;
   const activeProjectName = activeProjectRecord?.name ?? null;
+  const runningProjectPaths = new Set(
+    sessions
+      .filter((session) =>
+        runningSessions.has(session.id) || sessionActivity(session).state.kind === "running"
+      )
+      .map(sessionProjectPath),
+  );
 
   // "Recent" means what it says: the active project's sessions, newest first — per group.
   const forProject = useCallback(
@@ -948,6 +955,15 @@ export function SessionRail({
                       <span className="truncate">{p.name}</span>
                       <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>
                     </DropdownMenuItemText>
+                    {runningProjectPaths.has(p.path) && (
+                      <ActivityOrb
+                        data-project-running=""
+                        state="working"
+                        visualSize={14}
+                        aria-label={t("session.running")}
+                        title={t("session.running")}
+                      />
+                    )}
                     <span className="shrink-0 text-fine text-muted-foreground">
                       {shortAge(p.last_opened_at)}
                     </span>

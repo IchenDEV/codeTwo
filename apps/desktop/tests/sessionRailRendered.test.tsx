@@ -231,13 +231,21 @@ describe("SessionRail row layout", () => {
 
   test("renders project choices as checked menu rows with their paths", async () => {
     activateDom();
+    disableCanvasDrawing();
     const selected = [];
+    const runningSession = {
+      ...session("running-other", "Background task"),
+      cwd: "/tmp/other",
+      project_path: "/tmp/other",
+    };
     const view = renderRail({
       projects: [
         { name: "repo", path: "/tmp/repo", last_opened_at: Date.now() },
         { name: "other", path: "/tmp/other", last_opened_at: Date.now() - 60_000 },
       ],
       activeProject: "/tmp/repo",
+      sessions: [session("idle-repo", "Idle task"), runningSession],
+      runningSessions: new Set([runningSession.id]),
       onSelectProject: (path) => selected.push(path),
     });
 
@@ -250,6 +258,9 @@ describe("SessionRail row layout", () => {
       expect(choices[0]?.querySelector('[data-slot="dropdown-menu-radio-item-indicator"]'))
         .toBeTruthy();
       expect(choices[1]?.textContent).toContain("/tmp/other");
+      expect(choices[0]?.querySelector("[data-project-running]")).toBeNull();
+      expect(choices[1]?.querySelector("[data-project-running]")?.getAttribute("aria-label"))
+        .toBe("Working");
     });
 
     click(dom.document.body.querySelectorAll('[role="menuitemradio"]')[1]);
