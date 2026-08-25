@@ -3,7 +3,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type HTMLAttributes,
@@ -48,6 +48,11 @@ import type { NativeContextMenuItem } from "../electrobun/rpc";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -200,7 +205,7 @@ export function SessionRail({
   /** Keeps an active session above the recency list until explicitly unpinned. */
   onPin: (id: string, pinned: boolean) => void;
   /** Flips a session's archived state — true to archive, false to restore. */
-  onArchive: (id: string, archived: boolean) => void;
+  onArchive: (id: string, archived: boolean) => Promise<void> | void;
   /** Permanently removes a session's isolated checkout and branch, after confirmation. */
   onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
@@ -266,14 +271,44 @@ export function SessionRail({
   // `invisible` only after the collapse lands: a zero-width pane still paints its border as a
   // hairline, and hiding earlier would cut the animation off.
   const [gone, setGone] = useState(collapsed);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!collapsed) {
       setGone(false);
       return;
     }
-    const id = window.setTimeout(() => setGone(true), 340);
+    const id = window.setTimeout(() => setGone(true), 300);
     return () => window.clearTimeout(id);
   }, [collapsed]);
+
+  // Keep the row in place long enough for its exit to read before the bridge moves it between the
+  // live and archived collections. Reduced Motion collapses the CSS duration, so the same event
+  // path still commits immediately without maintaining a second timing constant in TypeScript.
+  const [archiveMotion, setArchiveMotion] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
+  );
+  const requestArchive = useCallback((id: string, archived: boolean) => {
+    setArchiveMotion((current) => {
+      if (current.has(id)) return current;
+      const next = new Map(current);
+      next.set(id, archived);
+      return next;
+    });
+  }, []);
+  const finishArchiveMotion = useCallback((id: string) => {
+    const archived = archiveMotion.get(id);
+    if (archived === undefined) return;
+
+    const clearMotion = () => {
+      setArchiveMotion((current) => {
+        if (!current.has(id)) return current;
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      });
+    };
+
+    Promise.resolve(onArchive(id, archived)).then(clearMotion, clearMotion);
+  }, [archiveMotion, onArchive]);
 
   const startDrag = useCallback(
     (e: React.MouseEvent) => {
@@ -400,7 +435,7 @@ export function SessionRail({
           startRename();
           break;
         case "archive":
-          onArchive(s.id, !isArchived);
+          requestArchive(s.id, !isArchived);
           break;
         case "reveal-working-directory":
           void revealWorkingDirectory(s.worktree_path ?? s.cwd);
@@ -511,7 +546,14 @@ export function SessionRail({
             <div
               data-session-id={s.id}
               data-session-density="comfortable"
+              data-session-archive-motion={archiveMotion.has(s.id)
+                ? isArchived ? "restore" : "archive"
+                : undefined}
+              aria-busy={archiveMotion.has(s.id) || undefined}
               title={hasUsefulPreview ? preview : undefined}
+              onAnimationEnd={(event) => {
+                if (event.target === event.currentTarget) finishArchiveMotion(s.id);
+              }}
               onContextMenu={(event) =>
                 event.currentTarget
                   .querySelector<HTMLButtonElement>("[data-session-select]")
@@ -625,7 +667,7 @@ export function SessionRail({
                       className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onArchive(s.id, !isArchived);
+                        requestArchive(s.id, !isArchived);
                       }}
                     >
                       {isArchived ? <ArchiveRestore /> : <Archive />}
@@ -707,7 +749,7 @@ export function SessionRail({
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
-            <ContextMenuItem onClick={() => onArchive(s.id, !isArchived)}>
+            <ContextMenuItem onClick={() => requestArchive(s.id, !isArchived)}>
               {isArchived ? (
                 <ArchiveRestore />
               ) : (
@@ -763,16 +805,17 @@ export function SessionRail({
   return (
     <aside
       aria-hidden={collapsed}
+      data-collapsed={collapsed ? "" : undefined}
+      data-dragging={dragging ? "" : undefined}
       className={cn(
-        "glass-rail relative flex shrink-0 flex-col overflow-hidden",
+        "session-rail glass-rail relative flex shrink-0 flex-col overflow-hidden",
         overlay && "fixed inset-y-0 left-0 z-50 shadow-2xl",
-        !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         gone && "invisible",
       )}
       style={{ width: collapsed ? 0 : applied }}
     >
       {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
+      <div className="session-rail-content flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
       {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
@@ -1036,14 +1079,12 @@ export function SessionRail({
                 </>
               )}
               {archived.length > 0 && (
-                <>
+                <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
                   {/* Same face as a group label, but it folds — archived rows only take space
                       (and attention) when asked for. */}
-                  <button
+                  <CollapsibleTrigger
                     data-rail-archive-toggle
-                    aria-expanded={archivedOpen}
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
-                    onClick={() => setArchivedOpen(!archivedOpen)}
                     className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 transition-colors hover:text-foreground"
                   >
                     <span>{t("rail.groupArchived")}</span>
@@ -1051,13 +1092,13 @@ export function SessionRail({
                     <ChevronRight
                       className={cn("size-3.5 shrink-0 transition-transform", archivedOpen && "rotate-90")}
                     />
-                  </button>
-                  {archivedOpen && (
+                  </CollapsibleTrigger>
+                  <CollapsibleContent data-rail-archive-list className="rail-archive-panel">
                     <div className="flex flex-col gap-2 opacity-80">
                       {archived.map((s) => sessionRow(s, true))}
                     </div>
-                  )}
-                </>
+                  </CollapsibleContent>
+                </Collapsible>
               )}
             </>
           )}

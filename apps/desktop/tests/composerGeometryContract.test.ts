@@ -20,6 +20,8 @@ describe("composer geometry contract", () => {
       "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));",
     );
     expect(composer).toContain("data-gooey-composer");
+    expect(composer).toContain('data-composer-mode={docMode ? "document" : "compact"}');
+    expect(composer).toContain('"composer-mode-transition flex flex-col"');
     expect(composer).toContain(
       ": { shape: true, speed: 1.35, bounce: 0.2, contentBlur: 0 }",
     );
