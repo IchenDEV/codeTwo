@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
 const executable = process.platform === "win32" ? "codetwo-tool-broker.exe" : "codetwo-tool-broker";
-const outputDirectory = resolve(desktopRoot, "dist", "tool-broker");
+const outputDirectory = resolve(desktopRoot, "build", "tool-broker");
 
 mkdirSync(outputDirectory, { recursive: true });
 const result = Bun.spawnSync(

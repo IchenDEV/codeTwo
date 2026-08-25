@@ -92,11 +92,7 @@ fn parse_args(args: Vec<String>) -> Result<Option<Options>, String> {
     let current = std::env::current_dir().map_err(|error| error.to_string())?;
     let default_data_dir = std::env::var_os("CODETWO_AGENT_DATA_DIR")
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|home| home.join(".codetwo-agent"))
-        })
+        .or_else(|| codetwo_core::provider::home_dir().map(|home| home.join(".codetwo-agent")))
         .unwrap_or_else(|| std::env::temp_dir().join("codetwo-agent"));
     let mut workspace = current.clone();
     let mut data_dir = default_data_dir;

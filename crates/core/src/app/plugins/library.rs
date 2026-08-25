@@ -535,8 +535,7 @@ fn editable_scene_dir(
     cwd: Option<&str>,
 ) -> Result<PathBuf, codetwo_kernel::PluginError> {
     match scope {
-        SceneSaveScope::User => std::env::var_os("HOME")
-            .map(PathBuf::from)
+        SceneSaveScope::User => crate::provider::home_dir()
             .map(|home| home.join(".config/codetwo/scenes"))
             .ok_or_else(|| codetwo_kernel::PluginError::new("home directory is unavailable")),
         SceneSaveScope::Project => cwd

@@ -328,6 +328,22 @@
   .macos-window-glass .app-shell {
     background: transparent;
   }
+  .window-controls-safe-main {
+    padding-left: 1rem;
+  }
+  .window-controls-safe-rail,
+  .window-controls-safe-scene {
+    padding-left: 0.75rem;
+  }
+  html[data-platform="macos"] .window-controls-safe-main {
+    padding-left: 5rem;
+  }
+  html[data-platform="macos"] .window-controls-safe-rail {
+    padding-left: 6rem;
+  }
+  html[data-platform="macos"] .window-controls-safe-scene {
+    padding-left: 5rem;
+  }
   /* The sidebar is its own pane — tinted, blurred, and cut off from the content by its border. */
   .glass-rail {
     background: color-mix(

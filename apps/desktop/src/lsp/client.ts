@@ -67,12 +67,24 @@ export function isLspLanguage(lang: string): boolean {
 }
 
 export function pathToUri(p: string): string {
-  // Percent-encode per RFC 3986 but keep "/". Matches monaco.Uri.file() output for POSIX paths.
-  return `file://${p.split("/").map(encodeURIComponent).join("/")}`;
+  const normalized = p.replaceAll("\\", "/");
+  if (normalized.startsWith("//")) {
+    const [authority, ...segments] = normalized.slice(2).split("/");
+    return `file://${encodeURIComponent(authority)}/${segments.map(encodeURIComponent).join("/")}`;
+  }
+  const path = /^[a-z]:\//i.test(normalized) ? `/${normalized}` : normalized;
+  return `file://${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 export function uriToPath(uri: string): string {
-  return decodeURIComponent(uri.replace(/^file:\/\//, ""));
+  const unc = uri.match(/^file:\/\/([^/]+)(\/.*)?$/);
+  if (unc) {
+    const rest = decodeURIComponent(unc[2] ?? "").replaceAll("/", "\\");
+    return `\\\\${decodeURIComponent(unc[1])}${rest}`;
+  }
+  const decoded = decodeURIComponent(uri.replace(/^file:\/\//, ""));
+  if (/^\/[a-z]:\//i.test(decoded)) return decoded.slice(1).replaceAll("/", "\\");
+  return decoded;
 }
 
 export class LspClient {
@@ -110,7 +122,7 @@ export class LspClient {
   }
 
   private async initialize(): Promise<void> {
-    const name = this.cwd.split("/").filter(Boolean).pop() ?? this.cwd;
+    const name = this.cwd.split(/[\\/]/).filter(Boolean).pop() ?? this.cwd;
     const result = await this.request("initialize", {
       processId: null,
       clientInfo: { name: "C2" },

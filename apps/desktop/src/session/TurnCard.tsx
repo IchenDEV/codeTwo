@@ -147,7 +147,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
         <button
           type="button"
           className="rounded p-1 hover:bg-accent hover:text-foreground"
-          title="Reveal in Finder"
+          title="Reveal in file manager"
           onClick={() => {
             setActionError(null);
             void revealArtifact(artifact.id).catch(() => setActionError("Could not reveal image"));

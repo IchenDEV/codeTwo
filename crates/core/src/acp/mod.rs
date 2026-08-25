@@ -24,12 +24,16 @@ use std::sync::Arc;
 use tokio::process::Command;
 
 use crate::error::AcpError;
-use crate::provider::LaunchSpec;
+use crate::provider::{which, LaunchSpec};
 
 /// Spawn a provider CLI as an ACP agent subprocess and return a connected [`AcpClient`].
 /// The caller must still run [`AcpClient::initialize`] before creating sessions.
-pub async fn spawn(spec: &LaunchSpec, handler: Arc<dyn ClientHandler>) -> Result<AcpClient, AcpError> {
-    let mut cmd = Command::new(&spec.command);
+pub async fn spawn(
+    spec: &LaunchSpec,
+    handler: Arc<dyn ClientHandler>,
+) -> Result<AcpClient, AcpError> {
+    let executable = which(&spec.command).unwrap_or_else(|| spec.command.clone().into());
+    let mut cmd = Command::new(executable);
     cmd.args(&spec.args);
     for (k, v) in &spec.env {
         cmd.env(k, v);

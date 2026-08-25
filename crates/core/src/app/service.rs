@@ -435,8 +435,7 @@ impl SceneService {
         }
         let cwd = self.cwd.lock().unwrap().clone();
         let project_dir = cwd.map(|cwd| cwd.join(".codetwo/scenes"));
-        let user_dir =
-            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config/codetwo/scenes"));
+        let user_dir = crate::provider::home_dir().map(|home| home.join(".config/codetwo/scenes"));
         let plugins = hub.map(PluginHub::scene_dirs).unwrap_or_default();
         self.set_library(Arc::new(SceneLibrary::load(
             project_dir.as_deref(),

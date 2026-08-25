@@ -5,7 +5,7 @@
 //! This mirrors Zed's `agent_servers` model: a launch spec (`command`, `args`, `env`) per backend.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::skill::McpServer;
@@ -233,6 +233,14 @@ const GUI_PATH_FALLBACKS: [&str; 6] = [
     "~/.opencode/bin",
 ];
 
+/// Resolve the current user's home directory on Unix and Windows hosts.
+pub fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .or_else(|| std::env::var_os("USERPROFILE").filter(|value| !value.is_empty()))
+        .map(PathBuf::from)
+}
+
 /// Append the directories above to this process's `PATH`, once, if they exist and aren't already
 /// there. Child processes inherit it, so this fixes both [`which`] and anything we spawn.
 ///
@@ -241,7 +249,7 @@ const GUI_PATH_FALLBACKS: [&str; 6] = [
 pub fn augment_search_path() {
     let current = std::env::var_os("PATH").unwrap_or_default();
     let mut dirs: Vec<PathBuf> = std::env::split_paths(&current).collect();
-    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let home = home_dir();
     let mut added = false;
     for entry in GUI_PATH_FALLBACKS {
         let dir = match entry.strip_prefix("~/") {
@@ -264,16 +272,33 @@ pub fn augment_search_path() {
     }
 }
 
-/// Minimal `which`: resolve an executable name against `$PATH` (or treat a path-like arg directly).
+fn existing_executable(path: &Path) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path.to_path_buf());
+    }
+    #[cfg(windows)]
+    if path.extension().is_none() {
+        let extensions =
+            std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        for extension in extensions.split(';').filter(|value| !value.is_empty()) {
+            let candidate = path.with_extension(extension.trim_start_matches('.'));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Minimal `which`: resolve an executable name against `PATH` and Windows `PATHEXT`, or treat a
+/// path-like argument directly.
 pub fn which(cmd: &str) -> Option<PathBuf> {
-    if cmd.contains('/') {
-        let p = PathBuf::from(cmd);
-        return if p.is_file() { Some(p) } else { None };
+    if cmd.contains('/') || cmd.contains('\\') {
+        return existing_executable(Path::new(cmd));
     }
     let paths = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&paths) {
-        let candidate = dir.join(cmd);
-        if candidate.is_file() {
+        if let Some(candidate) = existing_executable(&dir.join(cmd)) {
             return Some(candidate);
         }
     }
@@ -316,6 +341,19 @@ mod tests {
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::ZCode && p.needs_node));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolves_and_runs_windows_pathext_shims() {
+        let directory = tempfile::tempdir().unwrap();
+        let shim = directory.path().join("npx.CMD");
+        std::fs::write(&shim, "@echo off\r\necho shim-ready\r\n").unwrap();
+        let resolved = existing_executable(&directory.path().join("npx")).unwrap();
+        assert_eq!(resolved, shim);
+        let output = std::process::Command::new(resolved).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "shim-ready");
     }
 
     #[test]

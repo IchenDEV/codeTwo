@@ -46,6 +46,15 @@ struct ProviderRecipe {
     requirements: &'static [&'static str],
 }
 
+#[cfg(not(windows))]
+const CURSOR_INSTALL: Option<&[&str]> = Some(&[
+    "/bin/sh",
+    "-c",
+    "curl https://cursor.com/install -fsS | bash",
+]);
+#[cfg(windows)]
+const CURSOR_INSTALL: Option<&[&str]> = None;
+
 const RECIPES: &[ProviderRecipe] = &[
     ProviderRecipe {
         id: "claude_code",
@@ -98,11 +107,7 @@ const RECIPES: &[ProviderRecipe] = &[
         id: "cursor",
         executable: "cursor-agent",
         version_args: &["--version"],
-        install: Some(&[
-            "/bin/sh",
-            "-c",
-            "curl https://cursor.com/install -fsS | bash",
-        ]),
+        install: CURSOR_INSTALL,
         upgrade: Some(&["cursor-agent", "update"]),
         managed_launch_args: None,
         requirements: &[],
@@ -489,5 +494,11 @@ mod tests {
             .enabled("codex")
             .unwrap());
         assert!(manager.set_enabled("not-a-provider", true).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cursor_does_not_offer_the_unix_installer_on_windows() {
+        assert!(recipe("cursor").unwrap().install.is_none());
     }
 }

@@ -48,7 +48,7 @@ pub struct ProjectScript {
     pub id: String,
     #[serde(default)]
     pub name: String,
-    /// Shell command, run with `sh -c` in the project directory.
+    /// Shell command, run with the platform shell in the project directory.
     pub command: String,
     /// Optional project-local shortcut in the shared canonical key syntax (`Mod+Shift+T`).
     #[serde(default)]
@@ -177,8 +177,19 @@ pub fn save_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<Projec
 
 /// Run one script in `cwd`, returning its combined output.
 pub async fn run_script(cwd: &Path, script: &ProjectScript) -> std::io::Result<String> {
-    let out = Command::new("sh")
-        .arg("-c")
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/D", "/S", "/C"]);
+        command
+    };
+    #[cfg(not(windows))]
+    let mut command = {
+        let mut command = Command::new("sh");
+        command.arg("-c");
+        command
+    };
+    let out = command
         .arg(&script.command)
         .current_dir(cwd)
         .output()

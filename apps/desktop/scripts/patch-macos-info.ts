@@ -17,10 +17,53 @@ import {
   resolveDesktopChannel,
 } from "./desktop-channel";
 
-if (process.platform !== "darwin") process.exit(0);
-
+const desktopRoot = join(import.meta.dir, "..");
 const wrapperBundle = process.env.ELECTROBUN_WRAPPER_BUNDLE_PATH;
 const buildDirectory = process.env.ELECTROBUN_BUILD_DIR;
+
+if (process.platform === "win32" && process.env.ELECTROBUN_OS === "win") {
+  if (!buildDirectory) {
+    throw new Error("ELECTROBUN_BUILD_DIR is required for Windows icon patching");
+  }
+
+  const icon = join(desktopRoot, "assets", "icon.ico");
+  const rcedit = join(
+    desktopRoot,
+    "node_modules",
+    "rcedit",
+    "bin",
+    "rcedit-x64.exe",
+  );
+  const appName = process.env.ELECTROBUN_APP_NAME;
+  if (!appName) throw new Error("ELECTROBUN_APP_NAME is required for Windows icon patching");
+
+  const executables = wrapperBundle
+    ? [join(desktopRoot, "node_modules", "electrobun", "dist-win-x64", "extractor.exe")]
+    : [
+        join(buildDirectory, appName, "bin", "launcher.exe"),
+        join(buildDirectory, appName, "bin", "bun.exe"),
+      ];
+
+  for (const executable of [icon, rcedit, ...executables]) {
+    if (!existsSync(executable)) {
+      throw new Error(`Required Windows packaging file is missing: ${executable}`);
+    }
+  }
+
+  for (const executable of executables) {
+    const result = Bun.spawnSync([rcedit, executable, "--set-icon", icon], {
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    if (result.exitCode !== 0) throw new Error(`Could not embed the C2 icon in ${executable}`);
+    console.log(`Embedded the C2 icon in ${executable}`);
+  }
+
+  process.exit(0);
+}
+
+if (process.platform !== "darwin") process.exit(0);
+
 const channelName =
   desktopChannelForIdentifier(process.env.ELECTROBUN_APP_IDENTIFIER) ??
   resolveDesktopChannel(process.env.CODETWO_CHANNEL);
@@ -40,7 +83,6 @@ const descriptions = {
     "C2 turns your dictation into text using macOS's on-device speech recognition. Audio is never sent to a server.",
 };
 
-const desktopRoot = join(import.meta.dir, "..");
 const updateHelperBuild = join(desktopRoot, "native", "update-helper", ".build", "release");
 const updateHelperExecutable = join(updateHelperBuild, "CodeTwoUpdateHelper");
 const sparkleFramework = join(updateHelperBuild, "Sparkle.framework");

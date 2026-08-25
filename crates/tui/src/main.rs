@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use app::App;
 use codetwo_core::app::{AppConfig, CoreApp, EngineService, EventBus, SkillService};
-use codetwo_core::provider::default_registry;
+use codetwo_core::provider::{default_registry, home_dir};
 use codetwo_core::Op;
 
 use ratatui::crossterm::event::{self, Event as CtEvent};
@@ -23,9 +23,7 @@ use ratatui::DefaultTerminal;
 use tokio::sync::{broadcast, mpsc};
 
 fn data_dir() -> PathBuf {
-    let home = std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::temp_dir());
+    let home = home_dir().unwrap_or_else(std::env::temp_dir);
     home.join(".codetwo")
 }
 

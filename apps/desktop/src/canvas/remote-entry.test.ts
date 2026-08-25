@@ -2,8 +2,13 @@
 import { describe, expect, test } from "bun:test";
 import { activateDom, dom, restoreDom } from "../../tests/domTestHarness";
 
-const source = await Bun.file(new URL("./remote-entry.tsx", import.meta.url)).text();
-const remoteShell = await Bun.file(new URL("../../../../crates/server/src/client.html", import.meta.url)).text();
+const normalizeLineEndings = (value: string) => value.replaceAll("\r\n", "\n");
+const source = normalizeLineEndings(
+  await Bun.file(new URL("./remote-entry.tsx", import.meta.url)).text(),
+);
+const remoteShell = normalizeLineEndings(
+  await Bun.file(new URL("../../../../crates/server/src/client.html", import.meta.url)).text(),
+);
 const shellScript = remoteShell.match(/<script>\n([\s\S]*?)\n    <\/script>/)?.[1] || "";
 let restoreRemoteGlobals: (() => void) | null = null;
 
