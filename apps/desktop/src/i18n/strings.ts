@@ -16,7 +16,7 @@ export const en = {
     "No projects yet. Add a directory to work in — sessions and git status follow it.",
   "rail.addProject": "Add a project…",
   "rail.renameProject": "Rename",
-  "rail.removeProject": "Remove from list (sessions are kept)",
+  "rail.removeProject": "Remove from list (chats stay)",
   "rail.chooseFolder": "Choose a project folder",
 
   // rail — conversations
@@ -1995,7 +1995,7 @@ export const zhCN: Record<StringKey, string> = {
     "还没有项目。添加一个工作目录——会话和 Git 状态都会跟着它走。",
   "rail.addProject": "添加项目…",
   "rail.renameProject": "重命名",
-  "rail.removeProject": "从列表移除（会话会保留）",
+  "rail.removeProject": "从列表移除（聊天记录会保留）",
   "rail.chooseFolder": "选择项目文件夹",
 
   "rail.features": "功能",
