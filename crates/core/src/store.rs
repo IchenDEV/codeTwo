@@ -756,6 +756,30 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             )?;
         }
     }
+
+    // A session worktree is an execution checkout of its source project, not another project.
+    // Older clients could still register that directory through the folder picker (and then sync
+    // the bad row), so retire those rows on open while preserving their sessions and propagating
+    // the bookkeeping removal to paired devices.
+    let cleanup_at = unix_millis();
+    tx.execute(
+        "INSERT INTO sync_tombstones(entity,entity_id,deleted_at)
+         SELECT 'project',p.path,?1 FROM projects p
+         WHERE EXISTS (
+           SELECT 1 FROM sessions s
+           WHERE s.worktree_path=p.path AND s.worktree_discarded=0
+         )
+         ON CONFLICT(entity,entity_id) DO UPDATE SET
+           deleted_at=MAX(deleted_at,excluded.deleted_at)",
+        [cleanup_at],
+    )?;
+    tx.execute(
+        "DELETE FROM projects WHERE EXISTS (
+           SELECT 1 FROM sessions s
+           WHERE s.worktree_path=projects.path AND s.worktree_discarded=0
+         )",
+        [],
+    )?;
     tx.commit()?;
 
     // This derived FTS projection has its own marker and transaction because SQLite does not allow
@@ -1669,9 +1693,15 @@ impl Store {
     pub fn list_projects(&self) -> Result<Vec<Project>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT path, name, last_opened_at, default_worktree_mode, icon_path,
-                    icon_updated_at, default_provider, default_model, default_reasoning_effort
-             FROM projects ORDER BY added_at DESC, path ASC",
+            "SELECT p.path, p.name, p.last_opened_at, p.default_worktree_mode, p.icon_path,
+                    p.icon_updated_at, p.default_provider, p.default_model,
+                    p.default_reasoning_effort
+             FROM projects p
+             WHERE NOT EXISTS (
+               SELECT 1 FROM sessions s
+               WHERE s.worktree_path=p.path AND s.worktree_discarded=0
+             )
+             ORDER BY p.added_at DESC, p.path ASC",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok(Project {
@@ -1697,6 +1727,20 @@ impl Store {
     /// keeps its original `added_at`, so re-adding doesn't move a row the user has learned to find.
     pub fn add_project(&self, path: &str, name: Option<&str>, now: i64) -> Result<(), StoreError> {
         let conn = self.conn.lock().unwrap();
+        let source_project = conn
+            .query_row(
+                "SELECT project_path FROM sessions
+                 WHERE worktree_path=?1 AND worktree_discarded=0 AND project_path IS NOT NULL
+                 ORDER BY created_at DESC LIMIT 1",
+                [path],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if let Some(source_project) = source_project {
+            return Err(StoreError::InvalidProject(format!(
+                "{path:?} is an isolated worktree for {source_project:?}; open the source project instead"
+            )));
+        }
         let name = name
             .map(|s| s.to_string())
             .unwrap_or_else(|| default_project_name(path));
@@ -3872,6 +3916,63 @@ mod tests {
         assert_eq!(list[0].path, "/work/beta", "most recently added first");
         // A name defaults to the directory's own name, not the whole path.
         assert_eq!(list[0].name, "beta");
+    }
+
+    #[test]
+    fn session_worktrees_are_not_listed_as_projects() {
+        let store = Store::open_in_memory().unwrap();
+        store.add_project("/work/source", None, 100).unwrap();
+
+        let mut session = Session::new(ProviderId::Grok, "/work/source");
+        session.cwd = "/work/.codetwo-worktrees/source-session".into();
+        session.worktree_path = Some(session.cwd.clone());
+        store.upsert_session(&session).unwrap();
+
+        // A later registration can come from a folder picker or another synced device. The
+        // session record is authoritative: its isolated checkout remains part of the source
+        // project rather than becoming a peer in the project switcher.
+        let error = store.add_project(&session.cwd, None, 200).unwrap_err();
+        assert!(error.to_string().contains("is an isolated worktree"));
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO projects(path,name,last_opened_at,added_at,updated_at)
+                 VALUES(?1,'source-session',200,200,200)",
+                [&session.cwd],
+            )
+            .unwrap();
+
+        let paths = store
+            .list_projects()
+            .unwrap()
+            .into_iter()
+            .map(|project| project.path)
+            .collect::<Vec<_>>();
+        assert_eq!(paths, ["/work/source"]);
+
+        let synced_paths = store
+            .device_sync_snapshot("device-a")
+            .unwrap()
+            .projects
+            .into_iter()
+            .map(|project| project.path)
+            .collect::<Vec<_>>();
+        assert_eq!(synced_paths, ["/work/source"]);
+
+        migrate(&store.conn.lock().unwrap()).unwrap();
+        let stale_rows: i64 = store
+            .conn
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM projects WHERE path=?1",
+                [&session.cwd],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stale_rows, 0, "migration cleans existing registries");
     }
 
     #[test]
