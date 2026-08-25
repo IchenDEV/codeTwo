@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use codetwo_core::event::Event;
-use codetwo_core::memory::MemoryCapability;
+use codetwo_core::memory::{MemoryCapability, MemorySettings};
 use codetwo_core::provider::{LaunchSpec, Provider, ProviderId};
 use codetwo_core::session::{Part, Role, Session};
 use codetwo_core::skill::{DocBlock, SkillLibrary};
@@ -56,6 +56,80 @@ for line in sys.stdin:
         time.sleep(5)
         print(json.dumps({"jsonrpc":"2.0","id":message.get("id"),"result":{"protocolVersion":1}}), flush=True)
 "#;
+
+async fn run_memory_turn(
+    engine: &Engine,
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<Event>,
+    session: &str,
+    prompt: &str,
+) -> (String, usize) {
+    engine
+        .submit(Op::Prompt {
+            session: session.into(),
+            doc: vec![DocBlock::Text {
+                text: prompt.into(),
+            }],
+            request_id: None,
+        })
+        .await
+        .unwrap();
+
+    let mut agent_text = String::new();
+    let mut receipt_items = 0;
+    loop {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(10), events.recv())
+            .await
+            .expect("event before timeout")
+            .expect("event stream open");
+        match event {
+            Event::AgentText { text, .. } => agent_text.push_str(&text),
+            Event::MemoryContext { receipt, .. } => receipt_items += receipt.items.len(),
+            Event::TurnEnded { .. } => return (agent_text, receipt_items),
+            Event::Error { message, .. } => panic!("unexpected engine error: {message}"),
+            _ => {}
+        }
+    }
+}
+
+#[tokio::test]
+async fn recall_only_sends_new_memory_items_to_a_live_provider_context() {
+    let project = std::env::temp_dir().to_string_lossy().to_string();
+    let provider = Provider {
+        id: ProviderId::Grok,
+        display_name: "Memory mock".into(),
+        launch: LaunchSpec::new("python3", ["-c", MEMORY_AGENT]),
+        needs_node: false,
+    };
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    store
+        .set_memory_settings(MemorySettings {
+            enabled: true,
+            capture: false,
+            inject: true,
+            include_external_context: true,
+        })
+        .unwrap();
+    store
+        .add_memory(
+            &project,
+            "constraint",
+            "Always use frobnicator for releases",
+            true,
+        )
+        .unwrap();
+    let session = Session::new(ProviderId::Grok, project);
+    let session_id = session.id.clone();
+    store.upsert_session(&session).unwrap();
+
+    let (engine, mut events) =
+        Engine::with_store(vec![provider], SkillLibrary::new(vec![]), store.clone());
+    let first = run_memory_turn(&engine, &mut events, &session_id, "How should we release?").await;
+    let second = run_memory_turn(&engine, &mut events, &session_id, "How should we release?").await;
+
+    assert_eq!(first, ("memory-seen".into(), 1));
+    assert_eq!(second, ("memory-missing".into(), 0));
+    assert_eq!(store.list_memory_receipts(&session_id).unwrap().len(), 1);
+}
 
 #[tokio::test]
 async fn recall_is_transient_and_completed_turn_is_captured() {

@@ -36,7 +36,7 @@ use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, SandboxPolicy,
 };
-use crate::provider::{Provider, ProviderId, ProviderToolset};
+use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
     SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
@@ -842,6 +842,76 @@ fn with_provider_tool_instructions(prompt: String, instructions: &[String]) -> S
     } else {
         format!("[C2 host tools]\n{}\n\n{prompt}", instructions.join("\n"))
     }
+}
+
+fn with_initial_provider_context(
+    prompt: String,
+    tool_instructions: &[String],
+    route_desktop_browser: bool,
+    route_codex_sites: bool,
+    inject: bool,
+) -> String {
+    if !inject {
+        return prompt;
+    }
+    let prompt = with_provider_tool_instructions(prompt, tool_instructions);
+    let prompt = with_codetwo_browser_routing(prompt, route_desktop_browser);
+    with_codex_sites_routing(prompt, route_codex_sites)
+}
+
+fn codex_launch_with_static_provider_context(
+    launch: &LaunchSpec,
+    tool_instructions: &[String],
+    route_desktop_browser: bool,
+) -> Result<LaunchSpec, serde_json::Error> {
+    let static_context = with_initial_provider_context(
+        String::new(),
+        tool_instructions,
+        route_desktop_browser,
+        true,
+        true,
+    )
+    .trim()
+    .to_string();
+    let existing_config = launch
+        .env
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "CODEX_CONFIG")
+        .map(|(_, value)| value.clone())
+        .or_else(|| std::env::var("CODEX_CONFIG").ok());
+    let mut config = match existing_config {
+        Some(value) => serde_json::from_str::<Map<String, Value>>(&value)?,
+        None => Map::new(),
+    };
+    let existing_instructions = config
+        .remove("developer_instructions")
+        .map(serde_json::from_value::<String>)
+        .transpose()?;
+    let developer_instructions = match existing_instructions {
+        Some(existing) if existing.contains(&static_context) => existing,
+        Some(existing) if !existing.trim().is_empty() => {
+            format!("{}\n\n{}", existing.trim(), static_context)
+        }
+        _ => static_context,
+    };
+    config.insert(
+        "developer_instructions".into(),
+        Value::String(developer_instructions),
+    );
+    let encoded = serde_json::to_string(&config)?;
+    let mut launch = launch.clone();
+    if let Some((_, value)) = launch
+        .env
+        .iter_mut()
+        .rev()
+        .find(|(key, _)| key == "CODEX_CONFIG")
+    {
+        *value = encoded;
+    } else {
+        launch.env.push(("CODEX_CONFIG".into(), encoded));
+    }
+    Ok(launch)
 }
 
 fn auto_scene_routing_instructions(
@@ -1655,6 +1725,12 @@ struct SessionRuntime {
     /// Host tools are fixed when C2 creates or revives the session. Settings changes therefore
     /// affect subsequent sessions without mutating an ACP session's already-attached MCP set.
     provider_toolset: ProviderToolset,
+    /// Stable host-tool and routing instructions are provider-only context. Codex receives them
+    /// through its launch config; other providers receive them on their first prompt only.
+    provider_context_injected: bool,
+    /// Memory item revisions already accepted by this live provider context. Recall remains
+    /// query-driven, but only new or corrected items are sent on later turns.
+    injected_memory_keys: HashSet<String>,
     client: Arc<AcpClient>,
     /// `None` until the first prompt creates the ACP session (so MCP servers from the document
     /// attach at `session/new`).
@@ -3052,7 +3128,7 @@ impl Engine {
         if canonical.trim().is_empty() {
             return Err("prompt is empty".into());
         }
-        let (client, acp_session_id, cwd, interaction, instructions) = {
+        let (client, acp_session_id, cwd, interaction) = {
             let sessions = self.state.sessions.lock().unwrap();
             let runtime = sessions
                 .get(session)
@@ -3065,13 +3141,12 @@ impl Engine {
                     .ok_or_else(|| "ACP session is unavailable".to_string())?,
                 runtime.cwd.clone(),
                 runtime.interaction.clone(),
-                runtime.provider_toolset.instructions.clone(),
             )
         };
         if !interaction.steering {
             return Err("the provider did not advertise native steering".into());
         }
-        let mut compiled = match self.preflight_attachment_document(&doc, &cwd)? {
+        let compiled = match self.preflight_attachment_document(&doc, &cwd)? {
             Some(compiled) => compiled,
             None => {
                 let resolve = |id: &str| -> Option<String> {
@@ -3086,7 +3161,6 @@ impl Engine {
                 )
             }
         };
-        compiled.prompt = with_provider_tool_instructions(compiled.prompt, &instructions);
         let mut blocks = vec![ContentBlock::text(compiled.prompt)];
         for path in &compiled.images {
             if let Ok((mime_type, data)) =
@@ -3273,9 +3347,21 @@ impl Engine {
             self.state.router.clone(),
             self.state.store.clone(),
         ));
+        let provider_toolset = self.provider_toolset(&sess.provider);
+        let provider_context_injected = sess.provider == ProviderId::Codex;
+        let launch = if provider_context_injected {
+            codex_launch_with_static_provider_context(
+                &prov.launch,
+                &provider_toolset.instructions,
+                self.state.desktop_mcp.is_some(),
+            )
+            .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
+        } else {
+            prov.launch.clone()
+        };
         let replaying = handler.replay_flag();
         let client = Arc::new(
-            acp::spawn(&prov.launch, handler)
+            acp::spawn(&launch, handler)
                 .await
                 .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?,
         );
@@ -3297,7 +3383,6 @@ impl Engine {
         let cwd = sess.cwd.clone();
         let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
-        let provider_toolset = self.provider_toolset(&sess.provider);
         let mut sessions = self.state.sessions.lock().unwrap();
         if self.state.shutting_down.load(Ordering::Acquire) {
             drop(sessions);
@@ -3311,6 +3396,8 @@ impl Engine {
             SessionRuntime {
                 session: sess,
                 provider_toolset,
+                provider_context_injected,
+                injected_memory_keys: HashSet::new(),
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: resume,
@@ -3617,8 +3704,20 @@ impl Engine {
                     self.state.store.clone(),
                 ));
 
+                let provider_toolset = self.provider_toolset(&sess.provider);
+                let provider_context_injected = sess.provider == ProviderId::Codex;
+                let launch = if provider_context_injected {
+                    codex_launch_with_static_provider_context(
+                        &prov.launch,
+                        &provider_toolset.instructions,
+                        self.state.desktop_mcp.is_some(),
+                    )
+                    .map_err(AcpError::Decode)?
+                } else {
+                    prov.launch.clone()
+                };
                 let replaying = handler.replay_flag();
-                let client = Arc::new(acp::spawn(&prov.launch, handler).await?);
+                let client = Arc::new(acp::spawn(&launch, handler).await?);
                 if !self.track_starting_client(&client) {
                     return Err(AcpError::Closed);
                 }
@@ -3669,8 +3768,6 @@ impl Engine {
                 // Offer the provider's built-in models straight away. Keep the client tracked
                 // while this async probe runs so plugin unload can still terminate it.
                 let models = available_models(&prov).await;
-                let provider_toolset = self.provider_toolset(&sess.provider);
-
                 // Moving a starting client into the live session map is atomic with shutdown:
                 // shutdown sets the flag before taking this same lock, so it either sees the new
                 // session or this path refuses to persist/insert it.
@@ -3738,6 +3835,8 @@ impl Engine {
                     SessionRuntime {
                         session: sess,
                         provider_toolset,
+                        provider_context_injected,
+                        injected_memory_keys: HashSet::new(),
                         client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
@@ -4112,9 +4211,19 @@ impl Engine {
                         request_id: request_id.clone(),
                     });
                 }
+                let injected_memory_keys = self
+                    .state
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .get(&session)
+                    .map(|runtime| runtime.injected_memory_keys.clone())
+                    .unwrap_or_default();
                 let memory_turn = self.state.memory.as_ref().and_then(|memory| {
                     match memory.recall(&cwd, &session, &memory_source) {
-                        Ok(turn) => turn,
+                        Ok(turn) => {
+                            turn.map(|turn| turn.excluding_item_keys(&injected_memory_keys))
+                        }
                         Err(e) => {
                             tracing::warn!("load memory context failed: {e}");
                             None
@@ -4145,15 +4254,25 @@ impl Engine {
                 });
                 let provider_prompt =
                     with_auto_scene_routing(provider_prompt, auto_scene_instructions);
-                let provider_prompt = with_provider_tool_instructions(
+                let (caps, attached_mcp, inject_provider_context) = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session)
+                        .map(|runtime| {
+                            (
+                                runtime.caps,
+                                runtime.mcp_servers.clone(),
+                                !runtime.provider_context_injected,
+                            )
+                        })
+                        .unwrap_or((AgentCaps::default(), Vec::new(), true))
+                };
+                let provider_prompt = with_initial_provider_context(
                     provider_prompt,
                     &provider_toolset.instructions,
-                );
-                let provider_prompt = with_codetwo_browser_routing(
-                    provider_prompt,
                     is_codex && self.state.desktop_mcp.is_some(),
+                    is_codex,
+                    inject_provider_context,
                 );
-                let provider_prompt = with_codex_sites_routing(provider_prompt, is_codex);
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
@@ -4173,12 +4292,6 @@ impl Engine {
                             revision: canvas.payload.revision,
                         })
                         .collect(),
-                };
-                let (caps, attached_mcp) = {
-                    let map = self.state.sessions.lock().unwrap();
-                    map.get(&session)
-                        .map(|runtime| (runtime.caps, runtime.mcp_servers.clone()))
-                        .unwrap_or_default()
                 };
                 if acp_sid.is_some() {
                     let late = compiled
@@ -4577,6 +4690,11 @@ impl Engine {
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
                 let turn_memory = self.state.memory.clone();
+                let injected_memory_keys = memory_context
+                    .items
+                    .iter()
+                    .map(|item| item.injection_key())
+                    .collect::<Vec<_>>();
                 let memory_project = images_cwd.clone();
                 // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
                 // carries plain handles instead of engine references. Best-effort by design:
@@ -4639,6 +4757,17 @@ impl Engine {
                     blocks.extend(canvas_image_blocks);
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
+                            {
+                                let mut sessions = turn_engine.state.sessions.lock().unwrap();
+                                if let Some(runtime) = sessions.get_mut(&sess_for_task) {
+                                    if runtime.acp_session_id.as_deref() == Some(acp_sid.as_str()) {
+                                        runtime.provider_context_injected = true;
+                                        runtime
+                                            .injected_memory_keys
+                                            .extend(injected_memory_keys.iter().cloned());
+                                    }
+                                }
+                            }
                             if clear_handoff_after_prompt {
                                 if let Err(error) =
                                     turn_engine.clear_handoff_context(&sess_for_task)
@@ -6757,14 +6886,16 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        attach_host_mcp_servers, auto_scene_routing_instructions, elicitation_message,
-        encode_mcp_servers, rich_tool_kind, sites_permission_kind, with_auto_scene_routing,
-        with_codetwo_browser_routing, with_codex_sites_routing, with_provider_tool_instructions,
-        DesktopMcpConfig,
+        attach_host_mcp_servers, auto_scene_routing_instructions,
+        codex_launch_with_static_provider_context, elicitation_message, encode_mcp_servers,
+        rich_tool_kind, sites_permission_kind, with_auto_scene_routing,
+        with_codetwo_browser_routing, with_codex_sites_routing, with_initial_provider_context,
+        with_provider_tool_instructions, DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
     use crate::artifact::ToolSource;
     use crate::permission::PermissionContextKind;
+    use crate::provider::LaunchSpec;
     use crate::skill::{McpServer, McpTransport};
 
     #[test]
@@ -6824,6 +6955,53 @@ mod mcp_tests {
         assert_eq!(
             with_provider_tool_instructions("plain".into(), &[]),
             "plain"
+        );
+    }
+
+    #[test]
+    fn stable_provider_context_is_only_added_to_the_initial_prompt() {
+        let instructions = vec!["HOST_TOOL_MARKER".to_string()];
+        let first =
+            with_initial_provider_context("first request".into(), &instructions, true, true, true);
+        assert!(first.contains("[C2 host tools]"));
+        assert!(first.contains("[C2 desktop browser routing]"));
+        assert!(first.contains("[C2 Sites routing and safety]"));
+
+        assert_eq!(
+            with_initial_provider_context("later request".into(), &instructions, true, true, false,),
+            "later request"
+        );
+    }
+
+    #[test]
+    fn codex_static_context_uses_developer_config_without_overwriting_user_config() {
+        let mut launch = LaunchSpec::new("codex-acp", []);
+        launch.env.push((
+            "CODEX_CONFIG".into(),
+            r#"{"model":"kept","developer_instructions":"Existing rule."}"#.into(),
+        ));
+        let instructions = vec!["HOST_TOOL_MARKER".to_string()];
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+            .expect("valid Codex config");
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+            .expect("reapplying context remains valid");
+        let encoded = launch
+            .env
+            .iter()
+            .find(|(key, _)| key == "CODEX_CONFIG")
+            .map(|(_, value)| value)
+            .expect("Codex config env");
+        let config: serde_json::Value = serde_json::from_str(encoded).unwrap();
+        let developer = config["developer_instructions"].as_str().unwrap();
+
+        assert_eq!(config["model"], "kept");
+        assert!(developer.starts_with("Existing rule."));
+        assert!(developer.contains("HOST_TOOL_MARKER"));
+        assert!(developer.contains("[C2 desktop browser routing]"));
+        assert!(developer.contains("[C2 Sites routing and safety]"));
+        assert_eq!(
+            developer.matches("[C2 Sites routing and safety]").count(),
+            1
         );
     }
 

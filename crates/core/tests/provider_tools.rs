@@ -1,6 +1,7 @@
 //! The Rust host adapter used by TUI/server must reach the real ACP session seam. Tool Broker
 //! conformance is covered by `tool_broker_adapter`; these tests prove the returned MCP servers and
-//! instructions survive engine compilation into both `session/new` and `session/load`.
+//! instructions reach new and loaded sessions. Codex receives stable instructions through its
+//! developer config; other providers receive them on the first prompt only.
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -35,11 +36,50 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","id":request_id,"result":{"stopReason":"end_turn"}})
 "#;
 
+const CODEX_CONTEXT_AGENT: &str = r#"
+import json, os, sys
+config = json.loads(os.environ.get("CODEX_CONFIG", "{}"))
+def send(message): print(json.dumps(message), flush=True)
+for line in sys.stdin:
+    line = line.strip()
+    if not line: continue
+    message = json.loads(line)
+    method, request_id = message.get("method"), message.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":request_id,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":True}}})
+    elif method == "session/new":
+        send({"jsonrpc":"2.0","id":request_id,"result":{"sessionId":"codex-new"}})
+    elif method == "session/load":
+        send({"jsonrpc":"2.0","id":request_id,"result":{}})
+    elif method == "session/prompt":
+        prompt = json.dumps(message["params"].get("prompt", []))
+        instructions = config.get("developer_instructions", "")
+        text = ";".join([
+            "config_host=" + str("HOST_TOOL_MARKER" in instructions).lower(),
+            "config_sites=" + str("[C2 Sites routing and safety]" in instructions).lower(),
+            "prompt_host=" + str("HOST_TOOL_MARKER" in prompt).lower(),
+            "prompt_sites=" + str("[C2 Sites routing and safety]" in prompt).lower(),
+        ])
+        send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":message["params"]["sessionId"],"update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":text}}}})
+        send({"jsonrpc":"2.0","id":request_id,"result":{"stopReason":"end_turn"}})
+"#;
+
 fn mock_provider() -> Provider {
     Provider {
         id: ProviderId::Grok,
         display_name: "Mock".into(),
         launch: LaunchSpec::new("python3", ["-c", HOST_TOOL_AGENT]),
+        needs_node: false,
+    }
+}
+
+fn mock_codex_provider() -> Provider {
+    let mut launch = LaunchSpec::new("python3", ["-c", CODEX_CONTEXT_AGENT]);
+    launch.env.push(("CODEX_CONFIG".into(), "{}".into()));
+    Provider {
+        id: ProviderId::Codex,
+        display_name: "Mock Codex".into(),
+        launch,
         needs_node: false,
     }
 }
@@ -62,6 +102,14 @@ fn provider_toolsets() -> HashMap<String, ProviderToolset> {
             instructions: vec!["Use HOST_TOOL_MARKER for provider-neutral app control.".into()],
         },
     )])
+}
+
+fn codex_toolsets() -> HashMap<String, ProviderToolset> {
+    let mut toolsets = provider_toolsets();
+    let toolset = toolsets
+        .remove(ProviderId::Grok.as_str())
+        .expect("mock toolset");
+    HashMap::from([(ProviderId::Codex.as_str().to_string(), toolset)])
 }
 
 async fn run_turn(
@@ -128,8 +176,73 @@ async fn projected_tools_reach_session_new_and_the_prompt() {
             _ => {}
         }
     };
-    let texts = run_turn(&engine, &mut events, session).await;
+    let texts = run_turn(&engine, &mut events, session.clone()).await;
     assert_eq!(texts, ["mcp=computer-use;instructions=true"]);
+    let texts = run_turn(&engine, &mut events, session).await;
+    assert_eq!(texts, ["mcp=computer-use;instructions=false"]);
+}
+
+#[tokio::test]
+async fn codex_stable_context_uses_developer_config_instead_of_the_user_prompt() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let (engine, mut events) = Engine::with_store_memory_and_provider_tools(
+        vec![mock_codex_provider()],
+        SkillLibrary::default(),
+        store,
+        None,
+        codex_toolsets(),
+    );
+    engine
+        .submit(Op::NewSession {
+            provider: ProviderId::Codex,
+            cwd: std::env::temp_dir().to_string_lossy().to_string(),
+            use_worktree: false,
+            worktree_base: None,
+            worktree_base_sha: None,
+            request_id: Some("codex-hidden-context-session".into()),
+            model: None,
+            initial_policy: None,
+        })
+        .await
+        .unwrap();
+
+    let session = loop {
+        match events.recv().await.expect("session event") {
+            Event::SessionCreated { session, .. } => break session,
+            Event::Error { message, .. } => panic!("unexpected session error: {message}"),
+            _ => {}
+        }
+    };
+    let expected = ["config_host=true;config_sites=true;prompt_host=false;prompt_sites=false"];
+    assert_eq!(
+        run_turn(&engine, &mut events, session.clone()).await,
+        expected
+    );
+    assert_eq!(run_turn(&engine, &mut events, session).await, expected);
+}
+
+#[tokio::test]
+async fn revived_codex_session_restores_hidden_static_context() {
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    let mut session = Session::new(
+        ProviderId::Codex,
+        std::env::temp_dir().to_string_lossy().to_string(),
+    );
+    session.acp_session_id = Some("codex-old".into());
+    store.upsert_session(&session).unwrap();
+    let id = session.id.clone();
+    let (engine, mut events) = Engine::with_store_memory_and_provider_tools(
+        vec![mock_codex_provider()],
+        SkillLibrary::default(),
+        store,
+        None,
+        codex_toolsets(),
+    );
+
+    assert_eq!(
+        run_turn(&engine, &mut events, id).await,
+        ["config_host=true;config_sites=true;prompt_host=false;prompt_sites=false"]
+    );
 }
 
 #[tokio::test]
@@ -150,8 +263,10 @@ async fn projected_tools_reach_session_load_and_the_prompt() {
         provider_toolsets(),
     );
 
-    let texts = run_turn(&engine, &mut events, id).await;
+    let texts = run_turn(&engine, &mut events, id.clone()).await;
     assert_eq!(texts, ["mcp=computer-use;instructions=true"]);
+    let texts = run_turn(&engine, &mut events, id).await;
+    assert_eq!(texts, ["mcp=computer-use;instructions=false"]);
 }
 
 #[tokio::test]
