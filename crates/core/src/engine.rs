@@ -945,7 +945,7 @@ fn auto_scene_routing_instructions(
 
 fn with_auto_scene_routing(prompt: String, instructions: Option<String>) -> String {
     match instructions {
-        Some(instructions) => format!("{instructions}\n\n{prompt}"),
+        Some(instructions) => format!("{prompt}\n\n{instructions}"),
         None => prompt,
     }
 }
@@ -1758,7 +1758,7 @@ struct SessionRuntime {
     models_reported: bool,
     initial_reasoning_effort: Option<String>,
     /// Provider-only continuation context imported by a task handoff. A successful ACP
-    /// `session/load` makes it redundant; otherwise it is prepended exactly once to the first
+    /// `session/load` makes it redundant; otherwise it is appended exactly once to the first
     /// successful prompt on this device.
     handoff_context: Option<Value>,
 }
@@ -2760,40 +2760,43 @@ impl Engine {
             });
         }
 
-        // Directories in the shared container that Git no longer registers: leftovers from prunes,
-        // failed creations, or manual deletions inside the checkout.
+        // Directories in the shared container that Git no longer registers: current
+        // `<session>/<repo>` checkouts plus legacy flat `<repo>-<session>` checkouts.
         if let Some(container) =
             crate::worktree::session_container_dir_with_root(&root, configured_root.as_deref())
         {
             if let Ok(read_dir) = std::fs::read_dir(&container) {
+                let repo_name = crate::worktree::session_checkout_name(&root);
                 for entry in read_dir.flatten() {
-                    let path = entry.path();
+                    let direct = entry.path();
+                    let nested = direct.join(repo_name);
+                    let candidate = std::fs::symlink_metadata(&nested)
+                        .is_ok()
+                        .then_some(nested)
+                        .filter(|path| {
+                            crate::worktree::is_managed_session_checkout(&root, &container, path)
+                        })
+                        .or_else(|| {
+                            crate::worktree::is_managed_session_checkout(&root, &container, &direct)
+                                .then_some(direct)
+                        });
+                    let Some(path) = candidate else {
+                        continue;
+                    };
                     let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                    if claimed_paths.contains(&canonical) {
-                        continue;
+                    if !claimed_paths.contains(&canonical) {
+                        entries.push(WorktreeStatusEntry {
+                            path: path.to_string_lossy().into_owned(),
+                            branch: None,
+                            kind: WorktreeEntryKind::Stale,
+                            registered: false,
+                            checkout_present: true,
+                            session_id: None,
+                            session_title: None,
+                            session_archived: false,
+                            worktree_discarded: false,
+                        });
                     }
-                    let repo_name = root
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("repo");
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    let ours = name.starts_with(&format!("{repo_name}-"))
-                        || name.starts_with(".codetwo-rollback-");
-                    if !ours {
-                        continue;
-                    }
-                    entries.push(WorktreeStatusEntry {
-                        path: path.to_string_lossy().into_owned(),
-                        branch: None,
-                        kind: WorktreeEntryKind::Stale,
-                        registered: false,
-                        checkout_present: true,
-                        session_id: None,
-                        session_title: None,
-                        session_archived: false,
-                        worktree_discarded: false,
-                    });
                 }
             }
         }
@@ -2823,9 +2826,9 @@ impl Engine {
             .map_err(|error| format!("worktree container is unavailable: {error}"))?;
         let target_raw = std::path::PathBuf::from(worktree_path);
         let target = std::fs::canonicalize(&target_raw).unwrap_or_else(|_| target_raw.clone());
-        if target.parent() != Some(container.as_path()) {
+        if !crate::worktree::is_managed_session_checkout(&root, &container, &target) {
             return Err(format!(
-                "refusing to discard {}: only checkouts directly inside {} can be cleaned up here",
+                "refusing to discard {}: only C2 session checkouts inside {} can be cleaned up here",
                 target.display(),
                 container.display()
             ));
@@ -2882,6 +2885,12 @@ impl Engine {
                 std::fs::remove_dir_all(&target).map_err(|error| {
                     format!("couldn't remove stale worktree directory: {error}")
                 })?;
+                if let Some(parent) = target
+                    .parent()
+                    .filter(|parent| *parent != container.as_path())
+                {
+                    let _ = std::fs::remove_dir(parent);
+                }
                 let _ = std::fs::remove_dir(&container);
                 Ok(crate::worktree::DiscardedWorktree {
                     removed_checkout: true,
@@ -4463,7 +4472,7 @@ impl Engine {
                 let provider_prompt = if memory_context.block.is_empty() {
                     compiled.prompt.clone()
                 } else {
-                    format!("{}\n\n{}", memory_context.block, compiled.prompt)
+                    format!("{}\n\n{}", compiled.prompt, memory_context.block)
                 };
                 let auto_scene_instructions = self.state.store.as_ref().and_then(|store| {
                     store
@@ -4909,9 +4918,8 @@ impl Engine {
                 let clear_handoff_after_prompt = handoff_context.is_some();
                 let provider_prompt = match handoff_context {
                     Some(context) => format!(
-                        "The task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}\n\n{}",
-                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into()),
-                        provider_prompt
+                        "{provider_prompt}\n\nThe task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}",
+                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into())
                     ),
                     None => provider_prompt,
                 };
@@ -6785,21 +6793,22 @@ for line in sys.stdin:
         let baseline = crate::worktree::resolve_baseline(&repo, WorktreeBaseline::Current)
             .await
             .unwrap();
-        let orphan = crate::worktree::add_for_session_from_baseline(&repo, "orphan-1", &baseline)
+        let orphan_id = uuid::Uuid::new_v4().to_string();
+        let orphan = crate::worktree::add_for_session_from_baseline(&repo, &orphan_id, &baseline)
             .await
             .unwrap();
+        let orphan_parent = orphan.path.parent().unwrap().to_path_buf();
 
-        // A stale directory inside the shared container that Git does not register.
-        let container = orphan.path.parent().unwrap().to_path_buf();
-        let repo_name = repo
-            .canonicalize()
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
-        let stale = container.join(format!("{repo_name}-stale-leftover"));
-        std::fs::create_dir(&stale).unwrap();
+        // Current nested and legacy flat stale directories that Git does not register.
+        let repo_root = repo.canonicalize().unwrap();
+        let container = crate::worktree::session_container_dir(&repo_root).unwrap();
+        let repo_name = crate::worktree::session_checkout_name(&repo_root);
+        let stale_parent = container.join(uuid::Uuid::new_v4().to_string());
+        let stale_nested = stale_parent.join(repo_name);
+        std::fs::create_dir_all(&stale_nested).unwrap();
+        let stale_legacy =
+            container.join(format!("{}-stale-leftover", repo_name.to_string_lossy()));
+        std::fs::create_dir(&stale_legacy).unwrap();
 
         let (engine, _events) =
             Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
@@ -6826,9 +6835,11 @@ for line in sys.stdin:
         let orphan_entry = find(&orphan.path.to_string_lossy());
         assert_eq!(orphan_entry.kind, super::WorktreeEntryKind::Orphan);
         assert!(orphan_entry.session_id.is_none());
-        let stale_entry = find(&stale.to_string_lossy());
-        assert_eq!(stale_entry.kind, super::WorktreeEntryKind::Stale);
-        assert!(!stale_entry.registered);
+        for stale in [&stale_nested, &stale_legacy] {
+            let stale_entry = find(&stale.to_string_lossy());
+            assert_eq!(stale_entry.kind, super::WorktreeEntryKind::Stale);
+            assert!(!stale_entry.registered);
+        }
 
         // A session-claimed checkout is refused by the orphan flow.
         let refused = engine
@@ -6844,14 +6855,25 @@ for line in sys.stdin:
             .await
             .unwrap();
         assert!(outcome.removed_checkout);
-        assert_eq!(outcome.deleted_branch.as_deref(), Some("codetwo/orphan-1"));
+        assert_eq!(
+            outcome.deleted_branch.as_deref(),
+            Some(orphan.branch.as_str())
+        );
         assert!(!orphan.path.exists());
+        assert!(!orphan_parent.exists());
         let outcome = engine
-            .discard_orphan_worktree(&project, &stale.to_string_lossy())
+            .discard_orphan_worktree(&project, &stale_nested.to_string_lossy())
             .await
             .unwrap();
         assert!(outcome.removed_checkout);
-        assert!(!stale.exists());
+        assert!(!stale_nested.exists());
+        assert!(!stale_parent.exists());
+        let outcome = engine
+            .discard_orphan_worktree(&project, &stale_legacy.to_string_lossy())
+            .await
+            .unwrap();
+        assert!(outcome.removed_checkout);
+        assert!(!stale_legacy.exists());
 
         drop(engine);
         drop(store);
@@ -6959,9 +6981,7 @@ for line in sys.stdin:
         let mut session = Session::new(ProviderId::Grok, source.clone());
         let branch = crate::worktree::branch_for_session(&session.id).unwrap();
         let safe_id = branch.strip_prefix("codetwo/").unwrap();
-        let expected_path = base
-            .join(".codetwo-worktrees")
-            .join(format!("repo-{safe_id}"));
+        let expected_path = base.join(".codetwo-worktrees").join(safe_id).join("repo");
         let moved_path = std::path::PathBuf::from(format!("{}-moved", expected_path.display()));
 
         let error = prepare_session_worktree(&repo, &mut session, WorktreeBaseline::Current)
@@ -7288,8 +7308,7 @@ mod mcp_tests {
         assert!(!instructions.contains("`builtin:research`"));
         assert!(instructions.len() < 400);
         let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
-        assert!(prompt.starts_with("[C2 Auto Scene]"));
-        assert!(prompt.ends_with("fix the tests"));
+        assert!(prompt.starts_with("fix the tests\n\n[C2 Auto Scene]"));
     }
 
     #[test]

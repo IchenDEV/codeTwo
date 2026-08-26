@@ -29,6 +29,23 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","id":mid,"result":{"stopReason":"end_turn"}})
 "#;
 
+const PROMPT_CAPTURE_AGENT: &str = r#"
+import json, os, sys
+def send(message): print(json.dumps(message), flush=True)
+for line in sys.stdin:
+    if not line.strip(): continue
+    message = json.loads(line)
+    method, mid = message.get("method"), message.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1}})
+    elif method == "session/new":
+        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"prompt-capture-session"}})
+    elif method == "session/prompt":
+        with open(os.environ["C2_TEST_PROMPT_CAPTURE"], "w") as output:
+            json.dump(message["params"]["prompt"], output)
+        send({"jsonrpc":"2.0","id":mid,"result":{"stopReason":"end_turn"}})
+"#;
+
 const SLOW_MEMORY_AGENT: &str = r#"
 import json, sys, time
 def send(message): print(json.dumps(message), flush=True)
@@ -89,6 +106,82 @@ async fn run_memory_turn(
             _ => {}
         }
     }
+}
+
+#[tokio::test]
+async fn recalled_memory_and_handoff_follow_the_current_request() {
+    let base = std::env::temp_dir().join(format!("codetwo-prompt-order-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&base).unwrap();
+    let capture = base.join("prompt.json");
+    let project = base.to_string_lossy().into_owned();
+    let mut launch = LaunchSpec::new("python3", ["-c", PROMPT_CAPTURE_AGENT]);
+    launch.env.push((
+        "C2_TEST_PROMPT_CAPTURE".into(),
+        capture.to_string_lossy().into_owned(),
+    ));
+    let provider = Provider {
+        id: ProviderId::Grok,
+        display_name: "Prompt capture mock".into(),
+        launch,
+        needs_node: false,
+    };
+    let store = Arc::new(Store::open_in_memory().unwrap());
+    store
+        .add_memory(&project, "preference", "MEMORY_MARKER", true)
+        .unwrap();
+    let session = Session::new(ProviderId::Grok, project.clone());
+    let session_id = session.id.clone();
+    store
+        .accept_handoff(
+            "prompt-order-handoff",
+            1,
+            &session,
+            &[],
+            &project,
+            &serde_json::json!({"marker": "HANDOFF_MARKER"}),
+        )
+        .unwrap();
+    store
+        .activate_target_handoff(&session_id, "prompt-order-handoff", 1)
+        .unwrap();
+
+    let (engine, mut events) =
+        Engine::with_store(vec![provider], SkillLibrary::new(vec![]), store.clone());
+    engine
+        .submit(Op::Prompt {
+            session: session_id.clone(),
+            doc: vec![DocBlock::Text {
+                text: "USER_PROMPT_MARKER".into(),
+            }],
+            request_id: None,
+        })
+        .await
+        .unwrap();
+    loop {
+        let event = tokio::time::timeout(std::time::Duration::from_secs(10), events.recv())
+            .await
+            .expect("event before timeout")
+            .expect("event stream open");
+        match event {
+            Event::TurnEnded { session, .. } if session == session_id => break,
+            Event::Error { message, .. } => panic!("unexpected engine error: {message}"),
+            _ => {}
+        }
+    }
+
+    let blocks: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&capture).unwrap()).unwrap();
+    let prompt = blocks[0]["text"].as_str().expect("first ACP text block");
+    let user = prompt.find("USER_PROMPT_MARKER").unwrap();
+    let memory = prompt.find("MEMORY_MARKER").unwrap();
+    let handoff = prompt
+        .find("The task was transferred from another C2 device")
+        .unwrap();
+    let handoff_marker = prompt.find("HANDOFF_MARKER").unwrap();
+    assert!(user < memory && memory < handoff && handoff < handoff_marker);
+    assert!(store.handoff_context(&session_id).unwrap().is_none());
+
+    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[tokio::test]
