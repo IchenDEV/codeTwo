@@ -36,7 +36,6 @@ function renderActions(overrides = {}) {
     onCheckpoint: callback("checkpoint"),
     onPush: callback("push"),
     onToggleTerminal: callback("terminal"),
-    onToggleSideChat: callback("side-chat"),
     onTogglePanel: callback("panel"),
     ...overrides,
   };
@@ -76,10 +75,10 @@ describe("SessionHeaderActions", () => {
     await press(button(view.container, "Add action"));
     await press(button(view.container, "Open"));
     await press(button(view.container, "Commit"));
-    await press(button(view.container, "Toggle side chat"));
     await press(button(view.container, "Toggle terminal"));
     await press(button(view.container, "Toggle side panel"));
-    expect(calls).toEqual(["add", "open", "commit", "side-chat", "terminal", "panel"]);
+    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel"]);
+    expect(view.container.querySelector('[aria-label="Toggle side chat"]')).toBeNull();
 
     await press(button(view.container, "Open · More"));
     expect(dom.document.body.textContent).toContain("Cursor");
@@ -91,7 +90,7 @@ describe("SessionHeaderActions", () => {
       .find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
-    expect(calls).toEqual(["add", "open", "commit", "side-chat", "terminal", "panel", "finder"]);
+    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel", "finder"]);
 
     view.unmount();
   });

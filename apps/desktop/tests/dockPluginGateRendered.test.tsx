@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
+import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -11,7 +11,12 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
-function renderDock(availableSurfaces, tab = "home", open = true) {
+function renderDock(
+  availableSurfaces,
+  tab = "home",
+  open = true,
+  onOpenSideChat = () => {},
+) {
   return mount(
     <I18nProvider>
       <Dock
@@ -19,6 +24,7 @@ function renderDock(availableSurfaces, tab = "home", open = true) {
         tab={tab}
         availableSurfaces={availableSurfaces}
         onTab={() => {}}
+        onOpenSideChat={onOpenSideChat}
         onClose={() => {}}
         cwd={null}
         projectPath={null}
@@ -58,6 +64,26 @@ describe("Dock plugin component gate", () => {
 
     expect(separator?.getAttribute("tabindex")).toBe("-1");
     expect(separator?.getAttribute("aria-disabled")).toBe("true");
+
+    view.unmount();
+  });
+
+  test("opens side chat from the right-panel surface picker", async () => {
+    activateDom();
+    let opens = 0;
+    const view = renderDock(
+      ["trajectory", "browser", "terminal", "files", "git"],
+      "home",
+      true,
+      () => { opens += 1; },
+    );
+    await flush();
+
+    const cards = Array.from(view.container.querySelectorAll(".grid > button"));
+    expect(cards[2]?.textContent).toContain("Terminal");
+    expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
+    click(button(view.container, "Side chat"));
+    expect(opens).toBe(1);
 
     view.unmount();
   });

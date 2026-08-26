@@ -6464,8 +6464,7 @@ export default function App() {
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
               terminalActive={dockTab === "terminal"}
-              panelActive={dockTab !== null}
-              sideChatActive={sideChatOpen}
+              panelActive={dockTab !== null || sideChatOpen}
               actions={scripts}
               editorLaunchersAvailable={editorLaunchersAvailable}
               fileManagerLabel={fileManagerLabel}
@@ -6482,16 +6481,10 @@ export default function App() {
               onCheckpoint={() => void doCheckpoint()}
               onPush={() => void doPush().catch(() => {})}
               onToggleTerminal={() => toggleDock("terminal")}
-              onToggleSideChat={() => {
-                setSideChatOpen((current) => {
-                  const next = !current;
-                  if (next) manualDockTab(null);
-                  return next;
-                });
-              }}
               onTogglePanel={() => {
+                const panelOpen = dockTab !== null || sideChatOpen;
                 setSideChatOpen(false);
-                manualDockTab(dockTab ? null : "home");
+                manualDockTab(panelOpen ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
               onMoveTask={() => activeSession && setShowTaskHandoff(true)}
@@ -6915,6 +6908,10 @@ export default function App() {
               tab={dockTab}
               availableSurfaces={availableDockSurfaces}
               onTab={manualDockTab}
+              onOpenSideChat={() => {
+                manualDockTab(null);
+                setSideChatOpen(true);
+              }}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
               highlightFile={dockAutoHint?.file ?? null}

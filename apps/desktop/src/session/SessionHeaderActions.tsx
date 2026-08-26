@@ -6,7 +6,6 @@ import {
   GitCommitHorizontal,
   History,
   Ellipsis,
-  MessageSquare,
   MessageSquareText,
   Orbit,
   PanelRight,
@@ -89,7 +88,6 @@ export function SessionHeaderActions({
   canCommit,
   terminalActive,
   panelActive,
-  sideChatActive = false,
   onAddAction,
   onOpen,
   onOpenCursor,
@@ -105,13 +103,11 @@ export function SessionHeaderActions({
   onPush,
   onToggleTerminal,
   onTogglePanel,
-  onToggleSideChat = () => {},
   onMoveTask,
 }: {
   canCommit: boolean;
   terminalActive: boolean;
   panelActive: boolean;
-  sideChatActive?: boolean;
   onAddAction: () => void;
   onOpen: () => void;
   onOpenCursor: () => void;
@@ -127,7 +123,6 @@ export function SessionHeaderActions({
   onPush: () => void;
   onToggleTerminal: () => void;
   onTogglePanel: () => void;
-  onToggleSideChat?: () => void;
   onMoveTask: () => void;
 }) {
   const t = useT();
@@ -270,12 +265,6 @@ export function SessionHeaderActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <PanelAction
-        icon={MessageSquare}
-        label={t("sideChat.toggle")}
-        active={sideChatActive}
-        onClick={onToggleSideChat}
-      />
       <PanelAction
         icon={TerminalIcon}
         label={t("action.toggle_terminal")}
