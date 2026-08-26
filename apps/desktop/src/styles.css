@@ -1281,3 +1281,19 @@ pre {
     display: inline-flex;
   }
 }
+
+/* The command palette floats over live project context, so its tint stays translucent enough for
+   the blur to read as material while the modal token keeps both schemes legible. */
+.command-palette-surface {
+  background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
+  backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .command-palette-surface {
+    background: var(--ds-color-modal);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

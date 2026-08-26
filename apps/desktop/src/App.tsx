@@ -3585,6 +3585,7 @@ export default function App() {
         return {
           id: `conversation-${hit.session_id}-${hit.seq}`,
           identity: `session-${hit.session_id}`,
+          category: "session",
           label: hit.title,
           detail: `${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
           hint: hit.archived ? t("palette.archived") : project,
@@ -5404,6 +5405,7 @@ export default function App() {
     },
     {
       id: "usage",
+      category: "setting" as const,
       label: "Usage (5h / week / month)",
       hint: hint("open_usage"),
       run: () => {
@@ -5456,6 +5458,7 @@ export default function App() {
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     {
       id: "settings",
+      category: "setting" as const,
       label: "Open settings",
       hint: hint("open_settings"),
       run: () => {
@@ -5541,7 +5544,8 @@ export default function App() {
     ...sessions.map((s) => ({
       id: `sess-${s.id}`,
       identity: `session-${s.id}`,
-      label: `Session: ${s.title}`,
+      category: "session" as const,
+      label: s.title,
       hint: displayProvider(s.provider),
       run: () => void selectSession(s.id),
     })),
