@@ -61,7 +61,7 @@ async function render() {
       <ThemeProvider>
         <I18nProvider>
           <ErrorBoundary>
-            <TooltipProvider delay={300}>
+            <TooltipProvider>
               <ToastProvider>
                 <Root />
               </ToastProvider>

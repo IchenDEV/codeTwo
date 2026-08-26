@@ -23,9 +23,13 @@ describe("composer geometry contract", () => {
     );
     expect(
       composer.match(
-        /className="size-8 shrink-0 rounded-full transition-transform active:scale-90"/g,
+        /className="size-8 shrink-0 rounded-full"/g,
       ),
     ).toHaveLength(2);
+    expect(composer).toMatch(
+      /variant="secondary"\s+size="icon"\s+className="size-8 shrink-0 rounded-full"\s+onClick=\{onStop\}/,
+    );
+    expect(composer).not.toContain("active:scale-90");
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"',

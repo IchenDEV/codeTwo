@@ -52,6 +52,7 @@ export function SceneChip({
   onModel,
   configOptions,
   onConfigOption,
+  modelChangeDisabled = false,
 }: {
   config: SessionConfig;
   models: ModelChoice[];
@@ -60,6 +61,7 @@ export function SceneChip({
   onModel: (id: string) => void;
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
+  modelChangeDisabled?: boolean;
   /** Unused here (the context gauge stays in the row); kept so the row passes one props bag. */
   contextWindow?: ContextWindow | null;
 }) {
@@ -200,6 +202,7 @@ export function SceneChip({
               onConfigOption={onConfigOption}
               hasSession={config.hasSession}
               compact
+              disabled={modelChangeDisabled}
             />
             <ModePicker config={config} />
             {config.memoryEnabled ? <MemoryPicker config={config} /> : null}

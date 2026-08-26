@@ -874,7 +874,16 @@ export function SessionRail({
           title={quickQuotaTitle}
           onClick={onOpenUsage}
         >
-          <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          {quickQuota ? (
+            <span
+              data-quota-provider={quickQuota.provider}
+              className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+            >
+              <ProviderIcon provider={quickQuota.provider} className="size-4" />
+            </span>
+          ) : (
+            <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          )}
           <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
           {quickQuota ? (
             <span className="flex shrink-0 items-center gap-1.5">

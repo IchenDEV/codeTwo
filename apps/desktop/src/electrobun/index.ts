@@ -1,4 +1,5 @@
 import Electrobun, {
+  ApplicationMenu,
   BrowserView,
   BrowserWindow,
   ContextMenu,
@@ -20,6 +21,7 @@ import { nativeContextMenuAction, nativeContextMenuConfig } from "./contextMenuH
 import { NativeHost } from "./nativeHost";
 import { getAppUpdateStatus, startAppUpdateCheck } from "./update";
 import { AppshotManager } from "./appshots";
+import { macOSApplicationMenu } from "./applicationMenu";
 import { configureMacOSWindowEffects } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
 
@@ -109,6 +111,9 @@ let rendererReady = false;
 let rpc: ReturnType<typeof BrowserView.defineRPC<CodeTwoRPC>>;
 let appshots: AppshotManager;
 const applicationName = process.env.CODETWO_APP_NAME ?? "C2";
+if (process.platform === "darwin") {
+  ApplicationMenu.setApplicationMenu(macOSApplicationMenu());
+}
 const dataDir =
   process.env.CODETWO_DATA_DIR ??
   join(Utils.paths.appData, process.env.CODETWO_APP_IDENTIFIER ?? "dev.codetwo.app.dev");

@@ -97,6 +97,8 @@ interface EditorProps {
     message: string,
     kind: "provider_image" | "other",
   ) => void) | null>;
+  /** App-owned image intake. Text and other clipboard payloads remain BlockNote's responsibility. */
+  onPasteImages?: (files: readonly File[]) => void | Promise<void>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
 }
@@ -284,11 +286,13 @@ export function DocEditor({
   restoreCanvasDocumentRef,
   freezeCanvasesRef,
   canvasDeliveryErrorRef,
+  onPasteImages,
   onEmptyChange,
 }: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
   const t = useT();
+  const editorRootRef = useRef<HTMLDivElement>(null);
   // The Composer's color scheme is transient UI state. Keep it outside the Canvas envelope so a
   // live theme change updates mounted editable blocks without rewriting readonly/history data.
   const scheme = useColorScheme();
@@ -308,6 +312,14 @@ export function DocEditor({
       },
     },
   });
+
+  useEffect(() => {
+    const editable = editorRootRef.current?.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) return;
+    editable.setAttribute("role", "textbox");
+    editable.setAttribute("aria-label", t("composer.documentInput"));
+    editable.setAttribute("aria-multiline", "true");
+  }, [t]);
 
   const insertCanvasDraft = useCallback((draft: CanvasDraft, options: CanvasInsertOptions = {}) => {
     if (!canvasEnabled) return;
@@ -707,58 +719,71 @@ export function DocEditor({
   };
 
   return (
-    <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
-      <BlockNoteView
-        editor={editor}
-        slashMenu={false}
-        theme={scheme}
-        onChange={observeDocument}
-      >
-        <SuggestionMenuController
-          triggerCharacter={"/"}
-          getItems={async (query) =>
-            filterSuggestionItems(
-              [
-                ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
-                ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
-                // Drop the media blocks: they need an upload handler this app doesn't configure, so
-                // they insert an "Add file" placeholder that can never be filled and never reaches
-                // the compiled prompt. Use `@` for files instead.
-                ...getDefaultReactSlashMenuItems(editor).filter(
-                  (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
-                ),
-              ],
-              query,
-            )
-          }
-        />
-        {/* `@` mentions workspace files and past chats — file contents and chat transcripts are
-            inlined into the compiled prompt. */}
-        {/* The type argument is explicit because the controller infers its item type from `getItems`,
-            and an inline lambda lets it fall back to BlockNote's default item instead. */}
-        <SuggestionMenuController<typeof getAtItems>
-          triggerCharacter={"@"}
-          getItems={getAtItems}
-          suggestionMenuComponent={FileMenu}
-          onItemClick={(item) => {
-            editor.insertInlineContent([
-              item.kind === "chat"
-                ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
-                : item.kind === "artifact"
-                  ? {
-                      type: "artifactMention",
-                      props: {
-                        artifactId: String(item.recordId),
-                        title: item.title,
-                        kind: item.artifactKind,
-                      },
-                    }
-                  : { type: "fileMention", props: { path: item.path } },
-              " ",
-            ]);
-          }}
-        />
-      </BlockNoteView>
-    </CanvasBlockRuntimeContext.Provider>
+    <div
+      ref={editorRootRef}
+      data-composer-editor
+      onPasteCapture={(event) => {
+        if (!onPasteImages) return;
+        const files = Array.from(event.clipboardData.files).filter((file) =>
+          file.type.startsWith("image/"),
+        );
+        if (files.length === 0) return;
+        event.preventDefault();
+        void onPasteImages(files);
+      }}
+    >
+      <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
+        <BlockNoteView
+          editor={editor}
+          slashMenu={false}
+          theme={scheme}
+          onChange={observeDocument}
+        >
+          <SuggestionMenuController
+            triggerCharacter={"/"}
+            getItems={async (query) =>
+              filterSuggestionItems(
+                [
+                  ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
+                  ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
+                  // Prompt images use the Composer's private attachment intake. Keep BlockNote's
+                  // unrelated media placeholders out of the slash menu; use `@` for workspace files.
+                  ...getDefaultReactSlashMenuItems(editor).filter(
+                    (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
+                  ),
+                ],
+                query,
+              )
+            }
+          />
+          {/* `@` mentions workspace files and past chats — file contents and chat transcripts are
+              inlined into the compiled prompt. */}
+          {/* The type argument is explicit because the controller infers its item type from `getItems`,
+              and an inline lambda lets it fall back to BlockNote's default item instead. */}
+          <SuggestionMenuController<typeof getAtItems>
+            triggerCharacter={"@"}
+            getItems={getAtItems}
+            suggestionMenuComponent={FileMenu}
+            onItemClick={(item) => {
+              editor.insertInlineContent([
+                item.kind === "chat"
+                  ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
+                  : item.kind === "artifact"
+                    ? {
+                        type: "artifactMention",
+                        props: {
+                          artifactId: String(item.recordId),
+                          title: item.title,
+                          kind: item.artifactKind,
+                        },
+                      }
+                    : { type: "fileMention", props: { path: item.path } },
+                " ",
+              ]);
+            }}
+          />
+        </BlockNoteView>
+      </CanvasBlockRuntimeContext.Provider>
+    </div>
   );
 }

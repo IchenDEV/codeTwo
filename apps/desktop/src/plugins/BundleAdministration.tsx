@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import {
   CircleAlert,
+  ExternalLink,
   Loader2,
   PackageCheck,
   ShieldAlert,
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { openExternal } from "../bridge";
 
 import type {
   PluginManagerBundle,
@@ -54,6 +56,18 @@ export function BundleAdministration({
   const uninstallKey = `bundle-uninstall:${bundle.id}`;
   const trustBusy = busyAction === trustKey;
   const uninstallBusy = busyAction === uninstallKey;
+  const repositoryUrl = (() => {
+    const repository = bundle.repository?.trim();
+    if (!repository) return null;
+    try {
+      const url = new URL(repository);
+      return url.protocol === "https:" || url.protocol === "http:"
+        ? url.href
+        : null;
+    } catch {
+      return null;
+    }
+  })();
 
   const confirmUninstall = async () => {
     if (!onUninstall || uninstallBusy) return;
@@ -168,12 +182,24 @@ export function BundleAdministration({
 
         {userScope ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              {bundle.requiresTrust && onSetTrusted ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {repositoryUrl ? (
                 <Button
                   type="button"
                   size="compact"
                   variant="secondary"
+                  disabled={trustBusy || uninstallBusy}
+                  onClick={() => void openExternal(repositoryUrl)}
+                >
+                  <ExternalLink data-icon="inline-start" />
+                  {labels.reviewSource}
+                </Button>
+              ) : null}
+              {bundle.requiresTrust && onSetTrusted ? (
+                <Button
+                  type="button"
+                  size="compact"
+                  variant={bundle.trusted ? "secondary" : "default"}
                   disabled={trustBusy || uninstallBusy}
                   onClick={() => void onSetTrusted(bundle.id, !bundle.trusted)}
                 >
@@ -193,7 +219,8 @@ export function BundleAdministration({
               <Button
                 type="button"
                 size="compact"
-                variant="destructive"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
                 disabled={trustBusy || uninstallBusy}
                 onClick={() => setUninstallOpen(true)}
               >

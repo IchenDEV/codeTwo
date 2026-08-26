@@ -49,9 +49,13 @@ import {
 import { cn } from "@/lib/utils"
 import { useToast } from "@/ui/toast"
 import { confirmNative } from "@/bridge"
+import { useLanguage, type Locale, type Translate } from "@/i18n"
 
 import {
+  CORRUPT_BOARD_WARNING,
+  LOAD_BOARD_WARNING,
   PRIORITIES,
+  SAVE_BOARD_WARNING,
   TASK_STATUSES,
   boardLabels,
   boardReducer,
@@ -67,9 +71,9 @@ import {
   type TaskStatus,
 } from "./taskBoard"
 import {
-  PRIORITY_LABELS,
-  STATUS_LABELS,
   TaskEditorDialog,
+  taskPriorityLabel,
+  taskStatusLabel,
   type TaskEditorValue,
 } from "./TaskEditorDialog"
 
@@ -119,19 +123,22 @@ const PRIORITY_TONES: Record<TaskPriority, string> = {
   urgent: "text-destructive",
 }
 
-const DATE_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
-  month: "numeric",
-  day: "numeric",
-})
-
-function formatUpdatedAt(value: number): string {
+function formatUpdatedAt(value: number, locale: Locale, t: Translate): string {
   const elapsed = Math.max(0, Date.now() - value)
   const hour = 60 * 60 * 1000
   const day = 24 * hour
-  if (elapsed < hour) return "刚刚"
-  if (elapsed < day) return `${Math.floor(elapsed / hour)} 小时前`
-  if (elapsed < day * 7) return `${Math.floor(elapsed / day)} 天前`
-  return DATE_FORMATTER.format(value)
+  if (elapsed < hour) return t("taskboard.updatedNow")
+  if (elapsed < day) return t("taskboard.updatedHours", { count: Math.floor(elapsed / hour) })
+  if (elapsed < day * 7) return t("taskboard.updatedDays", { count: Math.floor(elapsed / day) })
+  const date = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(value)
+  return t("taskboard.updatedOn", { date })
+}
+
+function warningText(warning: string, t: Translate): string {
+  if (warning === CORRUPT_BOARD_WARNING) return t("taskboard.warning.corrupt")
+  if (warning === LOAD_BOARD_WARNING) return t("taskboard.warning.load")
+  if (warning === SAVE_BOARD_WARNING) return t("taskboard.warning.save")
+  return warning
 }
 
 function nextColumnOrder(tasks: readonly BoardTask[], status: TaskStatus): number {
@@ -146,9 +153,20 @@ function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[
   return values.includes(value) ? removeFilterValue(values, value) : [...values, value]
 }
 
+function taskActionLabel(t: Translate, status: TaskStatus, continuesSession: boolean): string {
+  if (continuesSession) return t("taskboard.continueTask")
+  if (status === "in_progress") return t("taskboard.continueTask")
+  if (status === "in_review") return t("taskboard.reviewTask")
+  if (status === "done") return t("taskboard.revisitTask")
+  return t("taskboard.startTask")
+}
+
 function TaskCard({
+  t,
+  locale,
   task,
   latestSessionTitle,
+  continuesSession,
   sessionCount,
   dragTarget,
   onDragStart,
@@ -161,8 +179,11 @@ function TaskCard({
   onContinue,
   onStartNewSession,
 }: {
+  t: Translate
+  locale: Locale
   task: BoardTask
   latestSessionTitle?: string
+  continuesSession: boolean
   sessionCount: number
   dragTarget: boolean
   onDragStart: (event: DragEvent<HTMLButtonElement>) => void
@@ -175,6 +196,7 @@ function TaskCard({
   onContinue?: () => void
   onStartNewSession?: () => void
 }) {
+  const primaryActionLabel = taskActionLabel(t, task.status, continuesSession)
   return (
     <div
       data-task-drop-before={task.id}
@@ -192,16 +214,13 @@ function TaskCard({
               type="button"
               draggable
               className="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
-              aria-label={`拖动任务：${task.title}`}
-              title="拖动任务"
+              aria-label={t("taskboard.dragTask", { title: task.title })}
+              title={t("taskboard.dragTaskHint")}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
             >
               <GripVertical aria-hidden className="size-4" />
             </button>
-            <span className="min-w-0 flex-1 truncate font-mono text-fine text-muted-foreground">
-              {task.id}
-            </span>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
@@ -209,7 +228,8 @@ function TaskCard({
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`任务操作：${task.title}`}
+                    className="ml-auto"
+                    aria-label={t("taskboard.taskActions", { title: task.title })}
                   >
                     <MoreHorizontal data-icon="inline-start" aria-hidden />
                   </Button>
@@ -219,18 +239,20 @@ function TaskCard({
                 <DropdownMenuGroup>
                   <DropdownMenuItem onClick={onEdit}>
                     <Pencil aria-hidden />
-                    编辑任务
+                    {t("taskboard.edit")}
                   </DropdownMenuItem>
                   {latestSessionTitle && onContinue ? (
                     <DropdownMenuItem onClick={onContinue}>
                       <ExternalLink aria-hidden />
-                      打开最近会话
+                      {t("taskboard.openRecentSession")}
                     </DropdownMenuItem>
                   ) : null}
                   {onStartNewSession ? (
                     <DropdownMenuItem onClick={onStartNewSession}>
                       <MessageSquareText aria-hidden />
-                      {sessionCount > 0 ? "在新会话中继续" : "开始任务"}
+                      {sessionCount > 0
+                        ? t("taskboard.startInNewSession")
+                        : primaryActionLabel}
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuGroup>
@@ -238,7 +260,7 @@ function TaskCard({
                 <DropdownMenuGroup>
                   {TASK_STATUSES.filter((status) => status !== task.status).map((status) => (
                     <DropdownMenuItem key={status} onClick={() => onMove(status)}>
-                      移动到“{STATUS_LABELS[status]}”
+                      {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuGroup>
@@ -246,7 +268,7 @@ function TaskCard({
                 <DropdownMenuGroup>
                   <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <Trash2 aria-hidden />
-                    删除任务
+                    {t("taskboard.delete")}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
@@ -276,7 +298,7 @@ function TaskCard({
               )}
             >
               <Flag aria-hidden className="size-3.5" />
-              {PRIORITY_LABELS[task.priority]}
+              {taskPriorityLabel(t, task.priority)}
             </span>
             {task.labels.slice(0, 2).map((label) => (
               <Badge key={label} variant="secondary" className="text-cap font-medium">
@@ -303,13 +325,13 @@ function TaskCard({
                 className="-ml-2 text-primary"
                 onClick={onContinue}
               >
-                {sessionCount > 0 ? "继续任务" : "开始任务"}
+                {primaryActionLabel}
                 <ArrowRight data-icon="inline-end" aria-hidden />
               </Button>
             ) : null}
             <span className="ml-auto truncate text-fine text-muted-foreground">
-              {sessionCount > 0 ? `${sessionCount} 个会话 · ` : ""}
-              {formatUpdatedAt(task.updatedAt)}
+              {sessionCount > 0 ? `${t("taskboard.sessionCount", { count: sessionCount })} · ` : ""}
+              {formatUpdatedAt(task.updatedAt, locale, t)}
             </span>
           </div>
         </CardContent>
@@ -319,6 +341,8 @@ function TaskCard({
 }
 
 function BoardColumn({
+  t,
+  locale,
   status,
   tasks,
   totalCount,
@@ -332,6 +356,8 @@ function BoardColumn({
   onOpenSession,
   onStartTask,
 }: {
+  t: Translate
+  locale: Locale
   status: TaskStatus
   tasks: BoardTask[]
   totalCount: number
@@ -357,7 +383,7 @@ function BoardColumn({
     <section
       data-task-column={status}
       aria-labelledby={`taskboard-column-${status}`}
-      className="flex min-h-0 w-72 shrink-0 flex-col rounded-(--ds-radius-module) bg-fill-quiet"
+      className="flex min-h-0 w-72 min-w-72 flex-1 flex-col rounded-(--ds-radius-module) bg-fill-quiet"
     >
       <header
         className={cn(
@@ -368,11 +394,13 @@ function BoardColumn({
       >
         <StatusIcon aria-hidden className="size-4" />
         <h2 id={`taskboard-column-${status}`} className="text-title font-semibold">
-          {STATUS_LABELS[status]}
+          {taskStatusLabel(t, status)}
         </h2>
         <span
           className="ml-auto text-ui tabular-nums text-muted-foreground"
-          aria-label={filtered ? `${tasks.length} 个可见，共 ${totalCount} 个` : `${totalCount} 个任务`}
+          aria-label={filtered
+            ? t("taskboard.visibleCount", { visible: tasks.length, total: totalCount })
+            : t("taskboard.taskCount", { count: totalCount })}
         >
           {filtered ? `${tasks.length}/${totalCount}` : totalCount}
         </span>
@@ -381,7 +409,7 @@ function BoardColumn({
           variant="ghost"
           size="icon-xs"
           className="text-current"
-          aria-label={`在${STATUS_LABELS[status]}中新建任务`}
+          aria-label={t("taskboard.addInColumn", { status: taskStatusLabel(t, status) })}
           onClick={() => openEditor(null, status)}
         >
           <Plus data-icon="inline-start" aria-hidden />
@@ -402,10 +430,13 @@ function BoardColumn({
           return (
             <TaskCard
               key={task.id}
+              t={t}
+              locale={locale}
               task={task}
               latestSessionTitle={
                 latestSessionId ? sessionsById.get(latestSessionId)?.title : undefined
               }
+              continuesSession={Boolean(latestSessionId && onOpenSession)}
               sessionCount={task.sessionIds.length}
               dragTarget={dragState?.status === status && dragState.beforeId === task.id}
               onDragStart={(event) => {
@@ -441,7 +472,9 @@ function BoardColumn({
           <div className="grid flex-1 place-content-center gap-2 px-4 py-8 text-center text-muted-foreground">
             <Circle aria-hidden className="mx-auto size-6 opacity-50" />
             <p className="text-ui font-medium">
-              {filtered && totalCount > 0 ? "没有符合筛选条件的任务" : "此列暂无任务"}
+              {filtered && totalCount > 0
+                ? t("taskboard.emptyFiltered")
+                : t("taskboard.emptyColumn")}
             </p>
             <Button
               type="button"
@@ -450,14 +483,14 @@ function BoardColumn({
               onClick={() => openEditor(null, status)}
             >
               <Plus data-icon="inline-start" aria-hidden />
-              添加任务
+              {t("taskboard.addTask")}
             </Button>
           </div>
         ) : null}
 
         <div
           data-task-drop-end={status}
-          aria-label={`移动到${STATUS_LABELS[status]}末尾`}
+          aria-label={t("taskboard.moveToEnd", { status: taskStatusLabel(t, status) })}
           className={cn(
             "min-h-16 flex-1 rounded-(--ds-radius-module) transition-[background-color,box-shadow]",
             columnEndTarget && "bg-fill-hover ring-[3px] ring-primary/40"
@@ -483,8 +516,13 @@ export function TaskBoardPage({
   onOpenSession,
   onStartTask,
 }: TaskBoardPageProps) {
+  const { locale, t } = useLanguage()
   const toast = useToast()
-  const [state, dispatchBase] = useReducer(boardReducer, undefined, loadBoardSnapshot)
+  const [state, dispatchBase] = useReducer(
+    boardReducer,
+    undefined,
+    () => loadBoardSnapshot(undefined, locale),
+  )
   const [query, setQuery] = useState("")
   const [priorities, setPriorities] = useState<TaskPriority[]>([])
   const [labels, setLabels] = useState<string[]>([])
@@ -494,8 +532,8 @@ export function TaskBoardPage({
   const didMount = useRef(false)
 
   useEffect(() => {
-    if (state.warning) toast(state.warning, "error")
-  }, [state.warning, toast])
+    if (state.warning) toast(warningText(state.warning, t), "error")
+  }, [state.warning, t, toast])
 
   useEffect(() => {
     if (!didMount.current) {
@@ -503,8 +541,8 @@ export function TaskBoardPage({
       return
     }
     const result = saveBoardSnapshot(state.tasks)
-    if (!result.ok) toast(result.warning, "error")
-  }, [state.tasks, toast])
+    if (!result.ok) toast(warningText(result.warning, t), "error")
+  }, [state.tasks, t, toast])
 
   const filters: BoardFilters = useMemo(
     () => ({ query, priorities, labels }),
@@ -557,8 +595,8 @@ export function TaskBoardPage({
         task,
       })
       if (filterBoardTasks([task], filters).length === 0) {
-        toast(`已创建“${task.title}”，但它被当前筛选隐藏`, "info", {
-          label: "清除筛选",
+        toast(t("taskboard.createdHidden", { title: task.title }), "info", {
+          label: t("taskboard.clearFilters"),
           run: clearFilters,
         })
       }
@@ -567,10 +605,10 @@ export function TaskBoardPage({
   }
 
   const deleteTask = async (task: BoardTask) => {
-    const confirmed = await confirmNative(`确定删除“${task.title}”？此操作无法撤销。`)
+    const confirmed = await confirmNative(t("taskboard.deleteConfirm", { title: task.title }))
     if (!confirmed) return
     dispatch({ type: "delete", id: task.id })
-    toast(`已删除“${task.title}”`, "success")
+    toast(t("taskboard.deleted", { title: task.title }), "success")
   }
 
   return (
@@ -579,9 +617,11 @@ export function TaskBoardPage({
         <div data-page-header-content className="mx-auto w-full max-w-4xl px-6 sm:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
             <div className="min-w-0 flex-1">
-              <h1 className="text-display font-semibold tracking-tight">任务看板</h1>
+              <h1 className="text-display font-semibold tracking-tight">
+                {t("taskboard.title")}
+              </h1>
               <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
-                规划、推进并交付你的工作
+                {t("taskboard.description")}
               </p>
             </div>
             <Button
@@ -591,7 +631,7 @@ export function TaskBoardPage({
               onClick={() => openEditor(null, "todo")}
             >
               <Plus data-icon="inline-start" aria-hidden />
-              新建任务
+              {t("taskboard.new")}
             </Button>
           </div>
 
@@ -604,8 +644,8 @@ export function TaskBoardPage({
               <Input
                 className="h-(--ds-control-field) rounded-(--ds-radius-control) bg-background pl-10 pr-10 ring-1 ring-inset ring-border"
                 type="search"
-                aria-label="搜索任务"
-                placeholder="搜索任务"
+                aria-label={t("taskboard.search")}
+                placeholder={t("taskboard.search")}
                 value={query}
                 onChange={(event) => setQuery(event.currentTarget.value)}
               />
@@ -615,7 +655,7 @@ export function TaskBoardPage({
                   variant="ghost"
                   size="icon-sm"
                   className="absolute right-1.5 top-1/2 -translate-y-1/2"
-                  aria-label="清除搜索"
+                  aria-label={t("taskboard.clearSearch")}
                   onClick={() => setQuery("")}
                 >
                   <X aria-hidden />
@@ -628,7 +668,7 @@ export function TaskBoardPage({
                 render={
                   <Button type="button" variant="secondary" size="compact">
                     <Filter data-icon="inline-start" aria-hidden />
-                    筛选
+                    {t("taskboard.filter")}
                     {activeFilterCount > 0 ? (
                       <Badge className="min-w-4 px-1 text-cap">{activeFilterCount}</Badge>
                     ) : null}
@@ -640,12 +680,14 @@ export function TaskBoardPage({
                 className="grid max-h-(--available-height) gap-4 overflow-y-auto"
               >
                 <PopoverHeader>
-                  <PopoverTitle>筛选任务</PopoverTitle>
-                  <PopoverDescription>可组合优先级和标签条件。</PopoverDescription>
+                  <PopoverTitle>{t("taskboard.filtersTitle")}</PopoverTitle>
+                  <PopoverDescription>{t("taskboard.filtersDescription")}</PopoverDescription>
                 </PopoverHeader>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-hint font-medium">优先级</legend>
+                  <legend className="mb-1 text-hint font-medium">
+                    {t("taskboard.priority")}
+                  </legend>
                   {PRIORITIES.map((priority) => (
                     <label key={priority} className="flex items-center gap-2 text-ui">
                       <Checkbox
@@ -654,13 +696,15 @@ export function TaskBoardPage({
                           setPriorities((current) => toggleFilterValue(current, priority))
                         }
                       />
-                      {PRIORITY_LABELS[priority]}
+                      {taskPriorityLabel(t, priority)}
                     </label>
                   ))}
                 </fieldset>
 
                 <fieldset className="grid gap-2">
-                  <legend className="mb-1 text-hint font-medium">标签</legend>
+                  <legend className="mb-1 text-hint font-medium">
+                    {t("taskboard.labels")}
+                  </legend>
                   {availableLabels.length > 0 ? (
                     availableLabels.map((label) => (
                       <label key={label} className="flex items-center gap-2 text-ui">
@@ -674,7 +718,9 @@ export function TaskBoardPage({
                       </label>
                     ))
                   ) : (
-                    <p className="text-hint text-muted-foreground">暂无可用标签</p>
+                    <p className="text-hint text-muted-foreground">
+                      {t("taskboard.noLabels")}
+                    </p>
                   )}
                 </fieldset>
 
@@ -685,7 +731,7 @@ export function TaskBoardPage({
                   disabled={activeFilterCount === 0}
                   onClick={clearFilters}
                 >
-                  清除筛选
+                  {t("taskboard.clearFilters")}
                 </Button>
               </PopoverContent>
             </Popover>
@@ -695,7 +741,7 @@ export function TaskBoardPage({
 
       {state.warning ? (
         <p role="alert" className="bg-destructive/10 px-6 py-2 text-hint text-destructive">
-          {state.warning}
+          {warningText(state.warning, t)}
         </p>
       ) : null}
 
@@ -705,12 +751,14 @@ export function TaskBoardPage({
       >
         <div
           data-task-board-content
-          className="mx-auto h-full w-full max-w-4xl px-6 sm:px-8"
+          className="h-full w-full px-6 sm:px-8"
         >
-          <div className="flex h-full min-w-max gap-4 pr-6 sm:pr-8">
+          <div className="flex h-full min-w-max gap-4">
             {TASK_STATUSES.map((status) => (
               <BoardColumn
                 key={status}
+                t={t}
+                locale={locale}
                 status={status}
                 tasks={visibleTasks.filter((task) => task.status === status)}
                 totalCount={state.tasks.filter((task) => task.status === status).length}

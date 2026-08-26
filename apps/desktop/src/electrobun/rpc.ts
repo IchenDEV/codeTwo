@@ -75,6 +75,8 @@ export interface AppshotSettings {
 
 export interface AppshotCapture {
   id: string;
+  /** Absent on legacy Appshot events; private user-selected images identify themselves explicitly. */
+  kind?: "appshot" | "attachment";
   app_name: string;
   window_title: string;
   captured_at: string;

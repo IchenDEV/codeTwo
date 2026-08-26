@@ -143,6 +143,35 @@ describe("ReasoningScale", () => {
     expect(rendered.container.querySelector('button[title="Model"]')).toBeNull();
     rendered.unmount();
   });
+
+  test("locks the model selector while the current turn is running", () => {
+    activateDom();
+    const selected: string[] = [];
+    const rendered = mount(
+      <I18nProvider>
+        <ModelPicker
+          models={[
+            { id: "fast", name: "Fast", description: null },
+            { id: "deep", name: "Deep", description: null },
+          ]}
+          current="fast"
+          defaultModel="fast"
+          provider="grok"
+          onModel={(model) => selected.push(model)}
+          configOptions={[]}
+          onConfigOption={() => {}}
+          hasSession
+          disabled
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = rendered.container.querySelector<HTMLButtonElement>('button[title="Model"]');
+    expect(trigger?.disabled).toBe(true);
+    trigger?.click();
+    expect(selected).toEqual([]);
+    rendered.unmount();
+  });
 });
 
 describe("provider-native session controls", () => {

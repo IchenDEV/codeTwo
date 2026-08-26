@@ -6,7 +6,11 @@ import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHar
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SessionHeaderActions } = await import("../src/session/SessionHeaderActions");
-const { TooltipProvider } = await import("../src/components/ui/tooltip");
+const {
+  TOOLTIP_FIRST_OPEN_DELAY,
+  TOOLTIP_INSTANT_PHASE_TIMEOUT,
+  TooltipProvider,
+} = await import("../src/components/ui/tooltip");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -60,6 +64,11 @@ async function press(element: Element) {
 }
 
 describe("SessionHeaderActions", () => {
+  test("uses a deliberate first tooltip delay with an adjacent instant phase", () => {
+    expect(TOOLTIP_FIRST_OPEN_DELAY).toBe(600);
+    expect(TOOLTIP_INSTANT_PHASE_TIMEOUT).toBe(400);
+  });
+
   test("wires the primary actions and exposes the split menus", async () => {
     activateDom();
     const { calls, view } = renderActions();

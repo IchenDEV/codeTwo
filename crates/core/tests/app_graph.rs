@@ -5,6 +5,7 @@ use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp, EngineService, StoreService};
 use codetwo_core::Engine;
 use codetwo_kernel::{KernelError, PluginEntry, Status};
+use base64::Engine as _;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -91,6 +92,7 @@ async fn plugins_contribute_the_app_surface() {
     let commands: Vec<String> = app.commands().into_iter().map(|c| c.name).collect();
     for expected in [
         "artifacts.get",
+        "attachments.import",
         "canvas.feature_state",
         "document.compile",
         "engine.answer_elicitation",
@@ -155,6 +157,22 @@ async fn plugins_contribute_the_app_surface() {
     assert_eq!(canvas["feature"], "CODETWO_CANVAS_INPUT_V1");
     assert_eq!(canvas["enabled"], false);
     assert_eq!(canvas["status"], "not production-enabled");
+
+    let png = base64::engine::general_purpose::STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        .unwrap();
+    let attachment = app
+        .call(
+            "attachments.import",
+            json!({ "bytes": png, "declared_mime": "image/png", "name": "pasted.png" }),
+        )
+        .await
+        .expect("attachments.import");
+    assert_eq!(attachment["kind"], "attachment");
+    assert_eq!(attachment["window_title"], "pasted.png");
+    assert!(attachment["preview_data_url"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("data:image/png;base64,")));
 }
 
 #[tokio::test]

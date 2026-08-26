@@ -8,6 +8,7 @@ import {
   FileText,
   Folder,
   GitBranch,
+  ImagePlus,
   ListChecks,
   Lock,
   LockOpen,
@@ -113,6 +114,7 @@ interface ComposerProps {
   goal: GoalSnapshot | null;
   onGoal: (action: "set" | "pause" | "resume" | "clear", objective?: string) => Promise<void>;
   onAttachFile: () => void;
+  onAttachImages: (files: readonly File[]) => void | Promise<void>;
   onInsertSkill: () => void;
   onInsertIssue: () => void;
   onOpenMarket: () => void;
@@ -459,11 +461,13 @@ export function ReasoningScale({
   rows,
   onSelect,
   compact = false,
+  disabled = false,
 }: {
   label: string;
   rows: PickerRow[];
   onSelect: (row: PickerRow) => void;
   compact?: boolean;
+  disabled?: boolean;
 }) {
   const selectedIndex = Math.max(0, rows.findIndex((row) => row.selected));
   const selected = rows[selectedIndex];
@@ -496,7 +500,8 @@ export function ReasoningScale({
         aria-label={label}
         aria-valuetext={selected?.label}
         title={selected?.detail || selected?.label}
-        autoFocus
+        autoFocus={!disabled}
+        disabled={disabled}
         onInput={(event) => onSelect(rows[Number(event.currentTarget.value)])}
       />
     </div>
@@ -987,6 +992,7 @@ export function ModelPicker({
   onConfigOption,
   hasSession,
   compact = false,
+  disabled = false,
 }: {
   models: ModelChoice[];
   current: string | null;
@@ -998,11 +1004,16 @@ export function ModelPicker({
   hasSession: boolean;
   /** Scene configuration nests this picker inside another popover, so it uses desktop control density. */
   compact?: boolean;
+  /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
+  disabled?: boolean;
 }) {
   const t = useT();
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorPanel, setSelectorPanel] = useState<"reasoning" | "model">("reasoning");
   const families = useMemo(() => groupModels(models), [models]);
+  useEffect(() => {
+    if (disabled) setSelectorOpen(false);
+  }, [disabled]);
   if (!hasSession && models.length === 0) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
@@ -1076,7 +1087,7 @@ export function ModelPicker({
       <Popover
         open={selectorOpen}
         onOpenChange={(open) => {
-          setSelectorOpen(open);
+          setSelectorOpen(disabled ? false : open);
           if (!open) setSelectorPanel("reasoning");
         }}
       >
@@ -1090,6 +1101,8 @@ export function ModelPicker({
               )}
               title={`${t("composer.model")}: ${modelLabel} · ${t("composer.reasoning")}: ${effortLabel}`}
               aria-label={`${modelLabel} ${effortLabel}`}
+              disabled={disabled}
+              aria-busy={disabled}
             >
               <span className="reasoning-selector-trigger-model">{modelLabel}</span>
               <span className="reasoning-selector-trigger-effort">{effortLabel}</span>
@@ -1125,6 +1138,7 @@ export function ModelPicker({
                 rows={effortRows}
                 onSelect={(row) => row.select()}
                 compact={compact}
+                disabled={disabled}
               />
             </>
           ) : (
@@ -1147,6 +1161,7 @@ export function ModelPicker({
                     isDefault={r.isDefault}
                     label={r.label}
                     detail={r.detail}
+                    disabled={disabled}
                     onClick={() => {
                       r.select();
                       setSelectorPanel("reasoning");
@@ -1163,9 +1178,14 @@ export function ModelPicker({
   }
 
   return (
-    <Popover open={selectorOpen} onOpenChange={setSelectorOpen}>
+    <Popover open={selectorOpen} onOpenChange={(open) => setSelectorOpen(disabled ? false : open)}>
       <PopoverTrigger
-        render={<Chip title={t("composer.model")}>
+        render={<Chip
+          title={t("composer.model")}
+          disabled={disabled}
+          aria-busy={disabled}
+          className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+        >
           <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
           <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
             {modelLabel}
@@ -1189,6 +1209,7 @@ export function ModelPicker({
                   isDefault={r.isDefault}
                   label={r.label}
                   detail={r.detail}
+                  disabled={disabled}
                   onClick={() => {
                     r.select();
                     setSelectorOpen(false);
@@ -1244,6 +1265,7 @@ export function Composer({
   goal,
   onGoal,
   onAttachFile,
+  onAttachImages,
   onInsertSkill,
   onInsertIssue,
   onOpenMarket,
@@ -1261,6 +1283,7 @@ export function Composer({
   insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
   // Dismissal is remembered per session for the Composer's lifetime — a dismissed offer must not
@@ -1334,6 +1357,18 @@ export function Composer({
 
   const controls = (
     <>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          if (files.length > 0) void onAttachImages(files);
+        }}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger
           render={<Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
@@ -1346,6 +1381,10 @@ export function Composer({
               <FileText />
               {t("composer.mentionFile")}
               {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+              <ImagePlus />
+              {t("composer.attachImage")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onInsertSkill}>
               <Sparkles />
@@ -1396,6 +1435,7 @@ export function Composer({
         onModel={onModel}
         configOptions={configOptions}
         onConfigOption={onConfigOption}
+        modelChangeDisabled={running || loading}
       />
 
       <CollaborationModePicker options={configOptions} onChange={onConfigOption} />
@@ -1492,9 +1532,9 @@ export function Composer({
           <Tooltip>
             <TooltipTrigger
               render={<Button
-                variant="destructive"
+                variant="secondary"
                 size="icon"
-                className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
+                className="size-8 shrink-0 rounded-full"
                 onClick={onStop}
                 aria-label={t("composer.stop")}
               >
@@ -1513,7 +1553,7 @@ export function Composer({
             <Button
               size="icon"
               variant={composerEmpty ? "secondary" : "default"}
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
+              className="size-8 shrink-0 rounded-full"
               onClick={onRun}
               disabled={loading}
               aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
@@ -1605,17 +1645,30 @@ export function Composer({
                     />
                     <div className="min-w-0 flex-1 pr-5">
                       <p className="truncate text-hint font-medium">{appshot.window_title}</p>
-                      <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
-                      <p className="text-cap text-muted-foreground">
-                        {t("composer.appshotText", { count: appshot.text_length })}
-                      </p>
+                      {appshot.kind === "attachment" ? (
+                        <p className="text-fine text-muted-foreground">
+                          {t("composer.imageDimensions", {
+                            width: appshot.width,
+                            height: appshot.height,
+                          })}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
+                          <p className="text-cap text-muted-foreground">
+                            {t("composer.appshotText", { count: appshot.text_length })}
+                          </p>
+                        </>
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="absolute right-1 top-1 size-6 text-muted-foreground opacity-70 hover:opacity-100"
-                      aria-label={t("composer.removeAppshot", { title: appshot.window_title })}
+                      aria-label={appshot.kind === "attachment"
+                        ? t("composer.removeImage", { title: appshot.window_title })
+                        : t("composer.removeAppshot", { title: appshot.window_title })}
                       onClick={() => onRemoveAppshot?.(appshot.id)}
                     >
                       <X className="size-3.5" />

@@ -377,9 +377,17 @@ describe("PluginManagerPage", () => {
     await flush();
 
     const administration = view.container.querySelector("[data-bundle-administration]");
+    const details = view.container.querySelector("[data-plugin-details]");
     expect(administration?.textContent).toContain("Bundle management");
     expect(administration?.textContent).toContain("1 Process runtime");
     expect(administration?.textContent).toContain("Trust before running.");
+    expect(details?.querySelector("[data-plugin-trust-gate]")?.textContent).toBe(
+      "Trust required before enabling",
+    );
+    expect(details?.querySelector("#plugin-state-review-tools")).toBeNull();
+    expect(button(administration, "Review source")?.dataset.variant).toBe("secondary");
+    expect(button(administration, "Trust plugin")?.dataset.variant).toBe("default");
+    expect(button(administration, "Uninstall")?.dataset.variant).toBe("ghost");
 
     click(button(administration, "Trust plugin"));
     await flush();

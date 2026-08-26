@@ -689,6 +689,7 @@ export type DocBlock =
   | { type: "file"; path: string }
   | { type: "image"; path: string }
   | { type: "appshot"; id: string; title?: string }
+  | { type: "attachment"; id: string; name?: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
   | { type: "session"; session_id: string }
   // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
@@ -708,6 +709,8 @@ export function describeBlock(b: DocBlock): string {
       return `[img:${b.path}]`;
     case "appshot":
       return `[appshot:${b.title || b.id}]`;
+    case "attachment":
+      return `[image:${b.name || b.id}]`;
     case "canvas":
       return `[canvas:${b.id}@${b.frozen_revision}]`;
     case "session":
@@ -3291,6 +3294,19 @@ export async function canvasNormalizeMedia(
   return call<CanvasStaticAsset>("canvas.normalize_media", {
     bytes: Array.from(bytes),
     declared_mime: declaredMime ?? null,
+  });
+}
+
+/** Normalize and store a pasted or selected prompt image in app-private storage. */
+export async function importPromptImage(
+  bytes: Uint8Array | number[],
+  declaredMime: string | null,
+  name: string,
+): Promise<AppshotCapture> {
+  return call<AppshotCapture>("attachments.import", {
+    bytes: Array.from(bytes),
+    declared_mime: declaredMime,
+    name,
   });
 }
 

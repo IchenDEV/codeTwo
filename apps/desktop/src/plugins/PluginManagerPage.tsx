@@ -111,8 +111,10 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   bundleManagement: "Bundle management",
   bundleManagementUserOnly:
     "Installation, trust, and removal are managed in User scope.",
+  reviewSource: "Review source",
   trustRequired:
     "This bundle contains executable contributions. Review its source before allowing it to run with your user permissions.",
+  trustBeforeEnabling: "Trust required before enabling",
   trusted: "Trusted",
   notTrusted: "Not trusted",
   trustPlugin: "Trust plugin",
@@ -642,6 +644,9 @@ function PluginDetails({
   const configurable =
     plugin.configurable ??
     (plugin.configSchema !== undefined || plugin.state.config !== undefined);
+  const trustRequired = Boolean(
+    plugin.bundle?.requiresTrust && !plugin.bundle.trusted,
+  );
   return (
     <Card data-plugin-details className="gap-4 py-4">
       <CardHeader className="gap-1 px-4">
@@ -658,7 +663,14 @@ function PluginDetails({
           {plugin.description || labels.noDescription}
         </CardDescription>
         <CardAction>
-          {plugin.bundle &&
+          {trustRequired ? (
+            <span
+              data-plugin-trust-gate
+              className="text-fine text-muted-foreground"
+            >
+              {labels.trustBeforeEnabling}
+            </span>
+          ) : plugin.bundle &&
           !plugin.bundle.runtimeManaged &&
           !onSetBundleEnabled ? (
             <span className="text-fine text-muted-foreground">
@@ -674,10 +686,7 @@ function PluginDetails({
               state={plugin.state}
               scope={scope}
               labels={labels}
-              disabled={
-                busy ||
-                Boolean(plugin.bundle?.requiresTrust && !plugin.bundle.trusted)
-              }
+              disabled={busy}
               onChange={(request) => {
                 if (
                   plugin.bundle &&
@@ -698,7 +707,9 @@ function PluginDetails({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 px-4">
-        <StatusSummary state={plugin.state} labels={labels} />
+        {trustRequired ? null : (
+          <StatusSummary state={plugin.state} labels={labels} />
+        )}
         {plugin.state.error ? (
           <p
             role="alert"

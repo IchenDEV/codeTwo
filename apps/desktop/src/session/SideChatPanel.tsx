@@ -588,6 +588,7 @@ export function SideChatPanel({
                 provider={activeTab.provider}
                 configOptions={activeTab.configOptions}
                 hasSession={activeTab.sessionId !== null}
+                disabled={activeTab.running}
                 onModel={(nextModel) => {
                   const previousModel = activeTab.currentModel;
                   updateTab(activeTab.localId, (tab) => ({
