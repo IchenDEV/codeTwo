@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icons";
 
 import type { ContextCategory, ContextWindow } from "./contextWindow";
 import { formatContextTokens, contextWindowPercentage } from "./contextWindow";
