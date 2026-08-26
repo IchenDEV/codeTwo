@@ -27,7 +27,7 @@ import type {
   AppUpdateStatus,
   WorkspaceOpenTarget,
 } from "./electrobun/rpc";
-import type { PluginUiContribution } from "./pluginModel";
+import type { PluginRuntimeCommandContribution, PluginUiContribution } from "./pluginModel";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -1398,12 +1398,11 @@ export async function resetManagedPlugin(
 }
 
 /**
- * Installed bundles that ship a process (the plugin protocol): which are running, and which are
- * installed but waiting for the user to trust them. Trust — not installation — is what starts a
- * process, so `untrusted` is the actionable list.
+ * Installed bundles that ship a process: which have a ready host adapter, and which are installed
+ * but waiting for trust. A ready lazy adapter does not imply that its child process is resident.
  */
-export async function listExtensions(): Promise<{ running: string[]; untrusted: string[] }> {
-  if (!inDesktop) return { running: [], untrusted: [] };
+export async function listExtensions(): Promise<{ ready: string[]; untrusted: string[] }> {
+  if (!inDesktop) return { ready: [], untrusted: [] };
   return await call("extensions.list");
 }
 
@@ -2798,6 +2797,8 @@ export interface PluginCounts {
   pipelines: number;
   /** Present for hosts that support a C2 JSON-RPC process runtime contribution. */
   runtime?: number;
+  /** Statically declared commands implemented by the process runtime. */
+  runtime_commands?: number;
 }
 
 export type PluginInstallScope = "user" | "project" | "local" | "managed";
@@ -2828,6 +2829,7 @@ export {
   pluginUiComponentId,
 } from "./pluginModel";
 export type {
+  PluginRuntimeCommandContribution,
   PluginUiContribution,
   PluginUiSlotId,
 } from "./pluginModel";
@@ -2855,6 +2857,7 @@ export interface PluginInfo {
   counts: PluginCounts;
   scaffolds: PluginScaffoldInfo[];
   extension_components: PluginExtensionComponent[];
+  runtime_commands?: PluginRuntimeCommandContribution[];
   ui_contributions?: PluginUiContribution[];
   lsp_servers?: PluginLanguageServer[];
   diagnostics: PluginDiagnostic[];
@@ -2978,7 +2981,7 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           author: "C2",
           source: "Built-in renderer preview",
           repository: "https://github.com/IchenDEV/codeTwo",
-          standard_version: "1.0.0",
+          standard_version: "1.1.0",
           enabled: true,
           trusted: true,
           scope: "user",
@@ -2987,7 +2990,8 @@ export async function listPlugins(): Promise<PluginInfo[]> {
             subagents: 0,
             mcp_servers: 0,
             scaffolds: 0,
-            commands: 10,
+            commands: 0,
+            runtime_commands: 10,
             hooks: 0,
             lsp_servers: 0,
             monitors: 0,
@@ -3000,6 +3004,18 @@ export async function listPlugins(): Promise<PluginInfo[]> {
           extension_components: [
             { kind: "runtime", name: "docker-tools", path: "plugin.js", status: "ready" },
           ],
+          runtime_commands: [
+            ["docker.status", "Docker status"],
+            ["docker.containers", "List containers"],
+            ["docker.images", "List images"],
+            ["docker.inspect", "Inspect container"],
+            ["docker.logs", "Read container logs"],
+            ["docker.start", "Start container"],
+            ["docker.stop", "Stop container"],
+            ["docker.restart", "Restart container"],
+            ["docker.pull", "Pull image"],
+            ["docker.remove_image", "Remove image"],
+          ].map(([id, title]) => ({ id, title, description: "", argsSchema: null })),
           ui_contributions: [],
           lsp_servers: [],
           diagnostics: [],

@@ -40,12 +40,14 @@ for (const server of manifest.languageServers) {
   bundledExecutable(server.command, `language server ${server.id}`);
 }
 
-const contributionCount = manifest.ui.length + manifest.languageServers.length + Number(Boolean(manifest.runtime));
+const contributionCount = manifest.commands.length + manifest.ui.length + manifest.languageServers.length +
+  Number(Boolean(manifest.runtime));
 process.stdout.write([
   `Manifest valid: ${manifest.name} ${manifest.version}`,
   `Manifest: ${manifestPath}`,
   `C2 contributions: ${contributionCount}`,
   `Runtime: ${manifest.runtime ? manifest.runtime.command : "none"}`,
+  `Runtime commands: ${manifest.commands.length}`,
   `UI actions: ${manifest.ui.length}`,
   `Language servers: ${manifest.languageServers.length}`,
 ].join("\n") + "\n");

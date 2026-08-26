@@ -27,7 +27,8 @@ const BUNDLE_CONTRIBUTIONS = [
   ["skills", "Skills"],
   ["subagents", "Subagents"],
   ["mcp_servers", "MCP servers"],
-  ["commands", "Commands"],
+  ["commands", "Prompt commands"],
+  ["runtime_commands", "Runtime commands"],
   ["hooks", "Hooks"],
   ["lsp_servers", "Language servers"],
   ["scaffolds", "Scaffolds"],
@@ -284,7 +285,9 @@ export function buildPluginManagerCatalog({
             ...policyEntry.dependencies.optional.map((dependency) => `${dependency} (optional)`),
           ]
         : undefined,
-      commands: policyEntry?.commands ?? [],
+      commands: policyEntry?.commands?.length
+        ? policyEntry.commands
+        : (bundle.runtime_commands ?? []).map((command) => command.id),
       services: policyEntry?.services ?? [],
       componentIds: [
         ...(bundle.ui_contributions ?? []).map((contribution) =>

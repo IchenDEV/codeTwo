@@ -29,6 +29,7 @@ const CONTRIBUTION_KEYS: Record<string, StringKey> = {
   subagents: "pluginManager.contribution.subagents",
   mcp_servers: "pluginManager.contribution.mcpServers",
   commands: "pluginManager.contribution.commands",
+  runtime_commands: "pluginManager.contribution.runtimeCommands",
   hooks: "pluginManager.contribution.hooks",
   lsp_servers: "pluginManager.contribution.languageServers",
   scaffolds: "pluginManager.contribution.scaffolds",

@@ -270,6 +270,20 @@ impl Runtime {
             .unwrap_or(Status::Disposed)
     }
 
+    pub(crate) fn scope_generation(&self, scope: ScopeId) -> Option<u64> {
+        self.state()
+            .scopes
+            .get(&scope)
+            .map(|scope| scope.generation)
+    }
+
+    pub(crate) fn scope_generation_is_current(&self, scope: ScopeId, generation: u64) -> bool {
+        self.state()
+            .scopes
+            .get(&scope)
+            .is_some_and(|scope| scope.generation == generation)
+    }
+
     /// Every live service and who provides it.
     pub fn services(&self) -> Vec<ServiceInfo> {
         let state = self.state();
@@ -561,13 +575,24 @@ impl Runtime {
         Ok(())
     }
 
-    pub(crate) fn add_disposable(&self, scope: ScopeId, dispose: Box<dyn FnOnce() + Send>) {
+    pub(crate) fn add_disposable(
+        &self,
+        scope: ScopeId,
+        generation: u64,
+        dispose: Box<dyn FnOnce() + Send>,
+    ) -> bool {
         let mut state = self.state();
-        if let Some(entry) = state.scopes.get_mut(&scope) {
+        if let Some(entry) = state
+            .scopes
+            .get_mut(&scope)
+            .filter(|entry| entry.generation == generation)
+        {
             entry.disposables.push(dispose);
+            true
         } else {
             drop(state);
             dispose();
+            false
         }
     }
 
@@ -579,12 +604,23 @@ impl Runtime {
             .push(entry);
     }
 
-    pub(crate) fn add_json_listener(&self, name: String, entry: JsonListenerEntry) {
-        self.state()
-            .json_listeners
-            .entry(name)
-            .or_default()
-            .push(entry);
+    pub(crate) fn add_json_listener(
+        &self,
+        name: String,
+        generation: u64,
+        entry: JsonListenerEntry,
+    ) -> bool {
+        let mut state = self.state();
+        if state
+            .scopes
+            .get(&entry.scope)
+            .is_some_and(|scope| scope.generation == generation)
+        {
+            state.json_listeners.entry(name).or_default().push(entry);
+            true
+        } else {
+            false
+        }
     }
 
     /// Snapshot the listeners for an event type. Dispatch happens with the lock released, so a
@@ -891,7 +927,8 @@ impl Runtime {
         self.emit_status(id, name.clone(), Status::Loading, None)
             .await;
 
-        let ctx = crate::Context::with_isolate(self.clone(), id, isolate, command_realm);
+        let ctx =
+            crate::Context::with_isolate(self.clone(), id, generation, isolate, command_realm);
         // A third-party or host plugin panic is a failed scope, not permission to kill the single
         // graph driver and leave every future `flush()` waiting forever. A nested Tokio task gives
         // us a panic boundary while preserving the driver's strictly serial lifecycle ordering.

@@ -4,7 +4,7 @@ C2 Core is implemented as a runtime-module graph. This document explains that in
 how Core and host modules fit together, and where the public extension boundary begins.
 
 For the normative package, naming, lifecycle, scope, security, versioning, and host-capability
-rules, see the [C2 Plugin Standard 1.0.0](plugin-standard.md). This document focuses on the graph's
+rules, see the [C2 Plugin Standard 1.1.0](plugin-standard.md). This document focuses on the graph's
 implementation and rationale.
 
 The internal model is [cordis](https://github.com/cordiverse/cordis)', ported to Rust in
@@ -285,7 +285,8 @@ into commands explicitly published through the versioned Extension API. The exis
 `optionalInject` fields are a migration surface for known services, not general access to Core.
 
 A C2 bundle opts in with `extensions.dev.codetwo.runtime` in `plugin.json`, and the process
-starts only once the user marks the bundle **trusted** — installing still executes nothing. See
+becomes eligible only once the user marks the bundle **trusted**. Its static Manifest commands are
+then ready, while the process starts on the first invocation — installing still executes nothing. See
 [`docs/plugin-protocol.md`](plugin-protocol.md) for the spec and a working plugin in forty lines.
 Runtime, safe UI actions, and language servers are distributed together from that same bundle root;
 run `cargo run -p codetwo-core --example validate_bundle -- <bundle-root>` before publishing it or
@@ -319,9 +320,9 @@ instances use the ordinary project child graph, command realm, policy inheritanc
 idle reclamation described above. Trust remains a hard execution gate in every scope; neither an
 enabled policy nor a project override can start an untrusted runtime.
 
-That leaves exactly one thing compile-time: native code. The graph, the wiring, the lifecycle, the
-config surface, and the whole command API are decided at runtime, and a host can register plugins
-of its own at boot:
+That leaves exactly one thing compile-time: native code. The graph, wiring, lifecycle, and config
+surface are decided at runtime. External command surfaces are static Manifest contributions rather
+than process-discovered UI, while a host can register compiled modules of its own at boot:
 
 ```rust
 let mut registry = codetwo_core::app::plugins::builtin_registry();
@@ -365,9 +366,10 @@ The application migration is complete:
 - The Electrobun desktop boots that same graph in `codetwo-desktop-host`, adding individually owned
   automation, device-sync, LSP, event, and remote plugins. `device-sync` publishes the Core-backed
   snapshot/merge service; `remote` optionally injects it to add C2 pairing without coupling T3 or
-  browser control to synchronization. The manager reads installed Bundle records, starts only
-  trusted and enabled external runtimes, registers their JSON-RPC commands into the same command
-  seam, and creates isolated child processes and command realms for project-capable Bundles.
+  browser control to synchronization. The manager reads installed Bundle records, makes only
+  trusted and enabled extension adapters ready, registers their static commands into the same
+  command seam, and lazily creates isolated child processes and command realms for project-capable
+  Bundles.
 - The renderer exposes one typed `call` request. Electrobun relays it to one versioned JSON-lines
   `call` method on the bundled Rust host; host events return over the same connection. A protocol
   mismatch or failed Kernel startup stops desktop startup instead of falling back to another

@@ -4,11 +4,12 @@ Version **1.0.0**.
 
 This document defines the process wire format. Bundle terminology, manifest namespacing, trust,
 policy, contribution support, and host capability rules are normative in the
-[C2 Plugin Standard 1.0.0](plugin-standard.md).
+[C2 Plugin Standard 1.1.0](plugin-standard.md).
 
-An external extension runtime is a process. C2 speaks JSON-RPC 2.0 to it over stdio, and what the
-extension declares — commands, event subscriptions — is registered in the same scoped kernel
-registries used by built-in Rust runtime modules. Installed runtimes have stable managed names of
+An external extension runtime is a process. C2 speaks JSON-RPC 2.0 to it over stdio. Its commands
+are declared statically in the Bundle Manifest; `initialize` confirms their implementation and may
+subscribe to events. The host registers both in the same scoped kernel registries used by built-in
+Rust runtime modules. Installed runtimes have stable managed names of
 the form `bundle:<id>`. Their commands appear in `kernel.commands`, are callable from a frontend in
 the matching command realm, and disappear the instant the runtime unloads.
 
@@ -31,9 +32,11 @@ inventing a third.
 
 ## Handshake
 
-The host sends `initialize` first, and waits **10 seconds**. Answer it promptly: loading runs on the
-kernel's single driver task, so a plugin that starts and then says nothing would stall the whole
-graph. A plugin that misses the window is marked failed, by name, and everything else keeps running.
+On the first invocation of a 1.1 static command, the host starts the process, sends `initialize`
+first, and waits **10 seconds**. Answer it promptly. A process that misses the window is killed and
+that scope generation's activation fails; its dormant command stubs remain fail-closed until the
+plugin is reloaded or disabled and re-enabled. Legacy 1.0 Bundles retain eager initialization for
+compatibility, with the same bounded wait.
 
 **Host → plugin**
 
@@ -61,6 +64,11 @@ graph. A plugin that misses the window is marked failed, by name, and everything
 }}
 ```
 
+For a 1.1 Bundle, `commands` MUST contain exactly the IDs and schemas declared by
+`extensions.dev.codetwo.commands`. It is implementation confirmation, not a second contribution
+source: missing, extra, duplicate, or changed schemas are refused and the process is killed. The
+host uses Manifest titles and descriptions.
+
 Wire compatibility is by **major version**. Declaring `2.x` to a `1.x` host, or omitting
 `protocolVersion`, is refused with a readable error.
 
@@ -87,7 +95,7 @@ fallback/blocking rules, so guessing an internal command name does not grant acc
 | `command/invoke` | request | `{ name, args }` | whatever your command returns |
 | `event/emit` | notification | `{ name, payload }` | — |
 
-`command/invoke` only ever names a command you declared. Returning a JSON-RPC error turns into a
+`command/invoke` only ever names a command declared in the Manifest. Returning a JSON-RPC error turns into a
 readable failure at the caller — the frontend sees `my.greet: <your message>`.
 An extension command that collides with a global command owned by Core or another module is rejected
 during activation, so a project extension cannot shadow host dispatch. The same project-capable
@@ -137,6 +145,9 @@ You receive only the events you name in `events`. The host publishes:
 This list is the contract. Typed Rust events do not cross a pipe, so each entry is a deliberate
 decision to expose one — see `publish_host_events` in
 `crates/core/src/app/plugins/extensions.rs`.
+Because 1.1 activation is command-driven, event subscriptions begin only after the first command
+has successfully initialized the process; events emitted while the runtime is dormant are not
+buffered or replayed.
 
 Your own `event/emit` goes onto the host's JSON bus, where other plugins (in or out of process) can
 subscribe to it. The JSON bus is currently host-wide, not project-confidential: project process
@@ -155,7 +166,13 @@ runtime under C2's client-extension namespace; a top-level `runtime` field inval
   "version": "1.0.0",
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.0.0",
+      "standardVersion": "1.1.0",
+      "commands": [{
+        "id": "my.greet",
+        "title": "Say hello",
+        "description": "Greet the current user.",
+        "argsSchema": { "type": "object", "additionalProperties": false }
+      }],
       "runtime": {
         "protocol": "1.0.0",
         "command": "node",
@@ -170,11 +187,11 @@ runtime under C2's client-extension namespace; a top-level `runtime` field inval
 }
 ```
 
-The process starts with the bundle directory as its working directory.
+When activated, the process starts with the bundle directory as its working directory.
 
-`inject` gets you the same reactive contract a Rust plugin has: your process is not started until
-those services exist, and is **restarted** if one is replaced. It is declared in the manifest rather
-than at `initialize` because the host needs to know before deciding whether to start you at all.
+`inject` gets you the same reactive contract a Rust plugin has: command stubs are not made ready
+until those services exist, and an active process is stopped when one is replaced. It is declared
+in the Manifest because the host needs it before making the adapter eligible.
 
 `scopeSupport` is an explicit capability declaration. If it is omitted, the runtime supports only
 `["user"]`. Include `"project"` only when the process is prepared for
@@ -182,9 +199,9 @@ one independently managed process, command realm, `dataDir`, and `projectPath` p
 The bundle's skills and other data-only extension components are not made project-scoped by this
 field; they remain user-only and are managed through Bundle Tools.
 
-A bundle whose only component is `extensions.dev.codetwo.runtime` is a valid bundle. UI action
-descriptors are declared beside it under `extensions.dev.codetwo.ui`; they do not alter this wire
-protocol or load third-party renderer code.
+A 1.1 process runtime declares at least one sibling `commands` entry. UI action descriptors are
+declared beside both under `extensions.dev.codetwo.ui`; they do not alter this wire protocol or load
+third-party renderer code. A legacy 1.0 runtime without static commands remains valid and eager.
 
 `extensions.dev.codetwo.languageServers` is a separate host-owned stdio LSP contribution. Language
 servers use standard `Content-Length` LSP framing, not this newline-delimited plugin protocol. They
@@ -195,21 +212,27 @@ may exist without a C2 process runtime and still share bundle trust, enablement,
 **Installing a bundle executes nothing.** That property of the Plugin Hub is not weakened by this
 protocol — it is the reason the protocol is shaped this way.
 
-A process starts only when its bundle is **enabled *and* trusted**. Trust is a separate, deliberate
-user action, and installing a bundle that ships a C2 runtime raises a diagnostic saying so.
-Until then the plugin is listed by `extensions.list` under `untrusted` and does not run.
+An enabled and **trusted** 1.1 bundle is eligible: its host adapter and dormant command stubs become
+ready, but the process does not start until the first declared command invocation. Trust is a
+separate, deliberate user action, and installing a bundle that ships a C2 runtime raises a
+diagnostic saying so. Until then the plugin is listed by `extensions.list` under `untrusted`.
 
 Trust is a hard gate in every realm. No configuration setting can bypass it.
 
 ## Lifecycle
 
 ```
-enabled + trusted ──▶ spawn ──▶ initialize ──▶ register commands & subscriptions ──▶ active
-                                    │
-                                    ├─ timeout / bad version / crash ──▶ failed (process killed)
-                                    │
-     unload, dependency lost, ──────┴──▶ process killed, registrations removed
-     bundle disabled or removed
+enabled + trusted ──▶ register static stubs ──▶ ready, process dormant
+                                                    │ first command
+                                                    ▼
+                                               spawn + initialize
+                                                    │
+                              exact command/schema confirmation ──▶ invoke
+                                                    │
+                             timeout / mismatch ──▶ process killed; activation terminal
+                                  caller cancellation ──▶ process killed; next invocation may retry
+
+unload, dependency lost, bundle disabled/removed ──▶ process killed; stubs removed
 ```
 
 Unloading is exact: the process is killed and every command it contributed is gone. Nothing has to
@@ -260,7 +283,7 @@ rl.on("line", async (line) => {
   network, environment, or the host-wide JSON event bus. Treat it as such.
 - **No timeout on `command/invoke`.** A plugin that never answers a command hangs that caller — not
   the graph. The handshake is the only bounded wait.
-- **One process per active managed realm.** A project-capable runtime may have one global process
+- **One process per activated managed realm.** A project-capable runtime may have one global process
   and separate processes for multiple live projects. Fan out inside one realm if you need more.
 - **Rust plugins are still compile-time.** This protocol is how a plugin gets added without
   rebuilding C2; it is not dynamic loading of native code, and deliberately so.

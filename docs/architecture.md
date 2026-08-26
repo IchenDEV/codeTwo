@@ -30,13 +30,14 @@ separately installed **extensions**. See [ADR 0002](adr/0002-core-extension-boun
 That is why the module list below reads as a menu rather than a build order: `store` and `engine`
 have no fixed sequence, the app runs without either, and reconfiguring one reloads exactly what was
 built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
-hand-wired, and the [C2 Plugin Standard 1.0.0](plugin-standard.md) for the normative package,
+hand-wired, and the [C2 Plugin Standard 1.1.0](plugin-standard.md) for the normative package,
 lifecycle, scope, security, and host-capability contract.
 
 An extension does not have to be Rust. A bundle can ship a **process** that C2 speaks JSON-RPC to
-over stdio; the commands it declares use the same registry and teardown machinery. It receives only
+over stdio; its Manifest commands use the same registry and teardown machinery. It receives only
 the explicitly exported Extension API, not the complete Core command catalog. Installing such a
-bundle still executes nothing—the process starts only once the user marks it trusted. Spec:
+bundle still executes nothing. Enablement and trust make its adapter ready; the first declared
+command invocation starts the process. Spec:
 [`docs/plugin-protocol.md`](plugin-protocol.md).
 
 ## Layers

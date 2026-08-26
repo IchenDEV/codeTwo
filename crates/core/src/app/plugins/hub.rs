@@ -67,6 +67,8 @@ struct PluginInfo {
     counts: PluginCounts,
     scaffolds: Vec<PluginScaffoldInfo>,
     extension_components: Vec<plugin::PluginExtensionComponent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_commands: Option<Vec<plugin::PluginRuntimeCommand>>,
     ui_contributions: Vec<plugin::PluginUiContribution>,
     lsp_servers: Vec<plugin::PluginLspServer>,
     diagnostics: Vec<plugin::PluginDiagnostic>,
@@ -89,6 +91,7 @@ impl From<InstalledPlugin> for PluginInfo {
             counts: plugin.counts,
             scaffolds: plugin.scaffolds.into_iter().map(Into::into).collect(),
             extension_components: plugin.extension_components,
+            runtime_commands: plugin.runtime_commands,
             ui_contributions: plugin.ui_contributions,
             lsp_servers: plugin.lsp_servers,
             diagnostics: plugin.diagnostics,
