@@ -7,16 +7,16 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Archive,
   Check,
-  CircleAlert,
   Folder,
   FolderPlus,
   Keyboard,
   PanelLeft,
   SquareKanban,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import { DocEditor } from "./editor/Editor";
 import { type CanvasBlockRuntime } from "./skillInline";
@@ -27,6 +27,11 @@ import {
   removeBrowserProject,
   saveBrowserHistory,
 } from "./browser/history";
+import {
+  workspaceRelativeLinkPath,
+  type BuiltinLinkActions,
+  type BuiltinLinkTarget,
+} from "./session/MarkdownContent";
 import {
   answerElicitation,
   answerPermission,
@@ -45,13 +50,13 @@ import {
   canvasTombstone,
   canvasUpdateDraft,
   cancelTurn,
+  call,
   compileDoc,
   confirmNative,
   controlGoal,
   addProject,
   DEFAULT_KEYMAP,
   defaultCwd,
-  deleteSkill,
   describeBlock,
   discardSessionWorktree,
   fallbackProviders,
@@ -66,6 +71,7 @@ import {
   gitStatus,
   githubImportPlugin,
   installMarketplacePlugin,
+  importPromptImage,
   invokePluginUi,
   commentIssue,
   issueContext,
@@ -110,6 +116,7 @@ import {
   saveSkill,
   searchSessions,
   sessionPreviews,
+  setSystemBadgeCount,
   setConfigOption,
   setCallProjectPath,
   setKeymap,
@@ -151,6 +158,7 @@ import {
   type MemoryReceipt,
   type ModelChoice,
   type PluginInfo,
+  type PluginMarketplace,
   type ManagedPluginCatalog,
   type Project,
   type ProjectScript,
@@ -192,7 +200,6 @@ import {
 } from "./bridge";
 import { loadProviderRegistry } from "./providers/registry";
 import { makeTranscriptHandler } from "./voice/VoiceButton";
-import { PluginHub } from "./market/Market";
 import {
   PluginManagerPage,
   PluginUiSlot,
@@ -279,11 +286,12 @@ import {
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
 import { QuestionDialog } from "./session/QuestionDialog";
+import { PermissionCard } from "./session/PermissionCard";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
-import { TrajectoryView } from "./session/TrajectoryView";
 import { planChecklistMarkdown } from "./session/TurnCard";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
+import { DesktopPetBridge } from "./pet/DesktopPet";
 import { petAnimationForActivity } from "./pet/state";
 import {
   applyEvent,
@@ -302,6 +310,7 @@ import {
   turnsFromTranscript,
   withRunningSession,
   withoutUnacceptedTurn,
+  type PromptImage,
   type Turn,
 } from "./session/turns";
 import {
@@ -313,6 +322,7 @@ import {
   matchesSessionCreation,
   permissionQueueAfterAnswer,
   permissionQueueAfterActivity,
+  pendingInputsForSession,
   permissionsFromSessions,
   sessionCreationBaseline,
   sessionCreationBaselineSha,
@@ -326,6 +336,7 @@ import {
   type SessionCreationShell,
 } from "./session/sessionEvents";
 import {
+  activeInteractivePreview,
   classifyToolSurface,
   followReduce,
   initialFollowState,
@@ -333,10 +344,13 @@ import {
   type FollowState,
   type ToolSurfaceHint,
 } from "./session/toolActivity";
+import { needsMeCount } from "./sidebar/missionControl.ts";
 import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
+import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
 import { PullRequestsPage } from "./github/PullRequestsPage";
+import { DockerPage, type DockerCommandCaller } from "./docker/DockerPage";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 import {
   associateTaskSession,
@@ -386,6 +400,24 @@ function summarizeDoc(doc: DocBlock[]): string {
   return doc.map(describeBlock).join("\n\n");
 }
 
+function privateImageBlock(capture: AppshotCapture): DocBlock {
+  return capture.kind === "attachment"
+    ? { type: "attachment", id: capture.id, name: capture.window_title }
+    : { type: "appshot", id: capture.id, title: capture.window_title };
+}
+
+function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[] {
+  return captures.flatMap((capture) => capture.kind === "attachment"
+    ? [{
+        id: capture.id,
+        name: capture.window_title,
+        previewDataUrl: capture.preview_data_url,
+        width: capture.width,
+        height: capture.height,
+      }]
+    : []);
+}
+
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
 
 interface PendingPromptRequest {
@@ -401,6 +433,8 @@ interface PendingPromptRequest {
   canvasRefs: Array<{ id: string; revision: number }>;
   /** Private Appshot captures attached to this turn; removed from Composer only after acceptance. */
   appshotIds: string[];
+  /** Prompt actions submit their own document and must leave the user's Composer draft untouched. */
+  clearEditor: boolean;
 }
 
 interface PendingCreation {
@@ -411,8 +445,16 @@ interface PendingCreation {
   editorSnapshot: DocBlock[];
   editorRevision: number;
   appshotIds: string[];
+  clearEditor: boolean;
   /** Project default resolved before the provider publishes its session-owned selector id. */
   projectReasoningEffort: string | null;
+}
+
+interface NewSessionRunTarget {
+  source: string;
+  worktreeBase: WorktreeBaselineKind;
+  worktreeBaseSha: string;
+  parallelTask?: boolean;
 }
 
 interface PendingPolicyRequest {
@@ -594,13 +636,13 @@ export default function App() {
     shell: SessionCreationShell;
   } | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [trajectoryOpen, setTrajectoryOpen] = useState(false);
   const [permissionQueue, setPermissionQueue] = useState<PermissionQueueItem[]>(
     [],
   );
   const [runningSessions, setRunningSessions] = useState<Set<string>>(
     () => new Set(),
   );
+  const systemBadgeCount = useMemo(() => needsMeCount(sessions), [sessions]);
   const [pendingSessionRunning, setPendingSessionRunning] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [transcriptNextBefore, setTranscriptNextBefore] = useState<
@@ -609,7 +651,11 @@ export default function App() {
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const transcriptScroll = useTranscriptScroll(activeSession, turns);
   const { capturePrependAnchor, prepareForPrepend } = transcriptScroll;
-  const permission = permissionQueue[0] ?? null;
+  const activePendingInputs = pendingInputsForSession(
+    permissionQueue,
+    activeSession,
+  );
+  const permission = activePendingInputs[0] ?? null;
   const [skillDraft, setSkillDraft] = useState<{
     name: string;
     text: string;
@@ -633,9 +679,11 @@ export default function App() {
     useState<SettingsTab>("general");
   const [showAutomations, setShowAutomations] = useState(false);
   const [capturing, setCapturing] = useState<string | null>(null);
-  const [showPluginHub, setShowPluginHub] = useState(false);
-  const [showBundlePluginTools, setShowBundlePluginTools] = useState(false);
+  const [showPluginManager, setShowPluginManager] = useState(false);
+  const [showDocker, setShowDocker] = useState(false);
   const [market, setMarket] = useState<MarketItem[]>([]);
+  const [localPluginMarketplace, setLocalPluginMarketplace] =
+    useState<PluginMarketplace | null>(null);
   const [showSourceControl, setShowSourceControl] = useState(false);
   const [checkpointWorkspace, setCheckpointWorkspace] = useState<
     WorkspaceLoadState<Checkpoint[]>
@@ -660,7 +708,6 @@ export default function App() {
   const [temporarySession, setTemporarySession] = useState(false);
   const temporarySessionRef = useRef(false);
   const [showPullRequests, setShowPullRequests] = useState(false);
-  const [terminalOpen, setTerminalOpen] = useState(false);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
   const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
@@ -671,13 +718,18 @@ export default function App() {
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
-  const terminalOpenRef = useRef(false);
   const dockTabRef = useRef<DockTab | null>(null);
   const dockFollowRef = useRef<FollowState>(initialFollowState);
   const [dockAutoHint, setDockAutoHint] = useState<ToolSurfaceHint | null>(
     null,
   );
   const [docEmpty, setDocEmpty] = useState(true);
+
+  useEffect(() => {
+    void setSystemBadgeCount(systemBadgeCount).catch((error) => {
+      console.warn("Could not update the system badge", error);
+    });
+  }, [systemBadgeCount]);
   // ---- scenes (Agent Scenes 1.0.0; docs/scenes.md) ----
   const [scenes, setScenes] = useState<SceneInfo[]>([]);
   /** The active scene's canonical reference for the focused session (or the draft). */
@@ -865,6 +917,7 @@ export default function App() {
     EMPTY_GIT_WORKSPACE,
   );
   const git = currentGitWorkspace.value.status;
+  const diffStat = currentGitWorkspace.value.diffStat;
   const currentCheckpointWorkspace = workspaceStateForCwd(
     checkpointWorkspace,
     workspaceCwd,
@@ -874,6 +927,7 @@ export default function App() {
   const running = activeSession
     ? runningSessions.has(activeSession)
     : pendingSessionRunning;
+  const interactivePreview = useMemo(() => activeInteractivePreview(turns), [turns]);
   const activeInteractionCapabilities = activeSession
     ? interactionCapabilities[activeSession] ?? null
     : null;
@@ -914,10 +968,6 @@ export default function App() {
   const [dockWidth, setDockWidth] = usePersistedNumber(
     "codetwo.dockWidth",
     440,
-  );
-  const [dockHeight, setDockHeight] = usePersistedNumber(
-    "codetwo.dockHeight",
-    280,
   );
   const [railWidth, setRailWidth] = usePersistedNumber(
     "codetwo.railWidth",
@@ -965,8 +1015,9 @@ export default function App() {
   }, [narrowLayout, toggleRail]);
   const openTaskBoard = useCallback(() => {
     setShowAutomations(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     setShowTaskBoard(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -1012,6 +1063,11 @@ export default function App() {
     ((a: Annotation, context: string) => void) | null
   >(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
+  const insertSessionRef = useRef<((session: {
+    id: string;
+    title: string;
+    throughSeq: number;
+  }) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
   const insertMarkdownRef = useRef<
@@ -1296,20 +1352,11 @@ export default function App() {
     if (dockTab !== null) setSideChatOpen(false);
   }, [dockTab]);
 
-  useEffect(() => {
-    terminalOpenRef.current = terminalOpen;
-  }, [terminalOpen]);
-
   /** The one dock-follow chokepoint: reduce, apply an emitted switch, mirror the badge hint. */
   const followDockEvent = useCallback((event: FollowEvent) => {
     const { state, setTab } = followReduce(dockFollowRef.current, event);
     dockFollowRef.current = state;
-    if (setTab === "terminal") {
-      terminalOpenRef.current = true;
-      setTerminalOpen(true);
-    } else if (setTab) {
-      setDockTab(setTab);
-    }
+    if (setTab) setDockTab(setTab);
     if (event.kind === "tool") {
       setDockAutoHint(
         state.autoTab
@@ -1341,7 +1388,7 @@ export default function App() {
         kind: "tool",
         hint,
         now: Date.now(),
-        dockOpen: dockTabRef.current !== null || terminalOpenRef.current,
+        dockOpen: dockTabRef.current !== null,
       });
     },
     [followDockEvent],
@@ -1352,15 +1399,6 @@ export default function App() {
     (tab: DockTab | null) => {
       followDockEvent({ kind: "manual", tab });
       setDockTab(tab);
-    },
-    [followDockEvent],
-  );
-
-  const manualTerminalOpen = useCallback(
-    (open: boolean) => {
-      followDockEvent({ kind: "manual", tab: open ? "terminal" : null });
-      terminalOpenRef.current = open;
-      setTerminalOpen(open);
     },
     [followDockEvent],
   );
@@ -1821,11 +1859,13 @@ export default function App() {
   // Track whether the user has hand-picked a provider; until then we auto-pick an available one.
   const providerPinned = useRef(false);
 
-  const refreshProviders = useCallback(async (): Promise<ProviderInfo[]> => {
+  const refreshProviders = useCallback(async (checkUpdates = false): Promise<ProviderInfo[]> => {
     const request = ++providerRegistryRequestRef.current;
     setProvidersStatus("loading");
     try {
-      const list = await loadProviderRegistry(listProviders);
+      const list = checkUpdates
+        ? await listProviders(true)
+        : await loadProviderRegistry(listProviders);
       if (request !== providerRegistryRequestRef.current) return list;
       setProviders(list);
       setProvidersStatus("ready");
@@ -1852,6 +1892,11 @@ export default function App() {
       throw error;
     }
   }, []);
+
+  const refreshProviderUpdates = useCallback(
+    () => refreshProviders(true),
+    [refreshProviders],
+  );
 
   useEffect(() => {
     void refreshProviders().catch(() => {});
@@ -2037,6 +2082,7 @@ export default function App() {
                   : [],
               ),
               appshotIds: pending.appshotIds,
+              clearEditor: pending.clearEditor,
             });
             void initializePluginSessionState(ev.session)
               .then(() =>
@@ -2339,6 +2385,7 @@ export default function App() {
           if (pendingRequest) {
             const currentEditor = getBlocksRef.current?.();
             if (
+              pendingRequest.clearEditor &&
               currentEditor &&
               matchesSubmittedEditorRevision(
                 currentEditor,
@@ -2397,6 +2444,7 @@ export default function App() {
             removePendingAppshots(pendingRequest.appshotIds);
             const currentEditor = getBlocksRef.current?.();
             if (
+              pendingRequest.clearEditor &&
               currentEditor &&
               matchesSubmittedEditorRevision(
                 currentEditor,
@@ -2574,11 +2622,14 @@ export default function App() {
     setCurrentModel("dev-model");
     setContextWindows((previous) => ({
       ...previous,
-      [session]: { usedTokens, contextWindow },
+      [session]: { usedTokens, contextWindow, breakdown: null },
     }));
   }, []);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (
+    docOverride?: DocBlock[],
+    newSessionTarget?: NewSessionRunTarget,
+  ) => {
     if (sessionLoading) {
       toast(t("toast.sessionLoading"));
       return;
@@ -2592,14 +2643,12 @@ export default function App() {
     if (!getBlocks) return;
     const editorSnapshot = getBlocks();
     const editorRevision = editorRevisionRef.current;
-    const appshotIds = activeAppshots.map((capture) => capture.id);
-    let doc: DocBlock[] = [
+    const promptAppshots = docOverride ? EMPTY_APPSHOTS : activeAppshots;
+    const appshotIds = promptAppshots.map((capture) => capture.id);
+    const clearEditor = docOverride === undefined;
+    let doc: DocBlock[] = docOverride ?? [
       ...editorSnapshot,
-      ...activeAppshots.map((capture): DocBlock => ({
-        type: "appshot",
-        id: capture.id,
-        title: capture.window_title,
-      })),
+      ...promptAppshots.map(privateImageBlock),
     ];
     // Running an empty document used to no-op in silence, which is indistinguishable from a broken
     // button. Say what's missing and put the caret where the fix goes.
@@ -2608,21 +2657,24 @@ export default function App() {
       focusEditorRef.current?.();
       return;
     }
-    if (running) {
+    if (running && !newSessionTarget) {
       toast(t("toast.alreadyRunning"));
       return;
     }
-    const targetSession = canvasRetryTargetSession(
-      activeSessionRef.current,
-      forceNewSessionForCanvasRetryRef.current,
-    );
-    const worktreeBaseSha = targetSession
+    const targetSession = newSessionTarget
+      ? null
+      : canvasRetryTargetSession(
+          activeSessionRef.current,
+          forceNewSessionForCanvasRetryRef.current,
+        );
+    const creationWorktreeBase = newSessionTarget?.worktreeBase ?? worktreeBase;
+    const worktreeBaseSha = newSessionTarget?.worktreeBaseSha ?? (targetSession
       ? null
       : sessionCreationBaselineSha(
-          worktreeBase,
+          creationWorktreeBase,
           worktreeOptions,
           worktreeOptionsLoading,
-        );
+        ));
     if (worktreeBaseSha === undefined) {
       toast(
         t(
@@ -2674,6 +2726,12 @@ export default function App() {
       }
       setTaskContext(task, false);
     }
+    const parallelTask = newSessionTarget?.parallelTask
+      ? {
+          taskId: activeBoardTaskRef.current!.id,
+          goal: summarizeDoc(doc).replace(/\s+/g, " ").trim(),
+        }
+      : null;
     const promptRequestId = globalThis.crypto.randomUUID();
     const creationRequestId = targetSession ? null : promptRequestId;
     if (targetSession) {
@@ -2685,6 +2743,7 @@ export default function App() {
         canvasIds,
         canvasRefs,
         appshotIds,
+        clearEditor,
       });
       updateRunningSession(targetSession, true);
     } else {
@@ -2696,6 +2755,7 @@ export default function App() {
         editorSnapshot,
         editorRevision,
         appshotIds,
+        clearEditor,
         projectReasoningEffort:
           projects.find((project) =>
             project.path === activeProjectRef.current && project.default_provider === provider
@@ -2703,7 +2763,10 @@ export default function App() {
       };
       setPendingSessionRunning(true);
     }
-    setTurns((prev) => [...prev, newTurn(summarizeDoc(doc), promptRequestId)]);
+    setTurns((prev) => [
+      ...prev,
+      newTurn(summarizeDoc(doc), promptRequestId, promptImagesForTurn(promptAppshots)),
+    ]);
     try {
       if (targetSession) {
         if (componentEnabledRef.current("memory.settings")) {
@@ -2718,14 +2781,15 @@ export default function App() {
       } else {
         await newSession(
           provider,
-          (activeProjectRef.current ?? cwd) || ".",
-          worktreeBase,
+          newSessionTarget?.source ?? ((activeProjectRef.current ?? cwd) || "."),
+          creationWorktreeBase,
           creationRequestId!,
           worktreeBaseSha,
           { mode, sandbox },
           currentModel,
           false,
           pendingCreationRef.current?.projectReasoningEffort ?? null,
+          parallelTask,
         );
       }
     } catch (e) {
@@ -2798,7 +2862,7 @@ export default function App() {
   ]);
 
   const sendDuringTurn = useCallback(
-    async (delivery: "queued" | "steer") => {
+    async (delivery: "queued" | "steer", docOverride?: DocBlock[]) => {
       if (sessionLoading) {
         toast(t("toast.sessionLoading"));
         return;
@@ -2812,14 +2876,11 @@ export default function App() {
       if (!getBlocks) return;
       const editorSnapshot = getBlocks();
       const editorRevision = editorRevisionRef.current;
-      const appshotIds = activeAppshots.map((capture) => capture.id);
-      let doc: DocBlock[] = [
+      const promptAppshots = docOverride ? EMPTY_APPSHOTS : activeAppshots;
+      const appshotIds = promptAppshots.map((capture) => capture.id);
+      let doc: DocBlock[] = docOverride ?? [
         ...editorSnapshot,
-        ...activeAppshots.map((capture): DocBlock => ({
-          type: "appshot",
-          id: capture.id,
-          title: capture.window_title,
-        })),
+        ...promptAppshots.map(privateImageBlock),
       ];
       if (doc.length === 0) {
         toast(t("toast.emptyDoc"));
@@ -2852,9 +2913,14 @@ export default function App() {
             : [],
         ),
         appshotIds,
+        clearEditor: docOverride === undefined,
       };
       pendingDeferredPromptRequestsRef.current.set(requestId, pending);
-      const optimistic = newTurn(summarizeDoc(doc), requestId);
+      const optimistic = newTurn(
+        summarizeDoc(doc),
+        requestId,
+        promptImagesForTurn(promptAppshots),
+      );
       optimistic.delivery = delivery;
       optimistic.queuePosition = delivery === "queued" ? 1 : undefined;
       setTurns((previous) => [...previous, optimistic]);
@@ -2881,7 +2947,7 @@ export default function App() {
     [activeAppshots, interactionCapabilities, sessionLoading, t, toast],
   );
 
-  const createSession = useCallback(() => {
+  const createSession = useCallback((): string | null => {
     const currentSessionId = activeSessionRef.current;
     const storedSession =
       sessions.find((session) => session.id === currentSessionId) ??
@@ -2899,12 +2965,13 @@ export default function App() {
     );
     if (source === null) {
       toast(t("toast.worktreeSourceUnknown"), "error");
-      return;
+      return null;
     }
 
     invalidatePendingCreation();
     setShowTaskBoard(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     sessionLoadSeq.current += 1;
     setSessionLoading(false);
     setPendingSessionRunning(false);
@@ -2946,6 +3013,7 @@ export default function App() {
     setTimeout(() => focusEditorRef.current?.(), 0);
     // A New action opens a configurable blank draft. The first Run creates the durable session,
     // after the now-visible baseline picker has had a chance to tell the truth and be changed.
+    return source;
   }, [
     cwd,
     sessions,
@@ -2958,8 +3026,26 @@ export default function App() {
 
   const createTaskDraft = useCallback(() => {
     setTaskContext(null, false);
-    createSession();
+    return createSession();
   }, [createSession, setTaskContext]);
+
+  const forkTurnIntoTask = useCallback((turn: Turn) => {
+    const sourceSession = activeSessionRef.current;
+    const throughSeq = turn.transcriptStartSeq;
+    const insertSession = insertSessionRef.current;
+    if (!sourceSession || throughSeq === undefined || !insertSession) {
+      toast(t("turn.forkFailed"), "error");
+      return;
+    }
+    const sourceTitle = activeSessionTitle ?? sourceSession.slice(0, 8);
+    if (!createTaskDraft()) return;
+    insertSession({
+      id: sourceSession,
+      title: sourceTitle,
+      throughSeq,
+    });
+    toast(t("turn.forked"), "success");
+  }, [activeSessionTitle, createTaskDraft, t, toast]);
 
   const createTemporarySession = useCallback(() => {
     setTaskContext(null, true);
@@ -2970,6 +3056,48 @@ export default function App() {
     setTaskContext(task, false);
     createSession();
   }, [createSession, setTaskContext]);
+
+  const startParallelTask = useCallback(() => {
+    const session = activeSessionRef.current;
+    if (!session || !runningSessionsRef.current.has(session)) {
+      toast(t("toast.notRunning"), "error");
+      return;
+    }
+    const worktreeBaseSha = sessionCreationBaselineSha(
+      "current",
+      worktreeOptions,
+      worktreeOptionsLoading,
+    );
+    if (!worktreeBaseSha) {
+      toast(t("toast.multitaskWorktreeUnavailable"), "error");
+      return;
+    }
+    const source = createSession();
+    if (!source) return;
+
+    // A parallel send is a new user-owned Task, not an opaque provider subagent. The current
+    // Session keeps running in the background while the new Session gets its own checkout.
+    setTaskContext(null, false);
+    setWorktreeBase("current");
+    setProvider(provider);
+    setCurrentModel(currentModel);
+    void run(undefined, {
+      source,
+      worktreeBase: "current",
+      worktreeBaseSha,
+      parallelTask: true,
+    });
+  }, [
+    createSession,
+    currentModel,
+    provider,
+    run,
+    setTaskContext,
+    t,
+    toast,
+    worktreeOptions,
+    worktreeOptionsLoading,
+  ]);
 
   const appshotCapturedRef = useRef<(capture: AppshotCapture) => void>(() => {});
   const appshotFailedRef = useRef<(failure: { message: string }) => void>(() => {});
@@ -2993,6 +3121,37 @@ export default function App() {
   appshotFailedRef.current = ({ message }) => {
     toast(t("toast.appshotFailed", { error: message }), "error");
   };
+
+  const attachPromptImages = useCallback(async (files: readonly File[]) => {
+    const images = files.filter((file) => file.type.startsWith("image/"));
+    if (images.length === 0) return;
+    const session = activeSessionRef.current;
+    const key = session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
+    const results = await Promise.allSettled(
+      images.map(async (file) =>
+        importPromptImage(
+          new Uint8Array(await file.arrayBuffer()),
+          file.type || null,
+          file.name || "Image.png",
+        )),
+    );
+    const captures = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    if (captures.length > 0) {
+      setPendingAppshots((current) => ({
+        ...current,
+        [key]: [...(current[key] ?? []), ...captures],
+      }));
+      setTimeout(() => focusEditorRef.current?.(), 0);
+    }
+    const failure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failure) {
+      toast(t("toast.imageAttachFailed", { error: String(failure.reason) }), "error");
+    }
+  }, [cwd, t, toast]);
 
   useEffect(() => {
     let removeCaptured: (() => void) | null = null;
@@ -3207,6 +3366,7 @@ export default function App() {
       // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
       setShowTaskBoard(false);
       setShowPullRequests(false);
+      setShowDocker(false);
       invalidatePendingCreation();
       const stored =
         sessions.find((s) => s.id === id) ??
@@ -3453,6 +3613,7 @@ export default function App() {
         return {
           id: `conversation-${hit.session_id}-${hit.seq}`,
           identity: `session-${hit.session_id}`,
+          category: "session",
           label: hit.title,
           detail: `${t(hit.role === "user" ? "palette.you" : "palette.agent")}: ${hit.snippet}`,
           hint: hit.archived ? t("palette.archived") : project,
@@ -3585,10 +3746,12 @@ export default function App() {
       bundles: plugins,
       skills,
       market,
+      localMarketplace: localPluginMarketplace,
       scope: pluginManagerScope,
     }),
     [
       managedUserCatalog,
+      localPluginMarketplace,
       market,
       pluginManagerScope,
       plugins,
@@ -3625,6 +3788,16 @@ export default function App() {
       skills,
     ],
   );
+  const activeSkills = useMemo(() => {
+    const enabledById = new Map(
+      activePluginModel.components
+        .filter((component) => component.skill)
+        .map((component) => [component.id, component.state.effectiveEnabled]),
+    );
+    return skills.filter(
+      (skill) => enabledById.get(`skill:${skill.id}`) ?? true,
+    );
+  }, [activePluginModel.components, skills]);
   const componentEnabled = useCallback(
     (id: BuiltinUiComponentId) =>
       pluginManagerComponentEnabled(activePluginModel.components, id, activeComponentPolicyReady),
@@ -3659,6 +3832,18 @@ export default function App() {
       activePluginModel.plugins,
       plugins,
     ],
+  );
+  const dockerPlugin = useMemo(
+    () => plugins.find((plugin) => plugin.name === "docker-tools") ?? null,
+    [plugins],
+  );
+  const dockerPluginReady = Boolean(dockerPlugin?.enabled && dockerPlugin.trusted);
+  useEffect(() => {
+    if (showDocker && !dockerPlugin) setShowDocker(false);
+  }, [dockerPlugin, showDocker]);
+  const callDocker = useCallback<DockerCommandCaller>(
+    async <T,>(name: string, args?: unknown) => call<T>(name, args, null),
+    [],
   );
   const pluginLanguageServers = useMemo(
     () =>
@@ -3722,16 +3907,13 @@ export default function App() {
   }, [activeComponentPolicyReady, lspPluginEnabled, lspProjectPath, lspRuntimeEnabled]);
   const availableDockSurfaces = useMemo<DockSurface[]>(
     () => [
+      "trajectory",
       ...(componentEnabled("browser.dock") ? ["browser" as const] : []),
       ...(componentEnabled("terminal.dock") ? ["terminal" as const] : []),
       ...(componentEnabled("files.surface") ? ["files" as const] : []),
       ...(componentEnabled("git.surface") ? ["git" as const] : []),
     ],
     [componentEnabled],
-  );
-  const availableSideDockSurfaces = useMemo(
-    () => availableDockSurfaces.filter((surface) => surface !== "terminal"),
-    [availableDockSurfaces],
   );
 
   // A live disable removes the surface immediately, including already-open dialogs. Runtime
@@ -3743,9 +3925,6 @@ export default function App() {
       !availableDockSurfaces.includes(dockTab)
     ) {
       manualDockTab(null);
-    }
-    if (terminalOpen && !availableDockSurfaces.includes("terminal")) {
-      manualTerminalOpen(false);
     }
     if (!componentEnabled("files.surface")) setShowFiles(false);
     if (!componentEnabled("search.modal")) setShowWorkspaceSearch(false);
@@ -3770,9 +3949,7 @@ export default function App() {
     componentEnabled,
     dockTab,
     manualDockTab,
-    manualTerminalOpen,
     scenesSurfaceEnabled,
-    terminalOpen,
   ]);
 
   const refreshScenes = useCallback(async () => {
@@ -3931,7 +4108,7 @@ export default function App() {
       });
   }, [cwd]);
 
-  const openPluginHub = useCallback(() => {
+  const openPluginManager = useCallback(() => {
     const normalizedActiveProject = activeProject
       ? normalizePluginProjectPath(activeProject)
       : null;
@@ -3943,7 +4120,7 @@ export default function App() {
         ? { kind: "project", projectPath: normalizedActiveProject }
       : { kind: "user" };
     setPluginManagerScope(scope);
-    setShowBundlePluginTools(false);
+    setLocalPluginMarketplace(null);
     marketCatalog()
       .then(setMarket)
       .catch(() => {});
@@ -3955,7 +4132,8 @@ export default function App() {
     setShowAutomations(false);
     setShowTaskBoard(false);
     setShowPullRequests(false);
-    setShowPluginHub(true);
+    setShowDocker(false);
+    setShowPluginManager(true);
   }, [
     activeProject,
     pluginManagerProjects,
@@ -4055,8 +4233,9 @@ export default function App() {
       return;
     }
     setShowTaskBoard(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowPullRequests(false);
+    setShowDocker(false);
     setShowAutomations(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
@@ -4074,12 +4253,23 @@ export default function App() {
       return;
     }
     setShowAutomations(false);
-    setShowPluginHub(false);
+    setShowPluginManager(false);
     setShowTaskBoard(false);
+    setShowDocker(false);
     setShowPullRequests(true);
     if (narrowLayout) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
   }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
+
+  const openDocker = useCallback(() => {
+    setShowAutomations(false);
+    setShowPluginManager(false);
+    setShowPullRequests(false);
+    setShowTaskBoard(false);
+    setShowDocker(true);
+    if (narrowLayout) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
+  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
 
   const openSourceControl = useCallback(() => {
     if (!componentEnabled("git.surface")) {
@@ -4161,13 +4351,14 @@ export default function App() {
 
   const toggleDock = useCallback(
     (t: DockSurface) => {
-      const component: Record<DockSurface, BuiltinUiComponentId> = {
+      const component: Partial<Record<DockSurface, BuiltinUiComponentId>> = {
         browser: "browser.dock",
         terminal: "terminal.dock",
         files: "files.surface",
         git: "git.surface",
       };
-      if (!componentEnabled(component[t])) {
+      const componentId = component[t];
+      if (componentId && !componentEnabled(componentId)) {
         toast(
           `${t[0]?.toUpperCase()}${t.slice(1)} is disabled in Plugins.`,
           "info",
@@ -4175,17 +4366,23 @@ export default function App() {
         return;
       }
       // A manual dock choice, so it routes through the follow reducer and latches auto-follow.
-      if (t === "terminal") {
-        manualTerminalOpen(!terminalOpenRef.current);
-      } else {
-        manualDockTab(dockTabRef.current === t ? null : t);
-      }
+      manualDockTab(dockTabRef.current === t ? null : t);
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
-    [componentEnabled, manualDockTab, manualTerminalOpen, toast],
+    [componentEnabled, manualDockTab, toast],
   );
 
   const runProjectAction = useCallback((script: ProjectScript) => {
+    if (script.kind === "prompt") {
+      const doc: DocBlock[] = [{ type: "text", text: script.prompt }];
+      const session = activeSessionRef.current;
+      if (session && runningSessionsRef.current.has(session)) {
+        void sendDuringTurn("queued", doc);
+      } else {
+        void run(doc);
+      }
+      return;
+    }
     const name = script.name || script.id;
     if (script.preview_url && script.open_preview) {
       if (componentEnabled("browser.dock")) {
@@ -4208,7 +4405,7 @@ export default function App() {
         toast(message, "success");
       })
       .catch((error) => toast(t("actionDialog.failed", { error: String(error) }), "error"));
-  }, [componentEnabled, cwd, manualDockTab, t, toast]);
+  }, [componentEnabled, cwd, manualDockTab, run, sendDuringTurn, t, toast]);
 
   const saveProjectAction = useCallback(async (script: ProjectScript) => {
     const saved = await saveProjectScript(cwd || ".", script);
@@ -4222,9 +4419,36 @@ export default function App() {
 
   // Expanding hands the whole column to the document; focus follows so you can just start writing.
   const toggleDocMode = useCallback((v: boolean) => {
-    setDocMode(v);
-    if (v) setTimeout(() => focusEditorRef.current?.(), 0);
-  }, []);
+    const focusDocument = () => {
+      if (v) setTimeout(() => focusEditorRef.current?.(), 0);
+    };
+    const transitionDocument = document as Document & {
+      startViewTransition?: (update: () => void) => { finished: Promise<void> };
+    };
+    const startViewTransition = transitionDocument.startViewTransition?.bind(document);
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    if (!startViewTransition || reducedMotion) {
+      setDocMode(v);
+      focusDocument();
+      return;
+    }
+
+    document.documentElement.dataset.composerModeTransition = "";
+    try {
+      const transition = startViewTransition(() => {
+        flushSync(() => setDocMode(v));
+      });
+      void transition.finished.finally(() => {
+        delete document.documentElement.dataset.composerModeTransition;
+        focusDocument();
+      });
+    } catch {
+      delete document.documentElement.dataset.composerModeTransition;
+      setDocMode(v);
+      focusDocument();
+    }
+  }, [setDocMode]);
 
   const getCanvasAssets = useCallback(
     (id: string): readonly CanvasStaticAsset[] => {
@@ -4562,6 +4786,49 @@ export default function App() {
       setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
     },
     [componentEnabled, dockWidth, setDockWidth, toast],
+  );
+
+  const openBuiltinWebLink = useCallback(
+    (url: string) => {
+      if (!componentEnabled("browser.dock")) {
+        toast("Browser is disabled in Plugins.", "info");
+        return;
+      }
+      setBrowserUrl(url);
+      void browserRegistryCreate(url).catch((error) => {
+        toast(t("actionDialog.failed", { error: String(error) }), "error");
+      });
+      manualDockTab("browser");
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    },
+    [componentEnabled, manualDockTab, t, toast],
+  );
+
+  const openBuiltinFileLink = useCallback(
+    (target: Extract<BuiltinLinkTarget, { kind: "file" }>) => {
+      if (!componentEnabled("files.surface")) {
+        toast("Files are disabled in Plugins.", "info");
+        return;
+      }
+      const path = workspaceRelativeLinkPath(target.path, cwd || ".");
+      if (!path) return;
+      openFileTab(
+        path,
+        target.line
+          ? { line: target.line, column: target.column ?? 1 }
+          : undefined,
+      );
+    },
+    [componentEnabled, cwd, openFileTab, toast],
+  );
+
+  const builtinLinkActions = useMemo<BuiltinLinkActions>(
+    () => ({
+      workspaceRoot: cwd || ".",
+      openWebLink: componentEnabled("browser.dock") ? openBuiltinWebLink : undefined,
+      openFileLink: componentEnabled("files.surface") ? openBuiltinFileLink : undefined,
+    }),
+    [componentEnabled, cwd, openBuiltinFileLink, openBuiltinWebLink],
   );
 
   const closeFileTab = useCallback(
@@ -4991,7 +5258,7 @@ export default function App() {
           break;
         case "new_session":
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           createTaskDraft();
           break;
@@ -5023,9 +5290,10 @@ export default function App() {
           break;
         case "open_settings":
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
+          setShowDocker(false);
           setSettingsInitialTab("general");
           setShowSettings(true);
           break;
@@ -5036,7 +5304,7 @@ export default function App() {
           openSourceControl();
           break;
         case "open_market":
-          openPluginHub();
+          openPluginManager();
           break;
         case "open_usage":
           if (!componentEnabled("usage.settings")) {
@@ -5044,9 +5312,10 @@ export default function App() {
             break;
           }
           setShowTaskBoard(false);
-          setShowPluginHub(false);
+          setShowPluginManager(false);
           setShowAutomations(false);
           setShowPullRequests(false);
+          setShowDocker(false);
           setSettingsInitialTab("usage");
           setShowSettings(true);
           break;
@@ -5119,7 +5388,7 @@ export default function App() {
       t,
       refreshGit,
       openSourceControl,
-      openPluginHub,
+      openPluginManager,
       openWorkingDirectory,
       toggleDock,
       manualDockTab,
@@ -5152,7 +5421,7 @@ export default function App() {
       hint: hint("new_session"),
       run: () => {
       setShowTaskBoard(false);
-      setShowPluginHub(false);
+      setShowPluginManager(false);
       setShowAutomations(false);
       createTaskDraft();
       },
@@ -5177,7 +5446,7 @@ export default function App() {
       id: "market",
       label: "Open Plugin Hub",
       hint: hint("open_market"),
-      run: openPluginHub,
+      run: openPluginManager,
     },
     { id: "automations", label: t("automations.title"), run: openAutomations },
     { id: "taskboard", label: t("taskboard.open"), run: openTaskBoard },
@@ -5207,13 +5476,15 @@ export default function App() {
     },
     {
       id: "usage",
+      category: "setting" as const,
       label: "Usage (5h / week / month)",
       hint: hint("open_usage"),
       run: () => {
         setShowTaskBoard(false);
-        setShowPluginHub(false);
+        setShowPluginManager(false);
         setShowAutomations(false);
         setShowPullRequests(false);
+        setShowDocker(false);
         setSettingsInitialTab("usage");
         setShowSettings(true);
       },
@@ -5258,10 +5529,12 @@ export default function App() {
     { id: "remote", label: "Remote control", run: () => setShowRemote(true) },
     {
       id: "settings",
+      category: "setting" as const,
       label: "Open settings",
       hint: hint("open_settings"),
       run: () => {
         setShowPullRequests(false);
+        setShowDocker(false);
         setSettingsInitialTab("general");
         setShowSettings(true);
       },
@@ -5333,14 +5606,17 @@ export default function App() {
     })),
     ...scripts.map((s) => ({
       id: `script-${s.id}`,
-      label: `Run script: ${s.name || s.id}`,
-      hint: s.command,
+      label: s.kind === "prompt"
+        ? `Send prompt: ${s.name || s.id}`
+        : `Run script: ${s.name || s.id}`,
+      hint: s.kind === "prompt" ? s.prompt : s.command,
       run: () => runProjectAction(s),
     })),
     ...sessions.map((s) => ({
       id: `sess-${s.id}`,
       identity: `session-${s.id}`,
-      label: `Session: ${s.title}`,
+      category: "session" as const,
+      label: s.title,
       hint: displayProvider(s.provider),
       run: () => void selectSession(s.id),
     })),
@@ -5657,6 +5933,14 @@ export default function App() {
     setSceneEditorRequest(null);
   };
 
+  const railExpandAction = displayedRailCollapsed ? (
+    <IconAction
+      icon={PanelLeft}
+      label={t("rail.expand")}
+      onClick={toggleDisplayedRail}
+    />
+  ) : undefined;
+
   return (
     <div
       className={cn(
@@ -5665,10 +5949,16 @@ export default function App() {
       )}
       style={{ "--side-chat-width": `${appliedSideChatWidth}px` } as CSSProperties}
     >
+      <DesktopPetBridge
+        animation={petAnimation}
+        voiceEnabled={voiceComposerEnabled}
+        onVoiceText={(text) => insertTextRef.current?.(text)}
+      />
       {/* Settings takes the whole window — its own nav rail replaces the session rail, and the
           Back row at its foot is the way home. */}
       {showSettings ? (
         <SettingsPage
+          sidebarWidth={railWidth}
           initialTab={settingsInitialTab}
           bindings={bindings}
           capturing={capturing}
@@ -5677,7 +5967,7 @@ export default function App() {
           onResetAll={resetAllBindings}
           providers={providers}
           provider={provider}
-          onReloadProviders={refreshProviders}
+          onReloadProviders={refreshProviderUpdates}
           projectPath={activeProject ?? cwd}
           project={
             projects.find((project) => project.path === activeProject) ?? null
@@ -5709,7 +5999,7 @@ export default function App() {
           }
           request={sceneEditorRequest}
           providers={providers}
-          skills={skills}
+          skills={activeSkills}
           cwd={cwd || "."}
           onRequest={setSceneEditorRequest}
           onScene={(reference) => applySceneChoice(reference)}
@@ -5738,8 +6028,9 @@ export default function App() {
           activeProject={activeProject}
           onSelectProject={(path) => {
             setShowAutomations(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             selectProject(path);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
@@ -5761,21 +6052,21 @@ export default function App() {
           runningSessions={runningSessions}
           onSelect={(id) => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             void selectSession(id);
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNew={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             createTaskDraft();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
           onNewTemporary={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             createTemporarySession();
             if (narrowLayout) setNarrowRailOpen(false);
@@ -5786,14 +6077,15 @@ export default function App() {
             onPin={(id, pinned) =>
               void pinSession(id, pinned).then(refreshSessions)
             }
-            onArchive={(id, archived) =>
-              void archiveSession(id, archived).then(refreshSessions)
-            }
+            onArchive={async (id, archived) => {
+              await archiveSession(id, archived);
+              await refreshSessions();
+            }}
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
           onOpenMarket={() => {
             setShowTaskBoard(false);
-            openPluginHub();
+            openPluginManager();
           }}
           onOpenAutomations={openAutomations}
           width={railWidth}
@@ -5803,9 +6095,10 @@ export default function App() {
           onOpenSearch={() => setShowPalette(true)}
           onOpenSettings={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             setSettingsInitialTab("general");
             setShowSettings(true);
           }}
@@ -5823,15 +6116,22 @@ export default function App() {
             else openPullRequests();
           }}
           automationsOpen={showAutomations}
-          pluginHubOpen={showPluginHub}
+          pluginManagerOpen={showPluginManager}
+          dockerAvailable={dockerPlugin !== null}
+          dockerOpen={showDocker}
+          onOpenDocker={() => {
+            if (showDocker) setShowDocker(false);
+            else openDocker();
+          }}
           quickQuota={railQuickQuota}
           quickQuotaLoading={quickQuotaLoading}
           quickQuotaProviderName={quickQuotaProviderName}
           onOpenUsage={() => {
             setShowTaskBoard(false);
-            setShowPluginHub(false);
+            setShowPluginManager(false);
             setShowAutomations(false);
             setShowPullRequests(false);
+            setShowDocker(false);
             setSettingsInitialTab("usage");
             setShowSettings(true);
           }}
@@ -5847,17 +6147,18 @@ export default function App() {
             }
         />
 
+          {showDocker && dockerPlugin ? (
+            <DockerPage
+              enabled={dockerPluginReady}
+              callCommand={callDocker}
+              onOpenPluginManager={openPluginManager}
+              headerLeadingAction={railExpandAction}
+            />
+          ) : null}
+
           {showPullRequests && (
             <PullRequestsPage
-              headerLeadingAction={
-                displayedRailCollapsed ? (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-                ) : undefined
-              }
+              headerLeadingAction={railExpandAction}
               onChat={chatAboutPullRequest}
             />
           )}
@@ -5873,6 +6174,7 @@ export default function App() {
               setShowAutomations(false);
               void selectSession(session);
             }}
+            headerLeadingAction={railExpandAction}
               />
             ) : null
           )}
@@ -5885,47 +6187,39 @@ export default function App() {
               void selectSession(id);
             }}
             onStartTask={startBoardTask}
+            headerLeadingAction={railExpandAction}
           />
         )}
 
-        {showPluginHub && !showBundlePluginTools && (
+        {showPluginManager && (
           <PluginManagerPage
-              plugins={localizedPluginManagerModel.plugins}
-              components={localizedPluginManagerModel.components}
-              marketplaceItems={localizedPluginManagerModel.marketplaceItems}
-              headerLeadingAction={
-                displayedRailCollapsed ? (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-                ) : undefined
-              }
-              labels={pluginManagerLabels}
+            plugins={localizedPluginManagerModel.plugins}
+            components={localizedPluginManagerModel.components}
+            marketplaceItems={localizedPluginManagerModel.marketplaceItems}
+            marketplaceSources={localizedPluginManagerModel.marketplaceSources}
+            headerLeadingAction={railExpandAction}
+            labels={pluginManagerLabels}
             scope={pluginManagerScope}
             projects={pluginManagerProjects}
-              recovery={
-                (selectedManagedCatalog ?? managedUserCatalog)?.recovery
-              }
+            recovery={(selectedManagedCatalog ?? managedUserCatalog)?.recovery}
             onScopeChange={(scope) => {
-                const normalized =
-                  scope.kind === "user"
-                ? scope
-                    : {
-                        kind: "project" as const,
-                        projectPath: normalizePluginProjectPath(
-                          scope.projectPath,
-                        ),
-                      };
+              const normalized =
+                scope.kind === "user"
+                  ? scope
+                  : {
+                      kind: "project" as const,
+                      projectPath: normalizePluginProjectPath(
+                        scope.projectPath,
+                      ),
+                    };
               setPluginManagerScope(normalized);
               void loadManagedCatalog(normalized).catch((error) => {
-                  toast(
-                    t("pluginManager.scopeLoadFailed", {
-                      error: String(error),
-                    }),
-                    "error",
-                  );
+                toast(
+                  t("pluginManager.scopeLoadFailed", {
+                    error: String(error),
+                  }),
+                  "error",
+                );
               });
             }}
             onPlanChange={planManagerChange}
@@ -5934,29 +6228,43 @@ export default function App() {
             onResetPlugin={async (pluginId, scope) => {
               await resetManagedPlugin(pluginId, toManagedPluginScope(scope));
               await refreshPluginManagerData(scope);
-                toast(pluginManagerLabels.settingsReset, "success");
+              toast(pluginManagerLabels.settingsReset, "success");
             }}
             onInstallMarketplaceItem={async ({ itemId, scope }) => {
               if (scope.kind !== "user") {
-                  throw new Error(t("pluginManager.marketplaceUserOnly"));
+                throw new Error(t("pluginManager.marketplaceUserOnly"));
               }
               const id = itemId.replace(/^market:/, "");
-              await marketInstall(id);
+              const item = pluginManagerModel.marketplaceItems.find(
+                (candidate) => candidate.id === itemId,
+              );
+              if (item?.marketplace) {
+                await installMarketplacePlugin(
+                  item.marketplace.manifestPath,
+                  item.marketplace.pluginName,
+                );
+              } else {
+                await marketInstall(id);
+              }
               await refreshPluginManagerData(scope);
               toast(t("pluginHub.componentInstalledToast"), "success");
             }}
             onRefreshMarketplace={async () => {
               await refreshPluginManagerData(pluginManagerScope);
             }}
+            onOpenMarketplace={async () => {
+              const selected = await pickPluginMarketplace();
+              if (selected) setLocalPluginMarketplace(selected);
+            }}
             onImportGithub={async (repository) => {
               const result = await githubImportPlugin(repository);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t("pluginHub.pluginInstalledToast", {
-                    name: result.plugin.name,
-                  }),
-                  "success",
-                );
+              toast(
+                t("pluginHub.pluginInstalledToast", {
+                  name: result.plugin.name,
+                }),
+                "success",
+              );
               return {
                 pluginId: result.plugin.id,
                 name: result.plugin.name,
@@ -5966,205 +6274,72 @@ export default function App() {
             onSetBundleEnabled={async (pluginId, enabled) => {
               await setPluginEnabled(pluginId, enabled);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t(
-                    enabled
-                      ? "pluginHub.pluginEnabledToast"
-                      : "pluginHub.pluginDisabledToast",
-                  ),
-                  "success",
-                );
+              toast(
+                t(
+                  enabled
+                    ? "pluginHub.pluginEnabledToast"
+                    : "pluginHub.pluginDisabledToast",
+                ),
+                "success",
+              );
             }}
             onSetBundleTrusted={async (pluginId, trusted) => {
               await setPluginTrusted(pluginId, trusted);
               await refreshPluginManagerData(pluginManagerScope);
-                toast(
-                  t(
-                    trusted
-                      ? "pluginHub.pluginTrustedToast"
-                      : "pluginHub.pluginUntrustedToast",
-                  ),
-                  "success",
-                );
+              toast(
+                t(
+                  trusted
+                    ? "pluginHub.pluginTrustedToast"
+                    : "pluginHub.pluginUntrustedToast",
+                ),
+                "success",
+              );
             }}
             onUninstallBundle={async (pluginId, keepData) => {
               await uninstallPlugin(pluginId, keepData);
               await refreshPluginManagerData(pluginManagerScope);
               toast(t("pluginHub.pluginUninstalledToast"), "success");
             }}
-            onOpenBundleTools={() => setShowBundlePluginTools(true)}
-          />
-        )}
-
-        {showPluginHub && showBundlePluginTools && (
-          <PluginHub
-            plugins={plugins}
-            skills={skills}
-            items={market}
-            cwd={cwd || "."}
-            onUse={(skill) => {
-              setShowPluginHub(false);
-              setTimeout(() => insertSkillRef.current?.(skill), 0);
-            }}
-            onInstallMarket={async (id) => {
-              try {
-                await marketInstall(id);
-                setMarket(await marketCatalog());
-                await refreshSkills();
-                toast(t("pluginHub.componentInstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.installFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onUninstallSkill={async (id) => {
-              try {
-                await deleteSkill(id);
-                setMarket(await marketCatalog());
-                await refreshSkills();
-                toast(t("pluginHub.componentUninstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.uninstallFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onImportGithub={async (repository) => {
-              const result = await githubImportPlugin(repository);
-              setPlugins(await listPlugins());
-              await refreshSkills();
-                toast(
-                  t("pluginHub.pluginInstalledToast", {
-                    name: result.plugin.name,
-                  }),
-                  "success",
-                );
-              return result;
-            }}
-            onOpenMarketplace={pickPluginMarketplace}
-              onInstallMarketplacePlugin={async (
-                marketplacePath,
-                pluginName,
-              ) => {
-              try {
-                  const result = await installMarketplacePlugin(
-                    marketplacePath,
-                    pluginName,
-                  );
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                  toast(
-                    t("pluginHub.pluginInstalledToast", {
-                      name: result.plugin.name,
-                    }),
-                    "success",
-                  );
-                return result;
-              } catch (error) {
-                  toast(
-                    t("pluginHub.installFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onUninstallPlugin={async (id, keepData = false) => {
-              try {
-                await uninstallPlugin(id, keepData);
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                toast(t("pluginHub.pluginUninstalledToast"), "success");
-              } catch (error) {
-                  toast(
-                    t("pluginHub.uninstallFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onSetPluginEnabled={async (id, enabled) => {
-              try {
-                await setPluginEnabled(id, enabled);
-                setPlugins(await listPlugins());
-                await refreshSkills();
-                  toast(
-                    t(
-                      enabled
-                        ? "pluginHub.pluginEnabledToast"
-                        : "pluginHub.pluginDisabledToast",
-                    ),
-                    "success",
-                  );
-              } catch (error) {
-                  toast(
-                    t("pluginHub.stateFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onSetPluginTrusted={async (id, trusted) => {
-              try {
-                await setPluginTrusted(id, trusted);
-                setPlugins(await listPlugins());
-                  toast(
-                    t(
-                      trusted
-                        ? "pluginHub.pluginTrustedToast"
-                        : "pluginHub.pluginUntrustedToast",
-                    ),
-                    "success",
-                  );
-              } catch (error) {
-                  toast(
-                    t("pluginHub.stateFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onApplyScaffold={async (pluginId, scaffoldId) => {
-              try {
-                  const result = await applyPluginScaffold(
-                    pluginId,
-                    scaffoldId,
-                    cwd || ".",
-                  );
-                  toast(
-                    t("pluginHub.scaffoldInstalledToast", {
-                      count: result.files,
-                    }),
-                    "success",
-                  );
-                return result;
-              } catch (error) {
-                  toast(
-                    t("pluginHub.scaffoldFailed", { error: String(error) }),
-                    "error",
-                  );
-                throw error;
-              }
-            }}
-            onNew={() => setSkillDraft({ name: "", text: "" })}
-            onClose={() => setShowBundlePluginTools(false)}
+            onApplyScaffold={
+              cwd
+                ? async (pluginId, scaffoldId) => {
+                    const result = await applyPluginScaffold(
+                      pluginId,
+                      scaffoldId,
+                      cwd,
+                    );
+                    toast(
+                      t("pluginHub.scaffoldInstalledToast", {
+                        count: result.files,
+                      }),
+                      "success",
+                    );
+                    return result;
+                  }
+                : undefined
+            }
           />
         )}
 
         <div
           ref={sessionWorkspaceRef}
-            aria-hidden={
-              showTaskBoard || showPluginHub || showAutomations || showPullRequests || undefined
-            }
-            className={
-              showTaskBoard || showPluginHub || showAutomations || showPullRequests
-                ? "hidden"
-                : "contents"
-            }
+          aria-hidden={
+            showTaskBoard ||
+            showPluginManager ||
+            showAutomations ||
+            showPullRequests ||
+            showDocker ||
+            undefined
+          }
+          className={
+            showTaskBoard ||
+            showPluginManager ||
+            showAutomations ||
+            showPullRequests ||
+            showDocker
+              ? "hidden"
+              : "contents"
+          }
         >
           <div
             data-workspace-stack
@@ -6186,13 +6361,7 @@ export default function App() {
               displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
             )}
           >
-            {displayedRailCollapsed && (
-                  <IconAction
-                    icon={PanelLeft}
-                    label={t("rail.expand")}
-                    onClick={toggleDisplayedRail}
-                  />
-            )}
+            {railExpandAction}
             {/* Breadcrumb, reference-style: project / thread. */}
             {activeProjectRecord ? (
               <ProjectIcon project={activeProjectRecord} size={18} />
@@ -6268,13 +6437,34 @@ export default function App() {
               </button>
             )}
 
+            <EnvironmentPopover
+              suppressed={
+                showTaskBoard ||
+                showPluginManager ||
+                showAutomations ||
+                showPullRequests ||
+                showDocker
+              }
+              project={activeProjectName}
+              projectPath={activeProjectName ? activeProject : null}
+              projects={projects}
+              git={git}
+              diffStat={diffStat}
+              onRefresh={refreshGit}
+              onSelectProject={selectProject}
+              onAddProject={() => void addProjectFolder()}
+              onOpenSourceControl={openSourceControl}
+              onOpenSettings={() => {
+                setSettingsInitialTab("general");
+                setShowSettings(true);
+              }}
+              preview={interactivePreview}
+            />
+
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
-              terminalActive={terminalOpen}
-              panelActive={dockTab !== null}
-              sideChatActive={sideChatOpen}
-              trajectoryActive={trajectoryOpen && !docMode}
-              trajectoryAvailable={!docMode && turns.length > 0 && !sessionLoading}
+              terminalActive={dockTab === "terminal"}
+              panelActive={dockTab !== null || sideChatOpen}
               actions={scripts}
               editorLaunchersAvailable={editorLaunchersAvailable}
               fileManagerLabel={fileManagerLabel}
@@ -6291,17 +6481,10 @@ export default function App() {
               onCheckpoint={() => void doCheckpoint()}
               onPush={() => void doPush().catch(() => {})}
               onToggleTerminal={() => toggleDock("terminal")}
-              onToggleSideChat={() => {
-                setSideChatOpen((current) => {
-                  const next = !current;
-                  if (next) manualDockTab(null);
-                  return next;
-                });
-              }}
-              onToggleTrajectory={() => setTrajectoryOpen((current) => !current)}
               onTogglePanel={() => {
+                const panelOpen = dockTab !== null || sideChatOpen;
                 setSideChatOpen(false);
-                manualDockTab(dockTab ? null : "home");
+                manualDockTab(panelOpen ? null : "home");
                 setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
               }}
               onMoveTask={() => activeSession && setShowTaskHandoff(true)}
@@ -6326,43 +6509,34 @@ export default function App() {
               docMode ? "flex-row" : "flex-col",
             )}
           >
-            {(turns.length > 0 || running || sessionLoading) &&
-              (trajectoryOpen && !docMode && !sessionLoading && turns.length > 0 ? (
-                  <TrajectoryView
-                    turns={turns}
-                    usage={sessionUsage}
-                    hasEarlier={transcriptNextBefore !== null}
-                    loadingEarlier={loadingEarlier}
-                    onLoadEarlier={() => void loadEarlierTranscript()}
+            {(turns.length > 0 || running || sessionLoading) && (
+              <TranscriptPane
+                variant={docMode ? "side" : "main"}
+                turns={turns}
+                loading={sessionLoading}
+                hasEarlier={transcriptNextBefore !== null}
+                loadingEarlier={loadingEarlier}
+                onLoadEarlier={() => void loadEarlierTranscript()}
+                scroll={transcriptScroll}
+                onOpenPlanAsDocument={openPlanAsDocument}
+                onPinPlanArtifact={pinPlanArtifact}
+                canPinPlan={scenesSurfaceEnabled && canPinPlan}
+                onSaveTemplate={openTemplateDraft}
+                linkActions={builtinLinkActions}
+                sessionId={activeSession}
+                onForkTurn={forkTurnIntoTask}
+                onAddSelection={addSelectedText}
+                onExplainSelection={explainSelectedText}
+                onAskSelectionInSideChat={askSelectedTextInSideChat}
+                before={
+                  <PluginUiSlot
+                    slot="transcript.before"
+                    contributions={pluginUiActions["transcript.before"]}
+                    onInvoke={invokePluginAction}
                   />
-                ) : (
-                  <TranscriptPane
-                    variant={docMode ? "side" : "main"}
-                    turns={turns}
-                    loading={sessionLoading}
-                    hasEarlier={transcriptNextBefore !== null}
-                    loadingEarlier={loadingEarlier}
-                    onLoadEarlier={() => void loadEarlierTranscript()}
-                    scroll={transcriptScroll}
-                    onOpenPlanAsDocument={openPlanAsDocument}
-                    onPinPlanArtifact={pinPlanArtifact}
-                    canPinPlan={scenesSurfaceEnabled && canPinPlan}
-                    onSaveTemplate={openTemplateDraft}
-                    petAnimation={petAnimation}
-                    voiceEnabled={voiceComposerEnabled}
-                    onVoiceText={(text) => insertTextRef.current?.(text)}
-                    onAddSelection={addSelectedText}
-                    onExplainSelection={explainSelectedText}
-                    onAskSelectionInSideChat={askSelectedTextInSideChat}
-                    before={
-                      <PluginUiSlot
-                        slot="transcript.before"
-                        contributions={pluginUiActions["transcript.before"]}
-                        onInvoke={invokePluginAction}
-                      />
-                    }
-                  />
-                ))}
+                }
+              />
+            )}
 
             {/* One wrapper in both modes so the Composer keeps its tree position across the toggle —
                 BlockNote unmounts (and takes the draft with it) if the structure around it changes.
@@ -6488,6 +6662,14 @@ export default function App() {
                   onInvoke={invokePluginAction}
                 />
               )}
+              {permission && !permission.form && !activeArchived && (
+                <PermissionCard
+                  key={`${permission.session}:${permission.requestId}`}
+                  request={permission}
+                  pendingCount={activePendingInputs.length}
+                  onAnswer={answer}
+                />
+              )}
               <div className={cn("contents", activeArchived && "hidden")}>
                 <Composer
                   config={sessionConfig}
@@ -6519,6 +6701,10 @@ export default function App() {
                       setCurrentModel(id);
                       return;
                     }
+                    if (runningSessionsRef.current.has(session)) {
+                      toast(t("toast.modelBusy"), "error");
+                      return;
+                    }
                     // Optimistic: the engine answers with a `models` event, or an `error` if the provider
                     // doesn't implement the switch.
                     if (id !== currentModelRef.current) {
@@ -6544,6 +6730,13 @@ export default function App() {
                         const option = configOptions.find(
                           (item) => item.id === configId,
                         );
+                    if (
+                      (option?.category === "model" || configId === "model") &&
+                      runningSessionsRef.current.has(session)
+                    ) {
+                      toast(t("toast.modelBusy"), "error");
+                      return;
+                    }
                     if (
                       option?.category === "collaboration_mode" ||
                       configId === "collaboration_mode"
@@ -6590,6 +6783,7 @@ export default function App() {
                   onRemoveAppshot={(id) => removePendingAppshots([id])}
                   onRun={() => void run()}
                   onQueue={() => void sendDuringTurn("queued")}
+                  onMultitask={startParallelTask}
                   onSteer={() => void sendDuringTurn("steer")}
                   steeringSupported={activeInteractionCapabilities?.steering ?? false}
                   goalCapability={activeInteractionCapabilities?.goal ?? null}
@@ -6612,13 +6806,14 @@ export default function App() {
                           setShowFiles(true);
                     else toast("Files are disabled in Plugins.", "info");
                   }}
+                  onAttachImages={attachPromptImages}
                   onInsertSkill={() => openSkillPickerRef.current?.()}
                   onInsertIssue={() => {
                         if (componentEnabled("issues.modal"))
                           setShowIssues(true);
                     else toast("Issues are disabled in Plugins.", "info");
                   }}
-                  onOpenMarket={openPluginHub}
+                  onOpenMarket={openPluginManager}
                   onNewSkill={() => setSkillDraft({ name: "", text: "" })}
                   canvasEnabled={canvasUiEnabled}
                   onInsertCanvas={() => void insertCanvasRef.current?.()}
@@ -6659,13 +6854,14 @@ export default function App() {
                 >
                   <DocEditor
                     key={editorKey}
-                    skills={skills}
+                    skills={activeSkills}
                     cwd={cwd || "."}
                     sessionId={activeSession}
                     getBlocksRef={getBlocksRef}
                     insertTextRef={insertTextRef}
                     insertAnnotationRef={insertAnnotationRef}
                     insertFileRef={insertFileRef}
+                    insertSessionRef={insertSessionRef}
                     focusRef={focusEditorRef}
                     clearRef={clearEditorRef}
                     insertMarkdownRef={insertMarkdownRef}
@@ -6693,6 +6889,7 @@ export default function App() {
                     restoreCanvasDocumentRef={restoreCanvasDocumentRef}
                     freezeCanvasesRef={freezeCanvasesRef}
                     canvasDeliveryErrorRef={canvasDeliveryErrorRef}
+                    onPasteImages={attachPromptImages}
                     onEmptyChange={handleEditorEmptyChange}
                   />
                 </Composer>
@@ -6701,57 +6898,20 @@ export default function App() {
           </div>
             </main>
 
-            {/* ---------------- bottom terminal panel ---------------- */}
-            {/* Always mounted so its shell and PTY survive close/open. Height collapses to zero. */}
-            <Dock
-              placement="bottom"
-              open={terminalOpen}
-              tab={terminalOpen ? "terminal" : null}
-              availableSurfaces={
-                availableDockSurfaces.includes("terminal") ? ["terminal"] : []
-              }
-              onTab={() => manualTerminalOpen(true)}
-              onClose={() => manualTerminalOpen(false)}
-              autoTab={dockAutoHint?.surface ?? null}
-              highlightFile={dockAutoHint?.file ?? null}
-              cwd={cwd || null}
-              projectPath={
-                activeProject ? normalizePluginProjectPath(activeProject) : null
-              }
-              sessionKey={activeSession ?? "main"}
-              git={git}
-              onRefreshGit={refreshGit}
-              onOpenSourceControl={openSourceControl}
-              browserUrl={browserUrl}
-              onNavigate={setBrowserUrl}
-              onAnnotate={(n) => void annotate(n)}
-              onInsertFile={(p) => insertFileRef.current?.(p)}
-              onSendText={(text) => insertTextRef.current?.(text)}
-              onOpenFile={openFileTab}
-              openFiles={openFiles}
-              activeFile={activeFile}
-              fileReveal={fileReveal}
-              onActiveFile={(path) => {
-                setActiveFile(path);
-                setFileReveal(null);
-              }}
-              onCloseFile={closeFileTab}
-              width={dockWidth}
-              onWidth={setDockWidth}
-              height={dockHeight}
-              onHeight={setDockHeight}
-            />
           </div>
 
-            {/* ---------------- side dock ---------------- */}
+            {/* ---------------- right work dock ---------------- */}
             {/* Always mounted: closing animates the width to zero instead of unmounting, which both
                 plays the full collapse and keeps shells alive across close/open. */}
             <Dock
-              placement="right"
               open={dockTab !== null}
               tab={dockTab}
-              availableSurfaces={availableSideDockSurfaces}
+              availableSurfaces={availableDockSurfaces}
               onTab={manualDockTab}
+              onOpenSideChat={() => {
+                manualDockTab(null);
+                setSideChatOpen(true);
+              }}
               onClose={() => manualDockTab(null)}
               autoTab={dockAutoHint?.surface ?? null}
               highlightFile={dockAutoHint?.file ?? null}
@@ -6777,10 +6937,13 @@ export default function App() {
                 setFileReveal(null);
               }}
               onCloseFile={closeFileTab}
+              turns={turns}
+              usage={sessionUsage}
+              hasEarlier={transcriptNextBefore !== null}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={() => void loadEarlierTranscript()}
               width={dockWidth}
               onWidth={setDockWidth}
-              height={dockHeight}
-              onHeight={setDockHeight}
             />
         </div>
       </div>
@@ -6803,6 +6966,7 @@ export default function App() {
             current?.id === id ? null : current,
           )
         }
+        linkActions={builtinLinkActions}
       />
 
       {/* ---------------- dialogs ---------------- */}
@@ -7053,54 +7217,6 @@ export default function App() {
         />
       )}
 
-      {permission && !permission.form && (
-        <Dialog open onOpenChange={(o) => !o && void answer(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CircleAlert className="size-4 text-warning" /> Permission
-                requested
-              </DialogTitle>
-            </DialogHeader>
-            <p className="rounded-md border bg-muted/50 px-3 py-2 font-mono text-ui">
-              {permission.title}
-            </p>
-            {permission.context && permission.context.kind !== "acp" && (
-              <div className="space-y-1 text-hint text-muted-foreground">
-                <p className="font-medium capitalize text-foreground">
-                  {permission.context.kind.replaceAll("_", " ")}
-                </p>
-                {permission.context.server && (
-                  <p>Server: {permission.context.server}</p>
-                )}
-                {permission.context.tool && (
-                  <p>Tool: {permission.context.tool}</p>
-                )}
-                {permission.context.origin && (
-                  <p>Site: {permission.context.origin}</p>
-                )}
-                {permission.context.application && (
-                  <p>Application: {permission.context.application}</p>
-                )}
-                {permission.context.risk && (
-                  <p>Risk: {permission.context.risk}</p>
-                )}
-                <p>This approval is required even in Full Access.</p>
-              </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => void answer(null)}>
-                Cancel
-              </Button>
-              {permission.options.map(([id, label]) => (
-                <Button key={id} onClick={() => void answer(id)}>
-                  {label}
-                </Button>
-              ))}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }

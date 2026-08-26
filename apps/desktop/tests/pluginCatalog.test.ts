@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 
+import { listPlugins } from "../src/bridge";
 import {
   buildPluginManagerCatalog,
   normalizePluginProjectPath,
@@ -14,6 +15,7 @@ function entry(id, overrides = {}) {
     description: `${id} description`,
     metadata: {
       origin: "built_in",
+      role: "built_in",
       category: "other",
       scope_support: ["user", "project"],
       essential: false,
@@ -44,6 +46,21 @@ const emptyCatalog = {
 };
 
 describe("unified plugin catalog adapter", () => {
+  test("keeps the browser preview aligned with Docker's static command manifest", async () => {
+    const preview = (await listPlugins()).find((plugin) => plugin.id === "docker-tools-preview");
+    const manifest = await Bun.file(
+      new URL("../../../packs/docker/plugin.json", import.meta.url),
+    ).json();
+    const declared = manifest.extensions["dev.codetwo"].commands.map(({ id, title }) => ({
+      id,
+      title,
+    }));
+
+    expect(preview?.standard_version).toBe("1.1.0");
+    expect(preview?.counts).toMatchObject({ commands: 0, runtime_commands: declared.length });
+    expect(preview?.runtime_commands?.map(({ id, title }) => ({ id, title }))).toEqual(declared);
+  });
+
   test("normalizes project paths and maps the serde scope boundary", () => {
     expect(normalizePluginProjectPath("/tmp/demo///")).toBe("/tmp/demo");
     expect(normalizePluginProjectPath("/")).toBe("/");
@@ -60,6 +77,7 @@ describe("unified plugin catalog adapter", () => {
         entry("kernel", {
           metadata: {
             origin: "built_in",
+            role: "core",
             category: "foundation",
             scope_support: ["user"],
             essential: true,
@@ -69,6 +87,7 @@ describe("unified plugin catalog adapter", () => {
         entry("browser", {
           metadata: {
             origin: "host",
+            role: "built_in",
             category: "interface",
             scope_support: ["user"],
             essential: false,
@@ -80,6 +99,7 @@ describe("unified plugin catalog adapter", () => {
         entry("device-sync", {
           metadata: {
             origin: "host",
+            role: "built_in",
             category: "integration",
             scope_support: ["user"],
             essential: false,
@@ -98,13 +118,19 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      standard_version: "1.0.0",
+      standard_version: "1.1.0",
       enabled: true,
       trusted: true,
       scope: "user",
-      counts: { runtime: 1, skills: 2 },
+      counts: { runtime: 1, runtime_commands: 1, skills: 2 },
       scaffolds: [],
       extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
+      runtime_commands: [{
+        id: "review.run",
+        title: "Review workspace",
+        description: "Review this workspace.",
+        argsSchema: null,
+      }],
       diagnostics: [],
     };
     const model = buildPluginManagerCatalog({
@@ -116,6 +142,7 @@ describe("unified plugin catalog adapter", () => {
     });
 
     expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["browser", "host"]);
+    expect(model.plugins.find((plugin) => plugin.id === "kernel")).toBeUndefined();
     expect(model.plugins.map((plugin) => [plugin.id, plugin.source])).toContainEqual(["bundle:review", "bundle"]);
     expect(model.plugins.find((plugin) => plugin.id === "browser")).toMatchObject({
       commands: ["browser.navigate"],
@@ -130,16 +157,24 @@ describe("unified plugin catalog adapter", () => {
       contributions: [
         { id: "runtime", label: "Process runtime", count: 1 },
         { id: "skills", label: "Skills", count: 2 },
+        { id: "runtime_commands", label: "Runtime commands", count: 1 },
       ],
     });
-    expect(model.components.find((component) => component.id === "plugin-manager.page")?.required).toBe(true);
+    expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.commands)
+      .toEqual(["review.run"]);
+    expect(model.components.find((component) => component.id === "plugin-manager.page")).toBeUndefined();
     expect(model.components.find((component) => component.id === "device-sync.settings")).toMatchObject({
       pluginId: "device-sync",
       kind: "settingsSection",
       slot: "settings.sections",
     });
     expect(model.components.find((component) => component.id === "bundle:review:extension:lsp:rust")?.slot).toBe("plugin.json#extensions.dev.codetwo.languageServers");
-    expect(model.components.find((component) => component.id === "skill:review-skill")?.pluginId).toBe("bundle:review");
+    expect(model.components.find((component) => component.id === "skill:review-skill")).toMatchObject({
+      pluginId: "bundle:review",
+      policyPluginId: "skills",
+      manageable: true,
+      supportedScopes: ["user", "project"],
+    });
     expect(model.marketplaceItems[0]).toMatchObject({ id: "market:browser-tool", installable: true });
   });
 
@@ -190,7 +225,7 @@ describe("unified plugin catalog adapter", () => {
       scope: "local",
         counts: {},
       scaffolds: [],
-      extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "ready" }],
+      extension_components: [{ kind: "hook", name: "session", path: "hooks.json", status: "unsupported" }],
       diagnostics: [],
     };
     const model = buildPluginManagerCatalog({
@@ -203,6 +238,7 @@ describe("unified plugin catalog adapter", () => {
 
     expect(model.plugins[0]?.supportedScopes).toEqual(["user"]);
     expect(model.components[0]?.supportedScopes).toEqual(["user"]);
+    expect(model.components[0]?.state.status).toBe("unsupported");
   });
 
   test("uses managed project policy only for the bundle process runtime", () => {
@@ -235,6 +271,7 @@ describe("unified plugin catalog adapter", () => {
     };
     const metadata = {
       origin: "third_party",
+      role: "extension",
       category: "developer_tools",
       scope_support: ["user", "project"],
       essential: false,
@@ -306,5 +343,82 @@ describe("unified plugin catalog adapter", () => {
       supportedScopes: ["user"],
       state: { effectiveEnabled: true, status: "active" },
     });
+  });
+
+  test("includes local marketplace bundles and skill actions in the unified model", () => {
+    const model = buildPluginManagerCatalog({
+      catalog: emptyCatalog,
+      bundles: [],
+      skills: [
+        {
+          id: "release-review",
+          name: "Release review",
+          description: "Review a release.",
+          kind: "agent_skill",
+          source: "GitHub · c2/release-review",
+          icon: null,
+        },
+      ],
+      market: [
+        {
+          id: "release-review",
+          name: "Release review",
+          description: "Review a release.",
+          author: "C2",
+          tags: ["review"],
+          icon: null,
+          kind: "skill",
+          installed: true,
+        },
+      ],
+      localMarketplace: {
+        name: "local-tools",
+        display_name: "Local tools",
+        description: "Local plugin bundles.",
+        manifest_path: "/tmp/marketplace.json",
+        root: "/tmp",
+        diagnostics: [
+          { code: "preview", message: "Preview catalog", entry: null },
+        ],
+        plugins: [
+          {
+            name: "review-tools",
+            display_name: "Review Tools",
+            description: "Review bundle",
+            version: "1.0.0",
+            category: "development",
+            installation_policy: "allowed",
+            authentication_policy: "none",
+            default_enabled: true,
+            source: { kind: "local", path: "./review-tools" },
+            installable: true,
+            diagnostic: null,
+          },
+        ],
+      },
+      scope: { kind: "user" },
+    });
+
+    expect(
+      model.components.find(
+        (component) => component.id === "skill:release-review",
+      )?.skill,
+    ).toEqual({ id: "release-review", removable: true });
+    expect(model.marketplaceItems[0]).toMatchObject({
+      id: "marketplace:local-tools:review-tools",
+      name: "Review Tools",
+      marketplace: {
+        manifestPath: "/tmp/marketplace.json",
+        pluginName: "review-tools",
+      },
+    });
+    expect(model.marketplaceSources).toEqual([
+      {
+        id: "/tmp/marketplace.json",
+        name: "Local tools",
+        description: "Local plugin bundles.",
+        diagnostics: ["Preview catalog"],
+      },
+    ]);
   });
 });

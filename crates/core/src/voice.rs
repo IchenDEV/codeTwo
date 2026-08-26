@@ -4,10 +4,11 @@
 //! order:
 //!
 //! 1. **A transcriber you named.** `CODETWO_TRANSCRIBE_CMD` is a shell command template containing
-//!    `{file}`; an explicit choice always wins. We also auto-detect a few common whisper binaries.
+//!    `{file}`. C2 does not guess a command from `PATH`: native whisper.cpp binaries also need an
+//!    explicit model path, so finding the executable alone does not make them usable.
 //!
 //!    ```text
-//!    CODETWO_TRANSCRIBE_CMD='whisper-cli -f {file} -nt -np'
+//!    CODETWO_TRANSCRIBE_CMD='whisper-cli -m /models/ggml-base.bin -f {file} -l auto -nt -np'
 //!    ```
 //!
 //!    `{file}` is a 16 kHz mono WAV — what whisper.cpp and friends accept without conversion. The
@@ -23,26 +24,11 @@ use tokio::process::Command;
 #[cfg(target_os = "macos")]
 pub mod apple;
 
-/// Command templates we try when `CODETWO_TRANSCRIBE_CMD` isn't set. Each prints to stdout.
-const AUTODETECT: [(&str, &str); 3] = [
-    ("whisper-cli", "whisper-cli -f {file} -nt -np"),
-    ("whisper-cpp", "whisper-cpp -f {file} -nt -np"),
-    ("whisper", "whisper {file} --model base --output_format txt --output_dir /tmp --fp16 False"),
-];
-
-/// The configured (or auto-detected) transcription command template, if any.
+/// The configured transcription command template, if any.
 pub fn transcriber_command() -> Option<String> {
-    if let Ok(cmd) = std::env::var("CODETWO_TRANSCRIBE_CMD") {
-        if !cmd.trim().is_empty() {
-            return Some(cmd);
-        }
-    }
-    AUTODETECT.iter().find_map(|(bin, tmpl)| {
-        // Substitute the resolved absolute path. Being explicit keeps the command working if the
-        // shell's inherited search path changes later.
-        let path = crate::provider::which(bin)?;
-        Some(tmpl.replacen(bin, &shell_quote(path.to_string_lossy().as_ref()), 1))
-    })
+    std::env::var("CODETWO_TRANSCRIBE_CMD")
+        .ok()
+        .filter(|cmd| !cmd.trim().is_empty())
 }
 
 /// Can C2 transcribe audio locally — by any route?

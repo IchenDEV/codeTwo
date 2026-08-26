@@ -15,11 +15,12 @@ use crate::app::service::{
     StoreService,
 };
 use crate::app::{json, take_args};
-use crate::engine::Engine;
+use crate::engine::{Engine, ParallelTaskCreation};
 use crate::event::Op;
 use crate::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use crate::provider::ProviderId;
 use crate::session::TranscriptCursor;
+use crate::task::TaskId;
 use crate::worktree::WorktreeBaseline;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -38,7 +39,8 @@ struct QueuedPrompt {
 /// returns an engine without forking the plugin graph.
 pub struct EngineInputs {
     pub providers: Vec<crate::provider::Provider>,
-    pub provider_tools: std::collections::HashMap<String, crate::provider::ProviderToolset>,
+    pub provider_tools:
+        Arc<std::sync::RwLock<std::collections::HashMap<String, crate::provider::ProviderToolset>>>,
     pub skills: crate::skill::SkillLibrary,
     pub store: Arc<crate::store::Store>,
     pub memory: Option<crate::memory::MemoryCapability>,
@@ -119,7 +121,7 @@ impl Plugin for EnginePlugin {
 
         let inputs = EngineInputs {
             providers: providers.runtime_providers(),
-            provider_tools: providers.toolsets(),
+            provider_tools: providers.shared_toolsets(),
             skills: skills.library(),
             store: store.0.clone(),
             memory: ctx.get::<MemoryService>().map(|memory| memory.0.clone()),
@@ -131,10 +133,16 @@ impl Plugin for EnginePlugin {
                 inputs.skills,
                 inputs.store,
                 inputs.memory,
-                providers.shared_toolsets(),
+                inputs.provider_tools,
             ),
         };
         engine.set_private_data_dir(paths.data_dir.clone());
+        let worktree_settings =
+            crate::worktree::load_settings(&paths.data_dir).unwrap_or_else(|error| {
+                tracing::warn!("could not load worktree settings: {error}");
+                crate::worktree::WorktreeSettings::default()
+            });
+        engine.set_worktree_root(worktree_settings.root.map(std::path::PathBuf::from));
         let engine = Arc::new(engine);
 
         // Scenes are optional: without them the engine compiles prompts against the default
@@ -177,7 +185,7 @@ impl Plugin for EnginePlugin {
         }
 
         ctx.provide(Arc::new(EngineService(engine.clone())))?;
-        register_commands(&ctx, engine.clone(), store, bus)?;
+        register_commands(&ctx, engine.clone(), store, bus, paths)?;
         ctx.effect(move || engine.shutdown());
         Ok(())
     }
@@ -188,6 +196,7 @@ fn register_commands(
     engine: Arc<Engine>,
     store: Arc<StoreService>,
     bus: Arc<EventBus>,
+    paths: Arc<Paths>,
 ) -> Result<(), PluginError> {
     #[derive(Deserialize)]
     struct SubmitArgs {
@@ -356,10 +365,33 @@ fn register_commands(
         reasoning_effort: Option<String>,
     }
     let new_session = engine.clone();
+    let worktree_settings_dir = paths.data_dir.clone();
     ctx.command("engine.new_session", move |args| {
         let engine = new_session.clone();
+        let settings_dir = worktree_settings_dir.clone();
         async move {
-            let args: NewSessionArgs = take_args(args)?;
+            let mut args: NewSessionArgs = take_args(args)?;
+            let worktree_settings =
+                crate::worktree::load_settings(&settings_dir).map_err(PluginError::new)?;
+            engine.set_worktree_root(
+                worktree_settings
+                    .root
+                    .as_deref()
+                    .map(std::path::PathBuf::from),
+            );
+            if args.use_worktree && worktree_settings.fetch_upstream {
+                let source = std::path::Path::new(&args.cwd);
+                crate::worktree::fetch_upstream(source)
+                    .await
+                    .map_err(PluginError::new)?;
+                let baseline = args.worktree_base.unwrap_or(WorktreeBaseline::Current);
+                args.worktree_base_sha = Some(
+                    crate::worktree::resolve_baseline(source, baseline)
+                        .await
+                        .map_err(PluginError::new)?
+                        .sha,
+                );
+            }
             engine
                 .create_session(
                     parse_provider(&args.provider),
@@ -375,6 +407,87 @@ fn register_commands(
                 )
                 .await
                 .map_err(PluginError::new)?;
+            if args.use_worktree && worktree_settings.auto_delete {
+                let (_, errors) = engine
+                    .cleanup_old_worktrees(worktree_settings.auto_delete_limit)
+                    .await;
+                for error in errors {
+                    tracing::warn!("automatic worktree cleanup failed: {error}");
+                }
+            }
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct NewParallelTaskArgs {
+        provider: String,
+        cwd: String,
+        #[serde(default)]
+        worktree_base: Option<WorktreeBaseline>,
+        #[serde(default)]
+        worktree_base_sha: Option<String>,
+        request_id: String,
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        initial_policy: Option<ExecutionPolicy>,
+        #[serde(default)]
+        reasoning_effort: Option<String>,
+        task_id: String,
+        goal: String,
+    }
+    let new_parallel_task = engine.clone();
+    let parallel_worktree_settings_dir = paths.data_dir.clone();
+    ctx.command("engine.new_parallel_task", move |args| {
+        let engine = new_parallel_task.clone();
+        let settings_dir = parallel_worktree_settings_dir.clone();
+        async move {
+            let mut args: NewParallelTaskArgs = take_args(args)?;
+            let worktree_settings =
+                crate::worktree::load_settings(&settings_dir).map_err(PluginError::new)?;
+            engine.set_worktree_root(
+                worktree_settings
+                    .root
+                    .as_deref()
+                    .map(std::path::PathBuf::from),
+            );
+            let baseline = args.worktree_base.unwrap_or(WorktreeBaseline::Current);
+            if worktree_settings.fetch_upstream {
+                let source = std::path::Path::new(&args.cwd);
+                crate::worktree::fetch_upstream(source)
+                    .await
+                    .map_err(PluginError::new)?;
+                args.worktree_base_sha = Some(
+                    crate::worktree::resolve_baseline(source, baseline)
+                        .await
+                        .map_err(PluginError::new)?
+                        .sha,
+                );
+            }
+            engine
+                .create_parallel_task_session(ParallelTaskCreation {
+                    provider: parse_provider(&args.provider),
+                    cwd: args.cwd,
+                    worktree_base: baseline,
+                    worktree_base_sha: args.worktree_base_sha,
+                    request_id: args.request_id,
+                    model: args.model,
+                    initial_policy: args.initial_policy,
+                    reasoning_effort: args.reasoning_effort,
+                    task_id: TaskId::new(args.task_id),
+                    goal: args.goal,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            if worktree_settings.auto_delete {
+                let (_, errors) = engine
+                    .cleanup_old_worktrees(worktree_settings.auto_delete_limit)
+                    .await;
+                for error in errors {
+                    tracing::warn!("automatic worktree cleanup failed: {error}");
+                }
+            }
             Ok(Value::Bool(true))
         }
     })?;
@@ -750,6 +863,43 @@ fn register_commands(
                     .await
                     .map_err(PluginError::new)?,
             )
+        }
+    })?;
+
+    let settings_dir = paths.data_dir.clone();
+    ctx.command("worktrees.settings", move |_| {
+        let settings_dir = settings_dir.clone();
+        async move {
+            json(
+                crate::worktree::load_settings(&settings_dir)
+                    .map_err(PluginError::new)?,
+            )
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct WorktreeSettingsArgs {
+        settings: crate::worktree::WorktreeSettings,
+    }
+    let settings_dir = paths.data_dir.clone();
+    let settings_engine = engine.clone();
+    ctx.command("worktrees.set_settings", move |args| {
+        let settings_dir = settings_dir.clone();
+        let engine = settings_engine.clone();
+        async move {
+            let args: WorktreeSettingsArgs = take_args(args)?;
+            let settings = crate::worktree::save_settings(&settings_dir, args.settings)
+                .map_err(PluginError::new)?;
+            engine.set_worktree_root(settings.root.as_deref().map(std::path::PathBuf::from));
+            if settings.auto_delete {
+                let (_, errors) = engine
+                    .cleanup_old_worktrees(settings.auto_delete_limit)
+                    .await;
+                for error in errors {
+                    tracing::warn!("automatic worktree cleanup failed: {error}");
+                }
+            }
+            json(settings)
         }
     })?;
 

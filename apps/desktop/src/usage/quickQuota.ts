@@ -1,6 +1,7 @@
 import type { ProviderQuotaReport, ProviderQuotaWindow } from "../bridge";
 
 export interface QuickQuotaSummary {
+  provider: string;
   remainingPercent: number;
   windowMinutes: number | null;
   resetsAt: number | null;
@@ -29,6 +30,7 @@ export function quickQuotaSummary(report: ProviderQuotaReport | null): QuickQuot
   );
 
   return {
+    provider: report.provider,
     remainingPercent: remainingPercent(window),
     windowMinutes: window.window_minutes,
     resetsAt: window.resets_at,

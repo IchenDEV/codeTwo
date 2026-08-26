@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  activeInteractivePreview,
   classifyToolSurface,
   followReduce,
   initialFollowState,
@@ -8,6 +9,7 @@ import {
   type FollowState,
   type ToolSurfaceHint,
 } from "../src/session/toolActivity";
+import type { Turn } from "../src/session/turns";
 import type { DockSurface } from "../src/dock/Dock";
 
 describe("classifyToolSurface", () => {
@@ -74,6 +76,144 @@ describe("classifyToolSurface", () => {
       expect(classifyToolSurface(tool)).toEqual(expected);
     });
   }
+});
+
+describe("activeInteractivePreview", () => {
+  const artifact = (id: string) => ({
+    id,
+    mime_type: "image/png",
+    bytes: 100,
+    width: 1280,
+    height: 720,
+    display_name: `${id}.png`,
+  });
+  const turn = (overrides: Partial<Turn> = {}): Turn => ({
+    id: 1,
+    accepted: true,
+    streamBoundaryKnown: true,
+    prompt: "Inspect the page",
+    text: "",
+    textDeltas: [],
+    observedTextDeltas: 0,
+    observedThoughtDeltas: 0,
+    pendingTextDeltaSkips: 0,
+    pendingThoughtDeltaSkips: 0,
+    thoughts: [],
+    tools: [],
+    content: [],
+    plan: [],
+    startedAt: 1,
+    ...overrides,
+  });
+
+  test("uses the latest screenshot from an in-flight Browser Use call", () => {
+    expect(activeInteractivePreview([
+      turn({
+        tools: [{
+          id: "browser-1",
+          title: "Open example.com",
+          kind: "browser_use",
+          status: "in_progress",
+          outputs: [
+            { type: "image", artifact: artifact("shot-1") },
+            { type: "image", artifact: artifact("shot-2") },
+          ],
+        }],
+      }),
+    ])).toEqual({
+      kind: "browser",
+      title: "Open example.com",
+      artifact: artifact("shot-2"),
+    });
+  });
+
+  test("keeps a completed Browser Use screenshot until the current agent turn ends", () => {
+    expect(activeInteractivePreview([
+      turn({
+        tools: [{
+          id: "browser-1",
+          title: "Take screenshot",
+          kind: "browser_use",
+          status: "completed",
+          outputs: [{ type: "image", artifact: artifact("settled-shot") }],
+          endedAt: 8,
+        }],
+      }),
+    ])).toEqual({
+      kind: "browser",
+      title: "Take screenshot",
+      artifact: artifact("settled-shot"),
+    });
+  });
+
+  test("labels the retained screenshot with the latest same-kind activity", () => {
+    expect(activeInteractivePreview([
+      turn({
+        tools: [
+          {
+            id: "browser-1",
+            title: "Take screenshot",
+            kind: "browser_use",
+            status: "completed",
+            outputs: [{ type: "image", artifact: artifact("last-shot") }],
+            endedAt: 8,
+          },
+          {
+            id: "browser-2",
+            title: "Open the checkout page",
+            kind: "browser_use",
+            status: "in_progress",
+            outputs: [],
+          },
+        ],
+      }),
+    ])).toEqual({
+      kind: "browser",
+      title: "Open the checkout page",
+      artifact: artifact("last-shot"),
+    });
+  });
+
+  test("recognizes Computer Use while excluding finished and unrelated image tools", () => {
+    const completedBrowser = turn({
+      endedAt: 10,
+      tools: [{
+        id: "browser-done",
+        title: "Browser Use",
+        kind: "browser_use",
+        status: "completed",
+        outputs: [{ type: "image", artifact: artifact("old-shot") }],
+        endedAt: 10,
+      }],
+    });
+    const activeImageGeneration = turn({
+      tools: [{
+        id: "imagegen",
+        title: "Image generation",
+        kind: "image_generation",
+        status: "in_progress",
+        outputs: [{ type: "image", artifact: artifact("generated") }],
+      }],
+    });
+    const activeComputer = turn({
+      id: 3,
+      tools: [{
+        id: "computer-1",
+        title: "Computer Use",
+        kind: "computer_use",
+        status: "in_progress",
+        outputs: [{ type: "image", artifact: artifact("desktop-shot") }],
+      }],
+    });
+
+    expect(activeInteractivePreview([completedBrowser, activeImageGeneration, activeComputer]))
+      .toEqual({
+        kind: "computer",
+        title: "Computer Use",
+        artifact: artifact("desktop-shot"),
+      });
+    expect(activeInteractivePreview([completedBrowser, activeImageGeneration])).toBeNull();
+  });
 });
 
 describe("followReduce", () => {

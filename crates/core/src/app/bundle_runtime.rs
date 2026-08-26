@@ -1,8 +1,8 @@
 use super::{normalize_project_path, protocol::ProtocolPlugin};
-use crate::plugin::{InstalledPlugin, PluginRuntimeSpec};
+use crate::plugin::{InstalledPlugin, PluginRuntimeCommand, PluginRuntimeSpec};
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginCategory, PluginEntry,
-    PluginError, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult, Service,
+    PluginError, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult, PluginRole, Service,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -50,6 +50,7 @@ pub(crate) fn bundle_runtime_descriptor(
     let default_enabled = installed.enabled && installed.trusted;
     let metadata = PluginMetadata {
         origin: PluginOrigin::ThirdParty,
+        role: PluginRole::Extension,
         category: PluginCategory::Integration,
         scope_support: runtime.scope_support.clone(),
         essential: false,
@@ -62,6 +63,7 @@ pub(crate) fn bundle_runtime_descriptor(
         metadata,
         trusted: installed.trusted,
         runtime,
+        runtime_commands: installed.runtime_commands.clone(),
         bundle_dir,
         data_root,
     };
@@ -90,6 +92,7 @@ struct FingerprintMaterial<'a> {
     description: &'a str,
     trusted: bool,
     runtime: &'a PluginRuntimeSpec,
+    runtime_commands: &'a Option<Vec<PluginRuntimeCommand>>,
     plugins_root: String,
 }
 
@@ -106,6 +109,7 @@ fn bundle_fingerprint(
         description: &installed.description,
         trusted: installed.trusted,
         runtime,
+        runtime_commands: &installed.runtime_commands,
         // Normalize the existing inventory root once. Canonicalizing the child data directory
         // would make the fingerprint change merely because the first run created that directory
         // (notably `/var` becoming `/private/var` on macOS).
@@ -123,6 +127,7 @@ struct BundleRuntimePlugin {
     metadata: PluginMetadata,
     trusted: bool,
     runtime: PluginRuntimeSpec,
+    runtime_commands: Option<Vec<PluginRuntimeCommand>>,
     bundle_dir: PathBuf,
     data_root: PathBuf,
 }
@@ -184,6 +189,9 @@ impl Plugin for BundleRuntimePlugin {
         let (ctx, data_dir) = self.context_and_data_dir(ctx);
         let mut protocol =
             ProtocolPlugin::from_spec(&self.name, &self.runtime, self.bundle_dir.clone(), data_dir);
+        if let Some(commands) = &self.runtime_commands {
+            protocol = protocol.with_declared_commands(commands.clone());
+        }
         if !self.description.is_empty() {
             protocol = protocol.with_description(self.description.clone());
         }
@@ -264,11 +272,32 @@ mod tests {
                 .fingerprint
         );
 
+        let mut static_commands = installed(true);
+        static_commands.standard_version = "1.1.0".into();
+        static_commands.runtime_commands = Some(vec![PluginRuntimeCommand {
+            id: "fixture.run".into(),
+            title: "Run fixture".into(),
+            description: "Run the fixture command.".into(),
+            args_schema: None,
+        }]);
+        let static_fingerprint = bundle_runtime_descriptor(&static_commands, root.path())
+            .unwrap()
+            .fingerprint;
+        assert_ne!(descriptor.fingerprint, static_fingerprint);
+        static_commands.runtime_commands.as_mut().unwrap()[0].description = "Changed".into();
+        assert_ne!(
+            static_fingerprint,
+            bundle_runtime_descriptor(&static_commands, root.path())
+                .unwrap()
+                .fingerprint
+        );
+
         let mut registry = PluginRegistry::new();
         descriptor.register_into(&mut registry);
         let factory = registry.get("bundle:fixture").unwrap();
         assert_eq!(factory.description.as_deref(), Some("A fixture process"));
         assert_eq!(factory.metadata.origin, PluginOrigin::ThirdParty);
+        assert_eq!(factory.metadata.role, PluginRole::Extension);
         assert_eq!(factory.metadata.category, PluginCategory::Integration);
         assert_eq!(
             factory.metadata.scope_support,

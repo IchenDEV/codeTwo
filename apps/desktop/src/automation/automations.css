@@ -1,0 +1,29 @@
+.automations-page {
+  container-type: inline-size;
+}
+
+.automation-list-pane {
+  width: clamp(20rem, 38cqw, 31rem);
+}
+
+.automation-back {
+  display: none;
+}
+
+@container (max-width: 44rem) {
+  .automation-list-pane {
+    width: 100%;
+  }
+
+  .automations-page[data-compact-detail="true"] .automation-list-pane {
+    display: none;
+  }
+
+  .automations-page[data-compact-detail="false"] .automation-detail-pane {
+    display: none;
+  }
+
+  .automation-back {
+    display: inline-flex;
+  }
+}

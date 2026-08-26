@@ -16,7 +16,15 @@ function run(command: string[], cwd: string): void {
 
 run(["bun", "run", "build:renderer"], desktopRoot);
 run(["bun", "run", "build:tool-broker"], desktopRoot);
-run(["cargo", "build", "--release", "-p", "codetwo-desktop-host"], repositoryRoot);
+
+import { existsSync } from "node:fs";
+const hostExecutable = process.platform === "win32" ? "codetwo-desktop-host.exe" : "codetwo-desktop-host";
+const hostBinaryPath = resolve(repositoryRoot, "target", "release", hostExecutable);
+if (existsSync(hostBinaryPath)) {
+  console.log(`Skipping cargo build: ${hostExecutable} already exists at ${hostBinaryPath}`);
+} else {
+  run(["cargo", "build", "--release", "-p", "codetwo-desktop-host"], repositoryRoot);
+}
 
 if (process.platform === "darwin") {
   const windowEffectsRoot = resolve(desktopRoot, "native", "window-effects");

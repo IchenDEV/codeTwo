@@ -20,11 +20,11 @@ const providers = [{
   models: [{ id: "gpt-test", name: "GPT Test", description: null }],
 }];
 
-function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}) {
+function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}, open = true) {
   return (
     <I18nProvider>
       <SideChatPanel
-        open
+        open={open}
         width={440}
         onWidth={() => {}}
         onClose={onClose}
@@ -42,6 +42,17 @@ function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}) {
 }
 
 describe("SideChatPanel", () => {
+  test("removes its resize separator from the tab order while hidden", () => {
+    activateDom();
+    const view = mount(panel(null, () => {}, () => {}, false));
+    const separator = view.container.querySelector('[role="separator"]');
+
+    expect(separator?.getAttribute("tabindex")).toBe("-1");
+    expect(separator?.getAttribute("aria-disabled")).toBe("true");
+
+    view.unmount();
+  });
+
   test("opens an app-lifetime chat surface and creates independent tabs", async () => {
     activateDom();
     dom.window.localStorage.setItem("codetwo.language", "en");

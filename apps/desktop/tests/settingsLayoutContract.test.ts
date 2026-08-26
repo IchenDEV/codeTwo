@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const source = readFileSync(new URL("../src/settings/SettingsPage.tsx", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../src/settings/settings-page.css", import.meta.url), "utf8");
 const petStyles = readFileSync(new URL("../src/settings/pet-settings.css", import.meta.url), "utf8");
 
@@ -27,6 +28,14 @@ describe("Settings page layout contract", () => {
     );
   });
 
+  test("matches the settings sidebar to the persisted main rail width", () => {
+    expect(appSource).toMatch(/<SettingsPage[\s\S]*?sidebarWidth=\{railWidth\}/);
+    expect(source).toMatch(
+      /data-settings-sidebar[\s\S]*?style=\{\{ width: Math\.min\(420, Math\.max\(220, sidebarWidth\)\) \}\}/,
+    );
+    expect(source).not.toContain('className="glass-rail flex w-56');
+  });
+
   test("uses a compact item rhythm inside visibly separated groups", () => {
     expect(source).toContain('className="space-y-1"');
     expect(source).toContain('className="min-h-0 flex-1 space-y-6');
@@ -49,6 +58,13 @@ describe("Settings page layout contract", () => {
     expect(source).toMatch(
       /<UsagePanel[\s\S]*?provider=\{provider\}[\s\S]*?providerNames=\{providerNames\}[\s\S]*?\/>/,
     );
+  });
+
+  test("includes Profile as a first-class personal panel", () => {
+    expect(source).toMatch(/\{ id: "profile", icon: UserRound, labelKey: "profile\.title" \}/);
+    expect(source).toContain('{tab === "profile" && <ProfileSettings providerNames={providerNames} />}');
+    expect(styles).toContain(".settings-profile-page");
+    expect(styles).toContain(".profile-activity-grid");
   });
 
   test("includes Pets as a first-class settings panel", () => {

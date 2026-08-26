@@ -1,4 +1,4 @@
-import { ArrowLeft, Clapperboard, Copy, Download, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Clapperboard, Copy, Download, Pencil, Plus } from "@/components/ui/icons";
 
 import {
   exportSceneSkillMd,

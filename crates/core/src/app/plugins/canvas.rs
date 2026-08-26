@@ -353,8 +353,11 @@ impl Plugin for DocumentPlugin {
                 let args: Args = take_args(args)?;
                 let library = skills.library();
                 let path = args.cwd.as_deref().map(Path::new);
-                let resolve = |id: &str| -> Option<String> {
-                    engine.referenced_session_context(id).ok().flatten()
+                let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                    engine
+                        .referenced_session_context_through(id, through_seq)
+                        .ok()
+                        .flatten()
                 };
                 let compiled = crate::skill::compile_with_canvas(
                     &args.doc,

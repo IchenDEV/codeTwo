@@ -171,19 +171,72 @@ const DEFAULT_TASK_DATA: readonly BoardTask[] = [
   },
 ];
 
+const ENGLISH_SEED_COPY: Record<
+  string,
+  Pick<BoardTask, "title" | "description" | "labels">
+> = {
+  "seed-define-workflow": {
+    title: "Confirm the task workflow",
+    description: "Agree on the entry criteria for To do, In progress, In review, and Done.",
+    labels: ["Product", "Workflow"],
+  },
+  "seed-local-persistence": {
+    title: "Add local task persistence",
+    description: "Save the board and explain clearly when stored data is damaged or unavailable.",
+    labels: ["Engineering", "Reliability"],
+  },
+  "seed-review-mobile-layout": {
+    title: "Review the narrow board layout",
+    description: "Verify horizontal browsing, task menus, and filters in a narrow window.",
+    labels: ["Design", "Responsive"],
+  },
+  "seed-empty-state-copy": {
+    title: "Improve empty states and guidance",
+    description: "Give first-time board users concise, actionable guidance.",
+    labels: ["Copy", "Experience"],
+  },
+  "seed-session-link": {
+    title: "Design the session link entry point",
+    description: "Let a task open its coding sessions while the board remains the source of task state.",
+    labels: ["Product", "Sessions"],
+  },
+  "seed-accessibility-notes": {
+    title: "Document keyboard and accessibility behavior",
+    description: "Cover focus order, button names, and a non-drag path for moving tasks.",
+    labels: ["Accessibility", "Docs"],
+  },
+  "seed-filter-search": {
+    title: "Implement task filters and search",
+    description: "Narrow tasks by query, priority, and label without changing their order.",
+    labels: ["Engineering", "Search"],
+  },
+  "seed-review-drag-order": {
+    title: "Verify drag ordering across columns",
+    description: "Check same-column reordering, cross-column moves, and filtered task order.",
+    labels: ["Testing", "Interaction"],
+  },
+  "seed-priority-guidelines": {
+    title: "Define task priority guidelines",
+    description: "Clarify when to use no, low, medium, high, and urgent priority.",
+    labels: ["Product", "Guidelines"],
+  },
+};
+
 function cloneTask(task: BoardTask): BoardTask {
   return { ...task, labels: [...task.labels], sessionIds: [...task.sessionIds] };
 }
 
-/** Returns a fresh deterministic starter board so consumers cannot mutate the shared template. */
-export function seedTasks(): BoardTask[] {
-  return DEFAULT_TASK_DATA.map(cloneTask);
+/** Returns a fresh localized starter board so consumers cannot mutate the shared template. */
+export function seedTasks(locale: "en" | "zh-CN" = "zh-CN"): BoardTask[] {
+  return DEFAULT_TASK_DATA.map((task) =>
+    cloneTask(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
+  );
 }
 
 export const DEFAULT_TASKS: BoardTask[] = seedTasks();
 
-export function createInitialTaskBoardState(): TaskBoardState {
-  return { tasks: seedTasks(), warning: null };
+export function createInitialTaskBoardState(locale: "en" | "zh-CN" = "zh-CN"): TaskBoardState {
+  return { tasks: seedTasks(locale), warning: null };
 }
 
 function normalizeLabels(labels: readonly string[] | undefined): string[] {
@@ -447,12 +500,15 @@ function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSIO
   };
 }
 
-function corruptBoardState(): TaskBoardState {
-  return { tasks: seedTasks(), warning: CORRUPT_BOARD_WARNING };
+function corruptBoardState(locale: "en" | "zh-CN" = "zh-CN"): TaskBoardState {
+  return { tasks: seedTasks(locale), warning: CORRUPT_BOARD_WARNING };
 }
 
 /** Parses and validates the complete snapshot boundary; no unchecked persisted value reaches the UI. */
-export function parseBoardSnapshot(raw: string): TaskBoardState {
+export function parseBoardSnapshot(
+  raw: string,
+  locale: "en" | "zh-CN" = "zh-CN",
+): TaskBoardState {
   try {
     const value: unknown = JSON.parse(raw);
     if (
@@ -460,7 +516,7 @@ export function parseBoardSnapshot(raw: string): TaskBoardState {
       || (value.version !== 1 && value.version !== TASKBOARD_SNAPSHOT_VERSION)
       || !Array.isArray(value.tasks)
     ) {
-      return corruptBoardState();
+      return corruptBoardState(locale);
     }
     const version = value.version;
     const tasks: BoardTask[] = [];
@@ -468,7 +524,7 @@ export function parseBoardSnapshot(raw: string): TaskBoardState {
     const claimedSessions = new Set<string>();
     for (const valueTask of value.tasks) {
       const task = parseTask(valueTask, version);
-      if (!task || ids.has(task.id)) return corruptBoardState();
+      if (!task || ids.has(task.id)) return corruptBoardState(locale);
       ids.add(task.id);
       task.sessionIds = task.sessionIds.filter((sessionId) => {
         if (claimedSessions.has(sessionId)) return false;
@@ -479,7 +535,7 @@ export function parseBoardSnapshot(raw: string): TaskBoardState {
     }
     return { tasks, warning: null };
   } catch {
-    return corruptBoardState();
+    return corruptBoardState(locale);
   }
 }
 
@@ -491,14 +547,17 @@ function defaultStorage(): StorageLike | null {
   }
 }
 
-export function loadBoardSnapshot(storage?: StorageLike | null): TaskBoardState {
+export function loadBoardSnapshot(
+  storage?: StorageLike | null,
+  locale: "en" | "zh-CN" = "zh-CN",
+): TaskBoardState {
   const resolvedStorage = storage === undefined ? defaultStorage() : storage;
-  if (!resolvedStorage) return createInitialTaskBoardState();
+  if (!resolvedStorage) return createInitialTaskBoardState(locale);
   try {
     const raw = resolvedStorage.getItem(TASKBOARD_STORAGE_KEY);
-    return raw === null ? createInitialTaskBoardState() : parseBoardSnapshot(raw);
+    return raw === null ? createInitialTaskBoardState(locale) : parseBoardSnapshot(raw, locale);
   } catch {
-    return { tasks: seedTasks(), warning: LOAD_BOARD_WARNING };
+    return { tasks: seedTasks(locale), warning: LOAD_BOARD_WARNING };
   }
 }
 

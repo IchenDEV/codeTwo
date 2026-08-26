@@ -1,7 +1,7 @@
 use codetwo_kernel::{
     async_trait, App, Context, Injection, KernelError, Loader, LoaderConfig, Plugin,
     PluginCategory, PluginEntry, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult,
-    PluginScopeSupport,
+    PluginRole, PluginScopeSupport,
 };
 use serde_json::{json, Value};
 
@@ -33,6 +33,7 @@ impl Plugin for ManagedPlugin {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
             origin: PluginOrigin::Host,
+            role: PluginRole::BuiltIn,
             category: PluginCategory::Foundation,
             scope_support: vec![PluginScopeSupport::User, PluginScopeSupport::Project],
             essential: true,
@@ -64,6 +65,7 @@ async fn legacy_plugins_get_backward_compatible_catalog_defaults() {
     let factory = registry.get("legacy").expect("registered factory");
     assert_eq!(factory.metadata, PluginMetadata::default());
     assert_eq!(factory.metadata.origin, PluginOrigin::BuiltIn);
+    assert_eq!(factory.metadata.role, PluginRole::BuiltIn);
     assert_eq!(factory.metadata.category, PluginCategory::Other);
     assert_eq!(factory.metadata.scope_support, [PluginScopeSupport::User]);
     assert!(!factory.metadata.essential);
@@ -92,6 +94,7 @@ fn registry_metadata_can_be_classified_centrally() {
     registry.register(|| LegacyPlugin);
     let metadata = PluginMetadata {
         origin: PluginOrigin::Host,
+        role: PluginRole::Core,
         category: PluginCategory::Interface,
         scope_support: vec![PluginScopeSupport::User],
         essential: true,

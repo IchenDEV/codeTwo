@@ -1,4 +1,4 @@
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "@/components/ui/icons";
 import { useEffect, useState } from "react";
 
 import type { SceneSlotDef } from "./scene";

@@ -442,7 +442,12 @@ fn bool_from_i64(value: i64) -> bool {
 fn snapshot_on(conn: &Connection, device_id: &str) -> Result<DeviceSyncDocument, StoreError> {
     let projects = {
         let mut statement = conn.prepare(
-            "SELECT path,name,last_opened_at,added_at,default_worktree_mode,updated_at FROM projects",
+            "SELECT p.path,p.name,p.last_opened_at,p.added_at,p.default_worktree_mode,p.updated_at
+             FROM projects p
+             WHERE NOT EXISTS (
+               SELECT 1 FROM sessions s
+               WHERE s.worktree_path=p.path AND s.worktree_discarded=0
+             )",
         )?;
         let rows = statement.query_map([], |row| {
             Ok(DeviceSyncProject {

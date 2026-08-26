@@ -1,4 +1,6 @@
 import type { DockSurface, DockTab } from "../dock/Dock";
+import type { ArtifactRef } from "../bridge";
+import type { ToolEntry, Turn } from "./turns";
 
 /**
  * R10 dock follow (docs/design/scenes-impl-frontend.md, Item 6): map a tool call to the dock
@@ -38,6 +40,59 @@ function normalizeIdentifier(value: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+export interface InteractiveToolPreview {
+  kind: "browser" | "computer";
+  title: string;
+  artifact: ArtifactRef;
+}
+
+function interactiveToolKind(tool: ToolEntry): InteractiveToolPreview["kind"] | null {
+  const kind = normalizeIdentifier(tool.kind);
+  const title = normalizeIdentifier(tool.title);
+  if (kind === "computer_use" || title === "computer_use") return "computer";
+  if (
+    kind === "browser_use" ||
+    kind === "codetwo_browser" ||
+    kind === "chrome_browser" ||
+    title === "browser_use"
+  ) {
+    return "browser";
+  }
+  return null;
+}
+
+/** The latest real screen image from Browser/Computer activity in the current agent turn. */
+export function activeInteractivePreview(turns: readonly Turn[]): InteractiveToolPreview | null {
+  for (let turnIndex = turns.length - 1; turnIndex >= 0; turnIndex -= 1) {
+    const turn = turns[turnIndex];
+    if (!turn || turn.endedAt !== undefined) continue;
+
+    let activeTool: Pick<InteractiveToolPreview, "kind" | "title"> | null = null;
+    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+      const tool = turn.tools[toolIndex];
+      const kind = tool && interactiveToolKind(tool);
+      if (tool && kind) {
+        activeTool = { kind, title: tool.title };
+        break;
+      }
+    }
+    if (!activeTool) continue;
+
+    for (let toolIndex = turn.tools.length - 1; toolIndex >= 0; toolIndex -= 1) {
+      const tool = turn.tools[toolIndex];
+      if (!tool || interactiveToolKind(tool) !== activeTool.kind) continue;
+      const outputs = tool.outputs ?? [];
+      for (let outputIndex = outputs.length - 1; outputIndex >= 0; outputIndex -= 1) {
+        const output = outputs[outputIndex];
+        if (output?.type === "image") {
+          return { ...activeTool, artifact: output.artifact };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function parsedRecord(value: unknown): JsonRecord | null {

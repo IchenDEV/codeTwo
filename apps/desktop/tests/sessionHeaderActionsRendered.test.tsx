@@ -6,7 +6,11 @@ import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHar
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SessionHeaderActions } = await import("../src/session/SessionHeaderActions");
-const { TooltipProvider } = await import("../src/components/ui/tooltip");
+const {
+  TOOLTIP_FIRST_OPEN_DELAY,
+  TOOLTIP_INSTANT_PHASE_TIMEOUT,
+  TooltipProvider,
+} = await import("../src/components/ui/tooltip");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -32,7 +36,6 @@ function renderActions(overrides = {}) {
     onCheckpoint: callback("checkpoint"),
     onPush: callback("push"),
     onToggleTerminal: callback("terminal"),
-    onToggleSideChat: callback("side-chat"),
     onTogglePanel: callback("panel"),
     ...overrides,
   };
@@ -60,6 +63,11 @@ async function press(element: Element) {
 }
 
 describe("SessionHeaderActions", () => {
+  test("uses a deliberate first tooltip delay with an adjacent instant phase", () => {
+    expect(TOOLTIP_FIRST_OPEN_DELAY).toBe(600);
+    expect(TOOLTIP_INSTANT_PHASE_TIMEOUT).toBe(400);
+  });
+
   test("wires the primary actions and exposes the split menus", async () => {
     activateDom();
     const { calls, view } = renderActions();
@@ -67,10 +75,10 @@ describe("SessionHeaderActions", () => {
     await press(button(view.container, "Add action"));
     await press(button(view.container, "Open"));
     await press(button(view.container, "Commit"));
-    await press(button(view.container, "Toggle side chat"));
     await press(button(view.container, "Toggle terminal"));
     await press(button(view.container, "Toggle side panel"));
-    expect(calls).toEqual(["add", "open", "commit", "side-chat", "terminal", "panel"]);
+    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel"]);
+    expect(view.container.querySelector('[aria-label="Toggle side chat"]')).toBeNull();
 
     await press(button(view.container, "Open · More"));
     expect(dom.document.body.textContent).toContain("Cursor");
@@ -82,7 +90,7 @@ describe("SessionHeaderActions", () => {
       .find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
-    expect(calls).toEqual(["add", "open", "commit", "side-chat", "terminal", "panel", "finder"]);
+    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel", "finder"]);
 
     view.unmount();
   });
@@ -127,7 +135,9 @@ describe("SessionHeaderActions", () => {
       actions: [{
         id: "test",
         name: "Test",
+        kind: "command",
         command: "bun test",
+        prompt: "",
         keybinding: "Mod+Shift+T",
         preview_url: "",
         run_on_worktree_create: false,

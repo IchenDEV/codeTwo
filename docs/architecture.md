@@ -15,24 +15,30 @@ business runtime.
   automation, device-sync, event, language-server, and remote adapters. Bun owns windows, dialogs,
   updates, and the narrow JSON-lines process transport.
 
-## Shape: a plugin graph, not a program with hooks
+## Shape: an internal runtime-module graph
 
-Everything below is a **plugin**. `crates/kernel` is a Rust port of
+Everything below is a kernel **runtime module**. `crates/kernel` is a Rust port of
 [cordis](https://github.com/cordiverse/cordis): contexts, services published by name, declared
 injections, and scopes that undo everything a plugin did when it unloads. `crates/core/src/app`
 defines C2's subsystems as plugins over it, and `CoreApp::boot(AppConfig)` assembles them from
 config rather than from a constructor.
 
+That shared Rust trait is an implementation mechanism, not the public plugin contract. Product
+policy distinguishes non-user-manageable **Core**, optional C2-owned **built-in features**, and
+separately installed **extensions**. See [ADR 0002](adr/0002-core-extension-boundary.md).
+
 That is why the module list below reads as a menu rather than a build order: `store` and `engine`
 have no fixed sequence, the app runs without either, and reconfiguring one reloads exactly what was
 built on it. See [`docs/plugins.md`](plugins.md) for the model, how to write one, and what is still
-hand-wired, and the [C2 Plugin Standard 1.0.0](plugin-standard.md) for the normative package,
+hand-wired, and the [C2 Plugin Standard 1.1.0](plugin-standard.md) for the normative package,
 lifecycle, scope, security, and host-capability contract.
 
-A plugin does not have to be ours, or Rust. A bundle can ship a **process** that C2 speaks
-JSON-RPC to over stdio; the commands it declares land in the same registry a built-in's do and are
-callable from every frontend. Installing such a bundle still executes nothing — the process starts
-only once the user marks it trusted. Spec: [`docs/plugin-protocol.md`](plugin-protocol.md).
+An extension does not have to be Rust. A bundle can ship a **process** that C2 speaks JSON-RPC to
+over stdio; its Manifest commands use the same registry and teardown machinery. It receives only
+the explicitly exported Extension API, not the complete Core command catalog. Installing such a
+bundle still executes nothing. Enablement and trust make its adapter ready; the first declared
+command invocation starts the process. Spec:
+[`docs/plugin-protocol.md`](plugin-protocol.md).
 
 ## Layers
 

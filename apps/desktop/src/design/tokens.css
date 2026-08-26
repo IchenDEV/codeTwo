@@ -103,6 +103,20 @@
   --ds-foundation-dark-overlay: oklch(0.08 0.004 265 / 72%);
   --ds-foundation-dark-shadow: rgb(0 0 0 / 34%);
 
+  /* Foundation: chart palette for data visualization (6 distinguishable hues). */
+  --ds-foundation-light-chart-1: oklch(0.55 0.24 292);
+  --ds-foundation-light-chart-2: oklch(0.65 0.15 163);
+  --ds-foundation-light-chart-3: oklch(0.75 0.17 75);
+  --ds-foundation-light-chart-4: oklch(0.48 0.27 285);
+  --ds-foundation-light-chart-5: oklch(0.59 0.19 260);
+  --ds-foundation-light-chart-6: oklch(0.59 0.23 25);
+  --ds-foundation-dark-chart-1: oklch(0.72 0.18 292);
+  --ds-foundation-dark-chart-2: oklch(0.78 0.14 163);
+  --ds-foundation-dark-chart-3: oklch(0.82 0.14 75);
+  --ds-foundation-dark-chart-4: oklch(0.68 0.2 285);
+  --ds-foundation-dark-chart-5: oklch(0.74 0.15 260);
+  --ds-foundation-dark-chart-6: oklch(0.74 0.17 25);
+
   /* Appearance theme library. Product code references these names; raw palette values stay here. */
   --ds-theme-code2-light-accent: #3b73f0;
   --ds-theme-code2-light-background: #ffffff;
@@ -221,6 +235,13 @@
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
+  --ds-color-shadow: var(--ds-foundation-light-shadow);
+  --ds-color-chart-1: var(--ds-foundation-light-chart-1);
+  --ds-color-chart-2: var(--ds-foundation-light-chart-2);
+  --ds-color-chart-3: var(--ds-foundation-light-chart-3);
+  --ds-color-chart-4: var(--ds-foundation-light-chart-4);
+  --ds-color-chart-5: var(--ds-foundation-light-chart-5);
+  --ds-color-chart-6: var(--ds-foundation-light-chart-6);
 
   --ds-focus-width: var(--ds-foundation-space-2);
   --ds-focus-offset: var(--ds-foundation-space-2);
@@ -245,38 +266,6 @@
   --ds-menu-padding: var(--ds-space-control-group);
   --ds-menu-elevation: var(--ds-elevation-raised);
 
-  /* Reasoning selector — reference presentation plus a nested desktop-density variant. */
-  --ds-reasoning-selector-width: 450px;
-  --ds-reasoning-selector-compact-width: 320px;
-  --ds-reasoning-selector-panel-height: 170px;
-  --ds-reasoning-selector-compact-panel-height: 104px;
-  --ds-reasoning-selector-panel-radius: 24px;
-  --ds-reasoning-selector-panel-inset: 25px;
-  --ds-reasoning-selector-header-height: 32px;
-  --ds-reasoning-selector-track-gap: 32px;
-  --ds-reasoning-selector-track-height: 48px;
-  --ds-reasoning-selector-track-radius: 24px;
-  --ds-reasoning-selector-step-inset: 26px;
-  --ds-reasoning-selector-dot-size: 8px;
-  --ds-reasoning-selector-thumb-size: 64px;
-  --ds-reasoning-selector-range-overflow: 6px;
-  --ds-reasoning-selector-trigger-height: 56px;
-  --ds-reasoning-selector-trigger-radius: 28px;
-  --ds-reasoning-selector-trigger-gap: 8px;
-  --ds-reasoning-selector-layer-gap: 17px;
-  --ds-reasoning-selector-icon-size: 28px;
-  --ds-reasoning-selector-panel: #2c2c2c;
-  --ds-reasoning-selector-panel-edge: #414141;
-  --ds-reasoning-selector-track: #3f3f3f;
-  --ds-reasoning-selector-trigger: #3b3b3b;
-  --ds-reasoning-selector-accent: #339cff;
-  --ds-reasoning-selector-active-dot: #78baff;
-  --ds-reasoning-selector-rest-dot: #6f6f6f;
-  --ds-reasoning-selector-thumb: #ffffff;
-  --ds-reasoning-selector-text: #dedede;
-  --ds-reasoning-selector-text-muted: #9b9b9b;
-  --ds-reasoning-selector-panel-shadow: 0 0 0 1px var(--ds-reasoning-selector-panel-edge);
-  --ds-reasoning-selector-focus-shadow: 0 0 0 3px color-mix(in srgb, var(--ds-reasoning-selector-accent) 55%, transparent);
 }
 
 /* Explicit preview light mode must override an OS-driven `.dark` class on the document root. */
@@ -300,6 +289,13 @@
   --ds-color-destructive-hover: var(--ds-foundation-light-destructive-hover);
   --ds-color-focus: var(--ds-foundation-light-focus);
   --ds-color-overlay: var(--ds-foundation-light-overlay);
+  --ds-color-shadow: var(--ds-foundation-light-shadow);
+  --ds-color-chart-1: var(--ds-foundation-light-chart-1);
+  --ds-color-chart-2: var(--ds-foundation-light-chart-2);
+  --ds-color-chart-3: var(--ds-foundation-light-chart-3);
+  --ds-color-chart-4: var(--ds-foundation-light-chart-4);
+  --ds-color-chart-5: var(--ds-foundation-light-chart-5);
+  --ds-color-chart-6: var(--ds-foundation-light-chart-6);
   --ds-elevation-surface: 0 1px 2px var(--ds-foundation-light-shadow),
     0 4px 12px rgb(16 24 40 / 5%);
   --ds-elevation-raised: 0 2px 6px var(--ds-foundation-light-shadow),
@@ -329,6 +325,13 @@
   --ds-color-destructive-hover: var(--ds-foundation-dark-destructive-hover);
   --ds-color-focus: var(--ds-foundation-dark-focus);
   --ds-color-overlay: var(--ds-foundation-dark-overlay);
+  --ds-color-shadow: var(--ds-foundation-dark-shadow);
+  --ds-color-chart-1: var(--ds-foundation-dark-chart-1);
+  --ds-color-chart-2: var(--ds-foundation-dark-chart-2);
+  --ds-color-chart-3: var(--ds-foundation-dark-chart-3);
+  --ds-color-chart-4: var(--ds-foundation-dark-chart-4);
+  --ds-color-chart-5: var(--ds-foundation-dark-chart-5);
+  --ds-color-chart-6: var(--ds-foundation-dark-chart-6);
   --ds-elevation-surface: 0 1px 2px var(--ds-foundation-dark-shadow),
     0 6px 16px rgb(0 0 0 / 20%);
   --ds-elevation-raised: 0 3px 8px var(--ds-foundation-dark-shadow),

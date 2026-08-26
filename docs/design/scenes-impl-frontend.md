@@ -60,19 +60,15 @@ content)`, `listSceneArtifacts(session)`, `sceneArtifactContent(recordId)`, `pin
 
 | Component | Props | Notes |
 |---|---|---|
-| `SceneChip` | `{ config: SessionConfig; models, currentModel, defaultModel, onModel, configOptions, onConfigOption, contextWindow }` (the props the inner pickers already take) | The one chip replacing Composer.tsx:817-847. Label: scene icon + title (`@lg/composer:inline` hiding), amber-dot **customized** badge, partial-apply dot when `scenePendingFields.length > 0`. |
-| `SceneChipPopover` | rendered inside `PopoverContent` | Top to bottom: (1) header — scene title, `SourceBadge`, `CustomizedBadge`; (2) scene list (MenuRow per resolved scene, "None" row); (3) divider; (4) **controls row**: existing `ProviderPicker`, `ModelPicker`, `ModePicker`, `MemoryPicker`, Plan-First `Chip`, `WorktreePicker` rendered **unchanged** in a flex-wrap row; (5) footer: partial-apply notice + "Restart in this scene" when pending fields exist. |
+| `SceneChip` | `{ config: SessionConfig }` | Scene selection only. Label: scene icon + title, amber-dot **customized** badge, partial-apply dot when `scenePendingFields.length > 0`. |
+| `SceneChipPopover` | rendered inside `PopoverContent` | Top to bottom: (1) header — scene title, `SourceBadge`, `CustomizedBadge`; (2) scene list (MenuRow per resolved scene, "None" row); (3) footer: partial-apply notice + "Restart in this scene" when pending fields exist. |
+| `SessionControls` | `{ config; models, currentModel, defaultModel, onModel, configOptions, onConfigOption }` | Always-visible wrapping composer row containing Scene, Provider, Model/Effort, Permission, Memory, and Worktree. |
 | `SourceBadge` | `{ source: SceneSource }` | Pill styled like `DefaultBadge` (Composer.tsx:128). |
 | `ScenePicker` (full) | `{ scenes, activeScene, onScene, onClose }` | Palette-style dialog: all resolved scenes, description + SourceBadge; reached from "All scenes…" row + palette command. |
 
-Two rendering facts:
-1. **Container queries inside the portal.** Inner pickers hide labels via `@lg/composer:inline`;
-   Radix portals `PopoverContent` to `body`, outside `@container/composer`. Wrap the popover body
-   in `<div className="@container/composer w-[22rem]">` so the classes resolve — pickers stay
-   byte-for-byte unchanged.
-2. **Nested popovers.** Each inner picker opens its own portaled popover; clicking it counts as
-   "outside" for the shell. On the outer `PopoverContent`:
-   `onInteractOutside={(e)=>{ if ((e.target as HTMLElement).closest("[data-radix-popper-content-wrapper]")) e.preventDefault(); }}`.
+The session row wraps independently from the action row, so narrow composer widths never hide the
+run, stop, voice, or document controls. Keeping configuration outside the scene popover also avoids
+nested-popover focus and dismissal behavior.
 
 ### SessionConfig extension (`apps/desktop/src/session/config.ts`)
 

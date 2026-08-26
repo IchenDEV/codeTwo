@@ -20,7 +20,7 @@ pub const PROTOCOL_VERSION: &str = "1.0.0";
 pub struct HostInfo {
     pub name: String,
     pub version: String,
-    /// Every command the host offers right now. A plugin can call any of them back.
+    /// Effective extension-public commands in this extension instance's command realm.
     #[serde(default)]
     pub commands: Vec<String>,
 }
@@ -73,8 +73,8 @@ pub struct CommandSpec {
     pub schema: Option<Value>,
 }
 
-/// `command/invoke` — either direction. The host calls a plugin's command; the plugin calls a
-/// host command with the same message.
+/// `command/invoke` — host → extension. `command/call` uses the same shape in the other direction,
+/// but only for commands explicitly registered as extension-public.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InvokeParams {

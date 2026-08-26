@@ -1341,6 +1341,9 @@ fn summarize(doc: &[DocBlock]) -> String {
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
             DocBlock::Appshot { id, .. } => format!("[appshot:{id}]"),
+            DocBlock::Attachment { id, name } => {
+                format!("[image:{}]", name.clone().unwrap_or_else(|| short(id)))
+            }
             DocBlock::Canvas {
                 id,
                 frozen_revision,
@@ -1354,7 +1357,7 @@ fn summarize(doc: &[DocBlock]) -> String {
                     codetwo_core::CanvasPixelPolicy::StructureOnly => "structure",
                 }
             ),
-            DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
+            DocBlock::Session { session_id, .. } => format!("[chat:{}]", short(session_id)),
             DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
             DocBlock::Issue { source, id, .. } => format!("[issue:{source}#{id}]"),
         })

@@ -36,7 +36,9 @@ impl Plugin for GitPlugin {
     }
 
     async fn apply(&self, ctx: Context, _config: Value) -> PluginResult {
-        ctx.command("git.status", |args| async move {
+        // Read-only and already callable by the shipped hello-runtime example. Keep this narrow:
+        // mutating Git commands remain internal until they have a separate extension contract.
+        ctx.command_extension_public("git.status", |args| async move {
             let args: CwdArgs = take_args(args)?;
             json(git::status(Path::new(&args.cwd)).await)
         })?;

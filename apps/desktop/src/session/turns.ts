@@ -99,6 +99,21 @@ export type TurnContentEntry =
   | { kind: "text"; text: string; transcriptSeq?: number; createdAt?: number }
   | { kind: "tool"; toolId: string; transcriptSeq?: number; createdAt?: number };
 
+export interface PromptImage {
+  id: string;
+  name?: string;
+  previewDataUrl?: string;
+  width?: number;
+  height?: number;
+}
+
+const PROMPT_ATTACHMENT_MARKER =
+  /\[attachment:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi;
+
+function promptImagesFromCanonicalText(text: string): PromptImage[] {
+  return Array.from(text.matchAll(PROMPT_ATTACHMENT_MARKER), (match) => ({ id: match[1] }));
+}
+
 /**
  * One prompt → response cycle. The engine streams fragments; grouping them into turns is what makes
  * the transcript readable (previously every text chunk became its own row).
@@ -117,6 +132,8 @@ export interface Turn {
   /** True when live deltas were observed from this turn's explicit TurnStarted boundary. */
   streamBoundaryKnown: boolean;
   prompt: string;
+  /** Private prompt images rendered beside the user-authored text, never as marker strings. */
+  promptImages?: PromptImage[];
   text: string;
   /** Exact ACP text chunks; merge by boundary/count, never by substring equality. */
   textDeltas: string[];
@@ -139,13 +156,18 @@ export interface Turn {
 
 let nextId = 1;
 
-export function newTurn(prompt: string, requestId?: string): Turn {
+export function newTurn(
+  prompt: string,
+  requestId?: string,
+  promptImages: PromptImage[] = [],
+): Turn {
   return {
     id: nextId++,
     requestId,
     accepted: false,
     streamBoundaryKnown: false,
     prompt,
+    promptImages,
     text: "",
     textDeltas: [],
     observedTextDeltas: 0,
@@ -202,7 +224,11 @@ export function sameDocBlocks(a: readonly DocBlock[], b: readonly DocBlock[]): b
       case "image":
         return right.type === left.type && left.path === right.path;
       case "session":
-        return right.type === "session" && left.session_id === right.session_id;
+        return (
+          right.type === "session" &&
+          left.session_id === right.session_id &&
+          left.through_seq === right.through_seq
+        );
       case "canvas":
         return (
           right.type === "canvas" &&
@@ -735,7 +761,11 @@ export function turnsFromTranscript(
     const at = createdAt && createdAt > 0 ? createdAt : Date.now();
     if (role === "user" && (part.kind === "text" || part.kind === "prompt")) {
       out.push({
-        ...newTurn(part.text),
+        ...newTurn(
+          part.text,
+          undefined,
+          part.kind === "prompt" ? promptImagesFromCanonicalText(part.text) : [],
+        ),
         transcriptStartSeq: seq,
         accepted: true,
         memory: seq === undefined ? undefined : receiptBySeq.get(seq),

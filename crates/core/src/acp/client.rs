@@ -64,15 +64,18 @@ impl AcpClient {
         cwd: impl Into<String>,
         mcp_servers: Vec<Value>,
     ) -> Result<NewSessionResponse, AcpError> {
-        self.conn
-            .request(
-                "session/new",
-                NewSessionRequest {
-                    cwd: cwd.into(),
-                    mcp_servers,
-                },
-            )
-            .await
+        let request = NewSessionRequest {
+            cwd: cwd.into(),
+            mcp_servers,
+        };
+        let first = self.conn.request("session/new", request.clone()).await;
+        match first {
+            Err(AcpError::Rpc(error)) if error.code == -32603 => {
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                self.conn.request("session/new", request).await
+            }
+            result => result,
+        }
     }
 
     /// Re-attach a previous session by id (`session/load`), restoring the agent's conversation

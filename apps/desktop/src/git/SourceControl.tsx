@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GitBranch, Minus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { GitBranch, Minus, Plus, RefreshCw, Sparkles } from "@/components/ui/icons";
 import {
   gitCreatePr,
   gitDiff,
@@ -16,6 +16,7 @@ import {
   type GitStatus,
 } from "../bridge";
 import { Button } from "@/components/ui/button";
+import { SplitButton } from "@/components/ui/split-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -333,20 +334,6 @@ export function SourceControlModal({
     }
   };
 
-  const push = async () => {
-    if (repositoryBusy) return;
-    setActionError(null);
-    setActionStatus(null);
-    setPhase("pushing");
-    try {
-      await onPush();
-      setActionStatus("Pushed.");
-    } catch (error) {
-      setActionError(`Push failed: ${error}`);
-    } finally {
-      setPhase("idle");
-    }
-  };
 
   const createPr = async () => {
     if (!changeRequest.canCreate || repositoryBusy) return;
@@ -360,6 +347,73 @@ export function SourceControlModal({
       if (cwdRef.current !== targetCwd) return;
       setPrUrl(url);
       setActionStatus(changeRequest.createdLabel);
+      onRefresh();
+    } catch (error) {
+      if (cwdRef.current === targetCwd) {
+        setActionError(`${changeRequest.createLabel} failed: ${error}`);
+      }
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  const commitAndPush = async () => {
+    if (repositoryBusy) return;
+    const trimmed = message.trim();
+    if (!trimmed) { setMessageError("Enter a commit message."); return; }
+    if (sections.staged.length === 0) { setMessageError("Stage at least one file before committing."); return; }
+    setMessageError(null);
+    suggestionRequestRef.current += 1;
+    setSuggesting(false);
+    setActionError(null);
+    setActionStatus(null);
+    setPhase("committing");
+    try {
+      await onCommit(trimmed);
+      setMessage("");
+    } catch (error) {
+      setActionError(`Commit failed: ${error}`);
+      setPhase("idle");
+      return;
+    }
+    setPhase("pushing");
+    try {
+      await onPush();
+      setActionStatus("Committed & pushed.");
+    } catch (error) {
+      setActionError(`Push failed: ${error}`);
+    } finally {
+      setPhase("idle");
+    }
+  };
+
+  const commitAndCreatePr = async () => {
+    if (repositoryBusy || !changeRequest.canCreate) return;
+    const trimmed = message.trim();
+    if (!trimmed) { setMessageError("Enter a commit message."); return; }
+    if (sections.staged.length === 0) { setMessageError("Stage at least one file before committing."); return; }
+    const targetCwd = cwd;
+    setMessageError(null);
+    suggestionRequestRef.current += 1;
+    setSuggesting(false);
+    setActionError(null);
+    setActionStatus(null);
+    setPrUrl(null);
+    setPhase("committing");
+    try {
+      await onCommit(trimmed);
+      setMessage("");
+    } catch (error) {
+      setActionError(`Commit failed: ${error}`);
+      setPhase("idle");
+      return;
+    }
+    setPhase("creating_pr");
+    try {
+      const url = await gitCreatePr(targetCwd, trimmed || "Update", "");
+      if (cwdRef.current !== targetCwd) return;
+      setPrUrl(url);
+      setActionStatus(`Committed & ${changeRequest.createdLabel.toLowerCase()}.`);
       onRefresh();
     } catch (error) {
       if (cwdRef.current === targetCwd) {
@@ -717,23 +771,35 @@ export function SourceControlModal({
             >
               <Sparkles className="size-3.5" aria-hidden="true" /> {suggesting ? "Suggesting…" : "Suggest"}
             </Button>
-            <Button className="min-w-28" size="sm" disabled={repositoryBusy} onClick={() => void commit()}>
-              {phase === "committing" ? gitPhaseLabel(phase) : "Commit staged"}
-            </Button>
-            <Button className="min-w-24" variant="outline" size="sm" disabled={repositoryBusy} onClick={() => void push()}>
-              {phase === "pushing" ? gitPhaseLabel(phase) : "Push"}
-            </Button>
-            <Button
-              className="min-w-28"
-              variant="outline"
+            <SplitButton
+              label={
+                phase === "committing" ? gitPhaseLabel(phase)
+                  : phase === "pushing" ? gitPhaseLabel(phase)
+                  : phase === "creating_pr" ? changeRequest.creatingLabel
+                  : "Commit & Push"
+              }
+              onClick={() => void commitAndPush()}
+              disabled={repositoryBusy}
               size="sm"
-              disabled={repositoryBusy || !changeRequest.canCreate}
-              aria-describedby="source-control-change-request-status"
-              title={!changeRequest.canCreate ? changeRequest.status : changeRequest.createLabel}
-              onClick={() => void createPr()}
-            >
-              {phase === "creating_pr" ? changeRequest.creatingLabel : changeRequest.createLabel}
-            </Button>
+              className="min-w-36"
+              menuSide="top"
+              actions={[
+                {
+                  label: "Commit",
+                  onClick: () => void commit(),
+                },
+                {
+                  label: `Commit & ${changeRequest.createLabel}`,
+                  onClick: () => void commitAndCreatePr(),
+                  disabled: !changeRequest.canCreate,
+                },
+                {
+                  label: changeRequest.createLabel,
+                  onClick: () => void createPr(),
+                  disabled: !changeRequest.canCreate,
+                },
+              ]}
+            />
             <Button variant="ghost" size="sm" onClick={onClose}>Done</Button>
           </div>
           {messageError && (

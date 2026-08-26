@@ -36,7 +36,7 @@ use crate::permission::{
     Action, ExecutionPolicy, PermissionContext, PermissionContextKind, PermissionMode,
     PermissionPolicy, SandboxPolicy,
 };
-use crate::provider::{Provider, ProviderId, ProviderToolset};
+use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
     initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
     SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
@@ -48,6 +48,10 @@ use crate::skill::{
     McpTransport, SkillLibrary,
 };
 use crate::store::{PreparedSessionHandoff, SessionSearchHit, Store, StoreError};
+use crate::task::{
+    AgentId, ProviderConfiguration, ResultContract, Task, TaskBudget, TaskId, TaskStatus, WorkItem,
+    WorkItemId, WorkItemStatus,
+};
 use crate::worktree::WorktreeBaseline;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -339,6 +343,12 @@ fn rich_tool_kind(kind: Option<String>, source: &ToolSource, title: &str) -> Opt
         Some("chrome_browser".into())
     } else if tool.contains("computer") || tool.contains("cua") || title.contains("computer use") {
         Some("computer_use".into())
+    } else if server == "node_repl"
+        || server.contains("browser")
+        || tool.contains("browser")
+        || title.contains("browser use")
+    {
+        Some("browser_use".into())
     } else {
         kind
     }
@@ -844,6 +854,76 @@ fn with_provider_tool_instructions(prompt: String, instructions: &[String]) -> S
     }
 }
 
+fn with_initial_provider_context(
+    prompt: String,
+    tool_instructions: &[String],
+    route_desktop_browser: bool,
+    route_codex_sites: bool,
+    inject: bool,
+) -> String {
+    if !inject {
+        return prompt;
+    }
+    let prompt = with_provider_tool_instructions(prompt, tool_instructions);
+    let prompt = with_codetwo_browser_routing(prompt, route_desktop_browser);
+    with_codex_sites_routing(prompt, route_codex_sites)
+}
+
+fn codex_launch_with_static_provider_context(
+    launch: &LaunchSpec,
+    tool_instructions: &[String],
+    route_desktop_browser: bool,
+) -> Result<LaunchSpec, serde_json::Error> {
+    let static_context = with_initial_provider_context(
+        String::new(),
+        tool_instructions,
+        route_desktop_browser,
+        true,
+        true,
+    )
+    .trim()
+    .to_string();
+    let existing_config = launch
+        .env
+        .iter()
+        .rev()
+        .find(|(key, _)| key == "CODEX_CONFIG")
+        .map(|(_, value)| value.clone())
+        .or_else(|| std::env::var("CODEX_CONFIG").ok());
+    let mut config = match existing_config {
+        Some(value) => serde_json::from_str::<Map<String, Value>>(&value)?,
+        None => Map::new(),
+    };
+    let existing_instructions = config
+        .remove("developer_instructions")
+        .map(serde_json::from_value::<String>)
+        .transpose()?;
+    let developer_instructions = match existing_instructions {
+        Some(existing) if existing.contains(&static_context) => existing,
+        Some(existing) if !existing.trim().is_empty() => {
+            format!("{}\n\n{}", existing.trim(), static_context)
+        }
+        _ => static_context,
+    };
+    config.insert(
+        "developer_instructions".into(),
+        Value::String(developer_instructions),
+    );
+    let encoded = serde_json::to_string(&config)?;
+    let mut launch = launch.clone();
+    if let Some((_, value)) = launch
+        .env
+        .iter_mut()
+        .rev()
+        .find(|(key, _)| key == "CODEX_CONFIG")
+    {
+        *value = encoded;
+    } else {
+        launch.env.push(("CODEX_CONFIG".into(), encoded));
+    }
+    Ok(launch)
+}
+
 fn auto_scene_routing_instructions(
     scenes: &crate::scene::SceneLibrary,
     current: Option<&str>,
@@ -858,30 +938,14 @@ fn auto_scene_routing_instructions(
             )
         })
         .unwrap_or_else(|| "none".into());
-    let mut catalog = String::new();
-    for entry in scenes.scenes().iter().take(50) {
-        let description = entry
-            .scene
-            .description
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let description: String = description.chars().take(240).collect();
-        catalog.push_str(&format!(
-            "- `{}` — {}: {}\n",
-            crate::scene::SceneLibrary::reference_for(entry),
-            entry.scene.title,
-            description
-        ));
-    }
     format!(
-        "[C2 Auto Scene]\nAuto Scene is enabled for this session. At the start of this turn, decide which available scene best fits the user's current task. The active scene is {current}. If none is active, call `scene_select` before substantive work. If one is active, keep it only while it remains the best fit; call `scene_select` when the task changes. Use an exact reference from the catalog. The tool returns the selected scene's current-turn instructions; follow them immediately. A switch that would loosen permissions requires user approval and is not applied until the tool confirms it. Never claim a scene changed from your own text.\n\nAvailable scenes:\n{catalog}"
+        "[C2 Auto Scene]\nActive scene: {current}. If no scene is active or the task no longer fits it, call `scene_list` with a short task query, then call `scene_select` with an exact returned reference. Follow its returned instructions. Never claim a scene changed until the tool confirms it."
     )
 }
 
 fn with_auto_scene_routing(prompt: String, instructions: Option<String>) -> String {
     match instructions {
-        Some(instructions) => format!("{instructions}\n\n{prompt}"),
+        Some(instructions) => format!("{prompt}\n\n{instructions}"),
         None => prompt,
     }
 }
@@ -1655,6 +1719,12 @@ struct SessionRuntime {
     /// Host tools are fixed when C2 creates or revives the session. Settings changes therefore
     /// affect subsequent sessions without mutating an ACP session's already-attached MCP set.
     provider_toolset: ProviderToolset,
+    /// Stable host-tool and routing instructions are provider-only context. Codex receives them
+    /// through its launch config; other providers receive them on their first prompt only.
+    provider_context_injected: bool,
+    /// Memory item revisions already accepted by this live provider context. Recall remains
+    /// query-driven, but only new or corrected items are sent on later turns.
+    injected_memory_keys: HashSet<String>,
     client: Arc<AcpClient>,
     /// `None` until the first prompt creates the ACP session (so MCP servers from the document
     /// attach at `session/new`).
@@ -1688,7 +1758,7 @@ struct SessionRuntime {
     models_reported: bool,
     initial_reasoning_effort: Option<String>,
     /// Provider-only continuation context imported by a task handoff. A successful ACP
-    /// `session/load` makes it redundant; otherwise it is prepended exactly once to the first
+    /// `session/load` makes it redundant; otherwise it is appended exactly once to the first
     /// successful prompt on this device.
     handoff_context: Option<Value>,
 }
@@ -1697,6 +1767,30 @@ struct SessionRuntime {
 struct SessionCreationOptions {
     transient: bool,
     reasoning_effort: Option<String>,
+}
+
+/// Native creation request for the user-visible parallel-task action. Core generates the runtime
+/// Work Item and Agent identities so a renderer cannot pretend that local UI state is an Agent.
+#[derive(Debug, Clone)]
+pub struct ParallelTaskCreation {
+    pub provider: ProviderId,
+    pub cwd: String,
+    pub worktree_base: WorktreeBaseline,
+    pub worktree_base_sha: Option<String>,
+    pub request_id: String,
+    pub model: Option<String>,
+    pub initial_policy: Option<ExecutionPolicy>,
+    pub reasoning_effort: Option<String>,
+    pub task_id: TaskId,
+    pub goal: String,
+}
+
+#[derive(Debug, Clone)]
+struct PendingParallelTask {
+    task_id: TaskId,
+    work_item_id: WorkItemId,
+    agent_id: AgentId,
+    goal: String,
 }
 
 struct EngineState {
@@ -1715,6 +1809,7 @@ struct EngineState {
     /// this set closes the interval before and during the SQLite handoff transaction.
     handoff_fences: Mutex<HashSet<SessionId>>,
     pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
+    pending_parallel_tasks: Mutex<HashMap<String, PendingParallelTask>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
     starting_clients: Mutex<Vec<Arc<AcpClient>>>,
     shutting_down: AtomicBool,
@@ -1725,8 +1820,11 @@ struct EngineState {
     memory: Option<MemoryCapability>,
     canvas_gate: CanvasFeatureGate,
     /// App-owned private attachment root. Only the plugin graph injects this; library/TUI engines
-    /// intentionally cannot resolve desktop Appshot IDs.
+    /// intentionally cannot resolve desktop Appshot or prompt-attachment IDs.
     private_data_dir: RwLock<Option<std::path::PathBuf>>,
+    /// Optional global parent for new session worktrees. `None` preserves the project-adjacent
+    /// `.codetwo-worktrees` layout used by older versions.
+    worktree_root: RwLock<Option<std::path::PathBuf>>,
     desktop_mcp: Option<DesktopMcpConfig>,
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
@@ -1741,6 +1839,8 @@ pub struct DesktopMcpConfig {
     pub command: String,
     pub socket_path: String,
     pub master_key: String,
+    /// Electrobun currently contributes only the scene surface. Browser hosts opt in separately.
+    pub browser_enabled: bool,
 }
 
 impl DesktopMcpConfig {
@@ -1754,7 +1854,10 @@ impl DesktopMcpConfig {
             cwd: None,
             transport: McpTransport::Stdio {
                 command: self.command.clone(),
-                args: vec!["--codetwo-browser-mcp".into()],
+                args: vec![match surface {
+                    "scenes" => "--codetwo-scene-mcp".into(),
+                    _ => "--codetwo-browser-mcp".into(),
+                }],
                 env: vec![
                     ("CODETWO_BROWSER_SOCKET".into(), self.socket_path.clone()),
                     ("CODETWO_BROWSER_SESSION".into(), session.to_string()),
@@ -1894,8 +1997,8 @@ impl Engine {
         )
     }
 
-    /// Desktop construction path that attaches C2's internal browser MCP to every Codex
-    /// session. Other providers and non-desktop frontends remain unchanged.
+    /// Desktop construction path that attaches C2's internal MCP surfaces. Other frontends remain
+    /// unchanged.
     #[doc(hidden)]
     pub fn with_store_canvas_and_desktop_mcp(
         providers: Vec<Provider>,
@@ -1904,6 +2007,7 @@ impl Engine {
         memory: Option<MemoryCapability>,
         canvas_gate: CanvasFeatureGate,
         desktop_mcp: DesktopMcpConfig,
+        provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
     ) -> (Engine, mpsc::UnboundedReceiver<Event>) {
         Self::build(
             providers,
@@ -1912,7 +2016,7 @@ impl Engine {
             memory,
             canvas_gate,
             Some(desktop_mcp),
-            Arc::new(RwLock::new(HashMap::new())),
+            provider_tools,
         )
     }
 
@@ -1950,6 +2054,7 @@ impl Engine {
             sessions: Mutex::new(HashMap::new()),
             handoff_fences: Mutex::new(HashSet::new()),
             pending_creation_options: Mutex::new(HashMap::new()),
+            pending_parallel_tasks: Mutex::new(HashMap::new()),
             starting_clients: Mutex::new(Vec::new()),
             shutting_down: AtomicBool::new(false),
             activity,
@@ -1958,6 +2063,7 @@ impl Engine {
             memory,
             canvas_gate,
             private_data_dir: RwLock::new(None),
+            worktree_root: RwLock::new(None),
             desktop_mcp,
             provider_tools,
         });
@@ -2160,6 +2266,10 @@ impl Engine {
         *self.state.private_data_dir.write().unwrap() = Some(data_dir.into());
     }
 
+    pub fn set_worktree_root(&self, root: Option<std::path::PathBuf>) {
+        *self.state.worktree_root.write().unwrap() = root;
+    }
+
     /// Replace the resolved scene library (mirroring [`Engine::set_skills`]; the desktop's
     /// `reload_scenes` calls both). Prompts compiled afterwards see the new definitions.
     pub fn set_scenes(&self, library: Arc<crate::scene::SceneLibrary>) {
@@ -2229,15 +2339,21 @@ impl Engine {
         let has_canvas = doc
             .iter()
             .any(|block| matches!(block, DocBlock::Canvas { .. }));
-        let has_appshot = doc
-            .iter()
-            .any(|block| matches!(block, DocBlock::Appshot { .. }));
-        if !has_canvas && !has_appshot {
+        let has_private_image = doc.iter().any(|block| {
+            matches!(
+                block,
+                DocBlock::Appshot { .. } | DocBlock::Attachment { .. }
+            )
+        });
+        if !has_canvas && !has_private_image {
             return Ok(None);
         }
         let library = self.state.skills.lock().unwrap();
-        let resolve_session =
-            |id: &str| -> Option<String> { self.referenced_session_context(id).ok().flatten() };
+        let resolve_session = |id: &str, through_seq: Option<i64>| -> Option<String> {
+            self.referenced_session_context_through(id, through_seq)
+                .ok()
+                .flatten()
+        };
         let store = self.state.store.clone();
         let resolve_canvas = move |id: &str, revision: u64| {
             store
@@ -2246,15 +2362,15 @@ impl Engine {
                 .resolve_canvas_prompt_frozen(id, revision)
         };
         let data_dir = self.state.private_data_dir.read().unwrap().clone();
-        let compiled = match (has_canvas, has_appshot) {
+        let compiled = match (has_canvas, has_private_image) {
             (true, true) => compile_with_canvas_and_appshots(
                 doc,
                 &library,
                 Some(std::path::Path::new(cwd)),
                 Some(&resolve_session),
-                data_dir
-                    .as_deref()
-                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+                data_dir.as_deref().ok_or_else(|| {
+                    "private prompt images are unavailable in this host".to_string()
+                })?,
                 self.state.canvas_gate,
                 CanvasProviderImageCapability::Unknown,
                 &resolve_canvas,
@@ -2274,9 +2390,9 @@ impl Engine {
                 &library,
                 Some(std::path::Path::new(cwd)),
                 Some(&resolve_session),
-                data_dir
-                    .as_deref()
-                    .ok_or_else(|| "Appshots are unavailable in this host".to_string())?,
+                data_dir.as_deref().ok_or_else(|| {
+                    "private prompt images are unavailable in this host".to_string()
+                })?,
             )?,
             (false, false) => unreachable!(),
         };
@@ -2318,12 +2434,57 @@ impl Engine {
         &self,
         session_id: &str,
     ) -> Result<Option<String>, StoreError> {
+        self.referenced_session_context_through(session_id, None)
+    }
+
+    /// Resolve a bounded chat reference. When `through_seq` is present it must identify a user
+    /// part, and the context stops immediately before the next user part so the whole selected turn
+    /// is retained without leaking later conversation into a branch.
+    pub fn referenced_session_context_through(
+        &self,
+        session_id: &str,
+        through_seq: Option<i64>,
+    ) -> Result<Option<String>, StoreError> {
         let Some(store) = &self.state.store else {
             return Ok(None);
         };
         let Some(session) = store.get_session(session_id)? else {
             return Ok(None);
         };
+        if let Some(through_seq) = through_seq {
+            let transcript = store.transcript_with_seq(session_id)?;
+            let Some(selected_index) = transcript
+                .iter()
+                .position(|(seq, role, _)| *seq == through_seq && *role == Role::User)
+            else {
+                return Ok(None);
+            };
+            let end_index = transcript
+                .iter()
+                .enumerate()
+                .skip(selected_index + 1)
+                .find_map(|(index, (_, role, _))| (*role == Role::User).then_some(index))
+                .unwrap_or(transcript.len());
+            let through_turn = &transcript[..end_index];
+            let user_indices: Vec<usize> = through_turn
+                .iter()
+                .enumerate()
+                .filter_map(|(index, (_, role, _))| (*role == Role::User).then_some(index))
+                .collect();
+            let first_kept_user = user_indices
+                .len()
+                .checked_sub(DEFAULT_TRANSCRIPT_TURNS)
+                .and_then(|index| user_indices.get(index).copied());
+            let start_index = first_kept_user.unwrap_or(0);
+            let earlier_omitted = start_index > 0;
+            let bounded: Vec<(Role, Part)> = through_turn[start_index..]
+                .iter()
+                .map(|(_, role, part)| (*role, part.clone()))
+                .collect();
+            let context =
+                transcript_context_with_omission(&session.title, &bounded, earlier_omitted);
+            return Ok((!context.trim().is_empty()).then_some(context));
+        }
         let page = store.transcript_page(session_id, None, DEFAULT_TRANSCRIPT_TURNS)?;
         let earlier_omitted = page.next_before.is_some();
         let transcript: Vec<(Role, Part)> = page
@@ -2496,6 +2657,53 @@ impl Engine {
         Ok(outcome)
     }
 
+    /// Keep at most `limit` durable session worktrees by discarding the oldest archived ones.
+    /// Active sessions and unclaimed/stale directories are deliberately outside automatic cleanup.
+    pub async fn cleanup_old_worktrees(&self, limit: usize) -> (usize, Vec<String>) {
+        let Some(store) = &self.state.store else {
+            return (0, Vec::new());
+        };
+        let active = match store.list_sessions() {
+            Ok(sessions) => sessions,
+            Err(error) => return (0, vec![error.to_string()]),
+        };
+        let archived = match store.list_archived_sessions() {
+            Ok(sessions) => sessions,
+            Err(error) => return (0, vec![error.to_string()]),
+        };
+        let managed = active
+            .iter()
+            .chain(archived.iter())
+            .filter(|session| session.worktree_path.is_some() && !session.worktree_discarded)
+            .count();
+        let mut remaining = managed.saturating_sub(limit.max(1));
+        if remaining == 0 {
+            return (0, Vec::new());
+        }
+
+        let candidates: Vec<String> = archived
+            .iter()
+            .rev()
+            .filter(|session| session.worktree_path.is_some() && !session.worktree_discarded)
+            .map(|session| session.id.clone())
+            .collect();
+        let mut removed = 0;
+        let mut errors = Vec::new();
+        for session in candidates {
+            if remaining == 0 {
+                break;
+            }
+            match self.discard_session_worktree(&session).await {
+                Ok(_) => {
+                    removed += 1;
+                    remaining -= 1;
+                }
+                Err(error) => errors.push(format!("{session}: {error}")),
+            }
+        }
+        (removed, errors)
+    }
+
     /// Every session checkout, orphaned registration, and stale directory associated with one
     /// project's repository, for the management UI.
     pub async fn list_project_worktrees(
@@ -2508,6 +2716,7 @@ impl Engine {
         let common_dir = crate::worktree::common_dir(&root)
             .await
             .map_err(|error| format!("couldn't identify repository: {error}"))?;
+        let configured_root = self.state.worktree_root.read().unwrap().clone();
         let registrations = crate::worktree::registrations_from_common_dir(&common_dir)
             .await
             .map_err(|error| format!("couldn't list worktrees: {error}"))?;
@@ -2599,38 +2808,43 @@ impl Engine {
             });
         }
 
-        // Directories in the shared container that Git no longer registers: leftovers from prunes,
-        // failed creations, or manual deletions inside the checkout.
-        if let Some(container) = crate::worktree::session_container_dir(&root) {
+        // Directories in the shared container that Git no longer registers: current
+        // `<session>/<repo>` checkouts plus legacy flat `<repo>-<session>` checkouts.
+        if let Some(container) =
+            crate::worktree::session_container_dir_with_root(&root, configured_root.as_deref())
+        {
             if let Ok(read_dir) = std::fs::read_dir(&container) {
+                let repo_name = crate::worktree::session_checkout_name(&root);
                 for entry in read_dir.flatten() {
-                    let path = entry.path();
+                    let direct = entry.path();
+                    let nested = direct.join(repo_name);
+                    let candidate = std::fs::symlink_metadata(&nested)
+                        .is_ok()
+                        .then_some(nested)
+                        .filter(|path| {
+                            crate::worktree::is_managed_session_checkout(&root, &container, path)
+                        })
+                        .or_else(|| {
+                            crate::worktree::is_managed_session_checkout(&root, &container, &direct)
+                                .then_some(direct)
+                        });
+                    let Some(path) = candidate else {
+                        continue;
+                    };
                     let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                    if claimed_paths.contains(&canonical) {
-                        continue;
+                    if !claimed_paths.contains(&canonical) {
+                        entries.push(WorktreeStatusEntry {
+                            path: path.to_string_lossy().into_owned(),
+                            branch: None,
+                            kind: WorktreeEntryKind::Stale,
+                            registered: false,
+                            checkout_present: true,
+                            session_id: None,
+                            session_title: None,
+                            session_archived: false,
+                            worktree_discarded: false,
+                        });
                     }
-                    let repo_name = root
-                        .file_name()
-                        .and_then(|name| name.to_str())
-                        .unwrap_or("repo");
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    let ours = name.starts_with(&format!("{repo_name}-"))
-                        || name.starts_with(".codetwo-rollback-");
-                    if !ours {
-                        continue;
-                    }
-                    entries.push(WorktreeStatusEntry {
-                        path: path.to_string_lossy().into_owned(),
-                        branch: None,
-                        kind: WorktreeEntryKind::Stale,
-                        registered: false,
-                        checkout_present: true,
-                        session_id: None,
-                        session_title: None,
-                        session_archived: false,
-                        worktree_discarded: false,
-                    });
                 }
             }
         }
@@ -2652,15 +2866,17 @@ impl Engine {
         let common_dir = crate::worktree::common_dir(&root)
             .await
             .map_err(|error| format!("couldn't identify repository: {error}"))?;
-        let container = crate::worktree::session_container_dir(&root)
-            .ok_or_else(|| "repository has no parent directory".to_string())?;
+        let configured_root = self.state.worktree_root.read().unwrap().clone();
+        let container =
+            crate::worktree::session_container_dir_with_root(&root, configured_root.as_deref())
+                .ok_or_else(|| "repository has no parent directory".to_string())?;
         let container = std::fs::canonicalize(&container)
             .map_err(|error| format!("worktree container is unavailable: {error}"))?;
         let target_raw = std::path::PathBuf::from(worktree_path);
         let target = std::fs::canonicalize(&target_raw).unwrap_or_else(|_| target_raw.clone());
-        if target.parent() != Some(container.as_path()) {
+        if !crate::worktree::is_managed_session_checkout(&root, &container, &target) {
             return Err(format!(
-                "refusing to discard {}: only checkouts directly inside {} can be cleaned up here",
+                "refusing to discard {}: only C2 session checkouts inside {} can be cleaned up here",
                 target.display(),
                 container.display()
             ));
@@ -2717,6 +2933,12 @@ impl Engine {
                 std::fs::remove_dir_all(&target).map_err(|error| {
                     format!("couldn't remove stale worktree directory: {error}")
                 })?;
+                if let Some(parent) = target
+                    .parent()
+                    .filter(|parent| *parent != container.as_path())
+                {
+                    let _ = std::fs::remove_dir(parent);
+                }
                 let _ = std::fs::remove_dir(&container);
                 Ok(crate::worktree::DiscardedWorktree {
                     removed_checkout: true,
@@ -2893,7 +3115,7 @@ impl Engine {
         let mut servers = toolset.mcp_servers.clone();
         if let Some(config) = &self.state.desktop_mcp {
             attach_host_mcp_servers(&mut servers, [config.scene_server_for_session(session)]);
-            if provider == ProviderId::Codex {
+            if provider == ProviderId::Codex && config.browser_enabled {
                 attach_host_mcp_servers(&mut servers, [config.browser_server_for_session(session)]);
             }
         }
@@ -3049,7 +3271,7 @@ impl Engine {
         if canonical.trim().is_empty() {
             return Err("prompt is empty".into());
         }
-        let (client, acp_session_id, cwd, interaction, instructions) = {
+        let (client, acp_session_id, cwd, interaction) = {
             let sessions = self.state.sessions.lock().unwrap();
             let runtime = sessions
                 .get(session)
@@ -3062,17 +3284,18 @@ impl Engine {
                     .ok_or_else(|| "ACP session is unavailable".to_string())?,
                 runtime.cwd.clone(),
                 runtime.interaction.clone(),
-                runtime.provider_toolset.instructions.clone(),
             )
         };
         if !interaction.steering {
             return Err("the provider did not advertise native steering".into());
         }
-        let mut compiled = match self.preflight_attachment_document(&doc, &cwd)? {
+        let compiled = match self.preflight_attachment_document(&doc, &cwd)? {
             Some(compiled) => compiled,
             None => {
-                let resolve = |id: &str| -> Option<String> {
-                    self.referenced_session_context(id).ok().flatten()
+                let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                    self.referenced_session_context_through(id, through_seq)
+                        .ok()
+                        .flatten()
                 };
                 let library = self.state.skills.lock().unwrap();
                 compile_with_sessions(
@@ -3083,7 +3306,6 @@ impl Engine {
                 )
             }
         };
-        compiled.prompt = with_provider_tool_instructions(compiled.prompt, &instructions);
         let mut blocks = vec![ContentBlock::text(compiled.prompt)];
         for path in &compiled.images {
             if let Ok((mime_type, data)) =
@@ -3096,6 +3318,12 @@ impl Engine {
             blocks.push(ContentBlock::Image {
                 data: appshot.data.clone(),
                 mime_type: appshot.mime_type.clone(),
+            });
+        }
+        for attachment in &compiled.attachments {
+            blocks.push(ContentBlock::Image {
+                data: attachment.data.clone(),
+                mime_type: attachment.mime_type.clone(),
             });
         }
         let response: serde_json::Value = client
@@ -3264,9 +3492,24 @@ impl Engine {
             self.state.router.clone(),
             self.state.store.clone(),
         ));
+        let provider_toolset = self.provider_toolset(&sess.provider);
+        let provider_context_injected = sess.provider == ProviderId::Codex;
+        let launch = if provider_context_injected {
+            codex_launch_with_static_provider_context(
+                &prov.launch,
+                &provider_toolset.instructions,
+                self.state
+                    .desktop_mcp
+                    .as_ref()
+                    .is_some_and(|config| config.browser_enabled),
+            )
+            .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
+        } else {
+            prov.launch.clone()
+        };
         let replaying = handler.replay_flag();
         let client = Arc::new(
-            acp::spawn(&prov.launch, handler)
+            acp::spawn(&launch, handler)
                 .await
                 .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?,
         );
@@ -3288,7 +3531,6 @@ impl Engine {
         let cwd = sess.cwd.clone();
         let models = available_models(&prov).await;
         let current = sess.model.clone().unwrap_or_default();
-        let provider_toolset = self.provider_toolset(&sess.provider);
         let mut sessions = self.state.sessions.lock().unwrap();
         if self.state.shutting_down.load(Ordering::Acquire) {
             drop(sessions);
@@ -3302,6 +3544,8 @@ impl Engine {
             SessionRuntime {
                 session: sess,
                 provider_toolset,
+                provider_context_injected,
+                injected_memory_keys: HashSet::new(),
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: resume,
@@ -3474,6 +3718,75 @@ impl Engine {
         result
     }
 
+    /// Create one durable Session, isolated checkout, Task, Work Item, Executor Agent, and lease.
+    /// The SessionCreated event is emitted only after all durable state commits successfully.
+    pub async fn create_parallel_task_session(
+        &self,
+        creation: ParallelTaskCreation,
+    ) -> Result<(), AcpError> {
+        if self.state.store.is_none() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation requires durable storage",
+            )));
+        }
+        let request_id = creation.request_id.trim().to_string();
+        if request_id.is_empty() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation needs a request id",
+            )));
+        }
+        if creation.task_id.as_str().trim().is_empty() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation needs a task id",
+            )));
+        }
+        let goal = creation.goal.trim();
+        if goal.is_empty() || goal.chars().count() > 4_096 {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task goal must contain between 1 and 4096 characters",
+            )));
+        }
+
+        let pending = PendingParallelTask {
+            task_id: creation.task_id,
+            work_item_id: WorkItemId::new(format!("work-{}", uuid::Uuid::new_v4())),
+            agent_id: AgentId::new(format!("agent-{}", uuid::Uuid::new_v4())),
+            goal: goal.to_string(),
+        };
+        {
+            let mut pending_parallel_tasks = self.state.pending_parallel_tasks.lock().unwrap();
+            if pending_parallel_tasks.contains_key(&request_id) {
+                return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                    "parallel task request id is already pending",
+                )));
+            }
+            pending_parallel_tasks.insert(request_id.clone(), pending);
+        }
+
+        let result = self
+            .create_session(
+                creation.provider,
+                creation.cwd,
+                true,
+                Some(creation.worktree_base),
+                creation.worktree_base_sha,
+                Some(request_id.clone()),
+                creation.model,
+                creation.initial_policy,
+                false,
+                creation.reasoning_effort,
+            )
+            .await;
+        if result.is_err() {
+            self.state
+                .pending_parallel_tasks
+                .lock()
+                .unwrap()
+                .remove(&request_id);
+        }
+        result
+    }
+
     pub async fn submit(&self, op: Op) -> Result<(), AcpError> {
         if self.state.shutting_down.load(Ordering::Acquire) {
             return Err(AcpError::Closed);
@@ -3499,6 +3812,13 @@ impl Engine {
                             .remove(request_id)
                     })
                     .unwrap_or_default();
+                let parallel_task = request_id.as_ref().and_then(|request_id| {
+                    self.state
+                        .pending_parallel_tasks
+                        .lock()
+                        .unwrap()
+                        .remove(request_id)
+                });
                 let creation_receipt = t3_session_create_receipt(request_id.as_deref());
                 if let (Some(store), Some((command_id, public_thread_id))) =
                     (&self.state.store, creation_receipt.as_ref())
@@ -3608,8 +3928,23 @@ impl Engine {
                     self.state.store.clone(),
                 ));
 
+                let provider_toolset = self.provider_toolset(&sess.provider);
+                let provider_context_injected = sess.provider == ProviderId::Codex;
+                let launch = if provider_context_injected {
+                    codex_launch_with_static_provider_context(
+                        &prov.launch,
+                        &provider_toolset.instructions,
+                        self.state
+                            .desktop_mcp
+                            .as_ref()
+                            .is_some_and(|config| config.browser_enabled),
+                    )
+                    .map_err(AcpError::Decode)?
+                } else {
+                    prov.launch.clone()
+                };
                 let replaying = handler.replay_flag();
-                let client = Arc::new(acp::spawn(&prov.launch, handler).await?);
+                let client = Arc::new(acp::spawn(&launch, handler).await?);
                 if !self.track_starting_client(&client) {
                     return Err(AcpError::Closed);
                 }
@@ -3632,11 +3967,13 @@ impl Engine {
                 let mut prepared_worktree = None;
                 if use_worktree {
                     let baseline = worktree_base.unwrap_or(WorktreeBaseline::Current);
+                    let configured_root = self.state.worktree_root.read().unwrap().clone();
                     match prepare_session_worktree_with_expected_sha(
                         std::path::Path::new(&cwd),
                         &mut sess,
                         baseline,
                         worktree_base_sha.as_deref(),
+                        configured_root.as_deref(),
                     )
                     .await
                     {
@@ -3660,8 +3997,6 @@ impl Engine {
                 // Offer the provider's built-in models straight away. Keep the client tracked
                 // while this async probe runs so plugin unload can still terminate it.
                 let models = available_models(&prov).await;
-                let provider_toolset = self.provider_toolset(&sess.provider);
-
                 // Moving a starting client into the live session map is atomic with shutdown:
                 // shutdown sets the flag before taking this same lock, so it either sees the new
                 // session or this path refuses to persist/insert it.
@@ -3679,15 +4014,71 @@ impl Engine {
                 }
 
                 if let Some(store) = &self.state.store {
-                    let persisted = match creation_receipt.as_ref() {
-                        Some((command_id, public_thread_id)) => store
-                            .upsert_session_with_command_receipt(
-                                "t3-create",
-                                command_id,
-                                public_thread_id,
+                    let persisted = match parallel_task.as_ref() {
+                        Some(parallel_task) => {
+                            let provider_configuration = ProviderConfiguration {
+                                provider: sess.provider.clone(),
+                                model: sess.model.clone(),
+                                reasoning_effort: creation_options.reasoning_effort.clone(),
+                            };
+                            let task = Task {
+                                id: parallel_task.task_id.clone(),
+                                status: TaskStatus::Active,
+                                result_contract: ResultContract {
+                                    goal: parallel_task.goal.clone(),
+                                    required_deliverables: Vec::new(),
+                                    completion_conditions: Vec::new(),
+                                    boundaries: Vec::new(),
+                                    known_risks: Vec::new(),
+                                    unresolved_facts: Vec::new(),
+                                },
+                                provider_configuration: provider_configuration.clone(),
+                                budget: TaskBudget {
+                                    max_cost_microusd: None,
+                                    max_tokens: None,
+                                    max_duration_seconds: None,
+                                },
+                            };
+                            let work_item = WorkItem {
+                                id: parallel_task.work_item_id.clone(),
+                                objective: parallel_task.goal.clone(),
+                                result_contract_conditions: Vec::new(),
+                                scenes: Vec::new(),
+                                agent_skills: Vec::new(),
+                                input_artifacts: Vec::new(),
+                                expected_outputs: Vec::new(),
+                                completion_evidence: Vec::new(),
+                                status: WorkItemStatus::Running,
+                                blocker: None,
+                                assigned_session_id: Some(sess.id.clone()),
+                                reason: "Started from the desktop parallel-task action".into(),
+                            };
+                            let compatibility_payload = serde_json::to_vec(&provider_configuration)
+                                .expect("Provider Configuration serialization cannot fail");
+                            let compatibility_identity = format!(
+                                "executor:{}:{}",
+                                task.id.as_str(),
+                                blake3::hash(&compatibility_payload).to_hex()
+                            );
+                            store.create_parallel_task_session(
                                 &sess,
-                            ),
-                        None => store.upsert_session(&sess),
+                                &task,
+                                &work_item,
+                                &parallel_task.agent_id,
+                                &compatibility_identity,
+                                sess.created_at,
+                            )
+                        }
+                        None => match creation_receipt.as_ref() {
+                            Some((command_id, public_thread_id)) => store
+                                .upsert_session_with_command_receipt(
+                                    "t3-create",
+                                    command_id,
+                                    public_thread_id,
+                                    &sess,
+                                ),
+                            None => store.upsert_session(&sess),
+                        },
                     };
                     if let Err(e) = persisted {
                         drop(live_sessions);
@@ -3729,6 +4120,8 @@ impl Engine {
                     SessionRuntime {
                         session: sess,
                         provider_toolset,
+                        provider_context_injected,
+                        injected_memory_keys: HashSet::new(),
                         client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
@@ -3988,8 +4381,10 @@ impl Engine {
                         let lib = self.state.skills.lock().unwrap();
                         // `@`-mentioned past chats resolve against the store; without one (tests,
                         // in-memory runs) they surface as unresolved rather than silently vanishing.
-                        let resolve = |id: &str| -> Option<String> {
-                            self.referenced_session_context(id).ok().flatten()
+                        let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                            self.referenced_session_context_through(id, through_seq)
+                                .ok()
+                                .flatten()
                         };
                         compile_with_sessions(
                             &doc,
@@ -4084,7 +4479,7 @@ impl Engine {
                     {
                         compiled.mcp_servers.push(server);
                     }
-                    if is_codex {
+                    if is_codex && config.browser_enabled {
                         let server = config.browser_server_for_session(&session);
                         if !compiled
                             .mcp_servers
@@ -4103,9 +4498,19 @@ impl Engine {
                         request_id: request_id.clone(),
                     });
                 }
+                let injected_memory_keys = self
+                    .state
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .get(&session)
+                    .map(|runtime| runtime.injected_memory_keys.clone())
+                    .unwrap_or_default();
                 let memory_turn = self.state.memory.as_ref().and_then(|memory| {
                     match memory.recall(&cwd, &session, &memory_source) {
-                        Ok(turn) => turn,
+                        Ok(turn) => {
+                            turn.map(|turn| turn.excluding_item_keys(&injected_memory_keys))
+                        }
                         Err(e) => {
                             tracing::warn!("load memory context failed: {e}");
                             None
@@ -4119,7 +4524,7 @@ impl Engine {
                 let provider_prompt = if memory_context.block.is_empty() {
                     compiled.prompt.clone()
                 } else {
-                    format!("{}\n\n{}", memory_context.block, compiled.prompt)
+                    format!("{}\n\n{}", compiled.prompt, memory_context.block)
                 };
                 let auto_scene_instructions = self.state.store.as_ref().and_then(|store| {
                     store
@@ -4136,15 +4541,30 @@ impl Engine {
                 });
                 let provider_prompt =
                     with_auto_scene_routing(provider_prompt, auto_scene_instructions);
-                let provider_prompt = with_provider_tool_instructions(
+                let (caps, attached_mcp, inject_provider_context) = {
+                    let map = self.state.sessions.lock().unwrap();
+                    map.get(&session)
+                        .map(|runtime| {
+                            (
+                                runtime.caps,
+                                runtime.mcp_servers.clone(),
+                                !runtime.provider_context_injected,
+                            )
+                        })
+                        .unwrap_or((AgentCaps::default(), Vec::new(), true))
+                };
+                let provider_prompt = with_initial_provider_context(
                     provider_prompt,
                     &provider_toolset.instructions,
+                    is_codex
+                        && self
+                            .state
+                            .desktop_mcp
+                            .as_ref()
+                            .is_some_and(|config| config.browser_enabled),
+                    is_codex,
+                    inject_provider_context,
                 );
-                let provider_prompt = with_codetwo_browser_routing(
-                    provider_prompt,
-                    is_codex && self.state.desktop_mcp.is_some(),
-                );
-                let provider_prompt = with_codex_sites_routing(provider_prompt, is_codex);
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
@@ -4164,12 +4584,6 @@ impl Engine {
                             revision: canvas.payload.revision,
                         })
                         .collect(),
-                };
-                let (caps, attached_mcp) = {
-                    let map = self.state.sessions.lock().unwrap();
-                    map.get(&session)
-                        .map(|runtime| (runtime.caps, runtime.mcp_servers.clone()))
-                        .unwrap_or_default()
                 };
                 if acp_sid.is_some() {
                     let late = compiled
@@ -4556,9 +4970,8 @@ impl Engine {
                 let clear_handoff_after_prompt = handoff_context.is_some();
                 let provider_prompt = match handoff_context {
                     Some(context) => format!(
-                        "The task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}\n\n{}",
-                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into()),
-                        provider_prompt
+                        "{provider_prompt}\n\nThe task was transferred from another C2 device. Continue from the durable task state below without repeating completed work.\n\n{}",
+                        serde_json::to_string(&context).unwrap_or_else(|_| "{}".into())
                     ),
                     None => provider_prompt,
                 };
@@ -4568,6 +4981,11 @@ impl Engine {
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
                 let turn_memory = self.state.memory.clone();
+                let injected_memory_keys = memory_context
+                    .items
+                    .iter()
+                    .map(|item| item.injection_key())
+                    .collect::<Vec<_>>();
                 let memory_project = images_cwd.clone();
                 // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
                 // carries plain handles instead of engine references. Best-effort by design:
@@ -4618,12 +5036,29 @@ impl Engine {
                             mime_type: appshot.mime_type.clone(),
                         });
                     }
+                    for attachment in &compiled.attachments {
+                        blocks.push(ContentBlock::Image {
+                            data: attachment.data.clone(),
+                            mime_type: attachment.mime_type.clone(),
+                        });
+                    }
                     // Canvas exports are already normalized and ordered. Unknown provider
                     // capability intentionally attempted every image above; any provider failure
                     // remains visible through the ACP error path.
                     blocks.extend(canvas_image_blocks);
                     match client.prompt(&acp_sid, blocks).await {
                         Ok(stop) => {
+                            {
+                                let mut sessions = turn_engine.state.sessions.lock().unwrap();
+                                if let Some(runtime) = sessions.get_mut(&sess_for_task) {
+                                    if runtime.acp_session_id.as_deref() == Some(acp_sid.as_str()) {
+                                        runtime.provider_context_injected = true;
+                                        runtime
+                                            .injected_memory_keys
+                                            .extend(injected_memory_keys.iter().cloned());
+                                    }
+                                }
+                            }
                             if clear_handoff_after_prompt {
                                 if let Err(error) =
                                     turn_engine.clear_handoff_context(&sess_for_task)
@@ -4778,6 +5213,16 @@ impl Engine {
             }
 
             Op::SetModel { session, model } => {
+                if self.session_is_busy(&session) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: "can't switch models while a turn is running; stop it first"
+                            .into(),
+                        terminal: false,
+                        request_id: None,
+                    });
+                    return Ok(());
+                }
                 // Tell the agent, then record it. Storing it without the ACP call would leave the
                 // UI claiming a model the agent never switched to. Before the first prompt there's
                 // no ACP session to tell, so the choice is just recorded and `session/new` sends it.
@@ -4910,6 +5355,22 @@ impl Engine {
                     return Ok(());
                 };
 
+                let changes_turn_runtime = config_id == "model"
+                    || previous_options.iter().any(|option| {
+                        option.id == config_id && option.category.as_deref() == Some("model")
+                    });
+                if changes_turn_runtime && self.session_is_busy(&session) {
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message: format!(
+                            "can't change {config_id} while a turn is running; stop it first"
+                        ),
+                        terminal: false,
+                        request_id: None,
+                    });
+                    return Ok(());
+                }
+
                 // Grok's current ACP extension advertises effort in ModelInfo metadata and uses
                 // the legacy mode method to change it. Keep the generic frontend contract while
                 // sending the method this provider actually implements.
@@ -4995,7 +5456,7 @@ async fn prepare_session_worktree(
     baseline: WorktreeBaseline,
 ) -> std::io::Result<Vec<(String, String)>> {
     Ok(
-        prepare_session_worktree_with_expected_sha(source, session, baseline, None)
+        prepare_session_worktree_with_expected_sha(source, session, baseline, None, None)
             .await?
             .hook_errors,
     )
@@ -5006,6 +5467,7 @@ async fn prepare_session_worktree_with_expected_sha(
     session: &mut Session,
     baseline: WorktreeBaseline,
     expected_sha: Option<&str>,
+    configured_root: Option<&std::path::Path>,
 ) -> std::io::Result<PreparedSessionWorktree> {
     let source = source.canonicalize()?;
     let repo_root = crate::worktree::repo_root(&source).await?;
@@ -5032,8 +5494,13 @@ async fn prepare_session_worktree_with_expected_sha(
             ));
         }
     }
-    let worktree =
-        crate::worktree::add_for_session_from_baseline(&repo_root, &session.id, &resolved).await?;
+    let worktree = crate::worktree::add_for_session_from_baseline_in(
+        &repo_root,
+        &session.id,
+        &resolved,
+        configured_root,
+    )
+    .await?;
     let git_dir = match crate::worktree::git_dir(&worktree.path).await {
         Ok(git_dir) => git_dir,
         Err(error) => rollback_failed_worktree(&repo_root, &worktree, &resolved.sha, error).await?,
@@ -6040,6 +6507,7 @@ for line in sys.stdin:
             &mut session,
             WorktreeBaseline::Current,
             Some(&previewed),
+            None,
         )
         .await
         .unwrap_err();
@@ -6377,21 +6845,22 @@ for line in sys.stdin:
         let baseline = crate::worktree::resolve_baseline(&repo, WorktreeBaseline::Current)
             .await
             .unwrap();
-        let orphan = crate::worktree::add_for_session_from_baseline(&repo, "orphan-1", &baseline)
+        let orphan_id = uuid::Uuid::new_v4().to_string();
+        let orphan = crate::worktree::add_for_session_from_baseline(&repo, &orphan_id, &baseline)
             .await
             .unwrap();
+        let orphan_parent = orphan.path.parent().unwrap().to_path_buf();
 
-        // A stale directory inside the shared container that Git does not register.
-        let container = orphan.path.parent().unwrap().to_path_buf();
-        let repo_name = repo
-            .canonicalize()
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
-        let stale = container.join(format!("{repo_name}-stale-leftover"));
-        std::fs::create_dir(&stale).unwrap();
+        // Current nested and legacy flat stale directories that Git does not register.
+        let repo_root = repo.canonicalize().unwrap();
+        let container = crate::worktree::session_container_dir(&repo_root).unwrap();
+        let repo_name = crate::worktree::session_checkout_name(&repo_root);
+        let stale_parent = container.join(uuid::Uuid::new_v4().to_string());
+        let stale_nested = stale_parent.join(repo_name);
+        std::fs::create_dir_all(&stale_nested).unwrap();
+        let stale_legacy =
+            container.join(format!("{}-stale-leftover", repo_name.to_string_lossy()));
+        std::fs::create_dir(&stale_legacy).unwrap();
 
         let (engine, _events) =
             Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
@@ -6418,9 +6887,11 @@ for line in sys.stdin:
         let orphan_entry = find(&orphan.path.to_string_lossy());
         assert_eq!(orphan_entry.kind, super::WorktreeEntryKind::Orphan);
         assert!(orphan_entry.session_id.is_none());
-        let stale_entry = find(&stale.to_string_lossy());
-        assert_eq!(stale_entry.kind, super::WorktreeEntryKind::Stale);
-        assert!(!stale_entry.registered);
+        for stale in [&stale_nested, &stale_legacy] {
+            let stale_entry = find(&stale.to_string_lossy());
+            assert_eq!(stale_entry.kind, super::WorktreeEntryKind::Stale);
+            assert!(!stale_entry.registered);
+        }
 
         // A session-claimed checkout is refused by the orphan flow.
         let refused = engine
@@ -6436,14 +6907,25 @@ for line in sys.stdin:
             .await
             .unwrap();
         assert!(outcome.removed_checkout);
-        assert_eq!(outcome.deleted_branch.as_deref(), Some("codetwo/orphan-1"));
+        assert_eq!(
+            outcome.deleted_branch.as_deref(),
+            Some(orphan.branch.as_str())
+        );
         assert!(!orphan.path.exists());
+        assert!(!orphan_parent.exists());
         let outcome = engine
-            .discard_orphan_worktree(&project, &stale.to_string_lossy())
+            .discard_orphan_worktree(&project, &stale_nested.to_string_lossy())
             .await
             .unwrap();
         assert!(outcome.removed_checkout);
-        assert!(!stale.exists());
+        assert!(!stale_nested.exists());
+        assert!(!stale_parent.exists());
+        let outcome = engine
+            .discard_orphan_worktree(&project, &stale_legacy.to_string_lossy())
+            .await
+            .unwrap();
+        assert!(outcome.removed_checkout);
+        assert!(!stale_legacy.exists());
 
         drop(engine);
         drop(store);
@@ -6551,9 +7033,7 @@ for line in sys.stdin:
         let mut session = Session::new(ProviderId::Grok, source.clone());
         let branch = crate::worktree::branch_for_session(&session.id).unwrap();
         let safe_id = branch.strip_prefix("codetwo/").unwrap();
-        let expected_path = base
-            .join(".codetwo-worktrees")
-            .join(format!("repo-{safe_id}"));
+        let expected_path = base.join(".codetwo-worktrees").join(safe_id).join("repo");
         let moved_path = std::path::PathBuf::from(format!("{}-moved", expected_path.display()));
 
         let error = prepare_session_worktree(&repo, &mut session, WorktreeBaseline::Current)
@@ -6676,6 +7156,56 @@ mod session_management_tests {
     }
 
     #[test]
+    fn referenced_context_can_stop_after_one_selected_turn() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mut session = Session::new(ProviderId::Grok, "/work");
+        session.title = "Branch source".into();
+        store.upsert_session(&session).unwrap();
+        let mut selected_user_seq = 0;
+        let mut selected_agent_seq = 0;
+        for turn in 0..3 {
+            let user_seq = store
+                .append_part(
+                    &session.id,
+                    Role::User,
+                    &Part::Prompt {
+                        text: format!("USER_{turn}"),
+                        display: format!("user {turn}"),
+                    },
+                )
+                .unwrap();
+            let agent_seq = store
+                .append_part(
+                    &session.id,
+                    Role::Agent,
+                    &Part::Text {
+                        text: format!("AGENT_{turn}"),
+                    },
+                )
+                .unwrap();
+            if turn == 1 {
+                selected_user_seq = user_seq;
+                selected_agent_seq = agent_seq;
+            }
+        }
+        let (engine, _events) =
+            Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
+
+        let context = engine
+            .referenced_session_context_through(&session.id, Some(selected_user_seq))
+            .unwrap()
+            .unwrap();
+        assert!(context.contains("USER_0"));
+        assert!(context.contains("AGENT_1"));
+        assert!(!context.contains("USER_2"));
+        assert!(!context.contains("AGENT_2"));
+        assert!(engine
+            .referenced_session_context_through(&session.id, Some(selected_agent_seq))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
     fn referenced_context_bounds_an_oversized_latest_turn_and_keeps_its_tail() {
         let store = Arc::new(Store::open_in_memory().unwrap());
         let session = Session::new(ProviderId::Grok, "/work");
@@ -6716,14 +7246,16 @@ mod session_management_tests {
 #[cfg(test)]
 mod mcp_tests {
     use super::{
-        attach_host_mcp_servers, auto_scene_routing_instructions, elicitation_message,
-        encode_mcp_servers, rich_tool_kind, sites_permission_kind, with_auto_scene_routing,
-        with_codetwo_browser_routing, with_codex_sites_routing, with_provider_tool_instructions,
-        DesktopMcpConfig,
+        attach_host_mcp_servers, auto_scene_routing_instructions,
+        codex_launch_with_static_provider_context, elicitation_message, encode_mcp_servers,
+        rich_tool_kind, sites_permission_kind, with_auto_scene_routing,
+        with_codetwo_browser_routing, with_codex_sites_routing, with_initial_provider_context,
+        with_provider_tool_instructions, DesktopMcpConfig,
     };
     use crate::acp::wire::AgentCaps;
     use crate::artifact::ToolSource;
     use crate::permission::PermissionContextKind;
+    use crate::provider::LaunchSpec;
     use crate::skill::{McpServer, McpTransport};
 
     #[test]
@@ -6787,11 +7319,59 @@ mod mcp_tests {
     }
 
     #[test]
+    fn stable_provider_context_is_only_added_to_the_initial_prompt() {
+        let instructions = vec!["HOST_TOOL_MARKER".to_string()];
+        let first =
+            with_initial_provider_context("first request".into(), &instructions, true, true, true);
+        assert!(first.contains("[C2 host tools]"));
+        assert!(first.contains("[C2 desktop browser routing]"));
+        assert!(first.contains("[C2 Sites routing and safety]"));
+
+        assert_eq!(
+            with_initial_provider_context("later request".into(), &instructions, true, true, false,),
+            "later request"
+        );
+    }
+
+    #[test]
+    fn codex_static_context_uses_developer_config_without_overwriting_user_config() {
+        let mut launch = LaunchSpec::new("codex-acp", []);
+        launch.env.push((
+            "CODEX_CONFIG".into(),
+            r#"{"model":"kept","developer_instructions":"Existing rule."}"#.into(),
+        ));
+        let instructions = vec!["HOST_TOOL_MARKER".to_string()];
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+            .expect("valid Codex config");
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+            .expect("reapplying context remains valid");
+        let encoded = launch
+            .env
+            .iter()
+            .find(|(key, _)| key == "CODEX_CONFIG")
+            .map(|(_, value)| value)
+            .expect("Codex config env");
+        let config: serde_json::Value = serde_json::from_str(encoded).unwrap();
+        let developer = config["developer_instructions"].as_str().unwrap();
+
+        assert_eq!(config["model"], "kept");
+        assert!(developer.starts_with("Existing rule."));
+        assert!(developer.contains("HOST_TOOL_MARKER"));
+        assert!(developer.contains("[C2 desktop browser routing]"));
+        assert!(developer.contains("[C2 Sites routing and safety]"));
+        assert_eq!(
+            developer.matches("[C2 Sites routing and safety]").count(),
+            1
+        );
+    }
+
+    #[test]
     fn desktop_browser_mcp_uses_a_distinct_session_key() {
         let config = DesktopMcpConfig {
             command: "/Applications/C2.app/Contents/MacOS/C2".into(),
             socket_path: "/tmp/codetwo-browser.sock".into(),
             master_key: "launch-secret".into(),
+            browser_enabled: true,
         };
         let first = config.browser_server_for_session("session-a");
         let second = config.browser_server_for_session("session-b");
@@ -6809,19 +7389,28 @@ mod mcp_tests {
         };
         assert_ne!(env(&first), env(&second));
         assert!(!env(&first).contains("launch-secret"));
+
+        let scenes = config.scene_server_for_session("session-a");
+        match scenes.transport {
+            McpTransport::Stdio { args, .. } => {
+                assert_eq!(args, &["--codetwo-scene-mcp"])
+            }
+            _ => panic!("desktop scenes must use stdio"),
+        }
     }
 
     #[test]
-    fn auto_scene_routing_requires_a_first_selection_and_names_only_installed_scenes() {
+    fn auto_scene_routing_loads_the_catalog_only_when_needed() {
         let scenes = crate::scene::SceneLibrary::builtin();
         let instructions = auto_scene_routing_instructions(&scenes, None);
-        assert!(instructions.contains("call `scene_select` before substantive work"));
-        assert!(instructions.contains("`builtin:research`"));
-        assert!(instructions.contains("`builtin:develop`"));
-        assert!(!instructions.contains("builtin:missing"));
+        assert!(instructions.contains("If no scene is active or the task no longer fits it"));
+        assert!(instructions.contains("call `scene_list` with a short task query"));
+        assert!(instructions.contains("call `scene_select` with an exact returned reference"));
+        assert!(!instructions.contains("Available scenes:"));
+        assert!(!instructions.contains("`builtin:research`"));
+        assert!(instructions.len() < 400);
         let prompt = with_auto_scene_routing("fix the tests".into(), Some(instructions));
-        assert!(prompt.starts_with("[C2 Auto Scene]"));
-        assert!(prompt.ends_with("fix the tests"));
+        assert!(prompt.starts_with("fix the tests\n\n[C2 Auto Scene]"));
     }
 
     #[test]
@@ -6882,6 +7471,29 @@ mod mcp_tests {
         assert_eq!(
             sites_permission_kind(&mutation).map(|value| value.0),
             Some(PermissionContextKind::SitesMutation)
+        );
+    }
+
+    #[test]
+    fn browser_use_tools_have_a_distinct_rich_kind() {
+        let browser_use = ToolSource {
+            server: Some("browser-use".into()),
+            tool: Some("browser_screenshot".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &browser_use, "Take screenshot"),
+            Some("browser_use".into())
+        );
+
+        let openai_browser = ToolSource {
+            server: Some("node_repl".into()),
+            tool: Some("js".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            rich_tool_kind(None, &openai_browser, "mcp.node_repl.js"),
+            Some("browser_use".into())
         );
     }
 

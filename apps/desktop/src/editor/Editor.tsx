@@ -9,7 +9,7 @@ import {
 } from "@blocknote/react";
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
-import { Bot, Server, Sparkles } from "lucide-react";
+import { Bot, Server, Sparkles } from "@/components/ui/icons";
 import {
   CanvasBlockRuntimeContext,
   canvasBlockPropsFromDraft,
@@ -53,6 +53,12 @@ interface EditorProps {
   insertAnnotationRef: MutableRefObject<((a: Annotation, context: string) => void) | null>;
   // App inserts `@file` mentions (from the file browser) through this.
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
+  // A transcript branch prepends a bounded past-chat mention to the new task draft.
+  insertSessionRef?: MutableRefObject<((session: {
+    id: string;
+    title: string;
+    throughSeq: number;
+  }) => void) | null>;
   // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
   focusRef: MutableRefObject<(() => void) | null>;
   // App empties the document after a successful send.
@@ -97,6 +103,8 @@ interface EditorProps {
     message: string,
     kind: "provider_image" | "other",
   ) => void) | null>;
+  /** App-owned image intake. Text and other clipboard payloads remain BlockNote's responsibility. */
+  onPasteImages?: (files: readonly File[]) => void | Promise<void>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
 }
@@ -268,6 +276,7 @@ export function DocEditor({
   insertTextRef,
   insertAnnotationRef,
   insertFileRef,
+  insertSessionRef,
   focusRef,
   clearRef,
   insertMarkdownRef,
@@ -284,11 +293,13 @@ export function DocEditor({
   restoreCanvasDocumentRef,
   freezeCanvasesRef,
   canvasDeliveryErrorRef,
+  onPasteImages,
   onEmptyChange,
 }: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
   const t = useT();
+  const editorRootRef = useRef<HTMLDivElement>(null);
   // The Composer's color scheme is transient UI state. Keep it outside the Canvas envelope so a
   // live theme change updates mounted editable blocks without rewriting readonly/history data.
   const scheme = useColorScheme();
@@ -308,6 +319,14 @@ export function DocEditor({
       },
     },
   });
+
+  useEffect(() => {
+    const editable = editorRootRef.current?.querySelector<HTMLElement>(".ProseMirror");
+    if (!editable) return;
+    editable.setAttribute("role", "textbox");
+    editable.setAttribute("aria-label", t("composer.documentInput"));
+    editable.setAttribute("aria-multiline", "true");
+  }, [t]);
 
   const insertCanvasDraft = useCallback((draft: CanvasDraft, options: CanvasInsertOptions = {}) => {
     if (!canvasEnabled) return;
@@ -373,7 +392,13 @@ export function DocEditor({
         case "session":
           return {
             type: "paragraph",
-            content: [{ type: "sessionMention", props: { sessionId: block.session_id } }, " "],
+            content: [{
+              type: "sessionMention",
+              props: {
+                sessionId: block.session_id,
+                throughSeq: block.through_seq ?? 0,
+              },
+            }, " "],
           };
         case "issue":
           // Rebuild the embedded context the same way the core compile arm does (state "open"),
@@ -500,7 +525,7 @@ export function DocEditor({
     // Composer's Run-row hint listens for this (same window-event seam as the provider picker):
     // required slot-card fields without a value or default — a warning, never a send block.
     const unfilled = unfilledRequiredSlots(editor);
-    const key = unfilled.join(" ");
+    const key = unfilled.join("");
     if (key !== lastRequiredKey.current) {
       lastRequiredKey.current = key;
       window.dispatchEvent(new CustomEvent("codetwo-required-slots", { detail: unfilled }));
@@ -541,6 +566,23 @@ export function DocEditor({
     };
     insertFileRef.current = (path: string) => {
       editor.insertInlineContent([{ type: "fileMention", props: { path } }, " "]);
+    };
+    if (insertSessionRef) insertSessionRef.current = ({ id, title, throughSeq }) => {
+      const first = editor.document[0];
+      if (!first) return;
+      editor.insertBlocks(
+        [{
+          type: "paragraph",
+          content: [{
+            type: "sessionMention",
+            props: { sessionId: id, title, throughSeq },
+          }, " "],
+        }],
+        first,
+        "before",
+      );
+      onEmptyChange(false);
+      editor.focus();
     };
     focusRef.current = () => editor.focus();
     clearRef.current = () => {
@@ -661,6 +703,7 @@ export function DocEditor({
       insertTextRef.current = null;
       insertAnnotationRef.current = null;
       insertFileRef.current = null;
+      if (insertSessionRef) insertSessionRef.current = null;
       focusRef.current = null;
       clearRef.current = null;
       if (insertMarkdownRef) insertMarkdownRef.current = null;
@@ -673,7 +716,7 @@ export function DocEditor({
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertSessionRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();
@@ -707,13 +750,26 @@ export function DocEditor({
   };
 
   return (
-    <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
-      <BlockNoteView
-        editor={editor}
-        slashMenu={false}
-        theme={scheme}
-        onChange={observeDocument}
-      >
+    <div
+      ref={editorRootRef}
+      data-composer-editor
+      onPasteCapture={(event) => {
+        if (!onPasteImages) return;
+        const files = Array.from(event.clipboardData.files).filter((file) =>
+          file.type.startsWith("image/"),
+        );
+        if (files.length === 0) return;
+        event.preventDefault();
+        void onPasteImages(files);
+      }}
+    >
+      <CanvasBlockRuntimeContext.Provider value={editorCanvasRuntime}>
+        <BlockNoteView
+          editor={editor}
+          slashMenu={false}
+          theme={scheme}
+          onChange={observeDocument}
+        >
         <SuggestionMenuController
           triggerCharacter={"/"}
           getItems={async (query) =>
@@ -721,9 +777,8 @@ export function DocEditor({
               [
                 ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
                 ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
-                // Drop the media blocks: they need an upload handler this app doesn't configure, so
-                // they insert an "Add file" placeholder that can never be filled and never reaches
-                // the compiled prompt. Use `@` for files instead.
+                // Prompt images use the Composer's private attachment intake. Keep BlockNote's
+                // unrelated media placeholders out of the slash menu; use `@` for workspace files.
                 ...getDefaultReactSlashMenuItems(editor).filter(
                   (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
                 ),
@@ -743,7 +798,10 @@ export function DocEditor({
           onItemClick={(item) => {
             editor.insertInlineContent([
               item.kind === "chat"
-                ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
+                ? {
+                    type: "sessionMention",
+                    props: { sessionId: item.id, title: item.title, throughSeq: 0 },
+                  }
                 : item.kind === "artifact"
                   ? {
                       type: "artifactMention",
@@ -758,7 +816,8 @@ export function DocEditor({
             ]);
           }}
         />
-      </BlockNoteView>
-    </CanvasBlockRuntimeContext.Provider>
+        </BlockNoteView>
+      </CanvasBlockRuntimeContext.Provider>
+    </div>
   );
 }

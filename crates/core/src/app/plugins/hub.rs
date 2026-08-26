@@ -9,6 +9,7 @@
 //! system feel like one rather than like a build-time convention.
 
 use crate::app::events::PluginsChanged;
+use crate::app::plugins::plugin_development;
 use crate::app::service::{LoaderService, Paths, PluginHub};
 use crate::app::{json, take_args, PluginChangeRequest, PluginManager, PluginScope};
 use crate::github_skills;
@@ -66,6 +67,8 @@ struct PluginInfo {
     counts: PluginCounts,
     scaffolds: Vec<PluginScaffoldInfo>,
     extension_components: Vec<plugin::PluginExtensionComponent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_commands: Option<Vec<plugin::PluginRuntimeCommand>>,
     ui_contributions: Vec<plugin::PluginUiContribution>,
     lsp_servers: Vec<plugin::PluginLspServer>,
     diagnostics: Vec<plugin::PluginDiagnostic>,
@@ -88,6 +91,7 @@ impl From<InstalledPlugin> for PluginInfo {
             counts: plugin.counts,
             scaffolds: plugin.scaffolds.into_iter().map(Into::into).collect(),
             extension_components: plugin.extension_components,
+            runtime_commands: plugin.runtime_commands,
             ui_contributions: plugin.ui_contributions,
             lsp_servers: plugin.lsp_servers,
             diagnostics: plugin.diagnostics,
@@ -117,6 +121,25 @@ async fn reconcile_and_announce(
     if let Some(context) = context.upgrade() {
         context.emit(PluginsChanged).await;
         context.flush().await;
+    }
+    Ok(())
+}
+
+fn validate_marketplace_identity(
+    catalog_name: &str,
+    catalog_version: &str,
+    bundle_name: &str,
+    bundle_version: &str,
+) -> PluginResult {
+    if bundle_name != catalog_name {
+        return Err(PluginError::new(format!(
+            "Marketplace plugin name {catalog_name} does not match bundle name {bundle_name}"
+        )));
+    }
+    if bundle_version != catalog_version {
+        return Err(PluginError::new(format!(
+            "Marketplace version {catalog_version} does not match bundle version {bundle_version}"
+        )));
     }
     Ok(())
 }
@@ -153,6 +176,7 @@ impl Plugin for HubPlugin {
                 .sync_installed_bundles(&hub.dir)
                 .map_err(PluginError::new)?;
         }
+        plugin_development::register(&ctx, manager.clone(), hub.clone()).await?;
         let reconcile_context = ctx.weak();
 
         let listed = hub.clone();
@@ -357,12 +381,12 @@ impl Plugin for HubPlugin {
                         ))
                     }
                 };
-                if bundle.plugin.version != entry.version {
-                    return Err(PluginError::new(format!(
-                        "Marketplace version {} does not match bundle version {}",
-                        entry.version, bundle.plugin.version
-                    )));
-                }
+                validate_marketplace_identity(
+                    &entry.name,
+                    &entry.version,
+                    &bundle.plugin.name,
+                    &bundle.plugin.version,
+                )?;
                 bundle.plugin.source = source_label;
                 bundle.plugin.enabled = entry.default_enabled;
                 let _inventory = hub.inventory.lock().await;
@@ -473,8 +497,8 @@ impl Plugin for HubPlugin {
 
 // ---- the running graph ------------------------------------------------------------------------
 
-/// Exposes the kernel to the app: what is loaded, what is waiting, what each plugin contributed,
-/// and the switches to change it without a restart.
+/// Exposes the runtime-module graph to trusted hosts: what is loaded, what is waiting, and what each
+/// module contributed. Extension policy cannot change modules classified as Core.
 pub struct KernelPlugin;
 
 #[async_trait]
@@ -484,7 +508,7 @@ impl Plugin for KernelPlugin {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Inspect and control the running plugin graph.")
+        Some("Inspect and control managed runtime modules.")
     }
 
     fn inject(&self) -> Injection {
@@ -613,5 +637,26 @@ impl Plugin for KernelPlugin {
             },
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_marketplace_identity;
+
+    #[test]
+    fn marketplace_entry_must_match_bundle_identity() {
+        validate_marketplace_identity("review-tools", "1.2.3", "review-tools", "1.2.3").unwrap();
+
+        let name = validate_marketplace_identity("review-tools", "1.2.3", "other-tools", "1.2.3")
+            .unwrap_err();
+        assert!(name.to_string().contains("does not match bundle name"));
+
+        let version =
+            validate_marketplace_identity("review-tools", "1.2.3", "review-tools", "1.2.4")
+                .unwrap_err();
+        assert!(version
+            .to_string()
+            .contains("does not match bundle version"));
     }
 }

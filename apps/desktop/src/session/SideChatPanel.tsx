@@ -4,9 +4,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
-import { ArrowUp, MessageSquare, Plus, Square, X } from "lucide-react";
+import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
 
 import {
   cancelTurn,
@@ -26,12 +25,15 @@ import {
 } from "../bridge";
 import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
+import { LiquidSelectionGroup } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
+import { useResizeHandle } from "../components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { ModelPicker } from "./Composer";
 import { sessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import { applyEvent, newTurn, type Turn } from "./turns";
 
 export interface SideChatSeed {
@@ -132,6 +134,7 @@ export function SideChatPanel({
   sandbox,
   seed,
   onSeedHandled,
+  linkActions,
 }: {
   open: boolean;
   width: number;
@@ -145,6 +148,7 @@ export function SideChatPanel({
   sandbox: Sandbox;
   seed: SideChatSeed | null;
   onSeedHandled: (id: string) => void;
+  linkActions?: BuiltinLinkActions;
 }) {
   const t = useT();
   const [tabs, setTabs] = useState<SideChatTab[]>([]);
@@ -421,26 +425,16 @@ export function SideChatPanel({
     [activeTabId, onClose],
   );
 
-  const startResize = useCallback(
-    (event: ReactMouseEvent) => {
-      event.preventDefault();
-      const startX = event.clientX;
-      const startWidth = width;
-      const move = (next: MouseEvent) => {
-        const max = Math.max(360, Math.min(720, window.innerWidth - 360));
-        onWidth(Math.round(Math.min(max, Math.max(340, startWidth + startX - next.clientX))));
-      };
-      const up = () => {
-        document.body.classList.remove("resizing-h");
-        window.removeEventListener("mousemove", move);
-        window.removeEventListener("mouseup", up);
-      };
-      document.body.classList.add("resizing-h");
-      window.addEventListener("mousemove", move);
-      window.addEventListener("mouseup", up);
-    },
-    [onWidth, width],
-  );
+  const resizeMaxWidth = Math.max(360, Math.min(720, window.innerWidth - 360));
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    direction: -1,
+    value: width,
+    min: 340,
+    max: resizeMaxWidth,
+    disabled: !open,
+    onResize: onWidth,
+  });
 
   return (
     <aside
@@ -455,21 +449,24 @@ export function SideChatPanel({
     >
       <div
         className="dock-grip"
-        role="separator"
-        aria-orientation="vertical"
         aria-label={t("sideChat.resize")}
-        onMouseDown={startResize}
+        {...resizeHandle}
       />
 
       <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-2 py-2.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist">
+        <LiquidSelectionGroup
+          activeSelector='[data-selected="true"]'
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          role="tablist"
+        >
           {tabs.map((tab) => (
             <div
               key={tab.localId}
+              data-selected={tab.localId === activeTab?.localId}
               className={cn(
                 "flex max-w-48 shrink-0 items-center rounded-(--ds-radius-control) py-0.5 ps-1 transition-colors",
                 tab.localId === activeTab?.localId
-                  ? "bg-accent text-foreground"
+                  ? "text-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
               )}
             >
@@ -504,7 +501,7 @@ export function SideChatPanel({
           >
             <Plus className="size-4" aria-hidden />
           </Button>
-        </div>
+        </LiquidSelectionGroup>
         <Button
           type="button"
           variant="ghost"
@@ -522,7 +519,10 @@ export function SideChatPanel({
           <ol className="mx-auto m-0 w-full max-w-2xl list-none px-5 pb-8 pt-5">
             {activeTab.turns.map((turn) => (
               <li key={turn.transcriptStartSeq ?? turn.id}>
-                <TurnCard turn={turn} />
+                <TurnCard
+                  turn={turn}
+                  linkActions={{ ...linkActions, workspaceRoot: activeTab.cwd }}
+                />
               </li>
             ))}
           </ol>
@@ -581,13 +581,13 @@ export function SideChatPanel({
               </span>
               <div className="min-w-0 flex-1" />
               <ModelPicker
-                compact
                 models={activeTab.models}
                 current={activeTab.currentModel}
                 defaultModel={activeTab.defaultModel}
                 provider={activeTab.provider}
                 configOptions={activeTab.configOptions}
                 hasSession={activeTab.sessionId !== null}
+                disabled={activeTab.running}
                 onModel={(nextModel) => {
                   const previousModel = activeTab.currentModel;
                   updateTab(activeTab.localId, (tab) => ({

@@ -551,6 +551,13 @@ pub enum DocBlock {
         #[serde(default)]
         title: Option<String>,
     },
+    /// A user-selected or pasted image stored in the private attachment directory. Only the
+    /// opaque id is authoritative; `name` is display text and is re-read from trusted metadata.
+    Attachment {
+        id: String,
+        #[serde(default)]
+        name: Option<String>,
+    },
     /// A frozen app-owned Canvas revision.  Only the immutable reference and explicit image
     /// policy cross the document boundary; scene JSON and pixels remain in the core store.
     Canvas {
@@ -563,6 +570,9 @@ pub enum DocBlock {
     /// planning conversation can be referenced from the document that implements it.
     Session {
         session_id: String,
+        /// Optional user-part sequence that caps the referenced chat at one completed turn.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        through_seq: Option<i64>,
     },
     /// A stored scene-artifact version; its content is inlined as labeled context at compile time.
     Artifact {
@@ -598,12 +608,13 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
             DocBlock::File { path } => format!("[@{path}]"),
             DocBlock::Image { path } => format!("[img:{path}]"),
             DocBlock::Appshot { id, .. } => format!("[appshot:{id}]"),
+            DocBlock::Attachment { id, .. } => format!("[attachment:{id}]"),
             DocBlock::Canvas {
                 id,
                 frozen_revision,
                 ..
             } => format!("[canvas:{id}@{frozen_revision}]"),
-            DocBlock::Session { session_id } => {
+            DocBlock::Session { session_id, .. } => {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
             DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
@@ -633,6 +644,9 @@ pub struct CompiledPrompt {
     /// App-private images already resolved to bytes. These never masquerade as workspace paths.
     #[serde(default)]
     pub appshots: Vec<CompiledAppshot>,
+    /// User-selected or pasted private images already resolved to bytes.
+    #[serde(default)]
+    pub attachments: Vec<CompiledAttachment>,
     /// Resolved immutable Canvas payloads.  This is intentionally separate from workspace image
     /// paths so a provider cannot mistake an app-private asset for a workspace file.
     #[serde(default)]
@@ -660,8 +674,21 @@ pub struct CompiledAppshot {
     pub mime_type: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CompiledAttachment {
+    pub id: String,
+    pub name: String,
+    pub data: String,
+    pub mime_type: String,
+}
+
 struct ResolvedAppshot {
     image: CompiledAppshot,
+    context: String,
+}
+
+struct ResolvedAttachment {
+    image: CompiledAttachment,
     context: String,
 }
 
@@ -690,7 +717,7 @@ pub fn compile_with_canvas(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     gate: CanvasFeatureGate,
     capability: CanvasProviderImageCapability,
     resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
@@ -704,25 +731,35 @@ pub fn compile_with_canvas(
     )
 }
 
-/// Desktop compilation path for private Appshots. Only this explicit application-data root can
-/// resolve opaque capture IDs; normal workspace compilation leaves them unresolved.
+/// Desktop compilation path for private Appshots and prompt attachments. Only this explicit
+/// application-data root can resolve opaque IDs; normal workspace compilation leaves them
+/// unresolved.
 pub fn compile_with_appshots(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     data_dir: &std::path::Path,
 ) -> Result<CompiledPrompt, String> {
-    let resolver = |id: &str| load_appshot(data_dir, id);
-    compile_full_resolving(doc, library, cwd, resolve_session, None, Some(&resolver))
+    let appshot_resolver = |id: &str| load_appshot(data_dir, id);
+    let attachment_resolver = |id: &str| load_attachment(data_dir, id);
+    compile_full_resolving(
+        doc,
+        library,
+        cwd,
+        resolve_session,
+        None,
+        Some(&appshot_resolver),
+        Some(&attachment_resolver),
+    )
 }
 
-/// Desktop compilation path for documents that contain both Canvas and private Appshot blocks.
+/// Desktop compilation path for documents that contain Canvas and private image blocks.
 pub fn compile_with_canvas_and_appshots(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     data_dir: &std::path::Path,
     gate: CanvasFeatureGate,
     capability: CanvasProviderImageCapability,
@@ -777,7 +814,7 @@ pub fn compile_with_sessions(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
 ) -> CompiledPrompt {
     compile_full(doc, library, cwd, resolve_session, None)
 }
@@ -790,20 +827,29 @@ pub fn compile_full(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
 ) -> CompiledPrompt {
-    compile_full_resolving(doc, library, cwd, resolve_session, resolve_artifact, None)
-        .expect("document compilation without private resolvers cannot fail")
+    compile_full_resolving(
+        doc,
+        library,
+        cwd,
+        resolve_session,
+        resolve_artifact,
+        None,
+        None,
+    )
+    .expect("document compilation without private resolvers cannot fail")
 }
 
 fn compile_full_resolving(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
     resolve_appshot: Option<&dyn Fn(&str) -> Result<ResolvedAppshot, String>>,
+    resolve_attachment: Option<&dyn Fn(&str) -> Result<ResolvedAttachment, String>>,
 ) -> Result<CompiledPrompt, String> {
     let mut out = CompiledPrompt::default();
     let mut parts: Vec<String> = Vec::new();
@@ -841,6 +887,14 @@ fn compile_full_resolving(
                 }
                 None => out.unresolved.push(format!("appshot:{id}")),
             },
+            DocBlock::Attachment { id, .. } => match resolve_attachment {
+                Some(resolve) => {
+                    let resolved = resolve(id)?;
+                    parts.push(resolved.context);
+                    out.attachments.push(resolved.image);
+                }
+                None => out.unresolved.push(format!("attachment:{id}")),
+            },
             DocBlock::Canvas {
                 id,
                 frozen_revision,
@@ -861,15 +915,16 @@ fn compile_full_resolving(
                     _ => out.unresolved.push(format!("file:{path}")),
                 }
             }
-            DocBlock::Session { session_id } => {
-                match resolve_session.and_then(|resolve| resolve(session_id)) {
-                    Some(ctx) if !ctx.trim().is_empty() => {
-                        out.sessions.push(session_id.clone());
-                        parts.push(ctx);
-                    }
-                    _ => out.unresolved.push(format!("session:{session_id}")),
+            DocBlock::Session {
+                session_id,
+                through_seq,
+            } => match resolve_session.and_then(|resolve| resolve(session_id, *through_seq)) {
+                Some(ctx) if !ctx.trim().is_empty() => {
+                    out.sessions.push(session_id.clone());
+                    parts.push(ctx);
                 }
-            }
+                _ => out.unresolved.push(format!("session:{session_id}")),
+            },
             DocBlock::Artifact { record_id } => {
                 match resolve_artifact.and_then(|resolve| resolve(*record_id)) {
                     Some((label, content)) => {
@@ -1036,6 +1091,23 @@ fn load_appshot(data_dir: &std::path::Path, id: &str) -> Result<ResolvedAppshot,
         context: format!(
             "**Appshot — {app_name}: {title}**\n\nCaptured: {captured_at}\n\n{accessibility}"
         ),
+    })
+}
+
+fn load_attachment(data_dir: &std::path::Path, id: &str) -> Result<ResolvedAttachment, String> {
+    use base64::Engine as _;
+
+    let attachment = crate::attachment::load_prompt_attachment(data_dir, id)?;
+    let quoted_name =
+        serde_json::to_string(&attachment.name).unwrap_or_else(|_| "\"Image.png\"".to_string());
+    Ok(ResolvedAttachment {
+        image: CompiledAttachment {
+            id: attachment.id,
+            name: attachment.name,
+            data: base64::engine::general_purpose::STANDARD.encode(attachment.bytes),
+            mime_type: attachment.mime_type,
+        },
+        context: format!("**Attached image:** {quoted_name}"),
     })
 }
 
@@ -1325,13 +1397,15 @@ mod tests {
         let doc = vec![
             DocBlock::Session {
                 session_id: "abc".into(),
+                through_seq: Some(7),
             },
             DocBlock::Text {
                 text: "Implement what we planned.".into(),
             },
         ];
-        let resolve = |id: &str| -> Option<String> {
-            (id == "abc").then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
+        let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+            (id == "abc" && through_seq == Some(7))
+                .then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
         };
         let compiled = compile_with_sessions(&doc, &lib, None, Some(&resolve));
         assert_eq!(compiled.sessions, vec!["abc".to_string()]);
@@ -1345,6 +1419,7 @@ mod tests {
         let lib = sample_library();
         let doc = vec![DocBlock::Session {
             session_id: "ghost".into(),
+            through_seq: None,
         }];
         let compiled = compile(&doc, &lib);
         assert!(compiled.sessions.is_empty());
@@ -1452,6 +1527,7 @@ mod tests {
             },
             DocBlock::Session {
                 session_id: "1234567890abcdef".into(),
+                through_seq: None,
             },
         ];
 
@@ -1790,6 +1866,59 @@ mod tests {
         assert_eq!(
             canonical_doc_text(&doc),
             format!("Before\n\n[appshot:{id}]\n\nAfter")
+        );
+    }
+
+    #[test]
+    fn prompt_attachments_resolve_normalized_private_pixels_in_document_order() {
+        use base64::Engine as _;
+
+        let data = tempfile::tempdir().unwrap();
+        let input = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+            .unwrap();
+        let stored = crate::attachment::import_prompt_attachment(
+            data.path(),
+            "diagram.webp",
+            Some("image/png"),
+            &input,
+            42,
+        )
+        .unwrap();
+        let doc = vec![
+            DocBlock::Text {
+                text: "Before".into(),
+            },
+            DocBlock::Attachment {
+                id: stored.id.clone(),
+                name: Some("untrusted renderer label".into()),
+            },
+            DocBlock::Text {
+                text: "After".into(),
+            },
+        ];
+
+        let compiled =
+            compile_with_appshots(&doc, &sample_library(), None, None, data.path()).unwrap();
+        assert!(compiled.unresolved.is_empty());
+        assert_eq!(compiled.attachments.len(), 1);
+        assert_eq!(compiled.attachments[0].id, stored.id);
+        assert_eq!(compiled.attachments[0].name, "diagram.webp");
+        assert_eq!(compiled.attachments[0].mime_type, "image/png");
+        assert_eq!(
+            compiled.attachments[0].data,
+            base64::engine::general_purpose::STANDARD.encode(stored.bytes)
+        );
+        let before = compiled.prompt.find("Before").unwrap();
+        let attachment = compiled
+            .prompt
+            .find("**Attached image:** \"diagram.webp\"")
+            .unwrap();
+        let after = compiled.prompt.find("After").unwrap();
+        assert!(before < attachment && attachment < after);
+        assert_eq!(
+            canonical_doc_text(&doc),
+            format!("Before\n\n[attachment:{}]\n\nAfter", stored.id)
         );
     }
 

@@ -9,7 +9,7 @@ import {
   MessageSquare,
   RefreshCw,
   XCircle,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import {
   gitSourceControlInfo,

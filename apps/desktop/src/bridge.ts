@@ -7,8 +7,10 @@ import {
   desktopOpenDialog,
   desktopOpenExternal,
   desktopOpenPath,
+  desktopShowItemInFolder,
   desktopOpenWorkspace,
   desktopSaveDialog,
+  desktopSetSystemBadgeCount,
   desktopOpenAppshotPrivacySettings,
   desktopRequestAppshotPermissions,
   desktopUpdateAppshotSettings,
@@ -26,7 +28,7 @@ import type {
   AppUpdateStatus,
   WorkspaceOpenTarget,
 } from "./electrobun/rpc";
-import type { PluginUiContribution } from "./pluginModel";
+import type { PluginRuntimeCommandContribution, PluginUiContribution } from "./pluginModel";
 import {
   browserAnnotateLocal,
   browserAnnotationCountLocal,
@@ -66,6 +68,10 @@ export async function getAppUpdateStatus(): Promise<AppUpdateStatus> {
 
 export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
   return desktopCheckForUpdates();
+}
+
+export async function setSystemBadgeCount(count: number): Promise<boolean> {
+  return inDesktop ? desktopSetSystemBadgeCount(count) : false;
 }
 
 const browserAppshotSettings: AppshotSettings = {
@@ -181,6 +187,9 @@ export interface ProviderInfo {
 export interface ProviderManagementInfo {
   installed: boolean;
   version: string | null;
+  latest_version: string | null;
+  update_available: boolean | null;
+  check_error: string | null;
   install_supported: boolean;
   upgrade_supported: boolean;
   launch_mode: "installed" | "on_demand" | "unavailable";
@@ -267,6 +276,9 @@ export function normalizeProviderInfo(provider: ProviderInfoWire): ProviderInfo 
     management: provider.management ?? {
       installed: provider.available,
       version: null,
+      latest_version: null,
+      update_available: null,
+      check_error: null,
       install_supported: false,
       upgrade_supported: false,
       launch_mode: provider.available ? "installed" : "unavailable",
@@ -505,6 +517,13 @@ export interface WorktreeBaselineOption {
   unavailable_reason: string | null;
 }
 
+export interface WorktreeSettings {
+  root?: string;
+  fetch_upstream: boolean;
+  auto_delete: boolean;
+  auto_delete_limit: number;
+}
+
 /** What a discard actually removed. A repeat discard is a no-op success with both fields empty. */
 export interface DiscardedWorktree {
   removed_checkout: boolean;
@@ -691,7 +710,7 @@ export type DocBlock =
   | { type: "appshot"; id: string; title?: string }
   | { type: "attachment"; id: string; name?: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
-  | { type: "session"; session_id: string }
+  | { type: "session"; session_id: string; through_seq?: number }
   // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
   // `DocBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
   | { type: "issue"; source: string; id: string; title: string; url: string; body: string };
@@ -798,6 +817,7 @@ export type CoreEvent =
       used_tokens: number;
       context_window: number;
       cost_usd?: number | null;
+      breakdown?: { id: string; tokens: number }[] | null;
     }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
@@ -982,21 +1002,181 @@ export function setCallProjectPath(path: string | null): void {
   callProjectPath = path;
 }
 
+const BROWSER_DOCKER_CONTAINERS = [
+  {
+    id: "8f4c2e9133ef",
+    name: "api",
+    image: "ghcr.io/codetwo/api:latest",
+    command: '"bun run start"',
+    createdAt: "2026-08-25 19:21:04 +0800 SGT",
+    runningFor: "22 hours ago",
+    ports: "0.0.0.0:8080->8080/tcp",
+    state: "running",
+    status: "Up 22 hours",
+    size: "12.4kB (virtual 286MB)",
+    labels: null,
+    localVolumes: 0,
+    mounts: "",
+    networks: "bridge",
+  },
+  {
+    id: "b497581dd054",
+    name: "worker",
+    image: "ghcr.io/codetwo/worker:latest",
+    command: '"bun run worker"',
+    createdAt: "2026-08-24 08:12:01 +0800 SGT",
+    runningFor: "2 days ago",
+    ports: "",
+    state: "exited",
+    status: "Exited (0) 18 hours ago",
+    size: "8.2kB (virtual 284MB)",
+    labels: null,
+    localVolumes: 0,
+    mounts: "",
+    networks: "bridge",
+  },
+  {
+    id: "24c2830d260a",
+    name: "postgres",
+    image: "postgres:16-alpine",
+    command: '"docker-entrypoint.s…"',
+    createdAt: "2026-08-24 08:11:40 +0800 SGT",
+    runningFor: "2 days ago",
+    ports: "0.0.0.0:5432->5432/tcp",
+    state: "exited",
+    status: "Exited (0) 18 hours ago",
+    size: "63B (virtual 247MB)",
+    labels: null,
+    localVolumes: 1,
+    mounts: "codetwo_pgdata",
+    networks: "bridge",
+  },
+];
+
+const BROWSER_DOCKER_IMAGES = [
+  {
+    id: "sha256:19a3a8c9d0d8",
+    repository: "ghcr.io/codetwo/api",
+    tag: "latest",
+    digest: "sha256:6ec4ca4b0d1e",
+    createdAt: "2026-08-25 18:42:11 +0800 SGT",
+    createdSince: "22 hours ago",
+    size: "286MB",
+    sharedSize: "0B",
+    uniqueSize: "286MB",
+    containers: 1,
+  },
+  {
+    id: "sha256:f7eb244d02c9",
+    repository: "ghcr.io/codetwo/worker",
+    tag: "latest",
+    digest: "sha256:f79edcb4a1ef",
+    createdAt: "2026-08-24 07:55:03 +0800 SGT",
+    createdSince: "2 days ago",
+    size: "284MB",
+    sharedSize: "0B",
+    uniqueSize: "284MB",
+    containers: 1,
+  },
+  {
+    id: "sha256:34f2dfe3bb89",
+    repository: "postgres",
+    tag: "16-alpine",
+    digest: "sha256:3e89afe3d2c2",
+    createdAt: "2026-08-18 05:10:02 +0800 SGT",
+    createdSince: "8 days ago",
+    size: "247MB",
+    sharedSize: "0B",
+    uniqueSize: "247MB",
+    containers: 1,
+  },
+];
+
+function browserDockerCall<T>(name: string, rawArgs: unknown): T {
+  const args = rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+    ? rawArgs as Record<string, unknown>
+    : {};
+  const container = typeof args.container === "string" ? args.container : "container";
+  const image = typeof args.image === "string" ? args.image : "image";
+  switch (name) {
+    case "docker.status":
+      return {
+        available: true,
+        clientVersion: "29.7.2",
+        serverVersion: "29.7.2",
+        context: "desktop-linux",
+        engine: {
+          name: "docker-desktop",
+          operatingSystem: "Docker Desktop",
+          architecture: "aarch64",
+          cpus: 10,
+          memoryBytes: 8_589_934_592,
+          dockerRootDir: "/var/lib/docker",
+        },
+        containers: { total: 21, running: 1, paused: 0, stopped: 20 },
+        images: 12,
+        message: "Docker 29.7.2 is running · 1 running · 20 stopped · 12 images",
+      } as T;
+    case "docker.containers":
+      return {
+        containers: BROWSER_DOCKER_CONTAINERS,
+        count: BROWSER_DOCKER_CONTAINERS.length,
+        truncated: false,
+        message: `${BROWSER_DOCKER_CONTAINERS.length} Docker containers.`,
+      } as T;
+    case "docker.images":
+      return {
+        images: BROWSER_DOCKER_IMAGES,
+        count: BROWSER_DOCKER_IMAGES.length,
+        truncated: false,
+        message: `${BROWSER_DOCKER_IMAGES.length} Docker images.`,
+      } as T;
+    case "docker.inspect":
+      return {
+        container,
+        details: {
+          Id: BROWSER_DOCKER_CONTAINERS.find((item) => item.name === container)?.id ?? container,
+          Name: `/${container}`,
+          State: { Status: container === "api" ? "running" : "exited" },
+          Config: { Image: BROWSER_DOCKER_CONTAINERS.find((item) => item.name === container)?.image },
+        },
+        message: `Inspected ${container}.`,
+      } as T;
+    case "docker.logs":
+      return {
+        container,
+        stdout: `[2026-08-26T10:31:04Z] ${container} ready\n[2026-08-26T10:31:08Z] GET /health 200`,
+        stderr: "",
+        message: `Read logs from ${container}.`,
+      } as T;
+    case "docker.start":
+    case "docker.stop":
+    case "docker.restart":
+      return { container, action: name.slice("docker.".length), output: container, message: `${name} ${container}` } as T;
+    case "docker.pull":
+      return { image, output: `Downloaded newer image for ${image}`, message: `Pulled ${image}.` } as T;
+    case "docker.remove_image":
+      return { image, output: `Untagged: ${image}`, message: `Removed ${image}.` } as T;
+    default:
+      throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  }
+}
+
 // ---- the plugin graph -------------------------------------------------------------------------
 
 /**
- * Call a command contributed by a core plugin — `call("git.status", { cwd })`.
+ * Call a command through the trusted desktop host — `call("git.status", { cwd })`.
  *
- * This is the extension surface. A plugin that registers `foo.bar` is callable from here the
- * moment it loads, with no new desktop RPC method and no new
- * function in this file. The named wrappers below predate it and are being migrated onto it.
+ * This transport carries both internal host commands and extension-contributed commands. It is
+ * broader than the public Extension API exposed to child processes. A runtime module that
+ * registers `foo.bar` is callable from here without adding another desktop RPC method.
  */
 export async function call<T = unknown>(
   name: string,
   args?: unknown,
   projectPath: string | null = callProjectPath,
 ): Promise<T> {
-  if (!inDesktop) throw new Error(`plugin command "${name}" is unavailable outside the desktop app`);
+  if (!inDesktop) return browserDockerCall<T>(name, args);
   return desktopCall<T>(name, args ?? null, projectPath);
 }
 
@@ -1061,6 +1241,7 @@ export type ManagedPluginScope =
 
 export type ManagedPluginOverride = "inherit" | "enabled" | "disabled";
 export type ManagedPluginOrigin = "built_in" | "host" | "third_party";
+export type ManagedPluginRole = "core" | "built_in" | "extension";
 export type ManagedPluginCategory =
   | "foundation"
   | "workspace"
@@ -1073,6 +1254,7 @@ export type ManagedPluginScopeSupport = "user" | "project";
 
 export interface ManagedPluginMetadata {
   origin: ManagedPluginOrigin;
+  role: ManagedPluginRole;
   category: ManagedPluginCategory;
   scope_support: ManagedPluginScopeSupport[];
   essential: boolean;
@@ -1218,13 +1400,49 @@ export async function resetManagedPlugin(
 }
 
 /**
- * Installed bundles that ship a process (the plugin protocol): which are running, and which are
- * installed but waiting for the user to trust them. Trust — not installation — is what starts a
- * process, so `untrusted` is the actionable list.
+ * Installed bundles that ship a process: which have a ready host adapter, and which are installed
+ * but waiting for trust. A ready lazy adapter does not imply that its child process is resident.
  */
-export async function listExtensions(): Promise<{ running: string[]; untrusted: string[] }> {
-  if (!inDesktop) return { running: [], untrusted: [] };
+export async function listExtensions(): Promise<{ ready: string[]; untrusted: string[] }> {
+  if (!inDesktop) return { ready: [], untrusted: [] };
   return await call("extensions.list");
+}
+
+export interface PluginReloadRecord {
+  at: number;
+  plugins: string[];
+  success: boolean;
+  error?: string | null;
+}
+
+export interface PluginDeveloperStatus {
+  enabled: boolean;
+  watching: boolean;
+  plugins_dir: string;
+  last_reload: PluginReloadRecord | null;
+}
+
+const FALLBACK_PLUGIN_DEVELOPER_STATUS: PluginDeveloperStatus = {
+  enabled: false,
+  watching: false,
+  plugins_dir: "",
+  last_reload: null,
+};
+
+export async function getPluginDeveloperStatus(): Promise<PluginDeveloperStatus> {
+  return inDesktop
+    ? call<PluginDeveloperStatus>("plugins.developer_status", undefined, null)
+    : { ...FALLBACK_PLUGIN_DEVELOPER_STATUS };
+}
+
+export async function setPluginDeveloperMode(enabled: boolean): Promise<PluginDeveloperStatus> {
+  if (!inDesktop) throw new Error("Plugin development requires the C2 desktop app.");
+  return call<PluginDeveloperStatus>("plugins.set_developer_mode", { enabled }, null);
+}
+
+export async function reloadDevelopmentPlugins(): Promise<PluginDeveloperStatus> {
+  if (!inDesktop) throw new Error("Plugin reload requires the C2 desktop app.");
+  return call<PluginDeveloperStatus>("plugins.reload_development", undefined, null);
 }
 
 const fallbackProvider = (
@@ -1242,6 +1460,9 @@ const fallbackProvider = (
   management: {
     installed: false,
     version: null,
+    latest_version: null,
+    update_available: null,
+    check_error: null,
     install_supported: false,
     upgrade_supported: false,
     launch_mode: "unavailable",
@@ -1293,9 +1514,9 @@ const FALLBACK_SKILLS: SkillInfo[] = [
   { id: "demo:mcp:docs", name: "docs-search", description: "MCP server from Developer Toolkit", icon: null, kind: "mcp", source: "Plugin · Developer Toolkit" },
 ];
 
-export async function listProviders(): Promise<ProviderInfo[]> {
+export async function listProviders(checkUpdates = false): Promise<ProviderInfo[]> {
   const providers = inDesktop
-    ? await call<ProviderInfoWire[]>("providers.list")
+    ? await call<ProviderInfoWire[]>("providers.list", { check_updates: checkUpdates })
     : fallbackProviders();
   return providers.map(normalizeProviderInfo);
 }
@@ -1495,8 +1716,27 @@ export async function newSession(
   initialModel?: string | null,
   transient = false,
   initialReasoningEffort?: string | null,
+  parallelTask?: { taskId: string; goal: string } | null,
 ): Promise<void> {
   if (inDesktop) {
+    if (parallelTask) {
+      if (worktreeBase === null) {
+        throw new Error("Parallel tasks require an isolated worktree");
+      }
+      await call("engine.new_parallel_task", {
+        provider,
+        cwd,
+        worktree_base: worktreeBase,
+        worktree_base_sha: worktreeBaseSha ?? null,
+        request_id: requestId,
+        initial_policy: initialPolicy ?? null,
+        model: initialModel ?? null,
+        reasoning_effort: initialReasoningEffort ?? null,
+        task_id: parallelTask.taskId,
+        goal: parallelTask.goal,
+      });
+      return;
+    }
     await call("engine.new_session", {
       provider,
       cwd,
@@ -1534,6 +1774,26 @@ export async function discardSessionWorktree(session: string): Promise<Discarded
 /** Every checkout under a project's worktree container — session-claimed, orphan, or stale. */
 export async function listProjectWorktrees(projectPath: string): Promise<WorktreeStatusEntry[]> {
   return inDesktop ? call<WorktreeStatusEntry[]>("worktrees.list", { project_path: projectPath }) : [];
+}
+
+const browserWorktreeSettings: WorktreeSettings = {
+  fetch_upstream: false,
+  auto_delete: false,
+  auto_delete_limit: 15,
+};
+
+export async function getWorktreeSettings(): Promise<WorktreeSettings> {
+  return inDesktop
+    ? call<WorktreeSettings>("worktrees.settings", {})
+    : { ...browserWorktreeSettings };
+}
+
+export async function updateWorktreeSettings(
+  settings: WorktreeSettings,
+): Promise<WorktreeSettings> {
+  return inDesktop
+    ? call<WorktreeSettings>("worktrees.set_settings", { settings })
+    : { ...settings };
 }
 
 /** Remove an unclaimed checkout by path. The core rejects paths a session still claims. */
@@ -1756,10 +2016,10 @@ export async function readVisualization(path: string): Promise<string> {
     <div><p class="text-small text-muted">Renderer build</p><p class="viz-stat-value">Passed</p></div>
   </div>
   <div class="viz-row" style="margin-top:14px">
-    <button class="btn btn-primary" onclick="window.openai.sendFollowUpMessage({prompt:'Show the failed checks only',title:'Filter verification results'})"><i data-lucide="list-filter" aria-hidden="true"></i>Filter results</button>
+    <button class="btn btn-primary" onclick="window.openai.sendFollowUpMessage({prompt:'Show the failed checks only',title:'Filter verification results'})"><svg class="viz-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8.85746 12.5061C6.36901 10.6456 4.59564 8.59915 3.62734 7.44867C3.3276 7.09253 3.22938 6.8319 3.17033 6.3728C2.96811 4.8008 2.86701 4.0148 3.32795 3.5074C3.7889 3 4.60404 3 6.23433 3H17.7657C19.396 3 20.2111 3 20.672 3.5074C21.133 4.0148 21.0319 4.8008 20.8297 6.37281C20.7706 6.83191 20.6724 7.09254 20.3726 7.44867C19.403 8.60062 17.6261 10.6507 15.1326 12.5135C14.907 12.6821 14.7583 12.9567 14.7307 13.2614C14.4837 15.992 14.2559 17.4876 14.1141 18.2442C13.8853 19.4657 12.1532 20.2006 11.226 20.8563C10.6741 21.2466 10.0043 20.782 9.93278 20.1778C9.79643 19.0261 9.53961 16.6864 9.25927 13.2614C9.23409 12.9539 9.08486 12.6761 8.85746 12.5061Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"/></svg>Filter results</button>
     <span class="text-small text-muted">Updated just now</span>
   </div>
-</section><script>window.lucide.createIcons();</script>`;
+</section>`;
   }
   return call<string>("artifacts.read_visualization", { path });
 }
@@ -1829,7 +2089,8 @@ export async function deletePath(cwd: string, path: string): Promise<void> {
 
 /** Open the webview inspector on the app's own UI. */
 export async function openDevtools(): Promise<void> {
-  if (inDesktop) await desktopOpenDevtools();
+  if (!inDesktop) throw new Error("WebView DevTools require the C2 desktop app.");
+  await desktopOpenDevtools();
 }
 
 // ---- built-in browser --------------------------------------------------------------------------
@@ -2015,6 +2276,12 @@ export async function openExternal(url: string): Promise<void> {
 export async function openNativePath(path: string): Promise<boolean> {
   if (!inDesktop) return false;
   return desktopOpenPath(path);
+}
+
+/** Reveal a local path in the operating system's file manager. */
+export async function revealNativePath(path: string): Promise<boolean> {
+  if (!inDesktop) return false;
+  return desktopShowItemInFolder(path);
 }
 
 /** Open a workspace in one of the desktop destinations offered by the session header. */
@@ -2540,6 +2807,8 @@ export interface PluginCounts {
   pipelines: number;
   /** Present for hosts that support a C2 JSON-RPC process runtime contribution. */
   runtime?: number;
+  /** Statically declared commands implemented by the process runtime. */
+  runtime_commands?: number;
 }
 
 export type PluginInstallScope = "user" | "project" | "local" | "managed";
@@ -2570,6 +2839,7 @@ export {
   pluginUiComponentId,
 } from "./pluginModel";
 export type {
+  PluginRuntimeCommandContribution,
   PluginUiContribution,
   PluginUiSlotId,
 } from "./pluginModel";
@@ -2597,6 +2867,7 @@ export interface PluginInfo {
   counts: PluginCounts;
   scaffolds: PluginScaffoldInfo[];
   extension_components: PluginExtensionComponent[];
+  runtime_commands?: PluginRuntimeCommandContribution[];
   ui_contributions?: PluginUiContribution[];
   lsp_servers?: PluginLanguageServer[];
   diagnostics: PluginDiagnostic[];
@@ -2712,6 +2983,54 @@ export async function listPlugins(): Promise<PluginInfo[]> {
   return inDesktop
     ? call<PluginInfo[]>("plugins.list", undefined, null)
     : [
+        {
+          id: "docker-tools-preview",
+          name: "docker-tools",
+          version: "0.1.0",
+          description: "Inspect Docker and manage containers and images.",
+          author: "C2",
+          source: "Built-in renderer preview",
+          repository: "https://github.com/IchenDEV/codeTwo",
+          standard_version: "1.1.0",
+          enabled: true,
+          trusted: true,
+          scope: "user",
+          counts: {
+            skills: 0,
+            subagents: 0,
+            mcp_servers: 0,
+            scaffolds: 0,
+            commands: 0,
+            runtime_commands: 10,
+            hooks: 0,
+            lsp_servers: 0,
+            monitors: 0,
+            apps: 0,
+            ui: 0,
+            scenes: 0,
+            pipelines: 0,
+            runtime: 1,
+          },
+          extension_components: [
+            { kind: "runtime", name: "docker-tools", path: "plugin.js", status: "ready" },
+          ],
+          runtime_commands: [
+            ["docker.status", "Docker status"],
+            ["docker.containers", "List containers"],
+            ["docker.images", "List images"],
+            ["docker.inspect", "Inspect container"],
+            ["docker.logs", "Read container logs"],
+            ["docker.start", "Start container"],
+            ["docker.stop", "Stop container"],
+            ["docker.restart", "Restart container"],
+            ["docker.pull", "Pull image"],
+            ["docker.remove_image", "Remove image"],
+          ].map(([id, title]) => ({ id, title, description: "", argsSchema: null })),
+          ui_contributions: [],
+          lsp_servers: [],
+          diagnostics: [],
+          scaffolds: [],
+        },
         {
           id: "developer-toolkit-demo",
           name: "Developer Toolkit",
@@ -3312,6 +3631,13 @@ export async function importPromptImage(
   });
 }
 
+/** Reload a private prompt image for durable transcript rendering. */
+export async function getPromptImage(id: string): Promise<AppshotCapture> {
+  if (!inDesktop) throw new Error("Prompt images require the desktop app");
+  return call<AppshotCapture>("attachments.get", { id });
+}
+
+
 export async function canvasFreeze(
   id: string,
   expectedRevision: number,
@@ -3413,7 +3739,9 @@ export async function setSandbox(session: string, sandbox: Sandbox): Promise<voi
 export interface ProjectScript {
   id: string;
   name: string;
+  kind: "command" | "prompt";
   command: string;
+  prompt: string;
   keybinding: string;
   preview_url: string;
   run_on_worktree_create: boolean;
@@ -3434,8 +3762,8 @@ export async function runProjectScript(cwd: string, id: string): Promise<string>
 
 // ---- voice input (G11) -------------------------------------------------------------------------
 
-/// Whether the core has a local transcriber configured (CODETWO_TRANSCRIBE_CMD or an auto-detected
-/// whisper binary). The UI prefers the webview's own speech recognition when present.
+/// Whether the core has a configured local transcriber or a platform speech recognizer. The UI
+/// prefers the webview's own speech recognition when present.
 export async function voiceAvailable(): Promise<boolean> {
   return inDesktop ? call<boolean>("voice.available") : false;
 }

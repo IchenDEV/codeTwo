@@ -1,16 +1,54 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
-import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
+import { act as reactAct } from "react";
+import { activateDom, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { ProviderQuotaMeter, UsagePanel, quotaProviderFor } = await import("../src/usage/Usage");
+const {
+  ProviderQuotaMeter,
+  UsagePanel,
+  quotaProviderFor,
+  quotaProviderOptions,
+} = await import("../src/usage/Usage");
 const { quickQuotaProviderFor, quickQuotaSummary } = await import("../src/usage/quickQuota");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
+
+async function openSelect(trigger) {
+  await reactAct(async () => {
+    trigger.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+    }));
+    trigger.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  await flush();
+}
+
+async function selectItem(item) {
+  await reactAct(async () => {
+    item.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+    }));
+    item.dispatchEvent(new dom.window.PointerEvent("pointerup", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      pointerId: 1,
+    }));
+    item.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  await flush();
+}
 
 describe("UsagePanel", () => {
   test("uses the active provider, then falls back to recent Codex activity", () => {
@@ -36,20 +74,25 @@ describe("UsagePanel", () => {
     });
 
     expect(summary).toEqual({
+      provider: "codex",
       remainingPercent: 36,
       windowMinutes: 10_080,
       resetsAt: 200,
     });
   });
 
-  test("prefers Codex quota when local activity belongs to Codex", () => {
-    expect(
-      quotaProviderFor("grok", {
-        windows: [],
-        by_source: [["codex", 42]],
-        transcripts: 1,
-      }),
-    ).toBe("codex");
+  test("defaults to the current provider and preserves registry order without duplicates", () => {
+    expect(quotaProviderFor("grok", null)).toBe("grok");
+    expect(quotaProviderFor("grok", "codex")).toBe("codex");
+    expect(quotaProviderOptions("grok", "Grok", {
+      codex: "OpenAI Codex",
+      grok: "Grok",
+      claude_code: "Claude Code",
+    })).toEqual([
+      { id: "grok", name: "Grok" },
+      { id: "codex", name: "OpenAI Codex" },
+      { id: "claude_code", name: "Claude Code" },
+    ]);
   });
 
   test("renders the existing usage report as an embedded settings panel", async () => {
@@ -61,7 +104,7 @@ describe("UsagePanel", () => {
     );
 
     expect(view.container.querySelector("h1")?.textContent).toBe("Usage");
-    expect(view.container.textContent).toContain("current provider quota");
+    expect(view.container.textContent).toContain("quota for any provider");
     expect(view.container.textContent).toContain("Provider quota");
     expect(view.container.querySelector('[title="Rescan"]')).toBeTruthy();
     expect(view.container.textContent).toContain("7d");
@@ -71,6 +114,46 @@ describe("UsagePanel", () => {
     await flush();
     expect(view.container.textContent).toContain("Remaining amount unknown");
     expect(view.container.querySelector('[role="progressbar"]')).toBeNull();
+    view.unmount();
+  });
+
+  test("lets the user inspect quota for another provider", async () => {
+    activateDom();
+    const view = mount(
+      <I18nProvider>
+        <UsagePanel
+          provider="codex"
+          providerName="OpenAI Codex"
+          providerNames={{
+            codex: "OpenAI Codex",
+            grok: "Grok",
+            claude_code: "Claude Code",
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = view.container.querySelector("[data-quota-provider-select]");
+    expect(trigger?.getAttribute("aria-label")).toBe("Choose a quota provider");
+    expect(trigger?.textContent).toContain("OpenAI Codex");
+
+    await openSelect(trigger);
+    const items = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'));
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
+      "OpenAI Codex",
+      "Grok",
+      "Claude Code",
+    ]);
+    expect(items[0]?.firstElementChild?.className).toContain("flex");
+    expect(items[0]?.firstElementChild?.className).toContain("items-center");
+    await selectItem(items.find((item) => item.textContent?.trim() === "Grok"));
+
+    await waitFor(() => {
+      expect(trigger?.textContent).toContain("Grok");
+      expect(view.container.textContent).toContain(
+        "Grok does not expose a safe machine-readable quota interface",
+      );
+    });
     view.unmount();
   });
 

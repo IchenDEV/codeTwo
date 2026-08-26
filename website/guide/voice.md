@@ -17,16 +17,15 @@ Otherwise C2 records audio and hands it to a command of your choosing — an exp
 always wins over the built-in route below:
 
 ```sh
-export CODETWO_TRANSCRIBE_CMD='whisper-cli -f {file} -nt -np'
+export CODETWO_TRANSCRIBE_CMD='whisper-cli -m /absolute/path/to/ggml-base.bin -f {file} -l auto -nt -np'
 ```
 
 - `{file}` is replaced with the recorded audio path (properly shell-quoted). It is always a
   **16 kHz mono WAV** — the app resamples whatever the webview recorded, so whisper.cpp reads it
   straight off.
+- Native whisper.cpp commands require `-m` with a real model path. C2 does not infer one merely
+  because `whisper-cli` is installed: its built-in default is cwd-relative and often missing.
 - The only contract is: **print the transcript to stdout**. Any wrapper script works.
-
-If the variable isn't set, C2 also looks for `whisper-cli`, `whisper-cpp`, or `whisper` on your
-`PATH` and builds a sensible command.
 
 ## 3. macOS's own recognizer — nothing to install
 
@@ -46,10 +45,9 @@ The first dictation raises two macOS prompts — microphone and speech recogniti
   Speech Recognition (and Microphone).
 - **No on-device model for your language?** Install one via System Settings → Keyboard → Dictation
   (add the language, which downloads the offline asset), or configure route 2 instead.
-- **Launched from Finder and using route 2?** macOS gives a double-clicked app a bare `PATH`, so a
-  Homebrew whisper would be invisible. C2 adds `/opt/homebrew/bin`, `/usr/local/bin`,
-  `/opt/local/bin`, `~/.local/bin`, and `~/.cargo/bin` back on startup — anywhere else, set
-  `CODETWO_TRANSCRIBE_CMD` with an absolute path.
+- **Launched from Finder and using route 2?** macOS gives a double-clicked app a bare `PATH`. C2
+  adds `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, `~/.local/bin`, and `~/.cargo/bin`
+  back on startup. Anywhere else, use absolute paths for both the transcriber and its model.
 - **`CODETWO_TRANSCRIBE_CMD` set in your shell profile?** A GUI app doesn't read that. Launch
   C2 from a terminal, or rely on route 3.
 - **Running only the Vite renderer?** It has no native host, so route 3 is unavailable. Use

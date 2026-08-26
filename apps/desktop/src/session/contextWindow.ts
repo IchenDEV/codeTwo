@@ -1,9 +1,17 @@
 import type { CoreEvent } from "../bridge";
 
+/** One slice of the context window occupied by a named category. */
+export interface ContextCategory {
+  id: string;
+  tokens: number;
+}
+
 /** Provider-reported context state. This is intentionally not the rolling account quota shape. */
 export interface ContextWindow {
   usedTokens: number;
   contextWindow: number;
+  /** Per-category breakdown when the provider reports detailed occupancy. */
+  breakdown: ContextCategory[] | null;
 }
 
 export type ContextWindowBySession = Record<string, ContextWindow | null>;
@@ -22,7 +30,21 @@ export function contextWindowFromEvent(event: ContextWindowEvent): ContextWindow
   ) {
     return null;
   }
-  return { usedTokens, contextWindow };
+  const rawBreakdown = event.breakdown;
+  let breakdown: ContextCategory[] | null = null;
+  if (Array.isArray(rawBreakdown) && rawBreakdown.length > 0) {
+    breakdown = rawBreakdown
+      .filter(
+        (entry): entry is { id: string; tokens: number } =>
+          typeof entry?.id === "string" &&
+          entry.id.length > 0 &&
+          Number.isSafeInteger(entry?.tokens) &&
+          entry.tokens >= 0,
+      )
+      .map(({ id, tokens }) => ({ id, tokens }));
+    if (breakdown.length === 0) breakdown = null;
+  }
+  return { usedTokens, contextWindow, breakdown };
 }
 
 /** Keep provider state partitioned by session so background events cannot repaint the active chat. */
