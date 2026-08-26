@@ -1713,8 +1713,27 @@ export async function newSession(
   initialModel?: string | null,
   transient = false,
   initialReasoningEffort?: string | null,
+  parallelTask?: { taskId: string; goal: string } | null,
 ): Promise<void> {
   if (inDesktop) {
+    if (parallelTask) {
+      if (worktreeBase === null) {
+        throw new Error("Parallel tasks require an isolated worktree");
+      }
+      await call("engine.new_parallel_task", {
+        provider,
+        cwd,
+        worktree_base: worktreeBase,
+        worktree_base_sha: worktreeBaseSha ?? null,
+        request_id: requestId,
+        initial_policy: initialPolicy ?? null,
+        model: initialModel ?? null,
+        reasoning_effort: initialReasoningEffort ?? null,
+        task_id: parallelTask.taskId,
+        goal: parallelTask.goal,
+      });
+      return;
+    }
     await call("engine.new_session", {
       provider,
       cwd,

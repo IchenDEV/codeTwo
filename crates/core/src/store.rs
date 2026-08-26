@@ -2020,7 +2020,7 @@ impl Store {
         Ok(out)
     }
 
-    fn upsert_session_on(conn: &Connection, s: &Session) -> Result<(), StoreError> {
+    pub(crate) fn upsert_session_on(conn: &Connection, s: &Session) -> Result<(), StoreError> {
         conn.execute(
             "INSERT INTO sessions
                (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,updated_at)

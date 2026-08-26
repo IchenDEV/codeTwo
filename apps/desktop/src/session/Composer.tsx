@@ -104,6 +104,7 @@ interface ComposerProps {
   onRemoveAppshot?: (id: string) => void;
   onRun: () => void;
   onQueue: () => void;
+  onMultitask: () => void;
   onSteer: () => void;
   onStop: () => void;
   steeringSupported: boolean;
@@ -1292,6 +1293,7 @@ export function Composer({
   onRemoveAppshot,
   onRun,
   onQueue,
+  onMultitask,
   onSteer,
   onStop,
   steeringSupported,
@@ -1532,6 +1534,9 @@ export function Composer({
               />
               <DropdownMenuContent align="end" side="top">
                 <DropdownMenuItem onClick={onQueue}>{t("composer.queue")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={onMultitask}>
+                  {t("composer.multitask")}
+                </DropdownMenuItem>
                 {steeringSupported ? (
                   <DropdownMenuItem onClick={onSteer}>{t("composer.steer")}</DropdownMenuItem>
                 ) : null}

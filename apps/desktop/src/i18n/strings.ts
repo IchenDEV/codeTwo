@@ -804,6 +804,7 @@ export const en = {
   "composer.collapseLabel": "Collapse the document",
   "composer.stop": "Stop this turn",
   "composer.queue": "Queue after this turn",
+  "composer.multitask": "Run as a parallel task",
   "composer.steer": "Steer this turn",
   "composer.sendOptions": "Send options",
   "composer.run": "Run this document",
@@ -1708,6 +1709,8 @@ export const en = {
   "toast.nothingRunning": "Nothing is running.",
   "toast.turnFailed": "Could not start the turn: {error}",
   "toast.sessionFailed": "Could not create a session: {error}",
+  "toast.multitaskWorktreeUnavailable":
+    "Parallel tasks need an available Git worktree. Wait for checkout detection or select a Git project.",
   "toast.worktreeSourceUnknown":
     "This legacy worktree has no recorded source project. Select a project before creating another session.",
   "toast.worktreeDiscarded": "Worktree discarded.",
@@ -2981,6 +2984,7 @@ export const zhCN: Record<StringKey, string> = {
   "composer.collapseLabel": "收起文档",
   "composer.stop": "停止这一轮",
   "composer.queue": "排到本轮之后",
+  "composer.multitask": "作为并行任务运行",
   "composer.steer": "插队调整本轮",
   "composer.sendOptions": "发送方式",
   "composer.run": "运行这篇文档",
@@ -3835,6 +3839,8 @@ export const zhCN: Record<StringKey, string> = {
   "toast.nothingRunning": "当前没有在运行的任务。",
   "toast.turnFailed": "无法开始这一轮：{error}",
   "toast.sessionFailed": "无法创建会话：{error}",
+  "toast.multitaskWorktreeUnavailable":
+    "并行任务需要可用的 Git worktree。请等待检出信息加载完成，或先选择 Git 项目。",
   "toast.worktreeSourceUnknown":
     "这个旧版 worktree 没有记录源项目；请先选择项目，再创建新会话。",
   "toast.worktreeDiscarded": "已丢弃 worktree。",
