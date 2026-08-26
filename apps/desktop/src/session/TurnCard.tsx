@@ -3,20 +3,25 @@ import {
   BookOpen,
   Brain,
   BrainCircuit,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   CircleAlert,
   CircleCheck,
   Clock3,
+  Copy,
   Download,
   ExternalLink,
   FolderOpen,
+  GitFork,
   Loader2,
   ListTodo,
   MoreHorizontal,
   Search,
   Terminal,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -47,6 +52,7 @@ import {
   type CanvasSnapshot,
 } from "../bridge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
@@ -56,6 +62,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/ui/toast";
 import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
 
 const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
@@ -67,6 +75,62 @@ function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
   const s = Math.max(0, Math.round((t.endedAt - t.startedAt) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
+type CopyTarget = "prompt" | "response";
+type TurnFeedback = "helpful" | "unhelpful";
+
+function storedTurnFeedback(key: string | undefined): TurnFeedback | null {
+  if (!key || typeof localStorage === "undefined") return null;
+  try {
+    const value = localStorage.getItem(key);
+    return value === "helpful" || value === "unhelpful" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistTurnFeedback(key: string | undefined, value: TurnFeedback | null): void {
+  if (!key || typeof localStorage === "undefined") return;
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // Private mode or a full storage quota: the pressed state still works for this app run.
+  }
+}
+
+function TurnActionButton({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={label}
+            aria-pressed={pressed}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+            onClick={onClick}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function toolStatusDot(status: string): string {
@@ -656,6 +720,8 @@ export const TurnCard = memo(function TurnCard({
   canPinPlan = false,
   onSaveTemplate,
   linkActions,
+  onFork,
+  feedbackKey,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
@@ -669,10 +735,19 @@ export const TurnCard = memo(function TurnCard({
   onSaveTemplate?: (promptText: string) => void;
   /** Native context-menu actions for links rendered inside the assistant response. */
   linkActions?: BuiltinLinkActions;
+  /** Starts a new task whose referenced context ends at this completed turn. */
+  onFork?: (turn: Turn) => void;
+  /** Stable local-only key for the helpful / unhelpful response state. */
+  feedbackKey?: string;
 }) {
   const t = useT();
+  const toast = useToast();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const [copied, setCopied] = useState<CopyTarget | null>(null);
+  const [feedback, setFeedback] = useState<TurnFeedback | null>(() =>
+    storedTurnFeedback(feedbackKey),
+  );
   const running = isRunning(turn);
   const queued = turn.delivery === "queued";
   const dur = duration(turn);
@@ -688,6 +763,33 @@ export const TurnCard = memo(function TurnCard({
     () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
     [history.visiblePrompt, promptImages],
   );
+  const clock = useMemo(
+    () => new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
+    [locale],
+  );
+  useEffect(() => {
+    setFeedback(storedTurnFeedback(feedbackKey));
+  }, [feedbackKey]);
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(null), 1_500);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+  const copyText = (target: CopyTarget, text: string) => {
+    const write = navigator.clipboard?.writeText(text);
+    if (!write) {
+      toast(t("turn.copyFailed"), "error");
+      return;
+    }
+    void write
+      .then(() => setCopied(target))
+      .catch(() => toast(t("turn.copyFailed"), "error"));
+  };
+  const chooseFeedback = (next: TurnFeedback) => {
+    const value = feedback === next ? null : next;
+    setFeedback(value);
+    persistTurnFeedback(feedbackKey, value);
+  };
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
   useEffect(() => {
@@ -724,64 +826,82 @@ export const TurnCard = memo(function TurnCard({
     // conversation advancing rather than the list redrawing.
     <article aria-busy={running && !queued} className="animate-rise-in py-7">
       {/* prompt */}
-      <div className="group/prompt flex items-start justify-end gap-1">
-        {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
-            button so future turn actions slot in beside "Save as template…". */}
-        {onSaveTemplate && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button
-                type="button"
-                aria-label={t("templateFrom.menu")}
-                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+      <div className="group/prompt flex flex-col items-end">
+        <div className="flex items-start justify-end gap-1">
+          {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
+              button so future turn actions slot in beside "Save as template…". */}
+          {onSaveTemplate && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<button
+                  type="button"
+                  aria-label={t("templateFrom.menu")}
+                  className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+                >
+                  <MoreHorizontal className="size-3.5" aria-hidden />
+                </button>}
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
+                  {t("templateFrom.saveAs")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
+            {promptImages.length > 0 && (
+              <div
+                data-prompt-images
+                className={cn(
+                  "grid min-w-0 gap-1.5",
+                  visiblePrompt && "mb-2",
+                  promptImages.length > 1 && "grid-cols-2",
+                )}
               >
-                <MoreHorizontal className="size-3.5" aria-hidden />
-              </button>}
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
-                {t("templateFrom.saveAs")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
-          {promptImages.length > 0 && (
-            <div
-              data-prompt-images
-              className={cn(
-                "grid min-w-0 gap-1.5",
-                visiblePrompt && "mb-2",
-                promptImages.length > 1 && "grid-cols-2",
-              )}
+                {promptImages.map((image, index) => (
+                  <PromptImageThumbnail key={`${image.id}-${index}`} image={image} />
+                ))}
+              </div>
+            )}
+            {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
+            {turn.delivery && (
+              <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
+                {turn.delivery === "queued"
+                  ? t("turn.queued", { position: turn.queuePosition ?? 1 })
+                  : t("turn.steered")}
+              </p>
+            )}
+            {promptIsLong && (
+              <button
+                type="button"
+                aria-expanded={promptExpanded}
+                onClick={() => setPromptExpanded((value) => !value)}
+                className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {promptExpanded ? (
+                  <ChevronUp className="size-3" aria-hidden />
+                ) : (
+                  <ChevronDown className="size-3" aria-hidden />
+                )}
+                {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
+              </button>
+            )}
+          </div>
+        </div>
+        <div
+          data-turn-actions="prompt"
+          className="mt-1 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+        >
+          <time dateTime={new Date(turn.startedAt).toISOString()}>
+            {clock.format(turn.startedAt)}
+          </time>
+          {promptText && (
+            <TurnActionButton
+              label={t(copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt")}
+              onClick={() => copyText("prompt", promptText)}
             >
-              {promptImages.map((image, index) => (
-                <PromptImageThumbnail key={`${image.id}-${index}`} image={image} />
-              ))}
-            </div>
-          )}
-          {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
-          {turn.delivery && (
-            <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
-              {turn.delivery === "queued"
-                ? t("turn.queued", { position: turn.queuePosition ?? 1 })
-                : t("turn.steered")}
-            </p>
-          )}
-          {promptIsLong && (
-            <button
-              type="button"
-              aria-expanded={promptExpanded}
-              onClick={() => setPromptExpanded((value) => !value)}
-              className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            >
-              {promptExpanded ? (
-                <ChevronUp className="size-3" aria-hidden />
-              ) : (
-                <ChevronDown className="size-3" aria-hidden />
-              )}
-              {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-            </button>
+              {copied === "prompt" ? <Check aria-hidden /> : <Copy aria-hidden />}
+            </TurnActionButton>
           )}
         </div>
       </div>
@@ -986,6 +1106,46 @@ export const TurnCard = memo(function TurnCard({
             )}
             {dur && <span className="font-mono text-cap text-muted-foreground">{dur}</span>}
           </span>
+        </div>
+      )}
+
+      {!running && turn.text && (
+        <div
+          data-turn-actions="response"
+          className="mt-2 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+        >
+          <TurnActionButton
+            label={t(copied === "response" ? "turn.copiedResponse" : "turn.copyResponse")}
+            onClick={() => copyText("response", turn.text)}
+          >
+            {copied === "response" ? <Check aria-hidden /> : <Copy aria-hidden />}
+          </TurnActionButton>
+          {feedbackKey && (
+            <>
+              <TurnActionButton
+                label={t("turn.helpful")}
+                pressed={feedback === "helpful"}
+                onClick={() => chooseFeedback("helpful")}
+              >
+                <ThumbsUp aria-hidden />
+              </TurnActionButton>
+              <TurnActionButton
+                label={t("turn.unhelpful")}
+                pressed={feedback === "unhelpful"}
+                onClick={() => chooseFeedback("unhelpful")}
+              >
+                <ThumbsDown aria-hidden />
+              </TurnActionButton>
+            </>
+          )}
+          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
+            <TurnActionButton label={t("turn.fork")} onClick={() => onFork(turn)}>
+              <GitFork aria-hidden />
+            </TurnActionButton>
+          )}
+          <time dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}>
+            {clock.format(turn.endedAt ?? turn.startedAt)}
+          </time>
         </div>
       )}
     </article>

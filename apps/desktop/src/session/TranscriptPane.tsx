@@ -26,6 +26,9 @@ interface TranscriptPaneProps {
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
   linkActions?: BuiltinLinkActions;
+  /** Durable source session used for local feedback identity and turn branching. */
+  sessionId?: string | null;
+  onForkTurn?: (turn: Turn) => void;
   onAddSelection: (text: string) => void;
   onExplainSelection: (text: string) => void;
   onAskSelectionInSideChat: (text: string) => void;
@@ -47,6 +50,8 @@ export function TranscriptPane({
   canPinPlan,
   onSaveTemplate,
   linkActions,
+  sessionId,
+  onForkTurn,
   onAddSelection,
   onExplainSelection,
   onAskSelectionInSideChat,
@@ -125,6 +130,12 @@ export function TranscriptPane({
                       canPinPlan={canPinPlan}
                       onSaveTemplate={onSaveTemplate}
                       linkActions={linkActions}
+                      onFork={onForkTurn}
+                      feedbackKey={
+                        sessionId && turn.transcriptStartSeq !== undefined
+                          ? `codetwo.turnFeedback:${sessionId}:${turn.transcriptStartSeq}`
+                          : undefined
+                      }
                     />
                   </li>
                 ))}

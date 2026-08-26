@@ -1063,6 +1063,11 @@ export default function App() {
     ((a: Annotation, context: string) => void) | null
   >(null);
   const insertFileRef = useRef<((path: string) => void) | null>(null);
+  const insertSessionRef = useRef<((session: {
+    id: string;
+    title: string;
+    throughSeq: number;
+  }) => void) | null>(null);
   const focusEditorRef = useRef<(() => void) | null>(null);
   const clearEditorRef = useRef<(() => void) | null>(null);
   const insertMarkdownRef = useRef<
@@ -3021,8 +3026,26 @@ export default function App() {
 
   const createTaskDraft = useCallback(() => {
     setTaskContext(null, false);
-    createSession();
+    return createSession();
   }, [createSession, setTaskContext]);
+
+  const forkTurnIntoTask = useCallback((turn: Turn) => {
+    const sourceSession = activeSessionRef.current;
+    const throughSeq = turn.transcriptStartSeq;
+    const insertSession = insertSessionRef.current;
+    if (!sourceSession || throughSeq === undefined || !insertSession) {
+      toast(t("turn.forkFailed"), "error");
+      return;
+    }
+    const sourceTitle = activeSessionTitle ?? sourceSession.slice(0, 8);
+    if (!createTaskDraft()) return;
+    insertSession({
+      id: sourceSession,
+      title: sourceTitle,
+      throughSeq,
+    });
+    toast(t("turn.forked"), "success");
+  }, [activeSessionTitle, createTaskDraft, t, toast]);
 
   const createTemporarySession = useCallback(() => {
     setTaskContext(null, true);
@@ -6507,6 +6530,8 @@ export default function App() {
                 canPinPlan={scenesSurfaceEnabled && canPinPlan}
                 onSaveTemplate={openTemplateDraft}
                 linkActions={builtinLinkActions}
+                sessionId={activeSession}
+                onForkTurn={forkTurnIntoTask}
                 onAddSelection={addSelectedText}
                 onExplainSelection={explainSelectedText}
                 onAskSelectionInSideChat={askSelectedTextInSideChat}
@@ -6843,6 +6868,7 @@ export default function App() {
                     insertTextRef={insertTextRef}
                     insertAnnotationRef={insertAnnotationRef}
                     insertFileRef={insertFileRef}
+                    insertSessionRef={insertSessionRef}
                     focusRef={focusEditorRef}
                     clearRef={clearEditorRef}
                     insertMarkdownRef={insertMarkdownRef}

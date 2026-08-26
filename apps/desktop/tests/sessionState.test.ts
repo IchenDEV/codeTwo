@@ -401,6 +401,12 @@ describe("session event isolation", () => {
     ).toBe(false);
     expect(matchesSubmittedEditorRevision(submitted, 7, submitted, 7)).toBe(true);
     expect(matchesSubmittedEditorRevision(submitted, 8, submitted, 7)).toBe(false);
+    expect(
+      sameDocBlocks(
+        [{ type: "session", session_id: "source", through_seq: 11 }],
+        [{ type: "session", session_id: "source", through_seq: 12 }],
+      ),
+    ).toBe(false);
   });
 
   test("updates the running snapshot immutably", () => {

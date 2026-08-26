@@ -1560,7 +1560,7 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
                 frozen_revision,
                 ..
             } => lines.push(format!("Referenced canvas: {id}@{frozen_revision}")),
-            DocBlock::Session { session_id } => {
+            DocBlock::Session { session_id, .. } => {
                 lines.push(format!("Referenced session: {session_id}"))
             }
             DocBlock::Skill { skill_id, .. } => lines.push(format!("Used skill: {skill_id}")),

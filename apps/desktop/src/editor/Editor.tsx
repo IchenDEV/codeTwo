@@ -53,6 +53,12 @@ interface EditorProps {
   insertAnnotationRef: MutableRefObject<((a: Annotation, context: string) => void) | null>;
   // App inserts `@file` mentions (from the file browser) through this.
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
+  // A transcript branch prepends a bounded past-chat mention to the new task draft.
+  insertSessionRef?: MutableRefObject<((session: {
+    id: string;
+    title: string;
+    throughSeq: number;
+  }) => void) | null>;
   // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
   focusRef: MutableRefObject<(() => void) | null>;
   // App empties the document after a successful send.
@@ -270,6 +276,7 @@ export function DocEditor({
   insertTextRef,
   insertAnnotationRef,
   insertFileRef,
+  insertSessionRef,
   focusRef,
   clearRef,
   insertMarkdownRef,
@@ -385,7 +392,13 @@ export function DocEditor({
         case "session":
           return {
             type: "paragraph",
-            content: [{ type: "sessionMention", props: { sessionId: block.session_id } }, " "],
+            content: [{
+              type: "sessionMention",
+              props: {
+                sessionId: block.session_id,
+                throughSeq: block.through_seq ?? 0,
+              },
+            }, " "],
           };
         case "issue":
           // Rebuild the embedded context the same way the core compile arm does (state "open"),
@@ -554,6 +567,23 @@ export function DocEditor({
     insertFileRef.current = (path: string) => {
       editor.insertInlineContent([{ type: "fileMention", props: { path } }, " "]);
     };
+    if (insertSessionRef) insertSessionRef.current = ({ id, title, throughSeq }) => {
+      const first = editor.document[0];
+      if (!first) return;
+      editor.insertBlocks(
+        [{
+          type: "paragraph",
+          content: [{
+            type: "sessionMention",
+            props: { sessionId: id, title, throughSeq },
+          }, " "],
+        }],
+        first,
+        "before",
+      );
+      onEmptyChange(false);
+      editor.focus();
+    };
     focusRef.current = () => editor.focus();
     clearRef.current = () => {
       // Replace every block with one empty paragraph. Removing them all leaves BlockNote with no
@@ -673,6 +703,7 @@ export function DocEditor({
       insertTextRef.current = null;
       insertAnnotationRef.current = null;
       insertFileRef.current = null;
+      if (insertSessionRef) insertSessionRef.current = null;
       focusRef.current = null;
       clearRef.current = null;
       if (insertMarkdownRef) insertMarkdownRef.current = null;
@@ -685,7 +716,7 @@ export function DocEditor({
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertSessionRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();
@@ -767,7 +798,10 @@ export function DocEditor({
           onItemClick={(item) => {
             editor.insertInlineContent([
               item.kind === "chat"
-                ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
+                ? {
+                    type: "sessionMention",
+                    props: { sessionId: item.id, title: item.title, throughSeq: 0 },
+                  }
                 : item.kind === "artifact"
                   ? {
                       type: "artifactMention",

@@ -224,7 +224,11 @@ export function sameDocBlocks(a: readonly DocBlock[], b: readonly DocBlock[]): b
       case "image":
         return right.type === left.type && left.path === right.path;
       case "session":
-        return right.type === "session" && left.session_id === right.session_id;
+        return (
+          right.type === "session" &&
+          left.session_id === right.session_id &&
+          left.through_seq === right.through_seq
+        );
       case "canvas":
         return (
           right.type === "canvas" &&

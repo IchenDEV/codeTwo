@@ -15,6 +15,7 @@ const previewStartedAt = Date.now() - 31_000;
 
 const previewTurn: Turn = {
   id: 1,
+  transcriptStartSeq: 1,
   accepted: true,
   streamBoundaryKnown: true,
   prompt: "检查新的对话渲染：文本、工具调用、图表和交互式可视化应当在同一条流里按顺序出现。",
@@ -120,6 +121,7 @@ const previewTurn: Turn = {
   ],
   plan: ["Inspect the transcript path", "Run renderer checks", "Report the evidence"],
   startedAt: previewStartedAt,
+  endedAt: previewStartedAt + 25_000,
 };
 const previewTurns = [previewTurn] as const;
 
@@ -130,7 +132,7 @@ export function RichTranscriptPreview() {
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
         <p className="text-ui font-medium">Rich conversation</p>
-        <span className="ms-auto text-fine text-muted-foreground">Streaming</span>
+        <span className="ms-auto text-fine text-muted-foreground">Completed</span>
         <Button
           type="button"
           size="compact"
@@ -158,6 +160,8 @@ export function RichTranscriptPreview() {
             loadingEarlier={false}
             onLoadEarlier={() => {}}
             scroll={scroll}
+            sessionId="rich-transcript-preview"
+            onForkTurn={() => {}}
             onAddSelection={() => {}}
             onExplainSelection={() => {}}
             onAskSelectionInSideChat={() => {}}
