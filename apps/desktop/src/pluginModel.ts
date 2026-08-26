@@ -33,6 +33,13 @@ export interface PluginRuntimeContribution {
   scopeSupport: Array<"user" | "project">;
 }
 
+export interface PluginRuntimeCommandContribution {
+  id: string;
+  title: string;
+  description: string;
+  argsSchema: Record<string, unknown> | null;
+}
+
 export interface PluginLanguageServerContribution {
   id: string;
   languages: string[];
@@ -47,14 +54,17 @@ export interface C2PluginManifest {
   description: string;
   author: string;
   repository: string;
-  standardVersion: typeof C2_PLUGIN_STANDARD_VERSION;
+  standardVersion: C2PluginStandardVersion;
   runtime: PluginRuntimeContribution | null;
+  commands: PluginRuntimeCommandContribution[];
   ui: PluginUiContribution[];
   languageServers: PluginLanguageServerContribution[];
 }
 
 export const AGENT_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-export const C2_PLUGIN_STANDARD_VERSION = "1.0.0";
+export const C2_PLUGIN_STANDARD_VERSION = "1.1.0";
+export const C2_PLUGIN_STANDARD_VERSIONS = ["1.0.0", C2_PLUGIN_STANDARD_VERSION] as const;
+export type C2PluginStandardVersion = (typeof C2_PLUGIN_STANDARD_VERSIONS)[number];
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -89,7 +99,8 @@ function safeId(value: string): boolean {
 }
 
 function commandName(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value);
+  return typeof value === "string" && value.length <= 128 &&
+    /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+$/.test(value);
 }
 
 function safeCommand(value: string): boolean {
@@ -128,13 +139,35 @@ export function parsePluginRuntimeContribution(value: unknown): PluginRuntimeCon
   const normalizedScopes = scopeSupport.length > 0 ? [...new Set(scopeSupport)] : ["user" as const];
   if (!normalizedScopes.includes("user")) normalizedScopes.unshift("user");
   return {
-    protocol: typeof raw.protocol === "string" ? raw.protocol : C2_PLUGIN_STANDARD_VERSION,
+    protocol: typeof raw.protocol === "string" ? raw.protocol : "1.0.0",
     command: raw.command.trim(),
     args: strings(raw.args),
     env: stringRecord(raw.env),
     inject: strings(raw.inject),
     optionalInject: strings(raw.optionalInject),
     scopeSupport: normalizedScopes,
+  };
+}
+
+export function parsePluginRuntimeCommandContribution(
+  value: unknown,
+): PluginRuntimeCommandContribution | null {
+  if (!isObject(value)) return null;
+  const raw = asObject(value);
+  if (!hasOnlyKeys(raw, ["id", "title", "description", "argsSchema"])) return null;
+  if (!commandName(raw.id)) return null;
+  if (typeof raw.title !== "string" || raw.title.trim().length === 0 || raw.title.length > 80) {
+    return null;
+  }
+  if (raw.description != null && (
+    typeof raw.description !== "string" || raw.description.length > 300
+  )) return null;
+  if (raw.argsSchema != null && !isObject(raw.argsSchema)) return null;
+  return {
+    id: raw.id,
+    title: raw.title.trim(),
+    description: typeof raw.description === "string" ? raw.description.trim() : "",
+    argsSchema: raw.argsSchema == null ? null : raw.argsSchema,
   };
 }
 
@@ -280,17 +313,28 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
   }
   const c2 = asObject(c2Value);
   const standardVersion = typeof c2.standardVersion === "string" ? c2.standardVersion : "";
-  if (standardVersion !== C2_PLUGIN_STANDARD_VERSION) {
+  if (!C2_PLUGIN_STANDARD_VERSIONS.includes(standardVersion as C2PluginStandardVersion)) {
     throw new Error(`Unsupported C2 plugin standard: ${standardVersion || "missing"}`);
   }
+  const supportsStaticCommands = standardVersion === C2_PLUGIN_STANDARD_VERSION;
   const unknownFields = Object.keys(c2).filter(
-    (key) => !["standardVersion", "runtime", "ui", "languageServers"].includes(key),
+    (key) => ![
+      "standardVersion", "runtime", "ui", "languageServers",
+      ...(supportsStaticCommands ? ["commands"] : []),
+    ].includes(key),
   );
   if (unknownFields.length > 0) {
     throw new Error(`Unknown C2 plugin fields: ${unknownFields.join(", ")}`);
   }
   const runtime = c2.runtime == null ? null : parsePluginRuntimeContribution(c2.runtime);
   if (c2.runtime != null && !runtime) throw new Error("extensions.dev.codetwo.runtime is invalid");
+  const commands = parsePluginContributionArray(
+    c2.commands,
+    parsePluginRuntimeCommandContribution,
+    "extensions.dev.codetwo.commands",
+    true,
+  );
+  if (commands.length > 100) throw new Error("extensions.dev.codetwo.commands has too many entries");
   const ui = parsePluginContributionArray(
     c2.ui,
     parsePluginUiContribution,
@@ -303,10 +347,24 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     "extensions.dev.codetwo.languageServers",
     true,
   );
+  assertUniquePluginContributionIds(commands, "extensions.dev.codetwo.commands");
   assertUniquePluginContributionIds(ui, "extensions.dev.codetwo.ui");
   assertUniquePluginContributionIds(languageServers, "extensions.dev.codetwo.languageServers");
   if (ui.length > 0 && !runtime) {
     throw new Error("UI action contributions require extensions.dev.codetwo.runtime");
+  }
+  if (supportsStaticCommands && runtime && commands.length === 0) {
+    throw new Error("C2 1.1 process runtimes require extensions.dev.codetwo.commands");
+  }
+  if (commands.length > 0 && !runtime) {
+    throw new Error("Runtime command contributions require extensions.dev.codetwo.runtime");
+  }
+  const declaredCommands = new Set(commands.map((command) => command.id));
+  const unknownUiCommand = ui.find((contribution) => !declaredCommands.has(contribution.command));
+  if (commands.length > 0 && unknownUiCommand) {
+    throw new Error(
+      `UI action ${unknownUiCommand.id} references undeclared runtime command ${unknownUiCommand.command}`,
+    );
   }
   const author = asObject(raw.author);
   return {
@@ -315,8 +373,9 @@ export function parsePluginManifest(value: unknown): C2PluginManifest {
     description: typeof raw.description === "string" ? raw.description.slice(0, 500) : "",
     author: typeof author.name === "string" ? author.name : "",
     repository: typeof raw.repository === "string" ? raw.repository : "",
-    standardVersion: C2_PLUGIN_STANDARD_VERSION,
+    standardVersion: standardVersion as C2PluginStandardVersion,
     runtime,
+    commands,
     ui,
     languageServers,
   };

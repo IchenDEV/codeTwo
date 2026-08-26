@@ -173,7 +173,7 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   disabled: "Disabled",
   pending: "Pending",
   loading: "Loading",
-  active: "Active",
+  active: "Ready",
   failed: "Failed",
   disposed: "Unloaded",
   requires_auth: "Authentication required",

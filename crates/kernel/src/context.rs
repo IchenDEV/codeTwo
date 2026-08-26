@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub struct Context {
     runtime: Arc<Runtime>,
     scope: ScopeId,
+    generation: u64,
     command_realm: CommandRealm,
     /// Service-name → realm overrides inherited from [`Context::isolate`].
     isolate: Arc<HashMap<String, u64>>,
@@ -28,9 +29,11 @@ pub struct Context {
 
 impl Context {
     pub(crate) fn for_scope(runtime: Arc<Runtime>, scope: ScopeId) -> Context {
+        let generation = runtime.scope_generation(scope).unwrap_or_default();
         Context {
             runtime,
             scope,
+            generation,
             command_realm: CommandRealm::Global,
             isolate: Arc::new(HashMap::new()),
         }
@@ -39,12 +42,14 @@ impl Context {
     pub(crate) fn with_isolate(
         runtime: Arc<Runtime>,
         scope: ScopeId,
+        generation: u64,
         isolate: Arc<HashMap<String, u64>>,
         command_realm: CommandRealm,
     ) -> Context {
         Context {
             runtime,
             scope,
+            generation,
             command_realm,
             isolate,
         }
@@ -53,6 +58,12 @@ impl Context {
     /// The scope this context registers into.
     pub fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    /// Whether this handle still belongs to the scope generation that created it.
+    pub fn is_current(&self) -> bool {
+        self.runtime
+            .scope_generation_is_current(self.scope, self.generation)
     }
 
     pub fn runtime(&self) -> &Arc<Runtime> {
@@ -72,6 +83,7 @@ impl Context {
         Context {
             runtime: self.runtime.clone(),
             scope: self.scope,
+            generation: self.generation,
             command_realm: realm,
             isolate: self.isolate.clone(),
         }
@@ -187,6 +199,7 @@ impl Context {
         Context {
             runtime: self.runtime.clone(),
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: Arc::new(isolate),
         }
@@ -203,9 +216,11 @@ impl Context {
     ///
     /// This is the escape hatch that keeps everything else honest: a plugin that spawns a task,
     /// opens a socket, or writes a temp file hands the undo to `effect` and stops being something
-    /// the app has to remember.
-    pub fn effect(&self, dispose: impl FnOnce() + Send + 'static) {
-        self.runtime.add_disposable(self.scope, Box::new(dispose));
+    /// the app has to remember. Returns `false` and runs the cleanup immediately when this context
+    /// belongs to a disposed or superseded scope generation.
+    pub fn effect(&self, dispose: impl FnOnce() + Send + 'static) -> bool {
+        self.runtime
+            .add_disposable(self.scope, self.generation, Box::new(dispose))
     }
 
     /// Spawn a task tied to this scope: unloading the plugin aborts it.
@@ -304,7 +319,8 @@ impl Context {
     }
 
     /// Listen on the untyped side of the bus — the one frontends and external plugins can reach.
-    pub fn on_json<F, Fut>(&self, name: impl Into<String>, listener: F)
+    /// Returns `false` when this context belongs to a disposed or superseded scope generation.
+    pub fn on_json<F, Fut>(&self, name: impl Into<String>, listener: F) -> bool
     where
         F: Fn(Arc<Value>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Option<Value>> + Send + 'static,
@@ -316,6 +332,7 @@ impl Context {
         };
         self.runtime.add_json_listener(
             name.into(),
+            self.generation,
             JsonListenerEntry {
                 scope: self.scope,
                 seq,
@@ -324,7 +341,7 @@ impl Context {
                     Box::pin(async move { listener(value).await })
                 }),
             },
-        );
+        )
     }
 
     pub async fn emit_json(&self, name: &str, payload: Value) {
@@ -530,16 +547,22 @@ impl Context {
 pub struct WeakContext {
     runtime: std::sync::Weak<Runtime>,
     scope: ScopeId,
+    generation: u64,
     command_realm: CommandRealm,
     isolate: Arc<HashMap<String, u64>>,
 }
 
 impl WeakContext {
-    /// `None` once the app has been dropped — treat it as "nobody is listening any more".
+    /// `None` once the app is dropped or the owning scope is disposed or reloaded.
     pub fn upgrade(&self) -> Option<Context> {
+        let runtime = self.runtime.upgrade()?;
+        if !runtime.scope_generation_is_current(self.scope, self.generation) {
+            return None;
+        }
         Some(Context {
-            runtime: self.runtime.upgrade()?,
+            runtime,
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         })
@@ -552,6 +575,7 @@ impl Context {
         WeakContext {
             runtime: Arc::downgrade(&self.runtime),
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         }

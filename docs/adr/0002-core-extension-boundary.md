@@ -48,7 +48,9 @@ must evolve as a versioned Extension API instead of inheriting every new interna
 Installed bundles retain these properties:
 
 - install is data-only;
-- code runs only after enablement and bundle trust;
+- static contributions are inspectable before code runs;
+- enablement and bundle trust make an extension eligible, while its child process activates on the
+  first declared command invocation;
 - each bundle and project realm owns a separate supervised process;
 - UI is declarative and rendered by the host;
 - process isolation does not claim an OS sandbox.

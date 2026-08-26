@@ -24,7 +24,8 @@ const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_BUNDLE_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_DEPTH: usize = 12;
 const C2_EXTENSION_NAMESPACE: &str = "dev.codetwo";
-const C2_PLUGIN_STANDARD_VERSION: &str = "1.0.0";
+const C2_PLUGIN_STANDARD_VERSION: &str = "1.1.0";
+const C2_PLUGIN_STANDARD_LEGACY_VERSION: &str = "1.0.0";
 const AGENT_PLUGIN_SCHEMA_JSON: &str =
     include_str!("../schemas/agent-plugins/1.0.0/plugin.schema.json");
 const AGENT_MCP_SCHEMA_JSON: &str = include_str!("../schemas/agent-plugins/1.0.0/mcp.schema.json");
@@ -45,6 +46,10 @@ pub struct PluginCounts {
     pub scaffolds: usize,
     #[serde(default)]
     pub commands: usize,
+    /// Commands implemented by a C2 process runtime and declared statically in plugin.json.
+    /// Agent Plugins prompt commands remain in `commands` above.
+    #[serde(default)]
+    pub runtime_commands: usize,
     #[serde(default)]
     pub hooks: usize,
     #[serde(default)]
@@ -73,6 +78,7 @@ impl PluginCounts {
             + self.mcp_servers
             + self.scaffolds
             + self.commands
+            + self.runtime_commands
             + self.hooks
             + self.lsp_servers
             + self.monitors
@@ -139,6 +145,21 @@ pub struct PluginUiContribution {
     pub order: i32,
 }
 
+/// A host-readable command contribution implemented by the bundle's process runtime.
+///
+/// The manifest remains authoritative: the runtime may confirm these commands during initialize,
+/// but it cannot add to or rewrite this surface dynamically.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PluginRuntimeCommand {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args_schema: Option<Value>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginScaffold {
     pub id: String,
@@ -153,9 +174,9 @@ pub struct PluginScaffold {
 /// A bundle that ships **code** through `extensions.dev.codetwo.runtime`: a process C2 speaks the
 /// plugin protocol to (`docs/plugin-protocol.md`).
 ///
-/// Installing one still executes nothing. The process starts only when the user has marked the
-/// plugin **trusted** *and* enabled — see [`crate::app::protocol`], which is the only place that
-/// spawns it.
+/// Installing one still executes nothing. For the 1.1 static contract, enablement and trust make
+/// its host adapter eligible; the first declared command starts the process. See
+/// [`crate::app::protocol`], which is the only place that spawns it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PluginRuntimeSpec {
@@ -209,6 +230,8 @@ pub struct InstalledPlugin {
     pub components: Vec<Skill>,
     pub scaffolds: Vec<PluginScaffold>,
     pub extension_components: Vec<PluginExtensionComponent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_commands: Option<Vec<PluginRuntimeCommand>>,
     pub ui_contributions: Vec<PluginUiContribution>,
     pub lsp_servers: Vec<PluginLspServer>,
     pub diagnostics: Vec<PluginDiagnostic>,
@@ -298,7 +321,16 @@ fn semantic_version_major(value: &str) -> Option<u64> {
     Some(major)
 }
 
-fn c2_extension(manifest: &RawManifest) -> Result<&serde_json::Map<String, Value>, PluginError> {
+fn supported_c2_standard(version: &str) -> bool {
+    matches!(
+        version,
+        C2_PLUGIN_STANDARD_LEGACY_VERSION | C2_PLUGIN_STANDARD_VERSION
+    )
+}
+
+fn c2_extension(
+    manifest: &RawManifest,
+) -> Result<(&serde_json::Map<String, Value>, &str), PluginError> {
     let extension = manifest
         .extensions
         .as_object()
@@ -313,7 +345,7 @@ fn c2_extension(manifest: &RawManifest) -> Result<&serde_json::Map<String, Value
         .get("standardVersion")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if standard_version != C2_PLUGIN_STANDARD_VERSION {
+    if !supported_c2_standard(standard_version) {
         return Err(PluginError::Invalid(format!(
             "Unsupported C2 plugin standard: {}",
             if standard_version.is_empty() {
@@ -326,10 +358,12 @@ fn c2_extension(manifest: &RawManifest) -> Result<&serde_json::Map<String, Value
     let unknown = extension
         .keys()
         .filter(|key| {
-            !matches!(
+            let common = matches!(
                 key.as_str(),
                 "standardVersion" | "runtime" | "ui" | "languageServers"
-            )
+            );
+            !(common
+                || (standard_version == C2_PLUGIN_STANDARD_VERSION && key.as_str() == "commands"))
         })
         .cloned()
         .collect::<Vec<_>>();
@@ -339,7 +373,7 @@ fn c2_extension(manifest: &RawManifest) -> Result<&serde_json::Map<String, Value
             unknown.join(", ")
         )));
     }
-    Ok(extension)
+    Ok((extension, standard_version))
 }
 
 fn parse_runtime(
@@ -373,8 +407,10 @@ fn parse_runtime(
 #[derive(Debug, Default)]
 struct ManifestSet {
     primary: RawManifest,
+    standard_version: String,
     runtime: Option<Value>,
     extension_components: Vec<PluginExtensionComponent>,
+    runtime_commands: Option<Vec<PluginRuntimeCommand>>,
     ui_contributions: Vec<PluginUiContribution>,
     lsp_servers: Vec<PluginLspServer>,
     diagnostics: Vec<PluginDiagnostic>,
@@ -488,6 +524,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             .iter()
             .filter(|item| item.kind == "command")
             .count(),
+        runtime_commands: manifest_set.runtime_commands.as_ref().map_or(0, Vec::len),
         hooks: manifest_set
             .extension_components
             .iter()
@@ -536,7 +573,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             author: author_name(&manifest.author),
             source: checkout.spec.source(),
             repository,
-            standard_version: C2_PLUGIN_STANDARD_VERSION.into(),
+            standard_version: manifest_set.standard_version,
             enabled: true,
             trusted: false,
             scope: PluginInstallScope::User,
@@ -544,6 +581,7 @@ pub fn from_github(checkout: &GitHubCheckout) -> Result<PluginBundle, PluginErro
             components,
             scaffolds,
             extension_components: manifest_set.extension_components,
+            runtime_commands: manifest_set.runtime_commands,
             ui_contributions: manifest_set.ui_contributions,
             lsp_servers: manifest_set.lsp_servers,
             diagnostics: manifest_set.diagnostics,
@@ -620,7 +658,7 @@ pub fn install(
         serde_json::from_str::<InstalledPlugin>(&text)
             .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
     }) {
-        if previous.schema_version == 3 && previous.standard_version == C2_PLUGIN_STANDARD_VERSION {
+        if previous.schema_version == 3 && supported_c2_standard(&previous.standard_version) {
             bundle.plugin.enabled = previous.enabled;
             bundle.plugin.trusted = previous.trusted;
             bundle.plugin.scope = previous.scope;
@@ -690,7 +728,8 @@ pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError>
         match serde_json::from_str::<InstalledPlugin>(&text) {
             Ok(mut plugin)
                 if plugin.schema_version == 3
-                    && plugin.standard_version == C2_PLUGIN_STANDARD_VERSION =>
+                    && supported_c2_standard(&plugin.standard_version)
+                    && valid_installed_runtime_contract(&plugin) =>
             {
                 let data_dir = plugin_data_dir(plugins_dir, &plugin.id);
                 resolve_relative_mcp_commands(&mut plugin, &plugin_dir, &data_dir);
@@ -702,6 +741,23 @@ pub fn load_dir(plugins_dir: &Path) -> Result<Vec<InstalledPlugin>, PluginError>
     }
     plugins.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(plugins)
+}
+
+fn valid_installed_runtime_contract(plugin: &InstalledPlugin) -> bool {
+    match plugin.standard_version.as_str() {
+        C2_PLUGIN_STANDARD_LEGACY_VERSION => plugin.runtime_commands.is_none(),
+        C2_PLUGIN_STANDARD_VERSION => {
+            let Some(commands) = plugin.runtime_commands.as_ref() else {
+                return false;
+            };
+            if plugin.runtime.is_some() == commands.is_empty() {
+                return false;
+            }
+            validate_runtime_commands(commands).is_ok()
+                && validate_runtime_command_ownership(commands, &plugin.ui_contributions).is_ok()
+        }
+        _ => false,
+    }
 }
 
 pub fn uninstall(plugins_dir: &Path, id: &str) -> Result<(), PluginError> {
@@ -828,8 +884,11 @@ fn load_manifest(root: &Path) -> Result<ManifestSet, PluginError> {
     let value: Value = serde_json::from_str(&std::fs::read_to_string(&manifest_path)?)?;
     validate_agent_manifest(&value)?;
     let primary: RawManifest = serde_json::from_value(value)?;
-    let extension = c2_extension(&primary)?;
+    let (extension, standard_version) = c2_extension(&primary)?;
+    let standard_version = standard_version.to_string();
+    let supports_static_commands = standard_version == C2_PLUGIN_STANDARD_VERSION;
     let runtime = extension.get("runtime").cloned();
+    let runtime_commands = discover_runtime_commands(extension.get("commands"))?;
     let lsp_servers = discover_lsp_servers(root, extension.get("languageServers"))?;
     let mut extension_components =
         discover_extension_components(root, &lsp_servers, &mut diagnostics)?;
@@ -838,6 +897,20 @@ fn load_manifest(root: &Path) -> Result<ManifestSet, PluginError> {
         return Err(PluginError::Invalid(
             "UI action contributions require extensions.dev.codetwo.runtime".into(),
         ));
+    }
+    if supports_static_commands && runtime.is_some() && runtime_commands.is_empty() {
+        return Err(PluginError::Invalid(
+            "C2 1.1 process runtimes require at least one extensions.dev.codetwo.commands declaration"
+                .into(),
+        ));
+    }
+    if !runtime_commands.is_empty() && runtime.is_none() {
+        return Err(PluginError::Invalid(
+            "Runtime command contributions require extensions.dev.codetwo.runtime".into(),
+        ));
+    }
+    if !runtime_commands.is_empty() {
+        validate_runtime_command_ownership(&runtime_commands, &ui_contributions)?;
     }
     extension_components.extend(ui_contributions.iter().map(|contribution| {
         PluginExtensionComponent {
@@ -852,12 +925,120 @@ fn load_manifest(root: &Path) -> Result<ManifestSet, PluginError> {
     }));
     Ok(ManifestSet {
         primary,
+        standard_version,
         runtime,
         extension_components,
+        runtime_commands: supports_static_commands.then_some(runtime_commands),
         ui_contributions,
         lsp_servers,
         diagnostics,
     })
+}
+
+fn valid_runtime_command_id(command: &str) -> bool {
+    if command.is_empty() || command.len() > 128 {
+        return false;
+    }
+    let mut segments = command.split('.');
+    let Some(first) = segments.next() else {
+        return false;
+    };
+    let valid_segment = |segment: &str| {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    };
+    valid_segment(first) && segments.clone().next().is_some() && segments.all(valid_segment)
+}
+
+fn discover_runtime_commands(
+    value: Option<&Value>,
+) -> Result<Vec<PluginRuntimeCommand>, PluginError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let entries = value.as_array().ok_or_else(|| {
+        PluginError::Invalid("extensions.dev.codetwo.commands must be an array".into())
+    })?;
+    let mut commands = Vec::new();
+    for (index, value) in entries.iter().enumerate() {
+        let command: PluginRuntimeCommand =
+            serde_json::from_value(value.clone()).map_err(|error| {
+                PluginError::Invalid(format!(
+                    "extensions.dev.codetwo.commands[{index}] is invalid: {error}"
+                ))
+            })?;
+        commands.push(command);
+    }
+    validate_runtime_commands(&commands)?;
+    for command in &mut commands {
+        command.title = command.title.trim().to_string();
+        command.description = command.description.trim().to_string();
+    }
+    Ok(commands)
+}
+
+fn validate_runtime_commands(commands: &[PluginRuntimeCommand]) -> Result<(), PluginError> {
+    if commands.len() > MAX_COMPONENTS {
+        return Err(PluginError::Invalid(format!(
+            "extensions.dev.codetwo.commands cannot contain more than {MAX_COMPONENTS} entries"
+        )));
+    }
+    let mut ids = HashSet::new();
+    for (index, command) in commands.iter().enumerate() {
+        if !valid_runtime_command_id(&command.id) {
+            return Err(PluginError::Invalid(format!(
+                "extensions.dev.codetwo.commands[{index}] requires a namespaced id"
+            )));
+        }
+        if !ids.insert(command.id.as_str()) {
+            return Err(PluginError::Invalid(format!(
+                "Duplicate C2 runtime command id: {}",
+                command.id
+            )));
+        }
+        if command.title.trim().is_empty() || command.title.len() > 80 {
+            return Err(PluginError::Invalid(format!(
+                "extensions.dev.codetwo.commands[{index}] requires a title"
+            )));
+        }
+        if command.description.len() > 300 {
+            return Err(PluginError::Invalid(format!(
+                "extensions.dev.codetwo.commands[{index}] has an invalid description"
+            )));
+        }
+        if command
+            .args_schema
+            .as_ref()
+            .is_some_and(|schema| !schema.is_object())
+        {
+            return Err(PluginError::Invalid(format!(
+                "extensions.dev.codetwo.commands[{index}].argsSchema must be an object"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_runtime_command_ownership(
+    commands: &[PluginRuntimeCommand],
+    ui_contributions: &[PluginUiContribution],
+) -> Result<(), PluginError> {
+    let declared = commands
+        .iter()
+        .map(|command| command.id.as_str())
+        .collect::<HashSet<_>>();
+    if let Some(contribution) = ui_contributions
+        .iter()
+        .find(|contribution| !declared.contains(contribution.command.as_str()))
+    {
+        return Err(PluginError::Invalid(format!(
+            "UI action `{}` references undeclared runtime command `{}`",
+            contribution.id, contribution.command
+        )));
+    }
+    Ok(())
 }
 
 fn locate_plugin_root(selected: &Path) -> Result<PathBuf, PluginError> {
@@ -1108,16 +1289,7 @@ fn discover_ui_contributions(
         let command = item
             .get("command")
             .and_then(Value::as_str)
-            .filter(|command| {
-                let segments = command.split('.').collect::<Vec<_>>();
-                segments.len() >= 2
-                    && segments.iter().all(|segment| {
-                        !segment.is_empty()
-                            && segment
-                                .chars()
-                                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
-                    })
-            })
+            .filter(|command| valid_runtime_command_id(command))
             .ok_or_else(|| {
                 PluginError::Invalid(format!(
                     "extensions.dev.codetwo.ui[{index}] requires a namespaced command"
@@ -2419,9 +2591,111 @@ mod tests {
             ]
         );
         assert_eq!(bundle.plugin.counts.runtime, 1);
+        assert_eq!(bundle.plugin.standard_version, "1.0.0");
+        assert!(bundle.plugin.runtime_commands.is_none());
         assert_eq!(bundle.plugin.counts.ui, 1);
         assert_eq!(bundle.plugin.ui_contributions[0].command, "review.run");
         assert_eq!(bundle.plugin.ui_contributions[0].order, 10);
+    }
+
+    #[test]
+    fn loads_static_runtime_commands_from_c2_standard_1_1() {
+        let root =
+            std::env::temp_dir().join(format!("codetwo-static-runtime-{}", uuid::Uuid::new_v4()));
+        write(
+            &root.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"static-runtime","version":"1.0.0",
+              "extensions":{"dev.codetwo":{
+                "standardVersion":"1.1.0",
+                "commands":[{"id":"review.run","title":"Review workspace","description":"Review this project.","argsSchema":{"type":"object","additionalProperties":false}}],
+                "runtime":{"protocol":"1.0.0","command":"node","args":["plugin.js"]},
+                "ui":[{"id":"review","slot":"composer.toolbar","label":"Review","command":"review.run"}]
+              }}
+            }"#,
+        );
+        write(&root.join("plugin.js"), "process.exit(0);\n");
+
+        let bundle = from_github(&checkout(root)).unwrap();
+        assert_eq!(bundle.plugin.standard_version, "1.1.0");
+        assert_eq!(bundle.plugin.counts.runtime_commands, 1);
+        let commands = bundle
+            .plugin
+            .runtime_commands
+            .expect("1.1 runtime commands must be stored statically");
+        assert_eq!(commands[0].id, "review.run");
+        assert_eq!(commands[0].title, "Review workspace");
+        assert_eq!(
+            commands[0].args_schema,
+            Some(serde_json::json!({
+                "type": "object",
+                "additionalProperties": false
+            }))
+        );
+    }
+
+    #[test]
+    fn closes_static_runtime_command_ownership_and_schema() {
+        let missing = std::env::temp_dir().join(format!(
+            "codetwo-missing-static-commands-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write(
+            &missing.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"missing-static","version":"1.0.0",
+              "extensions":{"dev.codetwo":{"standardVersion":"1.1.0","runtime":{"command":"node"}}}
+            }"#,
+        );
+        assert!(matches!(
+            from_github(&checkout(missing)),
+            Err(PluginError::Invalid(message)) if message.contains("require at least one")
+        ));
+
+        let unknown_ui = std::env::temp_dir().join(format!(
+            "codetwo-unknown-ui-command-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write(
+            &unknown_ui.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"unknown-ui-command","version":"1.0.0",
+              "extensions":{"dev.codetwo":{
+                "standardVersion":"1.1.0",
+                "commands":[{"id":"review.run","title":"Review"}],
+                "runtime":{"command":"node"},
+                "ui":[{"id":"missing","slot":"composer.toolbar","label":"Missing","command":"review.missing"}]
+              }}
+            }"#,
+        );
+        assert!(matches!(
+            from_github(&checkout(unknown_ui)),
+            Err(PluginError::Invalid(message)) if message.contains("references undeclared runtime command")
+        ));
+
+        let legacy = std::env::temp_dir().join(format!(
+            "codetwo-legacy-static-field-{}",
+            uuid::Uuid::new_v4()
+        ));
+        write(
+            &legacy.join("plugin.json"),
+            r#"{
+              "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+              "name":"legacy-static-field","version":"1.0.0",
+              "extensions":{"dev.codetwo":{
+                "standardVersion":"1.0.0",
+                "commands":[{"id":"review.run","title":"Review"}],
+                "runtime":{"command":"node"}
+              }}
+            }"#,
+        );
+        assert!(matches!(
+            from_github(&checkout(legacy)),
+            Err(PluginError::Invalid(message)) if message.contains("Unknown C2 plugin fields: commands")
+        ));
     }
 
     #[test]
@@ -2492,8 +2766,13 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(bundle.plugin.standard_version, "1.0.0");
+        assert_eq!(bundle.plugin.standard_version, "1.1.0");
         assert_eq!(bundle.plugin.counts.runtime, 1);
+        assert_eq!(bundle.plugin.counts.runtime_commands, 1);
+        assert_eq!(
+            bundle.plugin.runtime_commands.as_ref().unwrap()[0].id,
+            "hello.dirty"
+        );
         assert_eq!(bundle.plugin.runtime.unwrap().command, "node");
     }
 
@@ -2863,7 +3142,10 @@ mod tests {
         .unwrap();
         set_enabled(&data, &first.id, false).unwrap();
         set_trusted(&data, &first.id, true).unwrap();
-        write_manifest(&source, "local-state", "2.0.0", "");
+        write(
+            &source.join("plugin.json"),
+            r#"{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"local-state","version":"2.0.0","extensions":{"dev.codetwo":{"standardVersion":"1.1.0"}}}"#,
+        );
 
         let updated = install(
             &data,
@@ -2871,6 +3153,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(updated.version, "2.0.0");
+        assert_eq!(updated.standard_version, "1.1.0");
+        assert_eq!(updated.runtime_commands, Some(Vec::new()));
         assert!(!updated.enabled);
         assert!(updated.trusted);
         assert!(source.join("skills/example/SKILL.md").is_file());

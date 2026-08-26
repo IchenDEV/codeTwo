@@ -27,6 +27,7 @@ fn install_runtime_bundle_with_command(
     std::fs::create_dir_all(&bundle_dir).unwrap();
     let server = bundle_dir.join("server.sh");
     let script = r#"#!/bin/sh
+printf '%s\n' "$$" >> "$C2_TEST_START_LOG"
 IFS= read -r initialize || exit 1
 initialize_id=$(printf '%s' "$initialize" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
 data_dir=$(printf '%s' "$initialize" | sed -n 's/.*"dataDir":"\([^"]*\)".*/\1/p')
@@ -44,6 +45,7 @@ done
     let mut runtime = json!({
         "protocol": "1.0.0",
         "command": server,
+        "env": { "C2_TEST_START_LOG": data_dir.join(format!("{id}-runtime-starts.log")) },
     });
     if project_capable {
         runtime["scopeSupport"] = json!(["user", "project"]);
@@ -57,7 +59,7 @@ done
         "author": "CodeTwo",
         "source": "local-test",
         "repository": bundle_dir,
-        "standard_version": "1.0.0",
+        "standard_version": "1.1.0",
         "enabled": true,
         "trusted": true,
         "scope": "user",
@@ -69,11 +71,17 @@ done
             "pipelines": 0,
             "scaffolds": 0,
             "ui": 1,
+            "runtime_commands": 1,
             "runtime": 1
         },
         "components": [],
         "scaffolds": [],
         "extension_components": [],
+        "runtime_commands": [{
+            "id": command,
+            "title": "Locate runtime",
+            "description": "Report the active runtime realm."
+        }],
         "ui_contributions": [{
             "id": "where",
             "slot": "session.header",
@@ -106,6 +114,13 @@ async fn boot(data_dir: &Path) -> CoreApp {
     )
     .await
     .unwrap()
+}
+
+#[cfg(unix)]
+fn runtime_start_count(data_dir: &Path, id: &str) -> usize {
+    std::fs::read_to_string(data_dir.join(format!("{id}-runtime-starts.log")))
+        .map(|contents| contents.lines().count())
+        .unwrap_or(0)
 }
 
 async fn change(
@@ -148,6 +163,13 @@ async fn an_installed_process_bundle_is_a_managed_project_plugin() {
         [PluginScopeSupport::User, PluginScopeSupport::Project]
     );
     assert_eq!(bundle.status, Some(Status::Active));
+    let extensions = app.call("extensions.list", Value::Null).await.unwrap();
+    assert_eq!(extensions["ready"], json!(["fixture"]));
+    assert_eq!(
+        runtime_start_count(data.path(), "fixture"),
+        0,
+        "a ready adapter must leave the process dormant"
+    );
 
     let global = app.call("bundle.where", Value::Null).await.unwrap();
     let local_a = app
@@ -178,6 +200,7 @@ async fn an_installed_process_bundle_is_a_managed_project_plugin() {
     assert_ne!(local_a["pid"], local_b["pid"]);
     assert_ne!(global["dataDir"], local_a["dataDir"]);
     assert_ne!(local_a["dataDir"], local_b["dataDir"]);
+    assert_eq!(runtime_start_count(data.path(), "fixture"), 3);
 
     change(
         &app,

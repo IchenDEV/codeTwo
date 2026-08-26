@@ -1,4 +1,4 @@
-# C2 Plugin Standard 1.0.0
+# C2 Plugin Standard 1.1.0
 
 Status: **normative for every C2 plugin bundle**. The root package schema is
 [Agent Plugins 1.0.0](https://agent-plugins.org/specification), extended by the mandatory
@@ -36,7 +36,8 @@ lifecycle or expose subsystem-specific bridge wrappers.
 ```text
 Bundle ──discovery──▶ Contributions
    │
-   └── trusted runtime declaration ──▶ Runtime module ──▶ command/event seam
+   ├── static command declarations ──▶ ready host stubs
+   └── trusted runtime declaration ──▶ on-command activation ──▶ process
                                                  │
 Policy ──catalog / plan / apply / reset──────────┤
                                                  │
@@ -46,9 +47,10 @@ Host adapter ──capabilities and native services──┘
 ## 2. Bundle manifest
 
 Every bundle MUST put identity in root `plugin.json` using Agent Plugins 1.0.0. C2-specific data
-MUST live under the reverse-domain namespace `extensions.dev.codetwo`; the namespace and
-`standardVersion: "1.0.0"` are required even for data-only bundles. Unknown top-level or C2 fields
-invalidate the bundle.
+MUST live under the reverse-domain namespace `extensions.dev.codetwo`; new bundles use
+`standardVersion: "1.1.0"`. C2 continues to read legacy `1.0.0` bundles, whose process commands are
+discovered eagerly during `initialize`. Unknown top-level or version-specific C2 fields invalidate
+the bundle.
 
 ```json
 {
@@ -58,7 +60,13 @@ invalidate the bundle.
   "description": "One sentence describing the user value.",
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.0.0",
+      "standardVersion": "1.1.0",
+      "commands": [{
+        "id": "review.run",
+        "title": "Review workspace",
+        "description": "Review the current workspace.",
+        "argsSchema": { "type": "object", "additionalProperties": false }
+      }],
       "runtime": {
         "protocol": "1.0.0",
         "command": "node",
@@ -89,14 +97,23 @@ invalidate the bundle.
 }
 ```
 
-`extensions.dev.codetwo` has these fields in 1.0.0:
+`extensions.dev.codetwo` has these fields in 1.1.0:
 
 | Field | Required | Contract |
 | --- | --- | --- |
-| `standardVersion` | yes | MUST equal `1.0.0`. Any other value invalidates the bundle. |
-| `runtime` | no | Declares one process runtime using the C2 Plugin Protocol. |
-| `ui` | no | Declares host-rendered action descriptors. A UI action requires `runtime` and may invoke only a command registered by that runtime. |
+| `standardVersion` | yes | MUST equal `1.1.0` for the static contract. `1.0.0` remains a legacy compatibility mode. |
+| `commands` | for a 1.1 process runtime | Declares the complete command surface before code runs. |
+| `runtime` | no | Declares one process implementation using the C2 Plugin Protocol. |
+| `ui` | no | Declares host-rendered action descriptors. A UI action requires `runtime` and may reference only a command in the same bundle's `commands` array. |
 | `languageServers` | no | Declares trusted stdio language-server processes selected by Monaco language ID. |
+
+Every `commands` entry has a unique namespaced `id`, a non-empty `title` of at most 80 characters,
+an optional `description` of at most 300 characters, and an optional object-valued `argsSchema`.
+There may be at most 100 entries. The host registers these declarations as dormant command stubs;
+the process may confirm only this exact ID/schema set during `initialize`. Missing, extra,
+duplicate, or schema-drifted implementations fail closed. Runtime descriptions never replace the
+Manifest copy. `argsSchema` is inspectable API metadata; this release verifies handshake equality
+but the runtime remains responsible for validating every invocation's arguments.
 
 The `runtime` object has these fields:
 
@@ -160,7 +177,7 @@ cargo run -p codetwo-core --example validate_bundle -- ../../packs/hello-runtime
 
 The Bun command is a fast manifest preflight. The Rust command uses the desktop installer's
 authoritative bounded bundle collector and package parser: it checks the Agent Plugins identity,
-exact C2 standard version, supported contributions, unique IDs, UI/runtime ownership,
+supported C2 standard version, supported contributions, unique IDs, UI/runtime ownership,
 bundle-relative executable paths, symlinks, and file/count/size limits. A valid bundle can be
 installed directly from a GitHub repository or `/tree/<ref>/<path>` URL, so a repository folder is
 the preferred distribution artifact. Releases MAY additionally attach an archive of that exact
@@ -196,14 +213,15 @@ The lifecycle is one transaction across configuration and runtime state:
 
 1. Installation validates and atomically stores a bundle. It MUST NOT run repository scripts or the
    declared runtime.
-2. A C2 process runtime and plugin LSP remain stopped until the bundle is both **enabled** and
-   **trusted**. MCP starts only through separate, explicit session composition; installation alone
-   never starts it.
+2. A C2 process runtime and plugin LSP remain ineligible until the bundle is both **enabled** and
+   **trusted**. For a 1.1 process runtime this registers dormant host stubs; its child starts only
+   when a declared command is first invoked. MCP starts only through separate, explicit session
+   composition; installation alone never starts it.
 3. `plugins.plan_change` validates scope, configuration schema, graph/config revisions, dependents,
    and active resources. It returns the exact impact to confirm.
 4. `plugins.apply_change` accepts that single-use plan only while its revisions are current.
-5. The loader starts, reloads, or unloads affected scopes. All commands, listeners, tasks, services,
-   child processes, and cleanup effects owned by the scope MUST disappear on unload.
+5. The loader makes affected scopes ready, reloads, or unloads them. All commands, listeners, tasks,
+   services, child processes, and cleanup effects owned by the scope MUST disappear on unload.
 6. Policy becomes last-known-good only after the requested runtime state is reached. Failure rolls
    back policy and runtime together.
 
@@ -225,12 +243,13 @@ with only essential management plugins. `plugins.reset` is the recovery operatio
 
 ## 5. Contribution conformance
 
-| Contribution | C2 1.0 status | Required behavior |
+| Contribution | C2 1.1 status | Required behavior |
 | --- | --- | --- |
 | Agent Skills | supported | `skills/<name>/SKILL.md`; inline fallback across providers |
 | Subagents | supported with fallback | `agents/*.md`; provider delegation when available, otherwise the same bounded contract is followed inline |
 | MCP | supported | Root `mcp.json` using Agent Plugins 1.0.0; stdio, Streamable HTTP, and SSE are capability-checked |
-| Commands | supported as content | `commands/*.md` compiles to the Skill fallback; runtime commands use the process protocol |
+| Prompt commands | supported as content | `commands/*.md` compiles to the Skill fallback |
+| Runtime commands | supported statically | `extensions.dev.codetwo.commands` is host-readable and activates its process implementation on first invocation |
 | Scenes and Pipelines | supported on Rust core hosts | Versioned schemas, library commands, assignment, hooks, scheduling, artifacts, and pipeline execution |
 | Scaffolds | supported | Explicit project target, complete conflict check, no overwrite |
 | LSP | stdio supported | Declared only in `extensions.dev.codetwo.languageServers`; explicit trust, matching language mapping, owned lifecycle |
@@ -263,7 +282,7 @@ Plugin boundaries for current features are fixed as follows:
 
 ## 7. Host capability profiles
 
-The Rust core is the reference C2 1.0 runtime. The TUI and server may intentionally omit UI or
+The Rust core is the reference C2 1.1 runtime. The TUI and server may intentionally omit UI or
 host-native plugins through configuration while retaining the same graph and command semantics.
 
 The Electrobun desktop packages the reference runtime as `codetwo-desktop-host`. That executable
@@ -291,7 +310,7 @@ host may register a fail-closed placeholder to preserve the typed bridge.
 
 ## 8. Security and resource limits
 
-- A trusted process has the user's OS permissions. C2 1.0 provides lifecycle isolation, not an OS
+- A trusted process has the user's OS permissions. C2 1.1 provides lifecycle isolation, not an OS
   sandbox, filesystem jail, network policy, or secret boundary.
 - The JSON event bus is host-wide and MUST NOT be treated as project-confidential.
 - Bundle discovery MUST reject traversal, escape through symlinks, oversized files/bundles, and
@@ -310,13 +329,13 @@ Three versions evolve independently:
 | Version | Location | Loading rule |
 | --- | --- | --- |
 | Agent Plugins | root `$schema` | Only locally recognized schema versions load |
-| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | MUST equal `1.0.0` |
-| C2 Plugin Protocol | manifest `runtime.protocol` and `initialize.protocolVersion` | Handshake major must match; the handshake is authoritative |
+| C2 Plugin Standard | `extensions.dev.codetwo.standardVersion` | `1.1.0` is current; `1.0.0` loads through the legacy eager path |
+| C2 Plugin Protocol | manifest `runtime.protocol` and `initialize.protocolVersion` | Handshake major must match; in 1.1 the Manifest command set is authoritative |
 
 A different Agent Plugins schema or C2 standard version is a different package contract and does
 not load. Unknown fields, malformed runtime/UI/LSP declarations, duplicate contribution IDs, and
 missing required files invalidate the bundle. Protocol negotiation happens only after a valid,
-trusted bundle has been enabled and its process starts.
+trusted bundle has been enabled and a declared command activates its process.
 
 ## 10. Conformance checklist
 

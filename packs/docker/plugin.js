@@ -11,105 +11,11 @@ const PROTOCOL_VERSION = "1.0.0";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
-const COMMANDS = [
-  {
-    name: "docker.status",
-    description: "Show Docker engine health, version, and resource counts.",
-    schema: objectSchema({}),
-  },
-  {
-    name: "docker.containers",
-    description: "List Docker containers with stable structured fields.",
-    schema: objectSchema({
-      all: { type: "boolean", description: "Include stopped containers. Defaults to true." },
-      limit: { type: "integer", minimum: 1, maximum: 500, description: "Maximum results. Defaults to 100." },
-    }),
-  },
-  {
-    name: "docker.images",
-    description: "List local Docker images with stable structured fields.",
-    schema: objectSchema({
-      all: { type: "boolean", description: "Include intermediate images. Defaults to false." },
-      limit: { type: "integer", minimum: 1, maximum: 500, description: "Maximum results. Defaults to 100." },
-    }),
-  },
-  {
-    name: "docker.inspect",
-    description: "Inspect one Docker container.",
-    schema: objectSchema({ container: containerSchema() }, ["container"]),
-  },
-  {
-    name: "docker.logs",
-    description: "Read a bounded tail of one Docker container's logs.",
-    schema: objectSchema({
-      container: containerSchema(),
-      tail: { type: "integer", minimum: 1, maximum: 1000, description: "Lines to return. Defaults to 200." },
-      timestamps: { type: "boolean", description: "Include Docker timestamps." },
-      since: { type: "string", maxLength: 64, description: "Docker duration or timestamp, such as 10m or 2026-08-26T10:00:00Z." },
-    }, ["container"]),
-  },
-  {
-    name: "docker.start",
-    description: "Start one stopped Docker container.",
-    schema: objectSchema({ container: containerSchema() }, ["container"]),
-  },
-  {
-    name: "docker.stop",
-    description: "Stop one running Docker container.",
-    schema: objectSchema({
-      container: containerSchema(),
-      timeout: { type: "integer", minimum: 0, maximum: 300, description: "Seconds before Docker kills the container. Defaults to Docker's setting." },
-    }, ["container"]),
-  },
-  {
-    name: "docker.restart",
-    description: "Restart one Docker container.",
-    schema: objectSchema({
-      container: containerSchema(),
-      timeout: { type: "integer", minimum: 0, maximum: 300, description: "Seconds before Docker kills the container. Defaults to Docker's setting." },
-    }, ["container"]),
-  },
-  {
-    name: "docker.pull",
-    description: "Pull one Docker image by repository, tag, or digest.",
-    schema: objectSchema({ image: imageSchema() }, ["image"]),
-  },
-  {
-    name: "docker.remove_image",
-    description: "Remove one local Docker image.",
-    schema: objectSchema({
-      image: imageSchema(),
-      force: { type: "boolean", description: "Force removal when Docker permits it." },
-    }, ["image"]),
-  },
-];
-
-function objectSchema(properties, required = []) {
-  return {
-    type: "object",
-    additionalProperties: false,
-    ...(required.length > 0 ? { required } : {}),
-    properties,
-  };
-}
-
-function containerSchema() {
-  return {
-    type: "string",
-    minLength: 1,
-    maxLength: 255,
-    description: "Container name or ID.",
-  };
-}
-
-function imageSchema() {
-  return {
-    type: "string",
-    minLength: 1,
-    maxLength: 512,
-    description: "Image repository, tag, digest, or ID.",
-  };
-}
+const COMMANDS = require("./plugin.json").extensions["dev.codetwo"].commands.map((command) => ({
+  name: command.id,
+  description: command.description,
+  schema: command.argsSchema,
+}));
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);

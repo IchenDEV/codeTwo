@@ -6,12 +6,14 @@
 
 use codetwo_core::app::protocol::{Channel, ProtocolPlugin, Transport, PROTOCOL_VERSION};
 use codetwo_core::app::{AppConfig, CoreApp};
+use codetwo_core::plugin::PluginRuntimeCommand;
 use codetwo_kernel::{async_trait, CommandRealm, FnPlugin, PluginError, Status};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
+use tokio::sync::Notify;
 
 // ---- the mock plugin ---------------------------------------------------------------------------
 
@@ -23,6 +25,10 @@ struct Behaviour {
     silent: bool,
     /// Try to shadow a global host command from a project command realm.
     shadows_global_command: bool,
+    /// Return an implementation schema that disagrees with the static manifest.
+    schema_mismatch: bool,
+    /// Hold the first transport start so a scope reload can supersede it.
+    start_gate: Option<Arc<StartGate>>,
 }
 
 impl Default for Behaviour {
@@ -31,8 +37,17 @@ impl Default for Behaviour {
             protocol_version: PROTOCOL_VERSION.to_string(),
             silent: false,
             shadows_global_command: false,
+            schema_mismatch: false,
+            start_gate: None,
         }
     }
+}
+
+#[derive(Default)]
+struct StartGate {
+    started: AtomicBool,
+    entered: Notify,
+    release: Notify,
 }
 
 /// Everything the mock observed, so tests can assert on the plugin's side of the conversation.
@@ -47,11 +62,19 @@ struct MockTransport {
     behaviour: Behaviour,
     observed: Arc<Observed>,
     shutdown_called: Arc<AtomicBool>,
+    start_count: Arc<AtomicUsize>,
 }
 
 #[async_trait]
 impl Transport for MockTransport {
     async fn start(&self) -> Result<Channel, PluginError> {
+        self.start_count.fetch_add(1, Ordering::SeqCst);
+        if let Some(gate) = &self.behaviour.start_gate {
+            if !gate.started.swap(true, Ordering::SeqCst) {
+                gate.entered.notify_one();
+                gate.release.notified().await;
+            }
+        }
         let (host_side, plugin_side) = tokio::io::duplex(64 * 1024);
         let (reader, writer) = tokio::io::split(host_side);
 
@@ -106,6 +129,12 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                 }
                 let commands = if behaviour.shadows_global_command {
                     json!([{ "name": "demo.internal" }])
+                } else if behaviour.schema_mismatch {
+                    json!([
+                        { "name": "mock.echo", "schema": { "type": "array" } },
+                        { "name": "mock.viaHost" },
+                        { "name": "mock.internalViaHost" }
+                    ])
                 } else {
                     json!([
                         { "name": "mock.echo", "description": "Echo the arguments back." },
@@ -202,6 +231,7 @@ struct Fixture {
     app: CoreApp,
     observed: Arc<Observed>,
     shutdown_called: Arc<AtomicBool>,
+    start_count: Arc<AtomicUsize>,
     _dir: tempfile::TempDir,
 }
 
@@ -212,6 +242,41 @@ async fn load(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
 async fn load_in_realm(
     behaviour: Behaviour,
     realm: CommandRealm,
+) -> (Fixture, codetwo_kernel::Fork) {
+    load_in_realm_with_commands(behaviour, realm, None).await
+}
+
+async fn load_static(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
+    load_in_realm_with_commands(behaviour, CommandRealm::Global, Some(static_commands())).await
+}
+
+fn static_commands() -> Vec<PluginRuntimeCommand> {
+    vec![
+        PluginRuntimeCommand {
+            id: "mock.echo".into(),
+            title: "Echo".into(),
+            description: "Static echo description.".into(),
+            args_schema: None,
+        },
+        PluginRuntimeCommand {
+            id: "mock.viaHost".into(),
+            title: "Call public host command".into(),
+            description: String::new(),
+            args_schema: None,
+        },
+        PluginRuntimeCommand {
+            id: "mock.internalViaHost".into(),
+            title: "Try internal host command".into(),
+            description: String::new(),
+            args_schema: None,
+        },
+    ]
+}
+
+async fn load_in_realm_with_commands(
+    behaviour: Behaviour,
+    realm: CommandRealm,
+    declared_commands: Option<Vec<PluginRuntimeCommand>>,
 ) -> (Fixture, codetwo_kernel::Fork) {
     let dir = tempfile::tempdir().unwrap();
     // A bare host: this test is about the protocol, not about the rest of the app.
@@ -261,16 +326,22 @@ async fn load_in_realm(
 
     let observed = Arc::new(Observed::default());
     let shutdown_called = Arc::new(AtomicBool::new(false));
+    let start_count = Arc::new(AtomicUsize::new(0));
     let transport = MockTransport {
         behaviour,
         observed: observed.clone(),
         shutdown_called: shutdown_called.clone(),
+        start_count: start_count.clone(),
     };
-    let fork = app.ctx().with_command_realm(realm).plugin(
-        ProtocolPlugin::new("mock", Arc::new(transport))
-            .with_handshake_timeout(Duration::from_millis(200)),
-        json!({ "greeting": "hi" }),
-    );
+    let mut plugin = ProtocolPlugin::new("mock", Arc::new(transport))
+        .with_handshake_timeout(Duration::from_millis(200));
+    if let Some(commands) = declared_commands {
+        plugin = plugin.with_declared_commands(commands);
+    }
+    let fork = app
+        .ctx()
+        .with_command_realm(realm)
+        .plugin(plugin, json!({ "greeting": "hi" }));
     app.flush().await;
 
     (
@@ -278,6 +349,7 @@ async fn load_in_realm(
             app,
             observed,
             shutdown_called,
+            start_count,
             _dir: dir,
         },
         fork,
@@ -313,6 +385,189 @@ async fn a_plugin_in_another_process_contributes_ordinary_commands() {
         echo.description.as_deref(),
         Some("Echo the arguments back.")
     );
+}
+
+#[tokio::test]
+async fn static_commands_activate_the_process_once_on_first_use() {
+    let (fixture, fork) = load_static(Behaviour::default()).await;
+    assert_eq!(fork.status(), Status::Active);
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 0);
+    assert!(!fixture.observed.initialized.load(Ordering::SeqCst));
+
+    let registered = fixture.app.commands();
+    let echo = registered
+        .iter()
+        .find(|command| command.name == "mock.echo")
+        .expect("the static stub is available before activation");
+    assert_eq!(
+        echo.description.as_deref(),
+        Some("Static echo description.")
+    );
+
+    let first = fixture.app.call("mock.echo", json!({ "call": 1 }));
+    let second = fixture.app.call("mock.echo", json!({ "call": 2 }));
+    let (first, second) = tokio::join!(first, second);
+    assert_eq!(first.unwrap(), json!({ "call": 1 }));
+    assert_eq!(second.unwrap(), json!({ "call": 2 }));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+    assert!(fixture.observed.initialized.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn unloading_a_dormant_static_runtime_removes_stubs_without_starting_it() {
+    let (fixture, fork) = load_static(Behaviour::default()).await;
+    fork.dispose();
+    fixture.app.flush().await;
+
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 0);
+    assert!(!fixture.shutdown_called.load(Ordering::SeqCst));
+    assert!(fixture.app.call("mock.echo", Value::Null).await.is_err());
+}
+
+#[tokio::test]
+async fn a_static_command_set_mismatch_fails_closed_for_the_scope_generation() {
+    let (fixture, _fork) = load_static(Behaviour {
+        shadows_global_command: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let first = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(first.to_string().contains("do not match the manifest"));
+    assert!(first.to_string().contains("disable and re-enable"));
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    let second = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert_eq!(second.to_string(), first.to_string());
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_static_command_schema_mismatch_is_rejected_before_invoke() {
+    let mut commands = static_commands();
+    commands[0].args_schema = Some(json!({ "type": "object" }));
+    let (fixture, _fork) = load_in_realm_with_commands(
+        Behaviour {
+            schema_mismatch: true,
+            ..Behaviour::default()
+        },
+        CommandRealm::Global,
+        Some(commands),
+    )
+    .await;
+
+    let error = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("does not match the manifest argsSchema"));
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn cancelling_first_activation_stops_the_child_and_allows_a_clean_retry() {
+    let (fixture, _fork) = load_static(Behaviour {
+        silent: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut first = Box::pin(fixture.app.call("mock.echo", Value::Null));
+    tokio::select! {
+        result = &mut first => panic!("silent activation unexpectedly completed: {result:?}"),
+        _ = tokio::time::sleep(Duration::from_millis(20)) => {}
+    }
+    drop(first);
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    fixture.shutdown_called.store(false, Ordering::SeqCst);
+    let retried = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(retried.to_string().contains("initialize"));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 2);
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn unloading_during_initialize_stops_the_pending_activation_before_flush_returns() {
+    let (fixture, fork) = load_static(Behaviour {
+        silent: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut call = Box::pin(fixture.app.call("mock.echo", Value::Null));
+    let initialized = tokio::time::timeout(Duration::from_millis(100), async {
+        while !fixture.observed.initialized.load(Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    });
+    tokio::select! {
+        result = &mut call => panic!("silent activation unexpectedly completed: {result:?}"),
+        result = initialized => result.expect("initialize should reach the silent plugin"),
+    }
+
+    fork.dispose();
+    fixture.app.flush().await;
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert!(tokio::time::timeout(Duration::from_millis(100), &mut call)
+        .await
+        .expect("unload should release the pending invocation")
+        .is_err());
+}
+
+#[tokio::test]
+async fn a_start_from_an_old_scope_generation_cannot_attach_after_reload() {
+    let gate = Arc::new(StartGate::default());
+    let (fixture, fork) = load_static(Behaviour {
+        start_gate: Some(gate.clone()),
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut stale_call = Box::pin(fixture.app.call("mock.echo", json!({ "old": true })));
+    tokio::select! {
+        result = &mut stale_call => panic!("gated start unexpectedly completed: {result:?}"),
+        _ = gate.entered.notified() => {}
+    }
+
+    fork.update(json!({ "greeting": "reloaded" }));
+    fixture.app.flush().await;
+    gate.release.notify_one();
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut stale_call)
+            .await
+            .expect("the stale start should be rejected")
+            .is_err()
+    );
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    let current = fixture
+        .app
+        .call("mock.echo", json!({ "current": true }))
+        .await
+        .unwrap();
+    assert_eq!(current, json!({ "current": true }));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]

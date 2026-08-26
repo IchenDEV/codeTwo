@@ -9,6 +9,12 @@
 
 const readline = require("readline");
 
+const COMMANDS = require("./plugin.json").extensions["dev.codetwo"].commands.map((command) => ({
+  name: command.id,
+  description: command.description,
+  schema: command.argsSchema,
+}));
+
 const send = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const log = (message, level = "info") => send({ jsonrpc: "2.0", method: "log", params: { level, message } });
 
@@ -56,17 +62,7 @@ rl.on("line", async (line) => {
           version: "1.0.0",
           protocolVersion: "1.0.0",
           description: "Example plugin.",
-          commands: [
-            {
-              name: "hello.dirty",
-              description: "How many files are modified in a workspace?",
-              schema: {
-                type: "object",
-                required: ["cwd"],
-                properties: { cwd: { type: "string" } },
-              },
-            },
-          ],
+          commands: COMMANDS,
           events: hostHasGitStatus ? ["skills/changed"] : [],
         },
       });

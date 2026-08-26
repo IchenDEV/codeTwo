@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
 
+import { listPlugins } from "../src/bridge";
 import {
   buildPluginManagerCatalog,
   normalizePluginProjectPath,
@@ -45,6 +46,21 @@ const emptyCatalog = {
 };
 
 describe("unified plugin catalog adapter", () => {
+  test("keeps the browser preview aligned with Docker's static command manifest", async () => {
+    const preview = (await listPlugins()).find((plugin) => plugin.id === "docker-tools-preview");
+    const manifest = await Bun.file(
+      new URL("../../../packs/docker/plugin.json", import.meta.url),
+    ).json();
+    const declared = manifest.extensions["dev.codetwo"].commands.map(({ id, title }) => ({
+      id,
+      title,
+    }));
+
+    expect(preview?.standard_version).toBe("1.1.0");
+    expect(preview?.counts).toMatchObject({ commands: 0, runtime_commands: declared.length });
+    expect(preview?.runtime_commands?.map(({ id, title }) => ({ id, title }))).toEqual(declared);
+  });
+
   test("normalizes project paths and maps the serde scope boundary", () => {
     expect(normalizePluginProjectPath("/tmp/demo///")).toBe("/tmp/demo");
     expect(normalizePluginProjectPath("/")).toBe("/");
@@ -102,13 +118,19 @@ describe("unified plugin catalog adapter", () => {
       author: "C2",
       source: "GitHub · c2/review",
       repository: "https://example.test/review",
-      standard_version: "1.0.0",
+      standard_version: "1.1.0",
       enabled: true,
       trusted: true,
       scope: "user",
-      counts: { runtime: 1, skills: 2 },
+      counts: { runtime: 1, runtime_commands: 1, skills: 2 },
       scaffolds: [],
       extension_components: [{ kind: "lsp", name: "rust", path: "plugin.json#extensions.dev.codetwo.languageServers", status: "ready" }],
+      runtime_commands: [{
+        id: "review.run",
+        title: "Review workspace",
+        description: "Review this workspace.",
+        argsSchema: null,
+      }],
       diagnostics: [],
     };
     const model = buildPluginManagerCatalog({
@@ -135,8 +157,11 @@ describe("unified plugin catalog adapter", () => {
       contributions: [
         { id: "runtime", label: "Process runtime", count: 1 },
         { id: "skills", label: "Skills", count: 2 },
+        { id: "runtime_commands", label: "Runtime commands", count: 1 },
       ],
     });
+    expect(model.plugins.find((plugin) => plugin.id === "bundle:review")?.commands)
+      .toEqual(["review.run"]);
     expect(model.components.find((component) => component.id === "plugin-manager.page")).toBeUndefined();
     expect(model.components.find((component) => component.id === "device-sync.settings")).toMatchObject({
       pluginId: "device-sync",

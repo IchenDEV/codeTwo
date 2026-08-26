@@ -9,7 +9,7 @@ native IPC path.
 
 ## Requirements
 
-- C2 with Plugin Standard 1.0.0 support
+- C2 with Plugin Standard 1.1.0 support
 - Node.js 18 or newer
 - Docker CLI with access to a running Docker engine
 
@@ -20,7 +20,8 @@ different executable.
 ## Install
 
 Install the `packs/docker` directory as a plugin bundle, then enable and trust its process runtime
-in Plugin Hub. Installation alone does not execute the plugin.
+in Plugin Hub. Installation and trust do not execute the plugin; its first `docker.*` command starts
+the process.
 
 During development, copy the bundle into C2's installed plugin directory and enable
 **Settings → Developer → Developer mode** for automatic reloads.
