@@ -710,7 +710,7 @@ export type DocBlock =
   | { type: "appshot"; id: string; title?: string }
   | { type: "attachment"; id: string; name?: string }
   | { type: "canvas"; id: string; frozen_revision: number; pixel_policy?: CanvasPixelPolicy }
-  | { type: "session"; session_id: string }
+  | { type: "session"; session_id: string; through_seq?: number }
   // R12: a referenced issue-tracker item with its snapshot embedded at insert time; mirrors core
   // `DocBlock::Issue`, which re-renders `issues::Issue::to_context` from exactly these fields.
   | { type: "issue"; source: string; id: string; title: string; url: string; body: string };

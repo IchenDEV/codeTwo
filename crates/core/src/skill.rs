@@ -570,6 +570,9 @@ pub enum DocBlock {
     /// planning conversation can be referenced from the document that implements it.
     Session {
         session_id: String,
+        /// Optional user-part sequence that caps the referenced chat at one completed turn.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        through_seq: Option<i64>,
     },
     /// A stored scene-artifact version; its content is inlined as labeled context at compile time.
     Artifact {
@@ -611,7 +614,7 @@ pub fn canonical_doc_text(doc: &[DocBlock]) -> String {
                 frozen_revision,
                 ..
             } => format!("[canvas:{id}@{frozen_revision}]"),
-            DocBlock::Session { session_id } => {
+            DocBlock::Session { session_id, .. } => {
                 format!("[chat:{}]", session_id.chars().take(8).collect::<String>())
             }
             DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
@@ -714,7 +717,7 @@ pub fn compile_with_canvas(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     gate: CanvasFeatureGate,
     capability: CanvasProviderImageCapability,
     resolve_canvas: &dyn Fn(&str, u64) -> Result<CanvasPromptPayload, crate::canvas::CanvasError>,
@@ -735,7 +738,7 @@ pub fn compile_with_appshots(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     data_dir: &std::path::Path,
 ) -> Result<CompiledPrompt, String> {
     let appshot_resolver = |id: &str| load_appshot(data_dir, id);
@@ -756,7 +759,7 @@ pub fn compile_with_canvas_and_appshots(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     data_dir: &std::path::Path,
     gate: CanvasFeatureGate,
     capability: CanvasProviderImageCapability,
@@ -811,7 +814,7 @@ pub fn compile_with_sessions(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
 ) -> CompiledPrompt {
     compile_full(doc, library, cwd, resolve_session, None)
 }
@@ -824,7 +827,7 @@ pub fn compile_full(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
 ) -> CompiledPrompt {
     compile_full_resolving(
@@ -843,7 +846,7 @@ fn compile_full_resolving(
     doc: &[DocBlock],
     library: &SkillLibrary,
     cwd: Option<&std::path::Path>,
-    resolve_session: Option<&dyn Fn(&str) -> Option<String>>,
+    resolve_session: Option<&dyn Fn(&str, Option<i64>) -> Option<String>>,
     resolve_artifact: Option<&dyn Fn(i64) -> Option<(String, String)>>,
     resolve_appshot: Option<&dyn Fn(&str) -> Result<ResolvedAppshot, String>>,
     resolve_attachment: Option<&dyn Fn(&str) -> Result<ResolvedAttachment, String>>,
@@ -912,15 +915,16 @@ fn compile_full_resolving(
                     _ => out.unresolved.push(format!("file:{path}")),
                 }
             }
-            DocBlock::Session { session_id } => {
-                match resolve_session.and_then(|resolve| resolve(session_id)) {
-                    Some(ctx) if !ctx.trim().is_empty() => {
-                        out.sessions.push(session_id.clone());
-                        parts.push(ctx);
-                    }
-                    _ => out.unresolved.push(format!("session:{session_id}")),
+            DocBlock::Session {
+                session_id,
+                through_seq,
+            } => match resolve_session.and_then(|resolve| resolve(session_id, *through_seq)) {
+                Some(ctx) if !ctx.trim().is_empty() => {
+                    out.sessions.push(session_id.clone());
+                    parts.push(ctx);
                 }
-            }
+                _ => out.unresolved.push(format!("session:{session_id}")),
+            },
             DocBlock::Artifact { record_id } => {
                 match resolve_artifact.and_then(|resolve| resolve(*record_id)) {
                     Some((label, content)) => {
@@ -1393,13 +1397,15 @@ mod tests {
         let doc = vec![
             DocBlock::Session {
                 session_id: "abc".into(),
+                through_seq: Some(7),
             },
             DocBlock::Text {
                 text: "Implement what we planned.".into(),
             },
         ];
-        let resolve = |id: &str| -> Option<String> {
-            (id == "abc").then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
+        let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+            (id == "abc" && through_seq == Some(7))
+                .then(|| "**Referenced chat** — Plan\n\n**User:**\nhello".to_string())
         };
         let compiled = compile_with_sessions(&doc, &lib, None, Some(&resolve));
         assert_eq!(compiled.sessions, vec!["abc".to_string()]);
@@ -1413,6 +1419,7 @@ mod tests {
         let lib = sample_library();
         let doc = vec![DocBlock::Session {
             session_id: "ghost".into(),
+            through_seq: None,
         }];
         let compiled = compile(&doc, &lib);
         assert!(compiled.sessions.is_empty());
@@ -1520,6 +1527,7 @@ mod tests {
             },
             DocBlock::Session {
                 session_id: "1234567890abcdef".into(),
+                through_seq: None,
             },
         ];
 

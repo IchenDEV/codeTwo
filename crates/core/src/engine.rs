@@ -2349,8 +2349,11 @@ impl Engine {
             return Ok(None);
         }
         let library = self.state.skills.lock().unwrap();
-        let resolve_session =
-            |id: &str| -> Option<String> { self.referenced_session_context(id).ok().flatten() };
+        let resolve_session = |id: &str, through_seq: Option<i64>| -> Option<String> {
+            self.referenced_session_context_through(id, through_seq)
+                .ok()
+                .flatten()
+        };
         let store = self.state.store.clone();
         let resolve_canvas = move |id: &str, revision: u64| {
             store
@@ -2431,12 +2434,57 @@ impl Engine {
         &self,
         session_id: &str,
     ) -> Result<Option<String>, StoreError> {
+        self.referenced_session_context_through(session_id, None)
+    }
+
+    /// Resolve a bounded chat reference. When `through_seq` is present it must identify a user
+    /// part, and the context stops immediately before the next user part so the whole selected turn
+    /// is retained without leaking later conversation into a branch.
+    pub fn referenced_session_context_through(
+        &self,
+        session_id: &str,
+        through_seq: Option<i64>,
+    ) -> Result<Option<String>, StoreError> {
         let Some(store) = &self.state.store else {
             return Ok(None);
         };
         let Some(session) = store.get_session(session_id)? else {
             return Ok(None);
         };
+        if let Some(through_seq) = through_seq {
+            let transcript = store.transcript_with_seq(session_id)?;
+            let Some(selected_index) = transcript
+                .iter()
+                .position(|(seq, role, _)| *seq == through_seq && *role == Role::User)
+            else {
+                return Ok(None);
+            };
+            let end_index = transcript
+                .iter()
+                .enumerate()
+                .skip(selected_index + 1)
+                .find_map(|(index, (_, role, _))| (*role == Role::User).then_some(index))
+                .unwrap_or(transcript.len());
+            let through_turn = &transcript[..end_index];
+            let user_indices: Vec<usize> = through_turn
+                .iter()
+                .enumerate()
+                .filter_map(|(index, (_, role, _))| (*role == Role::User).then_some(index))
+                .collect();
+            let first_kept_user = user_indices
+                .len()
+                .checked_sub(DEFAULT_TRANSCRIPT_TURNS)
+                .and_then(|index| user_indices.get(index).copied());
+            let start_index = first_kept_user.unwrap_or(0);
+            let earlier_omitted = start_index > 0;
+            let bounded: Vec<(Role, Part)> = through_turn[start_index..]
+                .iter()
+                .map(|(_, role, part)| (*role, part.clone()))
+                .collect();
+            let context =
+                transcript_context_with_omission(&session.title, &bounded, earlier_omitted);
+            return Ok((!context.trim().is_empty()).then_some(context));
+        }
         let page = store.transcript_page(session_id, None, DEFAULT_TRANSCRIPT_TURNS)?;
         let earlier_omitted = page.next_before.is_some();
         let transcript: Vec<(Role, Part)> = page
@@ -3244,8 +3292,10 @@ impl Engine {
         let compiled = match self.preflight_attachment_document(&doc, &cwd)? {
             Some(compiled) => compiled,
             None => {
-                let resolve = |id: &str| -> Option<String> {
-                    self.referenced_session_context(id).ok().flatten()
+                let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                    self.referenced_session_context_through(id, through_seq)
+                        .ok()
+                        .flatten()
                 };
                 let library = self.state.skills.lock().unwrap();
                 compile_with_sessions(
@@ -4331,8 +4381,10 @@ impl Engine {
                         let lib = self.state.skills.lock().unwrap();
                         // `@`-mentioned past chats resolve against the store; without one (tests,
                         // in-memory runs) they surface as unresolved rather than silently vanishing.
-                        let resolve = |id: &str| -> Option<String> {
-                            self.referenced_session_context(id).ok().flatten()
+                        let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                            self.referenced_session_context_through(id, through_seq)
+                                .ok()
+                                .flatten()
                         };
                         compile_with_sessions(
                             &doc,
@@ -7101,6 +7153,56 @@ mod session_management_tests {
         assert!(context.contains("TURN_024_AGENT_ONLY"));
         assert!(context.contains("_(earlier messages omitted)_"));
         assert!(context.chars().count() <= 16_000);
+    }
+
+    #[test]
+    fn referenced_context_can_stop_after_one_selected_turn() {
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mut session = Session::new(ProviderId::Grok, "/work");
+        session.title = "Branch source".into();
+        store.upsert_session(&session).unwrap();
+        let mut selected_user_seq = 0;
+        let mut selected_agent_seq = 0;
+        for turn in 0..3 {
+            let user_seq = store
+                .append_part(
+                    &session.id,
+                    Role::User,
+                    &Part::Prompt {
+                        text: format!("USER_{turn}"),
+                        display: format!("user {turn}"),
+                    },
+                )
+                .unwrap();
+            let agent_seq = store
+                .append_part(
+                    &session.id,
+                    Role::Agent,
+                    &Part::Text {
+                        text: format!("AGENT_{turn}"),
+                    },
+                )
+                .unwrap();
+            if turn == 1 {
+                selected_user_seq = user_seq;
+                selected_agent_seq = agent_seq;
+            }
+        }
+        let (engine, _events) =
+            Engine::with_store(Vec::new(), SkillLibrary::default(), store.clone());
+
+        let context = engine
+            .referenced_session_context_through(&session.id, Some(selected_user_seq))
+            .unwrap()
+            .unwrap();
+        assert!(context.contains("USER_0"));
+        assert!(context.contains("AGENT_1"));
+        assert!(!context.contains("USER_2"));
+        assert!(!context.contains("AGENT_2"));
+        assert!(engine
+            .referenced_session_context_through(&session.id, Some(selected_agent_seq))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
