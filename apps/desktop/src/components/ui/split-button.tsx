@@ -35,11 +35,11 @@ interface SplitButtonProps {
 }
 
 const separatorColor: Record<SplitButtonVariant, string> = {
-  default: "border-primary-foreground/25",
-  destructive: "border-white/25",
-  outline: "border-border",
-  secondary: "border-secondary-foreground/20",
-  ghost: "border-border",
+  default: "color-mix(in oklch, var(--primary-foreground) 25%, transparent)",
+  destructive: "color-mix(in oklch, white 25%, transparent)",
+  outline: "var(--border)",
+  secondary: "color-mix(in oklch, var(--secondary-foreground) 20%, transparent)",
+  ghost: "var(--border)",
 };
 
 /**
@@ -73,18 +73,20 @@ function SplitButton({
   return (
     <span
       className={cn(
-        "inline-flex items-stretch rounded-md",
+        "inline-flex items-stretch",
         disabled && "pointer-events-none opacity-50",
         className,
       )}
+      style={{ borderRadius: "var(--ds-button-radius)" }}
     >
       <button
         type="button"
         disabled={disabled}
         className={cn(
           buttonVariants({ variant, size }),
-          "rounded-r-none border-r-0 focus-visible:z-10",
+          "rounded-r-none focus-visible:z-10",
         )}
+        style={{ borderRightWidth: 0 }}
         onClick={onClick}
       >
         {label}
@@ -99,9 +101,12 @@ function SplitButton({
               aria-label="More actions"
               className={cn(
                 buttonVariants({ variant, size }),
-                "rounded-l-none border-l px-1.5 focus-visible:z-10",
-                separatorColor[variant],
+                "rounded-l-none px-1.5 focus-visible:z-10",
               )}
+              style={{
+                borderLeftWidth: "1px",
+                borderLeftColor: separatorColor[variant],
+              }}
             >
               <ChevronDown className="size-3.5" />
             </button>
