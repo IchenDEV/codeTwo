@@ -26,6 +26,23 @@ pub enum PluginOrigin {
     ThirdParty,
 }
 
+/// The product role of a runtime module.
+///
+/// [`Plugin`] is the kernel's lifecycle interface, so both C2 Core and optional extensions use it
+/// internally. The role keeps that implementation detail from turning every core subsystem into
+/// a user-manageable plugin.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginRole {
+    /// Required product infrastructure owned by host configuration, not extension policy.
+    Core,
+    /// Optional C2-owned behaviour compiled with the product.
+    #[default]
+    BuiltIn,
+    /// A separately installed bundle using the public extension seam.
+    Extension,
+}
+
 /// Stable, user-facing group for a plugin catalog.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -61,6 +78,8 @@ pub struct PluginMetadata {
     #[serde(default)]
     pub origin: PluginOrigin,
     #[serde(default)]
+    pub role: PluginRole,
+    #[serde(default)]
     pub category: PluginCategory,
     #[serde(default = "default_scope_support")]
     pub scope_support: Vec<PluginScopeSupport>,
@@ -82,6 +101,7 @@ impl Default for PluginMetadata {
     fn default() -> Self {
         PluginMetadata {
             origin: PluginOrigin::BuiltIn,
+            role: PluginRole::BuiltIn,
             category: PluginCategory::Other,
             scope_support: default_scope_support(),
             essential: false,

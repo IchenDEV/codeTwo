@@ -1,10 +1,11 @@
 //! The app as a plugin graph: it boots from config, explains itself, and can be reconfigured
 //! while it runs.
 
+use base64::Engine as _;
 use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp, EngineService, StoreService};
 use codetwo_core::Engine;
-use codetwo_kernel::{KernelError, PluginEntry, Status};
+use codetwo_kernel::{CommandVisibility, KernelError, PluginEntry, Status};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -91,6 +92,7 @@ async fn plugins_contribute_the_app_surface() {
     let commands: Vec<String> = app.commands().into_iter().map(|c| c.name).collect();
     for expected in [
         "artifacts.get",
+        "attachments.import",
         "canvas.feature_state",
         "document.compile",
         "engine.answer_elicitation",
@@ -128,6 +130,23 @@ async fn plugins_contribute_the_app_surface() {
         .await
         .expect("git.status");
     assert!(status.get("files").is_some());
+    let git_status = app
+        .commands()
+        .into_iter()
+        .find(|command| command.name == "git.status")
+        .unwrap();
+    assert_eq!(git_status.visibility, CommandVisibility::ExtensionPublic);
+    let extension_commands = app
+        .ctx()
+        .extension_public_commands()
+        .into_iter()
+        .map(|command| command.name)
+        .collect::<Vec<_>>();
+    assert!(extension_commands.contains(&"git.status".to_string()));
+    assert!(
+        !extension_commands.contains(&"git.push".to_string()),
+        "mutating Git commands stay out of the extension interface"
+    );
 
     // One that reads an injected service.
     let providers = app
@@ -155,6 +174,22 @@ async fn plugins_contribute_the_app_surface() {
     assert_eq!(canvas["feature"], "CODETWO_CANVAS_INPUT_V1");
     assert_eq!(canvas["enabled"], false);
     assert_eq!(canvas["status"], "not production-enabled");
+
+    let png = base64::engine::general_purpose::STANDARD
+        .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+        .unwrap();
+    let attachment = app
+        .call(
+            "attachments.import",
+            json!({ "bytes": png, "declared_mime": "image/png", "name": "pasted.png" }),
+        )
+        .await
+        .expect("attachments.import");
+    assert_eq!(attachment["kind"], "attachment");
+    assert_eq!(attachment["window_title"], "pasted.png");
+    assert!(attachment["preview_data_url"]
+        .as_str()
+        .is_some_and(|value| value.starts_with("data:image/png;base64,")));
 }
 
 #[tokio::test]
@@ -241,7 +276,7 @@ async fn bad_arguments_are_reported_against_the_command() {
 }
 
 #[tokio::test]
-async fn turning_storage_off_is_rejected_when_enabled_dependents_would_be_pending() {
+async fn core_storage_cannot_be_disabled_through_extension_policy() {
     let (app, _dir) = boot().await;
     assert_eq!(status_of(&app, "engine"), Status::Active);
 
@@ -249,8 +284,8 @@ async fn turning_storage_off_is_rejected_when_enabled_dependents_would_be_pendin
         .await
         .unwrap_err()
         .to_string();
-    assert!(error.contains("did not settle"), "{error}");
-    assert!(error.contains("Pending"), "{error}");
+    assert!(error.contains("core module `store`"), "{error}");
+    assert!(error.contains("host configuration"), "{error}");
     app.flush().await;
 
     assert_eq!(status_of(&app, "store"), Status::Active);
@@ -343,19 +378,15 @@ async fn disabling_a_required_host_capability_rolls_back_the_transaction() {
 }
 
 #[tokio::test]
-async fn reconfiguring_a_dependency_rebuilds_what_was_built_on_it() {
+async fn host_configuration_can_rebuild_a_core_dependency() {
     let (app, dir) = boot().await;
     let first = app.service::<EngineService>().expect("engine");
 
     let db = dir.path().join("moved.db");
-    change_plugin(
-        &app,
-        "store",
-        Some("enabled"),
-        Some(json!({ "path": db.to_string_lossy() })),
-    )
-    .await
-    .unwrap();
+    let mut next = app.loader().lock().unwrap().config().clone();
+    next.plugins.get_mut("store").unwrap().config = json!({ "path": db.to_string_lossy() });
+    let errors = app.loader().lock().unwrap().apply(next);
+    assert!(errors.is_empty(), "host config failed: {errors:?}");
     app.flush().await;
 
     assert_eq!(status_of(&app, "engine"), Status::Active);

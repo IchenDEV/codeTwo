@@ -19,13 +19,18 @@ describe("plugin manager localization", () => {
   test("translates manager chrome, statuses, and known contribution labels", () => {
     const labels = createPluginManagerLabels(t);
 
-    expect(labels.title).toBe("插件");
-    expect(labels.status.active).toBe("运行中");
-    expect(labels.sourceNames.host).toBe("桌面宿主");
+    expect(labels.title).toBe("功能与插件");
+    expect(labels.status.active).toBe("可用");
+    expect(labels.sourceNames.host).toBe("宿主功能");
     expect(labels.contribution("runtime", "Process runtime")).toBe(
       "进程运行时",
     );
+    expect(labels.contribution("runtime_commands", "Runtime commands")).toBe(
+      "运行时命令",
+    );
     expect(labels.componentKind("composerAction")).toBe("输入区操作");
+    expect(labels.reviewSource).toBe("检查源码");
+    expect(labels.trustBeforeEnabling).toBe("信任后才能启用");
     expect(labels.changeApplied("记忆", "disabled")).toBe(
       "记忆 现已设为已停用。",
     );
@@ -79,6 +84,7 @@ describe("plugin manager localization", () => {
           },
         ],
         marketplaceItems: [],
+        marketplaceSources: [],
       },
       t,
     );

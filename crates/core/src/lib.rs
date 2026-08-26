@@ -20,6 +20,7 @@ pub mod activity;
 pub mod agent_skill_v2;
 pub mod app;
 pub mod artifact;
+pub mod attachment;
 pub mod automation;
 pub mod brief;
 pub mod browser;
@@ -98,7 +99,8 @@ pub use capability_v2::{
 };
 pub use context::{estimate_tokens, ContextUsage};
 pub use engine::{
-    lower_canvas_prompt_payload, DesktopMcpConfig, Engine, PermissionRouter, SessionHandler,
+    lower_canvas_prompt_payload, DesktopMcpConfig, Engine, ParallelTaskCreation, PermissionRouter,
+    SessionHandler,
 };
 pub use error::{AcpError, RpcError};
 pub use event::{Event, Op};

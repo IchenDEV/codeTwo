@@ -11,8 +11,8 @@ use super::{
 use crate::plugin;
 use codetwo_kernel::{
     events::StatusChanged, CommandRealm, Context, FnPlugin, Fork, Injection, KernelError, Loader,
-    LoaderConfig, PluginEntry, PluginMetadata, PluginRegistry, PluginScopeSupport, Service, Status,
-    WeakContext,
+    LoaderConfig, PluginEntry, PluginMetadata, PluginRegistry, PluginRole, PluginScopeSupport,
+    Service, Status, WeakContext,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -101,6 +101,8 @@ pub struct PluginChangeResult {
     pub config_revision: u64,
     pub affected: Vec<String>,
     #[serde(skip)]
+    component_policy_changed: bool,
+    #[serde(skip)]
     settle: Option<Arc<PluginSettleSnapshot>>,
 }
 
@@ -108,6 +110,8 @@ pub struct PluginChangeResult {
 pub enum PluginManagerError {
     #[error("unknown plugin `{0}`")]
     UnknownPlugin(String),
+    #[error("core module `{0}` is owned by host configuration, not extension policy")]
+    CoreModule(String),
     #[error("plugin `{0}` does not support project scope")]
     UnsupportedProjectScope(String),
     #[error("plugin `{0}` is part of the management plane and cannot be disabled")]
@@ -342,6 +346,32 @@ impl PluginManager {
         &self,
         plugins_dir: &std::path::Path,
     ) -> Result<(), PluginManagerError> {
+        self.replace_installed_bundles(plugins_dir, BTreeSet::new())
+    }
+
+    /// Re-read the installed bundle inventory and force the named bundle runtimes through the
+    /// loader even when their manifests are unchanged.
+    pub fn reload_installed_bundles<I, S>(
+        &self,
+        plugins_dir: &std::path::Path,
+        bundle_ids: I,
+    ) -> Result<(), PluginManagerError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let forced = bundle_ids
+            .into_iter()
+            .map(|id| format!("bundle:{}", id.as_ref()))
+            .collect();
+        self.replace_installed_bundles(plugins_dir, forced)
+    }
+
+    fn replace_installed_bundles(
+        &self,
+        plugins_dir: &std::path::Path,
+        forced: BTreeSet<String>,
+    ) -> Result<(), PluginManagerError> {
         let installed = plugin::load_dir(plugins_dir)
             .map_err(|error| PluginManagerError::Loader(error.to_string()))?;
         let mut source = DynamicPluginSource::default();
@@ -358,7 +388,7 @@ impl PluginManager {
                 .fingerprints
                 .insert(descriptor.name.clone(), descriptor.fingerprint.clone());
         }
-        self.replace_dynamic_factory_source("installed-bundles", source)
+        self.replace_dynamic_factory_source("installed-bundles", source, forced)
     }
 
     pub(crate) fn forget_installed_bundle_policy(
@@ -376,6 +406,7 @@ impl PluginManager {
         &self,
         source_name: &str,
         source: DynamicPluginSource,
+        forced: BTreeSet<String>,
     ) -> Result<(), PluginManagerError> {
         let mut loader = self.loader.lock().unwrap();
         let config = self.config.lock().unwrap();
@@ -396,7 +427,8 @@ impl PluginManager {
 
         let (combined_registry, combined_defaults) =
             combine_factory_catalog(&catalog.base_registry, &catalog.base_defaults, &sources)?;
-        let changed = changed_dynamic_factories(&previous_source, &source);
+        let mut changed = changed_dynamic_factories(&previous_source, &source);
+        changed.extend(forced);
         let previous_dynamic_names = catalog
             .sources
             .values()
@@ -639,6 +671,9 @@ impl PluginManager {
                 request.plugin.clone(),
             ));
         }
+        if entry.metadata.role == PluginRole::Core {
+            return Err(PluginManagerError::CoreModule(request.plugin.clone()));
+        }
         if entry.metadata.essential
             && request.component.is_none()
             && matches!(request.state, Some(PluginOverride::Disabled))
@@ -762,6 +797,7 @@ impl PluginManager {
             return Err(PluginManagerError::StalePlan);
         }
         let plan = pending.plan;
+        let component_policy_changed = plan.request.component.is_some();
         let previous_document = config.snapshot();
         let previous_global = loader.config().clone();
         let previous_projects = projects
@@ -817,6 +853,7 @@ impl PluginManager {
             graph_revision: loader.revision(),
             config_revision: config.snapshot().revision,
             affected: plan.affected,
+            component_policy_changed,
             settle: Some(Arc::new(PluginSettleSnapshot {
                 previous_document,
                 previous_global,
@@ -888,6 +925,7 @@ impl PluginManager {
             graph_revision: loader.revision(),
             config_revision: config.snapshot().revision,
             affected: plan.affected,
+            component_policy_changed: true,
             settle: Some(Arc::new(PluginSettleSnapshot {
                 previous_document,
                 previous_global,
@@ -915,14 +953,19 @@ impl PluginManager {
             .ok_or(PluginManagerError::RuntimeGone)?;
 
         let Some(settle) = &result.settle else {
-            let loader = self.loader.lock().unwrap();
-            let config = self.config.lock().unwrap();
-            if loader.revision() != result.graph_revision
-                || config.snapshot().revision != result.config_revision
             {
-                return Err(PluginManagerError::StalePlan);
+                let loader = self.loader.lock().unwrap();
+                let config = self.config.lock().unwrap();
+                if loader.revision() != result.graph_revision
+                    || config.snapshot().revision != result.config_revision
+                {
+                    return Err(PluginManagerError::StalePlan);
+                }
+                config.mark_last_good()?;
             }
-            config.mark_last_good()?;
+            if result.component_policy_changed {
+                context.emit(crate::app::events::PluginPolicyChanged).await;
+            }
             return Ok(());
         };
 
@@ -1022,6 +1065,9 @@ impl PluginManager {
             }));
         }
         drop(project_leases);
+        if result.component_policy_changed {
+            context.emit(crate::app::events::PluginPolicyChanged).await;
+        }
         Ok(())
     }
 
@@ -1299,12 +1345,16 @@ impl PluginManager {
                     .plugins
                     .entry(plugin.to_string())
                     .or_insert_with(|| default.clone());
-                target.enabled = if metadata.essential {
+                target.enabled = if metadata.essential || metadata.role == PluginRole::Core {
                     true
                 } else {
                     policy.state.resolve(default.enabled)
                 };
-                target.config = policy.config.clone().unwrap_or(default.config);
+                target.config = if metadata.role == PluginRole::Core {
+                    default.config
+                } else {
+                    policy.config.clone().unwrap_or(default.config)
+                };
                 let errors = loader.apply(next);
                 if !errors.is_empty() {
                     let _ = loader.apply(previous_global);
@@ -1482,6 +1532,10 @@ fn project_loader_config_from(
             .get(&factory.name)
             .cloned()
             .unwrap_or_else(PluginEntry::disabled);
+        if factory.metadata.role == PluginRole::Core {
+            output.plugins.insert(factory.name.clone(), default);
+            continue;
+        }
         let user_scope = PluginScope::User;
         let user = candidate_policy(config, &user_scope, &factory.name, candidate);
         let project = candidate_policy(config, scope, &factory.name, candidate);

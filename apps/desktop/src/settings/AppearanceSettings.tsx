@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Copy, Download, Plus, Trash2, Upload } from "lucide-react";
+import { Copy, Download, Plus, Trash2, Upload } from "@/components/ui/icons";
 
 import {
   CODE_FONTS,

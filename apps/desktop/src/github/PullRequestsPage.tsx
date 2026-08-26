@@ -15,7 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   UserRound,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
@@ -267,7 +268,7 @@ export function PullRequestsPage({
       <div className="pull-requests-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-3 py-2.5">
           {headerLeadingAction}
-          <div role="tablist" aria-label={t("pullRequests.views")} className="flex h-(--ds-control-normal) items-center gap-1">
+          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.views")} className="flex h-(--ds-control-normal) items-center gap-1">
             {(["all", "reviewing", "authored"] as const).map((id) => (
               <button
                 key={id}
@@ -277,13 +278,13 @@ export function PullRequestsPage({
                 onClick={() => setView(id)}
                 className={cn(
                   "h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  view === id && "bg-secondary font-medium text-foreground",
+                  view === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
                 {t(`pullRequests.view.${id}`)}
               </button>
             ))}
-          </div>
+          </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           <Tooltip>
             <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}><RefreshCw className={cn("size-3.5", loading && "animate-spin")} /></Button>} />
@@ -330,11 +331,11 @@ export function PullRequestsPage({
       <div className="pull-request-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
           {selectedId && <Button variant="ghost" size="icon-xs" className="pull-request-back" aria-label={t("pullRequests.backToList")} onClick={() => setSelectedId(null)}><ArrowLeft className="size-3.5" /></Button>}
-          <div role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
+          <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
             {(["summary", "code"] as const).map((id) => (
-              <button key={id} type="button" role="tab" aria-selected={detailTab === id} disabled={!selected} onClick={() => setDetailTab(id)} className={cn("h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50", detailTab === id && "bg-secondary font-medium text-foreground")}>{t(`pullRequests.detail.${id}`)}</button>
+              <button key={id} type="button" role="tab" aria-selected={detailTab === id} disabled={!selected} onClick={() => setDetailTab(id)} className={cn("h-(--ds-control-normal) rounded-(--ds-radius-control) px-2.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50", detailTab === id && "font-medium text-foreground hover:bg-transparent")}>{t(`pullRequests.detail.${id}`)}</button>
             ))}
-          </div>
+          </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {detail && <>
             <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.openGithub")} onClick={() => void openExternal(detail.url)}><ExternalLink className="size-3.5" /></Button>} /><TooltipContent>{t("pullRequests.openGithub")}</TooltipContent></Tooltip>

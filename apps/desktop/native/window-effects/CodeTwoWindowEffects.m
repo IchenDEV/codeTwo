@@ -60,6 +60,26 @@ uint32_t codetwoConfigureWindowEffects(void *windowPointer) {
   return configuredEffects;
 }
 
+static BOOL setDockBadgeCount(uint32_t count) {
+  NSDockTile *dockTile = NSApp.dockTile;
+  if (dockTile == nil) return NO;
+
+  dockTile.badgeLabel = count > 0
+    ? [NSString stringWithFormat:@"%u", count]
+    : nil;
+  return YES;
+}
+
+uint32_t codetwoSetDockBadgeCount(uint32_t count) {
+  if ([NSThread isMainThread]) return setDockBadgeCount(count) ? 1 : 0;
+
+  __block BOOL updated = NO;
+  dispatch_sync(dispatch_get_main_queue(), ^{
+    updated = setDockBadgeCount(count);
+  });
+  return updated ? 1 : 0;
+}
+
 enum CodeTwoAppshotPermission : uint32_t {
   CodeTwoAppshotPermissionScreenRecording = 1 << 0,
   CodeTwoAppshotPermissionAccessibility = 1 << 1,

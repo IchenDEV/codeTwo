@@ -1,22 +1,38 @@
 import {
   Bot,
+  BookOpen,
   Brain,
   BrainCircuit,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   CircleAlert,
+  CircleCheck,
+  Clock3,
+  Copy,
   Download,
   ExternalLink,
   FolderOpen,
+  GitFork,
   Loader2,
   ListTodo,
   MoreHorizontal,
+  Search,
+  Terminal,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
-import { deriveAgentRoster } from "./agentActivity";
+import {
+  agentActivityState,
+  deriveAgentRoster,
+  isAgentActivityTool,
+  type AgentActivity,
+  type AgentActivityState,
+} from "./agentActivity";
 import {
   canvasExportDataUrl,
   collapsedPrompt,
@@ -24,10 +40,11 @@ import {
   parseCanvasHistoryPrompt,
   type CanvasHistoryMarker,
 } from "./promptPreview";
-import { isRunning, type ToolEntry, type Turn } from "./turns";
+import { isRunning, type PromptImage, type ToolEntry, type Turn } from "./turns";
 import {
   canvasGetSnapshot,
   getArtifact,
+  getPromptImage,
   openExternal,
   revealArtifact,
   saveArtifactAs,
@@ -35,6 +52,7 @@ import {
   type CanvasSnapshot,
 } from "../bridge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
@@ -44,7 +62,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import { MarkdownContent } from "./MarkdownContent";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useToast } from "@/ui/toast";
+import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
+
+const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
+const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
+const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
+const COMMAND_TOOL_PATTERN = /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
@@ -52,13 +77,60 @@ function duration(t: Turn): string | null {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-function agentStatusDot(status: string): string {
-  const value = status.toLowerCase().replace(/[\s-]+/g, "_");
-  if (["completed", "done", "success", "succeeded"].includes(value)) return "bg-success";
-  if (["cancelled", "canceled", "denied", "error", "failed", "rejected"].includes(value)) {
-    return "bg-destructive";
+type CopyTarget = "prompt" | "response";
+type TurnFeedback = "helpful" | "unhelpful";
+
+function storedTurnFeedback(key: string | undefined): TurnFeedback | null {
+  if (!key || typeof localStorage === "undefined") return null;
+  try {
+    const value = localStorage.getItem(key);
+    return value === "helpful" || value === "unhelpful" ? value : null;
+  } catch {
+    return null;
   }
-  return "bg-warning";
+}
+
+function persistTurnFeedback(key: string | undefined, value: TurnFeedback | null): void {
+  if (!key || typeof localStorage === "undefined") return;
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // Private mode or a full storage quota: the pressed state still works for this app run.
+  }
+}
+
+function TurnActionButton({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={label}
+            aria-pressed={pressed}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+            onClick={onClick}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 function toolStatusDot(status: string): string {
@@ -67,10 +139,89 @@ function toolStatusDot(status: string): string {
   return "bg-warning";
 }
 
+function toolIcon(tool: ToolEntry) {
+  const signal = `${tool.kind ?? ""} ${tool.title}`;
+  if (SEARCH_TOOL_PATTERN.test(signal)) return Search;
+  if (READ_TOOL_PATTERN.test(signal)) return BookOpen;
+  if (COMMAND_TOOL_PATTERN.test(signal)) return Terminal;
+  return Wrench;
+}
+
+function toolHasOutput(tool: ToolEntry): boolean {
+  return (tool.outputs?.length ?? 0) > 0;
+}
+
 function prettySize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function promptTextWithoutImageMarkers(prompt: string, images: readonly PromptImage[]): string {
+  let visible = prompt;
+  const markers = new Set<string>();
+  for (const image of images) {
+    markers.add(`[attachment:${image.id}]`);
+    if (image.name) markers.add(`[image:${image.name}]`);
+  }
+  for (const marker of markers) visible = visible.split(marker).join("");
+  return visible.replace(/\n(?:[ \t]*\n){2,}/g, "\n\n").trim();
+}
+
+function PromptImageThumbnail({ image }: { image: PromptImage }) {
+  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof getPromptImage>> | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (image.previewDataUrl) return;
+    let alive = true;
+    void getPromptImage(image.id)
+      .then((capture) => {
+        if (alive) setLoaded(capture);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [image.id, image.previewDataUrl]);
+
+  const src = image.previewDataUrl ?? loaded?.preview_data_url;
+  const name = loaded?.window_title ?? image.name ?? "Attached image";
+  const width = image.width ?? loaded?.width;
+  const height = image.height ?? loaded?.height;
+
+  return (
+    <figure
+      data-prompt-image={image.id}
+      className="flex min-h-24 min-w-0 max-w-80 items-center justify-center overflow-hidden rounded-(--ds-radius-module) bg-background/25 ring-[0.5px] ring-foreground/10"
+    >
+      {src && !failed ? (
+        <img
+          src={src}
+          alt={name}
+          width={width || undefined}
+          height={height || undefined}
+          loading="lazy"
+          className="block max-h-80 w-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      ) : failed ? (
+        <div
+          role="img"
+          aria-label={`${name} unavailable`}
+          className="flex min-w-0 items-center gap-2 px-3 py-8 text-fine text-muted-foreground"
+        >
+          <CircleAlert className="size-4 shrink-0" aria-hidden />
+          <span className="truncate">{name}</span>
+        </div>
+      ) : (
+        <div role="status" aria-label={`Loading ${name}`} className="px-3 py-8 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+        </div>
+      )}
+    </figure>
+  );
 }
 
 export function safeResourceLink(uri: string): { uri: string; host: string } | null {
@@ -161,7 +312,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
-function ToolCallBlock({ tool }: { tool: ToolEntry }) {
+function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: boolean }) {
   const textOutputs = (tool.outputs ?? []).flatMap((output) =>
     output.type === "text" ? [output.text] : [],
   );
@@ -174,28 +325,39 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
     return safe ? [{ ...output, ...safe }] : [];
   });
   const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
-  const [open, setOpen] = useState(
-    (tool.status !== "completed" && tool.status !== "failed") ||
-      images.length + resourceLinks.length > 0,
-  );
+  const [open, setOpen] = useState(false);
+  const ToolIcon = toolIcon(tool);
   const header = (
     <>
-      <Wrench className="size-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{tool.title}</span>
-      {tool.kind ? (
+      <ToolIcon className="size-3.5 shrink-0" aria-hidden />
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate",
+          compact ? "text-muted-foreground" : "font-medium text-foreground",
+        )}
+        title={tool.title}
+      >
+        {tool.title}
+      </span>
+      {!compact && tool.kind ? (
         <span className="shrink-0 font-mono text-cap text-muted-foreground">{tool.kind}</span>
       ) : null}
-      <span className="flex shrink-0 items-center gap-1.5 text-fine">
-        <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
-        {tool.status}
-      </span>
+      {!compact || tool.status !== "completed" ? (
+        <span className="flex shrink-0 items-center gap-1.5 text-fine">
+          <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
+          {tool.status}
+        </span>
+      ) : null}
     </>
   );
 
   if (!hasOutput) {
     return (
       <div
-        className="my-3 flex min-w-0 items-center gap-2 px-1 py-1.5 text-ui text-muted-foreground"
+        className={cn(
+          "flex min-w-0 items-center gap-2 px-1 text-ui text-muted-foreground",
+          compact ? "py-1" : "my-3 py-1.5",
+        )}
         data-tool-call={tool.id}
       >
         {header}
@@ -204,14 +366,27 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="my-3 min-w-0" data-tool-call={tool.id}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn("min-w-0", compact ? "py-0.5" : "my-3")}
+      data-tool-call={tool.id}
+    >
       <CollapsibleTrigger
-        className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className={cn(
+          "group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          compact ? "py-1" : "py-1.5",
+        )}
       >
         {header}
         <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
       </CollapsibleTrigger>
-        <CollapsibleContent className="mt-1.5 min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
+      <CollapsibleContent
+        className={cn(
+          "min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet",
+          compact ? "mb-1 ms-5 mt-0.5" : "mt-1.5",
+        )}
+      >
           {textOutputs.map((output, index) => (
             <pre
               key={index}
@@ -251,15 +426,84 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   );
 }
 
+function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
+  const t = useT();
+  let status = "completed";
+  for (const tool of tools) {
+    if (tool.status === "failed") {
+      status = tool.status;
+      break;
+    }
+    if (status === "completed" && tool.status !== "completed") status = tool.status;
+  }
+  const active = status !== "completed" && status !== "failed";
+  const latest = tools[tools.length - 1];
+  const LatestIcon = toolIcon(latest);
+  const history = toolHasOutput(latest) ? tools : tools.slice(0, -1);
+  const historyIsLong = history.length > 6;
+  const [open, setOpen] = useState(active);
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active, tools.length]);
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="my-3 min-w-0"
+      data-tool-call-group={tools[0].id}
+    >
+      <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <LatestIcon className="size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 truncate" title={latest.title}>
+          {latest.title}
+        </span>
+        <span className="sr-only">{t("turn.tools")} ({tools.length}), {status}</span>
+        {status === "failed" ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-fine text-destructive">
+            <CircleAlert className="size-3.5" aria-hidden />
+            {status}
+          </span>
+        ) : active ? (
+          <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(status))} aria-hidden />
+        ) : null}
+        <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="min-w-0">
+        <div
+          className={cn(
+            "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 pe-2 ps-5",
+            historyIsLong && "tool-call-history--faded pb-8",
+          )}
+          data-tool-call-history
+          data-faded={historyIsLong || undefined}
+        >
+          {history.map((tool) => (
+            <ToolCallBlock key={tool.id} tool={tool} compact />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 type RenderBlock =
   | { kind: "text"; text: string }
-  | { kind: "tool"; tool: ToolEntry };
+  | { kind: "tools"; tools: ToolEntry[] };
 
-/** Join adjacent streamed chunks while retaining tool calls at their exact event boundary. */
+/** Join adjacent streamed chunks and tool runs while retaining their exact event boundaries. */
 function orderedBlocks(turn: Turn): RenderBlock[] {
-  const tools = new Map(turn.tools.map((tool) => [tool.id, tool]));
+  const tools = new Map(
+    turn.tools.filter((tool) => !isAgentActivityTool(tool)).map((tool) => [tool.id, tool]),
+  );
   const seenTools = new Set<string>();
   const blocks: RenderBlock[] = [];
+  const appendTool = (tool: ToolEntry) => {
+    const tail = blocks[blocks.length - 1];
+    if (tail?.kind === "tools") tail.tools.push(tool);
+    else blocks.push({ kind: "tools", tools: [tool] });
+  };
   for (const entry of turn.content ?? []) {
     if (entry.kind === "text") {
       const tail = blocks[blocks.length - 1];
@@ -270,12 +514,12 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
     const tool = tools.get(entry.toolId);
     if (!tool || seenTools.has(tool.id)) continue;
     seenTools.add(tool.id);
-    blocks.push({ kind: "tool", tool });
+    appendTool(tool);
   }
   // Compatibility for turns produced by older renderers and manually constructed fixtures.
   if (blocks.length === 0 && turn.text) blocks.push({ kind: "text", text: turn.text });
-  for (const tool of turn.tools) {
-    if (!seenTools.has(tool.id)) blocks.push({ kind: "tool", tool });
+  for (const tool of tools.values()) {
+    if (!seenTools.has(tool.id)) appendTool(tool);
   }
   return blocks;
 }
@@ -324,16 +568,18 @@ function Detail({
   count,
   children,
   wide = false,
+  defaultOpen = false,
 }: {
   icon: typeof Brain;
   label: string;
   count: number;
   children: React.ReactNode;
   wide?: boolean;
+  defaultOpen?: boolean;
 }) {
   if (count === 0) return null;
   return (
-    <Collapsible className={cn("min-w-0", wide && "basis-full")}>
+    <Collapsible defaultOpen={defaultOpen} className={cn("min-w-0", wide && "basis-full")}>
       <CollapsibleTrigger className="group -ms-1 flex items-center gap-1.5 rounded px-1 py-1 text-fine text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <ChevronRight className="size-3 transition-transform group-data-[state=open]:rotate-90" />
         <Icon className="size-3" />
@@ -344,12 +590,127 @@ function Detail({
   );
 }
 
+function agentStatusLabel(state: AgentActivityState, t: ReturnType<typeof useT>): string {
+  return t(`turn.agentStatus.${state}`);
+}
+
+function agentElapsed(agent: AgentActivity, now: number): string | null {
+  if (agent.startedAt === undefined) return null;
+  const totalSeconds = Math.max(
+    0,
+    Math.floor(((agent.endedAt ?? now) - agent.startedAt) / 1000),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function AgentStateIcon({ state }: { state: AgentActivityState }) {
+  if (state === "active") {
+    return <ActivityOrb state="working" visualSize={20} aria-hidden="true" />;
+  }
+  if (state === "completed") {
+    return <CircleCheck className="size-4 text-success" aria-hidden />;
+  }
+  if (state === "failed") {
+    return <CircleAlert className="size-4 text-destructive" aria-hidden />;
+  }
+  return <Clock3 className="size-4 text-warning" aria-hidden />;
+}
+
+function AgentRosterSection({
+  agents,
+  label,
+  now,
+}: {
+  agents: readonly AgentActivity[];
+  label: string;
+  now: number;
+}) {
+  const t = useT();
+  if (agents.length === 0) return null;
+  return (
+    <div role="group" aria-label={label}>
+      <div className="flex items-center gap-2 px-2 py-1 text-cap font-medium uppercase tracking-wide text-muted-foreground">
+        <span>{label}</span>
+        <span className="tabular-nums">{agents.length}</span>
+      </div>
+      <ul className="divide-y divide-border">
+        {agents.map((agent) => {
+          const state = agentActivityState(agent.status);
+          const elapsed = agentElapsed(agent, now);
+          return (
+            <li
+              key={agent.id}
+              data-agent-row={agent.id}
+              data-agent-state={state}
+              className="flex min-w-0 items-start gap-2.5 px-2 py-2"
+            >
+              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+                <AgentStateIcon state={state} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="min-w-0 flex-1 truncate text-ui font-medium text-foreground">
+                    {agent.title}
+                  </span>
+                  <span className="shrink-0 text-cap text-muted-foreground">{agent.role}</span>
+                </div>
+                {agent.task && (
+                  <p className="mt-0.5 line-clamp-2 text-fine leading-relaxed text-muted-foreground">
+                    {agent.task}
+                  </p>
+                )}
+              </div>
+              <div className="shrink-0 text-right text-cap leading-relaxed text-muted-foreground">
+                <span className="block" aria-live="polite" aria-atomic="true">
+                  {agentStatusLabel(state, t)}
+                </span>
+                {elapsed && <time className="block tabular-nums">{elapsed}</time>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
+  const t = useT();
+  const active = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "active" || state === "pending";
+  });
+  const finished = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "completed" || state === "failed";
+  });
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (active.length === 0) return;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [active.length]);
+
+  return (
+    <div data-agent-roster className="flex flex-col gap-1.5">
+      <AgentRosterSection agents={active} label={t("turn.agentGroup.active")} now={now} />
+      <AgentRosterSection agents={finished} label={t("turn.agentGroup.finished")} now={now} />
+    </div>
+  );
+}
+
 /**
  * One prompt → response cycle.
  *
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
- * their streamed position; thinking and plan metadata stay collapsed underneath.
+ * their streamed position, with adjacent calls sharing one disclosure; thinking and plan metadata
+ * stay collapsed underneath.
  */
 export const TurnCard = memo(function TurnCard({
   turn,
@@ -358,6 +719,9 @@ export const TurnCard = memo(function TurnCard({
   onPinPlanArtifact,
   canPinPlan = false,
   onSaveTemplate,
+  linkActions,
+  onFork,
+  feedbackKey,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
@@ -369,16 +733,63 @@ export const TurnCard = memo(function TurnCard({
   canPinPlan?: boolean;
   /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
   onSaveTemplate?: (promptText: string) => void;
+  /** Native context-menu actions for links rendered inside the assistant response. */
+  linkActions?: BuiltinLinkActions;
+  /** Starts a new task whose referenced context ends at this completed turn. */
+  onFork?: (turn: Turn) => void;
+  /** Stable local-only key for the helpful / unhelpful response state. */
+  feedbackKey?: string;
 }) {
   const t = useT();
+  const toast = useToast();
   const { locale } = useLanguage();
   const [promptExpanded, setPromptExpanded] = useState(false);
+  const [copied, setCopied] = useState<CopyTarget | null>(null);
+  const [feedback, setFeedback] = useState<TurnFeedback | null>(() =>
+    storedTurnFeedback(feedbackKey),
+  );
   const running = isRunning(turn);
   const queued = turn.delivery === "queued";
   const dur = duration(turn);
   const agents = useMemo(() => deriveAgentRoster(turn.tools), [turn.tools]);
+  const activeAgentCount = agents.filter((agent) => {
+    const state = agentActivityState(agent.status);
+    return state === "active" || state === "pending";
+  }).length;
   const blocks = useMemo(() => orderedBlocks(turn), [turn.content, turn.text, turn.tools]);
   const history = useMemo(() => parseCanvasHistoryPrompt(turn.prompt), [turn.prompt]);
+  const promptImages = turn.promptImages ?? EMPTY_PROMPT_IMAGES;
+  const promptText = useMemo(
+    () => promptTextWithoutImageMarkers(history.visiblePrompt, promptImages),
+    [history.visiblePrompt, promptImages],
+  );
+  const clock = useMemo(
+    () => new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }),
+    [locale],
+  );
+  useEffect(() => {
+    setFeedback(storedTurnFeedback(feedbackKey));
+  }, [feedbackKey]);
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setCopied(null), 1_500);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
+  const copyText = (target: CopyTarget, text: string) => {
+    const write = navigator.clipboard?.writeText(text);
+    if (!write) {
+      toast(t("turn.copyFailed"), "error");
+      return;
+    }
+    void write
+      .then(() => setCopied(target))
+      .catch(() => toast(t("turn.copyFailed"), "error"));
+  };
+  const chooseFeedback = (next: TurnFeedback) => {
+    const value = feedback === next ? null : next;
+    setFeedback(value);
+    persistTurnFeedback(feedbackKey, value);
+  };
   const historySnapshots = useMemo(() => new Map<string, CanvasSnapshot>(), []);
   const [snapshots, setSnapshots] = useState<Record<string, CanvasSnapshot>>({});
   useEffect(() => {
@@ -405,60 +816,92 @@ export const TurnCard = memo(function TurnCard({
       turn.plan.length +
       (turn.memory?.items.length ?? 0) >
     0;
-  const promptIsLong = isLongPrompt(history.visiblePrompt);
+  const promptIsLong = isLongPrompt(promptText);
   const visiblePrompt = promptIsLong && !promptExpanded
-    ? collapsedPrompt(history.visiblePrompt)
-    : history.visiblePrompt;
+    ? collapsedPrompt(promptText)
+    : promptText;
 
   return (
     // Turns arrive one at a time, so each one entering under its own animation reads as the
     // conversation advancing rather than the list redrawing.
     <article aria-busy={running && !queued} className="animate-rise-in py-7">
       {/* prompt */}
-      <div className="group/prompt flex items-start justify-end gap-1">
-        {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
-            button so future turn actions slot in beside "Save as template…". */}
-        {onSaveTemplate && (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button
-                type="button"
-                aria-label={t("templateFrom.menu")}
-                className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
-              >
-                <MoreHorizontal className="size-3.5" aria-hidden />
-              </button>}
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
-                {t("templateFrom.saveAs")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
-          <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>
-          {turn.delivery && (
-            <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
-              {turn.delivery === "queued"
-                ? t("turn.queued", { position: turn.queuePosition ?? 1 })
-                : t("turn.steered")}
-            </p>
+      <div className="group/prompt flex flex-col items-end">
+        <div className="flex items-start justify-end gap-1">
+          {/* Hover-visible turn menu (SessionRail hover-actions idiom). A menu rather than a bare
+              button so future turn actions slot in beside "Save as template…". */}
+          {onSaveTemplate && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={<button
+                  type="button"
+                  aria-label={t("templateFrom.menu")}
+                  className="mt-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 group-hover/prompt:opacity-100 data-[state=open]:opacity-100"
+                >
+                  <MoreHorizontal className="size-3.5" aria-hidden />
+                </button>}
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onSaveTemplate(history.visiblePrompt)}>
+                  {t("templateFrom.saveAs")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
-          {promptIsLong && (
-            <button
-              type="button"
-              aria-expanded={promptExpanded}
-              onClick={() => setPromptExpanded((value) => !value)}
-              className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          <div className="max-w-[86%] rounded-2xl bg-secondary px-3.5 py-2 text-ui leading-relaxed text-secondary-foreground">
+            {promptImages.length > 0 && (
+              <div
+                data-prompt-images
+                className={cn(
+                  "grid min-w-0 gap-1.5",
+                  visiblePrompt && "mb-2",
+                  promptImages.length > 1 && "grid-cols-2",
+                )}
+              >
+                {promptImages.map((image, index) => (
+                  <PromptImageThumbnail key={`${image.id}-${index}`} image={image} />
+                ))}
+              </div>
+            )}
+            {visiblePrompt && <p className="whitespace-pre-wrap break-words">{visiblePrompt}</p>}
+            {turn.delivery && (
+              <p className="mt-1.5 text-cap font-medium uppercase text-muted-foreground">
+                {turn.delivery === "queued"
+                  ? t("turn.queued", { position: turn.queuePosition ?? 1 })
+                  : t("turn.steered")}
+              </p>
+            )}
+            {promptIsLong && (
+              <button
+                type="button"
+                aria-expanded={promptExpanded}
+                onClick={() => setPromptExpanded((value) => !value)}
+                className="mt-1.5 flex items-center gap-1 rounded-sm text-fine font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {promptExpanded ? (
+                  <ChevronUp className="size-3" aria-hidden />
+                ) : (
+                  <ChevronDown className="size-3" aria-hidden />
+                )}
+                {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
+              </button>
+            )}
+          </div>
+        </div>
+        <div
+          data-turn-actions="prompt"
+          className="mt-1 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+        >
+          <time dateTime={new Date(turn.startedAt).toISOString()}>
+            {clock.format(turn.startedAt)}
+          </time>
+          {promptText && (
+            <TurnActionButton
+              label={t(copied === "prompt" ? "turn.copiedPrompt" : "turn.copyPrompt")}
+              onClick={() => copyText("prompt", promptText)}
             >
-              {promptExpanded ? (
-                <ChevronUp className="size-3" aria-hidden />
-              ) : (
-                <ChevronDown className="size-3" aria-hidden />
-              )}
-              {t(promptExpanded ? "turn.showLess" : "turn.showMore")}
-            </button>
+              {copied === "prompt" ? <Check aria-hidden /> : <Copy aria-hidden />}
+            </TurnActionButton>
           )}
         </div>
       </div>
@@ -524,9 +967,12 @@ export const TurnCard = memo(function TurnCard({
                 key={`text-${index}`}
                 text={block.text}
                 streaming={running && index === blocks.length - 1}
+                linkActions={linkActions}
               />
+            ) : block.tools.length === 1 ? (
+              <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />
             ) : (
-              <ToolCallBlock key={block.tool.id} tool={block.tool} />
+              <ToolCallGroup key={block.tools[0].id} tools={block.tools} />
             ),
           )}
         </div>
@@ -556,24 +1002,14 @@ export const TurnCard = memo(function TurnCard({
       {/* secondary detail + outcome, on one quiet line */}
       {(hasDetail || dur || turn.stopReason || queued || (running && turn.text)) && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-          <Detail icon={Bot} label={t("turn.agents")} count={agents.length} wide>
-            <div className="flex flex-col gap-1">
-              {agents.map((agent) => (
-                <div key={agent.id} className="rounded-md bg-fill-quiet px-2 py-1.5">
-                  <div className="flex min-w-0 items-center gap-2 text-fine">
-                    <span className={cn("size-1.5 shrink-0 rounded-full", agentStatusDot(agent.status))} />
-                    <span className="min-w-0 flex-1 truncate font-medium text-foreground">{agent.title}</span>
-                    <span className="shrink-0 text-cap uppercase text-muted-foreground">{agent.role}</span>
-                    <span className="shrink-0 text-muted-foreground">{agent.status}</span>
-                  </div>
-                  {agent.task && (
-                    <p className="mt-0.5 line-clamp-2 ps-3.5 text-fine leading-relaxed text-muted-foreground">
-                      {agent.task}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
+          <Detail
+            icon={Bot}
+            label={t("turn.agents")}
+            count={agents.length}
+            wide
+            defaultOpen={activeAgentCount > 0}
+          >
+            <AgentRoster agents={agents} />
           </Detail>
 
           <Detail icon={Brain} label={t("turn.thinking")} count={turn.thoughts.length}>
@@ -670,6 +1106,46 @@ export const TurnCard = memo(function TurnCard({
             )}
             {dur && <span className="font-mono text-cap text-muted-foreground">{dur}</span>}
           </span>
+        </div>
+      )}
+
+      {!running && turn.text && (
+        <div
+          data-turn-actions="response"
+          className="mt-2 flex min-h-(--ds-control-mini) items-center gap-1 text-fine text-muted-foreground"
+        >
+          <TurnActionButton
+            label={t(copied === "response" ? "turn.copiedResponse" : "turn.copyResponse")}
+            onClick={() => copyText("response", turn.text)}
+          >
+            {copied === "response" ? <Check aria-hidden /> : <Copy aria-hidden />}
+          </TurnActionButton>
+          {feedbackKey && (
+            <>
+              <TurnActionButton
+                label={t("turn.helpful")}
+                pressed={feedback === "helpful"}
+                onClick={() => chooseFeedback("helpful")}
+              >
+                <ThumbsUp aria-hidden />
+              </TurnActionButton>
+              <TurnActionButton
+                label={t("turn.unhelpful")}
+                pressed={feedback === "unhelpful"}
+                onClick={() => chooseFeedback("unhelpful")}
+              >
+                <ThumbsDown aria-hidden />
+              </TurnActionButton>
+            </>
+          )}
+          {onFork && turn.accepted && turn.transcriptStartSeq !== undefined && (
+            <TurnActionButton label={t("turn.fork")} onClick={() => onFork(turn)}>
+              <GitFork aria-hidden />
+            </TurnActionButton>
+          )}
+          <time dateTime={new Date(turn.endedAt ?? turn.startedAt).toISOString()}>
+            {clock.format(turn.endedAt ?? turn.startedAt)}
+          </time>
         </div>
       )}
     </article>

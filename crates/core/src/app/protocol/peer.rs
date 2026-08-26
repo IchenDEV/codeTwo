@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, oneshot};
 
-/// What a plugin is allowed to ask the host for. Deliberately small: call a command, publish an
-/// event, write a log line. Everything a plugin can reach, it reaches by *name*, through the same
-/// registry a Rust plugin uses — there is no privileged back door.
+/// What an extension process is allowed to ask the host for. Deliberately small: call an
+/// extension-public command, publish an event, write a log line. Command authorization lives in
+/// the registry seam rather than trusting a name received over stdio.
 #[async_trait::async_trait]
 pub trait HostHandler: Send + Sync + 'static {
     async fn call(&self, name: &str, args: Value) -> Result<Value, String>;

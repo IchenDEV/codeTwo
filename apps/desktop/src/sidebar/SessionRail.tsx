@@ -3,7 +3,7 @@ import {
   cloneElement,
   isValidElement,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type HTMLAttributes,
@@ -18,6 +18,7 @@ import {
   ChartNoAxesColumn,
   Check,
   CircleAlert,
+  Container,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -36,7 +37,7 @@ import {
   SquareKanban,
   SquarePen,
   Trash2,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
 import {
@@ -47,6 +48,11 @@ import type { NativeContextMenuItem } from "../electrobun/rpc";
 import { ProviderIcon } from "../providers/ProviderIcon";
 import { Button } from "@/components/ui/button";
 import { ActivityOrb } from "@/components/ui/activity-orb";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -69,7 +75,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { usePersistedBoolean } from "@/lib/persist";
 import { cn } from "@/lib/utils";
@@ -125,6 +133,7 @@ function SessionContextMenu({
  * 2. Features — the app's primary destinations as compact, labeled source-list rows.
  * 3. Recent chats — the active project's sessions, newest first, with the project itself as a
  *    switcher dropdown in the section header (selection, add, rename, remove all live there).
+ * 4. Utilities — quota and settings stay reachable at the bottom while recent chats scroll.
  * The active model remains available in the composer, where it can also be changed.
  */
 export function SessionRail({
@@ -163,7 +172,10 @@ export function SessionRail({
   pullRequestsOpen,
   onOpenPullRequests,
   automationsOpen,
-  pluginHubOpen,
+  pluginManagerOpen,
+  dockerAvailable,
+  dockerOpen,
+  onOpenDocker,
   quickQuota,
   quickQuotaLoading,
   quickQuotaProviderName,
@@ -194,7 +206,7 @@ export function SessionRail({
   /** Keeps an active session above the recency list until explicitly unpinned. */
   onPin: (id: string, pinned: boolean) => void;
   /** Flips a session's archived state — true to archive, false to restore. */
-  onArchive: (id: string, archived: boolean) => void;
+  onArchive: (id: string, archived: boolean) => Promise<void> | void;
   /** Permanently removes a session's isolated checkout and branch, after confirmation. */
   onDiscardWorktree: (session: SessionInfo) => void;
   /** The provider a session runs on, as its display name — the row's agent line. */
@@ -219,7 +231,10 @@ export function SessionRail({
   pullRequestsOpen: boolean;
   onOpenPullRequests: () => void;
   automationsOpen: boolean;
-  pluginHubOpen: boolean;
+  pluginManagerOpen: boolean;
+  dockerAvailable: boolean;
+  dockerOpen: boolean;
+  onOpenDocker: () => void;
   /** Most constrained provider-owned quota window, for the glanceable rail meter. */
   quickQuota: QuickQuotaSummary | null;
   quickQuotaLoading: boolean;
@@ -237,7 +252,7 @@ export function SessionRail({
   // usable on another.
   const applied = Math.min(420, Math.max(220, width));
   const featureRowClass =
-    "flex h-(--ds-control-field) w-full items-center gap-2.5 rounded-(--ds-radius-control) px-2.5 text-left text-ui text-foreground/80 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+    "flex h-(--ds-control-normal) w-full items-center gap-2 rounded-(--ds-radius-control) px-2 text-left text-ui text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
   const quickQuotaWindow = quickQuota?.windowMinutes === 300
     ? t("quota.window5h")
     : quickQuota?.windowMinutes === 10_080
@@ -257,38 +272,66 @@ export function SessionRail({
   // `invisible` only after the collapse lands: a zero-width pane still paints its border as a
   // hairline, and hiding earlier would cut the animation off.
   const [gone, setGone] = useState(collapsed);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!collapsed) {
       setGone(false);
       return;
     }
-    const id = window.setTimeout(() => setGone(true), 340);
+    const id = window.setTimeout(() => setGone(true), 300);
     return () => window.clearTimeout(id);
   }, [collapsed]);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startX = e.clientX;
-      const startW = applied;
-      const onMove = (ev: MouseEvent) =>
-        onWidth(Math.round(Math.min(420, Math.max(220, startW + (ev.clientX - startX)))));
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove("resizing-h");
-        setDragging(false);
-      };
-      document.body.classList.add("resizing-h");
-      setDragging(true);
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [applied, onWidth],
+  // Keep the row in place long enough for its exit to read before the bridge moves it between the
+  // live and archived collections. Reduced Motion collapses the CSS duration, so the same event
+  // path still commits immediately without maintaining a second timing constant in TypeScript.
+  const [archiveMotion, setArchiveMotion] = useState<ReadonlyMap<string, boolean>>(
+    () => new Map(),
   );
+  const requestArchive = useCallback((id: string, archived: boolean) => {
+    setArchiveMotion((current) => {
+      if (current.has(id)) return current;
+      const next = new Map(current);
+      next.set(id, archived);
+      return next;
+    });
+  }, []);
+  const finishArchiveMotion = useCallback((id: string) => {
+    const archived = archiveMotion.get(id);
+    if (archived === undefined) return;
+
+    const clearMotion = () => {
+      setArchiveMotion((current) => {
+        if (!current.has(id)) return current;
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      });
+    };
+
+    Promise.resolve(onArchive(id, archived)).then(clearMotion, clearMotion);
+  }, [archiveMotion, onArchive]);
+
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    value: applied,
+    min: 220,
+    max: 420,
+    onStart: () => {
+      setDragging(true);
+    },
+    onResize: onWidth,
+    onEnd: () => setDragging(false),
+  });
 
   const activeProjectRecord = projects.find((p) => p.path === activeProject) ?? null;
   const activeProjectName = activeProjectRecord?.name ?? null;
+  const runningProjectPaths = new Set(
+    sessions
+      .filter((session) =>
+        runningSessions.has(session.id) || sessionActivity(session).state.kind === "running"
+      )
+      .map(sessionProjectPath),
+  );
 
   // "Recent" means what it says: the active project's sessions, newest first — per group.
   const forProject = useCallback(
@@ -333,7 +376,10 @@ export function SessionRail({
 
   /** Muted label over a group of rows — Active, Archived. */
   const groupLabel = (label: string) => (
-    <p className="px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80">
+    <p
+      data-rail-group-label
+      className="px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55"
+    >
       {label}
     </p>
   );
@@ -381,7 +427,7 @@ export function SessionRail({
           startRename();
           break;
         case "archive":
-          onArchive(s.id, !isArchived);
+          requestArchive(s.id, !isArchived);
           break;
         case "reveal-working-directory":
           void revealWorkingDirectory(s.worktree_path ?? s.cwd);
@@ -492,7 +538,14 @@ export function SessionRail({
             <div
               data-session-id={s.id}
               data-session-density="comfortable"
+              data-session-archive-motion={archiveMotion.has(s.id)
+                ? isArchived ? "restore" : "archive"
+                : undefined}
+              aria-busy={archiveMotion.has(s.id) || undefined}
               title={hasUsefulPreview ? preview : undefined}
+              onAnimationEnd={(event) => {
+                if (event.target === event.currentTarget) finishArchiveMotion(s.id);
+              }}
               onContextMenu={(event) =>
                 event.currentTarget
                   .querySelector<HTMLButtonElement>("[data-session-select]")
@@ -500,7 +553,8 @@ export function SessionRail({
               }
               className={cn(
                 "group relative cursor-default rounded-md px-2 py-2 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
-                s.id === activeSession && "bg-accent",
+                s.id === activeSession && "font-medium",
+                s.id === activeSession && typeof ResizeObserver === "undefined" && "bg-fill-hover",
               )}
             >
               <Button
@@ -605,7 +659,7 @@ export function SessionRail({
                       className="pointer-events-auto relative z-10 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onArchive(s.id, !isArchived);
+                        requestArchive(s.id, !isArchived);
                       }}
                     >
                       {isArchived ? <ArchiveRestore /> : <Archive />}
@@ -687,7 +741,7 @@ export function SessionRail({
               <Pencil />
               {t("rail.rename")}
             </ContextMenuItem>
-            <ContextMenuItem onClick={() => onArchive(s.id, !isArchived)}>
+            <ContextMenuItem onClick={() => requestArchive(s.id, !isArchived)}>
               {isArchived ? (
                 <ArchiveRestore />
               ) : (
@@ -743,25 +797,51 @@ export function SessionRail({
   return (
     <aside
       aria-hidden={collapsed}
+      data-collapsed={collapsed ? "" : undefined}
+      data-dragging={dragging ? "" : undefined}
       className={cn(
-        "glass-rail relative flex shrink-0 flex-col overflow-hidden",
+        "session-rail glass-rail relative flex shrink-0 flex-col overflow-hidden",
         overlay && "fixed inset-y-0 left-0 z-50 shadow-2xl",
-        !dragging && "transition-[width] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         gone && "invisible",
       )}
       style={{ width: collapsed ? 0 : applied }}
     >
       {/* Pinned to the open width so the content doesn't reflow while the pane sweeps. */}
-      <div className="flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
-      {!collapsed && <div className="rail-grip" onMouseDown={startDrag} title={t("rail.resize")} />}
+      <div className="session-rail-content flex min-h-0 flex-1 flex-col" style={{ width: applied }}>
+      {!collapsed && (
+        <div
+          className="rail-grip"
+          aria-label={t("rail.resize")}
+          title={t("rail.resize")}
+          {...resizeHandle}
+        />
+      )}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
       {/* Keep the controls centred in the same 48px title row as the main header, with enough
           clearance for the macOS traffic lights. */}
       <div
-        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-3"
+        data-rail-header
+        className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-2"
       >
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
+        <Tooltip>
+          <TooltipTrigger
+            render={<Button
+              variant="ghost"
+              size="icon"
+              data-rail-search
+              className="size-7 shrink-0 text-muted-foreground"
+              aria-label={t("rail.searchLabel")}
+              onClick={onOpenSearch}
+            >
+              <Search className="size-4" />
+            </Button>}
+          />
+          <TooltipContent side="bottom">
+            {t("rail.searchLabel")}{searchHint ? ` ${searchHint}` : ""}
+          </TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={<Button
@@ -778,63 +858,53 @@ export function SessionRail({
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
-      <div className="px-3 pb-2 pt-2">
-        <button
-          onClick={onOpenSearch}
-          className="flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-2.5 text-left text-ui text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.03)] transition-colors hover:bg-accent/50"
-        >
-          <Search className="size-3.5 shrink-0" />
-          <span className="flex-1 truncate">{t("rail.searchLabel")}</span>
-          {searchHint && (
-            <kbd className="shrink-0 rounded border bg-fill-rest px-1 py-px font-mono text-cap text-muted-foreground/80">
-              {searchHint}
-            </kbd>
-          )}
-        </button>
-      </div>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
-      <nav data-rail-features aria-label={t("rail.features")} className="flex flex-col gap-0.5 px-3 pb-2">
-        <div data-rail-feature="new-task" className="flex min-w-0 items-center gap-0.5">
+      <LiquidSelectionGroup
+        data-rail-features
+        role="navigation"
+        aria-label={t("rail.features")}
+        activeSelector='[aria-current="page"]'
+        fill="var(--color-fill-hover)"
+        className="flex flex-col gap-0.5 px-2 pb-1"
+      >
+        <div
+          data-rail-feature="new-task"
+          role="group"
+          aria-label={t("rail.newTask")}
+          className="group/new-task flex h-(--ds-control-normal) min-w-0 items-center rounded-(--ds-radius-control) text-foreground/75 transition-colors hover:bg-accent/55 hover:text-foreground focus-within:bg-accent/55 focus-within:text-foreground"
+        >
           <button
-            className={cn(featureRowClass, "min-w-0 flex-1")}
+            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-(--ds-radius-control) pl-2 pr-1 text-left text-ui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             title={`${t("rail.newTask")} ${newHint}`}
             onClick={onNew}
           >
             <SquarePen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="min-w-0 flex-1 truncate">{t("rail.newTask")}</span>
-            <span className="flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground ring-1 ring-foreground/10">
-              <Plus className="size-2.5" aria-hidden />
-            </span>
           </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger
+          <Tooltip>
+            <TooltipTrigger
               render={
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 text-muted-foreground"
-                  aria-label={t("rail.newOptions")}
+                  size="icon-xs"
+                  data-rail-quick-session
+                  className="mr-1 size-6 rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground"
+                  aria-label={t("rail.newTemporarySession")}
+                  onClick={onNewTemporary}
                 >
-                  <ChevronDown aria-hidden />
+                  <Plus className="size-3" aria-hidden />
                 </Button>
               }
             />
-            <DropdownMenuContent align="start">
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={onNewTemporary}>
-                  <SquarePen aria-hidden />
-                  {t("rail.newTemporarySession")}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <TooltipContent side="right">{t("rail.newTemporarySession")}</TooltipContent>
+          </Tooltip>
         </div>
         <button
           data-rail-feature="pull-requests"
           aria-current={pullRequestsOpen ? "page" : undefined}
-          className={cn(featureRowClass, pullRequestsOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, pullRequestsOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenPullRequests}
         >
           <GitPullRequest className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -843,7 +913,7 @@ export function SessionRail({
         <button
           data-rail-feature="task-board"
           aria-current={taskBoardOpen ? "page" : undefined}
-          className={cn(featureRowClass, taskBoardOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, taskBoardOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenTaskBoard}
         >
           <SquareKanban className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -852,7 +922,7 @@ export function SessionRail({
         <button
           data-rail-feature="scheduled-tasks"
           aria-current={automationsOpen ? "page" : undefined}
-          className={cn(featureRowClass, automationsOpen && "bg-accent font-medium text-foreground")}
+          className={cn(featureRowClass, automationsOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenAutomations}
         >
           <CalendarClock className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -860,13 +930,182 @@ export function SessionRail({
         </button>
         <button
           data-rail-feature="plugins"
-          aria-current={pluginHubOpen ? "page" : undefined}
-          className={cn(featureRowClass, pluginHubOpen && "bg-accent font-medium text-foreground")}
+          aria-current={pluginManagerOpen ? "page" : undefined}
+          className={cn(featureRowClass, pluginManagerOpen && "font-medium text-foreground hover:bg-transparent")}
           onClick={onOpenMarket}
         >
           <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{t("pluginHub.plugins")}</span>
         </button>
+        {dockerAvailable ? (
+          <button
+            data-rail-feature="docker"
+            aria-current={dockerOpen ? "page" : undefined}
+            className={cn(featureRowClass, dockerOpen && "bg-accent font-medium text-foreground")}
+            onClick={onOpenDocker}
+          >
+            <Container className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0 flex-1 truncate">{t("docker.title")}</span>
+          </button>
+        ) : null}
+        {pluginActions}
+      </LiquidSelectionGroup>
+
+      {/* ---- 3 · recent chats --------------------------------------------------------------- */}
+      {/* The section header carries the project switcher: which project's chats these are, and
+          every project operation, behind one chip instead of a whole tree. */}
+      <div className="flex items-center gap-1 px-2 pb-1 pt-2">
+        <span
+          data-rail-section-label="recent"
+          className="shrink-0 px-2 text-ui font-normal leading-4 text-foreground/55"
+        >
+          {t("rail.recent")}
+        </span>
+        <div className="min-w-0 flex-1" />
+        {renamingProject !== null && activeProject ? (
+          <Input
+            autoFocus
+            className="h-6 w-36 text-hint"
+            value={renamingProject}
+            onChange={(e) => setRenamingProject(e.target.value)}
+            onBlur={() => setRenamingProject(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onRenameProject(activeProject, renamingProject);
+                setRenamingProject(null);
+              } else if (e.key === "Escape") setRenamingProject(null);
+            }}
+          />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<button
+                data-rail-project-switcher
+                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-ui leading-4 text-foreground/60 transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
+                title={activeProject ?? undefined}
+              >
+                {activeProjectRecord ? (
+                  <ProjectIcon project={activeProjectRecord} size={16} />
+                ) : (
+                  <Folder className="size-3.5 shrink-0" />
+                )}
+                <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
+                <ChevronDown className="size-3 shrink-0 opacity-50" />
+              </button>}
+            />
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuRadioGroup value={activeProject ?? undefined} onValueChange={onSelectProject}>
+                {projects.map((p) => (
+                  <DropdownMenuRadioItem key={p.path} value={p.path}>
+                    <ProjectIcon
+                      project={p}
+                      size={20}
+                      className={cn(p.path === activeProject && "text-primary ring-primary/35")}
+                    />
+                    <DropdownMenuItemText title={p.path}>
+                      <span className="truncate">{p.name}</span>
+                      <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>
+                    </DropdownMenuItemText>
+                    {runningProjectPaths.has(p.path) && (
+                      <ActivityOrb
+                        data-project-running=""
+                        state="working"
+                        visualSize={14}
+                        aria-label={t("session.running")}
+                        title={t("session.running")}
+                      />
+                    )}
+                    <span className="shrink-0 text-fine text-muted-foreground">
+                      {shortAge(p.last_opened_at)}
+                    </span>
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={onAddProject}>
+                  <FolderPlus />
+                  {t("rail.addProject")}
+                </DropdownMenuItem>
+                {activeProject && (
+                  <>
+                    <DropdownMenuItem onClick={() => setRenamingProject(activeProjectName ?? "")}>
+                      <Pencil />
+                      {t("rail.renameProject")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => onRemoveProject(activeProject)}
+                    >
+                      <Trash2 />
+                      {t("rail.removeProject")}
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+
+      <ScrollArea data-rail-session-scroll className="min-h-0 flex-1">
+        <LiquidSelectionGroup
+          data-session-list
+          activeSelector='[aria-current="page"]'
+          fill="var(--color-fill-hover)"
+          className="px-2 pb-4"
+        >
+          {projects.length === 0 ? (
+            <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
+              {t("rail.projectsEmpty")}
+            </p>
+          ) : recent.length === 0 && archived.length === 0 ? (
+            <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
+              {t("rail.empty")} {t("rail.emptyHint")}
+            </p>
+          ) : (
+            <>
+              {pinned.length > 0 && (
+                <>
+                  {groupLabel(t("rail.groupPinned"))}
+                  <div className="flex flex-col gap-2">{pinned.map((s) => sessionRow(s, false))}</div>
+                </>
+              )}
+              {active.length > 0 && (
+                <>
+                  {groupLabel(t("rail.groupActive"))}
+                  <div className="flex flex-col gap-2">{active.map((s) => sessionRow(s, false))}</div>
+                </>
+              )}
+              {archived.length > 0 && (
+                <Collapsible open={archivedOpen} onOpenChange={setArchivedOpen}>
+                  {/* Same face as a group label, but it folds — archived rows only take space
+                      (and attention) when asked for. */}
+                  <CollapsibleTrigger
+                    data-rail-archive-toggle
+                    title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
+                    className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 transition-colors hover:text-foreground"
+                  >
+                    <span>{t("rail.groupArchived")}</span>
+                    <span className="font-normal text-foreground/40">{archived.length}</span>
+                    <ChevronRight
+                      className={cn("size-3.5 shrink-0 transition-transform", archivedOpen && "rotate-90")}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent data-rail-archive-list className="rail-archive-panel">
+                    <div className="flex flex-col gap-2 opacity-80">
+                      {archived.map((s) => sessionRow(s, true))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </>
+          )}
+        </LiquidSelectionGroup>
+      </ScrollArea>
+
+      {/* ---- 4 · utilities ------------------------------------------------------------------ */}
+      <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1">
         <button
           data-rail-feature="usage"
           aria-busy={quickQuotaLoading || undefined}
@@ -874,7 +1113,16 @@ export function SessionRail({
           title={quickQuotaTitle}
           onClick={onOpenUsage}
         >
-          <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          {quickQuota ? (
+            <span
+              data-quota-provider={quickQuota.provider}
+              className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+            >
+              <ProviderIcon provider={quickQuota.provider} className="size-4" />
+            </span>
+          ) : (
+            <ChartNoAxesColumn className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          )}
           <span className="min-w-0 flex-1 truncate">{t("quota.quick")}</span>
           {quickQuota ? (
             <span className="flex shrink-0 items-center gap-1.5">
@@ -910,7 +1158,6 @@ export function SessionRail({
             </span>
           )}
         </button>
-        {pluginActions}
         <button
           data-rail-feature="settings"
           className={featureRowClass}
@@ -919,144 +1166,7 @@ export function SessionRail({
           <Settings className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{t("header.settings")}</span>
         </button>
-      </nav>
-
-      {/* ---- 3 · recent chats --------------------------------------------------------------- */}
-      {/* The section header carries the project switcher: which project's chats these are, and
-          every project operation, behind one chip instead of a whole tree. */}
-      <div className="flex items-center gap-1 px-4 pb-1 pt-3">
-        <span className="shrink-0 px-2 text-fine font-medium uppercase tracking-wide text-muted-foreground">
-          {t("rail.recent")}
-        </span>
-        <div className="min-w-0 flex-1" />
-        {renamingProject !== null && activeProject ? (
-          <Input
-            autoFocus
-            className="h-6 w-36 text-hint"
-            value={renamingProject}
-            onChange={(e) => setRenamingProject(e.target.value)}
-            onBlur={() => setRenamingProject(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onRenameProject(activeProject, renamingProject);
-                setRenamingProject(null);
-              } else if (e.key === "Escape") setRenamingProject(null);
-            }}
-          />
-        ) : (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<button
-                className="flex min-w-0 max-w-44 shrink items-center gap-1.5 rounded-md px-2 py-1 text-hint text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground data-[popup-open]:bg-accent/70 data-[popup-open]:text-foreground"
-                title={activeProject ?? undefined}
-              >
-                {activeProjectRecord ? (
-                  <ProjectIcon project={activeProjectRecord} size={16} />
-                ) : (
-                  <Folder className="size-3.5 shrink-0" />
-                )}
-                <span className="truncate">{activeProjectName ?? t("rail.noProject")}</span>
-                <ChevronDown className="size-3 shrink-0 opacity-50" />
-              </button>}
-            />
-            <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuRadioGroup value={activeProject ?? undefined} onValueChange={onSelectProject}>
-                {projects.map((p) => (
-                  <DropdownMenuRadioItem key={p.path} value={p.path}>
-                    <ProjectIcon
-                      project={p}
-                      size={20}
-                      className={cn(p.path === activeProject && "text-primary ring-primary/35")}
-                    />
-                    <DropdownMenuItemText title={p.path}>
-                      <span className="truncate">{p.name}</span>
-                      <DropdownMenuItemDescription>{p.path}</DropdownMenuItemDescription>
-                    </DropdownMenuItemText>
-                    <span className="shrink-0 text-fine text-muted-foreground">
-                      {shortAge(p.last_opened_at)}
-                    </span>
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem onClick={onAddProject}>
-                  <FolderPlus />
-                  {t("rail.addProject")}
-                </DropdownMenuItem>
-                {activeProject && (
-                  <>
-                    <DropdownMenuItem onClick={() => setRenamingProject(activeProjectName ?? "")}>
-                      <Pencil />
-                      {t("rail.renameProject")}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => onRemoveProject(activeProject)}
-                    >
-                      <Trash2 />
-                      {t("rail.removeProject")}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
       </div>
-
-      <ScrollArea className="min-h-0 flex-1">
-        <div data-session-list className="px-4 pb-4">
-          {projects.length === 0 ? (
-            <p className="px-2 py-4 text-fine leading-relaxed text-muted-foreground">
-              {t("rail.projectsEmpty")}
-            </p>
-          ) : recent.length === 0 && archived.length === 0 ? (
-            <p className="px-2 py-3 text-fine leading-relaxed text-muted-foreground">
-              {t("rail.empty")} {t("rail.emptyHint")}
-            </p>
-          ) : (
-            <>
-              {pinned.length > 0 && (
-                <>
-                  {groupLabel(t("rail.groupPinned"))}
-                  <div className="flex flex-col gap-2">{pinned.map((s) => sessionRow(s, false))}</div>
-                </>
-              )}
-              {active.length > 0 && (
-                <>
-                  {groupLabel(t("rail.groupActive"))}
-                  <div className="flex flex-col gap-2">{active.map((s) => sessionRow(s, false))}</div>
-                </>
-              )}
-              {archived.length > 0 && (
-                <>
-                  {/* Same face as a group label, but it folds — archived rows only take space
-                      (and attention) when asked for. */}
-                  <button
-                    aria-expanded={archivedOpen}
-                    title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
-                    onClick={() => setArchivedOpen(!archivedOpen)}
-                    className="flex w-full items-center gap-1 rounded px-2 pb-0.5 pt-2 text-cap font-semibold uppercase tracking-wider text-muted-foreground/80 transition-colors hover:text-foreground"
-                  >
-                    <span>{t("rail.groupArchived")}</span>
-                    <span className="font-normal text-muted-foreground/60">{archived.length}</span>
-                    <ChevronRight
-                      className={cn("size-3 shrink-0 transition-transform", archivedOpen && "rotate-90")}
-                    />
-                  </button>
-                  {archivedOpen && (
-                    <div className="flex flex-col gap-2 opacity-80">
-                      {archived.map((s) => sessionRow(s, true))}
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-        </div>
-      </ScrollArea>
-
       </div>
     </aside>
   );

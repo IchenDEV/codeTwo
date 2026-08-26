@@ -57,11 +57,13 @@ Claude Code · Codex · Grok · Cursor · OpenCode 1 · OpenCode 2 · Pi · Kimi
           Electrobun + React  ratatui  Axum + WebSocket
 ```
 
-C2's internals form a plugin graph inspired by
+C2's internals form a runtime-module graph inspired by
 [cordis](https://github.com/cordiverse/cordis): storage, agent execution, git, memory, scenes, and
-other subsystems declare what they require and provide. Out-of-process plugins use the same small
-JSON-RPC [plugin protocol](docs/plugin-protocol.md) as built-in commands. Package, lifecycle,
-scope, security, and host behavior follow the [C2 Plugin Standard](docs/plugin-standard.md).
+other subsystems declare what they require and provide. Separately installed extensions use the
+small JSON-RPC [plugin protocol](docs/plugin-protocol.md) and only the explicitly exported Extension
+API; the internal Rust trait and Core commands are not the public plugin contract. Package,
+lifecycle, scope, security, and host behavior follow the
+[C2 Plugin Standard](docs/plugin-standard.md).
 
 ## Build from source
 

@@ -21,9 +21,12 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("positions the macOS traffic lights with a vertical offset to center in the title bar", () => {
+  test("centers the native macOS traffic lights in the 48px titlebar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
-    expect(electrobunHost).toContain("trafficLightOffset: { x: 0, y: 6 }");
+    expect(electrobunHost).not.toContain("trafficLightOffset");
+    expect(electrobunHost).toMatch(
+      /mainWindow\.webview\.on\("dom-ready", \(\) => \{[\s\S]*?if \(process\.platform === "darwin"\) \{[\s\S]*?mainWindow\.setWindowButtonPosition\(22, 17\);[\s\S]*?\}\s*rendererReady = true;/,
+    );
   });
 
   test("reserves traffic-light space only on macOS", () => {
@@ -32,7 +35,7 @@ describe("macOS window chrome contract", () => {
     expect(railSource).toContain("window-controls-safe-rail");
     expect(sceneStudioSource).toContain("window-controls-safe-scene");
     expect(styles).toMatch(
-      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*5rem/s,
+      /html\[data-platform="macos"\] \.window-controls-safe-main\s*{[^}]*padding-left:\s*6rem/s,
     );
     expect(styles).toMatch(/\.window-controls-safe-main\s*{[^}]*padding-left:\s*1rem/s);
   });
@@ -80,14 +83,19 @@ describe("macOS window chrome contract", () => {
     expect(nativeWindowEffects).toContain("dispatch_sync(dispatch_get_main_queue()");
   });
 
-  test("mounts independent bottom-terminal and right-side panel regions", () => {
-    expect(appSource).toContain('const [terminalOpen, setTerminalOpen]');
-    expect(appSource).toContain('placement="bottom"');
-    expect(appSource).toContain('placement="right"');
+  test("mounts the terminal in the shared right-side work dock", () => {
+    expect(appSource).not.toContain('const [terminalOpen, setTerminalOpen]');
+    expect(appSource).not.toContain('placement="bottom"');
+    expect(appSource).toContain('availableSurfaces={availableDockSurfaces}');
+    expect(appSource).toContain('terminalActive={dockTab === "terminal"}');
+    expect(dockSource).not.toContain('DockPlacement');
+    expect(dockSource).toContain('data-dock-placement="right"');
+    expect(dockSource).toContain('className="dock-tab-label"');
+    expect(styles).toMatch(/@container dock \(max-width: 359px\)/);
     expect(styles).toMatch(/\.glass-panel\s*{[^}]*--appearance-sidebar-opacity/s);
   });
 
-  test("keeps the empty-session hero below the titlebar when the bottom panel opens", () => {
+  test("keeps the empty-session hero safely centered in constrained window heights", () => {
     expect(appSource).toContain(
       '"order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"',
     );
@@ -130,5 +138,12 @@ describe("macOS window chrome contract", () => {
     expect(tabsSource).toContain(
       "group-data-[variant=toolbar]/tabs-list:data-active:text-primary",
     );
+  });
+
+  test("keeps the sidebar resize target invisible on hover", () => {
+    expect(styles).toMatch(
+      /\.rail-grip\s*{[^}]*width:\s*6px;[^}]*cursor:\s*col-resize;/s,
+    );
+    expect(styles).not.toMatch(/\.rail-grip(?:::after|:hover)/);
   });
 });

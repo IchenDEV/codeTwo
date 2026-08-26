@@ -2,7 +2,7 @@
 //!
 //! This is where the two senses of "plugin" finally meet. `plugin-hub` manages *bundles* — data a
 //! user installed from GitHub. This plugin looks through them for the ones that ship a `runtime`
-//! block, and loads each as a real member of the kernel graph over
+//! block, and loads each host adapter as a real member of the kernel graph over
 //! [the plugin protocol](crate::app::protocol).
 //!
 //! It also publishes the host's typed events onto the JSON bus, because a plugin in another
@@ -27,7 +27,7 @@ impl Plugin for ExtensionsPlugin {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("Runs installed plugin bundles that ship a process, over the plugin protocol.")
+        Some("Hosts installed process bundles over the plugin protocol.")
     }
 
     fn inject(&self) -> Injection {
@@ -51,13 +51,13 @@ impl Plugin for ExtensionsPlugin {
         let listed_hub = hub.clone();
         ctx.command_described(
             "extensions.list",
-            Some("Bundles that ship a process: which are running, which are waiting for trust."),
+            Some("Process bundles whose host adapter is ready, and bundles waiting for trust."),
             move |_| {
                 let runtime = runtime.clone();
                 let hub = listed_hub.clone();
                 async move {
                     let installed = hub.installed();
-                    let running = runtime
+                    let ready = runtime
                         .scopes()
                         .into_iter()
                         .filter(|scope| {
@@ -74,7 +74,7 @@ impl Plugin for ExtensionsPlugin {
                         .filter(|plugin| plugin.runtime.is_some() && !plugin.trusted)
                         .map(|plugin| plugin.id)
                         .collect::<Vec<_>>();
-                    json(jval!({ "running": running, "untrusted": untrusted }))
+                    json(jval!({ "ready": ready, "untrusted": untrusted }))
                 }
             },
         )?;

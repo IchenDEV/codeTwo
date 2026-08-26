@@ -1,0 +1,152 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "docker-tools",
+  "version": "0.1.0",
+  "description": "Inspect Docker and manage container lifecycle from C2.",
+  "author": { "name": "C2" },
+  "repository": "https://github.com/IchenDEV/codeTwo",
+  "license": "MIT",
+  "keywords": ["docker", "containers", "developer-tools"],
+  "extensions": {
+    "dev.codetwo": {
+      "standardVersion": "1.1.0",
+      "commands": [
+        {
+          "id": "docker.status",
+          "title": "Docker status",
+          "description": "Show Docker engine health, version, and resource counts.",
+          "argsSchema": { "type": "object", "additionalProperties": false, "properties": {} }
+        },
+        {
+          "id": "docker.containers",
+          "title": "List containers",
+          "description": "List Docker containers with stable structured fields.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "all": { "type": "boolean", "description": "Include stopped containers. Defaults to true." },
+              "limit": { "type": "integer", "minimum": 1, "maximum": 500, "description": "Maximum results. Defaults to 100." }
+            }
+          }
+        },
+        {
+          "id": "docker.images",
+          "title": "List images",
+          "description": "List local Docker images with stable structured fields.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "all": { "type": "boolean", "description": "Include intermediate images. Defaults to false." },
+              "limit": { "type": "integer", "minimum": 1, "maximum": 500, "description": "Maximum results. Defaults to 100." }
+            }
+          }
+        },
+        {
+          "id": "docker.inspect",
+          "title": "Inspect container",
+          "description": "Inspect one Docker container.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container"],
+            "properties": {
+              "container": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Container name or ID." }
+            }
+          }
+        },
+        {
+          "id": "docker.logs",
+          "title": "Read container logs",
+          "description": "Read a bounded tail of one Docker container's logs.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container"],
+            "properties": {
+              "container": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Container name or ID." },
+              "tail": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Lines to return. Defaults to 200." },
+              "timestamps": { "type": "boolean", "description": "Include Docker timestamps." },
+              "since": { "type": "string", "maxLength": 64, "description": "Docker duration or timestamp, such as 10m or 2026-08-26T10:00:00Z." }
+            }
+          }
+        },
+        {
+          "id": "docker.start",
+          "title": "Start container",
+          "description": "Start one stopped Docker container.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container"],
+            "properties": {
+              "container": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Container name or ID." }
+            }
+          }
+        },
+        {
+          "id": "docker.stop",
+          "title": "Stop container",
+          "description": "Stop one running Docker container.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container"],
+            "properties": {
+              "container": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Container name or ID." },
+              "timeout": { "type": "integer", "minimum": 0, "maximum": 300, "description": "Seconds before Docker kills the container. Defaults to Docker's setting." }
+            }
+          }
+        },
+        {
+          "id": "docker.restart",
+          "title": "Restart container",
+          "description": "Restart one Docker container.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["container"],
+            "properties": {
+              "container": { "type": "string", "minLength": 1, "maxLength": 255, "description": "Container name or ID." },
+              "timeout": { "type": "integer", "minimum": 0, "maximum": 300, "description": "Seconds before Docker kills the container. Defaults to Docker's setting." }
+            }
+          }
+        },
+        {
+          "id": "docker.pull",
+          "title": "Pull image",
+          "description": "Pull one Docker image by repository, tag, or digest.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["image"],
+            "properties": {
+              "image": { "type": "string", "minLength": 1, "maxLength": 512, "description": "Image repository, tag, digest, or ID." }
+            }
+          }
+        },
+        {
+          "id": "docker.remove_image",
+          "title": "Remove image",
+          "description": "Remove one local Docker image.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["image"],
+            "properties": {
+              "image": { "type": "string", "minLength": 1, "maxLength": 512, "description": "Image repository, tag, digest, or ID." },
+              "force": { "type": "boolean", "description": "Force removal when Docker permits it." }
+            }
+          }
+        }
+      ],
+      "runtime": {
+        "protocol": "1.0.0",
+        "command": "node",
+        "args": ["plugin.js"],
+        "inject": []
+      }
+    }
+  }
+}

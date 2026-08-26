@@ -7,16 +7,22 @@ import { ToastProvider } from "./ui/toast";
 import { I18nProvider } from "./i18n";
 import { ThemeProvider } from "./theme";
 import { currentDesktopPlatform } from "./platform";
+import { DesktopPetWindow } from "./pet/DesktopPet";
 import "./styles.css";
 
 document.documentElement.dataset.platform = currentDesktopPlatform();
 
+const searchParams = new URLSearchParams(window.location.search);
+const showDesktopPet = document.querySelector(
+  'meta[name="codetwo-surface"][content="desktop-pet"]',
+) !== null;
 const showDesignSystem =
-  import.meta.env.DEV && new URLSearchParams(window.location.search).has("design-system");
+  import.meta.env.DEV && searchParams.has("design-system");
 const showPetPreview =
-  import.meta.env.DEV && new URLSearchParams(window.location.search).has("pet-preview");
+  import.meta.env.DEV && searchParams.has("pet-preview");
 const showRichTranscript =
-  import.meta.env.DEV && new URLSearchParams(window.location.search).has("rich-transcript");
+  import.meta.env.DEV && searchParams.has("rich-transcript");
+if (showDesktopPet) document.documentElement.classList.add("desktop-pet-window-root");
 
 // The webview's own menu (Reload / Inspect Element) is a browser artefact, not something a desktop
 // app offers. Suppressed everywhere except real text inputs, where the system menu (cut / copy /
@@ -48,20 +54,22 @@ new MutationObserver((records) => {
 
 // ThemeProvider owns the `.dark` class on <html>, so it wraps everything that might read it.
 async function render() {
-  const Root = showPetPreview
-    ? (await import("./pet/PetPreview")).PetPreview
-    : showRichTranscript
-      ? (await import("./session/RichTranscriptPreview")).RichTranscriptPreview
-      : showDesignSystem
-        ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
-        : App;
+  const Root = showDesktopPet
+    ? DesktopPetWindow
+    : showPetPreview
+      ? (await import("./pet/PetPreview")).PetPreview
+      : showRichTranscript
+        ? (await import("./session/RichTranscriptPreview")).RichTranscriptPreview
+        : showDesignSystem
+          ? (await import("./design/DesignSystemPreview")).DesignSystemPreview
+          : App;
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ThemeProvider>
         <I18nProvider>
           <ErrorBoundary>
-            <TooltipProvider delay={300}>
+            <TooltipProvider>
               <ToastProvider>
                 <Root />
               </ToastProvider>

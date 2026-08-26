@@ -1,41 +1,46 @@
-//! Auto-detection of a local transcriber, end to end. Its own integration test because it rewrites
-//! `PATH` — that's process-wide, and the unit tests run threaded alongside code that resolves
-//! binaries.
+//! Transcriber discovery, end to end. Its own integration test because it rewrites `PATH` and
+//! `CODETWO_TRANSCRIBE_CMD` — both are process-wide.
 
 use codetwo_core::voice;
 
-/// A GUI-launched app finds whisper only because we put Homebrew-ish directories back on `PATH`;
-/// once found, the command has to carry the absolute path so `sh -c` can run it.
+/// A GUI-launched app must not treat whisper.cpp as configured merely because its executable is on
+/// `PATH`: without `-m`, it looks for a cwd-relative model and fails to initialize its context.
 #[tokio::test]
-async fn autodetects_whisper_and_transcribes_with_it() {
+async fn ignores_model_less_whisper_cpp_until_the_user_configures_it() {
     let dir = std::env::temp_dir().join(format!("codetwo-voice-{}", uuid::Uuid::new_v4().simple()));
     std::fs::create_dir_all(&dir).unwrap();
 
-    // A stand-in for whisper-cli: same name and flags, prints a transcript.
-    let bin = dir.join("whisper-cli");
-    std::fs::write(&bin, "#!/bin/sh\necho \"the transcript\"\n").unwrap();
+    // Homebrew's whisper.cpp binary has no usable default model. This is the exact failure C2 used
+    // to route recordings into instead of falling back to the system recognizer.
+    let whisper_cpp = dir.join("whisper-cli");
+    std::fs::write(
+        &whisper_cpp,
+        "#!/bin/sh\necho 'error: failed to initialize whisper context' >&2\nexit 3\n",
+    )
+    .unwrap();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(&whisper_cpp, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     std::env::remove_var("CODETWO_TRANSCRIBE_CMD");
     std::env::set_var("PATH", &dir);
 
-    assert!(voice::is_available(), "a whisper-cli on PATH counts as available");
-    let template = voice::transcriber_command().unwrap();
-    assert!(template.contains(bin.to_str().unwrap()), "absolute path in template: {template}");
+    assert!(
+        voice::transcriber_command().is_none(),
+        "a model-less whisper.cpp executable is not a working transcriber"
+    );
 
-    let audio = dir.join("clip.wav");
-    std::fs::write(&audio, b"pretend audio").unwrap();
-    assert_eq!(voice::transcribe(&audio).await.unwrap(), "the transcript");
-
-    // With no whisper on PATH there's no command route left. (Whether dictation as a whole is
-    // available then depends on the platform recognizer, which we can't exercise here: asking it
-    // for authorization outside an app bundle aborts the process.)
-    std::env::set_var("PATH", "/usr/bin:/bin");
-    assert!(voice::transcriber_command().is_none());
+    let configured = format!(
+        "{} -m /models/ggml-base.bin -f {{file}} -nt -np",
+        whisper_cpp.display()
+    );
+    std::env::set_var("CODETWO_TRANSCRIBE_CMD", &configured);
+    assert_eq!(
+        voice::transcriber_command().as_deref(),
+        Some(configured.as_str())
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

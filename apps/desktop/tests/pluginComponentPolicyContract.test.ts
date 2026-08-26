@@ -9,7 +9,7 @@ describe("built-in component policy integration", () => {
   test("projects voice, memory, scenes, and LSP policy into their real runtimes", () => {
     const app = source("App.tsx");
     const composer = source("session/Composer.tsx");
-    const transcript = source("session/TranscriptPane.tsx");
+    const desktopPet = source("pet/DesktopPet.tsx");
     const pet = source("pet/CodeTwoPet.tsx");
     const lsp = source("lsp/client.ts");
     const lspAttachment = source("lsp/attach.ts");
@@ -23,7 +23,7 @@ describe("built-in component policy integration", () => {
     expect(app).toContain('componentEnabled("lsp.runtime")');
     expect(app.match(/voiceEnabled=\{voiceComposerEnabled\}/g)).toHaveLength(2);
     expect(composer).toContain("{voiceEnabled ? (");
-    expect(transcript).toContain("voiceEnabled={voiceEnabled}");
+    expect(desktopPet).toContain("voiceEnabled={state.voiceEnabled}");
     expect(pet).toContain("{voiceEnabled ? <VoiceButton");
 
     expect(app.match(/componentEnabledRef\.current\("memory\.settings"\)/g)?.length).toBeGreaterThanOrEqual(4);
@@ -48,5 +48,25 @@ describe("built-in component policy integration", () => {
     const app = source("App.tsx");
     expect(app).toContain("setCallProjectPath(normalizePluginProjectPath(last.path))");
     expect(app).toContain("setCallProjectPath(normalizePluginProjectPath(resolved))");
+  });
+
+  test("hosts the pet in a global desktop window instead of the transcript", () => {
+    const host = source("electrobun/index.ts");
+    const main = source("main.tsx");
+    const transcript = source("session/TranscriptPane.tsx");
+    const petEntry = readFileSync(resolve(desktop, "desktop-pet.html"), "utf8");
+    const viteConfig = readFileSync(resolve(desktop, "vite.config.ts"), "utf8");
+
+    expect(host).toContain('url: "views://main/desktop-pet.html"');
+    expect(host).not.toContain('views://main/index.html?desktop-pet');
+    expect(host).not.toContain('views://main/index.html#desktop-pet');
+    expect(host).toContain("desktopPetWindow.setAlwaysOnTop(true)");
+    expect(host).toContain("desktopPetWindow.setVisibleOnAllWorkspaces(true)");
+    expect(host).toContain('mainWindow.on("close", () => desktopPetWindow?.close())');
+    expect(main).toContain('meta[name="codetwo-surface"][content="desktop-pet"]');
+    expect(main).toContain("? DesktopPetWindow");
+    expect(petEntry).toContain('<meta name="codetwo-surface" content="desktop-pet" />');
+    expect(viteConfig).toContain('desktopPet: path.resolve(__dirname, "desktop-pet.html")');
+    expect(transcript).not.toContain("CodeTwoPet");
   });
 });

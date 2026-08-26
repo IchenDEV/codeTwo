@@ -39,6 +39,23 @@ describe("persisted transcript projection", () => {
     expect(turns[0].prompt).toBe("legacy prompt");
   });
 
+  test("recovers private image references from a durable prompt", () => {
+    const first = "11111111-1111-4111-8111-111111111111";
+    const second = "22222222-2222-4222-8222-222222222222";
+    const turns = turnsFromTranscript([
+      [
+        "user",
+        {
+          kind: "prompt",
+          text: `Improve image rendering\n\n[attachment:${first}]\n\n[attachment:${second}]`,
+          display: "Improve image rendering",
+        },
+      ],
+    ]);
+
+    expect(turns[0].promptImages).toEqual([{ id: first }, { id: second }]);
+  });
+
   test("projects durable row and tool timing into a loaded turn", () => {
     const turns = turnsFromTranscript([
       {

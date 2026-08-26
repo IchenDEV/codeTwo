@@ -336,7 +336,8 @@
     padding-left: 0.75rem;
   }
   html[data-platform="macos"] .window-controls-safe-main {
-    padding-left: 5rem;
+    /* Keep the collapsed-sidebar control one full spacing step beyond the green traffic light. */
+    padding-left: 6rem;
   }
   html[data-platform="macos"] .window-controls-safe-rail {
     padding-left: 5rem;
@@ -352,6 +353,18 @@
       transparent
     );
     box-shadow: inset calc(-1 * var(--hairline-width)) 0 0 var(--sidebar-border);
+  }
+  .session-rail:not([data-dragging]) {
+    transition: width var(--motion-slow) var(--ease-standard);
+  }
+  .session-rail-content {
+    transition:
+      opacity var(--motion-layer) ease-out,
+      transform var(--motion-normal) var(--ease-standard);
+  }
+  .session-rail[data-collapsed] .session-rail-content {
+    opacity: 0;
+    transform: translateX(-8px);
   }
   .macos-window-glass .glass-rail {
     background: color-mix(
@@ -388,13 +401,14 @@
     transition-duration: var(--motion-slow);
     transition-timing-function: var(--ease-standard);
   }
-  .dock-panel-bottom {
-    box-shadow: inset 0 var(--hairline-width) 0 var(--border);
+  .dock-panel-side {
+    container-name: dock;
+    container-type: inline-size;
   }
-  .dock-panel-bottom:not(.dock-panel-dragging) {
-    transition-property: height;
-    transition-duration: var(--motion-slow);
-    transition-timing-function: var(--ease-standard);
+  @container dock (max-width: 359px) {
+    .dock-tab-label {
+      display: none;
+    }
   }
   /* Floating *over* opaque content — the composer, popovers, toasts. Here the backdrop really is
      page content, so the blur does what it looks like it does. */
@@ -535,7 +549,7 @@
   }
   .dialog-layer[data-state="open"],
   .dialog-layer[data-open] {
-    animation: dialog-in var(--motion-normal) var(--ease-standard);
+    animation: dialog-in var(--motion-normal) var(--ease-standard) both;
   }
   .dialog-layer[data-state="closed"],
   .dialog-layer[data-closed] {
@@ -560,7 +574,7 @@
   }
   .overlay-layer[data-state="open"],
   .overlay-layer[data-open] {
-    animation: veil-in var(--motion-normal) ease-out;
+    animation: veil-in var(--motion-normal) ease-out both;
   }
   .overlay-layer[data-state="closed"],
   .overlay-layer[data-closed] {
@@ -582,6 +596,73 @@
   }
   .animate-page-in {
     animation: page-in var(--motion-slow) var(--ease-standard) both;
+  }
+
+  /* Archiving is reversible but spatial: the row leaves its current collection before the bridge
+     moves it to the other one. Base UI keeps the archive panel mounted through its ending style,
+     so both the list and its rows finish their exits instead of disappearing on state change. */
+  @keyframes session-archive-out {
+    to {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+  }
+  @keyframes session-restore-out {
+    to {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.985);
+    }
+  }
+  [data-session-archive-motion="archive"] {
+    pointer-events: none;
+    animation: session-archive-out var(--motion-normal) ease-in both;
+  }
+  [data-session-archive-motion="restore"] {
+    pointer-events: none;
+    animation: session-restore-out var(--motion-normal) ease-in both;
+  }
+  .rail-archive-panel {
+    height: var(--collapsible-panel-height);
+    overflow: hidden;
+    opacity: 1;
+    transition:
+      height var(--motion-normal) var(--ease-standard),
+      opacity var(--motion-fast) ease-out;
+  }
+  .rail-archive-panel > div {
+    transform: none;
+    transition: transform var(--motion-normal) var(--ease-standard);
+  }
+  .rail-archive-panel[data-starting-style],
+  .rail-archive-panel[data-ending-style] {
+    height: 0;
+    opacity: 0;
+  }
+  .rail-archive-panel[data-starting-style] > div,
+  .rail-archive-panel[data-ending-style] > div {
+    transform: translateY(-4px);
+  }
+
+  /* The document keeps one React tree in compact and full-page modes. A named View Transition can
+     therefore interpolate the same surface between both geometries without remounting BlockNote
+     or inventing an animatable fixed height. The root snapshot is disabled so the transcript stays
+     crisp while only the composer travels. */
+  .composer-mode-transition {
+    view-transition-name: composer-mode;
+  }
+  html[data-composer-mode-transition]::view-transition-old(root),
+  html[data-composer-mode-transition]::view-transition-new(root) {
+    animation: none;
+  }
+  html[data-composer-mode-transition]::view-transition-group(composer-mode) {
+    animation-duration: var(--motion-slow);
+    animation-timing-function: var(--ease-standard);
+  }
+  html[data-composer-mode-transition]::view-transition-old(composer-mode) {
+    animation: veil-out var(--motion-layer) ease-in both;
+  }
+  html[data-composer-mode-transition]::view-transition-new(composer-mode) {
+    animation: veil-in var(--motion-slow) var(--ease-standard) both;
   }
 
   .skill-chip {
@@ -741,6 +822,19 @@
     font-weight: 600;
   }
 
+  /* The liquid silhouette owns the composer's hairline as well as its fill and shadow. Keeping all
+     three on one measured shape prevents the border from jumping ahead while the surface settles. */
+  .composer-liquid-surface {
+    --composer-liquid-border-color: color-mix(
+      in oklch,
+      var(--foreground) 7%,
+      transparent
+    );
+  }
+  .composer-liquid-surface:focus-within {
+    --composer-liquid-border-color: color-mix(in oklch, var(--ring) 20%, transparent);
+  }
+
   /* The composer's top rim: drag it for any height, double-click for the full column. The grabber
      stays invisible until you're near it, so the resting state reads as a plain card. */
   .composer-grip {
@@ -748,6 +842,8 @@
     flex-shrink: 0;
     cursor: row-resize;
     position: relative;
+    touch-action: none;
+    user-select: none;
   }
   .composer-grip::after {
     content: "";
@@ -779,6 +875,8 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
+    touch-action: none;
+    user-select: none;
     transition: background var(--motion-fast) ease-out;
   }
   /* The hover affordance is a slim inset line, not a filled bar — a 6px full-height fill reads
@@ -811,34 +909,9 @@
     inset-inline-end: auto;
   }
 
-  /* The bottom panel mirrors the side dock's resize affordance along its top edge. */
-  .dock-grip-bottom {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    height: 6px;
-    z-index: 20;
-    cursor: row-resize;
-    transition: background var(--motion-fast) ease-out;
-  }
-  .dock-grip-bottom::after {
-    content: "";
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    top: 2px;
-    height: 2px;
-    border-radius: var(--ds-radius-micro);
-    background: color-mix(in oklch, var(--primary) 55%, transparent);
-    opacity: 0;
-    transition: opacity var(--motion-fast) ease-out;
-  }
-  .dock-grip-bottom:hover::after {
-    opacity: 1;
-  }
-
-  /* Same affordance on the rail's right edge. */
+  /* Keep the rail's right edge as an invisible resize target. A full-height hover line is too
+     visually dominant beside the translucent sidebar, but the 6px hit area still makes dragging
+     easy and preserves the resize cursor. */
   .rail-grip {
     position: absolute;
     right: 0;
@@ -847,22 +920,14 @@
     width: 6px;
     z-index: 20;
     cursor: col-resize;
-    transition: background var(--motion-fast) ease-out;
+    touch-action: none;
+    user-select: none;
   }
-  .rail-grip::after {
-    content: "";
-    position: absolute;
-    right: 2px;
-    top: 12px;
-    bottom: 12px;
-    width: 2px;
-    border-radius: 999px;
-    background: color-mix(in oklch, var(--primary) 55%, transparent);
-    opacity: 0;
-    transition: opacity var(--motion-fast) ease-out;
-  }
-  .rail-grip:hover::after {
-    opacity: 1;
+  .composer-grip:focus-visible,
+  .dock-grip:focus-visible,
+  .rail-grip:focus-visible {
+    outline: 2px solid var(--foreground);
+    outline-offset: -2px;
   }
 
   /* While a drag is live: one cursor everywhere and no text selection. The browser panel's page is
@@ -1061,6 +1126,23 @@ aside .codetwo-visualize.is-wide {
 .transcript-turn:has(.codetwo-visualize.is-wide) {
   content-visibility: visible;
 }
+
+/* Long tool histories stay readable in place while their soft edge signals that more activity is
+   available below. Bottom padding keeps the final row clear of the mask after scrolling. */
+.tool-call-history--faded {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor calc(100% - var(--ds-space-page-section)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor calc(100% - var(--ds-space-page-section)),
+    transparent 100%
+  );
+}
 @media (max-width: 900px) {
   .codetwo-visualize.is-wide {
     inset-inline-start: auto;
@@ -1182,5 +1264,53 @@ pre {
   }
   .trajectory-ledger-row {
     grid-template-columns: 44px minmax(96px, 0.65fr) minmax(0, 2fr);
+  }
+}
+
+/* Plugin management follows the pull-request workbench: a stable catalog rail and an open detail pane. */
+.plugin-manager-page {
+  container: plugin-manager / inline-size;
+}
+
+.plugin-manager-list-pane {
+  width: clamp(20rem, 38cqw, 31rem);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+.plugin-manager-back {
+  display: none;
+}
+
+@container plugin-manager (max-width: 44rem) {
+  .plugin-manager-list-pane {
+    width: 100%;
+  }
+
+  .plugin-manager-page[data-compact-detail="true"] .plugin-manager-list-pane {
+    display: none;
+  }
+
+  .plugin-manager-page[data-compact-detail="false"] .plugin-manager-detail-pane {
+    display: none;
+  }
+
+  .plugin-manager-back {
+    display: inline-flex;
+  }
+}
+
+/* The command palette floats over live project context, so its tint stays translucent enough for
+   the blur to read as material while the modal token keeps both schemes legible. */
+.command-palette-surface {
+  background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
+  backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+  -webkit-backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
+}
+
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+  .command-palette-surface {
+    background: var(--ds-color-modal);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

@@ -1,17 +1,15 @@
 import { useRef, type ReactNode } from "react";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Loader2 } from "@/components/ui/icons";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
 import { TurnCard } from "./TurnCard";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import { SelectionActions } from "./SelectionActions";
 import type { Turn } from "./turns";
 import type { TranscriptScrollController } from "./useTranscriptScroll";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { useAppearanceSettings } from "../appearance";
-import { CodeTwoPet } from "../pet/CodeTwoPet";
-import type { CodeTwoPetAnimation } from "../pet/state";
 
 interface TranscriptPaneProps {
   variant: "main" | "side";
@@ -27,9 +25,10 @@ interface TranscriptPaneProps {
   canPinPlan?: boolean;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
-  petAnimation: CodeTwoPetAnimation;
-  voiceEnabled: boolean;
-  onVoiceText: (text: string) => void;
+  linkActions?: BuiltinLinkActions;
+  /** Durable source session used for local feedback identity and turn branching. */
+  sessionId?: string | null;
+  onForkTurn?: (turn: Turn) => void;
   onAddSelection: (text: string) => void;
   onExplainSelection: (text: string) => void;
   onAskSelectionInSideChat: (text: string) => void;
@@ -50,16 +49,15 @@ export function TranscriptPane({
   onPinPlanArtifact,
   canPinPlan,
   onSaveTemplate,
-  petAnimation,
-  voiceEnabled,
-  onVoiceText,
+  linkActions,
+  sessionId,
+  onForkTurn,
   onAddSelection,
   onExplainSelection,
   onAskSelectionInSideChat,
   before,
 }: TranscriptPaneProps) {
   const t = useT();
-  const appearance = useAppearanceSettings();
   const Root = variant === "side" ? "aside" : "section";
   const selectionScopeRef = useRef<HTMLDivElement | null>(null);
 
@@ -131,17 +129,17 @@ export function TranscriptPane({
                       onPinPlanArtifact={onPinPlanArtifact}
                       canPinPlan={canPinPlan}
                       onSaveTemplate={onSaveTemplate}
+                      linkActions={linkActions}
+                      onFork={onForkTurn}
+                      feedbackKey={
+                        sessionId && turn.transcriptStartSeq !== undefined
+                          ? `codetwo.turnFeedback:${sessionId}:${turn.transcriptStartSeq}`
+                          : undefined
+                      }
                     />
                   </li>
                 ))}
               </ol>
-              {variant === "main" && appearance.petEnabled ? (
-                <CodeTwoPet
-                  animation={petAnimation}
-                  voiceEnabled={voiceEnabled}
-                  onVoiceText={onVoiceText}
-                />
-              ) : null}
             </>
           )}
         </div>

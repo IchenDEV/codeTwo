@@ -1,6 +1,11 @@
 import type { ReactNode } from "react";
 
-export type PluginManagerTab = "plugins" | "components" | "marketplace";
+export type PluginManagerTab =
+  | "plugins"
+  | "mcps"
+  | "skills"
+  | "hooks"
+  | "marketplace";
 
 export type PluginManagerSource = "builtin" | "host" | "bundle";
 
@@ -17,7 +22,14 @@ export interface PluginManagerProject {
 export type PluginManagerOverride = "inherit" | "enabled" | "disabled";
 
 export type PluginManagerStatus =
-  "disabled" | "pending" | "loading" | "active" | "failed" | "disposed";
+  | "disabled"
+  | "pending"
+  | "loading"
+  | "active"
+  | "failed"
+  | "disposed"
+  | "requires_auth"
+  | "unsupported";
 
 export interface PluginManagerActiveResource {
   id: string;
@@ -49,6 +61,13 @@ export interface PluginManagerBundleContribution {
   count: number;
 }
 
+export interface PluginManagerScaffold {
+  id: string;
+  name: string;
+  description?: string | null;
+  files: number;
+}
+
 /** Installation and trust metadata for a plugin backed by an on-disk bundle. */
 export interface PluginManagerBundle {
   id: string;
@@ -60,6 +79,7 @@ export interface PluginManagerBundle {
   runtimeManaged: boolean;
   contributions: PluginManagerBundleContribution[];
   diagnostics: PluginManagerBundleDiagnostic[];
+  scaffolds: PluginManagerScaffold[];
 }
 
 export interface PluginManagerPlugin {
@@ -89,6 +109,8 @@ export interface PluginManagerComponent {
   id: string;
   pluginId: string;
   pluginName: string;
+  /** Managed plugin whose component policy controls this resource. Defaults to pluginId. */
+  policyPluginId?: string;
   name: string;
   description?: string | null;
   kind: string;
@@ -98,8 +120,14 @@ export interface PluginManagerComponent {
   supportedScopes: PluginManagerScopeKind[];
   /** False when the descriptor is visible here but its runtime has no component-policy seam. */
   manageable?: boolean;
+  availability?: "ready" | "requires_trust" | "requires_auth" | "unsupported";
   required?: boolean;
   state: PluginManagerScopedState;
+  /** Actions available for a skill shown in the unified component catalog. */
+  skill?: {
+    id: string;
+    removable: boolean;
+  };
 }
 
 export interface PluginManagerMarketplaceItem {
@@ -114,6 +142,18 @@ export interface PluginManagerMarketplaceItem {
   installable: boolean;
   supportedScopes: PluginManagerScopeKind[];
   diagnostic?: string | null;
+  /** Present for bundles loaded from a local marketplace manifest. */
+  marketplace?: {
+    manifestPath: string;
+    pluginName: string;
+  };
+}
+
+export interface PluginManagerMarketplaceSource {
+  id: string;
+  name: string;
+  description?: string | null;
+  diagnostics: string[];
 }
 
 export type PluginManagerDesiredState = "inherit" | "enabled" | "disabled";
@@ -169,10 +209,14 @@ export interface PluginManagerLabels {
   description: string;
   plugins: string;
   components: string;
+  mcps: string;
+  skills: string;
+  hooks: string;
   marketplace: string;
   userScope: string;
   projectScope: (project: PluginManagerProject) => string;
   search: string;
+  searchPlaceholder: (tab: PluginManagerTab) => string;
   noResults: string;
   enabled: string;
   disabled: string;
@@ -189,18 +233,22 @@ export interface PluginManagerLabels {
   installed: string;
   unavailable: string;
   refresh: string;
-  bundleTools: string;
-  advancedBundleTools: string;
+  newSkill: string;
+  openMarketplace: string;
+  use: string;
+  applyScaffold: string;
+  scaffoldFiles: (count: number) => string;
   installFromGithub: string;
   githubRepository: string;
   githubHint: string;
   closeInstaller: string;
   installingPlugin: string;
   bundleInstalled: (result: PluginManagerBundleInstallResult) => string;
-  managedInBundleTools: string;
   bundleManagement: string;
   bundleManagementUserOnly: string;
+  reviewSource: string;
   trustRequired: string;
+  trustBeforeEnabling: string;
   trusted: string;
   notTrusted: string;
   trustPlugin: string;
@@ -222,12 +270,17 @@ export interface PluginManagerLabels {
   scope: string;
   pluginList: string;
   componentList: string;
+  resourceList: (tab: "mcps" | "skills" | "hooks") => string;
   projectState: (name: string) => string;
   noDescription: string;
   configurationHint: string;
   plugin: string;
   source: string;
+  identifier: string;
+  definition: string;
   uiSlot: string;
+  managedByPlugin: string;
+  managePlugin: string;
   affectedPlugins: string;
   missingCount: (count: number) => string;
   status: Record<PluginManagerStatus, string>;
@@ -245,6 +298,8 @@ export interface PluginManagerLabels {
     state: PluginManagerDesiredState,
   ) => string;
   marketplaceInstalled: string;
+  componentUninstalled: string;
+  scaffoldApplied: (count: number) => string;
   settingsReset: string;
   bundleEnabled: (name: string, enabled: boolean) => string;
   bundleTrusted: (name: string, trusted: boolean) => string;
@@ -258,6 +313,7 @@ export interface PluginManagerPageProps {
   plugins: PluginManagerPlugin[];
   components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
+  marketplaceSources?: PluginManagerMarketplaceSource[];
   headerLeadingAction?: ReactNode;
   scope: PluginManagerScope;
   projects?: PluginManagerProject[];
@@ -274,14 +330,17 @@ export interface PluginManagerPageProps {
     request: PluginManagerInstallRequest,
   ) => Promise<void>;
   onRefreshMarketplace?: () => Promise<void>;
+  onOpenMarketplace?: () => Promise<void>;
   onImportGithub?: (
     repository: string,
   ) => Promise<PluginManagerBundleInstallResult>;
   onSetBundleEnabled?: (pluginId: string, enabled: boolean) => Promise<void>;
   onSetBundleTrusted?: (pluginId: string, trusted: boolean) => Promise<void>;
   onUninstallBundle?: (pluginId: string, keepData: boolean) => Promise<void>;
-  /** Advanced tools for local marketplace manifests and scaffolds. */
-  onOpenBundleTools?: () => void;
+  onApplyScaffold?: (
+    pluginId: string,
+    scaffoldId: string,
+  ) => Promise<{ files: number }>;
   onResetPlugin?: (
     pluginId: string,
     scope: PluginManagerScope,

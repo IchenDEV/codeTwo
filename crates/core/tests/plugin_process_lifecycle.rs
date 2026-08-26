@@ -3,6 +3,7 @@
 #![cfg(unix)]
 
 use codetwo_core::app::protocol::{ProcessTransport, ProtocolPlugin};
+use codetwo_core::plugin::PluginRuntimeCommand;
 use codetwo_kernel::{App, Status};
 use serde_json::Value;
 use std::path::Path;
@@ -52,12 +53,62 @@ worker_pid=$!
 printf '%s %s\n' "$$" "$worker_pid" > "$PID_FILE"
 IFS= read -r initialize || exit 1
 initialize_id=$(printf '%s' "$initialize" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
-printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"1.0.0"}}\n' "$initialize_id"
-wait "$worker_pid"
+printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"1.0.0","commands":[{"name":"fixture.ping"}]}}\n' "$initialize_id"
+while IFS= read -r request; do
+  request_id=$(printf '%s' "$request" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+  printf '{"jsonrpc":"2.0","id":%s,"result":null}\n' "$request_id"
+done
 "#,
     )
     .unwrap();
     script
+}
+
+#[tokio::test]
+async fn dormant_process_is_started_on_command_and_reaped_on_unload() {
+    let root = tempfile::tempdir().unwrap();
+    let pid_file = root.path().join("lazy-pids");
+    let script = write_protocol_process(root.path());
+    let transport = ProcessTransport {
+        command: "/bin/sh".into(),
+        args: vec![script.to_string_lossy().into_owned()],
+        env: vec![("PID_FILE".into(), pid_file.to_string_lossy().into_owned())],
+        cwd: Some(root.path().to_path_buf()),
+        label: "lazy-lifecycle-fixture".into(),
+    };
+
+    let app = App::new();
+    let fork = app.ctx().plugin(
+        ProtocolPlugin::new("lazy-lifecycle-fixture", Arc::new(transport))
+            .with_handshake_timeout(Duration::from_secs(2))
+            .with_declared_commands(vec![PluginRuntimeCommand {
+                id: "fixture.ping".into(),
+                title: "Ping".into(),
+                description: String::new(),
+                args_schema: None,
+            }]),
+        Value::Null,
+    );
+    app.flush().await;
+    assert_eq!(fork.status(), Status::Active);
+    assert!(
+        !pid_file.exists(),
+        "loading the adapter must not start the child"
+    );
+
+    app.ctx().call("fixture.ping", Value::Null).await.unwrap();
+    let pids = std::fs::read_to_string(&pid_file).unwrap();
+    let mut pids = pids
+        .split_whitespace()
+        .map(|pid| pid.parse::<i32>().unwrap());
+    let direct_pid = pids.next().unwrap();
+    let worker_pid = pids.next().unwrap();
+    let _cleanup = ProcessCleanup(vec![direct_pid, worker_pid]);
+
+    fork.dispose();
+    app.flush().await;
+    assert!(!process_exists(direct_pid));
+    assert!(!process_is_running(worker_pid));
 }
 
 #[tokio::test]

@@ -62,6 +62,21 @@ export interface AppUpdateStatus {
 export type AppshotHotkey = "both-command" | "command-shift-2" | "command-option-2";
 export type AppshotDestination = "automatic" | "current" | "new";
 
+export type DesktopPetAnimation = "idle" | "running" | "waiting" | "failed" | "review";
+
+export interface DesktopPetState {
+  visible: boolean;
+  animation: DesktopPetAnimation;
+  voiceEnabled: boolean;
+  appearance: {
+    petActivityEnabled: boolean;
+    petSize: "small" | "medium" | "large";
+    petSource: "builtin" | "petshare";
+    petId: string;
+    petName: string;
+  };
+}
+
 export interface AppshotSettings {
   available: boolean;
   hotkey: AppshotHotkey;
@@ -75,6 +90,8 @@ export interface AppshotSettings {
 
 export interface AppshotCapture {
   id: string;
+  /** Absent on legacy Appshot events; private user-selected images identify themselves explicitly. */
+  kind?: "appshot" | "attachment";
   app_name: string;
   window_title: string;
   captured_at: string;
@@ -104,7 +121,12 @@ export type CodeTwoRPC = {
         response: boolean;
       };
       showItemInFolder: { params: { path: string }; response: boolean };
+      systemBadgeSet: { params: { count: number }; response: boolean };
       browserZoom: { params: { webviewId: number; factor: number }; response: void };
+      desktopPetState: { params: undefined; response: DesktopPetState };
+      desktopPetUpdate: { params: DesktopPetState; response: void };
+      desktopPetHide: { params: undefined; response: void };
+      desktopPetVoiceText: { params: { text: string }; response: void };
       openDevtools: { params: undefined; response: void };
       updateStatus: { params: undefined; response: AppUpdateStatus };
       updateCheck: { params: undefined; response: AppUpdateStatus };

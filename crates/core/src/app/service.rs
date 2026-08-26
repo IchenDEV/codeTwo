@@ -5,7 +5,7 @@
 //! whoever held the struct. Now each is a [`Service`] published by the plugin that owns it, and
 //! reached by anything that declares it in `inject`. The wiring is no longer a place in the code.
 
-use crate::app::PluginConfigStore;
+use crate::app::{PluginConfigStore, PluginScope};
 use crate::canvas::CanvasFeatureGate;
 use crate::engine::Engine;
 use crate::event::Event;
@@ -28,18 +28,17 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::sync::{broadcast, Mutex as AsyncMutex};
 
-/// The loader itself, published as a service so a plugin can manage the plugin graph.
+/// The loader itself, published so the Core management plane can inspect the runtime-module graph.
 ///
-/// This is the reflexive step that makes the system finished rather than merely layered: the
-/// plugin manager is not privileged infrastructure, it is a plugin that injects `loader` like
-/// anything else, and it can be turned off.
+/// The manager uses the same scoped lifecycle as other Core modules, while its product role and
+/// command visibility keep it outside user extension policy.
 pub struct LoaderService(pub Arc<Mutex<codetwo_kernel::Loader>>);
 
 impl Service for LoaderService {
     const NAME: &'static str = "loader";
 }
 
-/// Durable user and project policy for the running plugin graph.
+/// Durable user and project policy for managed built-in features and installed extensions.
 ///
 /// This is rooted beside the loader, not provided by `paths`: disabling the paths plugin must not
 /// remove the one interface capable of recovering the graph.
@@ -284,6 +283,10 @@ impl ProviderService {
     }
 
     pub async fn summaries(&self) -> Vec<ProviderSummary> {
+        self.summaries_with_updates(false).await
+    }
+
+    pub async fn summaries_with_updates(&self, check_updates: bool) -> Vec<ProviderSummary> {
         let toolsets = self.toolsets();
         let mut tasks = tokio::task::JoinSet::new();
         for (index, provider) in self.providers.iter().cloned().enumerate() {
@@ -294,7 +297,7 @@ impl ProviderService {
                 .unwrap_or_default();
             tasks.spawn(async move {
                 let enabled = lifecycle.enabled(provider.id.as_str()).unwrap_or(false);
-                let management = lifecycle.status(&provider).await;
+                let management = lifecycle.status(&provider, check_updates).await;
                 let summary = ProviderSummary {
                     id: provider.id.as_str().to_string(),
                     display_name: provider.display_name.clone(),
@@ -323,8 +326,10 @@ impl ProviderService {
 /// skills discovered from the harness directories of the current workspace.
 pub struct SkillService {
     paths: Arc<Paths>,
+    catalog: Mutex<SkillLibrary>,
     library: Mutex<SkillLibrary>,
     cwd: Mutex<Option<PathBuf>>,
+    plugin_config: Option<Arc<Mutex<PluginConfigStore>>>,
 }
 
 impl Service for SkillService {
@@ -333,10 +338,19 @@ impl Service for SkillService {
 
 impl SkillService {
     pub fn new(paths: Arc<Paths>) -> SkillService {
+        Self::with_plugin_config(paths, None)
+    }
+
+    pub fn with_plugin_config(
+        paths: Arc<Paths>,
+        plugin_config: Option<Arc<Mutex<PluginConfigStore>>>,
+    ) -> SkillService {
         let service = SkillService {
             paths,
+            catalog: Mutex::new(SkillLibrary::default()),
             library: Mutex::new(SkillLibrary::default()),
             cwd: Mutex::new(None),
+            plugin_config,
         };
         service.reload(None);
         service
@@ -349,7 +363,7 @@ impl SkillService {
     }
 
     pub fn list(&self) -> Vec<Skill> {
-        self.library.lock().unwrap().all().cloned().collect()
+        self.catalog.lock().unwrap().all().cloned().collect()
     }
 
     /// Rebuild from every source. `cwd` selects the workspace whose project-level harness
@@ -361,19 +375,54 @@ impl SkillService {
         let cwd = self.cwd.lock().unwrap().clone();
 
         let mut skills = builtin_skills();
+        let mut source_enabled = skills
+            .iter()
+            .map(|skill| (skill.id.clone(), true))
+            .collect::<HashMap<_, _>>();
         if let Ok(loaded) = SkillLibrary::load_dir(&self.paths.skills()) {
-            skills.extend(loaded.all().cloned());
+            for skill in loaded.all().cloned() {
+                source_enabled.insert(skill.id.clone(), true);
+                skills.push(skill);
+            }
         }
         if let Ok(plugins) = crate::plugin::load_dir(&self.paths.plugins()) {
-            skills.extend(
-                plugins
-                    .into_iter()
-                    .filter(|plugin| plugin.enabled)
-                    .flat_map(|p| p.components),
-            );
+            for plugin in plugins {
+                for skill in plugin.components {
+                    source_enabled.insert(skill.id.clone(), plugin.enabled);
+                    skills.push(skill);
+                }
+            }
         }
-        skills.extend(crate::harness::discover(cwd.as_deref()));
-        *self.library.lock().unwrap() = SkillLibrary::new(skills);
+        for skill in crate::harness::discover(cwd.as_deref()) {
+            source_enabled.insert(skill.id.clone(), true);
+            skills.push(skill);
+        }
+        let catalog = SkillLibrary::new(skills);
+        let scope = cwd
+            .as_deref()
+            .map(PluginScope::project)
+            .unwrap_or(PluginScope::User);
+        let config = self
+            .plugin_config
+            .as_ref()
+            .map(|config| config.lock().unwrap());
+        let enabled = catalog
+            .all()
+            .filter(|skill| {
+                source_enabled.get(&skill.id).copied().unwrap_or(true)
+                    && config.as_ref().map_or(true, |config| {
+                        config.effective_component_enabled(
+                            &scope,
+                            "skills",
+                            &format!("skill:{}", skill.id),
+                            true,
+                        )
+                    })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        *self.catalog.lock().unwrap() = catalog;
+        *self.library.lock().unwrap() = SkillLibrary::new(enabled);
     }
 
     pub fn save(&self, skill: &Skill) -> std::io::Result<()> {
@@ -535,9 +584,9 @@ impl KeymapService {
 /// Installed plugin *bundles* — the data-only packages (skills, subagents, MCP servers, scenes,
 /// scaffolds) users install from GitHub.
 ///
-/// Note the two senses of "plugin" that meet here: a [`codetwo_kernel::Plugin`] is code that runs
-/// in this process, a [`crate::plugin::InstalledPlugin`] is content the app loads. This service is
-/// the bridge — a kernel plugin whose job is managing the other kind.
+/// A [`codetwo_kernel::Plugin`] is an internal runtime module; a
+/// [`crate::plugin::InstalledPlugin`] is a separately managed extension Bundle. This Core service
+/// bridges the two without making the kernel trait a public extension API.
 pub struct PluginHub {
     pub dir: PathBuf,
     /// Serializes installed-bundle mutations with the runtime factory snapshot they publish.
@@ -564,5 +613,57 @@ impl PluginHub {
             })
             .filter(|(_, dir)| dir.is_dir())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::{PluginOverride, PluginPolicy};
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn skill_catalog_keeps_disabled_entries_while_runtime_library_filters_them() {
+        let data = tempfile::tempdir().unwrap();
+        let project = data.path().join("project");
+        let mut store = PluginConfigStore::ephemeral();
+        store
+            .set_policy(
+                PluginScope::User,
+                "skills",
+                PluginPolicy {
+                    components: BTreeMap::from([(
+                        "skill:plan-first".into(),
+                        PluginOverride::Disabled,
+                    )]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        store
+            .set_policy(
+                PluginScope::project(&project),
+                "skills",
+                PluginPolicy {
+                    components: BTreeMap::from([(
+                        "skill:reviewer".into(),
+                        PluginOverride::Disabled,
+                    )]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let service = SkillService::with_plugin_config(
+            Arc::new(Paths::new(data.path())),
+            Some(Arc::new(Mutex::new(store))),
+        );
+        assert!(service.list().iter().any(|skill| skill.id == "plan-first"));
+        assert!(service.library().get("plan-first").is_none());
+        assert!(service.library().get("reviewer").is_some());
+
+        service.reload(Some(&project));
+        assert!(service.list().iter().any(|skill| skill.id == "reviewer"));
+        assert!(service.library().get("reviewer").is_none());
     }
 }

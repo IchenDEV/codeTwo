@@ -100,3 +100,122 @@ describe("Project settings", () => {
     view.unmount();
   });
 });
+
+describe("Worktrees settings", () => {
+  test("loads every project and exposes conversation and discard actions", async () => {
+    const projects = [
+      {
+        path: "/repo/codeTwo",
+        name: "codeTwo",
+        last_opened_at: 2,
+        default_worktree_mode: null,
+      },
+      {
+        path: "/repo/docs",
+        name: "Docs",
+        last_opened_at: 1,
+        default_worktree_mode: null,
+      },
+    ];
+    const listed = [];
+    const discarded = [];
+    const confirmations = [];
+    const opened = [];
+    const savedSettings = [];
+    let currentSettings = {
+      root: "/tmp/c2-worktrees",
+      fetch_upstream: false,
+      auto_delete: false,
+      auto_delete_limit: 15,
+    };
+    const sessionEntry = {
+      path: "/repo/.codetwo-worktrees/codeTwo-one",
+      branch: "refs/heads/codetwo/one",
+      kind: "session",
+      registered: true,
+      checkout_present: true,
+      session_id: "session-1",
+      session_title: "Fix renderer",
+      session_archived: false,
+      worktree_discarded: false,
+    };
+    const view = mount(
+      <I18nProvider>
+        <SettingsPage
+          bindings={[]}
+          capturing={null}
+          onCapture={() => {}}
+          providers={[]}
+          provider="codex"
+          projectPath={projects[0].path}
+          project={projects[0]}
+          projects={projects}
+          onProjectWorktreeMode={async () => {}}
+          onOpenSession={(session) => opened.push(session)}
+          worktreeLister={async (path) => {
+            listed.push(path);
+            return path === projects[0].path ? [sessionEntry] : [];
+          }}
+          worktreeSettingsLoader={async () => currentSettings}
+          worktreeSettingsSaver={async (settings) => {
+            savedSettings.push(settings);
+            currentSettings = settings;
+            return settings;
+          }}
+          sessionWorktreeDiscarder={async (session) => {
+            discarded.push(session);
+            return { removed_checkout: true };
+          }}
+          worktreeDiscardConfirmer={async (message) => {
+            confirmations.push(message);
+            return true;
+          }}
+          memoryEnabled={false}
+          initialTab="worktrees"
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(listed).toEqual(projects.map((project) => project.path)));
+    await flush();
+    expect(view.container.textContent).toContain("Review isolated checkouts across your projects");
+    expect(view.container.textContent).toContain("Worktree root");
+    expect(view.container.textContent).toContain("Fetch upstream before creating worktrees");
+    expect(view.container.textContent).toContain("Automatically delete old worktrees");
+    expect(view.container.textContent).toContain("Auto-delete limit");
+    expect(view.container.querySelector('input[aria-label="Auto-delete limit"]')?.disabled).toBe(true);
+    expect(view.container.querySelector('input[aria-label="Worktree root"]')?.value).toBe("/tmp/c2-worktrees");
+    expect(view.container.textContent).toContain("codeTwo");
+    expect(view.container.textContent).toContain("Docs");
+    expect(view.container.textContent).toContain("Fix renderer");
+    expect(view.container.textContent).toContain("codetwo/one");
+    expect(view.container.textContent).toContain("Worktrees: 1");
+    expect(view.container.textContent).toContain("No worktrees.");
+
+    await reactAct(async () => {
+      view.container.querySelector('[data-slot="switch"][aria-label="Fetch upstream before creating worktrees"]').click();
+    });
+    await waitFor(() => expect(savedSettings.at(-1)?.fetch_upstream).toBe(true));
+
+    await reactAct(async () => {
+      view.container.querySelector('[data-slot="switch"][aria-label="Automatically delete old worktrees"]').click();
+    });
+    await waitFor(() => expect(savedSettings.at(-1)?.auto_delete).toBe(true));
+    await waitFor(() => {
+      expect(view.container.querySelector('input[aria-label="Auto-delete limit"]')?.disabled).toBe(false);
+      expect(view.container.querySelector('input[aria-label="Worktree root"]')?.disabled).toBe(false);
+    });
+
+    await reactAct(async () => button(view.container, "Open conversation").click());
+    expect(opened).toEqual(["session-1"]);
+
+    await reactAct(async () => button(view.container, "Discard").click());
+    await waitFor(() => expect(discarded).toEqual(["session-1"]));
+    expect(confirmations[0]).toContain(sessionEntry.path);
+    expect(listed.slice(0, projects.length)).toEqual(projects.map((project) => project.path));
+    expect(listed.at(-1)).toBe(projects[0].path);
+
+    view.unmount();
+  });
+});

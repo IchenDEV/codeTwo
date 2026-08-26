@@ -4,7 +4,7 @@
 //! made through it is filed under that scope, which is why unloading a plugin is exact rather than
 //! best-effort. Cordis puts it well: the context *is* the plugin's undo log.
 
-use crate::command::CommandRealm;
+use crate::command::{CommandInfo, CommandRealm, CommandVisibility};
 use crate::error::{KernelError, PluginError};
 use crate::event::{BoxFuture, Event, Handler, JsonListenerEntry, ListenerEntry};
 use crate::plugin::{FnPlugin, Injection, Plugin};
@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub struct Context {
     runtime: Arc<Runtime>,
     scope: ScopeId,
+    generation: u64,
     command_realm: CommandRealm,
     /// Service-name → realm overrides inherited from [`Context::isolate`].
     isolate: Arc<HashMap<String, u64>>,
@@ -28,9 +29,11 @@ pub struct Context {
 
 impl Context {
     pub(crate) fn for_scope(runtime: Arc<Runtime>, scope: ScopeId) -> Context {
+        let generation = runtime.scope_generation(scope).unwrap_or_default();
         Context {
             runtime,
             scope,
+            generation,
             command_realm: CommandRealm::Global,
             isolate: Arc::new(HashMap::new()),
         }
@@ -39,12 +42,14 @@ impl Context {
     pub(crate) fn with_isolate(
         runtime: Arc<Runtime>,
         scope: ScopeId,
+        generation: u64,
         isolate: Arc<HashMap<String, u64>>,
         command_realm: CommandRealm,
     ) -> Context {
         Context {
             runtime,
             scope,
+            generation,
             command_realm,
             isolate,
         }
@@ -53,6 +58,12 @@ impl Context {
     /// The scope this context registers into.
     pub fn scope(&self) -> ScopeId {
         self.scope
+    }
+
+    /// Whether this handle still belongs to the scope generation that created it.
+    pub fn is_current(&self) -> bool {
+        self.runtime
+            .scope_generation_is_current(self.scope, self.generation)
     }
 
     pub fn runtime(&self) -> &Arc<Runtime> {
@@ -72,6 +83,7 @@ impl Context {
         Context {
             runtime: self.runtime.clone(),
             scope: self.scope,
+            generation: self.generation,
             command_realm: realm,
             isolate: self.isolate.clone(),
         }
@@ -187,6 +199,7 @@ impl Context {
         Context {
             runtime: self.runtime.clone(),
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: Arc::new(isolate),
         }
@@ -203,9 +216,11 @@ impl Context {
     ///
     /// This is the escape hatch that keeps everything else honest: a plugin that spawns a task,
     /// opens a socket, or writes a temp file hands the undo to `effect` and stops being something
-    /// the app has to remember.
-    pub fn effect(&self, dispose: impl FnOnce() + Send + 'static) {
-        self.runtime.add_disposable(self.scope, Box::new(dispose));
+    /// the app has to remember. Returns `false` and runs the cleanup immediately when this context
+    /// belongs to a disposed or superseded scope generation.
+    pub fn effect(&self, dispose: impl FnOnce() + Send + 'static) -> bool {
+        self.runtime
+            .add_disposable(self.scope, self.generation, Box::new(dispose))
     }
 
     /// Spawn a task tied to this scope: unloading the plugin aborts it.
@@ -304,7 +319,8 @@ impl Context {
     }
 
     /// Listen on the untyped side of the bus — the one frontends and external plugins can reach.
-    pub fn on_json<F, Fut>(&self, name: impl Into<String>, listener: F)
+    /// Returns `false` when this context belongs to a disposed or superseded scope generation.
+    pub fn on_json<F, Fut>(&self, name: impl Into<String>, listener: F) -> bool
     where
         F: Fn(Arc<Value>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Option<Value>> + Send + 'static,
@@ -316,6 +332,7 @@ impl Context {
         };
         self.runtime.add_json_listener(
             name.into(),
+            self.generation,
             JsonListenerEntry {
                 scope: self.scope,
                 seq,
@@ -324,7 +341,7 @@ impl Context {
                     Box::pin(async move { listener(value).await })
                 }),
             },
-        );
+        )
     }
 
     pub async fn emit_json(&self, name: &str, payload: Value) {
@@ -351,9 +368,11 @@ impl Context {
 
     // ---- commands ------------------------------------------------------------------------
 
-    /// Contribute a named command — a call a frontend, the TUI, or another plugin can make.
+    /// Contribute a named command to the trusted host surface.
     ///
-    /// The name is the API. Keep it `subsystem.verb` (`git.status`, `scene.apply`).
+    /// Internal runtime modules and host adapters may call it by name. Extension processes cannot
+    /// discover or invoke it unless it is registered with [`Context::command_extension_public`].
+    /// Keep names in `subsystem.verb` form (`git.status`, `scene.apply`).
     pub fn command<F, Fut>(&self, name: impl Into<String>, handler: F) -> Result<(), KernelError>
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -372,12 +391,53 @@ impl Context {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
     {
+        self.command_described_with_visibility(
+            name,
+            description,
+            CommandVisibility::Internal,
+            handler,
+        )
+    }
+
+    /// Contribute a command that an out-of-process extension may discover and invoke.
+    ///
+    /// This is deliberately separate from [`Context::command`], which stays internal by default.
+    /// Treat this method as publishing a compatibility and authorization contract.
+    pub fn command_extension_public<F, Fut>(
+        &self,
+        name: impl Into<String>,
+        handler: F,
+    ) -> Result<(), KernelError>
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
+    {
+        self.command_described_with_visibility(
+            name,
+            None,
+            CommandVisibility::ExtensionPublic,
+            handler,
+        )
+    }
+
+    fn command_described_with_visibility<F, Fut>(
+        &self,
+        name: impl Into<String>,
+        description: Option<&str>,
+        visibility: CommandVisibility,
+        handler: F,
+    ) -> Result<(), KernelError>
+    where
+        F: Fn(Value) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Value, PluginError>> + Send + 'static,
+    {
         let handler = Arc::new(handler);
         self.runtime.register_command(
             self.scope,
             self.command_realm.clone(),
             name.into(),
             description.map(str::to_string),
+            visibility,
             Arc::new(move |_realm, args| {
                 let handler = handler.clone();
                 Box::pin(async move { handler(args).await })
@@ -403,6 +463,7 @@ impl Context {
             self.command_realm.clone(),
             name.into(),
             None,
+            CommandVisibility::Internal,
             Arc::new(move |realm, args| {
                 let handler = handler.clone();
                 Box::pin(async move { handler(realm, args).await })
@@ -438,6 +499,32 @@ impl Context {
             })
     }
 
+    /// Invoke a command on behalf of an out-of-process extension.
+    ///
+    /// Resolution follows the same project-local then global-fallback rules as [`Context::call`],
+    /// but refuses the resolved command unless it was explicitly published for extensions.
+    pub async fn call_extension_public(
+        &self,
+        name: &str,
+        args: Value,
+    ) -> Result<Value, KernelError> {
+        let handler = self
+            .runtime
+            .extension_public_command_handler(&self.command_realm, name)?
+            .ok_or_else(|| KernelError::UnknownCommand(name.to_string()))?;
+        handler(self.command_realm.clone(), args)
+            .await
+            .map_err(|error| KernelError::Command {
+                name: name.to_string(),
+                message: error.0,
+            })
+    }
+
+    /// Commands effectively visible to an extension in this command realm.
+    pub fn extension_public_commands(&self) -> Vec<CommandInfo> {
+        self.runtime.extension_public_commands(&self.command_realm)
+    }
+
     /// Invoke a command and deserialize the result.
     pub async fn call_as<T: serde::de::DeserializeOwned>(
         &self,
@@ -460,16 +547,22 @@ impl Context {
 pub struct WeakContext {
     runtime: std::sync::Weak<Runtime>,
     scope: ScopeId,
+    generation: u64,
     command_realm: CommandRealm,
     isolate: Arc<HashMap<String, u64>>,
 }
 
 impl WeakContext {
-    /// `None` once the app has been dropped — treat it as "nobody is listening any more".
+    /// `None` once the app is dropped or the owning scope is disposed or reloaded.
     pub fn upgrade(&self) -> Option<Context> {
+        let runtime = self.runtime.upgrade()?;
+        if !runtime.scope_generation_is_current(self.scope, self.generation) {
+            return None;
+        }
         Some(Context {
-            runtime: self.runtime.upgrade()?,
+            runtime,
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         })
@@ -482,6 +575,7 @@ impl Context {
         WeakContext {
             runtime: Arc::downgrade(&self.runtime),
             scope: self.scope,
+            generation: self.generation,
             command_realm: self.command_realm.clone(),
             isolate: self.isolate.clone(),
         }

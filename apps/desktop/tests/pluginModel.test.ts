@@ -14,7 +14,13 @@ const manifest = {
   author: { name: "C2" },
   extensions: {
     "dev.codetwo": {
-      standardVersion: "1.0.0",
+      standardVersion: "1.1.0",
+      commands: [{
+        id: "review.run",
+        title: "Review workspace",
+        description: "Review the active workspace.",
+        argsSchema: { type: "object", additionalProperties: false },
+      }],
       runtime: {
         command: "node",
         args: ["dist/plugin.js"],
@@ -33,8 +39,11 @@ const manifest = {
 describe("C2 plugin package model", () => {
   test("normalizes runtime and UI contributions into one distribution contract", () => {
     const parsed = parsePluginManifest(manifest);
-    expect(parsed.standardVersion).toBe("1.0.0");
+    expect(parsed.standardVersion).toBe("1.1.0");
     expect(parsed.runtime?.scopeSupport).toEqual(["user", "project"]);
+    expect(parsed.commands).toEqual([
+      expect.objectContaining({ id: "review.run", title: "Review workspace" }),
+    ]);
     expect(parsed.ui).toEqual([
       expect.objectContaining({ id: "review", command: "review.run", order: 0 }),
     ]);
@@ -48,13 +57,13 @@ describe("C2 plugin package model", () => {
       name: "scene-pack",
       version: "1.0.0",
       extensions: { "dev.codetwo": { standardVersion: "1.0.0" } },
-    })).toMatchObject({ runtime: null, ui: [], languageServers: [] });
+    })).toMatchObject({ runtime: null, commands: [], ui: [], languageServers: [] });
 
     expect(() => parsePluginManifest({
       ...manifest,
       extensions: {
         "dev.codetwo": {
-          standardVersion: "1.0.0",
+          standardVersion: "1.1.0",
           ui: manifest.extensions["dev.codetwo"].ui,
         },
       },
@@ -74,7 +83,53 @@ describe("C2 plugin package model", () => {
     })).toThrow("duplicate ids");
   });
 
-  test("rejects bundles outside the exact current standard", () => {
+  test("keeps 1.0 runtimes compatible and closes the 1.1 command contract", () => {
+    expect(parsePluginManifest({
+      ...manifest,
+      extensions: {
+        "dev.codetwo": {
+          standardVersion: "1.0.0",
+          runtime: manifest.extensions["dev.codetwo"].runtime,
+          ui: manifest.extensions["dev.codetwo"].ui,
+        },
+      },
+    }).commands).toEqual([]);
+
+    expect(() => parsePluginManifest({
+      ...manifest,
+      extensions: {
+        "dev.codetwo": {
+          standardVersion: "1.1.0",
+          runtime: manifest.extensions["dev.codetwo"].runtime,
+        },
+      },
+    })).toThrow("require extensions.dev.codetwo.commands");
+
+    expect(() => parsePluginManifest({
+      ...manifest,
+      extensions: {
+        "dev.codetwo": {
+          ...manifest.extensions["dev.codetwo"],
+          commands: [{
+            ...manifest.extensions["dev.codetwo"].commands[0],
+            argsSchema: [],
+          }],
+        },
+      },
+    })).toThrow("commands[0] is invalid");
+
+    expect(() => parsePluginManifest({
+      ...manifest,
+      extensions: {
+        "dev.codetwo": {
+          ...manifest.extensions["dev.codetwo"],
+          ui: [{ ...manifest.extensions["dev.codetwo"].ui[0], command: "review.missing" }],
+        },
+      },
+    })).toThrow("references undeclared runtime command");
+  });
+
+  test("rejects bundles outside the supported C2 standards", () => {
     expect(() => parsePluginManifest({
       $schema: AGENT_PLUGIN_SCHEMA,
       name: "missing-extension",
@@ -83,7 +138,7 @@ describe("C2 plugin package model", () => {
 
     expect(() => parsePluginManifest({
       ...manifest,
-      extensions: { "dev.codetwo": { standardVersion: "1.1.0" } },
+      extensions: { "dev.codetwo": { standardVersion: "1.2.0" } },
     })).toThrow("Unsupported C2 plugin standard");
 
     expect(() => parsePluginManifest({

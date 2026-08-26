@@ -4,7 +4,9 @@ import type {
   ManagedPluginOverride,
   ManagedPluginScope,
   MarketItem,
+  PluginExtensionComponent,
   PluginInfo,
+  PluginMarketplace,
   SkillInfo,
 } from "../bridge";
 import { pluginUiComponentId } from "../pluginModel";
@@ -12,6 +14,7 @@ import { BUILTIN_UI_COMPONENTS } from "./builtinComponents";
 import type {
   PluginManagerComponent,
   PluginManagerMarketplaceItem,
+  PluginManagerMarketplaceSource,
   PluginManagerPlugin,
   PluginManagerScope,
   PluginManagerScopedState,
@@ -24,7 +27,8 @@ const BUNDLE_CONTRIBUTIONS = [
   ["skills", "Skills"],
   ["subagents", "Subagents"],
   ["mcp_servers", "MCP servers"],
-  ["commands", "Commands"],
+  ["commands", "Prompt commands"],
+  ["runtime_commands", "Runtime commands"],
   ["hooks", "Hooks"],
   ["lsp_servers", "Language servers"],
   ["scaffolds", "Scaffolds"],
@@ -52,6 +56,7 @@ export interface PluginManagerCatalogModel {
   plugins: PluginManagerPlugin[];
   components: PluginManagerComponent[];
   marketplaceItems: PluginManagerMarketplaceItem[];
+  marketplaceSources: PluginManagerMarketplaceSource[];
 }
 
 export interface PluginManagerCatalogInput {
@@ -61,6 +66,7 @@ export interface PluginManagerCatalogInput {
   bundles: PluginInfo[];
   skills: SkillInfo[];
   market: MarketItem[];
+  localMarketplace?: PluginMarketplace | null;
   scope: PluginManagerScope;
 }
 
@@ -167,6 +173,44 @@ function bundleState(bundle: PluginInfo): PluginManagerScopedState {
   };
 }
 
+function extensionState(
+  bundle: PluginInfo,
+  availability: PluginExtensionComponent["status"],
+): PluginManagerScopedState {
+  const state = bundleState(bundle);
+  if (!state.effectiveEnabled) return state;
+  if (availability === "requires_auth") {
+    return { ...state, status: "requires_auth" };
+  }
+  if (availability === "unsupported") {
+    return { ...state, status: "unsupported" };
+  }
+  if (availability === "requires_trust") {
+    return { ...state, status: "pending" };
+  }
+  return state;
+}
+
+function combineSkillState(
+  policy: PluginManagerScopedState,
+  bundle: PluginInfo | undefined,
+): PluginManagerScopedState {
+  if (!bundle) return policy;
+  if (!policy.effectiveEnabled) return policy;
+  const installed = bundleState(bundle);
+  if (!installed.effectiveEnabled || installed.status !== "active") {
+    return installed;
+  }
+  return {
+    ...policy,
+    missingDependencies: [
+      ...(installed.missingDependencies ?? []),
+      ...(policy.missingDependencies ?? []),
+    ],
+    error: installed.error ?? policy.error,
+  };
+}
+
 function findSkillBundle(skill: SkillInfo, bundles: PluginInfo[]): PluginInfo | undefined {
   if (!skill.source) return undefined;
   const source = skill.source.toLocaleLowerCase();
@@ -181,6 +225,7 @@ export function buildPluginManagerCatalog({
   bundles,
   skills,
   market,
+  localMarketplace,
   scope,
 }: PluginManagerCatalogInput): PluginManagerCatalogModel {
   const entries = new Map(catalog.plugins.map((entry) => [entry.id, entry]));
@@ -194,7 +239,7 @@ export function buildPluginManagerCatalog({
   }
 
   const managedPlugins: PluginManagerPlugin[] = catalog.plugins
-    .filter((entry) => !bundlesByManagedId.has(entry.id))
+    .filter((entry) => entry.metadata.role !== "core" && !bundlesByManagedId.has(entry.id))
     .map((entry) => ({
       id: entry.id,
       name: titleFor(entry.id),
@@ -232,14 +277,17 @@ export function buildPluginManagerCatalog({
       sourceLabel: bundle.source,
       category: policyEntry?.metadata.category ?? "plugin",
       supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
-      required: policyEntry?.metadata.essential ?? false,
+      required:
+        policyEntry?.metadata.essential === true || policyEntry?.metadata.role === "core",
       dependencies: policyEntry
         ? [
             ...policyEntry.dependencies.required,
             ...policyEntry.dependencies.optional.map((dependency) => `${dependency} (optional)`),
           ]
         : undefined,
-      commands: policyEntry?.commands ?? [],
+      commands: policyEntry?.commands?.length
+        ? policyEntry.commands
+        : (bundle.runtime_commands ?? []).map((command) => command.id),
       services: policyEntry?.services ?? [],
       componentIds: [
         ...(bundle.ui_contributions ?? []).map((contribution) =>
@@ -274,13 +322,19 @@ export function buildPluginManagerCatalog({
           message: diagnostic.message,
           component: diagnostic.component ?? null,
         })),
+        scaffolds: bundle.scaffolds.map((scaffold) => ({
+          id: scaffold.id,
+          name: scaffold.name,
+          description: scaffold.description,
+          files: scaffold.files,
+        })),
       },
     };
   });
 
   const builtinComponents: PluginManagerComponent[] = BUILTIN_UI_COMPONENTS.flatMap((descriptor) => {
     const entry = entries.get(descriptor.pluginId);
-    if (!entry) return [];
+    if (!entry || entry.metadata.role === "core") return [];
     return [{
       id: descriptor.id,
       pluginId: descriptor.pluginId,
@@ -335,7 +389,8 @@ export function buildPluginManagerCatalog({
           sourceLabel: bundle.source,
           supportedScopes: bundleScope(bundle),
           manageable: false,
-          state: bundleState(bundle),
+          availability: component.status,
+          state: extensionState(bundle, component.status),
         };
       });
     return [...uiComponents, ...inventoryComponents];
@@ -345,24 +400,35 @@ export function buildPluginManagerCatalog({
     const bundle = findSkillBundle(skill, bundles);
     const ownerEntry = entries.get("skills");
     const pluginId = bundle ? bundleId(bundle.id) : "skills";
-    const state = bundle
-      ? bundleState(bundle)
-      : ownerEntry
-        ? componentState(`skill:${skill.id}`, ownerEntry, userEntries.get("skills"), scope)
-        : { effectiveEnabled: true, status: "active" as const };
+    const policyState = ownerEntry
+      ? componentState(
+          `skill:${skill.id}`,
+          ownerEntry,
+          userEntries.get("skills"),
+          scope,
+        )
+      : { effectiveEnabled: true, status: "active" as const };
+    const state = combineSkillState(policyState, bundle);
     return {
       id: `skill:${skill.id}`,
       pluginId,
       pluginName: bundle?.name ?? "Skills",
+      policyPluginId: ownerEntry ? "skills" : undefined,
       name: skill.name,
       description: skill.description,
       kind: skill.kind || "skill",
       slot: "composer.skills",
       source: bundle ? "bundle" : "builtin",
       sourceLabel: skill.source,
-      supportedScopes: bundle ? bundleScope(bundle) : ownerEntry ? scopeSupport(ownerEntry) : ["user"],
-      manageable: bundle ? false : undefined,
+      supportedScopes: ownerEntry ? scopeSupport(ownerEntry) : ["user"],
+      manageable: ownerEntry != null,
       state,
+      skill: {
+        id: skill.id,
+        removable:
+          Boolean(skill.source?.startsWith("GitHub · ")) ||
+          market.some((item) => item.id === skill.id && item.installed),
+      },
     };
   });
 
@@ -384,10 +450,45 @@ export function buildPluginManagerCatalog({
     supportedScopes: ["user"],
   }));
 
+  const localMarketplaceItems: PluginManagerMarketplaceItem[] =
+    localMarketplace?.plugins.map((entry) => ({
+      id: `marketplace:${localMarketplace.name}:${entry.name}`,
+      name: entry.display_name,
+      description: entry.description,
+      version: entry.version || null,
+      kind: entry.category || "bundle",
+      sourceLabel: `${localMarketplace.display_name} · ${entry.source.kind.replace("_", " ")}`,
+      installed: bundles.some(
+        (bundle) =>
+          bundle.name === entry.display_name || bundle.name === entry.name,
+      ),
+      installable: entry.installable,
+      supportedScopes: ["user"],
+      diagnostic: entry.diagnostic,
+      marketplace: {
+        manifestPath: localMarketplace.manifest_path,
+        pluginName: entry.name,
+      },
+    })) ?? [];
+
+  const marketplaceSources: PluginManagerMarketplaceSource[] = localMarketplace
+    ? [
+        {
+          id: localMarketplace.manifest_path,
+          name: localMarketplace.display_name,
+          description: localMarketplace.description,
+          diagnostics: localMarketplace.diagnostics.map(
+            (diagnostic) => diagnostic.message,
+          ),
+        },
+      ]
+    : [];
+
   return {
     plugins: [...managedPlugins, ...bundlePlugins],
     components: [...builtinComponents, ...bundleComponents, ...skillComponents],
-    marketplaceItems,
+    marketplaceItems: [...localMarketplaceItems, ...marketplaceItems],
+    marketplaceSources,
   };
 }
 

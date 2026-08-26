@@ -3,7 +3,7 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
 import { onPtyExit, onPtyOutput, ptyResize, ptySpawn, ptyWrite } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";

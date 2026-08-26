@@ -64,6 +64,42 @@
   backdrop-filter: blur(var(--ds-space-module-inset));
 }
 
+.desktop-pet-window {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-optical);
+  padding: var(--ds-space-inline);
+  background: transparent;
+}
+
+.desktop-pet-window .codetwo-pet-stage {
+  gap: var(--ds-space-module-inset);
+  margin: 0;
+}
+
+.desktop-pet-drag-handle {
+  width: 44px;
+  height: 10px;
+  flex: 0 0 auto;
+  cursor: grab;
+  background: color-mix(in oklch, var(--ds-color-text) 18%, transparent);
+  border-radius: var(--ds-radius-control);
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.desktop-pet-drag-handle:hover {
+  background: color-mix(in oklch, var(--ds-color-text) 34%, transparent);
+}
+
+.desktop-pet-drag-handle:active {
+  cursor: grabbing;
+}
+
 @media (max-width: 720px) {
   .codetwo-pet-stage {
     margin-block: var(--ds-space-module-inset) var(--ds-space-section);

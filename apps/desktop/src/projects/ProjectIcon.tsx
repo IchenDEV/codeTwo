@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Folder } from "lucide-react";
+import { Folder } from "@/components/ui/icons";
 
 import { getProjectIcon, type Project, type ProjectIconData } from "../bridge";
 import { cn } from "@/lib/utils";

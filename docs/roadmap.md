@@ -44,7 +44,7 @@ menu (`session/TurnCard.tsx`) and command palette.
 ### R3 — Scene runtime + scene chip (PP4)
 Implement Agent Scenes 1.0.0 per `docs/scenes.md`: loader (`crates/core/src/scene.rs`, modeled on
 `SkillLibrary::load_dir` + harness-style precedence), soft/full-apply binding matrix, escalation
-rule, and the composer scene chip collapsing the posture chips
+rule, and the composer scene chip alongside directly accessible session controls
 (`session/Composer.tsx:771-915`), with Shift+Tab cycling (extend `crates/core/src/keymap.rs`).
 Ship the five builtin scenes + `rnd-lifecycle` from `examples/` as compiled-in defaults.
 

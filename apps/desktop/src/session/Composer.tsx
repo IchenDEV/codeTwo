@@ -1,13 +1,13 @@
-import { forwardRef, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactNode } from "react";
+import { forwardRef, useEffect, useId, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type ReactElement, type ReactNode } from "react";
+import { Liquid } from "liquid-gooey";
 import {
   ArrowUp,
   BrainCircuit,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Folder,
   GitBranch,
+  ImagePlus,
   ListChecks,
   Lock,
   LockOpen,
@@ -22,8 +22,7 @@ import {
   Ticket,
   TriangleAlert,
   X,
-  Zap,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import type { SessionConfig } from "./config";
 import type { SceneInfo } from "./scene";
@@ -58,11 +57,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import "@/components/ui/reasoning-selector.css";
 
 interface ComposerProps {
   /** The document editor itself. The composer only owns the frame around it. */
@@ -106,6 +104,7 @@ interface ComposerProps {
   onRemoveAppshot?: (id: string) => void;
   onRun: () => void;
   onQueue: () => void;
+  onMultitask: () => void;
   onSteer: () => void;
   onStop: () => void;
   steeringSupported: boolean;
@@ -113,6 +112,7 @@ interface ComposerProps {
   goal: GoalSnapshot | null;
   onGoal: (action: "set" | "pause" | "resume" | "clear", objective?: string) => Promise<void>;
   onAttachFile: () => void;
+  onAttachImages: (files: readonly File[]) => void | Promise<void>;
   onInsertSkill: () => void;
   onInsertIssue: () => void;
   onOpenMarket: () => void;
@@ -133,6 +133,106 @@ interface ComposerProps {
   sessionId?: string | null;
   /** Editor-owned seam that inserts the active scene's brief as a slot card (R5). */
   insertBriefRef?: MutableRefObject<((scene: SceneInfo, values?: Record<string, string>) => void) | null>;
+}
+
+const LIQUID_AVAILABLE = typeof ResizeObserver !== "undefined";
+const COMPOSER_LIQUID_SHADOW =
+  "0 1px 2px color-mix(in srgb, var(--ds-color-shadow) 30%, transparent), 0 4px 16px color-mix(in srgb, var(--ds-color-shadow) 50%, transparent), inset 0 0 0 0.5px var(--composer-liquid-border-color)";
+
+function useReducedMotionPreference() {
+  const [reduced, setReduced] = useState(() =>
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return reduced;
+}
+
+function ComposerLiquidSurface({
+  children,
+  docMode,
+  reducedMotion,
+}: {
+  children: ReactElement;
+  docMode: boolean;
+  reducedMotion: boolean;
+}) {
+  if (!LIQUID_AVAILABLE) return children;
+
+  return (
+    <Liquid
+      data-gooey-composer
+      blur={5.5}
+      contrast={20}
+      fill={docMode ? "transparent" : "var(--card)"}
+      filterPadding={20}
+      shadow={docMode ? undefined : COMPOSER_LIQUID_SHADOW}
+      className={cn("composer-liquid-surface relative z-10", docMode && "flex min-h-0 flex-1")}
+    >
+      <Liquid.Item
+        morph={reducedMotion
+          ? undefined
+          : {
+              shape: true,
+              speed: 1.1,
+              bounce: 0,
+              contentBlur: 0,
+              advanced: {
+                evolve: {
+                  roundness: 0.18,
+                  anticipation: 50,
+                  travel: 8,
+                  cornerDuration: 260,
+                  cornerEase: "cubic-bezier(0.16, 1, 0.3, 1)",
+                },
+              },
+            }}
+      >
+        {children}
+      </Liquid.Item>
+    </Liquid>
+  );
+}
+
+function LiquidActionSurface({
+  children,
+  disabled = false,
+  fill,
+  reducedMotion,
+}: {
+  children: ReactElement;
+  disabled?: boolean;
+  fill: string;
+  reducedMotion: boolean;
+}) {
+  if (!LIQUID_AVAILABLE) return children;
+
+  return (
+    <Liquid
+      data-gooey-action
+      blur={4}
+      contrast={20}
+      fill={fill}
+      filterPadding={12}
+      className={cn("shrink-0 transition-opacity", disabled && "opacity-50")}
+    >
+      <Liquid.Item
+        effect={reducedMotion ? undefined : "move"}
+        move={{ springiness: 0.72, wobble: 0.28, stretch: 0.42, trail: 0.3 }}
+      >
+        {children}
+      </Liquid.Item>
+    </Liquid>
+  );
 }
 
 function displayGitRef(reference: string | null | undefined): string | null {
@@ -361,7 +461,7 @@ export const Chip = forwardRef<HTMLButtonElement, ComponentProps<"button"> & { t
       ref={ref}
       type="button"
       className={cn(
-        "flex h-7 shrink-0 items-center gap-1.5 rounded-(--ds-radius-control) px-2 text-hint transition-colors hover:bg-accent/50",
+        "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-hint transition-colors hover:bg-accent/50",
         tone === "warning" ? "text-warning" : "text-muted-foreground hover:text-foreground",
         className,
       )}
@@ -375,7 +475,7 @@ Chip.displayName = "Chip";
 
 /** Muted section header inside a picker menu — "Model", "Reasoning". */
 function MenuSection({ children }: { children: ReactNode }) {
-  return <p className="px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
+  return <p className="shrink-0 px-2.5 pb-1 pt-1.5 text-hint text-muted-foreground">{children}</p>;
 }
 
 /** The small "Default" pill on the adapter's own pick. */
@@ -448,59 +548,6 @@ interface PickerRow {
   isDefault: boolean;
   selected: boolean;
   select: () => void;
-}
-
-const REASONING_STEP_INSET = 26;
-const COMPACT_REASONING_STEP_INSET = 16;
-
-/** Provider-owned discrete effort choices presented through the reference's continuous slider. */
-export function ReasoningScale({
-  label,
-  rows,
-  onSelect,
-  compact = false,
-}: {
-  label: string;
-  rows: PickerRow[];
-  onSelect: (row: PickerRow) => void;
-  compact?: boolean;
-}) {
-  const selectedIndex = Math.max(0, rows.findIndex((row) => row.selected));
-  const selected = rows[selectedIndex];
-  const progress = rows.length > 1 ? selectedIndex / (rows.length - 1) : 0;
-  const stepInset = compact ? COMPACT_REASONING_STEP_INSET : REASONING_STEP_INSET;
-  const fillAdjustment = stepInset * (1 - 2 * progress);
-  const fillWidth = `calc(${progress * 100}% + ${fillAdjustment}px)`;
-
-  return (
-    <div className={cn("reasoning-selector-scale", compact && "reasoning-selector-scale--compact")}>
-      <div className="reasoning-selector-track" aria-hidden>
-        <span className="reasoning-selector-fill" style={{ width: fillWidth }} />
-        <span className="reasoning-selector-dots">
-          {rows.map((row, index) => (
-            <span
-              key={row.key}
-              className="reasoning-selector-dot"
-              data-active={index <= selectedIndex}
-            />
-          ))}
-        </span>
-      </div>
-      <input
-        className="reasoning-selector-range"
-        type="range"
-        min={0}
-        max={Math.max(0, rows.length - 1)}
-        step={1}
-        value={selectedIndex}
-        aria-label={label}
-        aria-valuetext={selected?.label}
-        title={selected?.detail || selected?.label}
-        autoFocus
-        onInput={(event) => onSelect(rows[Number(event.currentTarget.value)])}
-      />
-    </div>
-  );
 }
 
 /**
@@ -986,7 +1033,7 @@ export function ModelPicker({
   configOptions,
   onConfigOption,
   hasSession,
-  compact = false,
+  disabled = false,
 }: {
   models: ModelChoice[];
   current: string | null;
@@ -996,13 +1043,19 @@ export function ModelPicker({
   configOptions: ConfigOptionInfo[];
   onConfigOption: (configId: string, value: string) => void;
   hasSession: boolean;
-  /** Scene configuration nests this picker inside another popover, so it uses desktop control density. */
-  compact?: boolean;
+  /** A live turn owns its provider runtime; model and effort changes wait until it ends. */
+  disabled?: boolean;
 }) {
   const t = useT();
-  const [selectorOpen, setSelectorOpen] = useState(false);
-  const [selectorPanel, setSelectorPanel] = useState<"reasoning" | "model">("reasoning");
+  const [modelOpen, setModelOpen] = useState(false);
+  const [effortOpen, setEffortOpen] = useState(false);
   const families = useMemo(() => groupModels(models), [models]);
+  useEffect(() => {
+    if (disabled) {
+      setModelOpen(false);
+      setEffortOpen(false);
+    }
+  }, [disabled]);
   if (!hasSession && models.length === 0) return null;
 
   const effortName = (e: Effort | null) => (e ? t(`effort.${e}` as "effort.low") : t("composer.default"));
@@ -1071,75 +1124,41 @@ export function ModelPicker({
     }));
   }
 
-  if (effortRows.length > 1) {
-    return (
-      <Popover
-        open={selectorOpen}
-        onOpenChange={(open) => {
-          setSelectorOpen(open);
-          if (!open) setSelectorPanel("reasoning");
-        }}
-      >
+  return (
+    <>
+      <Popover open={modelOpen} onOpenChange={(open) => setModelOpen(disabled ? false : open)}>
         <PopoverTrigger
           render={
-            <button
-              type="button"
-              className={cn(
-                "reasoning-selector-trigger",
-                compact && "reasoning-selector-trigger--compact",
-              )}
-              title={`${t("composer.model")}: ${modelLabel} · ${t("composer.reasoning")}: ${effortLabel}`}
-              aria-label={`${modelLabel} ${effortLabel}`}
+            <Chip
+              title={t("composer.model")}
+              disabled={disabled}
+              aria-busy={disabled}
+              className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             >
-              <span className="reasoning-selector-trigger-model">{modelLabel}</span>
-              <span className="reasoning-selector-trigger-effort">{effortLabel}</span>
-              <ChevronDown className="reasoning-selector-trigger-chevron" aria-hidden />
-            </button>
+              <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
+              <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
+                {modelLabel}
+              </span>
+              <ChevronDown className="size-3 shrink-0 opacity-50" />
+            </Chip>
           }
         />
         <PopoverContent
-          align="center"
+          align="start"
           side="top"
-          sideOffset={compact ? 8 : 17}
-          className={cn(
-            "reasoning-selector-popup",
-            selectorPanel === "model" && "reasoning-selector-popup--menu",
-            compact && "reasoning-selector-popup--compact",
-          )}
+          className="flex max-h-(--available-height) w-64 flex-col overflow-hidden p-1.5"
         >
-          {selectorPanel === "reasoning" ? (
-            <>
-              <div className="reasoning-selector-header">
-                <button
-                  type="button"
-                  className="reasoning-selector-header-button"
-                  onClick={() => setSelectorPanel("model")}
-                >
-                  <span>{t("composer.advanced")}</span>
-                  <ChevronRight aria-hidden />
-                </button>
-                <Zap className="reasoning-selector-header-icon" strokeWidth={2} aria-hidden />
-              </div>
-              <ReasoningScale
-                label={t("composer.reasoning")}
-                rows={effortRows}
-                onSelect={(row) => row.select()}
-                compact={compact}
-              />
-            </>
+          {modelRows.length === 0 ? (
+            <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
+              {t("composer.noModels")}
+            </p>
           ) : (
             <>
-              <div className="reasoning-selector-header">
-                <button
-                  type="button"
-                  className="reasoning-selector-header-button"
-                  onClick={() => setSelectorPanel("reasoning")}
-                >
-                  <ChevronLeft aria-hidden />
-                  <span>{t("composer.model")}</span>
-                </button>
-              </div>
-              <ScrollArea className="max-h-80">
+              <MenuSection>{t("composer.model")}</MenuSection>
+              <div
+                data-model-picker-list
+                className="max-h-80 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+              >
                 {modelRows.map((r) => (
                   <MenuRow
                     key={r.key}
@@ -1147,59 +1166,96 @@ export function ModelPicker({
                     isDefault={r.isDefault}
                     label={r.label}
                     detail={r.detail}
+                    disabled={disabled}
                     onClick={() => {
                       r.select();
-                      setSelectorPanel("reasoning");
-                      setSelectorOpen(false);
+                      setModelOpen(false);
                     }}
                   />
                 ))}
-              </ScrollArea>
+              </div>
             </>
           )}
         </PopoverContent>
       </Popover>
-    );
-  }
 
+      {effortRows.length > 1 && (
+        <Popover open={effortOpen} onOpenChange={(open) => setEffortOpen(disabled ? false : open)}>
+          <PopoverTrigger
+            render={
+              <Chip
+                title={t("composer.reasoning")}
+                disabled={disabled}
+                aria-busy={disabled}
+                className="disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+              >
+                <span>{effortLabel}</span>
+                <ChevronDown className="size-3 shrink-0 opacity-50" />
+              </Chip>
+            }
+          />
+          <PopoverContent align="start" side="top" className="w-44 p-1.5">
+            <MenuSection>{t("composer.reasoning")}</MenuSection>
+            {effortRows.map((r) => (
+              <MenuRow
+                key={r.key}
+                selected={r.selected}
+                isDefault={r.isDefault}
+                label={r.label}
+                detail={r.detail}
+                disabled={disabled}
+                onClick={() => {
+                  r.select();
+                  setEffortOpen(false);
+                }}
+              />
+            ))}
+          </PopoverContent>
+        </Popover>
+      )}
+    </>
+  );
+}
+
+/** High-frequency, session-scoped configuration stays one click from the prompt. */
+export function SessionControls({
+  config,
+  models,
+  currentModel,
+  defaultModel,
+  onModel,
+  configOptions,
+  onConfigOption,
+  modelChangeDisabled = false,
+}: {
+  config: SessionConfig;
+  models: ModelChoice[];
+  currentModel: string | null;
+  defaultModel: string | null;
+  onModel: (id: string) => void;
+  configOptions: ConfigOptionInfo[];
+  onConfigOption: (configId: string, value: string) => void;
+  modelChangeDisabled?: boolean;
+}) {
   return (
-    <Popover open={selectorOpen} onOpenChange={setSelectorOpen}>
-      <PopoverTrigger
-        render={<Chip title={t("composer.model")}>
-          <ProviderIcon provider={provider} className="size-3.5 shrink-0" />
-          <span className="max-w-28 truncate text-foreground/80 @lg/composer:max-w-44">
-            {modelLabel}
-          </span>
-          <ChevronDown className="size-3 shrink-0 opacity-50" />
-        </Chip>}
+    <div data-session-controls className="flex flex-wrap items-center gap-0.5">
+      {config.scenesEnabled ? <SceneChip config={config} /> : null}
+      <ProviderPicker config={config} />
+      <ModelPicker
+        models={models}
+        current={currentModel}
+        defaultModel={defaultModel}
+        provider={config.provider}
+        onModel={onModel}
+        configOptions={configOptions}
+        onConfigOption={onConfigOption}
+        hasSession={config.hasSession}
+        disabled={modelChangeDisabled}
       />
-      <PopoverContent align="start" side="top" className="w-64 p-1.5">
-        {modelRows.length === 0 ? (
-          <p className="px-2 py-2 text-fine leading-relaxed text-muted-foreground">
-            {t("composer.noModels")}
-          </p>
-        ) : (
-          <>
-            <MenuSection>{t("composer.model")}</MenuSection>
-            <ScrollArea className="max-h-80">
-              {modelRows.map((r) => (
-                <MenuRow
-                  key={r.key}
-                  selected={r.selected}
-                  isDefault={r.isDefault}
-                  label={r.label}
-                  detail={r.detail}
-                  onClick={() => {
-                    r.select();
-                    setSelectorOpen(false);
-                  }}
-                />
-              ))}
-            </ScrollArea>
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+      <ModePicker config={config} />
+      {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
+      <WorktreePicker config={config} />
+    </div>
   );
 }
 
@@ -1237,6 +1293,7 @@ export function Composer({
   onRemoveAppshot,
   onRun,
   onQueue,
+  onMultitask,
   onSteer,
   onStop,
   steeringSupported,
@@ -1244,6 +1301,7 @@ export function Composer({
   goal,
   onGoal,
   onAttachFile,
+  onAttachImages,
   onInsertSkill,
   onInsertIssue,
   onOpenMarket,
@@ -1261,6 +1319,8 @@ export function Composer({
   insertBriefRef,
 }: ComposerProps) {
   const t = useT();
+  const reducedMotion = useReducedMotionPreference();
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // ---- R5 scene brief: offer banner, + menu entry, required-slot hint --------------------------
   // Dismissal is remembered per session for the Composer's lifetime — a dismissed offer must not
@@ -1311,32 +1371,32 @@ export function Composer({
   }, [boundsRef]);
   const applied = Math.min(height, maxHeight);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startY = e.clientY;
-      const startH = applied;
-      const column = boundsRef.current?.getBoundingClientRect().height ?? 720;
-      const max = Math.max(72, column - 180);
-      const onMove = (ev: MouseEvent) =>
-        onHeight(Math.round(Math.min(max, Math.max(72, startH + (startY - ev.clientY)))));
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove("resizing-v");
-      };
-      document.body.classList.add("resizing-v");
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [applied, onHeight, boundsRef],
-  );
+  const resizeHandle = useResizeHandle({
+    axis: "y",
+    direction: -1,
+    value: applied,
+    min: 72,
+    max: maxHeight,
+    onResize: onHeight,
+  });
 
   const controls = (
     <>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        multiple
+        hidden
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          if (files.length > 0) void onAttachImages(files);
+        }}
+      />
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" className="size-7 shrink-0" aria-label={t("composer.add")}>
+          render={<Button variant="ghost" size="icon" className="size-7 shrink-0 rounded-full" aria-label={t("composer.add")}>
             <Plus className="size-4" />
           </Button>}
         />
@@ -1346,6 +1406,10 @@ export function Composer({
               <FileText />
               {t("composer.mentionFile")}
               {filesHint && <DropdownMenuShortcut>{filesHint}</DropdownMenuShortcut>}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+              <ImagePlus />
+              {t("composer.attachImage")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onInsertSkill}>
               <Sparkles />
@@ -1385,19 +1449,6 @@ export function Composer({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* One scene chip replaces the posture row (docs/scenes.md §UI contract): the scene sets
-          provider/model/permissions/memory/plan-first/worktree, and opening the chip still
-          exposes each picker unchanged for manual overrides. */}
-      <SceneChip
-        config={config}
-        models={models}
-        currentModel={currentModel}
-        defaultModel={defaultModel}
-        onModel={onModel}
-        configOptions={configOptions}
-        onConfigOption={onConfigOption}
-      />
-
       <CollaborationModePicker options={configOptions} onChange={onConfigOption} />
       <GoalPicker capability={goalCapability} goal={goal} onGoal={onGoal} />
 
@@ -1414,7 +1465,7 @@ export function Composer({
           render={<Button
             variant="ghost"
             size="icon"
-            className="size-7 shrink-0 text-muted-foreground"
+            className="size-7 shrink-0 rounded-full text-muted-foreground"
             aria-label={docMode ? t("composer.collapseLabel") : t("composer.expandLabel")}
             onClick={() => onDocMode(!docMode)}
           >
@@ -1483,6 +1534,9 @@ export function Composer({
               />
               <DropdownMenuContent align="end" side="top">
                 <DropdownMenuItem onClick={onQueue}>{t("composer.queue")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={onMultitask}>
+                  {t("composer.multitask")}
+                </DropdownMenuItem>
                 {steeringSupported ? (
                   <DropdownMenuItem onClick={onSteer}>{t("composer.steer")}</DropdownMenuItem>
                 ) : null}
@@ -1490,17 +1544,22 @@ export function Composer({
             </DropdownMenu>
           </div>
           <Tooltip>
-            <TooltipTrigger
-              render={<Button
-                variant="destructive"
-                size="icon"
-                className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-                onClick={onStop}
-                aria-label={t("composer.stop")}
-              >
-                <Square className="size-3.5 fill-current" />
-              </Button>}
-            />
+            <LiquidActionSurface fill="var(--secondary)" reducedMotion={reducedMotion}>
+              <TooltipTrigger
+                render={<Button
+                  variant="secondary"
+                  size="icon"
+                  className={cn(
+                    "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
+                    LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent",
+                  )}
+                  onClick={onStop}
+                  aria-label={t("composer.stop")}
+                >
+                  <Square className="size-3.5 fill-current" />
+                </Button>}
+              />
+            </LiquidActionSurface>
             <TooltipContent>{t("composer.stop")}</TooltipContent>
           </Tooltip>
         </>
@@ -1508,24 +1567,33 @@ export function Composer({
         <Tooltip>
           {/* Kept enabled on purpose: a disabled button explains nothing, and clicking it
               focuses the document and says what's missing. */}
-          <TooltipTrigger
-            render={
-            <Button
-              size="icon"
-              variant={composerEmpty ? "secondary" : "default"}
-              className="size-8 shrink-0 rounded-full transition-transform active:scale-90"
-              onClick={onRun}
-              disabled={loading}
-              aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
-            >
-              {loading ? (
-                <ActivityOrb state="connecting" aria-hidden="true" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </Button>
-            }
-          />
+          <LiquidActionSurface
+            fill={composerEmpty ? "var(--secondary)" : "var(--primary)"}
+            disabled={loading}
+            reducedMotion={reducedMotion}
+          >
+            <TooltipTrigger
+              render={
+              <Button
+                size="icon"
+                variant={composerEmpty ? "secondary" : "default"}
+                className={cn(
+                  "size-8 shrink-0 rounded-full transition-transform active:scale-90 motion-reduce:active:scale-100",
+                  LIQUID_AVAILABLE && "bg-transparent hover:bg-transparent disabled:opacity-100",
+                )}
+                onClick={onRun}
+                disabled={loading}
+                aria-label={loading ? t("composer.loadingSession") : t("composer.run")}
+              >
+                {loading ? (
+                  <ActivityOrb state="connecting" aria-hidden="true" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </Button>
+              }
+            />
+          </LiquidActionSurface>
           <TooltipContent>
             {loading ? t("composer.loadingSession") : composerEmpty ? t("composer.runEmpty") : t("composer.run")}
             {!loading && <span className="ml-1.5 opacity-60">{runHint}</span>}
@@ -1543,8 +1611,9 @@ export function Composer({
    */
   return (
     <section
+      data-composer-mode={docMode ? "document" : "compact"}
       className={cn(
-        "flex flex-col",
+        "composer-mode-transition flex flex-col",
         // min-w-0: in document mode the composer sits in a row beside the transcript panel and
         // must be able to shrink, or the panel gets pushed off the module's edge.
         docMode ? "min-h-0 min-w-0 flex-1" : "shrink-0 px-6 pb-6 pt-3",
@@ -1563,25 +1632,32 @@ export function Composer({
       >
         {/* No `overflow-hidden`: BlockNote's drag/insert handles render just outside the text
             column, and clipping them takes the block gutter away. */}
-        <div
-          className={cn(
-            "composer-card relative z-10 flex flex-col",
-            docMode
-              ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
-                // `relative` anchors the floating control bar below.
-                "min-h-0 flex-1"
-              : // A plain white card on a plain page, T3-style: a low-contrast hairline lets the
-                // shared raised shadow carry the separation without drawing a heavy box.
-                "rounded-(--ds-composer-radius) bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
-          )}
-        >
+        <ComposerLiquidSurface docMode={docMode} reducedMotion={reducedMotion}>
+          <div
+            className={cn(
+              "composer-card relative z-10 flex flex-col",
+              docMode
+                ? // Expanded, the composer *is* the page: no card, no border, the app's own surface.
+                  // `relative` anchors the floating control bar below.
+                  "min-h-0 flex-1"
+                : // The renderer delegates the fill and raised shadow to liquid-gooey so its
+                  // silhouette can lag resizing without softening the editor's actual DOM.
+                  cn(
+                    "rounded-(--ds-composer-radius)",
+                    LIQUID_AVAILABLE
+                      ? "bg-transparent"
+                      : "bg-card shadow-raised ring-[0.5px] ring-foreground/[0.07] transition-[box-shadow,--tw-ring-color] duration-200 focus-within:ring-ring/20",
+                  ),
+            )}
+          >
           {/* Grip: drag for any height, double-click for the full page. Meaningless once the
               document owns the column, so it's hidden — but kept mounted to preserve the tree. */}
           <div
             className={cn("composer-grip", docMode && "hidden")}
-            onMouseDown={startDrag}
+            aria-label={t("composer.grip")}
             onDoubleClick={() => onDocMode(true)}
             title={t("composer.grip")}
+            {...resizeHandle}
           />
 
           <div
@@ -1605,17 +1681,30 @@ export function Composer({
                     />
                     <div className="min-w-0 flex-1 pr-5">
                       <p className="truncate text-hint font-medium">{appshot.window_title}</p>
-                      <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
-                      <p className="text-cap text-muted-foreground">
-                        {t("composer.appshotText", { count: appshot.text_length })}
-                      </p>
+                      {appshot.kind === "attachment" ? (
+                        <p className="text-fine text-muted-foreground">
+                          {t("composer.imageDimensions", {
+                            width: appshot.width,
+                            height: appshot.height,
+                          })}
+                        </p>
+                      ) : (
+                        <>
+                          <p className="truncate text-fine text-muted-foreground">{appshot.app_name}</p>
+                          <p className="text-cap text-muted-foreground">
+                            {t("composer.appshotText", { count: appshot.text_length })}
+                          </p>
+                        </>
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="absolute right-1 top-1 size-6 text-muted-foreground opacity-70 hover:opacity-100"
-                      aria-label={t("composer.removeAppshot", { title: appshot.window_title })}
+                      aria-label={appshot.kind === "attachment"
+                        ? t("composer.removeImage", { title: appshot.window_title })
+                        : t("composer.removeAppshot", { title: appshot.window_title })}
                       onClick={() => onRemoveAppshot?.(appshot.id)}
                     >
                       <X className="size-3.5" />
@@ -1648,35 +1737,42 @@ export function Composer({
             </div>
           )}
 
-          {/* Expanded, the control row *floats* over the foot of the page as its own raised card.
+          {/* Expanded, the control rows *float* over the foot of the page as their own raised card.
               In normal flow it sat at the column's bottom edge, where the transcript panel beside
               the page ended up over the run button and swallowed its clicks; floating on its own
               z-plane keeps every control clickable no matter what the layout around the page does.
-              Sized to its content (`w-fit`), not the column: a page squeezed by the panel would
-              otherwise cap the card while the non-wrapping controls spill out of it — grown to fit,
-              the card carries its own surface over the panel instead of leaking naked buttons.
+              The session configuration row wraps independently, keeping its high-frequency
+              controls visible without crowding the run, stop, voice, or document controls.
               `pointer-events-none` on the strip, `auto` on the card: the page stays clickable
               either side of the floating bar. */}
           <div className={cn(docMode && "pointer-events-none absolute inset-x-0 bottom-5 z-20 px-6")}>
             <div
               className={cn(
-                "flex items-center gap-0.5",
+                "flex flex-col gap-1",
                 docMode
-                  ? // `w-max`, not `w-fit`: fit-content clamps to the column, and a clamped box
-                    // lets the send button spill outside the card. Max-content always wraps every
-                    // control — worst case the card floats a little over whatever sits beside it,
-                    // which its own z-plane makes safe. An 8px inset around the circular 32px
-                    // submit control aligns its centre with the surface's 24px corner centre.
-                    "glass-raised pointer-events-auto mx-auto w-max rounded-(--ds-composer-radius) border p-2 shadow-raised"
+                  ? "glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-(--ds-composer-radius) border p-2 shadow-raised"
                   : // Keep every outer edge 8px from the controls. The 24px surface radius then
                     // shares its bottom-right centre with the circular send/stop control.
                     "p-2",
               )}
             >
-              {controls}
+              <SessionControls
+                config={config}
+                models={models}
+                currentModel={currentModel}
+                defaultModel={defaultModel}
+                onModel={onModel}
+                configOptions={configOptions}
+                onConfigOption={onConfigOption}
+                modelChangeDisabled={running || loading}
+              />
+              <div className="flex items-center gap-0.5">
+                {controls}
+              </div>
             </div>
           </div>
-        </div>
+          </div>
+        </ComposerLiquidSurface>
 
         {/* Execution location and source control are adjacent but distinct: changing where a fresh
             session runs must never be confused with inspecting the current branch. */}

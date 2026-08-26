@@ -6,12 +6,14 @@
 
 use codetwo_core::app::protocol::{Channel, ProtocolPlugin, Transport, PROTOCOL_VERSION};
 use codetwo_core::app::{AppConfig, CoreApp};
+use codetwo_core::plugin::PluginRuntimeCommand;
 use codetwo_kernel::{async_trait, CommandRealm, FnPlugin, PluginError, Status};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream};
+use tokio::sync::Notify;
 
 // ---- the mock plugin ---------------------------------------------------------------------------
 
@@ -21,6 +23,12 @@ struct Behaviour {
     protocol_version: String,
     /// Never answer `initialize` — the failure mode that would otherwise hang the whole graph.
     silent: bool,
+    /// Try to shadow a global host command from a project command realm.
+    shadows_global_command: bool,
+    /// Return an implementation schema that disagrees with the static manifest.
+    schema_mismatch: bool,
+    /// Hold the first transport start so a scope reload can supersede it.
+    start_gate: Option<Arc<StartGate>>,
 }
 
 impl Default for Behaviour {
@@ -28,8 +36,18 @@ impl Default for Behaviour {
         Behaviour {
             protocol_version: PROTOCOL_VERSION.to_string(),
             silent: false,
+            shadows_global_command: false,
+            schema_mismatch: false,
+            start_gate: None,
         }
     }
+}
+
+#[derive(Default)]
+struct StartGate {
+    started: AtomicBool,
+    entered: Notify,
+    release: Notify,
 }
 
 /// Everything the mock observed, so tests can assert on the plugin's side of the conversation.
@@ -44,11 +62,19 @@ struct MockTransport {
     behaviour: Behaviour,
     observed: Arc<Observed>,
     shutdown_called: Arc<AtomicBool>,
+    start_count: Arc<AtomicUsize>,
 }
 
 #[async_trait]
 impl Transport for MockTransport {
     async fn start(&self) -> Result<Channel, PluginError> {
+        self.start_count.fetch_add(1, Ordering::SeqCst);
+        if let Some(gate) = &self.behaviour.start_gate {
+            if !gate.started.swap(true, Ordering::SeqCst) {
+                gate.entered.notify_one();
+                gate.release.notified().await;
+            }
+        }
         let (host_side, plugin_side) = tokio::io::duplex(64 * 1024);
         let (reader, writer) = tokio::io::split(host_side);
 
@@ -101,14 +127,26 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                 if behaviour.silent {
                     continue;
                 }
+                let commands = if behaviour.shadows_global_command {
+                    json!([{ "name": "demo.internal" }])
+                } else if behaviour.schema_mismatch {
+                    json!([
+                        { "name": "mock.echo", "schema": { "type": "array" } },
+                        { "name": "mock.viaHost" },
+                        { "name": "mock.internalViaHost" }
+                    ])
+                } else {
+                    json!([
+                        { "name": "mock.echo", "description": "Echo the arguments back." },
+                        { "name": "mock.viaHost" },
+                        { "name": "mock.internalViaHost" }
+                    ])
+                };
                 let result = json!({
                     "name": "mock",
                     "version": "0.1.0",
                     "protocolVersion": behaviour.protocol_version,
-                    "commands": [
-                        { "name": "mock.echo", "description": "Echo the arguments back." },
-                        { "name": "mock.viaHost" }
-                    ],
+                    "commands": commands,
                     "events": ["skills/changed"]
                 });
                 send(
@@ -132,10 +170,15 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                         .await;
                     }
                     // Call back into the host, and answer with what the host said.
-                    "mock.viaHost" => {
+                    "mock.viaHost" | "mock.internalViaHost" => {
+                        let target = if name == "mock.viaHost" {
+                            "demo.answer"
+                        } else {
+                            "demo.internal"
+                        };
                         let call = json!({
                             "jsonrpc": "2.0", "id": 9001, "method": "command/call",
-                            "params": { "name": "demo.answer", "args": {} }
+                            "params": { "name": target, "args": {} }
                         });
                         writer.write_all(format!("{call}\n").as_bytes()).await.ok();
                         // The host's response arrives on the same stream.
@@ -143,10 +186,18 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                             return;
                         };
                         let response: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
-                        let host_said = response.get("result").cloned().unwrap_or(Value::Null);
+                        let answer = if let Some(host_said) = response.get("result") {
+                            json!({ "host": host_said })
+                        } else {
+                            json!({
+                                "error": response["error"]["message"]
+                                    .as_str()
+                                    .unwrap_or("host call failed")
+                            })
+                        };
                         send(
                             &mut writer,
-                            json!({ "jsonrpc": "2.0", "id": id, "result": { "host": host_said } }),
+                            json!({ "jsonrpc": "2.0", "id": id, "result": answer }),
                         )
                         .await;
                     }
@@ -180,6 +231,7 @@ struct Fixture {
     app: CoreApp,
     observed: Arc<Observed>,
     shutdown_called: Arc<AtomicBool>,
+    start_count: Arc<AtomicUsize>,
     _dir: tempfile::TempDir,
 }
 
@@ -191,6 +243,41 @@ async fn load_in_realm(
     behaviour: Behaviour,
     realm: CommandRealm,
 ) -> (Fixture, codetwo_kernel::Fork) {
+    load_in_realm_with_commands(behaviour, realm, None).await
+}
+
+async fn load_static(behaviour: Behaviour) -> (Fixture, codetwo_kernel::Fork) {
+    load_in_realm_with_commands(behaviour, CommandRealm::Global, Some(static_commands())).await
+}
+
+fn static_commands() -> Vec<PluginRuntimeCommand> {
+    vec![
+        PluginRuntimeCommand {
+            id: "mock.echo".into(),
+            title: "Echo".into(),
+            description: "Static echo description.".into(),
+            args_schema: None,
+        },
+        PluginRuntimeCommand {
+            id: "mock.viaHost".into(),
+            title: "Call public host command".into(),
+            description: String::new(),
+            args_schema: None,
+        },
+        PluginRuntimeCommand {
+            id: "mock.internalViaHost".into(),
+            title: "Try internal host command".into(),
+            description: String::new(),
+            args_schema: None,
+        },
+    ]
+}
+
+async fn load_in_realm_with_commands(
+    behaviour: Behaviour,
+    realm: CommandRealm,
+    declared_commands: Option<Vec<PluginRuntimeCommand>>,
+) -> (Fixture, codetwo_kernel::Fork) {
     let dir = tempfile::tempdir().unwrap();
     // A bare host: this test is about the protocol, not about the rest of the app.
     let app = CoreApp::boot(AppConfig::bare()).await.unwrap();
@@ -198,7 +285,8 @@ async fn load_in_realm(
     // One host command for the plugin to call back into.
     app.ctx().plugin(
         FnPlugin::new("demo", |ctx: codetwo_kernel::Context, _| async move {
-            ctx.command("demo.answer", |_| async move { Ok(Value::from(42)) })?;
+            ctx.command_extension_public("demo.answer", |_| async move { Ok(Value::from(42)) })?;
+            ctx.command("demo.internal", |_| async move { Ok(Value::from(7)) })?;
             Ok(())
         }),
         Value::Null,
@@ -209,7 +297,11 @@ async fn load_in_realm(
             FnPlugin::new(
                 "project-a-plugin",
                 |ctx: codetwo_kernel::Context, _| async move {
-                    ctx.command("project-a.only", |_| async move { Ok(Value::Null) })?;
+                    ctx.command_extension_public(
+                        "project-a.only",
+                        |_| async move { Ok(Value::Null) },
+                    )?;
+                    ctx.command("project-a.internal", |_| async move { Ok(Value::Null) })?;
                     Ok(())
                 },
             ),
@@ -221,7 +313,10 @@ async fn load_in_realm(
             FnPlugin::new(
                 "project-b-plugin",
                 |ctx: codetwo_kernel::Context, _| async move {
-                    ctx.command("project-b.only", |_| async move { Ok(Value::Null) })?;
+                    ctx.command_extension_public(
+                        "project-b.only",
+                        |_| async move { Ok(Value::Null) },
+                    )?;
                     Ok(())
                 },
             ),
@@ -231,16 +326,22 @@ async fn load_in_realm(
 
     let observed = Arc::new(Observed::default());
     let shutdown_called = Arc::new(AtomicBool::new(false));
+    let start_count = Arc::new(AtomicUsize::new(0));
     let transport = MockTransport {
         behaviour,
         observed: observed.clone(),
         shutdown_called: shutdown_called.clone(),
+        start_count: start_count.clone(),
     };
-    let fork = app.ctx().with_command_realm(realm).plugin(
-        ProtocolPlugin::new("mock", Arc::new(transport))
-            .with_handshake_timeout(Duration::from_millis(200)),
-        json!({ "greeting": "hi" }),
-    );
+    let mut plugin = ProtocolPlugin::new("mock", Arc::new(transport))
+        .with_handshake_timeout(Duration::from_millis(200));
+    if let Some(commands) = declared_commands {
+        plugin = plugin.with_declared_commands(commands);
+    }
+    let fork = app
+        .ctx()
+        .with_command_realm(realm)
+        .plugin(plugin, json!({ "greeting": "hi" }));
     app.flush().await;
 
     (
@@ -248,6 +349,7 @@ async fn load_in_realm(
             app,
             observed,
             shutdown_called,
+            start_count,
             _dir: dir,
         },
         fork,
@@ -286,6 +388,189 @@ async fn a_plugin_in_another_process_contributes_ordinary_commands() {
 }
 
 #[tokio::test]
+async fn static_commands_activate_the_process_once_on_first_use() {
+    let (fixture, fork) = load_static(Behaviour::default()).await;
+    assert_eq!(fork.status(), Status::Active);
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 0);
+    assert!(!fixture.observed.initialized.load(Ordering::SeqCst));
+
+    let registered = fixture.app.commands();
+    let echo = registered
+        .iter()
+        .find(|command| command.name == "mock.echo")
+        .expect("the static stub is available before activation");
+    assert_eq!(
+        echo.description.as_deref(),
+        Some("Static echo description.")
+    );
+
+    let first = fixture.app.call("mock.echo", json!({ "call": 1 }));
+    let second = fixture.app.call("mock.echo", json!({ "call": 2 }));
+    let (first, second) = tokio::join!(first, second);
+    assert_eq!(first.unwrap(), json!({ "call": 1 }));
+    assert_eq!(second.unwrap(), json!({ "call": 2 }));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+    assert!(fixture.observed.initialized.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn unloading_a_dormant_static_runtime_removes_stubs_without_starting_it() {
+    let (fixture, fork) = load_static(Behaviour::default()).await;
+    fork.dispose();
+    fixture.app.flush().await;
+
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 0);
+    assert!(!fixture.shutdown_called.load(Ordering::SeqCst));
+    assert!(fixture.app.call("mock.echo", Value::Null).await.is_err());
+}
+
+#[tokio::test]
+async fn a_static_command_set_mismatch_fails_closed_for_the_scope_generation() {
+    let (fixture, _fork) = load_static(Behaviour {
+        shadows_global_command: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let first = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(first.to_string().contains("do not match the manifest"));
+    assert!(first.to_string().contains("disable and re-enable"));
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    let second = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert_eq!(second.to_string(), first.to_string());
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_static_command_schema_mismatch_is_rejected_before_invoke() {
+    let mut commands = static_commands();
+    commands[0].args_schema = Some(json!({ "type": "object" }));
+    let (fixture, _fork) = load_in_realm_with_commands(
+        Behaviour {
+            schema_mismatch: true,
+            ..Behaviour::default()
+        },
+        CommandRealm::Global,
+        Some(commands),
+    )
+    .await;
+
+    let error = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("does not match the manifest argsSchema"));
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn cancelling_first_activation_stops_the_child_and_allows_a_clean_retry() {
+    let (fixture, _fork) = load_static(Behaviour {
+        silent: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut first = Box::pin(fixture.app.call("mock.echo", Value::Null));
+    tokio::select! {
+        result = &mut first => panic!("silent activation unexpectedly completed: {result:?}"),
+        _ = tokio::time::sleep(Duration::from_millis(20)) => {}
+    }
+    drop(first);
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    fixture.shutdown_called.store(false, Ordering::SeqCst);
+    let retried = fixture
+        .app
+        .call("mock.echo", Value::Null)
+        .await
+        .unwrap_err();
+    assert!(retried.to_string().contains("initialize"));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 2);
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn unloading_during_initialize_stops_the_pending_activation_before_flush_returns() {
+    let (fixture, fork) = load_static(Behaviour {
+        silent: true,
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut call = Box::pin(fixture.app.call("mock.echo", Value::Null));
+    let initialized = tokio::time::timeout(Duration::from_millis(100), async {
+        while !fixture.observed.initialized.load(Ordering::SeqCst) {
+            tokio::task::yield_now().await;
+        }
+    });
+    tokio::select! {
+        result = &mut call => panic!("silent activation unexpectedly completed: {result:?}"),
+        result = initialized => result.expect("initialize should reach the silent plugin"),
+    }
+
+    fork.dispose();
+    fixture.app.flush().await;
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert!(tokio::time::timeout(Duration::from_millis(100), &mut call)
+        .await
+        .expect("unload should release the pending invocation")
+        .is_err());
+}
+
+#[tokio::test]
+async fn a_start_from_an_old_scope_generation_cannot_attach_after_reload() {
+    let gate = Arc::new(StartGate::default());
+    let (fixture, fork) = load_static(Behaviour {
+        start_gate: Some(gate.clone()),
+        ..Behaviour::default()
+    })
+    .await;
+
+    let mut stale_call = Box::pin(fixture.app.call("mock.echo", json!({ "old": true })));
+    tokio::select! {
+        result = &mut stale_call => panic!("gated start unexpectedly completed: {result:?}"),
+        _ = gate.entered.notified() => {}
+    }
+
+    fork.update(json!({ "greeting": "reloaded" }));
+    fixture.app.flush().await;
+    gate.release.notify_one();
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), &mut stale_call)
+            .await
+            .expect("the stale start should be rejected")
+            .is_err()
+    );
+    assert!(fixture.shutdown_called.load(Ordering::SeqCst));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 1);
+
+    let current = fixture
+        .app
+        .call("mock.echo", json!({ "current": true }))
+        .await
+        .unwrap();
+    assert_eq!(current, json!({ "current": true }));
+    assert_eq!(fixture.start_count.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
 async fn initialize_identifies_only_project_scoped_instances() {
     let (global, _fork) = load(Behaviour::default()).await;
     let global_params = global.observed.initialize_params.lock().unwrap()[0].clone();
@@ -317,6 +602,7 @@ async fn initialize_exposes_commands_from_only_the_instance_realm_and_global_fal
     let global_commands: Vec<String> =
         serde_json::from_value(global_params["host"]["commands"].clone()).unwrap();
     assert!(global_commands.contains(&"demo.answer".into()));
+    assert!(!global_commands.contains(&"demo.internal".into()));
     assert!(!global_commands.contains(&"project-a.only".into()));
     assert!(!global_commands.contains(&"project-b.only".into()));
 
@@ -327,7 +613,46 @@ async fn initialize_exposes_commands_from_only_the_instance_realm_and_global_fal
         serde_json::from_value(project_params["host"]["commands"].clone()).unwrap();
     assert!(project_commands.contains(&"demo.answer".into()));
     assert!(project_commands.contains(&"project-a.only".into()));
+    assert!(!project_commands.contains(&"demo.internal".into()));
+    assert!(!project_commands.contains(&"project-a.internal".into()));
     assert!(!project_commands.contains(&"project-b.only".into()));
+}
+
+#[tokio::test]
+async fn a_project_extension_cannot_shadow_a_global_host_command() {
+    let (fixture, fork) = load_in_realm(
+        Behaviour {
+            shadows_global_command: true,
+            ..Behaviour::default()
+        },
+        CommandRealm::project("project-a"),
+    )
+    .await;
+
+    assert_eq!(fork.status(), Status::Failed);
+    let scope = fixture
+        .app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.id == fork.id())
+        .unwrap();
+    assert!(
+        scope
+            .error
+            .unwrap()
+            .contains("conflicts with global command owned by `demo`"),
+        "the extension should fail before registering the shadow"
+    );
+    assert_eq!(
+        fixture
+            .app
+            .ctx()
+            .with_command_realm(CommandRealm::project("project-a"))
+            .call("demo.internal", Value::Null)
+            .await
+            .unwrap(),
+        7
+    );
 }
 
 #[tokio::test]
@@ -338,6 +663,32 @@ async fn a_plugin_can_call_back_into_the_host() {
         answered,
         json!({ "host": 42 }),
         "the plugin reached a host command by name, through the same registry"
+    );
+}
+
+#[tokio::test]
+async fn a_plugin_cannot_call_an_internal_host_command_even_if_it_knows_the_name() {
+    let (fixture, _fork) = load(Behaviour::default()).await;
+
+    assert_eq!(
+        fixture
+            .app
+            .call("demo.internal", Value::Null)
+            .await
+            .unwrap(),
+        7,
+        "the command remains available to the trusted host"
+    );
+    let refused = fixture
+        .app
+        .call("mock.internalViaHost", Value::Null)
+        .await
+        .unwrap();
+    assert_eq!(
+        refused,
+        json!({
+            "error": "command `demo.internal` is internal and is not available to extension processes"
+        })
     );
 }
 
