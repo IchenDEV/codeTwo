@@ -9,6 +9,10 @@ const app = readFileSync(
   new URL("../src/App.tsx", import.meta.url),
   "utf8",
 );
+const bridge = readFileSync(
+  new URL("../src/bridge.ts", import.meta.url),
+  "utf8",
+);
 const tokens = readFileSync(
   new URL("../src/design/tokens.css", import.meta.url),
   "utf8",
@@ -74,9 +78,12 @@ describe("composer multitask contract", () => {
     );
     expect(composer).toContain('t("composer.multitask")');
     expect(app).toContain("onMultitask={startParallelTask}");
-    expect(app).toContain('sessionCreationBaselineSha(\n      "current"');
+    expect(app).toMatch(/sessionCreationBaselineSha\(\s*"current"/);
     expect(app).toContain(
-      'void run(undefined, { source, worktreeBase: "current", worktreeBaseSha });',
+      'parallelTask: true',
     );
+    expect(bridge).toContain('call("engine.new_parallel_task"');
+    expect(bridge).toContain("task_id: parallelTask.taskId");
+    expect(bridge).toContain("goal: parallelTask.goal");
   });
 });

@@ -11,14 +11,15 @@ use crate::capability_v2::ConcreteEffect;
 use crate::risk_v2::{
     effect_requires_risk_gate, RiskGateDecision, RiskGateReceipt, UserRiskDecision,
 };
+use crate::session::Session;
 use crate::store::{Store, StoreError};
 use crate::task::{
     AgentAssignment, AgentId, AgentRole, AgentStatus, ArtifactProvenance, LoopGuardState,
     MaterialGoalChangeReceipt, OrchestrationEvent, OrchestrationEventKind, ResultContract,
     ResultContractRefinement, RunSnapshot, Task, TaskBudget, TaskBudgetState, TaskCacheReceipt,
     TaskCompletionEvaluation, TaskGraph, TaskId, TaskSessionLease, TaskStatus,
-    TaskUsageObservation, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge, WorkItemId,
-    WorkItemStatus,
+    TaskUsageObservation, WorkItem, WorkItemAttempt, WorkItemAttemptStatus, WorkItemEdge,
+    WorkItemId, WorkItemStatus,
 };
 
 const TASK_SCHEMA_V2: &str = "
@@ -200,6 +201,127 @@ pub(crate) fn install(conn: &rusqlite::Connection) -> Result<(), StoreError> {
 }
 
 impl Store {
+    /// Persist the native shell for a newly launched parallel Task and its first Executor as one
+    /// transaction. The renderer supplies the user-owned Task id and goal; Core owns every runtime
+    /// identity and invariant below that boundary.
+    pub fn create_parallel_task_session(
+        &self,
+        session: &Session,
+        task: &Task,
+        work_item: &WorkItem,
+        agent_id: &AgentId,
+        compatibility_identity: &str,
+        now_ms: i64,
+    ) -> Result<(), StoreError> {
+        let graph = TaskGraph {
+            revision: 1,
+            work_items: vec![work_item.clone()],
+            edges: Vec::new(),
+        };
+        validate_graph(&graph)?;
+        if work_item.status != WorkItemStatus::Running
+            || work_item.assigned_session_id.as_deref() != Some(session.id.as_str())
+        {
+            return Err(StoreError::InvalidTaskGraph(
+                "parallel Task Work Item must be running in its created Session".into(),
+            ));
+        }
+
+        let status = serde_json::to_string(&task.status)?;
+        let provider_configuration = serde_json::to_string(&task.provider_configuration)?;
+        let budget = serde_json::to_string(&task.budget)?;
+        let result_contract = serde_json::to_string(&task.result_contract)?;
+        let item_json = serde_json::to_string(work_item)?;
+        let task_created = serde_json::to_string(&OrchestrationEventKind::TaskCreated)?;
+        let graph_changed = serde_json::to_string(&OrchestrationEventKind::TaskGraphChanged {
+            reason: "Parallel task started".into(),
+        })?;
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+
+        Store::upsert_session_on(&tx, session)?;
+        tx.execute(
+            "INSERT INTO tasks_v2
+               (id,status_json,provider_configuration_json,budget_json,
+                result_contract_revision,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,1,?5,?5)",
+            rusqlite::params![
+                task.id.as_str(),
+                status,
+                provider_configuration,
+                budget,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_result_contracts_v2
+               (task_id,revision,contract_json,reason,created_at_ms)
+             VALUES (?1,1,?2,'task_created',?3)",
+            rusqlite::params![task.id.as_str(), result_contract, now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_graph_revisions_v2(task_id,revision,updated_at_ms)
+             VALUES (?1,1,?2)",
+            rusqlite::params![task.id.as_str(), now_ms],
+        )?;
+        tx.execute(
+            "INSERT INTO task_work_items_v2
+               (task_id,graph_revision,work_item_id,position,item_json)
+             VALUES (?1,1,?2,0,?3)",
+            rusqlite::params![task.id.as_str(), work_item.id.as_str(), item_json],
+        )?;
+        tx.execute(
+            "INSERT INTO task_loop_guard_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&LoopGuardState::default())?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_budget_state_v2(task_id,state_json,updated_at_ms)
+             VALUES (?1,?2,?3)",
+            rusqlite::params![
+                task.id.as_str(),
+                serde_json::to_string(&TaskBudgetState::default())?,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_orchestration_events_v2
+               (task_id,sequence,graph_revision,kind_json,created_at_ms)
+             VALUES (?1,1,0,?2,?3), (?1,2,1,?4,?3)",
+            rusqlite::params![task.id.as_str(), task_created, now_ms, graph_changed],
+        )?;
+        tx.execute(
+            "INSERT INTO task_session_leases_v2
+               (task_id,session_id,agent_id,role,compatibility_identity,leased_at_ms)
+             VALUES (?1,?2,?3,'executor',?4,?5)",
+            rusqlite::params![
+                task.id.as_str(),
+                session.id,
+                agent_id.as_str(),
+                compatibility_identity,
+                now_ms,
+            ],
+        )?;
+        tx.execute(
+            "INSERT INTO task_work_item_attempts_v2
+               (task_id,work_item_id,attempt,agent_id,session_id,status,started_at_ms)
+             VALUES (?1,?2,1,?3,?4,'running',?5)",
+            rusqlite::params![
+                task.id.as_str(),
+                work_item.id.as_str(),
+                agent_id.as_str(),
+                session.id,
+                now_ms,
+            ],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn create_task(&self, task: &Task, now_ms: i64) -> Result<TaskRecord, StoreError> {
         let status = serde_json::to_string(&task.status)?;
         let provider_configuration = serde_json::to_string(&task.provider_configuration)?;

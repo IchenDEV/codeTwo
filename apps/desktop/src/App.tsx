@@ -449,6 +449,7 @@ interface NewSessionRunTarget {
   source: string;
   worktreeBase: WorktreeBaselineKind;
   worktreeBaseSha: string;
+  parallelTask?: boolean;
 }
 
 interface PendingPolicyRequest {
@@ -2715,6 +2716,12 @@ export default function App() {
       }
       setTaskContext(task, false);
     }
+    const parallelTask = newSessionTarget?.parallelTask
+      ? {
+          taskId: activeBoardTaskRef.current!.id,
+          goal: summarizeDoc(doc).replace(/\s+/g, " ").trim(),
+        }
+      : null;
     const promptRequestId = globalThis.crypto.randomUUID();
     const creationRequestId = targetSession ? null : promptRequestId;
     if (targetSession) {
@@ -2772,6 +2779,7 @@ export default function App() {
           currentModel,
           false,
           pendingCreationRef.current?.projectReasoningEffort ?? null,
+          parallelTask,
         );
       }
     } catch (e) {
@@ -3045,7 +3053,12 @@ export default function App() {
     setWorktreeBase("current");
     setProvider(provider);
     setCurrentModel(currentModel);
-    void run(undefined, { source, worktreeBase: "current", worktreeBaseSha });
+    void run(undefined, {
+      source,
+      worktreeBase: "current",
+      worktreeBaseSha,
+      parallelTask: true,
+    });
   }, [
     createSession,
     currentModel,

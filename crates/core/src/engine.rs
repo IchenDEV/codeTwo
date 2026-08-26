@@ -48,6 +48,10 @@ use crate::skill::{
     McpTransport, SkillLibrary,
 };
 use crate::store::{PreparedSessionHandoff, SessionSearchHit, Store, StoreError};
+use crate::task::{
+    AgentId, ProviderConfiguration, ResultContract, Task, TaskBudget, TaskId, TaskStatus, WorkItem,
+    WorkItemId, WorkItemStatus,
+};
 use crate::worktree::WorktreeBaseline;
 
 /// Routes parked permission requests (awaiting a user decision) back to the ACP handler.
@@ -1765,6 +1769,30 @@ struct SessionCreationOptions {
     reasoning_effort: Option<String>,
 }
 
+/// Native creation request for the user-visible parallel-task action. Core generates the runtime
+/// Work Item and Agent identities so a renderer cannot pretend that local UI state is an Agent.
+#[derive(Debug, Clone)]
+pub struct ParallelTaskCreation {
+    pub provider: ProviderId,
+    pub cwd: String,
+    pub worktree_base: WorktreeBaseline,
+    pub worktree_base_sha: Option<String>,
+    pub request_id: String,
+    pub model: Option<String>,
+    pub initial_policy: Option<ExecutionPolicy>,
+    pub reasoning_effort: Option<String>,
+    pub task_id: TaskId,
+    pub goal: String,
+}
+
+#[derive(Debug, Clone)]
+struct PendingParallelTask {
+    task_id: TaskId,
+    work_item_id: WorkItemId,
+    agent_id: AgentId,
+    goal: String,
+}
+
 struct EngineState {
     providers: Vec<Provider>,
     /// Shared + mutable so the library-management UI can add/remove skills that the picker and the
@@ -1781,6 +1809,7 @@ struct EngineState {
     /// this set closes the interval before and during the SQLite handoff transaction.
     handoff_fences: Mutex<HashSet<SessionId>>,
     pending_creation_options: Mutex<HashMap<String, SessionCreationOptions>>,
+    pending_parallel_tasks: Mutex<HashMap<String, PendingParallelTask>>,
     /// Provider processes that have spawned but are not yet a fully initialized session.
     starting_clients: Mutex<Vec<Arc<AcpClient>>>,
     shutting_down: AtomicBool,
@@ -2025,6 +2054,7 @@ impl Engine {
             sessions: Mutex::new(HashMap::new()),
             handoff_fences: Mutex::new(HashSet::new()),
             pending_creation_options: Mutex::new(HashMap::new()),
+            pending_parallel_tasks: Mutex::new(HashMap::new()),
             starting_clients: Mutex::new(Vec::new()),
             shutting_down: AtomicBool::new(false),
             activity,
@@ -3629,6 +3659,75 @@ impl Engine {
         result
     }
 
+    /// Create one durable Session, isolated checkout, Task, Work Item, Executor Agent, and lease.
+    /// The SessionCreated event is emitted only after all durable state commits successfully.
+    pub async fn create_parallel_task_session(
+        &self,
+        creation: ParallelTaskCreation,
+    ) -> Result<(), AcpError> {
+        if self.state.store.is_none() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation requires durable storage",
+            )));
+        }
+        let request_id = creation.request_id.trim().to_string();
+        if request_id.is_empty() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation needs a request id",
+            )));
+        }
+        if creation.task_id.as_str().trim().is_empty() {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task creation needs a task id",
+            )));
+        }
+        let goal = creation.goal.trim();
+        if goal.is_empty() || goal.chars().count() > 4_096 {
+            return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                "parallel task goal must contain between 1 and 4096 characters",
+            )));
+        }
+
+        let pending = PendingParallelTask {
+            task_id: creation.task_id,
+            work_item_id: WorkItemId::new(format!("work-{}", uuid::Uuid::new_v4())),
+            agent_id: AgentId::new(format!("agent-{}", uuid::Uuid::new_v4())),
+            goal: goal.to_string(),
+        };
+        {
+            let mut pending_parallel_tasks = self.state.pending_parallel_tasks.lock().unwrap();
+            if pending_parallel_tasks.contains_key(&request_id) {
+                return Err(AcpError::Rpc(crate::error::RpcError::invalid_params(
+                    "parallel task request id is already pending",
+                )));
+            }
+            pending_parallel_tasks.insert(request_id.clone(), pending);
+        }
+
+        let result = self
+            .create_session(
+                creation.provider,
+                creation.cwd,
+                true,
+                Some(creation.worktree_base),
+                creation.worktree_base_sha,
+                Some(request_id.clone()),
+                creation.model,
+                creation.initial_policy,
+                false,
+                creation.reasoning_effort,
+            )
+            .await;
+        if result.is_err() {
+            self.state
+                .pending_parallel_tasks
+                .lock()
+                .unwrap()
+                .remove(&request_id);
+        }
+        result
+    }
+
     pub async fn submit(&self, op: Op) -> Result<(), AcpError> {
         if self.state.shutting_down.load(Ordering::Acquire) {
             return Err(AcpError::Closed);
@@ -3654,6 +3753,13 @@ impl Engine {
                             .remove(request_id)
                     })
                     .unwrap_or_default();
+                let parallel_task = request_id.as_ref().and_then(|request_id| {
+                    self.state
+                        .pending_parallel_tasks
+                        .lock()
+                        .unwrap()
+                        .remove(request_id)
+                });
                 let creation_receipt = t3_session_create_receipt(request_id.as_deref());
                 if let (Some(store), Some((command_id, public_thread_id))) =
                     (&self.state.store, creation_receipt.as_ref())
@@ -3849,15 +3955,71 @@ impl Engine {
                 }
 
                 if let Some(store) = &self.state.store {
-                    let persisted = match creation_receipt.as_ref() {
-                        Some((command_id, public_thread_id)) => store
-                            .upsert_session_with_command_receipt(
-                                "t3-create",
-                                command_id,
-                                public_thread_id,
+                    let persisted = match parallel_task.as_ref() {
+                        Some(parallel_task) => {
+                            let provider_configuration = ProviderConfiguration {
+                                provider: sess.provider.clone(),
+                                model: sess.model.clone(),
+                                reasoning_effort: creation_options.reasoning_effort.clone(),
+                            };
+                            let task = Task {
+                                id: parallel_task.task_id.clone(),
+                                status: TaskStatus::Active,
+                                result_contract: ResultContract {
+                                    goal: parallel_task.goal.clone(),
+                                    required_deliverables: Vec::new(),
+                                    completion_conditions: Vec::new(),
+                                    boundaries: Vec::new(),
+                                    known_risks: Vec::new(),
+                                    unresolved_facts: Vec::new(),
+                                },
+                                provider_configuration: provider_configuration.clone(),
+                                budget: TaskBudget {
+                                    max_cost_microusd: None,
+                                    max_tokens: None,
+                                    max_duration_seconds: None,
+                                },
+                            };
+                            let work_item = WorkItem {
+                                id: parallel_task.work_item_id.clone(),
+                                objective: parallel_task.goal.clone(),
+                                result_contract_conditions: Vec::new(),
+                                scenes: Vec::new(),
+                                agent_skills: Vec::new(),
+                                input_artifacts: Vec::new(),
+                                expected_outputs: Vec::new(),
+                                completion_evidence: Vec::new(),
+                                status: WorkItemStatus::Running,
+                                blocker: None,
+                                assigned_session_id: Some(sess.id.clone()),
+                                reason: "Started from the desktop parallel-task action".into(),
+                            };
+                            let compatibility_payload = serde_json::to_vec(&provider_configuration)
+                                .expect("Provider Configuration serialization cannot fail");
+                            let compatibility_identity = format!(
+                                "executor:{}:{}",
+                                task.id.as_str(),
+                                blake3::hash(&compatibility_payload).to_hex()
+                            );
+                            store.create_parallel_task_session(
                                 &sess,
-                            ),
-                        None => store.upsert_session(&sess),
+                                &task,
+                                &work_item,
+                                &parallel_task.agent_id,
+                                &compatibility_identity,
+                                sess.created_at,
+                            )
+                        }
+                        None => match creation_receipt.as_ref() {
+                            Some((command_id, public_thread_id)) => store
+                                .upsert_session_with_command_receipt(
+                                    "t3-create",
+                                    command_id,
+                                    public_thread_id,
+                                    &sess,
+                                ),
+                            None => store.upsert_session(&sess),
+                        },
                     };
                     if let Err(e) = persisted {
                         drop(live_sessions);

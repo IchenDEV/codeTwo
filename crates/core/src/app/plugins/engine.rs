@@ -15,11 +15,12 @@ use crate::app::service::{
     StoreService,
 };
 use crate::app::{json, take_args};
-use crate::engine::Engine;
+use crate::engine::{Engine, ParallelTaskCreation};
 use crate::event::Op;
 use crate::permission::{ExecutionPolicy, PermissionMode, SandboxPolicy};
 use crate::provider::ProviderId;
 use crate::session::TranscriptCursor;
+use crate::task::TaskId;
 use crate::worktree::WorktreeBaseline;
 use codetwo_kernel::{async_trait, Context, Injection, Plugin, PluginError, PluginResult};
 use serde::Deserialize;
@@ -407,6 +408,79 @@ fn register_commands(
                 .await
                 .map_err(PluginError::new)?;
             if args.use_worktree && worktree_settings.auto_delete {
+                let (_, errors) = engine
+                    .cleanup_old_worktrees(worktree_settings.auto_delete_limit)
+                    .await;
+                for error in errors {
+                    tracing::warn!("automatic worktree cleanup failed: {error}");
+                }
+            }
+            Ok(Value::Bool(true))
+        }
+    })?;
+
+    #[derive(Deserialize)]
+    struct NewParallelTaskArgs {
+        provider: String,
+        cwd: String,
+        #[serde(default)]
+        worktree_base: Option<WorktreeBaseline>,
+        #[serde(default)]
+        worktree_base_sha: Option<String>,
+        request_id: String,
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        initial_policy: Option<ExecutionPolicy>,
+        #[serde(default)]
+        reasoning_effort: Option<String>,
+        task_id: String,
+        goal: String,
+    }
+    let new_parallel_task = engine.clone();
+    let parallel_worktree_settings_dir = paths.data_dir.clone();
+    ctx.command("engine.new_parallel_task", move |args| {
+        let engine = new_parallel_task.clone();
+        let settings_dir = parallel_worktree_settings_dir.clone();
+        async move {
+            let mut args: NewParallelTaskArgs = take_args(args)?;
+            let worktree_settings =
+                crate::worktree::load_settings(&settings_dir).map_err(PluginError::new)?;
+            engine.set_worktree_root(
+                worktree_settings
+                    .root
+                    .as_deref()
+                    .map(std::path::PathBuf::from),
+            );
+            let baseline = args.worktree_base.unwrap_or(WorktreeBaseline::Current);
+            if worktree_settings.fetch_upstream {
+                let source = std::path::Path::new(&args.cwd);
+                crate::worktree::fetch_upstream(source)
+                    .await
+                    .map_err(PluginError::new)?;
+                args.worktree_base_sha = Some(
+                    crate::worktree::resolve_baseline(source, baseline)
+                        .await
+                        .map_err(PluginError::new)?
+                        .sha,
+                );
+            }
+            engine
+                .create_parallel_task_session(ParallelTaskCreation {
+                    provider: parse_provider(&args.provider),
+                    cwd: args.cwd,
+                    worktree_base: baseline,
+                    worktree_base_sha: args.worktree_base_sha,
+                    request_id: args.request_id,
+                    model: args.model,
+                    initial_policy: args.initial_policy,
+                    reasoning_effort: args.reasoning_effort,
+                    task_id: TaskId::new(args.task_id),
+                    goal: args.goal,
+                })
+                .await
+                .map_err(PluginError::new)?;
+            if worktree_settings.auto_delete {
                 let (_, errors) = engine
                     .cleanup_old_worktrees(worktree_settings.auto_delete_limit)
                     .await;
