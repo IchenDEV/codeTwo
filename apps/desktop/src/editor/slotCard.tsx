@@ -1,6 +1,6 @@
 import { createReactBlockSpec } from "@blocknote/react";
 import { createContext, useContext, useRef } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icons";
 
 import type { DocBlock } from "../bridge";
 import type { SceneSlotDef } from "../session/scene";

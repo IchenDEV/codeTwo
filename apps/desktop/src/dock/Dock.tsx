@@ -9,7 +9,7 @@ import {
   Plus,
   TerminalIcon,
   X,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";

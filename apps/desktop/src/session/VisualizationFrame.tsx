@@ -1,4 +1,4 @@
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2, TriangleAlert } from "@/components/ui/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { confirmNative, openExternal, readVisualization } from "../bridge";

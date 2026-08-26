@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "lucide-react";
+import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "@/components/ui/icons";
 
 import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";

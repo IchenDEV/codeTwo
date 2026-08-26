@@ -1,5 +1,5 @@
 import { PetX } from "@petx/react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "@/components/ui/icons";
 import { useEffect, useRef, useState } from "react";
 
 import {

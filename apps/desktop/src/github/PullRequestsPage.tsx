@@ -15,7 +15,7 @@ import {
   Search,
   SlidersHorizontal,
   UserRound,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {

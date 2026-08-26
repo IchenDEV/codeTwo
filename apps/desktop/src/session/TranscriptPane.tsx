@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from "react";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Loader2 } from "@/components/ui/icons";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
 import { TurnCard } from "./TurnCard";

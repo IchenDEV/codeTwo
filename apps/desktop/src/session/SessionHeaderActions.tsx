@@ -15,8 +15,8 @@ import {
   Send,
   TerminalIcon,
   Upload,
-  type LucideIcon,
-} from "lucide-react";
+  type HugeIcon,
+} from "@/components/ui/icons";
 
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
@@ -58,7 +58,7 @@ function PanelAction({
   active,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: HugeIcon;
   label: string;
   active: boolean;
   onClick: () => void;

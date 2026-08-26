@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Puzzle } from "lucide-react";
+import { Loader2, Puzzle } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";

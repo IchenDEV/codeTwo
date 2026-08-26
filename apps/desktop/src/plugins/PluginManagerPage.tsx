@@ -18,7 +18,7 @@ import {
   Store,
   Webhook,
   X,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import {
   AlertDialog,

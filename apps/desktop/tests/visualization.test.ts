@@ -47,7 +47,8 @@ describe("visualize transcript references", () => {
     expect(document).toContain("window.openai={sendFollowUpMessage");
     expect(document).toContain("background:var(--background)");
     expect(document).toContain("document.body.scrollHeight");
-    expect(document).toContain("window.lucide=window.lucide||");
+    expect(document).toContain(".viz-icon{");
+    expect(document).not.toContain("<script src=");
     expect(document).toContain('<div id="plot">Plot</div>');
     expect(document).toContain("safe-token");
   });

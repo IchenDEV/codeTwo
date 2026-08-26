@@ -24,7 +24,7 @@ import {
   Search,
   Trash2,
   X,
-} from "lucide-react"
+} from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"

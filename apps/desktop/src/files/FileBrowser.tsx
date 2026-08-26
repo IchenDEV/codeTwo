@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AtSign } from "lucide-react";
+import { AtSign } from "@/components/ui/icons";
 import { listFiles } from "../bridge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";

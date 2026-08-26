@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleAlert, RefreshCw } from "lucide-react";
+import { CircleAlert, RefreshCw } from "@/components/ui/icons";
 import {
   providerQuota,
   usageHistory,

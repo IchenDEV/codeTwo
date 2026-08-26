@@ -8,7 +8,7 @@ import {
   Moon,
   Search,
   Sun,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import "./tokens.css";
 import "./preview.css";

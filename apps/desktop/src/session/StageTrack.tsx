@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Lock } from "lucide-react";
+import { Check, Lock } from "@/components/ui/icons";
 
 import { cn } from "@/lib/utils";
 import { useT } from "../i18n";

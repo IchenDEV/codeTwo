@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Clapperboard } from "lucide-react";
+import { ChevronDown, ChevronRight, Clapperboard } from "@/components/ui/icons";
 import { listGithubIssues, listIssueDelegations, type Issue, type IssueDelegation } from "../bridge";
 import type { SceneInfo } from "../session/scene";
 import { useT } from "../i18n";

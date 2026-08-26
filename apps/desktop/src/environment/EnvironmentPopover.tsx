@@ -14,8 +14,8 @@ import {
   Settings,
   SlidersHorizontal,
   SquarePlus,
-  type LucideIcon,
-} from "lucide-react";
+  type HugeIcon,
+} from "@/components/ui/icons";
 
 import { getArtifact, type GitStatus, type Project } from "../bridge";
 import { useT } from "../i18n";
@@ -34,7 +34,7 @@ function EnvironmentRow({
   active = false,
   disabled = false,
 }: {
-  icon: LucideIcon;
+  icon: HugeIcon;
   label: string;
   description?: string;
   detail?: ReactNode;

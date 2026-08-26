@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic } from "lucide-react";
+import { Mic } from "@/components/ui/icons";
 import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { preferredRecordingType, toWav16kMono } from "./wav";
 import { shouldUseWebSpeech } from "./platform";
