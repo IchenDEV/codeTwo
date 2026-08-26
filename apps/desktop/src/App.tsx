@@ -28,6 +28,11 @@ import {
   saveBrowserHistory,
 } from "./browser/history";
 import {
+  workspaceRelativeLinkPath,
+  type BuiltinLinkActions,
+  type BuiltinLinkTarget,
+} from "./session/MarkdownContent";
+import {
   answerElicitation,
   answerPermission,
   applyPluginScaffold,
@@ -4760,6 +4765,49 @@ export default function App() {
     [componentEnabled, dockWidth, setDockWidth, toast],
   );
 
+  const openBuiltinWebLink = useCallback(
+    (url: string) => {
+      if (!componentEnabled("browser.dock")) {
+        toast("Browser is disabled in Plugins.", "info");
+        return;
+      }
+      setBrowserUrl(url);
+      void browserRegistryCreate(url).catch((error) => {
+        toast(t("actionDialog.failed", { error: String(error) }), "error");
+      });
+      manualDockTab("browser");
+      setTimeout(() => window.dispatchEvent(new Event("resize")), 0);
+    },
+    [componentEnabled, manualDockTab, t, toast],
+  );
+
+  const openBuiltinFileLink = useCallback(
+    (target: Extract<BuiltinLinkTarget, { kind: "file" }>) => {
+      if (!componentEnabled("files.surface")) {
+        toast("Files are disabled in Plugins.", "info");
+        return;
+      }
+      const path = workspaceRelativeLinkPath(target.path, cwd || ".");
+      if (!path) return;
+      openFileTab(
+        path,
+        target.line
+          ? { line: target.line, column: target.column ?? 1 }
+          : undefined,
+      );
+    },
+    [componentEnabled, cwd, openFileTab, toast],
+  );
+
+  const builtinLinkActions = useMemo<BuiltinLinkActions>(
+    () => ({
+      workspaceRoot: cwd || ".",
+      openWebLink: componentEnabled("browser.dock") ? openBuiltinWebLink : undefined,
+      openFileLink: componentEnabled("files.surface") ? openBuiltinFileLink : undefined,
+    }),
+    [componentEnabled, cwd, openBuiltinFileLink, openBuiltinWebLink],
+  );
+
   const closeFileTab = useCallback(
     async (p: string) => {
       // Unsaved edits die with the tab — say so first, like any editor would.
@@ -6458,6 +6506,7 @@ export default function App() {
                 onPinPlanArtifact={pinPlanArtifact}
                 canPinPlan={scenesSurfaceEnabled && canPinPlan}
                 onSaveTemplate={openTemplateDraft}
+                linkActions={builtinLinkActions}
                 onAddSelection={addSelectedText}
                 onExplainSelection={explainSelectedText}
                 onAskSelectionInSideChat={askSelectedTextInSideChat}
@@ -6894,6 +6943,7 @@ export default function App() {
             current?.id === id ? null : current,
           )
         }
+        linkActions={builtinLinkActions}
       />
 
       {/* ---------------- dialogs ---------------- */}

@@ -53,7 +53,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "../i18n";
 import { cn } from "@/lib/utils";
-import { MarkdownContent } from "./MarkdownContent";
+import { MarkdownContent, type BuiltinLinkActions } from "./MarkdownContent";
 
 const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
 
@@ -581,6 +581,7 @@ export const TurnCard = memo(function TurnCard({
   onPinPlanArtifact,
   canPinPlan = false,
   onSaveTemplate,
+  linkActions,
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
@@ -592,6 +593,8 @@ export const TurnCard = memo(function TurnCard({
   canPinPlan?: boolean;
   /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
   onSaveTemplate?: (promptText: string) => void;
+  /** Native context-menu actions for links rendered inside the assistant response. */
+  linkActions?: BuiltinLinkActions;
 }) {
   const t = useT();
   const { locale } = useLanguage();
@@ -770,6 +773,7 @@ export const TurnCard = memo(function TurnCard({
                 key={`text-${index}`}
                 text={block.text}
                 streaming={running && index === blocks.length - 1}
+                linkActions={linkActions}
               />
             ) : block.tools.length === 1 ? (
               <ToolCallBlock key={block.tools[0].id} tool={block.tools[0]} />

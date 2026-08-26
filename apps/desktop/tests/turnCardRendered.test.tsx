@@ -306,6 +306,38 @@ describe("TurnCard rendered activity", () => {
     rendered.unmount();
   });
 
+  test("renders workspace file references as links that open at their source position", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const opened = [];
+    const rendered = mount(
+      <TurnCard
+        turn={{
+          ...runningTurn(),
+          text:
+            "[Docs](https://example.com/docs) · [Source](/tmp/project/src/main.ts:42:7) · [Encoded](file:///tmp/project/src/encoded%20file.ts#L8)",
+          endedAt: 2,
+        }}
+        linkActions={{
+          workspaceRoot: "/tmp/project",
+          openFileLink: (target) => opened.push(target),
+        }}
+      />,
+    );
+    const links = rendered.container.querySelectorAll(".codetwo-markdown a");
+
+    expect(links).toHaveLength(3);
+    expect(links[0].getAttribute("href")).toBe("https://example.com/docs");
+    expect(links[1].textContent).toBe("Source");
+    click(links[1]);
+    click(links[2]);
+    expect(opened).toEqual([
+      { kind: "file", path: "/tmp/project/src/main.ts", line: 42, column: 7 },
+      { kind: "file", path: "/tmp/project/src/encoded file.ts", line: 8, column: undefined },
+    ]);
+    rendered.unmount();
+  });
+
   test("collapses adjacent tool calls into one group without hiding failures", async () => {
     activateDom();
     disableCanvasDrawing();

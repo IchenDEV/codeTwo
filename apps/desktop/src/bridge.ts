@@ -7,6 +7,7 @@ import {
   desktopOpenDialog,
   desktopOpenExternal,
   desktopOpenPath,
+  desktopShowItemInFolder,
   desktopOpenWorkspace,
   desktopSaveDialog,
   desktopSetSystemBadgeCount,
@@ -2272,6 +2273,12 @@ export async function openExternal(url: string): Promise<void> {
 export async function openNativePath(path: string): Promise<boolean> {
   if (!inDesktop) return false;
   return desktopOpenPath(path);
+}
+
+/** Reveal a local path in the operating system's file manager. */
+export async function revealNativePath(path: string): Promise<boolean> {
+  if (!inDesktop) return false;
+  return desktopShowItemInFolder(path);
 }
 
 /** Open a workspace in one of the desktop destinations offered by the session header. */
