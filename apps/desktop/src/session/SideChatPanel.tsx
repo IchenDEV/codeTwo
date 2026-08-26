@@ -33,6 +33,7 @@ import { cn } from "../lib/utils";
 import { ModelPicker } from "./Composer";
 import { sessionMode } from "./mode";
 import { TurnCard } from "./TurnCard";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import { applyEvent, newTurn, type Turn } from "./turns";
 
 export interface SideChatSeed {
@@ -133,6 +134,7 @@ export function SideChatPanel({
   sandbox,
   seed,
   onSeedHandled,
+  linkActions,
 }: {
   open: boolean;
   width: number;
@@ -146,6 +148,7 @@ export function SideChatPanel({
   sandbox: Sandbox;
   seed: SideChatSeed | null;
   onSeedHandled: (id: string) => void;
+  linkActions?: BuiltinLinkActions;
 }) {
   const t = useT();
   const [tabs, setTabs] = useState<SideChatTab[]>([]);
@@ -516,7 +519,10 @@ export function SideChatPanel({
           <ol className="mx-auto m-0 w-full max-w-2xl list-none px-5 pb-8 pt-5">
             {activeTab.turns.map((turn) => (
               <li key={turn.transcriptStartSeq ?? turn.id}>
-                <TurnCard turn={turn} />
+                <TurnCard
+                  turn={turn}
+                  linkActions={{ ...linkActions, workspaceRoot: activeTab.cwd }}
+                />
               </li>
             ))}
           </ol>

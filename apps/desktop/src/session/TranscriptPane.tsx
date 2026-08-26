@@ -3,6 +3,7 @@ import { ArrowDown, Loader2 } from "lucide-react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 
 import { TurnCard } from "./TurnCard";
+import type { BuiltinLinkActions } from "./MarkdownContent";
 import { SelectionActions } from "./SelectionActions";
 import type { Turn } from "./turns";
 import type { TranscriptScrollController } from "./useTranscriptScroll";
@@ -24,6 +25,7 @@ interface TranscriptPaneProps {
   canPinPlan?: boolean;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
+  linkActions?: BuiltinLinkActions;
   onAddSelection: (text: string) => void;
   onExplainSelection: (text: string) => void;
   onAskSelectionInSideChat: (text: string) => void;
@@ -44,6 +46,7 @@ export function TranscriptPane({
   onPinPlanArtifact,
   canPinPlan,
   onSaveTemplate,
+  linkActions,
   onAddSelection,
   onExplainSelection,
   onAskSelectionInSideChat,
@@ -121,6 +124,7 @@ export function TranscriptPane({
                       onPinPlanArtifact={onPinPlanArtifact}
                       canPinPlan={canPinPlan}
                       onSaveTemplate={onSaveTemplate}
+                      linkActions={linkActions}
                     />
                   </li>
                 ))}
