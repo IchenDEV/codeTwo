@@ -11,12 +11,12 @@ import { cn } from "@/lib/utils";
  */
 const CATEGORY_COLORS: Record<string, string> = {
   system_prompt: "var(--ds-color-text-muted)",
-  tool_definitions: "#8b5cf6",
-  rules: "#10b981",
-  skills: "#f59e0b",
-  mcp_dynamic_tools: "#7c3aed",
-  subagent_definitions: "#3b82f6",
-  conversation: "#ef4444",
+  tool_definitions: "var(--ds-color-chart-1)",
+  rules: "var(--ds-color-chart-2)",
+  skills: "var(--ds-color-chart-3)",
+  mcp_dynamic_tools: "var(--ds-color-chart-4)",
+  subagent_definitions: "var(--ds-color-chart-5)",
+  conversation: "var(--ds-color-chart-6)",
 };
 
 function categoryColor(id: string): string {
@@ -31,7 +31,7 @@ function CategoryRow({ category }: { category: ContextCategory }) {
   return (
     <div className="flex items-center gap-3 py-1">
       <span
-        className="size-2.5 shrink-0 rounded-sm"
+        className="size-2.5 shrink-0 rounded-(--ds-radius-micro)"
         style={{ background: categoryColor(category.id) }}
       />
       <span className="min-w-0 flex-1 truncate text-ui text-foreground/90">{label}</span>
@@ -62,7 +62,7 @@ function SegmentedBar({
         return (
           <div
             key={cat.id}
-            className="h-full transition-[width] duration-300"
+            className="h-full transition-[width] duration-(--ds-motion-page)"
             style={{
               width: `${pct}%`,
               backgroundColor: categoryColor(cat.id),
@@ -130,7 +130,7 @@ export function ContextBreakdown({
             <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted/60">
               <div
                 className={cn(
-                  "h-full rounded-full transition-[width] duration-300",
+                  "h-full rounded-full transition-[width] duration-(--ds-motion-page)",
                   percentLabel > 85
                     ? "bg-destructive"
                     : percentLabel > 60
