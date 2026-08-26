@@ -177,6 +177,17 @@ pub fn builtin_models(provider: &ProviderId) -> Vec<ModelChoice> {
             choice("glm-5-turbo", "GLM-5 Turbo", Some("Faster, 128K context")),
             choice("glm-4.7", "GLM-4.7", None),
         ],
+        // Amp routes internally across frontier models; these are its quality modes exposed as
+        // ACP model ids by the amp-acp adapter.
+        ProviderId::Amp => vec![
+            choice("medium", "Medium", Some("Default — balanced quality, speed, and cost")),
+            choice("low", "Low", Some("Fast, low-cost mode for small tasks")),
+            choice("high", "High", Some("Deeper reasoning, more time and cost")),
+            choice("ultra", "Ultra", Some("Maximum capability, open-ended tasks")),
+        ],
+        // Droid's ACP mode reports its own model list from the user's Factory account once a
+        // session starts. An empty fallback is better than inventing ids that may not exist.
+        ProviderId::Droid => Vec::new(),
         ProviderId::Custom(_) => Vec::new(),
     }
 }
@@ -434,8 +445,10 @@ mod tests {
     #[test]
     fn only_account_owned_catalogues_have_no_static_list() {
         for p in crate::provider::default_registry() {
-            let empty_is_expected =
-                matches!(p.id, ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi);
+            let empty_is_expected = matches!(
+                p.id,
+                ProviderId::OpenCode | ProviderId::OpenCode2 | ProviderId::Pi | ProviderId::Droid
+            );
             assert_eq!(
                 builtin_models(&p.id).is_empty(),
                 empty_is_expected,

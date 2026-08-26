@@ -25,7 +25,7 @@ pub struct HarnessSpec {
 }
 
 /// The products we know skill-directory conventions for.
-pub const HARNESSES: [HarnessSpec; 4] = [
+pub const HARNESSES: [HarnessSpec; 5] = [
     HarnessSpec {
         id: "claude",
         label: "Claude Code",
@@ -51,6 +51,12 @@ pub const HARNESSES: [HarnessSpec; 4] = [
         label: "Cursor",
         user_roots: &[".cursor/skills"],
         project_roots: &[".cursor/skills"],
+    },
+    HarnessSpec {
+        id: "droid",
+        label: "Droid",
+        user_roots: &[".factory/skills"],
+        project_roots: &[".factory/skills"],
     },
 ];
 

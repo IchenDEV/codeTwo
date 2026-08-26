@@ -193,6 +193,24 @@ const RECIPES: &[ProviderRecipe] = &[
         managed_launch_args: Some(&[]),
         requirements: &[],
     },
+    ProviderRecipe {
+        id: "amp",
+        executable: "amp-acp",
+        version_args: &["--version"],
+        install: Some(&["npm", "install", "--global", "amp-acp@latest"]),
+        upgrade: Some(&["npm", "install", "--global", "amp-acp@latest"]),
+        managed_launch_args: Some(&[]),
+        requirements: &["amp"],
+    },
+    ProviderRecipe {
+        id: "droid",
+        executable: "droid",
+        version_args: &["--version"],
+        install: Some(&["npm", "install", "--global", "droid"]),
+        upgrade: Some(&["droid", "upgrade"]),
+        managed_launch_args: None,
+        requirements: &[],
+    },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

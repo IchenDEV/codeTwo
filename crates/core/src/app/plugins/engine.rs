@@ -952,6 +952,8 @@ fn parse_provider(value: &str) -> ProviderId {
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,
+        "amp" => ProviderId::Amp,
+        "droid" => ProviderId::Droid,
         other => ProviderId::Custom(other.to_string()),
     }
 }

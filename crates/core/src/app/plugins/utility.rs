@@ -82,6 +82,8 @@ impl Plugin for UsagePlugin {
                 "pi" => crate::provider::ProviderId::Pi,
                 "kimi" => crate::provider::ProviderId::Kimi,
                 "zcode" => crate::provider::ProviderId::ZCode,
+                "amp" => crate::provider::ProviderId::Amp,
+                "droid" => crate::provider::ProviderId::Droid,
                 other => crate::provider::ProviderId::Custom(other.to_string()),
             };
             json(crate::usage::provider_quota(&provider).await)

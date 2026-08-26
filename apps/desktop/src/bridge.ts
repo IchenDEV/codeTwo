@@ -1479,6 +1479,8 @@ const FALLBACK_PROVIDERS: ProviderInfo[] = [
   fallbackProvider("pi", "Pi", true),
   fallbackProvider("kimi", "Kimi", false),
   fallbackProvider("zcode", "ZCode (GLM)", true),
+  fallbackProvider("amp", "Amp", true),
+  fallbackProvider("droid", "Droid", false),
 ];
 
 /** Stable provider identity while the desktop host is still starting or temporarily unavailable. */
@@ -3634,6 +3636,7 @@ export async function getPromptImage(id: string): Promise<AppshotCapture> {
   if (!inDesktop) throw new Error("Prompt images require the desktop app");
   return call<AppshotCapture>("attachments.get", { id });
 }
+
 
 export async function canvasFreeze(
   id: string,
