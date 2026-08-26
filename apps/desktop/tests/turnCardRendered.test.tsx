@@ -345,6 +345,7 @@ describe("TurnCard rendered activity", () => {
     expect(ordered[1]).toBe(group);
     expect(ordered[2].textContent).toContain("After");
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger?.textContent).toContain("Run tests");
     expect(trigger?.textContent).toContain("tools (2)");
     expect(trigger?.textContent).toContain("failed");
     expect(group?.querySelectorAll("[data-tool-call]")).toHaveLength(0);
@@ -353,9 +354,41 @@ describe("TurnCard rendered activity", () => {
     await flush();
 
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
-    expect(group?.querySelectorAll("[data-tool-call]")).toHaveLength(2);
+    expect(group?.querySelectorAll("[data-tool-call]")).toHaveLength(1);
     expect(group?.textContent).toContain("Read workspace");
     expect(group?.textContent).toContain("Run tests");
+    rendered.unmount();
+  });
+
+  test("keeps an active tool history open with a bounded Codex-style fade", () => {
+    activateDom();
+    disableCanvasDrawing();
+    const tools = Array.from({ length: 8 }, (_, index) => ({
+      id: `tool-${index}`,
+      title: index === 7 ? "Searching current styles" : `Read file ${index + 1}`,
+      status: index === 7 ? "in_progress" : "completed",
+      kind: index === 7 ? "search" : "read",
+    }));
+    const rendered = mount(
+      <I18nProvider>
+        <TurnCard
+          turn={{
+            ...runningTurn(),
+            tools,
+            content: tools.map((tool) => ({ kind: "tool", toolId: tool.id })),
+          }}
+        />
+      </I18nProvider>,
+    );
+    const group = rendered.container.querySelector("[data-tool-call-group]");
+    const trigger = group?.querySelector("button");
+    const history = group?.querySelector("[data-tool-call-history]");
+
+    expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(trigger?.textContent).toContain("Searching current styles");
+    expect(history?.getAttribute("data-faded")).toBe("true");
+    expect(history?.classList.contains("tool-call-history--faded")).toBe(true);
+    expect(history?.querySelectorAll("[data-tool-call]")).toHaveLength(7);
     rendered.unmount();
   });
 

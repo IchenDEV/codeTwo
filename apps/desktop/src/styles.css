@@ -1126,6 +1126,23 @@ aside .codetwo-visualize.is-wide {
 .transcript-turn:has(.codetwo-visualize.is-wide) {
   content-visibility: visible;
 }
+
+/* Long tool histories stay readable in place while their soft edge signals that more activity is
+   available below. Bottom padding keeps the final row clear of the mask after scrolling. */
+.tool-call-history--faded {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor calc(100% - var(--ds-space-page-section)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor calc(100% - var(--ds-space-page-section)),
+    transparent 100%
+  );
+}
 @media (max-width: 900px) {
   .codetwo-visualize.is-wide {
     inset-inline-start: auto;

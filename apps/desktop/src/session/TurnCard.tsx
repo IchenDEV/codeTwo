@@ -1,5 +1,6 @@
 import {
   Bot,
+  BookOpen,
   Brain,
   BrainCircuit,
   ChevronDown,
@@ -14,6 +15,8 @@ import {
   Loader2,
   ListTodo,
   MoreHorizontal,
+  Search,
+  Terminal,
   Wrench,
 } from "lucide-react";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -56,6 +59,9 @@ import { cn } from "@/lib/utils";
 import { MarkdownContent } from "./MarkdownContent";
 
 const EMPTY_PROMPT_IMAGES: PromptImage[] = [];
+const SEARCH_TOOL_PATTERN = /\b(?:search|searched|find|found|grep|rg)\b/i;
+const READ_TOOL_PATTERN = /\b(?:read|reading|open|view|inspect)\b/i;
+const COMMAND_TOOL_PATTERN = /\b(?:command|exec|execute|run|shell|terminal|test)\b/i;
 
 function duration(t: Turn): string | null {
   if (!t.endedAt) return null;
@@ -67,6 +73,18 @@ function toolStatusDot(status: string): string {
   if (status === "completed") return "bg-success";
   if (status === "failed") return "bg-destructive";
   return "bg-warning";
+}
+
+function toolIcon(tool: ToolEntry) {
+  const signal = `${tool.kind ?? ""} ${tool.title}`;
+  if (SEARCH_TOOL_PATTERN.test(signal)) return Search;
+  if (READ_TOOL_PATTERN.test(signal)) return BookOpen;
+  if (COMMAND_TOOL_PATTERN.test(signal)) return Terminal;
+  return Wrench;
+}
+
+function toolHasOutput(tool: ToolEntry): boolean {
+  return (tool.outputs?.length ?? 0) > 0;
 }
 
 function prettySize(bytes: number): string {
@@ -230,7 +248,7 @@ function ArtifactImage({ artifact }: { artifact: ArtifactRef }) {
   );
 }
 
-function ToolCallBlock({ tool }: { tool: ToolEntry }) {
+function ToolCallBlock({ tool, compact = false }: { tool: ToolEntry; compact?: boolean }) {
   const textOutputs = (tool.outputs ?? []).flatMap((output) =>
     output.type === "text" ? [output.text] : [],
   );
@@ -244,24 +262,38 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   });
   const hasOutput = textOutputs.length + images.length + resourceLinks.length > 0;
   const [open, setOpen] = useState(false);
+  const ToolIcon = toolIcon(tool);
   const header = (
     <>
-      <Wrench className="size-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 truncate font-medium text-foreground">{tool.title}</span>
-      {tool.kind ? (
+      <ToolIcon className="size-3.5 shrink-0" aria-hidden />
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate",
+          compact ? "text-muted-foreground" : "font-medium text-foreground",
+        )}
+        title={tool.title}
+      >
+        {tool.title}
+      </span>
+      {!compact && tool.kind ? (
         <span className="shrink-0 font-mono text-cap text-muted-foreground">{tool.kind}</span>
       ) : null}
-      <span className="flex shrink-0 items-center gap-1.5 text-fine">
-        <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
-        {tool.status}
-      </span>
+      {!compact || tool.status !== "completed" ? (
+        <span className="flex shrink-0 items-center gap-1.5 text-fine">
+          <span className={cn("size-1.5 rounded-full", toolStatusDot(tool.status))} aria-hidden />
+          {tool.status}
+        </span>
+      ) : null}
     </>
   );
 
   if (!hasOutput) {
     return (
       <div
-        className="my-3 flex min-w-0 items-center gap-2 px-1 py-1.5 text-ui text-muted-foreground"
+        className={cn(
+          "flex min-w-0 items-center gap-2 px-1 text-ui text-muted-foreground",
+          compact ? "py-1" : "my-3 py-1.5",
+        )}
         data-tool-call={tool.id}
       >
         {header}
@@ -270,14 +302,27 @@ function ToolCallBlock({ tool }: { tool: ToolEntry }) {
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="my-3 min-w-0" data-tool-call={tool.id}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn("min-w-0", compact ? "py-0.5" : "my-3")}
+      data-tool-call={tool.id}
+    >
       <CollapsibleTrigger
-        className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className={cn(
+          "group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          compact ? "py-1" : "py-1.5",
+        )}
       >
         {header}
         <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
       </CollapsibleTrigger>
-        <CollapsibleContent className="mt-1.5 min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet">
+      <CollapsibleContent
+        className={cn(
+          "min-w-0 divide-y divide-border overflow-hidden rounded-(--ds-radius-module) border bg-fill-quiet",
+          compact ? "mb-1 ms-5 mt-0.5" : "mt-1.5",
+        )}
+      >
           {textOutputs.map((output, index) => (
             <pre
               key={index}
@@ -327,24 +372,53 @@ function ToolCallGroup({ tools }: { tools: ToolEntry[] }) {
     }
     if (status === "completed" && tool.status !== "completed") status = tool.status;
   }
+  const active = status !== "completed" && status !== "failed";
+  const latest = tools[tools.length - 1];
+  const LatestIcon = toolIcon(latest);
+  const history = toolHasOutput(latest) ? tools : tools.slice(0, -1);
+  const historyIsLong = history.length > 6;
+  const [open, setOpen] = useState(active);
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active, tools.length]);
 
   return (
-    <Collapsible className="my-3 min-w-0" data-tool-call-group={tools[0].id}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="my-3 min-w-0"
+      data-tool-call-group={tools[0].id}
+    >
       <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-2 rounded-(--ds-radius-control) px-1 py-1.5 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <Wrench className="size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
-          {t("turn.tools")} ({tools.length})
+        <LatestIcon className="size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 truncate" title={latest.title}>
+          {latest.title}
         </span>
-        <span className="flex shrink-0 items-center gap-1.5 text-fine">
-          <span className={cn("size-1.5 rounded-full", toolStatusDot(status))} aria-hidden />
-          {status}
-        </span>
+        <span className="sr-only">{t("turn.tools")} ({tools.length}), {status}</span>
+        {status === "failed" ? (
+          <span className="flex shrink-0 items-center gap-1.5 text-fine text-destructive">
+            <CircleAlert className="size-3.5" aria-hidden />
+            {status}
+          </span>
+        ) : active ? (
+          <span className={cn("size-1.5 shrink-0 rounded-full", toolStatusDot(status))} aria-hidden />
+        ) : null}
         <ChevronRight className="size-3.5 shrink-0 transition-transform group-data-[state=open]:rotate-90" aria-hidden />
       </CollapsibleTrigger>
-      <CollapsibleContent className="min-w-0 ps-4">
-        {tools.map((tool) => (
-          <ToolCallBlock key={tool.id} tool={tool} />
-        ))}
+      <CollapsibleContent className="min-w-0">
+        <div
+          className={cn(
+            "max-h-56 min-w-0 overflow-y-auto overscroll-contain py-1 pe-2 ps-5",
+            historyIsLong && "tool-call-history--faded pb-8",
+          )}
+          data-tool-call-history
+          data-faded={historyIsLong || undefined}
+        >
+          {history.map((tool) => (
+            <ToolCallBlock key={tool.id} tool={tool} compact />
+          ))}
+        </div>
       </CollapsibleContent>
     </Collapsible>
   );
