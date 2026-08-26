@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { activateDom, dom, flush, mount, restoreDom } from "./domTestHarness";
+import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
@@ -11,14 +11,20 @@ afterEach(() => {
   dom.document.body.replaceChildren();
   restoreDom();
 });
-function renderDock(availableSurfaces, tab = "home", placement = "right") {
+function renderDock(
+  availableSurfaces,
+  tab = "home",
+  open = true,
+  onOpenSideChat = () => {},
+) {
   return mount(
     <I18nProvider>
       <Dock
-        open
+        open={open}
         tab={tab}
         availableSurfaces={availableSurfaces}
         onTab={() => {}}
+        onOpenSideChat={onOpenSideChat}
         onClose={() => {}}
         cwd={null}
         projectPath={null}
@@ -37,28 +43,64 @@ function renderDock(availableSurfaces, tab = "home", placement = "right") {
         fileReveal={null}
         onActiveFile={() => {}}
         onCloseFile={() => {}}
-        placement={placement}
+        turns={[]}
+        usage={null}
+        hasEarlier={false}
+        loadingEarlier={false}
+        onLoadEarlier={() => {}}
         width={440}
         onWidth={() => {}}
-        height={280}
-        onHeight={() => {}}
       />
     </I18nProvider>,
   );
 }
 
 describe("Dock plugin component gate", () => {
-  test("renders the terminal as a vertically resizable bottom panel", async () => {
+  test("removes its resize separator from the tab order while closed", async () => {
     activateDom();
-    const view = renderDock(["terminal"], "home", "bottom");
+    const view = renderDock(["terminal"], "home", false);
+    await flush();
+    const separator = view.container.querySelector('[role="separator"]');
+
+    expect(separator?.getAttribute("tabindex")).toBe("-1");
+    expect(separator?.getAttribute("aria-disabled")).toBe("true");
+
+    view.unmount();
+  });
+
+  test("opens side chat from the right-panel surface picker", async () => {
+    activateDom();
+    let opens = 0;
+    const view = renderDock(
+      ["trajectory", "browser", "terminal", "files", "git"],
+      "home",
+      true,
+      () => { opens += 1; },
+    );
     await flush();
 
-    const panel = view.container.querySelector('[data-dock-placement="bottom"]');
+    const cards = Array.from(view.container.querySelectorAll(".grid > button"));
+    expect(cards[2]?.textContent).toContain("Terminal");
+    expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
+    click(button(view.container, "Side chat"));
+    expect(opens).toBe(1);
+
+    view.unmount();
+  });
+
+  test("advertises the terminal in the horizontally resizable right panel", async () => {
+    activateDom();
+    const view = renderDock(["terminal"], "home");
+    await flush();
+
+    const panel = view.container.querySelector('[data-dock-placement="right"]');
     expect(panel).not.toBeNull();
-    expect(panel?.classList.contains("dock-panel-bottom")).toBe(true);
-    expect(panel?.classList.contains("border-l")).toBe(false);
-    expect(panel?.getAttribute("style")).toContain("height: 280px");
-    expect(panel?.querySelector('[data-dock-resize="vertical"]')).not.toBeNull();
+    expect(panel?.classList.contains("dock-panel-side")).toBe(true);
+    expect(panel?.classList.contains("border-l")).toBe(true);
+    expect(panel?.getAttribute("style")).toMatch(/^width: \d+px;$/);
+    expect(panel?.getAttribute("style")).not.toContain("height");
+    expect(panel?.querySelector('[data-dock-resize="horizontal"]')).not.toBeNull();
+    expect(view.container.textContent).toContain("Terminal");
 
     view.unmount();
   });
@@ -75,5 +117,23 @@ describe("Dock plugin component gate", () => {
     expect(view.container.querySelector('[data-slot="tabs-content"][data-value="terminal"]')).toBeNull();
 
     view.unmount();
+  });
+
+  test("renders trajectory as a right-panel module", async () => {
+    activateDom();
+    const home = renderDock(["trajectory"], "home");
+    await flush();
+
+    expect(home.container.textContent).toContain("Execution trajectory");
+    expect(home.container.textContent).toContain("Inspect the session timeline");
+    home.unmount();
+
+    const module = renderDock(["trajectory"], "trajectory");
+    await flush();
+
+    expect(module.container.querySelector('[role="tabpanel"]')).not.toBeNull();
+    expect(module.container.querySelector('[aria-label="Execution trajectory"]')).not.toBeNull();
+    expect(module.container.textContent).toContain("No events match this view.");
+    module.unmount();
   });
 });

@@ -6,7 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { ArrowDown, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowDown, ChevronDown, ChevronRight, Loader2 } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

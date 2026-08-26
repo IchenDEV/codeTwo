@@ -28,7 +28,7 @@ export async function planPluginManagerChange({
   const component = request.targetKind === "component"
     ? components.find((item) => item.id === request.targetId)
     : undefined;
-  const targetPluginId = component?.pluginId ?? request.targetId;
+  const targetPluginId = component?.policyPluginId ?? component?.pluginId ?? request.targetId;
   const targetPlugin = plugins.find((plugin) => plugin.id === targetPluginId);
   if (!targetPlugin) throw new Error(`Plugin ${targetPluginId} is no longer in the catalog.`);
 

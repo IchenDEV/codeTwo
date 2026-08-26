@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Save } from "lucide-react";
+import { AtSign, ChevronRight, Loader2, MessageSquarePlus, Save } from "@/components/ui/icons";
 
 import { CODE_FONTS, useAppearanceSettings } from "../appearance";
 import { readText, writeText } from "../bridge";

@@ -1,20 +1,11 @@
 import { useState } from "react";
-import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "lucide-react";
+import { ChevronDown, Clapperboard, Copy, Download, Pencil, Plus, RotateCcw, Route, Settings2 } from "@/components/ui/icons";
 
 import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
-import { exportSceneSkillMd, type ConfigOptionInfo, type ModelChoice } from "../bridge";
+import { exportSceneSkillMd } from "../bridge";
 import { useToast } from "../ui/toast";
-import type { ContextWindow } from "./contextWindow";
-import {
-  Chip,
-  MemoryPicker,
-  MenuRow,
-  ModelPicker,
-  ModePicker,
-  ProviderPicker,
-  WorktreePicker,
-} from "./Composer";
+import { Chip, MenuRow } from "./Composer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -40,45 +31,22 @@ export function SourceBadge({ source }: { source: SceneSource }) {
 }
 
 /**
- * The one chip that collapsed the posture row (docs/scenes.md §UI contract). Opening it shows the
- * scene list plus the individual posture pickers unchanged; manual overrides mark the chip
- * "customized" without mutating the scene definition.
+ * Scene selection stays distinct from the session configuration row. Manual overrides still mark
+ * the chip "customized" without mutating the scene definition.
  */
-export function SceneChip({
-  config,
-  models,
-  currentModel,
-  defaultModel,
-  onModel,
-  configOptions,
-  onConfigOption,
-  modelChangeDisabled = false,
-}: {
-  config: SessionConfig;
-  models: ModelChoice[];
-  currentModel: string | null;
-  defaultModel: string | null;
-  onModel: (id: string) => void;
-  configOptions: ConfigOptionInfo[];
-  onConfigOption: (configId: string, value: string) => void;
-  modelChangeDisabled?: boolean;
-  /** Unused here (the context gauge stays in the row); kept so the row passes one props bag. */
-  contextWindow?: ContextWindow | null;
-}) {
+export function SceneChip({ config }: { config: SessionConfig }) {
   const t = useT();
   const { locale } = useLanguage();
   const [open, setOpen] = useState(false);
   const active = config.activeScene;
   const sceneLabel = active ? sceneTitle(active, locale) : t("scene.none");
-  const label = config.scenesEnabled
-    ? config.autoScene
-      ? active
-        ? t("scene.autoActive", { scene: sceneLabel })
-        : t("scene.auto")
-      : sceneLabel
-    : t("config.session");
-  const surfaceLabel = config.scenesEnabled ? t("scene.chip") : t("config.session");
-  const partial = config.scenesEnabled && config.scenePendingFields.length > 0;
+  const label = config.autoScene
+    ? active
+      ? t("scene.autoActive", { scene: sceneLabel })
+      : t("scene.auto")
+    : sceneLabel;
+  const surfaceLabel = t("scene.chip");
+  const partial = config.scenePendingFields.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -86,13 +54,11 @@ export function SceneChip({
         render={<Chip
           title={surfaceLabel}
           aria-label={`${surfaceLabel}: ${label}`}
-          className={cn(config.scenesEnabled && (active || config.autoScene) && "text-foreground")}
+          className={cn((active || config.autoScene) && "text-foreground")}
         >
-          {config.scenesEnabled
-            ? <Clapperboard className="size-3.5 shrink-0" />
-            : <Settings2 className="size-3.5 shrink-0" />}
+          <Clapperboard className="size-3.5 shrink-0" />
           <span className="max-w-36 truncate">{label}</span>
-          {config.scenesEnabled && config.sceneCustomized && (
+          {config.sceneCustomized && (
             <span
               className="size-1.5 shrink-0 rounded-full bg-warning"
               title={t("scene.customized")}
@@ -112,8 +78,7 @@ export function SceneChip({
       <PopoverContent
         align="start"
         side="top"
-        size="wide"
-        className="max-h-(--available-height) overflow-y-auto p-2"
+        className="max-h-(--available-height) w-96 max-w-(--available-width) overflow-y-auto p-2"
       >
         <div className="@container/composer">
           <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
@@ -121,112 +86,89 @@ export function SceneChip({
               {surfaceLabel}
             </span>
             {config.scenesEnabled && active && <SourceBadge source={active.source} />}
-            {config.scenesEnabled && config.autoScene && <Badge variant="secondary">{t("scene.auto")}</Badge>}
-            {config.scenesEnabled && config.sceneCustomized && (
+            {config.autoScene && <Badge variant="secondary">{t("scene.auto")}</Badge>}
+            {config.sceneCustomized && (
               <Badge variant="outline" className="shrink-0 text-cap text-warning">
                 {t("scene.customized")}
               </Badge>
             )}
           </div>
 
-          {config.scenesEnabled ? (
-            <>
-              <MenuRow
-                selected={config.autoScene}
-                isDefault={false}
-                label={t("scene.auto")}
-                detail={t("scene.autoHint")}
-                detailWrap
-                leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
-                onClick={() => {
-                  config.onAutoScene(true);
-                  setOpen(false);
-                }}
-              />
-              <MenuRow
-                selected={active === null && !config.autoScene}
-                isDefault={false}
-                label={t("scene.none")}
-                detail={t("scene.noneHint")}
-                detailWrap
-                onClick={() => {
-                  config.onAutoScene(false);
-                  config.onScene(null, "soft");
-                  setOpen(false);
-                }}
-              />
-              {config.scenes.map((scene) => (
-                <MenuRow
-                  key={scene.reference}
-                  selected={!config.autoScene && active?.reference === scene.reference}
-                  isDefault={false}
-                  label={sceneTitle(scene, locale)}
-                  detail={scene.localizations[locale]?.description ?? scene.description}
-                  detailWrap
-                  leading={<SourceBadge source={scene.source} />}
-                  onClick={() => {
-                    config.onAutoScene(false);
-                    config.onScene(scene.reference, "soft");
-                    setOpen(false);
-                  }}
-                />
-              ))}
-
-              <Button
-                type="button"
-                variant="ghost"
-                className="mt-1 w-full justify-start text-muted-foreground"
-                onClick={() => {
-                  setOpen(false);
-                  config.onManageScenes();
-                }}
-              >
-                <Settings2 data-icon="inline-start" />
-                {t("sceneEditor.manage")}
-              </Button>
-
-              <div className="mx-2 my-1.5 h-px bg-border" />
-            </>
-          ) : null}
-
-          {/* Every posture override keeps its current value visible, even when this row wraps. */}
-          <div className="flex flex-wrap items-center gap-1.5 px-1 pb-1">
-            <ProviderPicker config={config} />
-            <ModelPicker
-              models={models}
-              current={currentModel}
-              defaultModel={defaultModel}
-              provider={config.provider}
-              onModel={onModel}
-              configOptions={configOptions}
-              onConfigOption={onConfigOption}
-              hasSession={config.hasSession}
-              compact
-              disabled={modelChangeDisabled}
+          <MenuRow
+            selected={config.autoScene}
+            isDefault={false}
+            label={t("scene.auto")}
+            detail={t("scene.autoHint")}
+            detailWrap
+            leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
+            onClick={() => {
+              config.onAutoScene(true);
+              setOpen(false);
+            }}
+          />
+          <MenuRow
+            selected={active === null && !config.autoScene}
+            isDefault={false}
+            label={t("scene.none")}
+            detail={t("scene.noneHint")}
+            detailWrap
+            onClick={() => {
+              config.onAutoScene(false);
+              config.onScene(null, "soft");
+              setOpen(false);
+            }}
+          />
+          {config.scenes.map((scene) => (
+            <MenuRow
+              key={scene.reference}
+              selected={!config.autoScene && active?.reference === scene.reference}
+              isDefault={false}
+              label={sceneTitle(scene, locale)}
+              detail={scene.localizations[locale]?.description ?? scene.description}
+              detailWrap
+              leading={<SourceBadge source={scene.source} />}
+              onClick={() => {
+                config.onAutoScene(false);
+                config.onScene(scene.reference, "soft");
+                setOpen(false);
+              }}
             />
-            <ModePicker config={config} />
-            {config.memoryEnabled ? <MemoryPicker config={config} /> : null}
-            <WorktreePicker config={config} />
-          </div>
+          ))}
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-1 w-full justify-start text-muted-foreground"
+            onClick={() => {
+              setOpen(false);
+              config.onManageScenes();
+            }}
+          >
+            <Settings2 data-icon="inline-start" />
+            {t("sceneEditor.manage")}
+          </Button>
 
           {partial && (
-            <div className="flex items-center gap-1.5 px-2 pb-1 pt-1.5">
-              <span className="min-w-0 flex-1 text-fine text-muted-foreground">
-                {t("scene.partialHint", { fields: config.scenePendingFields.join(", ") })}
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="shrink-0"
-                onClick={() => {
-                  setOpen(false);
-                  config.onRestartInScene();
-                }}
-              >
-                <RotateCcw className="size-3.5" />
-                {t("scene.restart")}
-              </Button>
-            </div>
+            <>
+              <div className="mx-2 my-1.5 h-px bg-border" />
+              <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
+                <span className="min-w-0 flex-1 text-fine text-muted-foreground">
+                  {t("scene.partialHint", { fields: config.scenePendingFields.join(", ") })}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    setOpen(false);
+                    config.onRestartInScene();
+                  }}
+                >
+                  <RotateCcw className="size-3.5" />
+                  {t("scene.restart")}
+                </Button>
+              </div>
+            </>
           )}
         </div>
       </PopoverContent>

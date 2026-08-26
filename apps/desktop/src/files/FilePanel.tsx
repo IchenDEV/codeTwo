@@ -12,7 +12,7 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import { confirmNative, copyPath, createDir, createFile, deletePath, listDir, renamePath, type DirEntry } from "../bridge";
 import { useToast } from "../ui/toast";

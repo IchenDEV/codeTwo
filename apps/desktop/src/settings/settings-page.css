@@ -2,13 +2,9 @@
   height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
 }
 
-.settings-standard-page {
-  max-width: 42.5rem;
-  padding: 2rem 2rem 0;
-}
-
-.settings-project-page {
+.settings-page {
   max-width: 48rem;
+  padding: 2rem 2rem 0;
 }
 
 .project-settings-row {
@@ -29,20 +25,163 @@
   margin-left: auto;
 }
 
-.settings-pets-page {
-  max-width: 58rem;
-  padding: 2rem 2rem 0;
+.settings-profile-page {
+  max-width: 64rem;
+  padding: 1.5rem 2rem 0;
 }
 
-.settings-memory-page {
-  max-width: 77.5rem;
-  padding: 1.5rem 1.5rem 0;
+.settings-worktrees-page {
+  max-width: 64rem;
+}
+
+.worktree-policy-card {
+  overflow: hidden;
+  margin-top: var(--ds-space-module-inset);
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.worktree-policy-row {
+  padding-right: var(--ds-space-surface-inset);
+  padding-left: var(--ds-space-surface-inset);
+}
+
+.worktree-policy-row:not(:last-child) {
+  box-shadow: inset 0 calc(-1 * var(--hairline-width)) 0 var(--ds-color-fill-rest);
+}
+
+.worktree-root-input {
+  width: min(24rem, 36vw);
+}
+
+.worktree-limit-input {
+  width: 7rem;
+}
+
+.worktree-project-section {
+  margin-top: var(--ds-space-section);
+}
+
+.worktree-project-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--ds-space-module-inset);
+  padding: 0 var(--ds-space-surface-inset) var(--ds-space-module-inset);
+}
+
+.worktree-project-card {
+  overflow: hidden;
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.worktree-settings-row {
+  gap: var(--ds-space-section);
+  padding-right: var(--ds-space-surface-inset);
+  padding-left: var(--ds-space-surface-inset);
+  transition: background-color var(--ds-motion-feedback) ease;
+}
+
+.worktree-settings-row:hover {
+  background: var(--ds-color-fill-hover);
+}
+
+.worktree-settings-actions {
+  gap: var(--ds-space-control-group);
+}
+
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-page-section);
+}
+
+.profile-hero {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: var(--ds-space-module-inset);
+  padding: 1rem 0 0.5rem;
+}
+
+.profile-avatar {
+  display: flex;
+  width: 4.5rem;
+  height: 4.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ds-radius-modal);
+  background: var(--ds-color-fill-hover);
+  color: var(--ds-color-text);
+  font-size: 1.25rem;
+  font-weight: 600;
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.profile-editor,
+.profile-section,
+.profile-stat-grid {
+  border-radius: var(--ds-radius-module);
+  background: var(--ds-color-fill-quiet);
+  box-shadow: var(--ds-elevation-surface);
+}
+
+.profile-editor,
+.profile-section {
+  padding: var(--ds-space-page-section);
+}
+
+.profile-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-page-section);
+}
+
+.profile-stat-grid {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ds-space-optical);
+  background: var(--ds-color-fill-rest);
+}
+
+.profile-stat {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 0.5rem;
+  background: var(--ds-color-fill-quiet);
+  text-align: center;
+}
+
+.profile-activity-grid {
+  display: grid;
+  margin-top: var(--ds-space-module-inset);
+  grid-auto-columns: minmax(0.625rem, 1fr);
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.profile-activity-cell {
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: var(--ds-radius-micro);
+}
+
+.profile-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ds-space-page-section);
 }
 
 @media (max-width: 50rem) {
-  .settings-project-page {
-    padding-right: 1.25rem;
-    padding-left: 1.25rem;
+  .settings-page {
+    padding: 1rem 1rem 0;
   }
 
   .project-settings-row {
@@ -64,8 +203,48 @@
     margin-left: 0;
   }
 
-  .settings-memory-page,
-  .settings-pets-page {
+  .settings-profile-page {
     padding: 1rem 1rem 0;
+  }
+
+  .settings-worktrees-page {
+    padding: 1rem 1rem 0;
+  }
+
+  .worktree-settings-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .worktree-policy-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .worktree-policy-row > :last-child {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .worktree-root-input {
+    width: 100%;
+  }
+
+  .worktree-settings-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .profile-stat-grid,
+  .profile-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 38rem) {
+  .profile-detail-grid {
+    grid-template-columns: 1fr;
   }
 }

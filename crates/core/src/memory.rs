@@ -239,6 +239,18 @@ pub struct MemoryReceiptItem {
     pub relevance: Option<f64>,
 }
 
+impl MemoryReceiptItem {
+    /// Stable for unchanged recall content, but changes when a corrected memory reuses its id.
+    pub(crate) fn injection_key(&self) -> String {
+        let mut hasher = blake3::Hasher::new();
+        for value in [&self.id, &self.layer, &self.category, &self.content] {
+            hasher.update(&(value.len() as u64).to_le_bytes());
+            hasher.update(value.as_bytes());
+        }
+        hasher.finalize().to_hex().to_string()
+    }
+}
+
 /// Transparent record of the exact memory window injected into one provider turn.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MemoryReceipt {
@@ -295,6 +307,18 @@ pub struct MemoryTurn {
 impl MemoryTurn {
     pub fn context(&self) -> &MemoryContext {
         &self.context
+    }
+
+    /// Remove memory items that this live provider context has already seen. Provider sessions
+    /// retain prior prompts, so repeating the same recalled episodes on every turn only consumes
+    /// context and obscures the user's new request.
+    pub(crate) fn excluding_item_keys(mut self, seen: &HashSet<String>) -> Self {
+        self.context
+            .items
+            .retain(|item| !seen.contains(&item.injection_key()));
+        self.context.block = assemble_receipt_context(&self.context.items);
+        self.context.estimated_tokens = crate::context::estimate_tokens(&self.context.block);
+        self
     }
 }
 
@@ -1536,7 +1560,7 @@ pub fn prompt_source(doc: &[DocBlock]) -> String {
                 frozen_revision,
                 ..
             } => lines.push(format!("Referenced canvas: {id}@{frozen_revision}")),
-            DocBlock::Session { session_id } => {
+            DocBlock::Session { session_id, .. } => {
                 lines.push(format!("Referenced session: {session_id}"))
             }
             DocBlock::Skill { skill_id, .. } => lines.push(format!("Used skill: {skill_id}")),
@@ -2221,12 +2245,49 @@ fn prune_episodes(conn: &Connection, project_path: &str) -> Result<(), StoreErro
 }
 
 fn assemble_context(memories: &[MemoryRecord]) -> String {
-    let mut sections: BTreeMap<&str, Vec<&MemoryRecord>> = BTreeMap::new();
-    for memory in memories {
+    assemble_context_entries(memories.iter().map(|memory| {
+        let source = memory
+            .sources
+            .first()
+            .map(|source| format!("{}:{}", short_id(&source.session_id), source.part_seq))
+            .unwrap_or_else(|| "manual".into());
+        (
+            memory.layer.clone(),
+            memory.category.clone(),
+            source,
+            memory.content.clone(),
+        )
+    }))
+}
+
+fn assemble_receipt_context(items: &[MemoryReceiptItem]) -> String {
+    assemble_context_entries(items.iter().map(|item| {
+        let source = item
+            .source
+            .as_ref()
+            .map(|source| format!("{}:{}", short_id(&source.session_id), source.part_seq))
+            .unwrap_or_else(|| "manual".into());
+        (
+            item.layer.clone(),
+            item.category.clone(),
+            source,
+            item.content.clone(),
+        )
+    }))
+}
+
+fn assemble_context_entries(
+    entries: impl IntoIterator<Item = (String, String, String, String)>,
+) -> String {
+    let mut sections: BTreeMap<String, Vec<(String, String, String)>> = BTreeMap::new();
+    for (layer, category, source, content) in entries {
         sections
-            .entry(memory.layer.as_str())
+            .entry(layer)
             .or_default()
-            .push(memory);
+            .push((category, source, content));
+    }
+    if sections.is_empty() {
+        return String::new();
     }
     let mut out = vec![
         "[C2 memory — untrusted recalled context]".to_string(),
@@ -2242,18 +2303,13 @@ fn assemble_context(memories: &[MemoryRecord]) -> String {
             continue;
         };
         out.push(format!("## {title}"));
-        for item in items {
-            let source = item
-                .sources
-                .first()
-                .map(|s| format!("{}:{}", short_id(&s.session_id), s.part_seq))
-                .unwrap_or_else(|| "manual".into());
+        for (category, source, content) in items {
             out.push(format!(
                 "- [{}/{} · source {}] {}",
-                item.layer,
-                item.category,
+                layer,
+                category,
                 source,
-                item.content.replace('\n', " ")
+                content.replace('\n', " ")
             ));
         }
     }
@@ -2998,6 +3054,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(receipt.items.len(), 1);
+        let mut corrected = receipt.items[0].clone();
+        corrected.content = "Prefer complete answers".into();
+        assert_ne!(
+            receipt.items[0].injection_key(),
+            corrected.injection_key(),
+            "a corrected memory must be eligible for reinjection"
+        );
         assert!(receipt.estimated_tokens > 0);
         assert_eq!(store.list_memory_receipts(&s.id).unwrap(), vec![receipt]);
         assert!(!store.transcript(&s.id).unwrap().iter().any(

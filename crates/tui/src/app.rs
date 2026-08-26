@@ -1357,7 +1357,7 @@ fn summarize(doc: &[DocBlock]) -> String {
                     codetwo_core::CanvasPixelPolicy::StructureOnly => "structure",
                 }
             ),
-            DocBlock::Session { session_id } => format!("[chat:{}]", short(session_id)),
+            DocBlock::Session { session_id, .. } => format!("[chat:{}]", short(session_id)),
             DocBlock::Artifact { record_id } => format!("[artifact:{record_id}]"),
             DocBlock::Issue { source, id, .. } => format!("[issue:{source}#{id}]"),
         })

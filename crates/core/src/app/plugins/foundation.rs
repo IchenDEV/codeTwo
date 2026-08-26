@@ -222,10 +222,18 @@ impl Plugin for ProvidersPlugin {
         let providers = lifecycle.prepare_registry(default_registry());
         let service = Arc::new(ProviderService::new(providers, host_tools, lifecycle));
 
+        #[derive(Deserialize)]
+        struct ProviderListArgs {
+            #[serde(default)]
+            check_updates: bool,
+        }
         let listed = service.clone();
-        ctx.command("providers.list", move |_| {
+        ctx.command("providers.list", move |args| {
             let service = listed.clone();
-            async move { json(service.summaries().await) }
+            async move {
+                let args: ProviderListArgs = take_args(args)?;
+                json(service.summaries_with_updates(args.check_updates).await)
+            }
         })?;
 
         #[derive(Deserialize)]

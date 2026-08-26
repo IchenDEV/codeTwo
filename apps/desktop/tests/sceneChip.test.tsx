@@ -5,7 +5,7 @@ import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHar
 
 activateDom();
 const { SceneChip, ScenePicker, SourceBadge } = await import("../src/session/SceneChip");
-const { ProviderPicker } = await import("../src/session/Composer");
+const { ProviderPicker, SessionControls } = await import("../src/session/Composer");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -71,15 +71,7 @@ function config(overrides = {}) {
 function renderChip(cfg) {
   return mount(
     <I18nProvider>
-      <SceneChip
-        config={cfg}
-        models={[]}
-        currentModel={null}
-        defaultModel={null}
-        onModel={() => {}}
-        configOptions={[]}
-        onConfigOption={() => {}}
-      />
+      <SceneChip config={cfg} />
     </I18nProvider>,
   );
 }
@@ -136,7 +128,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("shows scene-owned posture values and wraps scene details without emoji", async () => {
+  test("keeps the scene popover focused on scene selection", async () => {
     activateDom();
     const rendered = renderChip(config());
     const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
@@ -156,14 +148,14 @@ describe("SceneChip", () => {
     await flush();
 
     const content = dom.document.body.textContent ?? "";
-    expect(content).toContain("Ask first");
-    expect(content).toContain("Memory on");
-    // Collaboration mode lives in the provider-native Composer selector, not this scene popover.
-    expect(content).not.toContain("Plan first: Off");
-    expect(content).toContain("No worktree");
+    expect(content).toContain("Auto scene");
+    expect(content).toContain("No scene");
+    expect(content).toContain("Manage scenes");
+    expect(content).not.toContain("Memory on");
+    expect(content).not.toContain("No worktree");
     expect(content).not.toContain("🛠️");
     expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
-      "w-2xl",
+      "w-96",
     );
     expect(dom.document.body.querySelector('[data-slot="popover-content"]')?.className).toContain(
       "max-h-(--available-height)",
@@ -175,11 +167,11 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("keeps the model and reasoning selector compact inside the scene popover", async () => {
+  test("shows separate model and reasoning controls in the direct session row", () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
-        <SceneChip
+        <SessionControls
           config={config({ hasSession: true, provider: "grok" })}
           models={[{ id: "grok-4.6", name: "Grok 4.6", description: null }]}
           currentModel="grok-4.6"
@@ -201,20 +193,12 @@ describe("SceneChip", () => {
         />
       </I18nProvider>,
     );
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
-
-    await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        pointerId: 1,
-      }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-    await flush();
-
-    expect(dom.document.body.querySelector(".reasoning-selector-trigger--compact")).toBeTruthy();
+    const row = rendered.container.querySelector("[data-session-controls]");
+    expect(row?.textContent).toContain("Develop");
+    expect(row?.textContent).toContain("Grok 4.6");
+    expect(row?.querySelector('button[title="Model"]')).toBeTruthy();
+    expect(row?.querySelector('button[title="Reasoning"]')?.textContent).toContain("Extra High Effort");
+    expect(row?.querySelector('input[type="range"]')).toBeNull();
     rendered.unmount();
   });
 
@@ -277,50 +261,49 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("keeps session configuration while removing every scene surface", async () => {
+  test("keeps direct session controls while removing every scene surface", () => {
     activateDom();
-    const rendered = renderChip(config({ scenesEnabled: false }));
-    const trigger = rendered.container.querySelector(
-      '[aria-label="Session configuration: Session configuration"]',
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({ scenesEnabled: false })}
+          models={[]}
+          currentModel={null}
+          defaultModel={null}
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
     );
-    expect(trigger).toBeTruthy();
 
-    await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        pointerId: 1,
-      }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-    await flush();
-
-    const content = dom.document.body.textContent ?? "";
+    const content = rendered.container.textContent ?? "";
     expect(content).toContain("Ask first");
     expect(content).toContain("Memory on");
+    expect(content).toContain("No worktree");
     expect(content).not.toContain("Develop");
     expect(content).not.toContain("Auto scene");
     expect(content).not.toContain("Manage scenes");
     rendered.unmount();
   });
 
-  test("removes the memory policy control when memory is disabled", async () => {
+  test("removes the direct memory policy control when memory is disabled", () => {
     activateDom();
-    const rendered = renderChip(config({ memoryEnabled: false }));
-    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
-    await reactAct(async () => {
-      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", {
-        bubbles: true,
-        cancelable: true,
-        button: 0,
-        pointerId: 1,
-      }));
-      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-    await flush();
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config({ memoryEnabled: false })}
+          models={[]}
+          currentModel={null}
+          defaultModel={null}
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+        />
+      </I18nProvider>,
+    );
 
-    expect(dom.document.body.textContent).not.toContain("Memory on");
+    expect(rendered.container.textContent).not.toContain("Memory on");
     rendered.unmount();
   });
 });

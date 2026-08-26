@@ -5,6 +5,7 @@
 
 use crate::provider::{which, Provider};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +23,9 @@ pub enum ProviderLifecycleAction {
 pub struct ProviderLifecycleStatus {
     pub installed: bool,
     pub version: Option<String>,
+    pub latest_version: Option<String>,
+    pub update_available: Option<bool>,
+    pub check_error: Option<String>,
     pub install_supported: bool,
     pub upgrade_supported: bool,
     pub launch_mode: ProviderLaunchMode,
@@ -42,6 +46,7 @@ struct ProviderRecipe {
     version_args: &'static [&'static str],
     install: Option<&'static [&'static str]>,
     upgrade: Option<&'static [&'static str]>,
+    latest_package: Option<&'static str>,
     managed_launch_args: Option<&'static [&'static str]>,
     requirements: &'static [&'static str],
 }
@@ -72,6 +77,7 @@ const RECIPES: &[ProviderRecipe] = &[
             "--global",
             "@agentclientprotocol/claude-agent-acp@latest",
         ]),
+        latest_package: Some("@agentclientprotocol/claude-agent-acp"),
         managed_launch_args: Some(&[]),
         requirements: &[],
     },
@@ -91,6 +97,7 @@ const RECIPES: &[ProviderRecipe] = &[
             "--global",
             "@agentclientprotocol/codex-acp@latest",
         ]),
+        latest_package: Some("@agentclientprotocol/codex-acp"),
         managed_launch_args: Some(&[]),
         requirements: &[],
     },
@@ -100,6 +107,7 @@ const RECIPES: &[ProviderRecipe] = &[
         version_args: &["--version"],
         install: Some(&["npm", "install", "--global", "grok-dev@latest"]),
         upgrade: Some(&["grok", "update"]),
+        latest_package: Some("grok-dev"),
         managed_launch_args: None,
         requirements: &[],
     },
@@ -109,6 +117,7 @@ const RECIPES: &[ProviderRecipe] = &[
         version_args: &["--version"],
         install: CURSOR_INSTALL,
         upgrade: Some(&["cursor-agent", "update"]),
+        latest_package: None,
         managed_launch_args: None,
         requirements: &[],
     },
@@ -118,6 +127,7 @@ const RECIPES: &[ProviderRecipe] = &[
         version_args: &["--version"],
         install: Some(&["npm", "install", "--global", "opencode-ai@latest"]),
         upgrade: Some(&["opencode", "upgrade"]),
+        latest_package: Some("opencode-ai"),
         managed_launch_args: None,
         requirements: &[],
     },
@@ -127,6 +137,7 @@ const RECIPES: &[ProviderRecipe] = &[
         version_args: &["--version"],
         install: Some(&["npm", "install", "--global", "@opencode-ai/cli@beta"]),
         upgrade: Some(&["npm", "install", "--global", "@opencode-ai/cli@beta"]),
+        latest_package: Some("@opencode-ai/cli@beta"),
         managed_launch_args: None,
         requirements: &[],
     },
@@ -148,6 +159,7 @@ const RECIPES: &[ProviderRecipe] = &[
             "@earendil-works/pi-coding-agent@latest",
             "pi-acp@latest",
         ]),
+        latest_package: Some("pi-acp"),
         managed_launch_args: Some(&[]),
         requirements: &["pi"],
     },
@@ -167,6 +179,7 @@ const RECIPES: &[ProviderRecipe] = &[
             "--global",
             "@moonshot-ai/kimi-code@latest",
         ]),
+        latest_package: Some("@moonshot-ai/kimi-code"),
         managed_launch_args: None,
         requirements: &[],
     },
@@ -176,6 +189,7 @@ const RECIPES: &[ProviderRecipe] = &[
         version_args: &["--version"],
         install: Some(&["npm", "install", "--global", "glm-acp-agent@latest"]),
         upgrade: Some(&["npm", "install", "--global", "glm-acp-agent@latest"]),
+        latest_package: Some("glm-acp-agent"),
         managed_launch_args: Some(&[]),
         requirements: &[],
     },
@@ -238,12 +252,15 @@ impl ProviderLifecycleManager {
         Ok(())
     }
 
-    pub async fn status(&self, provider: &Provider) -> ProviderLifecycleStatus {
+    pub async fn status(&self, provider: &Provider, check_latest: bool) -> ProviderLifecycleStatus {
         let Some(recipe) = RECIPES.iter().find(|item| item.id == provider.id.as_str()) else {
             let available = provider.is_available();
             return ProviderLifecycleStatus {
                 installed: available,
                 version: None,
+                latest_version: None,
+                update_available: None,
+                check_error: None,
                 install_supported: false,
                 upgrade_supported: false,
                 launch_mode: if available {
@@ -264,9 +281,26 @@ impl ProviderLifecycleManager {
             Some(path) => command_version(&path, recipe.version_args).await,
             None => None,
         };
+        let (latest_version, check_error) = if check_latest && installed && recipe.upgrade.is_some()
+        {
+            match latest_provider_version(recipe).await {
+                Ok(latest) => (Some(latest), None),
+                Err(error) => (None, Some(error)),
+            }
+        } else {
+            (None, None)
+        };
+        let update_available = match (&version, &latest_version) {
+            (Some(current), Some(latest)) => compare_provider_versions(latest, current)
+                .map(|ordering| ordering == Ordering::Greater),
+            _ => None,
+        };
         ProviderLifecycleStatus {
             installed,
             version,
+            latest_version,
+            update_available,
+            check_error,
             install_supported: !installed
                 && recipe
                     .install
@@ -317,7 +351,7 @@ impl ProviderLifecycleManager {
             .into_iter()
             .find(|provider| provider.id.as_str() == provider_id)
             .ok_or_else(|| format!("unknown provider {provider_id:?}"))?;
-        let status = self.status(&provider).await;
+        let status = self.status(&provider, false).await;
         match action {
             ProviderLifecycleAction::Install if status.installed => {
                 return Err(format!("{} is already installed", provider.display_name));
@@ -403,6 +437,113 @@ async fn command_version(executable: &Path, args: &[&str]) -> Option<String> {
     parse_provider_version(&combined)
 }
 
+async fn latest_provider_version(recipe: &ProviderRecipe) -> Result<String, String> {
+    let (program, args): (&str, Vec<&str>) = if recipe.id == "cursor" {
+        ("curl", vec!["-fsS", "https://cursor.com/install"])
+    } else {
+        let package = recipe
+            .latest_package
+            .ok_or_else(|| "provider has no latest-version source".to_string())?;
+        ("npm", vec!["view", package, "version", "--json"])
+    };
+    let executable = which(program).ok_or_else(|| format!("{program} is not available"))?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(10),
+        Command::new(executable)
+            .args(args)
+            .env("NPM_CONFIG_UPDATE_NOTIFIER", "false")
+            .output(),
+    )
+    .await
+    .map_err(|_| format!("{program} version check timed out"))?
+    .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "{program} version check exited with {}",
+            output.status
+        ));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    if recipe.id == "cursor" {
+        cursor_installer_version(&text)
+            .ok_or_else(|| "Cursor installer did not expose a version".to_string())
+    } else {
+        parse_provider_version(&text)
+            .ok_or_else(|| format!("{program} version check returned no version"))
+    }
+}
+
+fn cursor_installer_version(script: &str) -> Option<String> {
+    script.lines().find_map(|line| {
+        let (_, tail) = line.split_once("/cursor-agent/versions/")?;
+        let version = tail
+            .trim_matches(|character: char| {
+                matches!(character, '"' | '\'') || character.is_whitespace()
+            })
+            .split(['/', '"', '\'', '$'])
+            .next()?;
+        parse_provider_version(version)
+    })
+}
+
+fn compare_provider_versions(latest: &str, current: &str) -> Option<Ordering> {
+    let (latest_numbers, latest_prerelease) = comparable_version(latest)?;
+    let (current_numbers, current_prerelease) = comparable_version(current)?;
+    let width = latest_numbers.len().max(current_numbers.len());
+    let mut latest_numbers = latest_numbers;
+    let mut current_numbers = current_numbers;
+    latest_numbers.resize(width, 0);
+    current_numbers.resize(width, 0);
+    match latest_numbers.cmp(&current_numbers) {
+        Ordering::Equal => compare_prerelease(latest_prerelease, current_prerelease),
+        ordering => Some(ordering),
+    }
+}
+
+fn comparable_version(version: &str) -> Option<(Vec<u64>, Option<&str>)> {
+    let version = version.trim_start_matches('v').split('+').next()?;
+    let (release, prerelease) = match version.split_once('-') {
+        Some((release, prerelease)) => (release, Some(prerelease)),
+        None => (version, None),
+    };
+    let numbers = release
+        .split('.')
+        .map(str::parse::<u64>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    (!numbers.is_empty()).then_some((numbers, prerelease))
+}
+
+fn compare_prerelease(latest: Option<&str>, current: Option<&str>) -> Option<Ordering> {
+    match (latest, current) {
+        (None, None) => Some(Ordering::Equal),
+        (None, Some(_)) => Some(Ordering::Greater),
+        (Some(_), None) => Some(Ordering::Less),
+        (Some(latest), Some(current)) => {
+            let mut latest = latest.split('.');
+            let mut current = current.split('.');
+            loop {
+                match (latest.next(), current.next()) {
+                    (None, None) => return Some(Ordering::Equal),
+                    (None, Some(_)) => return Some(Ordering::Less),
+                    (Some(_), None) => return Some(Ordering::Greater),
+                    (Some(latest), Some(current)) => {
+                        let ordering = match (latest.parse::<u64>(), current.parse::<u64>()) {
+                            (Ok(latest), Ok(current)) => latest.cmp(&current),
+                            (Ok(_), Err(_)) => Ordering::Less,
+                            (Err(_), Ok(_)) => Ordering::Greater,
+                            (Err(_), Err(_)) => latest.cmp(current),
+                        };
+                        if ordering != Ordering::Equal {
+                            return Some(ordering);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn parse_provider_version(output: &str) -> Option<String> {
     output.split_whitespace().find_map(|token| {
         let token = token
@@ -473,6 +614,32 @@ mod tests {
     }
 
     #[test]
+    fn compares_provider_versions_without_treating_prereleases_as_stable() {
+        assert_eq!(
+            compare_provider_versions("1.7.0", "1.6.2"),
+            Some(Ordering::Greater)
+        );
+        assert_eq!(
+            compare_provider_versions("1.6.2", "1.6.2"),
+            Some(Ordering::Equal)
+        );
+        assert_eq!(
+            compare_provider_versions("2.0.0-beta.2", "2.0.0-beta.1"),
+            Some(Ordering::Greater)
+        );
+        assert_eq!(
+            compare_provider_versions("2.0.0-beta.1", "2.0.0"),
+            Some(Ordering::Less)
+        );
+    }
+
+    #[test]
+    fn reads_cursor_version_from_the_vendor_installer_url() {
+        let script = r#"download="https://downloads.cursor.com/cursor-agent/versions/2026.08.1/darwin-arm64/cursor-agent""#;
+        assert_eq!(cursor_installer_version(script), Some("2026.08.1".into()));
+    }
+
+    #[test]
     fn every_builtin_provider_has_a_reviewed_recipe() {
         let ids = crate::provider::default_registry()
             .into_iter()
@@ -480,6 +647,9 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(ids.len(), RECIPES.len());
         assert!(ids.iter().all(|id| recipe(id).is_ok()));
+        assert!(RECIPES
+            .iter()
+            .all(|recipe| recipe.id == "cursor" || recipe.latest_package.is_some()));
     }
 
     #[test]

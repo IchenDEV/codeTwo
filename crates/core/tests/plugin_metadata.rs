@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use codetwo_core::app::plugins::{builtin_registry, BUILTIN};
-use codetwo_kernel::{PluginCategory, PluginOrigin, PluginScopeSupport};
+use codetwo_core::app::plugins::{builtin_registry, BUILTIN, CORE};
+use codetwo_kernel::{PluginCategory, PluginOrigin, PluginRole, PluginScopeSupport};
 
 #[test]
 fn builtins_have_complete_catalog_metadata() {
@@ -69,6 +69,15 @@ fn builtins_have_complete_catalog_metadata() {
     for name in BUILTIN {
         let metadata = &registry.get(name).expect("built-in factory").metadata;
         assert_eq!(metadata.origin, PluginOrigin::BuiltIn, "{name}");
+        assert_eq!(
+            metadata.role,
+            if CORE.contains(name) {
+                PluginRole::Core
+            } else {
+                PluginRole::BuiltIn
+            },
+            "{name}"
+        );
         assert!(metadata.default_enabled, "{name}");
         assert_eq!(metadata.essential, *name == "kernel", "{name}");
         assert_ne!(metadata.category, PluginCategory::Other, "{name}");

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save } from "@/components/ui/icons";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

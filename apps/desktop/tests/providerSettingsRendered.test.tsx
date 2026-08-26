@@ -113,6 +113,9 @@ describe("Provider settings capabilities", () => {
               management: {
                 installed: false,
                 version: null,
+                latest_version: null,
+                update_available: null,
+                check_error: null,
                 install_supported: true,
                 upgrade_supported: false,
                 launch_mode: "on_demand",
@@ -129,6 +132,28 @@ describe("Provider settings capabilities", () => {
               management: {
                 installed: true,
                 version: "1.0.5",
+                latest_version: "1.1.0",
+                update_available: true,
+                check_error: null,
+                install_supported: false,
+                upgrade_supported: true,
+                launch_mode: "installed",
+              },
+            },
+            {
+              id: "opencode",
+              display_name: "OpenCode",
+              available: true,
+              enabled: true,
+              needs_node: false,
+              models: [],
+              capabilities: [],
+              management: {
+                installed: true,
+                version: "2.0.0",
+                latest_version: "2.0.0",
+                update_available: false,
+                check_error: null,
                 install_supported: false,
                 upgrade_supported: true,
                 launch_mode: "installed",
@@ -165,6 +190,11 @@ describe("Provider settings capabilities", () => {
 
     expect(view.container.textContent).toContain("Ready on demand");
     expect(view.container.textContent).toContain("v1.0.5");
+    expect(view.container.textContent).toContain("Update to v1.1.0");
+    expect(view.container.querySelector('[data-provider-action="codex:upgrade"]')).toBeNull();
+    expect(view.container.querySelector('[data-provider-action="grok:install"]')).toBeNull();
+    expect(view.container.querySelector('[data-provider-action="opencode:install"]')).toBeNull();
+    expect(view.container.querySelector('[data-provider-action="opencode:upgrade"]')).toBeNull();
 
     view.container.querySelector('[data-provider-action="codex:install"]')?.click();
     await flush();
@@ -176,6 +206,7 @@ describe("Provider settings capabilities", () => {
     await flush();
 
     expect(actions).toEqual([
+      "refresh",
       "install:codex",
       "refresh",
       "upgrade:grok",

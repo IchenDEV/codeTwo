@@ -192,11 +192,16 @@ advisory hints forwarded to providers that support tool gating; ignored elsewher
 
 ## Auto Scene
 
-Auto Scene is an explicit per-session mode. When enabled, the host gives the Agent the resolved
-scene catalog and a bounded `scene_select` tool. With no active scene, the Agent selects one before
-substantive work. On later turns it may keep the current scene or switch when the task changes.
-The selected scene remains visible in the composer as `Auto · <scene>`; the session stores both
-the Auto flag and the concrete active scene independently.
+Auto Scene is an explicit per-session mode. When enabled, the host gives the Agent a short routing
+instruction plus bounded `scene_list` and `scene_select` tools. The resolved catalog is not injected
+into every prompt: the Agent queries compact candidates on demand, then selects one before
+substantive work when no scene is active or a better scene fits. The selected scene remains visible
+in the composer as `Auto · <scene>`; the session stores both the Auto flag and the concrete active
+scene independently.
+
+`scene_list` accepts an optional short task query and returns at most 50 installed references with
+their title and bounded description. It never returns scene instructions; those are loaded only by
+`scene_select` after the host validates the exact installed reference.
 
 `scene_select` accepts only an installed scene reference and a short user-visible reason. A
 successful call soft-applies that scene and returns its prompt preamble so the Agent follows the
@@ -252,9 +257,10 @@ transition history — all persisted with the project.
 
 ## UI contract (summary)
 
-- The composer's posture chips (provider/model/effort/permission/memory/Plan First) collapse
-  behind one **scene chip**; opening it still exposes the individual controls, and manual
-  overrides mark the chip "customized" without mutating the scene definition.
+- The composer keeps scene selection and the session-scoped configuration controls in one visible,
+  wrapping row. The **scene chip** opens only scene selection; provider/model/effort/permission/
+  memory/worktree remain directly reachable, and manual overrides mark the scene chip
+  "customized" without mutating the scene definition.
 - **Shift+Tab** cycles scenes (project-configurable ring); the full picker lists all resolved
   scenes with source badges.
 - Completion banner and stage suggestions as specified under `exit`.
@@ -289,7 +295,7 @@ transition history — all persisted with the project.
 
 `packs/office-starter/` (in this repository) is the first office-domain scene pack: incident
 retrospective, release notes, and tech design review scenes plus the `office-delivery` pipeline.
-Install it like any plugin — point the PluginHub GitHub install at this repository's
+Install it like any plugin — point the Plugins page GitHub installer at this repository's
 `packs/office-starter` path, or copy the directory into your plugins dir — and its scenes appear
 as `office-starter:scene:<name>` alongside the builtins. Packs are pure data: installing one
 never runs anything.

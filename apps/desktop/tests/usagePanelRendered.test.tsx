@@ -144,6 +144,8 @@ describe("UsagePanel", () => {
       "Grok",
       "Claude Code",
     ]);
+    expect(items[0]?.firstElementChild?.className).toContain("flex");
+    expect(items[0]?.firstElementChild?.className).toContain("items-center");
     await selectItem(items.find((item) => item.textContent?.trim() === "Grok"));
 
     await waitFor(() => {

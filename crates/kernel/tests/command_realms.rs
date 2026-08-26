@@ -1,6 +1,8 @@
 //! Command-realm behaviour tests. These exercise only the public kernel surface used by hosts.
 
-use codetwo_kernel::{App, CommandRealm, Context, FnPlugin, Plugin};
+use codetwo_kernel::{
+    App, CommandRealm, CommandVisibility, Context, FnPlugin, KernelError, Plugin,
+};
 use serde_json::{json, Value};
 
 fn responding_plugin(
@@ -167,4 +169,114 @@ async fn command_and_scope_introspection_include_their_realms() {
         .find(|scope| scope.plugin == "alpha-workspace")
         .unwrap();
     assert_eq!(scope.command_realm, project_realm);
+}
+
+#[tokio::test]
+async fn extension_process_calls_are_default_deny_and_explicitly_published() {
+    let app = App::new();
+    app.ctx().plugin(
+        FnPlugin::new("commands", |ctx: Context, _| async move {
+            ctx.command("commands.internal", |_| async { Ok(json!("internal")) })?;
+            ctx.command_extension_public("commands.public", |_| async { Ok(json!("public")) })?;
+            Ok(())
+        }),
+        Value::Null,
+    );
+    app.flush().await;
+
+    assert_eq!(
+        app.ctx()
+            .call("commands.internal", Value::Null)
+            .await
+            .unwrap(),
+        "internal",
+        "trusted host calls keep their existing command surface"
+    );
+    assert!(matches!(
+        app.ctx()
+            .call_extension_public("commands.internal", Value::Null)
+            .await,
+        Err(KernelError::CommandNotExtensionPublic(name)) if name == "commands.internal"
+    ));
+    assert_eq!(
+        app.ctx()
+            .call_extension_public("commands.public", Value::Null)
+            .await
+            .unwrap(),
+        "public"
+    );
+
+    let commands = app.runtime().commands();
+    assert_eq!(
+        commands
+            .iter()
+            .find(|command| command.name == "commands.internal")
+            .unwrap()
+            .visibility,
+        CommandVisibility::Internal
+    );
+    assert_eq!(
+        commands
+            .iter()
+            .find(|command| command.name == "commands.public")
+            .unwrap()
+            .visibility,
+        CommandVisibility::ExtensionPublic
+    );
+    assert_eq!(
+        app.ctx()
+            .extension_public_commands()
+            .into_iter()
+            .map(|command| command.name)
+            .collect::<Vec<_>>(),
+        ["commands.public"]
+    );
+}
+
+#[tokio::test]
+async fn an_internal_project_command_does_not_reexpose_a_public_global_fallback() {
+    let app = App::new();
+    let global = app.ctx();
+    let project = global.with_command_realm(CommandRealm::project("/projects/alpha"));
+
+    global.plugin(
+        FnPlugin::new("global", |ctx: Context, _| async move {
+            ctx.command_extension_public("workspace.describe", |_| async { Ok(json!("global")) })?;
+            Ok(())
+        }),
+        Value::Null,
+    );
+    project.plugin(
+        FnPlugin::new("project", |ctx: Context, _| async move {
+            ctx.command("workspace.describe", |_| async { Ok(json!("project")) })?;
+            Ok(())
+        }),
+        Value::Null,
+    );
+    app.flush().await;
+
+    assert_eq!(
+        project
+            .call("workspace.describe", Value::Null)
+            .await
+            .unwrap(),
+        "project"
+    );
+    assert!(matches!(
+        project
+            .call_extension_public("workspace.describe", Value::Null)
+            .await,
+        Err(KernelError::CommandNotExtensionPublic(name)) if name == "workspace.describe"
+    ));
+    assert!(!project
+        .extension_public_commands()
+        .iter()
+        .any(|command| command.name == "workspace.describe"));
+    assert_eq!(
+        global
+            .call_extension_public("workspace.describe", Value::Null)
+            .await
+            .unwrap(),
+        "global"
+    );
 }

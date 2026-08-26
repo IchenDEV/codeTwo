@@ -344,6 +344,7 @@ export const SessionMentionInline = createReactInlineContentSpec(
     propSchema: {
       sessionId: { default: "" },
       title: { default: "" },
+      throughSeq: { default: 0 },
     },
     content: "none",
   } as const,
@@ -830,8 +831,15 @@ export function docToBlocks(editor: CodeTwoEditor): DocBlock[] {
           out.push(workspaceReferenceBlock(props.path));
         } else if (inline.type === "sessionMention") {
           flush();
-          const props = inline.props as { sessionId: string };
-          out.push({ type: "session", session_id: props.sessionId });
+          const props = inline.props as { sessionId: string; throughSeq?: number };
+          const throughSeq = Number(props.throughSeq ?? 0);
+          out.push({
+            type: "session",
+            session_id: props.sessionId,
+            ...(Number.isSafeInteger(throughSeq) && throughSeq > 0
+              ? { through_seq: throughSeq }
+              : {}),
+          });
         } else if (inline.type === "artifactMention") {
           flush();
           const props = inline.props as { artifactId: string };

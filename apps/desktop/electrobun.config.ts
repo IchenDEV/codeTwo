@@ -40,7 +40,7 @@ export default {
       notarize: process.env.ELECTROBUN_NOTARIZE === "1",
       bundleCEF: false,
       defaultRenderer: "native",
-      icons: "assets/codeTwo.icon",
+      icons: "assets/codeTwo.iconset",
       entitlements: {
         "com.apple.security.device.audio-input": true,
         "com.apple.security.personal-information.speech-recognition": true,

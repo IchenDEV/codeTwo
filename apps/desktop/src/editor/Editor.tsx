@@ -9,7 +9,7 @@ import {
 } from "@blocknote/react";
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
-import { Bot, Server, Sparkles } from "lucide-react";
+import { Bot, Server, Sparkles } from "@/components/ui/icons";
 import {
   CanvasBlockRuntimeContext,
   canvasBlockPropsFromDraft,
@@ -53,6 +53,12 @@ interface EditorProps {
   insertAnnotationRef: MutableRefObject<((a: Annotation, context: string) => void) | null>;
   // App inserts `@file` mentions (from the file browser) through this.
   insertFileRef: MutableRefObject<((path: string) => void) | null>;
+  // A transcript branch prepends a bounded past-chat mention to the new task draft.
+  insertSessionRef?: MutableRefObject<((session: {
+    id: string;
+    title: string;
+    throughSeq: number;
+  }) => void) | null>;
   // App focuses the document (Mod+E) and opens the `/` picker (Mod+/) through these.
   focusRef: MutableRefObject<(() => void) | null>;
   // App empties the document after a successful send.
@@ -270,6 +276,7 @@ export function DocEditor({
   insertTextRef,
   insertAnnotationRef,
   insertFileRef,
+  insertSessionRef,
   focusRef,
   clearRef,
   insertMarkdownRef,
@@ -385,7 +392,13 @@ export function DocEditor({
         case "session":
           return {
             type: "paragraph",
-            content: [{ type: "sessionMention", props: { sessionId: block.session_id } }, " "],
+            content: [{
+              type: "sessionMention",
+              props: {
+                sessionId: block.session_id,
+                throughSeq: block.through_seq ?? 0,
+              },
+            }, " "],
           };
         case "issue":
           // Rebuild the embedded context the same way the core compile arm does (state "open"),
@@ -512,7 +525,7 @@ export function DocEditor({
     // Composer's Run-row hint listens for this (same window-event seam as the provider picker):
     // required slot-card fields without a value or default — a warning, never a send block.
     const unfilled = unfilledRequiredSlots(editor);
-    const key = unfilled.join(" ");
+    const key = unfilled.join("");
     if (key !== lastRequiredKey.current) {
       lastRequiredKey.current = key;
       window.dispatchEvent(new CustomEvent("codetwo-required-slots", { detail: unfilled }));
@@ -553,6 +566,23 @@ export function DocEditor({
     };
     insertFileRef.current = (path: string) => {
       editor.insertInlineContent([{ type: "fileMention", props: { path } }, " "]);
+    };
+    if (insertSessionRef) insertSessionRef.current = ({ id, title, throughSeq }) => {
+      const first = editor.document[0];
+      if (!first) return;
+      editor.insertBlocks(
+        [{
+          type: "paragraph",
+          content: [{
+            type: "sessionMention",
+            props: { sessionId: id, title, throughSeq },
+          }, " "],
+        }],
+        first,
+        "before",
+      );
+      onEmptyChange(false);
+      editor.focus();
     };
     focusRef.current = () => editor.focus();
     clearRef.current = () => {
@@ -673,6 +703,7 @@ export function DocEditor({
       insertTextRef.current = null;
       insertAnnotationRef.current = null;
       insertFileRef.current = null;
+      if (insertSessionRef) insertSessionRef.current = null;
       focusRef.current = null;
       clearRef.current = null;
       if (insertMarkdownRef) insertMarkdownRef.current = null;
@@ -685,7 +716,7 @@ export function DocEditor({
       restoreCanvasDocumentRef.current = null;
       freezeCanvasesRef.current = null;
     };
-  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
+  }, [canvasEnabled, createCanvas, editor, editorCanvasRuntime, freezeCanvasesRef, getBlocksRef, insertAnnotationRef, insertBriefRef, insertCanvasDraft, insertCanvasDraftRef, insertCanvasRef, insertIssueRef, restoreCanvasDocument, restoreCanvasDocumentRef, insertFileRef, insertSessionRef, insertMarkdownRef, focusRef, clearRef, openSkillPickerRef, insertSkillRef, onEmptyChange]);
 
   useEffect(() => {
     observeDocument();
@@ -739,49 +770,52 @@ export function DocEditor({
           theme={scheme}
           onChange={observeDocument}
         >
-          <SuggestionMenuController
-            triggerCharacter={"/"}
-            getItems={async (query) =>
-              filterSuggestionItems(
-                [
-                  ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
-                  ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
-                  // Prompt images use the Composer's private attachment intake. Keep BlockNote's
-                  // unrelated media placeholders out of the slash menu; use `@` for workspace files.
-                  ...getDefaultReactSlashMenuItems(editor).filter(
-                    (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
-                  ),
-                ],
-                query,
-              )
-            }
-          />
-          {/* `@` mentions workspace files and past chats — file contents and chat transcripts are
-              inlined into the compiled prompt. */}
-          {/* The type argument is explicit because the controller infers its item type from `getItems`,
-              and an inline lambda lets it fall back to BlockNote's default item instead. */}
-          <SuggestionMenuController<typeof getAtItems>
-            triggerCharacter={"@"}
-            getItems={getAtItems}
-            suggestionMenuComponent={FileMenu}
-            onItemClick={(item) => {
-              editor.insertInlineContent([
-                item.kind === "chat"
-                  ? { type: "sessionMention", props: { sessionId: item.id, title: item.title } }
-                  : item.kind === "artifact"
-                    ? {
-                        type: "artifactMention",
-                        props: {
-                          artifactId: String(item.recordId),
-                          title: item.title,
-                          kind: item.artifactKind,
-                        },
-                      }
-                    : { type: "fileMention", props: { path: item.path } },
-                " ",
-              ]);
-            }}
-          />
+        <SuggestionMenuController
+          triggerCharacter={"/"}
+          getItems={async (query) =>
+            filterSuggestionItems(
+              [
+                ...sceneSkillItems(editor, skills, sceneSkills, showAllSkillsRef),
+                ...(canvasEnabled ? [canvasSlashItem(() => insertCanvasRef.current?.() ?? Promise.resolve())] : []),
+                // Prompt images use the Composer's private attachment intake. Keep BlockNote's
+                // unrelated media placeholders out of the slash menu; use `@` for workspace files.
+                ...getDefaultReactSlashMenuItems(editor).filter(
+                  (i) => !["Image", "Video", "Audio", "File"].includes(i.title),
+                ),
+              ],
+              query,
+            )
+          }
+        />
+        {/* `@` mentions workspace files and past chats — file contents and chat transcripts are
+            inlined into the compiled prompt. */}
+        {/* The type argument is explicit because the controller infers its item type from `getItems`,
+            and an inline lambda lets it fall back to BlockNote's default item instead. */}
+        <SuggestionMenuController<typeof getAtItems>
+          triggerCharacter={"@"}
+          getItems={getAtItems}
+          suggestionMenuComponent={FileMenu}
+          onItemClick={(item) => {
+            editor.insertInlineContent([
+              item.kind === "chat"
+                ? {
+                    type: "sessionMention",
+                    props: { sessionId: item.id, title: item.title, throughSeq: 0 },
+                  }
+                : item.kind === "artifact"
+                  ? {
+                      type: "artifactMention",
+                      props: {
+                        artifactId: String(item.recordId),
+                        title: item.title,
+                        kind: item.artifactKind,
+                      },
+                    }
+                  : { type: "fileMention", props: { path: item.path } },
+              " ",
+            ]);
+          }}
+        />
         </BlockNoteView>
       </CanvasBlockRuntimeContext.Provider>
     </div>

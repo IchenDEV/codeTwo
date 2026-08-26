@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Activity,
   CornerUpLeft,
   FileText,
   FolderTree,
   GitBranch,
   Globe,
+  MessageSquare,
   Plus,
   TerminalIcon,
   X,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { BrowserPanel } from "../browser/Browser";
 import { TerminalPanel } from "../terminal/Terminal";
 import { FilePanel } from "../files/FilePanel";
@@ -21,16 +23,19 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useResizeHandle } from "@/components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
+import { TrajectoryView } from "../session/TrajectoryView";
+import type { Turn } from "../session/turns";
 
-export type DockSurface = "terminal" | "browser" | "files" | "git";
+export type DockSurface = "trajectory" | "terminal" | "browser" | "files" | "git";
 /** "home" is the dock open with nothing chosen yet — the surface picker. */
 export type DockTab = DockSurface | "home";
-export type DockPlacement = "right" | "bottom";
 
 /** The picker's cards, in the order a coding session tends to want them. */
 const SURFACES: { id: DockSurface; icon: typeof Globe; titleKey: StringKey; descKey: StringKey }[] = [
+  { id: "trajectory", icon: Activity, titleKey: "trajectory.label", descKey: "dock.trajectoryDesc" },
   { id: "browser", icon: Globe, titleKey: "dock.browser", descKey: "dock.browserDesc" },
   { id: "terminal", icon: TerminalIcon, titleKey: "dock.terminal", descKey: "dock.terminalDesc" },
   { id: "files", icon: FolderTree, titleKey: "dock.files", descKey: "dock.filesDesc" },
@@ -54,15 +59,12 @@ function tabLabel(title: string | undefined, slot: number): string {
   return title.split("/").filter(Boolean).pop() ?? title;
 }
 
-/**
- * A dock that can sit beside the document or below it. C2 uses the bottom placement for the
- * terminal and the right placement for browser/files/source-control surfaces. Keeping both modes
- * in one component preserves terminal sessions, tabs, and resize behavior across placements.
- */
+/** The right-side work dock shared by trajectory, terminal, browser, files, and source control. */
 export function Dock({
   open,
   tab,
   onTab,
+  onOpenSideChat,
   onClose,
   cwd,
   projectPath,
@@ -81,14 +83,16 @@ export function Dock({
   fileReveal,
   onActiveFile,
   onCloseFile,
-  placement = "right",
+  turns,
+  usage,
+  hasEarlier,
+  loadingEarlier,
+  onLoadEarlier,
   width,
   onWidth,
-  height = 280,
-  onHeight = () => {},
   autoTab,
   highlightFile,
-  availableSurfaces = ["browser", "terminal", "files", "git"],
+  availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
 }: {
   /** Whether the dock is expanded. It stays mounted while closed so shells survive and the
       collapse can actually animate — unmounting was why closing used to just blink away. */
@@ -96,6 +100,8 @@ export function Dock({
   /** null while closed; the last surface stays rendered underneath the collapse animation. */
   tab: DockTab | null;
   onTab: (t: DockSurface) => void;
+  /** Opens the app-lifetime side chat from the right-panel surface picker. */
+  onOpenSideChat?: () => void;
   onClose: () => void;
   cwd: string | null;
   /** Source project identity; distinct from `cwd` for isolated worktree sessions. */
@@ -119,14 +125,15 @@ export function Dock({
   fileReveal: FileRevealTarget | null;
   onActiveFile: (path: string) => void;
   onCloseFile: (path: string) => void;
-  /** The terminal uses a bottom panel; the remaining work surfaces stay in the right panel. */
-  placement?: DockPlacement;
+  /** Session execution data rendered as a module inside the right work dock. */
+  turns: readonly Turn[];
+  usage: { input_tokens: number; output_tokens: number } | null;
+  hasEarlier: boolean;
+  loadingEarlier: boolean;
+  onLoadEarlier: () => void;
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
-  /** Bottom-panel height in px — dragged by the top-edge grip, persisted by the caller. */
-  height?: number;
-  onHeight?: (n: number) => void;
   /** R10 dock follow: the surface the agent is working on right now — its tab gets a subtle
       primary pulse, never a forced switch. */
   autoTab?: DockSurface | null;
@@ -187,15 +194,11 @@ export function Dock({
     return () => window.clearTimeout(id);
   }, [open]);
 
-  const bottom = placement === "bottom";
-  // Never let either placement squeeze the document below a usable measure. Persist the preferred
-  // dimension, but clamp only what is applied so it returns in full on a larger window.
+  // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
+  // but clamp only what is applied so it returns in full on a larger window.
   const maxForPlacement = useCallback(
-    () =>
-      bottom
-        ? Math.max(180, window.innerHeight - 320)
-        : Math.max(300, window.innerWidth - 620),
-    [bottom],
+    () => Math.max(300, window.innerWidth - 620),
+    [],
   );
   const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
@@ -204,7 +207,7 @@ export function Dock({
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [maxForPlacement]);
-  const applied = Math.min(bottom ? height : width, maxSize);
+  const applied = Math.min(width, maxSize);
 
   // A drag must track the pointer 1:1. The open/close width transition below would ease every
   // intermediate width instead, so the edge lags the cursor and then keeps travelling after the
@@ -214,53 +217,53 @@ export function Dock({
   // anything we write in the components layer regardless of specificity.
   const [dragging, setDragging] = useState(false);
 
-  const startDrag = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      const startPointer = bottom ? e.clientY : e.clientX;
-      const startSize = applied;
-      const onMove = (ev: MouseEvent) => {
-        const pointer = bottom ? ev.clientY : ev.clientX;
-        const minimum = bottom ? 180 : 300;
-        const next = Math.round(
-          Math.min(
-            maxForPlacement(),
-            Math.max(minimum, startSize + (startPointer - pointer)),
-          ),
-        );
-        if (bottom) onHeight(next);
-        else onWidth(next);
-      };
-      const onUp = () => {
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-        document.body.classList.remove(bottom ? "resizing-v" : "resizing-h");
-        setDragging(false);
-        window.dispatchEvent(new Event("resize"));
-      };
-      document.body.classList.add(bottom ? "resizing-v" : "resizing-h");
+  const resizeHandle = useResizeHandle({
+    axis: "x",
+    direction: -1,
+    value: applied,
+    min: 300,
+    max: maxSize,
+    disabled: !open,
+    onStart: () => {
       setDragging(true);
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
     },
-    [applied, bottom, maxForPlacement, onHeight, onWidth],
+    onResize: onWidth,
+    onEnd: () => {
+      setDragging(false);
+      window.dispatchEvent(new Event("resize"));
+    },
+  });
+
+  const renderSurfaceCard = ({ id, icon: Icon, titleKey, descKey }: (typeof SURFACES)[number]) => (
+    <button
+      key={id}
+      onClick={() => onTab(id)}
+      className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+    >
+      <Icon className="size-5 text-muted-foreground" />
+      <span>
+        <span className="block text-ui font-semibold">{t(titleKey)}</span>
+        <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
+          {t(descKey)}
+        </span>
+      </span>
+    </button>
   );
 
   return (
     <aside
-      data-dock-placement={placement}
+      data-dock-placement="right"
       aria-hidden={!open}
       onTransitionEnd={(e) => {
         // Terminals and iframes fit themselves to their box — refit once the sweep lands.
         if (
           e.target === e.currentTarget &&
-          e.propertyName === (bottom ? "height" : "width")
+          e.propertyName === "width"
         )
           window.dispatchEvent(new Event("resize"));
       }}
       className={cn(
-        "glass-panel dock-panel relative flex shrink-0 flex-col overflow-hidden",
-        bottom ? "dock-panel-bottom w-full" : "dock-panel-side border-l",
+        "glass-panel dock-panel dock-panel-side relative flex shrink-0 flex-col overflow-hidden border-l",
         // The open/close sweep. Animating the real width moves the document column in the same
         // motion — the old mount-time slide left the layout to snap, which read as an animation
         // cut off halfway. It belongs to open/close only: while the grip is held, the width is the
@@ -268,23 +271,20 @@ export function Dock({
         dragging && "dock-panel-dragging",
         gone && "invisible",
       )}
-      style={
-        bottom
-          ? { height: open ? applied : 0 }
-          : { width: open ? applied : 0 }
-      }
+      style={{ width: open ? applied : 0 }}
     >
       <div
-        data-dock-resize={bottom ? "vertical" : "horizontal"}
-        className={bottom ? "dock-grip-bottom" : "dock-grip"}
-        onMouseDown={startDrag}
+        data-dock-resize="horizontal"
+        className="dock-grip"
+        aria-label={t("dock.resize")}
         title={t("dock.resize")}
+        {...resizeHandle}
       />
 
       {/* Pin the animated dimension so panel content does not reflow while it sweeps. */}
       <div
         className="flex min-h-0 flex-1 flex-col"
-        style={bottom ? { height: applied } : { width: applied }}
+        style={{ width: applied }}
       >
         {shown === "home" ? (
         <>
@@ -306,21 +306,24 @@ export function Dock({
                 {t("dock.openSurfaceHint")}
               </p>
               <div className="mt-6 grid grid-cols-2 gap-3">
-                {visibleSurfaces.map(({ id, icon: Icon, titleKey, descKey }) => (
+                {visibleSurfaces.slice(0, 3).map(renderSurfaceCard)}
+                {onOpenSideChat ? (
                   <button
-                    key={id}
-                    onClick={() => onTab(id)}
-                    className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+                    type="button"
+                    aria-label={t("sideChat.title")}
+                    onClick={onOpenSideChat}
+                    className="flex flex-col items-start gap-2.5 rounded-(--ds-radius-module) bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
                   >
-                    <Icon className="size-5 text-muted-foreground" />
+                    <MessageSquare className="size-5 text-muted-foreground" aria-hidden />
                     <span>
-                      <span className="block text-ui font-semibold">{t(titleKey)}</span>
+                      <span className="block text-ui font-semibold">{t("sideChat.title")}</span>
                       <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
-                        {t(descKey)}
+                        {t("sideChat.temporary")}
                       </span>
                     </span>
                   </button>
-                ))}
+                ) : null}
+                {visibleSurfaces.slice(3).map(renderSurfaceCard)}
               </div>
             </div>
           </div>
@@ -339,9 +342,10 @@ export function Dock({
               <TabsTrigger
                 key={id}
                 value={id}
-                title={autoTab === id ? t("dockFollow.auto") : undefined}
+                title={autoTab === id ? `${t(titleKey)} · ${t("dockFollow.auto")}` : t(titleKey)}
               >
-                <Icon className="size-3.5" /> {t(titleKey)}
+                <Icon className="size-3.5" />
+                <span className="dock-tab-label">{t(titleKey)}</span>
                 {autoTab === id && (
                   <span className="size-1.5 animate-pulse rounded-full bg-primary" />
                 )}
@@ -353,6 +357,18 @@ export function Dock({
             <X className="size-3.5" />
           </Button>
         </div>
+
+        {availableSurfaceSet.has("trajectory") && (
+          <TabsContent value="trajectory" className="m-0 flex min-h-0 flex-1">
+            <TrajectoryView
+              turns={turns}
+              usage={usage}
+              hasEarlier={hasEarlier}
+              loadingEarlier={loadingEarlier}
+              onLoadEarlier={onLoadEarlier}
+            />
+          </TabsContent>
+        )}
 
         {/* Terminal — all instances stay mounted so switching tabs doesn't kill a shell. The strip
             is the same h-9 bordered bar as the files tabs; the emulator below follows the app's

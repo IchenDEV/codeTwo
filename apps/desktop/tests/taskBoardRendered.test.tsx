@@ -147,6 +147,14 @@ function menuItem(label) {
 }
 
 describe("TaskBoardPage rendered", () => {
+  test("renders the sidebar recovery action supplied by the persistent shell", async () => {
+    const view = await renderBoard({
+      headerLeadingAction: <button aria-label="展开侧栏" />,
+    })
+
+    expect(view.container.querySelector('button[aria-label="展开侧栏"]')).not.toBeNull()
+  })
+
   test("renders the full four-column task board with semantic counts", async () => {
     const view = await renderBoard()
 
@@ -163,8 +171,8 @@ describe("TaskBoardPage rendered", () => {
     expect(title?.className).toContain("tracking-tight")
     expect(description?.className).toContain("mt-2")
     expect(description?.className).toContain("text-ui")
-    expect(header?.className).toContain("pt-10")
-    expect(header?.className).toContain("sm:pt-14")
+    expect(header?.className).toContain("pt-6")
+    expect(header?.className).not.toContain("sm:pt-")
     expect(content?.className).toContain("px-6")
     expect(content?.className).toContain("max-w-4xl")
     expect(content?.className).toContain("sm:px-8")

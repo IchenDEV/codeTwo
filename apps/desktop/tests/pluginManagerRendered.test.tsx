@@ -76,22 +76,55 @@ const plugins = [
         { id: "skills", label: "Skills", count: 2 },
       ],
       diagnostics: [{ level: "warning", message: "Trust before running." }],
+      scaffolds: [],
     },
   },
 ];
 
 const components = [
   {
-    id: "memory:composer-action",
+    id: "skill:docs-search",
     pluginId: "memory",
     pluginName: "Memory",
-    name: "Memory composer action",
-    description: "Adds memory context from the composer.",
-    kind: "composerAction",
-    slot: "composer.actions",
+    policyPluginId: "memory",
+    name: "docs-search",
+    description: "Search the project documentation through MCP.",
+    kind: "mcp",
     source: "builtin",
     supportedScopes: ["user", "project"],
-    state: { effectiveEnabled: true, override: "inherit", status: "active" },
+    manageable: true,
+    state: { effectiveEnabled: true, status: "active" },
+    skill: { id: "docs-search", removable: false },
+  },
+  {
+    id: "skill:release-review",
+    pluginId: "review-tools",
+    pluginName: "Review Tools",
+    policyPluginId: "memory",
+    name: "Release review",
+    description: "Review a release before deployment.",
+    kind: "agent_skill",
+    source: "bundle",
+    sourceLabel: "Bundle · Review Tools",
+    supportedScopes: ["user", "project"],
+    manageable: true,
+    state: { effectiveEnabled: true, status: "active" },
+    skill: { id: "release-review", removable: false },
+  },
+  {
+    id: "review-tools:hook:session",
+    pluginId: "review-tools",
+    pluginName: "Review Tools",
+    name: "session",
+    description: "hooks/hooks.json",
+    kind: "hook",
+    slot: "hooks/hooks.json",
+    source: "bundle",
+    sourceLabel: "Bundle · Review Tools",
+    supportedScopes: ["user"],
+    manageable: false,
+    availability: "unsupported",
+    state: { effectiveEnabled: true, status: "unsupported" },
   },
 ];
 
@@ -121,6 +154,8 @@ function renderManager(overrides = {}) {
     bundleEnabled: [],
     bundleTrust: [],
     uninstalls: [],
+    scaffolds: [],
+    marketplaceOpens: [],
   };
   const view = mount(
     <PluginManagerPage
@@ -151,6 +186,11 @@ function renderManager(overrides = {}) {
       onSetBundleEnabled={async (pluginId, enabled) => calls.bundleEnabled.push({ pluginId, enabled })}
       onSetBundleTrusted={async (pluginId, trusted) => calls.bundleTrust.push({ pluginId, trusted })}
       onUninstallBundle={async (pluginId, keepData) => calls.uninstalls.push({ pluginId, keepData })}
+      onApplyScaffold={async (pluginId, scaffoldId) => {
+        calls.scaffolds.push({ pluginId, scaffoldId });
+        return { files: 2 };
+      }}
+      onOpenMarketplace={async () => calls.marketplaceOpens.push(true)}
       {...overrides}
     />,
   );
@@ -303,6 +343,13 @@ describe("PluginManagerPage", () => {
       expect(action).not.toBeNull();
     }
 
+    const railAction = view.container.querySelector(
+      '[data-plugin-ui-slot="rail.features"] button',
+    );
+    expect(railAction?.className).toContain("h-(--ds-control-normal)");
+    expect(railAction?.className).toContain("text-ui");
+    expect(railAction?.className).toContain("text-foreground/75");
+
     const toolbar = view.container.querySelector('[data-plugin-ui-slot="composer.toolbar"]');
     click(toolbar.querySelector('button[aria-label="Review Tools: Action 4"]'));
     await flush();
@@ -311,22 +358,24 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
-  test("renders one scoped manager for built-in, host, bundle, component, and marketplace data", async () => {
+  test("renders one scoped manager for built-in, host, bundle, and marketplace data", async () => {
     activateDom();
     const { view } = renderManager();
     await flush();
 
     expect(view.container.querySelector("[data-plugin-manager-page]")?.tagName).toBe("MAIN");
-    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(3);
-    expect(view.container.querySelector('[data-slot="tabs"]')?.classList.contains("flex-col")).toBe(true);
-    expect(view.container.querySelector('[data-slot="tabs-list"]')?.classList.contains("w-full")).toBe(true);
+    expect(view.container.querySelector("header")?.querySelectorAll('[role="tab"]')).toHaveLength(5);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
+    expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
+    expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
+    expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("@3xl/plugin-manager:w-72")).toBe(true);
-    expect(view.container.querySelector("[data-plugin-details]")?.parentElement?.classList.contains("@3xl/plugin-manager:sticky")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
+    expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
-    expect(view.container.textContent).toContain("Built-in");
-    expect(view.container.textContent).toContain("Desktop host");
+    expect(view.container.textContent).toContain("Built-in feature");
+    expect(view.container.textContent).toContain("Host feature");
     expect(view.container.textContent).toContain("Bundle · Review Tools");
     expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("User");
     expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("MemoryCapability");
@@ -334,15 +383,52 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
     expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
     expect(button(view.container, "Install from GitHub")).not.toBeNull();
+    expect(button(view.container, "MCPs 1")).not.toBeNull();
+    expect(button(view.container, "Skills 1")).not.toBeNull();
+    expect(button(view.container, "Hooks 1")).not.toBeNull();
 
-    click(button(view.container, "Components 1"));
+    click(button(view.container, "MCPs 1"));
     await flush();
-    expect(view.container.querySelector("[data-component-details]")?.textContent).toContain("composer.actions");
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("docs-search");
+    expect(view.container.querySelector("[data-plugin-manager-search]")?.getAttribute("placeholder"))
+      .toBe("Search MCP servers…");
 
     click(button(view.container, "Marketplace 1"));
     await flush();
     expect(view.container.textContent).toContain("Release Review");
     expect(button(view.container, "Install")).not.toBeNull();
+
+    view.unmount();
+  });
+
+  test("manages MCP and skill policy while routing hook management to its plugin", async () => {
+    activateDom();
+    const { view, calls } = renderManager();
+    await flush();
+
+    click(button(view.container, "MCPs 1"));
+    await flush();
+    click(view.container.ownerDocument.getElementById("component-state-skill:docs-search"));
+    await flush();
+    expect(calls.planned[0]).toMatchObject({
+      targetKind: "component",
+      targetId: "skill:docs-search",
+      desiredState: "disabled",
+      scope: { kind: "user" },
+    });
+    click(button(dom.document.body, "Cancel"));
+    await flush();
+
+    click(button(view.container, "Skills 1"));
+    await flush();
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Release review");
+
+    click(button(view.container, "Hooks 1"));
+    await flush();
+    expect(view.container.querySelector("[data-resource-details]")?.textContent).toContain("Unsupported");
+    click(button(view.container, "Manage plugin"));
+    await flush();
+    expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("Review Tools");
 
     view.unmount();
   });
@@ -402,6 +488,65 @@ describe("PluginManagerPage", () => {
     click(button(dialog, "Uninstall"));
     await flush();
     expect(calls.uninstalls).toEqual([{ pluginId: "review-tools", keepData: true }]);
+
+    view.unmount();
+  });
+
+  test("keeps scaffolds and local marketplace actions on the unified page", async () => {
+    activateDom();
+    const bundleWithScaffold = {
+      ...plugins[2],
+      bundle: {
+        ...plugins[2].bundle,
+        scaffolds: [
+          {
+            id: "review-config",
+            name: "Review configuration",
+            description: "Adds review defaults.",
+            files: 2,
+          },
+        ],
+      },
+    };
+    const localItem = {
+      ...marketplaceItems[0],
+      id: "marketplace:local:review-tools",
+      marketplace: {
+        manifestPath: "/tmp/marketplace.json",
+        pluginName: "review-tools",
+      },
+    };
+    const { view, calls } = renderManager({
+      plugins: [bundleWithScaffold],
+      marketplaceItems: [localItem],
+      marketplaceSources: [
+        {
+          id: "/tmp/marketplace.json",
+          name: "Local tools",
+          description: "Workspace-local plugin catalog.",
+          diagnostics: [],
+        },
+      ],
+    });
+    await flush();
+
+    click(button(view.container, "Add to project"));
+    await flush();
+    expect(calls.scaffolds).toEqual([
+      { pluginId: "review-tools", scaffoldId: "review-config" },
+    ]);
+    expect(view.container.textContent).toContain("2 project files added.");
+
+    click(button(view.container, "Marketplace 1"));
+    await flush();
+    expect(view.container.textContent).toContain("Local tools");
+    click(button(view.container, "Open marketplace"));
+    click(button(view.container, "Install"));
+    await flush();
+    expect(calls.marketplaceOpens).toEqual([true]);
+    expect(calls.installs).toEqual([
+      { itemId: "marketplace:local:review-tools", scope: { kind: "user" } },
+    ]);
 
     view.unmount();
   });
@@ -524,6 +669,7 @@ describe("PluginManagerPage", () => {
     activateDom();
     const metadata = {
       origin: "third_party",
+      role: "extension",
       category: "developer_tools",
       scope_support: ["user", "project"],
       essential: false,
@@ -607,38 +753,6 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
-  test("shows bundle-owned descriptors without a no-op component switch", async () => {
-    activateDom();
-    const { view } = renderManager({
-      components: [{
-        id: "bundle:review:extension:lsp:rust",
-        pluginId: "bundle:review",
-        pluginName: "Review Tools",
-        name: "rust",
-        description: "plugin.json#extensions.dev.codetwo.languageServers",
-        kind: "lsp",
-        slot: "plugin.json#extensions.dev.codetwo.languageServers",
-        source: "bundle",
-        sourceLabel: "GitHub · c2/review",
-        supportedScopes: ["user"],
-        manageable: false,
-        state: { effectiveEnabled: true, status: "active" },
-      }],
-      marketplaceItems: [],
-      scope: { kind: "user" },
-    });
-    await flush();
-
-    click(button(view.container, "Components 1"));
-    await flush();
-    const details = view.container.querySelector("[data-component-details]");
-    expect(details?.textContent).toContain("Managed at bundle level");
-    expect(details?.querySelector('[data-slot="checkbox"]')).toBeNull();
-    expect(details?.querySelector('[data-slot="select-trigger"]')).toBeNull();
-
-    view.unmount();
-  });
-
   test("falls back to JSON when a schema contains unsupported nested structures", async () => {
     activateDom();
     const nested = {
@@ -655,7 +769,7 @@ describe("PluginManagerPage", () => {
     await flush();
 
     expect(view.container.querySelector("#plugin-config-json")).not.toBeNull();
-    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(5);
 
     view.unmount();
   });

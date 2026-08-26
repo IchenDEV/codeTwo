@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic } from "lucide-react";
+import { Mic } from "@/components/ui/icons";
 import { isDesktop, transcribeAudio, voiceAvailable } from "../bridge";
 import { preferredRecordingType, toWav16kMono } from "./wav";
 import { shouldUseWebSpeech } from "./platform";
@@ -321,7 +321,7 @@ export function VoiceButton({
           aria-label={label}
           aria-pressed={mode === "listening"}
           data-voice-mode={mode}
-          className="size-8 shrink-0"
+          className="size-8 shrink-0 rounded-full"
           onPointerDown={onPointerDown}
           onPointerUp={() => endPress(true)}
           onPointerLeave={() => endPress(false)}

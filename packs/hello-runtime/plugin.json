@@ -8,7 +8,20 @@
   "keywords": ["example", "plugin-protocol", "runtime"],
   "extensions": {
     "dev.codetwo": {
-      "standardVersion": "1.0.0",
+      "standardVersion": "1.1.0",
+      "commands": [
+        {
+          "id": "hello.dirty",
+          "title": "Check changes",
+          "description": "Count modified files in the active workspace.",
+          "argsSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cwd"],
+            "properties": { "cwd": { "type": "string" } }
+          }
+        }
+      ],
       "runtime": {
         "protocol": "1.0.0",
         "command": "node",

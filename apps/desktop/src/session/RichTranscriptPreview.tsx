@@ -15,6 +15,7 @@ const previewStartedAt = Date.now() - 31_000;
 
 const previewTurn: Turn = {
   id: 1,
+  transcriptStartSeq: 1,
   accepted: true,
   streamBoundaryKnown: true,
   prompt: "检查新的对话渲染：文本、工具调用、图表和交互式可视化应当在同一条流里按顺序出现。",
@@ -52,6 +53,47 @@ const previewTurn: Turn = {
       startedAt: previewStartedAt + 21_000,
       outputs: [],
     },
+    {
+      id: "agent-accessibility",
+      title: "spawn_agent",
+      status: "in_progress",
+      kind: "agent",
+      agentInput: {
+        agent_type: "explorer",
+        task_name: "accessibility_review",
+        message: "Check the transcript controls and status announcements.",
+      },
+      startedAt: previewStartedAt + 8_000,
+      outputs: [],
+    },
+    {
+      id: "agent-layout",
+      title: "spawn_agent",
+      status: "completed",
+      kind: "agent",
+      agentInput: {
+        agent_type: "worker",
+        task_name: "narrow_layout",
+        message: "Verify the transcript at a narrow desktop width.",
+      },
+      startedAt: previewStartedAt + 2_000,
+      endedAt: previewStartedAt + 18_000,
+      outputs: [],
+    },
+    {
+      id: "agent-tests",
+      title: "spawn_agent",
+      status: "failed",
+      kind: "agent",
+      agentInput: {
+        agent_type: "worker",
+        task_name: "renderer_tests",
+        message: "Run the renderer regression suite.",
+      },
+      startedAt: previewStartedAt + 3_000,
+      endedAt: previewStartedAt + 14_000,
+      outputs: [],
+    },
   ],
   content: [
     {
@@ -66,6 +108,9 @@ const previewTurn: Turn = {
       createdAt: previewStartedAt + 13_000,
     },
     { kind: "tool", toolId: "renderer-tests", createdAt: previewStartedAt + 21_000 },
+    { kind: "tool", toolId: "agent-accessibility", createdAt: previewStartedAt + 22_000 },
+    { kind: "tool", toolId: "agent-layout", createdAt: previewStartedAt + 23_000 },
+    { kind: "tool", toolId: "agent-tests", createdAt: previewStartedAt + 24_000 },
     {
       kind: "text",
       text:
@@ -76,6 +121,7 @@ const previewTurn: Turn = {
   ],
   plan: ["Inspect the transcript path", "Run renderer checks", "Report the evidence"],
   startedAt: previewStartedAt,
+  endedAt: previewStartedAt + 25_000,
 };
 const previewTurns = [previewTurn] as const;
 
@@ -86,7 +132,7 @@ export function RichTranscriptPreview() {
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
         <p className="text-ui font-medium">Rich conversation</p>
-        <span className="ms-auto text-fine text-muted-foreground">Streaming</span>
+        <span className="ms-auto text-fine text-muted-foreground">Completed</span>
         <Button
           type="button"
           size="compact"
@@ -114,9 +160,8 @@ export function RichTranscriptPreview() {
             loadingEarlier={false}
             onLoadEarlier={() => {}}
             scroll={scroll}
-            petAnimation="running"
-            voiceEnabled={false}
-            onVoiceText={() => {}}
+            sessionId="rich-transcript-preview"
+            onForkTurn={() => {}}
             onAddSelection={() => {}}
             onExplainSelection={() => {}}
             onAskSelectionInSideChat={() => {}}

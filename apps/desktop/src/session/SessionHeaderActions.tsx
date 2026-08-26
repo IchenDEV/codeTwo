@@ -1,5 +1,4 @@
 import {
-  Activity,
   Box,
   ChevronDown,
   Folder,
@@ -7,16 +6,16 @@ import {
   GitCommitHorizontal,
   History,
   Ellipsis,
-  MessageSquare,
+  MessageSquareText,
   Orbit,
-  PanelBottom,
   PanelRight,
   Plus,
   Play,
   Send,
+  TerminalIcon,
   Upload,
-  type LucideIcon,
-} from "lucide-react";
+  type HugeIcon,
+} from "@/components/ui/icons";
 
 import { useT } from "../i18n";
 import { formatCombo } from "../keys";
@@ -58,7 +57,7 @@ function PanelAction({
   active,
   onClick,
 }: {
-  icon: LucideIcon;
+  icon: HugeIcon;
   label: string;
   active: boolean;
   onClick: () => void;
@@ -89,9 +88,6 @@ export function SessionHeaderActions({
   canCommit,
   terminalActive,
   panelActive,
-  sideChatActive = false,
-  trajectoryActive = false,
-  trajectoryAvailable = false,
   onAddAction,
   onOpen,
   onOpenCursor,
@@ -107,16 +103,11 @@ export function SessionHeaderActions({
   onPush,
   onToggleTerminal,
   onTogglePanel,
-  onToggleSideChat = () => {},
-  onToggleTrajectory = () => {},
   onMoveTask,
 }: {
   canCommit: boolean;
   terminalActive: boolean;
   panelActive: boolean;
-  sideChatActive?: boolean;
-  trajectoryActive?: boolean;
-  trajectoryAvailable?: boolean;
   onAddAction: () => void;
   onOpen: () => void;
   onOpenCursor: () => void;
@@ -132,8 +123,6 @@ export function SessionHeaderActions({
   onPush: () => void;
   onToggleTerminal: () => void;
   onTogglePanel: () => void;
-  onToggleSideChat?: () => void;
-  onToggleTrajectory?: () => void;
   onMoveTask: () => void;
 }) {
   const t = useT();
@@ -152,10 +141,14 @@ export function SessionHeaderActions({
           variant="secondary"
           size="compact"
           className="max-w-36"
-          title={action.command}
+          title={action.kind === "prompt" ? action.prompt : action.command}
           onClick={() => onRunAction?.(action)}
         >
-          <Play className="size-3.5" aria-hidden />
+          {action.kind === "prompt" ? (
+            <MessageSquareText className="size-3.5" aria-hidden />
+          ) : (
+            <Play className="size-3.5" aria-hidden />
+          )}
           <span className="truncate">{action.name || action.id}</span>
         </Button>
       ))}
@@ -179,7 +172,11 @@ export function SessionHeaderActions({
             <DropdownMenuGroup>
               {actions.slice(2).map((action) => (
                 <DropdownMenuItem key={action.id} onClick={() => onRunAction?.(action)}>
-                  <Play aria-hidden />
+                  {action.kind === "prompt" ? (
+                    <MessageSquareText aria-hidden />
+                  ) : (
+                    <Play aria-hidden />
+                  )}
                   {action.name || action.id}
                   {action.keybinding && (
                     <DropdownMenuShortcut>{formatCombo(action.keybinding)}</DropdownMenuShortcut>
@@ -268,22 +265,8 @@ export function SessionHeaderActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {trajectoryAvailable ? (
-        <PanelAction
-          icon={Activity}
-          label={t(trajectoryActive ? "trajectory.hide" : "trajectory.show")}
-          active={trajectoryActive}
-          onClick={onToggleTrajectory}
-        />
-      ) : null}
       <PanelAction
-        icon={MessageSquare}
-        label={t("sideChat.toggle")}
-        active={sideChatActive}
-        onClick={onToggleSideChat}
-      />
-      <PanelAction
-        icon={PanelBottom}
+        icon={TerminalIcon}
         label={t("action.toggle_terminal")}
         active={terminalActive}
         onClick={onToggleTerminal}

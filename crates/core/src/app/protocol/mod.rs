@@ -3,33 +3,34 @@
 //!
 //! # Why this exists
 //!
-//! [`crate::app`] made C2 a plugin graph, but a Rust host can only load Rust plugins it was
-//! compiled with. That is a real ceiling: it means "plugin" describes how *we* organise our code,
-//! not something a user can add. This closes it. A plugin is a process; C2 speaks JSON-RPC to
-//! it over stdio; and what it contributes — commands, event subscriptions — lands in exactly the
-//! same registries a built-in plugin's do.
+//! [`crate::app`] made C2 an internal runtime-module graph, but a Rust host can only load modules it
+//! was compiled with. An external extension is a process; C2 speaks JSON-RPC to it over stdio; and
+//! static Manifest commands and initialized event subscriptions land in the same scoped registries
+//! as built-in modules.
 //!
-//! The consequence worth stating plainly: an out-of-process plugin is not a lesser citizen. Its
-//! commands appear in `kernel.commands`, are callable from the frontend through `call()`, and
-//! disappear the instant it unloads, because they belong to its scope like everything else.
+//! Its commands appear in `kernel.commands`, are callable from the host through `call()`, and
+//! disappear the instant it unloads. The reverse direction is narrower: an extension process may
+//! discover and invoke only commands explicitly registered as `extension_public`; ordinary Core
+//! and frontend commands are internal by default.
 //!
 //! # Trust
 //!
 //! Installing a bundle still executes nothing — that property of the Plugin Hub is not weakened
-//! here. A process starts only when the bundle is **enabled *and* trusted**, and trust is a
-//! deliberate user action on an install that has already been shown to ship code. [`ExtensionsPlugin`]
-//! is the only thing that spawns one, and it refuses untrusted bundles by default.
+//! here. Enablement and trust make a static adapter eligible; its process starts only on first
+//! command activation. Trust is a deliberate user action on an install already shown to ship code.
+//! [`ExtensionsPlugin`] is the only host that admits these adapters, and it refuses untrusted
+//! bundles by default.
 //!
 //! # Shape
 //!
 //! ```text
 //!  host                                  plugin process
-//!    │  initialize ────────────────────────▶
-//!    │  ◀──────────── { commands, events }
-//!    │                                     (host registers them in the kernel)
+//!    │  (Manifest commands registered; process dormant)
+//!    │  first command: initialize ─────────▶
+//!    │  ◀──────────── { commands, events }  (host verifies commands, registers events)
 //!    │  command/invoke ───────────────────▶      ← frontend called `call("foo.bar")`
 //!    │  event/emit ───────────────────────▶      ← something happened in the host
-//!    │  ◀─────────────────── command/call        ← plugin calls a host command
+//!    │  ◀─────────────────── command/call        ← plugin calls an extension-public command
 //!    │  ◀─────────────────── event/emit, log
 //!    │  (unload: process killed, registrations gone)
 //! ```
@@ -43,14 +44,16 @@ pub use wire::{
     InvokeParams, LogParams, PROTOCOL_VERSION,
 };
 
-use crate::plugin::PluginRuntimeSpec;
+use crate::plugin::{PluginRuntimeCommand, PluginRuntimeSpec};
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginError, PluginResult, WeakContext,
 };
 use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::OnceCell;
 
 /// A started plugin: the two streams to talk over, and how to stop it.
 pub struct Channel {
@@ -254,8 +257,9 @@ mod unix_process_group {
 
 /// A plugin that lives in another process.
 ///
-/// Everything the kernel knows about it comes from the manifest (its name, what it injects) and
-/// the handshake (what it contributes). From the graph's point of view it is an ordinary plugin.
+/// Everything the kernel knows about its command surface comes from the Manifest. The handshake
+/// confirms the implementation and subscribes to events. From the graph's point of view the ready
+/// adapter is an ordinary plugin even while its child process is dormant.
 pub struct ProtocolPlugin {
     name: String,
     description: Option<String>,
@@ -263,6 +267,9 @@ pub struct ProtocolPlugin {
     transport: Arc<dyn Transport>,
     data_dir: Option<PathBuf>,
     handshake_timeout: std::time::Duration,
+    /// `None` is the 1.0 compatibility path where initialize contributes commands dynamically.
+    /// `Some` is the 1.1 static contract: handlers exist before the process and activate it once.
+    declared_commands: Option<Vec<PluginRuntimeCommand>>,
 }
 
 /// How long to wait for `initialize` before giving up on a plugin.
@@ -281,6 +288,7 @@ impl ProtocolPlugin {
             transport,
             data_dir: None,
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
+            declared_commands: None,
         }
     }
 
@@ -307,6 +315,7 @@ impl ProtocolPlugin {
             transport: Arc::new(transport),
             data_dir: Some(data_dir),
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
+            declared_commands: None,
         }
     }
 
@@ -319,68 +328,108 @@ impl ProtocolPlugin {
         self.inject = inject;
         self
     }
+
+    pub fn with_declared_commands(mut self, commands: Vec<PluginRuntimeCommand>) -> ProtocolPlugin {
+        self.declared_commands = Some(commands);
+        self
+    }
 }
 
-#[async_trait]
-impl Plugin for ProtocolPlugin {
-    fn name(&self) -> &str {
-        &self.name
+type Shutdown = Box<dyn FnOnce() + Send>;
+
+/// A process teardown callback shared by the activation guard and the committed scope effect.
+/// Taking the callback makes cancellation, failure, unload, and their races idempotent.
+struct ShutdownOnce(Mutex<Option<Shutdown>>);
+
+impl ShutdownOnce {
+    fn new(shutdown: Shutdown) -> Arc<Self> {
+        Arc::new(Self(Mutex::new(Some(shutdown))))
     }
 
-    fn description(&self) -> Option<&str> {
-        self.description.as_deref()
+    fn run(&self) {
+        let shutdown = self.0.lock().unwrap().take();
+        if let Some(shutdown) = shutdown {
+            shutdown();
+        }
+    }
+}
+
+/// Owns a newly started process until initialize and contribution validation have completed.
+/// Dropping an uncommitted guard synchronously stops the child, including when the caller cancels.
+struct ActivationGuard {
+    shutdown: Arc<ShutdownOnce>,
+    committed: bool,
+}
+
+impl ActivationGuard {
+    fn new(shutdown: Shutdown) -> Self {
+        Self {
+            shutdown: ShutdownOnce::new(shutdown),
+            committed: false,
+        }
     }
 
-    fn inject(&self) -> Injection {
-        self.inject.clone()
+    fn commit(mut self) {
+        self.committed = true;
     }
+}
 
-    async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
+impl Drop for ActivationGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            self.shutdown.run();
+        }
+    }
+}
+
+struct PendingActivation {
+    peer: Arc<Peer>,
+    result: InitializeResult,
+    guard: ActivationGuard,
+}
+
+struct ProtocolSession {
+    plugin: String,
+    transport: Arc<dyn Transport>,
+    data_dir: Option<PathBuf>,
+    handshake_timeout: std::time::Duration,
+}
+
+impl ProtocolSession {
+    async fn initialize(
+        &self,
+        ctx: &Context,
+        config: Value,
+    ) -> Result<PendingActivation, PluginError> {
+        if let Some(dir) = &self.data_dir {
+            std::fs::create_dir_all(dir)?;
+        }
+
+        let channel = self.transport.start().await?;
+        let guard = ActivationGuard::new(channel.shutdown);
+        let shutdown = guard.shutdown.clone();
+        if !ctx.effect(move || shutdown.run()) {
+            return Err(PluginError::new("plugin runtime is unavailable"));
+        }
         let command_realm = ctx.command_realm().clone();
         let project_path = match &command_realm {
             CommandRealm::Global => None,
             CommandRealm::Project(path) => Some(path.clone()),
         };
-        let channel = self.transport.start().await?;
-
-        // Registered before the handshake on purpose: a plugin that never answers `initialize`
-        // still gets killed when this scope unwinds.
-        let shutdown = Mutex::new(Some(channel.shutdown));
-        ctx.effect(move || {
-            if let Some(shutdown) = shutdown.lock().unwrap().take() {
-                shutdown();
-            }
-        });
-
-        if let Some(dir) = &self.data_dir {
-            std::fs::create_dir_all(dir)?;
-        }
-
         let host = Arc::new(KernelHost {
             ctx: ctx.weak(),
-            plugin: self.name.clone(),
+            plugin: self.plugin.clone(),
         });
         let peer = Peer::new(channel.reader, channel.writer, host);
-
         let params = InitializeParams {
             protocol_version: PROTOCOL_VERSION.to_string(),
             host: HostInfo {
                 name: "code2".into(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 commands: ctx
-                    .runtime()
-                    .commands()
+                    .extension_public_commands()
                     .into_iter()
-                    .filter(|command| match (&command_realm, &command.realm) {
-                        (CommandRealm::Global, CommandRealm::Global) => true,
-                        (CommandRealm::Project(_), CommandRealm::Global) => true,
-                        (
-                            CommandRealm::Project(project),
-                            CommandRealm::Project(command_project),
-                        ) => project == command_project,
-                        (CommandRealm::Global, CommandRealm::Project(_)) => false,
-                    })
-                    .map(|c| c.name)
+                    .map(|command| command.name)
                     .collect(),
             },
             config,
@@ -407,58 +456,235 @@ impl Plugin for ProtocolPlugin {
                 result.protocol_version
             )));
         }
-
-        for spec in &result.commands {
-            let peer = peer.clone();
-            let name = spec.name.clone();
-            ctx.command_described(
-                spec.name.clone(),
-                spec.description.as_deref(),
-                move |args| {
-                    let peer = peer.clone();
-                    let name = name.clone();
-                    async move {
-                        peer.request::<_, Value>(
-                            "command/invoke",
-                            InvokeParams {
-                                name: name.clone(),
-                                args,
-                            },
-                        )
-                        .await
-                        .map_err(|error| PluginError::new(error.to_string()))
-                    }
-                },
-            )?;
+        if !ctx.is_current() {
+            return Err(PluginError::new("plugin runtime is unavailable"));
         }
+        Ok(PendingActivation {
+            peer,
+            result,
+            guard,
+        })
+    }
+}
 
-        for event in &result.events {
+fn ensure_command_available(ctx: &Context, plugin: &str, name: &str) -> PluginResult {
+    if let Some(existing) = ctx.runtime().commands().into_iter().find(|command| {
+        command.realm == CommandRealm::Global && command.name == name && command.plugin != plugin
+    }) {
+        return Err(PluginError::new(format!(
+            "extension command `{name}` conflicts with global command owned by `{}`",
+            existing.plugin
+        )));
+    }
+    Ok(())
+}
+
+fn register_events(ctx: &Context, peer: &Arc<Peer>, events: &[String]) -> PluginResult {
+    for event in events {
+        let peer = peer.clone();
+        let name = event.clone();
+        if !ctx.on_json(event.clone(), move |payload| {
             let peer = peer.clone();
-            let name = event.clone();
-            ctx.on_json(event.clone(), move |payload| {
+            let name = name.clone();
+            async move {
+                peer.notify(
+                    "event/emit",
+                    EventParams {
+                        name,
+                        payload: (*payload).clone(),
+                    },
+                );
+                None
+            }
+        }) {
+            return Err(PluginError::new("plugin runtime is unavailable"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_declared_commands(
+    declared: &[PluginRuntimeCommand],
+    result: &InitializeResult,
+) -> PluginResult {
+    let mut actual = BTreeMap::new();
+    for command in &result.commands {
+        if actual.insert(command.name.as_str(), command).is_some() {
+            return Err(PluginError::new(format!(
+                "initialize returned duplicate command `{}`",
+                command.name
+            )));
+        }
+    }
+    let expected_ids = declared
+        .iter()
+        .map(|command| command.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let actual_ids = actual.keys().copied().collect::<BTreeSet<_>>();
+    if expected_ids != actual_ids {
+        let missing = expected_ids
+            .difference(&actual_ids)
+            .copied()
+            .collect::<Vec<_>>();
+        let extra = actual_ids
+            .difference(&expected_ids)
+            .copied()
+            .collect::<Vec<_>>();
+        return Err(PluginError::new(format!(
+            "initialize commands do not match the manifest (missing: {}; extra: {})",
+            missing.join(", "),
+            extra.join(", ")
+        )));
+    }
+    for command in declared {
+        let implemented = actual
+            .get(command.id.as_str())
+            .expect("equal command sets must contain every declared id");
+        if implemented.schema != command.args_schema {
+            return Err(PluginError::new(format!(
+                "initialize schema for `{}` does not match the manifest argsSchema",
+                command.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+struct LazyProtocolRuntime {
+    session: Arc<ProtocolSession>,
+    context: WeakContext,
+    config: Value,
+    commands: Arc<Vec<PluginRuntimeCommand>>,
+    activation: OnceCell<Result<Arc<Peer>, String>>,
+}
+
+impl LazyProtocolRuntime {
+    async fn activate(&self) -> Result<Arc<Peer>, PluginError> {
+        let result = self
+            .activation
+            .get_or_init(|| async {
+                self.activate_once().await.map_err(|error| {
+                    format!(
+                        "plugin activation failed: {error}; reload or disable and re-enable the plugin to retry"
+                    )
+                })
+            })
+            .await;
+        match result {
+            Ok(peer) => Ok(peer.clone()),
+            Err(message) => Err(PluginError::new(message.clone())),
+        }
+    }
+
+    async fn activate_once(&self) -> Result<Arc<Peer>, PluginError> {
+        let ctx = self
+            .context
+            .upgrade()
+            .ok_or_else(|| PluginError::new("plugin runtime is unavailable"))?;
+        let PendingActivation {
+            peer,
+            result,
+            guard,
+        } = self.session.initialize(&ctx, self.config.clone()).await?;
+        validate_declared_commands(&self.commands, &result)?;
+        register_events(&ctx, &peer, &result.events)?;
+        guard.commit();
+        Ok(peer)
+    }
+}
+
+#[async_trait]
+impl Plugin for ProtocolPlugin {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    fn inject(&self) -> Injection {
+        self.inject.clone()
+    }
+
+    async fn apply(&self, ctx: Context, config: Value) -> PluginResult {
+        let session = Arc::new(ProtocolSession {
+            plugin: self.name.clone(),
+            transport: self.transport.clone(),
+            data_dir: self.data_dir.clone(),
+            handshake_timeout: self.handshake_timeout,
+        });
+
+        let Some(declared) = &self.declared_commands else {
+            let PendingActivation {
+                peer,
+                result,
+                guard,
+            } = session.initialize(&ctx, config).await?;
+            for spec in &result.commands {
+                ensure_command_available(&ctx, &self.name, &spec.name)?;
                 let peer = peer.clone();
+                let name = spec.name.clone();
+                ctx.command_described(
+                    spec.name.clone(),
+                    spec.description.as_deref(),
+                    move |args| {
+                        let peer = peer.clone();
+                        let name = name.clone();
+                        async move {
+                            peer.request::<_, Value>(
+                                "command/invoke",
+                                InvokeParams {
+                                    name: name.clone(),
+                                    args,
+                                },
+                            )
+                            .await
+                            .map_err(|error| PluginError::new(error.to_string()))
+                        }
+                    },
+                )?;
+            }
+            register_events(&ctx, &peer, &result.events)?;
+            guard.commit();
+            ctx.effect(move || drop(peer));
+            return Ok(());
+        };
+
+        for command in declared {
+            ensure_command_available(&ctx, &self.name, &command.id)?;
+        }
+        let runtime = Arc::new(LazyProtocolRuntime {
+            session,
+            context: ctx.weak(),
+            config,
+            commands: Arc::new(declared.clone()),
+            activation: OnceCell::new(),
+        });
+        for command in declared {
+            let runtime = runtime.clone();
+            let name = command.id.clone();
+            let description = if command.description.is_empty() {
+                command.title.as_str()
+            } else {
+                command.description.as_str()
+            };
+            ctx.command_described(command.id.clone(), Some(description), move |args| {
+                let runtime = runtime.clone();
                 let name = name.clone();
                 async move {
-                    peer.notify(
-                        "event/emit",
-                        EventParams {
-                            name,
-                            payload: (*payload).clone(),
-                        },
-                    );
-                    None
+                    let peer = runtime.activate().await?;
+                    peer.request::<_, Value>("command/invoke", InvokeParams { name, args })
+                        .await
+                        .map_err(|error| PluginError::new(error.to_string()))
                 }
-            });
+            })?;
         }
-
-        // Keep the peer alive for as long as the scope is: dropping the last handle closes the
-        // writer, which most plugins read as "shut down".
-        ctx.effect(move || drop(peer));
         Ok(())
     }
 }
 
-/// The host side of the protocol: what a plugin process is allowed to ask for.
+/// The host side of the protocol: what an extension process is allowed to ask for.
 struct KernelHost {
     ctx: WeakContext,
     plugin: String,
@@ -470,7 +696,7 @@ impl HostHandler for KernelHost {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err("the host is shutting down".into());
         };
-        ctx.call(name, args)
+        ctx.call_extension_public(name, args)
             .await
             .map_err(|error| error.to_string())
     }

@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   BrainCircuit,
+  Bug,
   ChartNoAxesColumn,
   ChevronDown,
   Copy,
   Download,
   Folder,
   FolderOpen,
+  GitBranch,
   Globe,
   ImagePlus,
   Keyboard,
   LoaderCircle,
+  MessageSquare,
   MousePointer2,
   Package,
   Palette,
@@ -22,7 +25,9 @@ import {
   ScanText,
   SlidersHorizontal,
   Trash2,
-} from "lucide-react";
+  UserRound,
+  Wrench,
+} from "@/components/ui/icons";
 
 import {
   browserPermissions,
@@ -36,6 +41,8 @@ import {
   discardSessionWorktree,
   getAppUpdateStatus,
   getDeviceSyncStatus,
+  getPluginDeveloperStatus,
+  getWorktreeSettings,
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
@@ -43,6 +50,7 @@ import {
   requestAppshotPermissions,
   takeAppshot,
   updateAppshotSettings,
+  updateWorktreeSettings,
   type AppshotSettings,
   type BrowserUseSettings,
   type ComputerUseSettings,
@@ -52,17 +60,23 @@ import {
   type ProjectWorktreeMode,
   type ProviderInfo,
   type WorktreeEntryKind,
+  type WorktreeSettings,
   type WorktreeStatusEntry,
   getProjectScheduling,
   installProvider,
   openNativePath,
+  openDevtools,
+  onPluginsChanged,
   pickProjectIcon,
   setProviderEnabled,
   setProjectScheduling,
   upgradeProvider,
   setDeviceSyncEnabled,
+  setPluginDeveloperMode,
   syncDeviceDataNow,
+  reloadDevelopmentPlugins,
   type DeviceSyncStatus,
+  type PluginDeveloperStatus,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
 import { useLanguage, useT, type LanguagePreference } from "../i18n";
@@ -77,6 +91,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { ProjectIcon } from "../projects/ProjectIcon";
 import { ModelPicker } from "../session/Composer";
 import { PetSettings } from "./PetSettings";
+import { ProfileSettings } from "./ProfileSettings";
 import {
   worktreeBranchDisplay,
   worktreeDiscardRoute,
@@ -89,15 +104,18 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
 
 export type SettingsTab =
   | "general"
+  | "profile"
   | "appearance"
   | "pets"
   | "project"
+  | "worktrees"
   | "memory"
   | "sync"
   | "keybindings"
@@ -106,6 +124,7 @@ export type SettingsTab =
   | "appshots"
   | "browser-use"
   | "usage"
+  | "developer"
   | "browser";
 
 type SettingsNavItem = {
@@ -124,6 +143,7 @@ const NAV_GROUPS: {
     labelKey: "settings.navPersonal",
     items: [
       { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+      { id: "profile", icon: UserRound, labelKey: "profile.title" },
       { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
       { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
       { id: "keybindings", icon: Keyboard, labelKey: "settings.keybindings" },
@@ -135,6 +155,7 @@ const NAV_GROUPS: {
     labelKey: "settings.navWorkspace",
     items: [
       { id: "project", icon: Folder, labelKey: "settings.project" },
+      { id: "worktrees", icon: GitBranch, labelKey: "settings.worktrees" },
       { id: "memory", icon: BrainCircuit, labelKey: "memory.title" },
       { id: "sync", icon: RefreshCw, labelKey: "settings.sync" },
     ],
@@ -148,6 +169,7 @@ const NAV_GROUPS: {
       { id: "appshots", icon: ScanText, labelKey: "settings.appshots" },
       { id: "browser-use", icon: Globe, labelKey: "settings.browserUse" },
       { id: "browser", icon: Globe, labelKey: "settings.browser" },
+      { id: "developer", icon: Wrench, labelKey: "settings.developer" },
     ],
   },
 ];
@@ -163,6 +185,13 @@ const WORKTREE_BADGE_LABELS: Record<WorktreeStatusBadge, StringKey> = {
   discarded: "worktree.badgeDiscarded",
   checkoutMissing: "worktree.badgeCheckoutMissing",
 };
+
+type ProjectWorktreeState = {
+  entries: WorktreeStatusEntry[];
+  error: string | null;
+};
+
+const EMPTY_PROJECTS: Project[] = [];
 
 const CAPABILITY_LABELS = {
   image_generation: "Image generation",
@@ -278,6 +307,7 @@ function Page({ title, description, children }: { title: string; description?: s
  * you went to, which is what earns the explicit way back.
  */
 export function SettingsPage({
+  sidebarWidth = 288,
   bindings,
   capturing,
   onCapture,
@@ -287,7 +317,7 @@ export function SettingsPage({
   provider,
   projectPath,
   project,
-  projects = [],
+  projects = EMPTY_PROJECTS,
   onProjectWorktreeMode,
   onProjectRename = async () => {},
   onProjectIcon = async () => {},
@@ -297,6 +327,12 @@ export function SettingsPage({
   projectActionsCount = 0,
   onAddProjectAction = () => {},
   onOpenSession = () => {},
+  worktreeLister = listProjectWorktrees,
+  worktreeSettingsLoader = getWorktreeSettings,
+  worktreeSettingsSaver = updateWorktreeSettings,
+  sessionWorktreeDiscarder = discardSessionWorktree,
+  orphanWorktreeDiscarder = discardOrphanWorktree,
+  worktreeDiscardConfirmer = confirmNative,
   onReloadProviders,
   memoryEnabled,
   deviceSyncEnabled = true,
@@ -319,7 +355,13 @@ export function SettingsPage({
   deviceSyncStatusLoader = getDeviceSyncStatus,
   deviceSyncEnabledSaver = setDeviceSyncEnabled,
   deviceSyncStarter = syncDeviceDataNow,
+  pluginDeveloperStatusLoader = getPluginDeveloperStatus,
+  pluginDeveloperModeSaver = setPluginDeveloperMode,
+  pluginDeveloperReloader = reloadDevelopmentPlugins,
+  devtoolsOpener = openDevtools,
 }: {
+  /** Matches the persisted width of the main session rail. */
+  sidebarWidth?: number;
   bindings: KeymapEntry[];
   capturing: string | null;
   onCapture: (action: string) => void;
@@ -345,6 +387,12 @@ export function SettingsPage({
   projectActionsCount?: number;
   onAddProjectAction?: () => void;
   onOpenSession?: (sessionId: string) => void;
+  worktreeLister?: typeof listProjectWorktrees;
+  worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
+  worktreeSettingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
+  sessionWorktreeDiscarder?: typeof discardSessionWorktree;
+  orphanWorktreeDiscarder?: typeof discardOrphanWorktree;
+  worktreeDiscardConfirmer?: typeof confirmNative;
   onReloadProviders?: () => void | Promise<ProviderInfo[]>;
   memoryEnabled: boolean;
   deviceSyncEnabled?: boolean;
@@ -371,6 +419,10 @@ export function SettingsPage({
   deviceSyncStatusLoader?: () => Promise<DeviceSyncStatus>;
   deviceSyncEnabledSaver?: (enabled: boolean) => Promise<DeviceSyncStatus>;
   deviceSyncStarter?: () => Promise<DeviceSyncStatus>;
+  pluginDeveloperStatusLoader?: () => Promise<PluginDeveloperStatus>;
+  pluginDeveloperModeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
+  pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
+  devtoolsOpener?: () => Promise<void>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -401,6 +453,10 @@ export function SettingsPage({
   const [providerError, setProviderError] = useState<{ id: string; text: string } | null>(null);
   const [deviceSync, setDeviceSync] = useState<DeviceSyncStatus | null>(null);
   const [deviceSyncSaving, setDeviceSyncSaving] = useState(false);
+  const [pluginDevelopment, setPluginDevelopment] = useState<PluginDeveloperStatus | null>(null);
+  const [pluginDevelopmentSaving, setPluginDevelopmentSaving] = useState(false);
+  const [pluginDevelopmentReloading, setPluginDevelopmentReloading] = useState(false);
+  const [pluginDevelopmentError, setPluginDevelopmentError] = useState<string | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -412,6 +468,30 @@ export function SettingsPage({
       setTab((current) => current === "sync" ? "general" : current);
     }
   }, [deviceSyncEnabled]);
+  useEffect(() => {
+    if (tab !== "providers" || !onReloadProviders) return;
+    let active = true;
+    setProviderOperation({ id: "*", action: "refresh" });
+    setProviderError(null);
+    void (async () => {
+      try {
+        await onReloadProviders();
+        if (active) setProviderMessage({ id: "*", text: t("settings.providerChecked") });
+      } catch (error: unknown) {
+        if (active) {
+          setProviderError({
+            id: "*",
+            text: t("settings.providerRefreshFailed", { error: String(error) }),
+          });
+        }
+      } finally {
+        if (active) setProviderOperation(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [tab, onReloadProviders, t]);
   useEffect(() => {
     if (tab !== "general") return;
     let active = true;
@@ -535,6 +615,34 @@ export function SettingsPage({
       active = false;
     };
   }, [tab, deviceSyncStatusLoader]);
+  useEffect(() => {
+    if (tab !== "developer") return;
+    let active = true;
+    let unsubscribe = () => {};
+    const refresh = () => {
+      void pluginDeveloperStatusLoader()
+        .then((status) => {
+          if (active) {
+            setPluginDevelopment(status);
+            setPluginDevelopmentError(null);
+          }
+        })
+        .catch((error) => {
+          if (active) {
+            setPluginDevelopmentError(t("settings.developerLoadFailed", { error: String(error) }));
+          }
+        });
+    };
+    refresh();
+    void onPluginsChanged(refresh).then((stop) => {
+      if (active) unsubscribe = stop;
+      else stop();
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [tab, pluginDeveloperStatusLoader, t]);
   const [projectModeSaving, setProjectModeSaving] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState(project?.name ?? "");
   const [projectProfileSaving, setProjectProfileSaving] = useState(false);
@@ -552,10 +660,14 @@ export function SettingsPage({
     void getProjectScheduling(project.path).then(setSchedulingEnabled);
   }, [project?.path]);
   const [browserOrigins, setBrowserOrigins] = useState<string[]>([]);
-  const [worktrees, setWorktrees] = useState<WorktreeStatusEntry[]>([]);
+  const [worktreesByProject, setWorktreesByProject] = useState<Record<string, ProjectWorktreeState>>({});
   const [worktreesLoading, setWorktreesLoading] = useState(false);
-  // Already translated at the failure site — listing and discarding fail with different framing.
-  const [worktreesError, setWorktreesError] = useState<string | null>(null);
+  const [worktreeSettings, setWorktreeSettings] = useState<WorktreeSettings | null>(null);
+  const [worktreeSettingsSaving, setWorktreeSettingsSaving] = useState(false);
+  const [worktreeSettingsError, setWorktreeSettingsError] = useState<string | null>(null);
+  const [worktreeRootDraft, setWorktreeRootDraft] = useState("");
+  const [worktreeLimitDraft, setWorktreeLimitDraft] = useState("15");
+  const worktreesRequestRef = useRef(0);
   /** Path mid-discard; every Discard button is held while one runs. */
   const [discardingWorktree, setDiscardingWorktree] = useState<string | null>(null);
 
@@ -563,41 +675,128 @@ export function SettingsPage({
     if (tab === "browser") void browserPermissions().then(setBrowserOrigins);
   }, [tab]);
 
-  const loadWorktrees = async (path: string) => {
+  const loadWorktrees = async (projectList: Project[]) => {
+    const request = ++worktreesRequestRef.current;
     setWorktreesLoading(true);
-    setWorktreesError(null);
-    try {
-      setWorktrees(await listProjectWorktrees(path));
-    } catch (error) {
-      setWorktrees([]);
-      setWorktreesError(t("worktree.manageFailed", { error: String(error) }));
-    } finally {
+    const results = await Promise.all(projectList.map(async (candidate) => {
+      try {
+        return [candidate.path, { entries: await worktreeLister(candidate.path), error: null }] as const;
+      } catch (error) {
+        return [candidate.path, {
+          entries: [],
+          error: t("worktree.manageFailed", { error: String(error) }),
+        }] as const;
+      }
+    }));
+    if (request !== worktreesRequestRef.current) return;
+    setWorktreesByProject(Object.fromEntries(results));
+    setWorktreesLoading(false);
+  };
+
+  useEffect(() => {
+    if (tab !== "worktrees") {
+      worktreesRequestRef.current += 1;
       setWorktreesLoading(false);
+      return;
+    }
+    void loadWorktrees(projects);
+  }, [tab, projects]);
+
+  useEffect(() => {
+    if (tab !== "worktrees") return;
+    let active = true;
+    setWorktreeSettingsError(null);
+    void worktreeSettingsLoader()
+      .then((settings) => {
+        if (!active) return;
+        setWorktreeSettings(settings);
+        setWorktreeRootDraft(settings.root ?? "");
+        setWorktreeLimitDraft(String(settings.auto_delete_limit));
+      })
+      .catch((error) => {
+        if (active) {
+          setWorktreeSettingsError(t("worktree.settingsLoadFailed", { error: String(error) }));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [tab, worktreeSettingsLoader, t]);
+
+  const loadProjectWorktrees = async (path: string) => {
+    try {
+      const entries = await worktreeLister(path);
+      setWorktreesByProject((current) => ({ ...current, [path]: { entries, error: null } }));
+    } catch (error) {
+      setWorktreesByProject((current) => ({
+        ...current,
+        [path]: {
+          entries: [],
+          error: t("worktree.manageFailed", { error: String(error) }),
+        },
+      }));
     }
   };
 
-  const projectWorktreePath = project?.path ?? null;
-  useEffect(() => {
-    if (tab !== "project" || !projectWorktreePath) {
-      setWorktrees([]);
-      setWorktreesError(null);
-      return;
+  const saveGlobalWorktreeSettings = async (patch: Partial<WorktreeSettings>) => {
+    if (!worktreeSettings) return false;
+    setWorktreeSettingsSaving(true);
+    setWorktreeSettingsError(null);
+    try {
+      const saved = await worktreeSettingsSaver({ ...worktreeSettings, ...patch });
+      setWorktreeSettings(saved);
+      setWorktreeRootDraft(saved.root ?? "");
+      setWorktreeLimitDraft(String(saved.auto_delete_limit));
+      if (
+        Object.prototype.hasOwnProperty.call(patch, "root")
+        || Object.prototype.hasOwnProperty.call(patch, "auto_delete")
+      ) {
+        await loadWorktrees(projects);
+      }
+      return true;
+    } catch (error) {
+      setWorktreeSettingsError(t("worktree.settingsSaveFailed", { error: String(error) }));
+      setWorktreeRootDraft(worktreeSettings.root ?? "");
+      setWorktreeLimitDraft(String(worktreeSettings.auto_delete_limit));
+      return false;
+    } finally {
+      setWorktreeSettingsSaving(false);
     }
-    void loadWorktrees(projectWorktreePath);
-  }, [tab, projectWorktreePath]);
+  };
 
-  const discardWorktree = async (entry: WorktreeStatusEntry) => {
-    if (!projectWorktreePath) return;
-    if (!(await confirmNative(t("worktree.discardConfirm", { path: entry.path })))) return;
+  const commitWorktreeRoot = () => {
+    if (!worktreeSettings) return;
+    const root = worktreeRootDraft.trim() || undefined;
+    if (root === worktreeSettings.root) return;
+    void saveGlobalWorktreeSettings({ root });
+  };
+
+  const commitWorktreeLimit = () => {
+    if (!worktreeSettings) return;
+    const parsed = Number.parseInt(worktreeLimitDraft, 10);
+    const limit = Number.isFinite(parsed) ? Math.min(1000, Math.max(1, parsed)) : worktreeSettings.auto_delete_limit;
+    setWorktreeLimitDraft(String(limit));
+    if (limit !== worktreeSettings.auto_delete_limit) {
+      void saveGlobalWorktreeSettings({ auto_delete_limit: limit });
+    }
+  };
+
+  const discardWorktree = async (projectPath: string, entry: WorktreeStatusEntry) => {
+    if (!(await worktreeDiscardConfirmer(t("worktree.discardConfirm", { path: entry.path })))) return;
     setDiscardingWorktree(entry.path);
-    setWorktreesError(null);
     try {
       const route = worktreeDiscardRoute(entry);
-      if (route.kind === "session") await discardSessionWorktree(route.session);
-      else await discardOrphanWorktree(projectWorktreePath, route.worktreePath);
-      await loadWorktrees(projectWorktreePath);
+      if (route.kind === "session") await sessionWorktreeDiscarder(route.session);
+      else await orphanWorktreeDiscarder(projectPath, route.worktreePath);
+      await loadProjectWorktrees(projectPath);
     } catch (error) {
-      setWorktreesError(t("worktree.discardFailed", { error: String(error) }));
+      setWorktreesByProject((current) => ({
+        ...current,
+        [projectPath]: {
+          entries: current[projectPath]?.entries ?? [],
+          error: t("worktree.discardFailed", { error: String(error) }),
+        },
+      }));
     } finally {
       setDiscardingWorktree(null);
     }
@@ -774,6 +973,61 @@ export function SettingsPage({
       setDeviceSync((current) => current ? { ...current, state: "error", message: String(error) } : current);
     }
   };
+
+  const savePluginDeveloperMode = async (enabled: boolean) => {
+    setPluginDevelopmentSaving(true);
+    setPluginDevelopmentError(null);
+    try {
+      setPluginDevelopment(await pluginDeveloperModeSaver(enabled));
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerSaveFailed", { error: String(error) }));
+    } finally {
+      setPluginDevelopmentSaving(false);
+    }
+  };
+
+  const reloadPlugins = async () => {
+    setPluginDevelopmentReloading(true);
+    setPluginDevelopmentError(null);
+    try {
+      setPluginDevelopment(await pluginDeveloperReloader());
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerReloadFailed", { error: String(error) }));
+    } finally {
+      setPluginDevelopmentReloading(false);
+    }
+  };
+
+  const showWebviewDevtools = async () => {
+    setPluginDevelopmentError(null);
+    try {
+      await devtoolsOpener();
+    } catch (error) {
+      setPluginDevelopmentError(t("settings.developerDevtoolsFailed", { error: String(error) }));
+    }
+  };
+
+  const pluginDevelopmentStatus = (() => {
+    if (!pluginDevelopment) return t("settings.pluginHotReloadLoading");
+    if (!pluginDevelopment.enabled) return t("settings.pluginHotReloadOff");
+    if (!pluginDevelopment.watching) return t("settings.pluginHotReloadUnavailable");
+    return t("settings.pluginHotReloadWatching", { path: pluginDevelopment.plugins_dir });
+  })();
+
+  const pluginReloadRecord = pluginDevelopment?.last_reload;
+  const pluginReloadDetail = pluginReloadRecord?.success
+    ? t("settings.pluginHotReloadLastSuccess", {
+        plugins: pluginReloadRecord.plugins.length
+          ? pluginReloadRecord.plugins.join(", ")
+          : t("settings.allInstalledPlugins"),
+        time: new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(pluginReloadRecord.at),
+      })
+    : pluginReloadRecord?.error
+      ? t("settings.pluginHotReloadLastError", { error: pluginReloadRecord.error })
+      : null;
 
   const deviceSyncHint = (() => {
     switch (deviceSync?.state) {
@@ -1015,7 +1269,11 @@ export function SettingsPage({
   return (
     <div className="animate-page-in flex min-h-0 min-w-0 flex-1">
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
-      <aside className="glass-rail flex w-56 shrink-0 flex-col">
+      <aside
+        data-settings-sidebar
+        className="glass-rail flex shrink-0 flex-col"
+        style={{ width: Math.min(420, Math.max(220, sidebarWidth)) }}
+      >
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
         <button
@@ -1031,6 +1289,11 @@ export function SettingsPage({
           aria-label={t("settings.title")}
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
         >
+          <LiquidSelectionGroup
+            activeSelector='[aria-current="page"]'
+            fill="var(--color-fill-hover)"
+            className="space-y-6"
+          >
           {NAV_GROUPS.map((group) => {
             const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
               .filter(({ id }) => deviceSyncEnabled || id !== "sync");
@@ -1052,7 +1315,7 @@ export function SettingsPage({
                       className={cn(
                         "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
                         id === tab
-                          ? "bg-accent font-medium text-foreground"
+                          ? "font-medium text-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                       )}
                     >
@@ -1064,6 +1327,7 @@ export function SettingsPage({
               </section>
             );
           })}
+          </LiquidSelectionGroup>
         </nav>
       </aside>
 
@@ -1075,7 +1339,7 @@ export function SettingsPage({
           className="electrobun-webkit-app-region-drag settings-titlebar flex shrink-0 items-center gap-1.5 border-b pb-1.5 pl-6 pr-3 pt-1.5"
         >
           <span className="electrobun-webkit-app-region-drag text-ui font-medium text-muted-foreground">
-            {t("settings.title")}
+            {tab === "profile" ? t("profile.title") : t("settings.title")}
           </span>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {(tab === "general" || tab === "appearance" || tab === "keybindings") && (
@@ -1094,13 +1358,9 @@ export function SettingsPage({
         <ScrollArea className="min-h-0 flex-1">
           <div
             className={cn(
-              "mx-auto w-full pb-20",
-              tab === "memory"
-                ? "settings-memory-page"
-                : tab === "pets"
-                  ? "settings-pets-page"
-                  : "settings-standard-page",
-              tab === "project" && "settings-project-page",
+              "settings-page mx-auto w-full pb-20",
+              tab === "profile" && "settings-profile-page",
+              tab === "worktrees" && "settings-worktrees-page",
             )}
           >
             {tab === "general" && (
@@ -1177,6 +1437,8 @@ export function SettingsPage({
                 <AppearanceSettings value={theme} onChange={setTheme} />
               </Page>
             )}
+
+            {tab === "profile" && <ProfileSettings providerNames={providerNames} />}
 
             {tab === "pets" && (
               <Page title={t("settings.pets")}>
@@ -1357,7 +1619,6 @@ export function SettingsPage({
                         {projectDefaultProvider && projectDefaultModels.length > 0 ? (
                           <div className="flex min-w-0 items-center rounded-(--ds-radius-control) bg-fill-rest px-1">
                             <ModelPicker
-                              compact
                               models={projectDefaultModels}
                               current={project.default_model ?? null}
                               defaultModel={null}
@@ -1537,56 +1798,6 @@ export function SettingsPage({
                       </Button>
                     </ProjectRow>
 
-                    <GroupHeading>{t("worktree.manage")}</GroupHeading>
-                    <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
-                      {t("worktree.manageHint")}
-                    </p>
-                    {worktreesError && (
-                      <p className="pt-2 text-hint leading-relaxed text-destructive">{worktreesError}</p>
-                    )}
-                    {worktreesLoading ? (
-                      <p className="py-5 text-ui text-muted-foreground">{t("worktree.manageLoading")}</p>
-                    ) : worktrees.length === 0 ? (
-                      !worktreesError && (
-                        <p className="py-5 text-ui text-muted-foreground">{t("worktree.manageEmpty")}</p>
-                      )
-                    ) : (
-                      worktrees.map((entry) => {
-                        const branch = worktreeBranchDisplay(entry.branch);
-                        return (
-                          <ProjectRow
-                            key={entry.path}
-                            compact
-                            label={entry.session_title ?? branch ?? entry.path}
-                            hint={
-                              <span className="flex flex-wrap items-center gap-1.5">
-                                <Badge variant="outline">{t(WORKTREE_KIND_LABELS[entry.kind])}</Badge>
-                                {worktreeStatusBadges(entry).map((badge) => (
-                                  <Badge key={badge} variant="outline">
-                                    {t(WORKTREE_BADGE_LABELS[badge])}
-                                  </Badge>
-                                ))}
-                                <span className="max-w-72 truncate font-mono" title={entry.path}>
-                                  {entry.path}
-                                </span>
-                                {branch && <span className="shrink-0 font-mono">{branch}</span>}
-                              </span>
-                            }
-                          >
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-muted-foreground hover:text-destructive"
-                              disabled={discardingWorktree !== null}
-                              onClick={() => void discardWorktree(entry)}
-                            >
-                              {t("worktree.discard")}
-                            </Button>
-                          </ProjectRow>
-                        );
-                      })
-                    )}
-
                     <GroupHeading>{t("settings.projectDanger")}</GroupHeading>
                     <ProjectRow
                       label={t("settings.removeProject")}
@@ -1606,6 +1817,199 @@ export function SettingsPage({
                   </>
                 ) : (
                   <p className="py-6 text-ui text-muted-foreground">{t("settings.projectNone")}</p>
+                )}
+              </Page>
+            )}
+
+            {tab === "worktrees" && (
+              <Page title={t("settings.worktrees")} description={t("worktree.manageAllHint")}>
+                <section className="worktree-policy-card" aria-label={t("worktree.settingsTitle")}>
+                  {worktreeSettings ? (
+                    <>
+                      <Row
+                        className="worktree-policy-row"
+                        label={t("worktree.root")}
+                        hint={t("worktree.rootHint")}
+                      >
+                        <Input
+                          className="worktree-root-input font-mono"
+                          value={worktreeRootDraft}
+                          placeholder={t("worktree.rootDefault")}
+                          aria-label={t("worktree.root")}
+                          disabled={worktreeSettingsSaving}
+                          onChange={(event) => setWorktreeRootDraft(event.target.value)}
+                          onBlur={commitWorktreeRoot}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                          }}
+                        />
+                      </Row>
+                      <Row
+                        className="worktree-policy-row"
+                        label={t("worktree.fetchUpstream")}
+                        hint={t("worktree.fetchUpstreamHint")}
+                      >
+                        <Switch
+                          checked={worktreeSettings.fetch_upstream}
+                          disabled={worktreeSettingsSaving}
+                          aria-label={t("worktree.fetchUpstream")}
+                          onCheckedChange={(fetch_upstream) => {
+                            void saveGlobalWorktreeSettings({ fetch_upstream });
+                          }}
+                        />
+                      </Row>
+                      <Row
+                        className="worktree-policy-row"
+                        label={t("worktree.autoDelete")}
+                        hint={t("worktree.autoDeleteHint")}
+                      >
+                        <Switch
+                          checked={worktreeSettings.auto_delete}
+                          disabled={worktreeSettingsSaving}
+                          aria-label={t("worktree.autoDelete")}
+                          onCheckedChange={(auto_delete) => {
+                            void saveGlobalWorktreeSettings({ auto_delete });
+                          }}
+                        />
+                      </Row>
+                      <Row
+                        className="worktree-policy-row"
+                        label={t("worktree.autoDeleteLimit")}
+                        hint={t("worktree.autoDeleteLimitHint")}
+                      >
+                        <Input
+                          className="worktree-limit-input"
+                          type="number"
+                          min={1}
+                          max={1000}
+                          inputMode="numeric"
+                          value={worktreeLimitDraft}
+                          aria-label={t("worktree.autoDeleteLimit")}
+                          disabled={worktreeSettingsSaving || !worktreeSettings.auto_delete}
+                          onChange={(event) => setWorktreeLimitDraft(event.target.value)}
+                          onBlur={commitWorktreeLimit}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                          }}
+                        />
+                      </Row>
+                    </>
+                  ) : (
+                    <p className="px-4 py-4 text-hint text-muted-foreground">
+                      {t("worktree.settingsLoading")}
+                    </p>
+                  )}
+                </section>
+                {worktreeSettingsError ? (
+                  <p className="mt-2 text-hint leading-relaxed text-destructive" role="alert">
+                    {worktreeSettingsError}
+                  </p>
+                ) : null}
+
+                <div className="flex items-center justify-end pb-2 pt-5">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={worktreesLoading || worktreeSettingsSaving || discardingWorktree !== null}
+                    onClick={() => void loadWorktrees(projects)}
+                  >
+                    <RefreshCw className={cn(worktreesLoading && "animate-spin")} />
+                    {t("worktree.refresh")}
+                  </Button>
+                </div>
+
+                {projects.length === 0 ? (
+                  <p className="py-6 text-ui text-muted-foreground">{t("worktree.manageNoProjects")}</p>
+                ) : worktreesLoading && Object.keys(worktreesByProject).length === 0 ? (
+                  <p className="py-6 text-ui text-muted-foreground">{t("worktree.manageLoading")}</p>
+                ) : (
+                  projects.map((candidate) => {
+                    const state = worktreesByProject[candidate.path] ?? { entries: [], error: null };
+                    return (
+                      <section
+                        key={candidate.path}
+                        data-worktree-project={candidate.path}
+                        className="worktree-project-section"
+                      >
+                        <div className="worktree-project-header">
+                          <ProjectIcon project={candidate} size={24} />
+                          <div className="min-w-0 flex-1">
+                            <h2 className="truncate text-ui font-semibold">{candidate.name}</h2>
+                            <p className="truncate font-mono text-fine text-muted-foreground" title={candidate.path}>
+                              {candidate.path}
+                            </p>
+                          </div>
+                          <Badge variant="secondary">
+                            {t("worktree.count", { count: state.entries.length })}
+                          </Badge>
+                        </div>
+
+                        <div className="worktree-project-card">
+                          {state.error ? (
+                            <p className="px-3 py-3 text-hint leading-relaxed text-destructive" role="alert">
+                              {state.error}
+                            </p>
+                          ) : state.entries.length === 0 ? (
+                            <p className="px-3 py-3 text-hint text-muted-foreground">
+                              {t("worktree.manageEmpty")}
+                            </p>
+                          ) : (
+                            state.entries.map((entry) => {
+                              const branch = worktreeBranchDisplay(entry.branch);
+                              return (
+                                <Row
+                                  key={entry.path}
+                                  compact
+                                  className="worktree-settings-row"
+                                  controlClassName="worktree-settings-actions"
+                                  label={entry.session_title ?? branch ?? entry.path}
+                                  hint={(
+                                    <span className="block min-w-0">
+                                      <span className="flex flex-wrap items-center gap-1.5">
+                                        <Badge variant="secondary">{t(WORKTREE_KIND_LABELS[entry.kind])}</Badge>
+                                        {worktreeStatusBadges(entry).map((badge) => (
+                                          <Badge key={badge} variant="secondary">
+                                            {t(WORKTREE_BADGE_LABELS[badge])}
+                                          </Badge>
+                                        ))}
+                                        {branch && <span className="shrink-0 font-mono">{branch}</span>}
+                                      </span>
+                                      <span className="mt-1 block truncate font-mono" title={entry.path}>
+                                        {entry.path}
+                                      </span>
+                                    </span>
+                                  )}
+                                >
+                                  {entry.session_id ? (
+                                    <Button
+                                      variant="secondary"
+                                      size="xs"
+                                      disabled={discardingWorktree !== null}
+                                      onClick={() => onOpenSession(entry.session_id!)}
+                                    >
+                                      <MessageSquare />
+                                      {t("worktree.openConversation")}
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    variant="destructive"
+                                    size="xs"
+                                    disabled={discardingWorktree !== null}
+                                    onClick={() => void discardWorktree(candidate.path, entry)}
+                                  >
+                                    {discardingWorktree === entry.path
+                                      ? <LoaderCircle className="animate-spin" />
+                                      : <Trash2 />}
+                                    {t("worktree.discard")}
+                                  </Button>
+                                </Row>
+                              );
+                            })
+                          )}
+                        </div>
+                      </section>
+                    );
+                  })
                 )}
               </Page>
             )}
@@ -1906,13 +2310,13 @@ export function SettingsPage({
             {tab === "providers" && (
               <Page title={t("settings.providers")} description={t("settings.providersHint")}>
                 <div className="mb-2 flex items-center justify-end gap-2">
-                  <span className="text-fine text-muted-foreground">
-                    {providerOperation?.action === "refresh"
-                      ? t("settings.providerChecking")
-                      : providerMessage?.id === "*"
-                        ? providerMessage.text
-                        : t("settings.providerChecked")}
-                  </span>
+                  {(providerOperation?.action === "refresh" || providerMessage?.id === "*") && (
+                    <span className="text-fine text-muted-foreground">
+                      {providerOperation?.action === "refresh"
+                        ? t("settings.providerChecking")
+                        : providerMessage?.text}
+                    </span>
+                  )}
                   <Button
                     data-provider-refresh
                     variant="ghost"
@@ -1934,6 +2338,9 @@ export function SettingsPage({
                     const management = p.management ?? {
                       installed: p.available,
                       version: null,
+                      latest_version: null,
+                      update_available: null,
+                      check_error: null,
                       install_supported: false,
                       upgrade_supported: false,
                       launch_mode: p.available ? "installed" as const : "unavailable" as const,
@@ -1998,7 +2405,7 @@ export function SettingsPage({
                               )}
                             />
                           </button>
-                          {management.install_supported && (
+                          {!management.installed && management.install_supported && (
                             <Button
                               data-provider-action={`${p.id}:install`}
                               variant="secondary"
@@ -2012,7 +2419,9 @@ export function SettingsPage({
                                 : t("settings.providerInstall")}
                             </Button>
                           )}
-                          {management.upgrade_supported && (
+                          {management.installed
+                            && management.upgrade_supported
+                            && management.update_available === true && (
                             <Button
                               data-provider-action={`${p.id}:upgrade`}
                               variant="ghost"
@@ -2023,7 +2432,11 @@ export function SettingsPage({
                               {operation === "upgrade" ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
                               {operation === "upgrade"
                                 ? t("settings.providerUpgrading")
-                                : t("settings.providerUpgrade")}
+                                : management.latest_version
+                                  ? t("settings.providerUpgradeVersion", {
+                                    version: management.latest_version,
+                                  })
+                                  : t("settings.providerUpgrade")}
                             </Button>
                           )}
                           <Switch
@@ -2106,6 +2519,66 @@ export function SettingsPage({
                     );
                   })}
                 </div>
+              </Page>
+            )}
+
+            {tab === "developer" && (
+              <Page title={t("settings.developer")} description={t("settings.developerHint")}>
+                <Row label={t("settings.developerMode")} hint={t("settings.developerModeHint")}>
+                  <Switch
+                    checked={pluginDevelopment?.enabled ?? false}
+                    disabled={pluginDevelopmentSaving}
+                    onCheckedChange={(checked) => void savePluginDeveloperMode(checked)}
+                    aria-label={t("settings.developerMode")}
+                  />
+                </Row>
+
+                <GroupHeading>{t("settings.pluginDevelopment")}</GroupHeading>
+
+                <Row
+                  label={t("settings.pluginHotReload")}
+                  hint={(
+                    <span aria-live="polite">
+                      <span className="block">{pluginDevelopmentStatus}</span>
+                      {pluginReloadDetail && (
+                        <span
+                          className="mt-0.5 block"
+                          role={pluginReloadRecord?.success ? undefined : "alert"}
+                        >
+                          {pluginReloadDetail}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pluginDevelopmentReloading || pluginDevelopmentSaving}
+                    onClick={() => void reloadPlugins()}
+                  >
+                    <RefreshCw
+                      data-icon="inline-start"
+                      className={cn(pluginDevelopmentReloading && "animate-spin")}
+                    />
+                    {pluginDevelopmentReloading
+                      ? t("settings.reloadingPlugins")
+                      : t("settings.reloadPlugins")}
+                  </Button>
+                </Row>
+
+                <Row label={t("settings.webviewDevtools")} hint={t("settings.webviewDevtoolsHint")}>
+                  <Button variant="outline" size="sm" onClick={() => void showWebviewDevtools()}>
+                    <Bug data-icon="inline-start" />
+                    {t("settings.openWebviewDevtools")}
+                  </Button>
+                </Row>
+
+                {pluginDevelopmentError && (
+                  <p className="pt-2 text-hint text-destructive" role="alert">
+                    {pluginDevelopmentError}
+                  </p>
+                )}
               </Page>
             )}
 
