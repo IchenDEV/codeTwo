@@ -21,9 +21,9 @@ const nativeWindowEffects = source("../native/window-effects/CodeTwoWindowEffect
 const themeSource = source("../src/theme.tsx");
 
 describe("macOS window chrome contract", () => {
-  test("leaves the native macOS traffic lights entirely to the system", () => {
+  test("positions the macOS traffic lights with a vertical offset to center in the title bar", () => {
     expect(electrobunHost).toContain('titleBarStyle: "hiddenInset"');
-    expect(electrobunHost).not.toMatch(/trafficLightOffset|setWindowButtonPosition/);
+    expect(electrobunHost).toContain("trafficLightOffset: { x: 0, y: 6 }");
   });
 
   test("reserves traffic-light space only on macOS", () => {

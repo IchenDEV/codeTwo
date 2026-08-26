@@ -213,6 +213,7 @@ const mainWindow = new BrowserWindow({
   renderer: "native",
   rpc,
   titleBarStyle: "hiddenInset",
+  trafficLightOffset: { x: 0, y: 6 },
   transparent: process.platform === "darwin",
   sandbox: false,
 });
