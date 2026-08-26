@@ -445,6 +445,12 @@ interface PendingCreation {
   projectReasoningEffort: string | null;
 }
 
+interface NewSessionRunTarget {
+  source: string;
+  worktreeBase: WorktreeBaselineKind;
+  worktreeBaseSha: string;
+}
+
 interface PendingPolicyRequest {
   session: string;
   authoritative: ExecutionPolicy;
@@ -2609,7 +2615,10 @@ export default function App() {
     }));
   }, []);
 
-  const run = useCallback(async (docOverride?: DocBlock[]) => {
+  const run = useCallback(async (
+    docOverride?: DocBlock[],
+    newSessionTarget?: NewSessionRunTarget,
+  ) => {
     if (sessionLoading) {
       toast(t("toast.sessionLoading"));
       return;
@@ -2637,21 +2646,24 @@ export default function App() {
       focusEditorRef.current?.();
       return;
     }
-    if (running) {
+    if (running && !newSessionTarget) {
       toast(t("toast.alreadyRunning"));
       return;
     }
-    const targetSession = canvasRetryTargetSession(
-      activeSessionRef.current,
-      forceNewSessionForCanvasRetryRef.current,
-    );
-    const worktreeBaseSha = targetSession
+    const targetSession = newSessionTarget
+      ? null
+      : canvasRetryTargetSession(
+          activeSessionRef.current,
+          forceNewSessionForCanvasRetryRef.current,
+        );
+    const creationWorktreeBase = newSessionTarget?.worktreeBase ?? worktreeBase;
+    const worktreeBaseSha = newSessionTarget?.worktreeBaseSha ?? (targetSession
       ? null
       : sessionCreationBaselineSha(
-          worktreeBase,
+          creationWorktreeBase,
           worktreeOptions,
           worktreeOptionsLoading,
-        );
+        ));
     if (worktreeBaseSha === undefined) {
       toast(
         t(
@@ -2752,8 +2764,8 @@ export default function App() {
       } else {
         await newSession(
           provider,
-          (activeProjectRef.current ?? cwd) || ".",
-          worktreeBase,
+          newSessionTarget?.source ?? ((activeProjectRef.current ?? cwd) || "."),
+          creationWorktreeBase,
           creationRequestId!,
           worktreeBaseSha,
           { mode, sandbox },
@@ -2917,7 +2929,7 @@ export default function App() {
     [activeAppshots, interactionCapabilities, sessionLoading, t, toast],
   );
 
-  const createSession = useCallback(() => {
+  const createSession = useCallback((): string | null => {
     const currentSessionId = activeSessionRef.current;
     const storedSession =
       sessions.find((session) => session.id === currentSessionId) ??
@@ -2935,7 +2947,7 @@ export default function App() {
     );
     if (source === null) {
       toast(t("toast.worktreeSourceUnknown"), "error");
-      return;
+      return null;
     }
 
     invalidatePendingCreation();
@@ -2983,6 +2995,7 @@ export default function App() {
     setTimeout(() => focusEditorRef.current?.(), 0);
     // A New action opens a configurable blank draft. The first Run creates the durable session,
     // after the now-visible baseline picker has had a chance to tell the truth and be changed.
+    return source;
   }, [
     cwd,
     sessions,
@@ -3007,6 +3020,43 @@ export default function App() {
     setTaskContext(task, false);
     createSession();
   }, [createSession, setTaskContext]);
+
+  const startParallelTask = useCallback(() => {
+    const session = activeSessionRef.current;
+    if (!session || !runningSessionsRef.current.has(session)) {
+      toast(t("toast.notRunning"), "error");
+      return;
+    }
+    const worktreeBaseSha = sessionCreationBaselineSha(
+      "current",
+      worktreeOptions,
+      worktreeOptionsLoading,
+    );
+    if (!worktreeBaseSha) {
+      toast(t("toast.multitaskWorktreeUnavailable"), "error");
+      return;
+    }
+    const source = createSession();
+    if (!source) return;
+
+    // A parallel send is a new user-owned Task, not an opaque provider subagent. The current
+    // Session keeps running in the background while the new Session gets its own checkout.
+    setTaskContext(null, false);
+    setWorktreeBase("current");
+    setProvider(provider);
+    setCurrentModel(currentModel);
+    void run(undefined, { source, worktreeBase: "current", worktreeBaseSha });
+  }, [
+    createSession,
+    currentModel,
+    provider,
+    run,
+    setTaskContext,
+    t,
+    toast,
+    worktreeOptions,
+    worktreeOptionsLoading,
+  ]);
 
   const appshotCapturedRef = useRef<(capture: AppshotCapture) => void>(() => {});
   const appshotFailedRef = useRef<(failure: { message: string }) => void>(() => {});
@@ -6649,6 +6699,7 @@ export default function App() {
                   onRemoveAppshot={(id) => removePendingAppshots([id])}
                   onRun={() => void run()}
                   onQueue={() => void sendDuringTurn("queued")}
+                  onMultitask={startParallelTask}
                   onSteer={() => void sendDuringTurn("steer")}
                   steeringSupported={activeInteractionCapabilities?.steering ?? false}
                   goalCapability={activeInteractionCapabilities?.goal ?? null}

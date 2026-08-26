@@ -5,6 +5,10 @@ const composer = readFileSync(
   new URL("../src/session/Composer.tsx", import.meta.url),
   "utf8",
 );
+const app = readFileSync(
+  new URL("../src/App.tsx", import.meta.url),
+  "utf8",
+);
 const tokens = readFileSync(
   new URL("../src/design/tokens.css", import.meta.url),
   "utf8",
@@ -58,6 +62,21 @@ describe("composer geometry contract", () => {
     expect(composer).not.toContain('"px-3 pb-2.5 pt-1.5"');
     expect(composer).not.toContain(
       'className="size-8 shrink-0 rounded-(--ds-radius-control) transition-transform active:scale-90"',
+    );
+  });
+});
+
+describe("composer multitask contract", () => {
+  test("starts a parallel task in an isolated worktree instead of queueing it", () => {
+    expect(composer).toContain("onMultitask: () => void;");
+    expect(composer).toContain(
+      '<DropdownMenuItem onClick={onMultitask}>',
+    );
+    expect(composer).toContain('t("composer.multitask")');
+    expect(app).toContain("onMultitask={startParallelTask}");
+    expect(app).toContain('sessionCreationBaselineSha(\n      "current"');
+    expect(app).toContain(
+      'void run(undefined, { source, worktreeBase: "current", worktreeBaseSha });',
     );
   });
 });
