@@ -10,8 +10,9 @@ not a supported capability until a host has an adapter for it and reports that s
 
 ## 1. System model
 
-C2 uses five distinct concepts. Calling all five “a plugin” hides the boundary that matters, so
-code, UI, diagnostics, and documentation MUST use the precise term where ambiguity is possible.
+C2 uses the following distinct concepts. Calling all of them “a plugin” hides the boundary that
+matters, so code, UI, diagnostics, and documentation MUST use the precise term where ambiguity is
+possible.
 
 | Term | Meaning | Stable interface |
 | --- | --- | --- |
@@ -20,6 +21,12 @@ code, UI, diagnostics, and documentation MUST use the precise term where ambigui
 | **Runtime module** | Behavior loaded into the graph: a compiled `Plugin` or a trusted child process. | Commands, events, services, dependencies, and cleanup |
 | **Host adapter** | The narrow implementation that connects a runtime module to Rust, Electrobun/Bun, TUI, server, or a native OS service. | Host capability profile and the typed `call` boundary |
 | **Policy** | Durable user/project intent, trust, configuration, recovery, and lifecycle decisions. | `catalog -> plan_change -> apply_change`, plus `reset` |
+
+Runtime modules also have a product role: **Core** is host-owned and not controlled by extension
+policy; a **built-in feature** is optional behavior shipped by C2 or a host; an **extension** is a
+separately installed Bundle. Sharing `codetwo_kernel::Plugin` lifecycle plumbing does not grant an
+extension access to Core's private services or commands. The normative boundary is recorded in
+[ADR 0002](adr/0002-core-extension-boundary.md).
 
 The plugin manager is a deep module. Its public seam is small—catalog, plan, apply, reset, commands,
 and events—while discovery, configuration storage, dependency ordering, process supervision, project
@@ -148,23 +155,28 @@ package or ship renderer code. Validate the same directory that will be committe
 ```sh
 cd apps/desktop
 bun run plugin:validate ../../packs/hello-runtime
+cargo run -p codetwo-core --example validate_bundle -- ../../packs/hello-runtime
 ```
 
-The validator uses the same package model as the desktop installer. It checks the Agent Plugins
-identity, exact C2 standard version, runtime and contribution shapes, unique IDs, UI/runtime
-ownership, and bundle-relative runtime paths. A valid bundle can be installed directly from a
-GitHub repository or `/tree/<ref>/<path>` URL, so a repository folder is the preferred distribution
-artifact. Releases MAY additionally attach an archive of that exact folder; extracting it MUST
-produce `plugin.json` at the selected root.
+The Bun command is a fast manifest preflight. The Rust command uses the desktop installer's
+authoritative bounded bundle collector and package parser: it checks the Agent Plugins identity,
+exact C2 standard version, supported contributions, unique IDs, UI/runtime ownership,
+bundle-relative executable paths, symlinks, and file/count/size limits. A valid bundle can be
+installed directly from a GitHub repository or `/tree/<ref>/<path>` URL, so a repository folder is
+the preferred distribution artifact. Releases MAY additionally attach an archive of that exact
+folder; extracting it MUST produce `plugin.json` at the selected root.
 
 Use stable bundle-local contribution IDs. C2 derives policy identities from the installed bundle
 and contribution ID, so upgrades can preserve per-component user and project choices without an
 author coordinating generated installation IDs.
 
 A distributable catalog is a root `marketplace.json` with `standardVersion: "1.0.0"`. Every entry
-requires a semantic `version` that matches its bundle manifest and one explicit source object with
-`kind` equal to `local`, `github`, `git`, `npm`, or `archive`. Catalog, entry, and source objects are
-closed; unknown fields invalidate that object rather than falling through to another source shape.
+requires a `name` and semantic `version` that both match its bundle manifest, plus one explicit
+source object with `kind` equal to `local`, `github`, `git`, `npm`, or `archive`. Catalog, entry,
+and source objects are closed; unknown fields invalidate that object rather than falling through
+to another source shape. The canonical `IchenDEV/c2-plugins` community catalog points to
+author-owned repositories at exact commit SHAs; catalog inclusion is not a security, quality, or
+maintenance endorsement.
 
 ## 3. Identity and names
 
@@ -313,7 +325,8 @@ A change is plugin-conformant only when all applicable statements are true:
 - The feature is owned by one runtime module and reached through `subsystem.verb` commands or typed
   events, not a new parallel bridge.
 - Dependencies and optional dependencies are declared; owned resources are registered for cleanup.
-- Catalog metadata names origin, category, supported scopes, essential state, and default state.
+- Catalog metadata names role, origin, category, supported scopes, essential state, and default
+  state.
 - Configuration has a schema when user-editable, and changes use revision-bound plan/apply.
 - Executable bundle content is trust-gated and installation remains data-only.
 - Project support has a real isolated instance and command realm, not a UI-only scope label.

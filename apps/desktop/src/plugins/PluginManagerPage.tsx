@@ -68,10 +68,9 @@ import type {
 } from "./types";
 
 const DEFAULT_LABELS: PluginManagerLabels = {
-  title: "Plugins",
-  description:
-    "Manage built-in features, desktop host integrations, and installed bundles in one place.",
-  plugins: "Plugins",
+  title: "Features & plugins",
+  description: "Manage optional C2 features, desktop integrations, and installed plugins.",
+  plugins: "Features",
   components: "Components",
   mcps: "MCPs",
   skills: "Skills",
@@ -181,9 +180,9 @@ const DEFAULT_LABELS: PluginManagerLabels = {
   unsupported: "Unsupported",
   },
   sourceNames: {
-  builtin: "Built-in",
-  host: "Desktop host",
-  bundle: "Bundle",
+    builtin: "Built-in feature",
+    host: "Host feature",
+    bundle: "Plugin bundle",
   },
   contribution: (_id, fallback) => fallback,
   componentKind: (kind) => kind,

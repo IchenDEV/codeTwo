@@ -19,9 +19,9 @@ describe("plugin manager localization", () => {
   test("translates manager chrome, statuses, and known contribution labels", () => {
     const labels = createPluginManagerLabels(t);
 
-    expect(labels.title).toBe("插件");
+    expect(labels.title).toBe("功能与插件");
     expect(labels.status.active).toBe("运行中");
-    expect(labels.sourceNames.host).toBe("桌面宿主");
+    expect(labels.sourceNames.host).toBe("宿主功能");
     expect(labels.contribution("runtime", "Process runtime")).toBe(
       "进程运行时",
     );

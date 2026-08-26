@@ -1,8 +1,7 @@
-//! Every built-in plugin, and the registry that makes them loadable by name.
+//! Core and built-in runtime modules, and the registry that makes them loadable by name.
 //!
-//! Adding a subsystem to C2 means writing one file here and one line in the config. Nothing
-//! else in the codebase has to learn about it — not a state struct, not a constructor, not a
-//! dispatch table.
+//! These modules share the kernel's internal lifecycle. That does not make Core infrastructure a
+//! user-installable extension or make its commands part of the public Extension API.
 
 mod canvas;
 mod engine;
@@ -38,8 +37,24 @@ pub use workspace::{GitPlugin, KeymapPlugin, MarketPlugin};
 pub use workspace_io::{ArtifactsPlugin, ProjectsPlugin, WorkspacePlugin, WorkspaceSearchPlugin};
 
 use codetwo_kernel::{
-    PluginCategory, PluginMetadata, PluginOrigin, PluginRegistry, PluginScopeSupport,
+    PluginCategory, PluginMetadata, PluginOrigin, PluginRegistry, PluginRole, PluginScopeSupport,
 };
+
+/// Runtime modules that form the C2 platform rather than an optional extension.
+///
+/// They still use the kernel's [`Plugin`](codetwo_kernel::Plugin) lifecycle internally, but their
+/// presence is owned by host configuration and cannot be changed through extension policy.
+pub const CORE: &[&str] = &[
+    "paths",
+    "store",
+    "bus",
+    "providers",
+    "plugin-hub",
+    "skills",
+    "engine",
+    "kernel",
+    "extensions",
+];
 
 /// The names of every built-in, in the order a fresh config enables them.
 ///
@@ -152,6 +167,11 @@ pub fn builtin_registry() -> PluginRegistry {
                 name,
                 PluginMetadata {
                     origin: PluginOrigin::BuiltIn,
+                    role: if CORE.contains(&name) {
+                        PluginRole::Core
+                    } else {
+                        PluginRole::BuiltIn
+                    },
                     category,
                     scope_support,
                     essential: name == "kernel",

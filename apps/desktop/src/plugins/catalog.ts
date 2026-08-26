@@ -238,7 +238,7 @@ export function buildPluginManagerCatalog({
   }
 
   const managedPlugins: PluginManagerPlugin[] = catalog.plugins
-    .filter((entry) => !bundlesByManagedId.has(entry.id))
+    .filter((entry) => entry.metadata.role !== "core" && !bundlesByManagedId.has(entry.id))
     .map((entry) => ({
       id: entry.id,
       name: titleFor(entry.id),
@@ -276,7 +276,8 @@ export function buildPluginManagerCatalog({
       sourceLabel: bundle.source,
       category: policyEntry?.metadata.category ?? "plugin",
       supportedScopes: policyEntry ? scopeSupport(policyEntry) : bundleScope(bundle),
-      required: policyEntry?.metadata.essential ?? false,
+      required:
+        policyEntry?.metadata.essential === true || policyEntry?.metadata.role === "core",
       dependencies: policyEntry
         ? [
             ...policyEntry.dependencies.required,
@@ -330,7 +331,7 @@ export function buildPluginManagerCatalog({
 
   const builtinComponents: PluginManagerComponent[] = BUILTIN_UI_COMPONENTS.flatMap((descriptor) => {
     const entry = entries.get(descriptor.pluginId);
-    if (!entry) return [];
+    if (!entry || entry.metadata.role === "core") return [];
     return [{
       id: descriptor.id,
       pluginId: descriptor.pluginId,

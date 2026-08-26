@@ -1,4 +1,4 @@
-//! Durable policy for the plugin graph.
+//! Durable policy for managed built-in features and installed extensions.
 //!
 //! The loader owns the running graph; this module owns the user's intent. Keeping those two
 //! responsibilities separate lets the manager stage and validate a change before it asks the

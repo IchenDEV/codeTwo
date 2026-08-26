@@ -2,7 +2,7 @@ use super::{normalize_project_path, protocol::ProtocolPlugin};
 use crate::plugin::{InstalledPlugin, PluginRuntimeSpec};
 use codetwo_kernel::{
     async_trait, CommandRealm, Context, Injection, Plugin, PluginCategory, PluginEntry,
-    PluginError, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult, Service,
+    PluginError, PluginMetadata, PluginOrigin, PluginRegistry, PluginResult, PluginRole, Service,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -50,6 +50,7 @@ pub(crate) fn bundle_runtime_descriptor(
     let default_enabled = installed.enabled && installed.trusted;
     let metadata = PluginMetadata {
         origin: PluginOrigin::ThirdParty,
+        role: PluginRole::Extension,
         category: PluginCategory::Integration,
         scope_support: runtime.scope_support.clone(),
         essential: false,
@@ -269,6 +270,7 @@ mod tests {
         let factory = registry.get("bundle:fixture").unwrap();
         assert_eq!(factory.description.as_deref(), Some("A fixture process"));
         assert_eq!(factory.metadata.origin, PluginOrigin::ThirdParty);
+        assert_eq!(factory.metadata.role, PluginRole::Extension);
         assert_eq!(factory.metadata.category, PluginCategory::Integration);
         assert_eq!(
             factory.metadata.scope_support,

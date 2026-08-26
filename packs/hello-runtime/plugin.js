@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // A complete C2 plugin, in one file. See docs/plugin-protocol.md.
 //
-// It contributes one command, calls one of the host's from inside it, and listens for a host
-// event. Nothing here is C2-specific machinery: JSON-RPC 2.0, one object per line, on stdio.
+// It contributes one command, calls one extension-public host command from inside it, and listens
+// for a host event. Nothing here is C2-specific machinery: JSON-RPC 2.0, one object per line.
 //
 // Run it by installing this directory as a plugin and marking it **trusted** — installing alone
 // never starts a process.
@@ -18,6 +18,7 @@ const rl = readline.createInterface({ input: process.stdin });
 // Outstanding requests *we* made to the host, by id.
 let nextId = 1;
 const pending = new Map();
+let hostHasGitStatus = false;
 
 function callHost(name, args) {
   const id = nextId++;
@@ -45,8 +46,8 @@ rl.on("line", async (line) => {
 
   switch (message.method) {
     case "initialize": {
-      // `params.host.commands` is the host's surface right now — feature-detect rather than assume.
-      const hostHasGit = (message.params.host.commands ?? []).includes("git.status");
+      // `params.host.commands` is the extension-public surface — feature-detect rather than assume.
+      hostHasGitStatus = (message.params.host.commands ?? []).includes("git.status");
       send({
         jsonrpc: "2.0",
         id: message.id,
@@ -66,7 +67,7 @@ rl.on("line", async (line) => {
               },
             },
           ],
-          events: hostHasGit ? ["skills/changed"] : [],
+          events: hostHasGitStatus ? ["skills/changed"] : [],
         },
       });
       log(`ready; the host offers ${(message.params.host.commands ?? []).length} commands`);
@@ -77,9 +78,10 @@ rl.on("line", async (line) => {
       const { name, args } = message.params;
       try {
         if (name !== "hello.dirty") throw new Error(`no command ${name}`);
+        if (!hostHasGitStatus) throw new Error("git.status is not available from this host");
         const cwd = args.cwd ?? args.context?.cwd;
         if (!cwd) throw new Error("cwd is required");
-        // Reach a host command by name — the same registry a Rust plugin uses.
+        // Reach a public host command by name — the same registry a Rust runtime module uses.
         const status = await callHost("git.status", { cwd });
         send({
           jsonrpc: "2.0",

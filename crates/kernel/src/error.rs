@@ -17,6 +17,9 @@ pub enum KernelError {
     CommandConflict(String),
     #[error("no command named `{0}`")]
     UnknownCommand(String),
+    /// An extension process tried to cross the command allowlist.
+    #[error("command `{0}` is internal and is not available to extension processes")]
+    CommandNotExtensionPublic(String),
     /// A project scope deliberately disabled the plugin that owns the global implementation.
     /// This is distinct from an unknown command so hosts can explain why inheritance stopped.
     #[error("command `{name}` is disabled in command realm {realm:?}")]

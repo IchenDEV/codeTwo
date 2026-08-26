@@ -21,6 +21,8 @@ struct Behaviour {
     protocol_version: String,
     /// Never answer `initialize` — the failure mode that would otherwise hang the whole graph.
     silent: bool,
+    /// Try to shadow a global host command from a project command realm.
+    shadows_global_command: bool,
 }
 
 impl Default for Behaviour {
@@ -28,6 +30,7 @@ impl Default for Behaviour {
         Behaviour {
             protocol_version: PROTOCOL_VERSION.to_string(),
             silent: false,
+            shadows_global_command: false,
         }
     }
 }
@@ -101,14 +104,20 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                 if behaviour.silent {
                     continue;
                 }
+                let commands = if behaviour.shadows_global_command {
+                    json!([{ "name": "demo.internal" }])
+                } else {
+                    json!([
+                        { "name": "mock.echo", "description": "Echo the arguments back." },
+                        { "name": "mock.viaHost" },
+                        { "name": "mock.internalViaHost" }
+                    ])
+                };
                 let result = json!({
                     "name": "mock",
                     "version": "0.1.0",
                     "protocolVersion": behaviour.protocol_version,
-                    "commands": [
-                        { "name": "mock.echo", "description": "Echo the arguments back." },
-                        { "name": "mock.viaHost" }
-                    ],
+                    "commands": commands,
                     "events": ["skills/changed"]
                 });
                 send(
@@ -132,10 +141,15 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                         .await;
                     }
                     // Call back into the host, and answer with what the host said.
-                    "mock.viaHost" => {
+                    "mock.viaHost" | "mock.internalViaHost" => {
+                        let target = if name == "mock.viaHost" {
+                            "demo.answer"
+                        } else {
+                            "demo.internal"
+                        };
                         let call = json!({
                             "jsonrpc": "2.0", "id": 9001, "method": "command/call",
-                            "params": { "name": "demo.answer", "args": {} }
+                            "params": { "name": target, "args": {} }
                         });
                         writer.write_all(format!("{call}\n").as_bytes()).await.ok();
                         // The host's response arrives on the same stream.
@@ -143,10 +157,18 @@ async fn run_mock(stream: DuplexStream, behaviour: Behaviour, observed: Arc<Obse
                             return;
                         };
                         let response: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
-                        let host_said = response.get("result").cloned().unwrap_or(Value::Null);
+                        let answer = if let Some(host_said) = response.get("result") {
+                            json!({ "host": host_said })
+                        } else {
+                            json!({
+                                "error": response["error"]["message"]
+                                    .as_str()
+                                    .unwrap_or("host call failed")
+                            })
+                        };
                         send(
                             &mut writer,
-                            json!({ "jsonrpc": "2.0", "id": id, "result": { "host": host_said } }),
+                            json!({ "jsonrpc": "2.0", "id": id, "result": answer }),
                         )
                         .await;
                     }
@@ -198,7 +220,8 @@ async fn load_in_realm(
     // One host command for the plugin to call back into.
     app.ctx().plugin(
         FnPlugin::new("demo", |ctx: codetwo_kernel::Context, _| async move {
-            ctx.command("demo.answer", |_| async move { Ok(Value::from(42)) })?;
+            ctx.command_extension_public("demo.answer", |_| async move { Ok(Value::from(42)) })?;
+            ctx.command("demo.internal", |_| async move { Ok(Value::from(7)) })?;
             Ok(())
         }),
         Value::Null,
@@ -209,7 +232,11 @@ async fn load_in_realm(
             FnPlugin::new(
                 "project-a-plugin",
                 |ctx: codetwo_kernel::Context, _| async move {
-                    ctx.command("project-a.only", |_| async move { Ok(Value::Null) })?;
+                    ctx.command_extension_public(
+                        "project-a.only",
+                        |_| async move { Ok(Value::Null) },
+                    )?;
+                    ctx.command("project-a.internal", |_| async move { Ok(Value::Null) })?;
                     Ok(())
                 },
             ),
@@ -221,7 +248,10 @@ async fn load_in_realm(
             FnPlugin::new(
                 "project-b-plugin",
                 |ctx: codetwo_kernel::Context, _| async move {
-                    ctx.command("project-b.only", |_| async move { Ok(Value::Null) })?;
+                    ctx.command_extension_public(
+                        "project-b.only",
+                        |_| async move { Ok(Value::Null) },
+                    )?;
                     Ok(())
                 },
             ),
@@ -317,6 +347,7 @@ async fn initialize_exposes_commands_from_only_the_instance_realm_and_global_fal
     let global_commands: Vec<String> =
         serde_json::from_value(global_params["host"]["commands"].clone()).unwrap();
     assert!(global_commands.contains(&"demo.answer".into()));
+    assert!(!global_commands.contains(&"demo.internal".into()));
     assert!(!global_commands.contains(&"project-a.only".into()));
     assert!(!global_commands.contains(&"project-b.only".into()));
 
@@ -327,7 +358,46 @@ async fn initialize_exposes_commands_from_only_the_instance_realm_and_global_fal
         serde_json::from_value(project_params["host"]["commands"].clone()).unwrap();
     assert!(project_commands.contains(&"demo.answer".into()));
     assert!(project_commands.contains(&"project-a.only".into()));
+    assert!(!project_commands.contains(&"demo.internal".into()));
+    assert!(!project_commands.contains(&"project-a.internal".into()));
     assert!(!project_commands.contains(&"project-b.only".into()));
+}
+
+#[tokio::test]
+async fn a_project_extension_cannot_shadow_a_global_host_command() {
+    let (fixture, fork) = load_in_realm(
+        Behaviour {
+            shadows_global_command: true,
+            ..Behaviour::default()
+        },
+        CommandRealm::project("project-a"),
+    )
+    .await;
+
+    assert_eq!(fork.status(), Status::Failed);
+    let scope = fixture
+        .app
+        .scopes()
+        .into_iter()
+        .find(|scope| scope.id == fork.id())
+        .unwrap();
+    assert!(
+        scope
+            .error
+            .unwrap()
+            .contains("conflicts with global command owned by `demo`"),
+        "the extension should fail before registering the shadow"
+    );
+    assert_eq!(
+        fixture
+            .app
+            .ctx()
+            .with_command_realm(CommandRealm::project("project-a"))
+            .call("demo.internal", Value::Null)
+            .await
+            .unwrap(),
+        7
+    );
 }
 
 #[tokio::test]
@@ -338,6 +408,32 @@ async fn a_plugin_can_call_back_into_the_host() {
         answered,
         json!({ "host": 42 }),
         "the plugin reached a host command by name, through the same registry"
+    );
+}
+
+#[tokio::test]
+async fn a_plugin_cannot_call_an_internal_host_command_even_if_it_knows_the_name() {
+    let (fixture, _fork) = load(Behaviour::default()).await;
+
+    assert_eq!(
+        fixture
+            .app
+            .call("demo.internal", Value::Null)
+            .await
+            .unwrap(),
+        7,
+        "the command remains available to the trusted host"
+    );
+    let refused = fixture
+        .app
+        .call("mock.internalViaHost", Value::Null)
+        .await
+        .unwrap();
+    assert_eq!(
+        refused,
+        json!({
+            "error": "command `demo.internal` is internal and is not available to extension processes"
+        })
     );
 }
 

@@ -374,8 +374,8 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
     expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
-    expect(view.container.textContent).toContain("Built-in");
-    expect(view.container.textContent).toContain("Desktop host");
+    expect(view.container.textContent).toContain("Built-in feature");
+    expect(view.container.textContent).toContain("Host feature");
     expect(view.container.textContent).toContain("Bundle · Review Tools");
     expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("User");
     expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("MemoryCapability");
@@ -669,6 +669,7 @@ describe("PluginManagerPage", () => {
     activateDom();
     const metadata = {
       origin: "third_party",
+      role: "extension",
       category: "developer_tools",
       scope_support: ["user", "project"],
       essential: false,
