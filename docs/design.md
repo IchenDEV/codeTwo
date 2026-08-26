@@ -31,7 +31,7 @@ mobile layout and not a showcase for decorative effects.
 - Persistent panels, cards, inputs, popovers, and dialogs are borderless and separated by solid
   surface tones plus controlled elevation.
 - Hover changes surface or text tone only. It never lifts, scales, or blooms a shadow.
-- Icons use Lucide and `currentColor`. Provider marks may keep their shape, never their brand color.
+- Icons use Hugeicons and `currentColor`. Provider marks may keep their shape, never their brand color.
 - Official themes are light, dark, and system. There is no user accent, provider theme, or custom
   palette.
 

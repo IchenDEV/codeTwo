@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, LoaderCircle, Lock, Pencil, Share2, UserRound } from "lucide-react";
+import { Check, LoaderCircle, Lock, Pencil, Share2, UserRound } from "@/components/ui/icons";
 
 import {
   usageHistory,

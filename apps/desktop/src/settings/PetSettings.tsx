@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Check, LoaderCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, Check, LoaderCircle, RefreshCw } from "@/components/ui/icons";
 
 import { setAppearanceSettings, useAppearanceSettings, type PetSize } from "../appearance";
 import { CodeTwoPetSprite } from "../pet/CodeTwoPet";

@@ -23,7 +23,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   Wrench,
-} from "lucide-react";
+} from "@/components/ui/icons";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import {

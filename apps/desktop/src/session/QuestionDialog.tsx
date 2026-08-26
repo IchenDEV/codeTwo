@@ -1,4 +1,4 @@
-import { Check, MessageCircleQuestion } from "lucide-react";
+import { Check, MessageCircleQuestion } from "@/components/ui/icons";
 import { useState } from "react";
 
 import {

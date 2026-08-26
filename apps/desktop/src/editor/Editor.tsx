@@ -9,7 +9,7 @@ import {
 } from "@blocknote/react";
 import { filterSuggestionItems, locales } from "@blocknote/core";
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
-import { Bot, Server, Sparkles } from "lucide-react";
+import { Bot, Server, Sparkles } from "@/components/ui/icons";
 import {
   CanvasBlockRuntimeContext,
   canvasBlockPropsFromDraft,

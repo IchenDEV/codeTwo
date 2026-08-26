@@ -16,7 +16,7 @@ import {
   Keyboard,
   PanelLeft,
   SquareKanban,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import { DocEditor } from "./editor/Editor";
 import { type CanvasBlockRuntime } from "./skillInline";

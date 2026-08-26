@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GitBranch, Minus, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { GitBranch, Minus, Plus, RefreshCw, Sparkles } from "@/components/ui/icons";
 import {
   gitCreatePr,
   gitDiff,

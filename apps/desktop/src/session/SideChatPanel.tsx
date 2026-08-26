@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { ArrowUp, MessageSquare, Plus, Square, X } from "lucide-react";
+import { ArrowUp, MessageSquare, Plus, Square, X } from "@/components/ui/icons";
 
 import {
   cancelTurn,

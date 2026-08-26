@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { MessageSquareText, Play } from "lucide-react";
+import { MessageSquareText, Play } from "@/components/ui/icons";
 
 import type { KeymapEntry, ProjectScript } from "../bridge";
 import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";

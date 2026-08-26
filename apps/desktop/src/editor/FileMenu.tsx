@@ -7,8 +7,8 @@ import {
   FileType,
   MessageSquare,
   Package,
-  type LucideIcon,
-} from "lucide-react";
+  type HugeIcon,
+} from "@/components/ui/icons";
 import type { SuggestionMenuProps } from "@blocknote/react";
 
 import { useT } from "../i18n";
@@ -47,7 +47,7 @@ export interface ArtifactAtItem {
 /** Everything the `@` picker can insert: chats, then artifacts, then workspace files. */
 export type AtItem = ChatItem | ArtifactAtItem | FileItem;
 
-const BY_EXTENSION: Record<string, LucideIcon> = {
+const BY_EXTENSION: Record<string, HugeIcon> = {
   ts: FileCode, tsx: FileCode, js: FileCode, jsx: FileCode, rs: FileCode, py: FileCode,
   go: FileCode, rb: FileCode, sh: FileCode, css: FileCode, html: FileCode, swift: FileCode,
   json: FileJson, lock: FileJson,
@@ -57,7 +57,7 @@ const BY_EXTENSION: Record<string, LucideIcon> = {
 };
 
 /** A page icon on every row says only "this is a file", which the user already knows. */
-function iconFor(name: string): LucideIcon {
+function iconFor(name: string): HugeIcon {
   const dot = name.lastIndexOf(".");
   return (dot > 0 && BY_EXTENSION[name.slice(dot + 1).toLowerCase()]) || FileText;
 }

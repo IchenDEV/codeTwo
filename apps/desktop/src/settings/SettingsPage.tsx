@@ -27,7 +27,7 @@ import {
   Trash2,
   UserRound,
   Wrench,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import {
   browserPermissions,

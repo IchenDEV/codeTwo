@@ -22,7 +22,7 @@ import {
   Ticket,
   TriangleAlert,
   X,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import type { SessionConfig } from "./config";
 import type { SceneInfo } from "./scene";

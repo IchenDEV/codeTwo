@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icons";
 import { Button } from "@/components/ui/button";
 import { useLanguage, useT } from "../i18n";
 import type { CoreEvent } from "../bridge";

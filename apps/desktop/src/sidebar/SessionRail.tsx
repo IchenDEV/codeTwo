@@ -37,7 +37,7 @@ import {
   SquareKanban,
   SquarePen,
   Trash2,
-} from "lucide-react";
+} from "@/components/ui/icons";
 
 import { openNativePath, providerLabel, type Project, type SessionInfo } from "../bridge";
 import {
