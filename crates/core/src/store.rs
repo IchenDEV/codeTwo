@@ -696,7 +696,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     // business host with the Rust kernel does not strand existing sessions or transcripts.
     tx.execute_batch(
         "UPDATE sessions SET provider=char(34)||provider||char(34)
-           WHERE provider IN ('claude_code','codex','grok','cursor','opencode','opencode2','pi','kimi','zcode');
+           WHERE provider IN ('claude_code','codex','grok','cursor','opencode','opencode2','pi','kimi','zcode','amp','droid');
          UPDATE sessions SET permission_mode=char(34)||permission_mode||char(34)
            WHERE permission_mode IN ('ask','accept_edits','yolo');
          UPDATE sessions SET sandbox_policy=char(34)||sandbox_policy||char(34)

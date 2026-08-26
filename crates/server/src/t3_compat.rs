@@ -2282,6 +2282,8 @@ fn provider_slug(provider: &ProviderId) -> String {
         ProviderId::Pi => "pi".into(),
         ProviderId::Kimi => "kimi".into(),
         ProviderId::ZCode => "zcode".into(),
+        ProviderId::Amp => "amp".into(),
+        ProviderId::Droid => "droid".into(),
         ProviderId::Custom(value) => slug(value),
     }
 }
@@ -2297,6 +2299,8 @@ fn provider_from_slug(value: &str) -> ProviderId {
         "pi" => ProviderId::Pi,
         "kimi" => ProviderId::Kimi,
         "zcode" => ProviderId::ZCode,
+        "amp" => ProviderId::Amp,
+        "droid" => ProviderId::Droid,
         other => ProviderId::Custom(other.to_string()),
     }
 }

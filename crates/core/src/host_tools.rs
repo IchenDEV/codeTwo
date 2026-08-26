@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 
 use crate::provider::{which, ProviderId, ProviderToolset};
 
-const BUILTIN_PROVIDER_IDS: [&str; 8] = [
+const BUILTIN_PROVIDER_IDS: [&str; 10] = [
     "claude_code",
     "codex",
     "grok",
@@ -23,6 +23,8 @@ const BUILTIN_PROVIDER_IDS: [&str; 8] = [
     "pi",
     "kimi",
     "zcode",
+    "amp",
+    "droid",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

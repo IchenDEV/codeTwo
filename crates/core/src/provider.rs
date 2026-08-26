@@ -73,6 +73,8 @@ pub enum ProviderId {
     Pi,
     Kimi,
     ZCode,
+    Amp,
+    Droid,
     Custom(String),
 }
 
@@ -88,6 +90,8 @@ impl ProviderId {
             ProviderId::Pi => "pi",
             ProviderId::Kimi => "kimi",
             ProviderId::ZCode => "zcode",
+            ProviderId::Amp => "amp",
+            ProviderId::Droid => "droid",
             ProviderId::Custom(s) => s,
         }
     }
@@ -134,7 +138,7 @@ impl Provider {
     }
 }
 
-/// The three providers from the plan, wired from the start (see plan decision "all three").
+/// The built-in provider registry, covering agents that speak ACP over stdio.
 ///
 /// - Claude Code: official ACP adapter via npx (richest ACP surface).
 /// - Codex: maintained ACP adapter via npx, backed by the Codex App Server.
@@ -142,6 +146,8 @@ impl Provider {
 /// - Kimi Code: speaks ACP natively too (`kimi acp`).
 /// - Pi: community ACP adapter via npx (pi itself has no ACP mode yet).
 /// - ZCode: the GLM ACP agent via npx (ZCode ships only a desktop app).
+/// - Amp: community ACP adapter (`amp-acp`) bridges Sourcegraph's Amp CLI.
+/// - Droid: Factory's CLI speaks ACP natively (`droid exec --output-format acp`).
 pub fn default_registry() -> Vec<Provider> {
     registry_with_codex_runtime(&CodexRuntimeDiscovery::detect())
 }
@@ -218,19 +224,36 @@ pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provi
             launch: LaunchSpec::new("npx", ["-y", "glm-acp-agent"]),
             needs_node: true,
         },
+        // Amp (Sourcegraph) has no native ACP mode; the community `amp-acp` adapter bridges its
+        // streaming JSON CLI to ACP over stdio. Requires `amp` on PATH and `amp login`.
+        Provider {
+            id: ProviderId::Amp,
+            display_name: "Amp".into(),
+            launch: LaunchSpec::new("npx", ["-y", "amp-acp"]),
+            needs_node: true,
+        },
+        // Factory Droid speaks ACP natively via `droid exec --output-format acp`. No adapter needed.
+        Provider {
+            id: ProviderId::Droid,
+            display_name: "Droid".into(),
+            launch: LaunchSpec::new("droid", ["exec", "--output-format", "acp"]),
+            needs_node: false,
+        },
     ]
 }
 
 /// Directories a login shell puts on `PATH` but a GUI-launched app doesn't. macOS hands a bundle
 /// started from Finder or Spotlight the bare `/usr/bin:/bin:/usr/sbin:/sbin`, so Homebrew, cargo,
 /// and friends are invisible — every CLI we shell out to looks "not installed".
-const GUI_PATH_FALLBACKS: [&str; 6] = [
+const GUI_PATH_FALLBACKS: [&str; 8] = [
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/opt/local/bin",
     "~/.local/bin",
     "~/.cargo/bin",
     "~/.opencode/bin",
+    "~/.amp/bin",
+    "~/.factory/bin",
 ];
 
 /// Resolve the current user's home directory on Unix and Windows hosts.
@@ -324,7 +347,7 @@ mod tests {
     #[test]
     fn registry_has_all_providers() {
         let reg = default_registry();
-        assert_eq!(reg.len(), 9);
+        assert_eq!(reg.len(), 11);
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::Grok && !p.needs_node));
@@ -341,6 +364,12 @@ mod tests {
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::ZCode && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Amp && p.needs_node));
+        assert!(reg
+            .iter()
+            .any(|p| p.id == ProviderId::Droid && !p.needs_node));
     }
 
     #[cfg(windows)]
