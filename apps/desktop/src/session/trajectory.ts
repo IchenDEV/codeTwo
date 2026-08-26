@@ -146,7 +146,7 @@ export function deriveTrajectory(turns: readonly Turn[], now = Date.now()): Traj
         turn: turnNumber,
         step: 1,
         title: "Plan",
-        summary: compact(turn.plan.join(" · ")),
+        summary: compact(turn.plan.map((entry) => entry.content).join(" · ")),
         startAt: turn.startedAt,
         endAt: turn.startedAt,
         running: false,

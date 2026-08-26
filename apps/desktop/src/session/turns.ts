@@ -1,4 +1,12 @@
-import type { CoreEvent, DocBlock, MemoryReceipt, Part, ToolOutput, TranscriptEntry } from "../bridge";
+import type {
+  CoreEvent,
+  DocBlock,
+  MemoryReceipt,
+  Part,
+  PlanEntry,
+  ToolOutput,
+  TranscriptEntry,
+} from "../bridge";
 import { isAgentActivityTitle } from "./agentActivity";
 
 /** Only an accepted TurnStarted may dispose mutable Composer Canvas heads. */
@@ -90,6 +98,21 @@ export interface ToolEntry {
   lastTranscriptSeq?: number;
 }
 
+/** Normalize durable legacy string entries and current structured ACP plan entries once. */
+export function normalizePlanEntries(
+  entries: readonly (PlanEntry | string)[],
+): PlanEntry[] {
+  return entries.map((entry) =>
+    typeof entry === "string"
+      ? { content: entry, priority: null, status: null }
+      : {
+          content: entry.content,
+          priority: entry.priority ?? null,
+          status: entry.status ?? null,
+        },
+  );
+}
+
 /**
  * The render-order projection of one turn. Text chunks stay as independent atoms so a tool call
  * can sit between two streamed answer fragments without splitting the durable assistant message.
@@ -146,7 +169,7 @@ export interface Turn {
   thoughts: string[];
   tools: ToolEntry[];
   content: TurnContentEntry[];
-  plan: string[];
+  plan: PlanEntry[];
   memory?: MemoryReceipt;
   error?: string;
   stopReason?: string;
@@ -574,7 +597,7 @@ export function applyEvent(
       break;
     }
     case "plan":
-      cur.plan = ev.entries;
+      cur.plan = normalizePlanEntries(ev.entries);
       break;
     case "turn_ended":
       cur.stopReason = ev.stop_reason;
@@ -807,7 +830,7 @@ export function turnsFromTranscript(
         cur.content = appendToolContent(cur.content, part.id, seq, at);
         break;
       case "plan":
-        cur.plan = part.entries;
+        cur.plan = normalizePlanEntries(part.entries);
         break;
     }
     cur.endedAt = Math.max(cur.endedAt ?? at, at);

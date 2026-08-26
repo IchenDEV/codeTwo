@@ -374,7 +374,14 @@ impl App {
                 session, entries, ..
             } => {
                 if self.active.as_deref() == Some(session.as_str()) {
-                    self.push("plan", entries.join("\n"));
+                    self.push(
+                        "plan",
+                        entries
+                            .iter()
+                            .map(|entry| entry.content.as_str())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    );
                 }
             }
             Event::PermissionRequest {
@@ -1318,7 +1325,14 @@ fn project_transcript_entry(entry: &TranscriptEntry) -> Option<TItem> {
             let label = if title.is_empty() { id } else { title };
             ("tool", format!("{label} — {status}"))
         }
-        (_, Part::Plan { entries }) => ("plan", entries.join("\n")),
+        (_, Part::Plan { entries }) => (
+            "plan",
+            entries
+                .iter()
+                .map(|entry| entry.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ),
         // Prompt parts are authored by the user; if legacy data labels one as agent, retain the
         // prompt's read-only text rather than dropping it from history.
         (_, Part::Prompt { text, display }) => ("user", project_prompt_history(text, display)),

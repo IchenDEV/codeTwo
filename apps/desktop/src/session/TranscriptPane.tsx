@@ -19,10 +19,6 @@ interface TranscriptPaneProps {
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
   scroll: TranscriptScrollController;
-  /** R4 plan-as-document affordances, threaded through to each turn's Plan detail. */
-  onOpenPlanAsDocument?: (entries: string[]) => void;
-  onPinPlanArtifact?: (markdown: string) => void;
-  canPinPlan?: boolean;
   /** R2 "Save as template…" in each turn's prompt menu. Absent → the menu stays hidden. */
   onSaveTemplate?: (promptText: string) => void;
   linkActions?: BuiltinLinkActions;
@@ -45,9 +41,6 @@ export function TranscriptPane({
   loadingEarlier,
   onLoadEarlier,
   scroll,
-  onOpenPlanAsDocument,
-  onPinPlanArtifact,
-  canPinPlan,
   onSaveTemplate,
   linkActions,
   sessionId,
@@ -125,9 +118,6 @@ export function TranscriptPane({
                   >
                     <TurnCard
                       turn={turn}
-                      onOpenPlanAsDocument={onOpenPlanAsDocument}
-                      onPinPlanArtifact={onPinPlanArtifact}
-                      canPinPlan={canPinPlan}
                       onSaveTemplate={onSaveTemplate}
                       linkActions={linkActions}
                       onFork={onForkTurn}

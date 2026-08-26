@@ -166,6 +166,7 @@ import {
   type ProviderInfo,
   type ProviderQuotaReport,
   type PermissionMode,
+  type PlanEntry,
   type Sandbox,
   type SessionActivity,
   type SessionInfo,
@@ -289,7 +290,7 @@ import { QuestionDialog } from "./session/QuestionDialog";
 import { PermissionCard } from "./session/PermissionCard";
 import { TemplateDialog } from "./session/TemplateDialog";
 import { TranscriptPane } from "./session/TranscriptPane";
-import { planChecklistMarkdown } from "./session/TurnCard";
+import { planChecklistMarkdown } from "./session/TaskPlanPanel";
 import { useTranscriptScroll } from "./session/useTranscriptScroll";
 import { DesktopPetBridge } from "./pet/DesktopPet";
 import { petAnimationForActivity } from "./pet/state";
@@ -1104,7 +1105,7 @@ export default function App() {
   const [planDocPending, setPlanDocPending] = useState<string | null>(null);
   /** The edited plan IS the next prompt: it opens into this session's composer document. */
   const openPlanAsDocument = useCallback(
-    (entries: string[]) => {
+    (entries: PlanEntry[]) => {
       const markdown = planChecklistMarkdown(entries);
       if (docEmpty) {
         void insertMarkdownRef.current?.(markdown, "replace");
@@ -6458,6 +6459,10 @@ export default function App() {
                 setSettingsInitialTab("general");
                 setShowSettings(true);
               }}
+              turns={turns}
+              onOpenPlanAsDocument={openPlanAsDocument}
+              onPinPlanArtifact={pinPlanArtifact}
+              canPinPlan={scenesSurfaceEnabled && canPinPlan}
               preview={interactivePreview}
             />
 
@@ -6518,9 +6523,6 @@ export default function App() {
                 loadingEarlier={loadingEarlier}
                 onLoadEarlier={() => void loadEarlierTranscript()}
                 scroll={transcriptScroll}
-                onOpenPlanAsDocument={openPlanAsDocument}
-                onPinPlanArtifact={pinPlanArtifact}
-                canPinPlan={scenesSurfaceEnabled && canPinPlan}
                 onSaveTemplate={openTemplateDraft}
                 linkActions={builtinLinkActions}
                 sessionId={activeSession}

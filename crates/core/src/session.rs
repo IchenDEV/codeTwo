@@ -6,7 +6,7 @@
 use crate::permission::{PermissionMode, SandboxPolicy};
 use crate::provider::ProviderId;
 use crate::worktree::{DirectoryIdentity, ResolvedWorktreeBaseline};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -183,6 +183,72 @@ pub enum PendingInputKind {
     Elicitation,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlanEntry {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for PlanEntry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum WireEntry {
+            Legacy(String),
+            Structured {
+                content: String,
+                #[serde(default)]
+                priority: Option<String>,
+                #[serde(default)]
+                status: Option<String>,
+            },
+        }
+
+        Ok(match WireEntry::deserialize(deserializer)? {
+            WireEntry::Legacy(content) => Self {
+                content,
+                priority: None,
+                status: None,
+            },
+            WireEntry::Structured {
+                content,
+                priority,
+                status,
+            } => Self {
+                content,
+                priority,
+                status,
+            },
+        })
+    }
+}
+
+impl From<&str> for PlanEntry {
+    fn from(content: &str) -> Self {
+        Self {
+            content: content.into(),
+            priority: None,
+            status: None,
+        }
+    }
+}
+
+impl From<String> for PlanEntry {
+    fn from(content: String) -> Self {
+        Self {
+            content,
+            priority: None,
+            status: None,
+        }
+    }
+}
+
 /// A rendered piece of a message. The transcript is a flat list of these per message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -213,7 +279,7 @@ pub enum Part {
         outputs: Vec<crate::artifact::ToolOutput>,
     },
     Plan {
-        entries: Vec<String>,
+        entries: Vec<PlanEntry>,
     },
 }
 
@@ -422,6 +488,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn plan_entries_keep_status_and_accept_legacy_strings() {
+        let structured: Part = serde_json::from_value(serde_json::json!({
+            "kind": "plan",
+            "entries": [{
+                "content": "Run renderer checks",
+                "priority": "high",
+                "status": "in_progress"
+            }]
+        }))
+        .unwrap();
+        let legacy: Part = serde_json::from_value(serde_json::json!({
+            "kind": "plan",
+            "entries": ["Inspect the workspace"]
+        }))
+        .unwrap();
+
+        let Part::Plan { entries } = structured else {
+            panic!("expected plan");
+        };
+        assert_eq!(entries[0].content, "Run renderer checks");
+        assert_eq!(entries[0].priority.as_deref(), Some("high"));
+        assert_eq!(entries[0].status.as_deref(), Some("in_progress"));
+
+        let Part::Plan { entries } = legacy else {
+            panic!("expected legacy plan");
+        };
+        assert_eq!(entries, vec![PlanEntry::from("Inspect the workspace")]);
+    }
+
+    #[test]
     fn older_serialized_sessions_default_to_unpinned() {
         let session = Session::new(ProviderId::Grok, "/work");
         let mut value = serde_json::to_value(&session).unwrap();
@@ -539,7 +635,7 @@ pub fn transcript_context_with_omission(
             Part::Prompt { text, .. } => text.trim().to_string(),
             Part::Plan { entries } => entries
                 .iter()
-                .map(|e| format!("- {e}"))
+                .map(|entry| format!("- {}", entry.content))
                 .collect::<Vec<_>>()
                 .join("\n"),
             Part::Reasoning { .. } | Part::ToolCall { .. } => continue,

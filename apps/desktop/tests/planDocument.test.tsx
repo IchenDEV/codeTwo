@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
-const { TurnCard, planChecklistMarkdown } = await import("../src/session/TurnCard");
+const { TaskPlanPanel, planChecklistMarkdown } = await import("../src/session/TaskPlanPanel");
 const { I18nProvider } = await import("../src/i18n");
 
 afterEach(() => {
@@ -25,27 +25,22 @@ function finishedTurn(overrides = {}) {
     pendingThoughtDeltaSkips: 0,
     thoughts: [],
     tools: [],
-    plan: ["Survey the code", "[x] Write the fix"],
+    plan: [
+      { content: "Survey the code", status: "in_progress" },
+      { content: "Write the fix", status: "completed" },
+    ],
     startedAt: 1,
     endedAt: 2,
     ...overrides,
   };
 }
 
-function renderCard(props = {}) {
+function renderPanel(props = {}) {
   return mount(
     <I18nProvider>
-      <TurnCard turn={finishedTurn()} {...props} />
+      <TaskPlanPanel turns={[finishedTurn()]} {...props} />
     </I18nProvider>,
   );
-}
-
-async function expandPlanDetail(rendered) {
-  const trigger = [...rendered.container.querySelectorAll('[data-slot="collapsible-trigger"]')]
-    .find((el) => el.textContent?.includes("plan"));
-  expect(trigger).toBeTruthy();
-  click(trigger);
-  await flush();
 }
 
 // An earlier suite in the same bun run leaks a key-echo `useT` module mock, so a label renders
@@ -59,18 +54,22 @@ function buttonByLabel(rendered, labels) {
 }
 
 describe("planChecklistMarkdown", () => {
-  test("converts entries to a checklist, preserving embedded checkbox markers", () => {
-    expect(planChecklistMarkdown(["Survey the code", "[x] Write the fix", "- [ ] Test it"]))
-      .toBe("- [ ] Survey the code\n- [x] Write the fix\n- [ ] Test it");
+  test("converts entries to a checklist, preserving markers and structured status", () => {
+    expect(planChecklistMarkdown([
+      "Survey the code",
+      "[x] Write the fix",
+      "- [ ] Test it",
+      { content: "Ship it", status: "completed" },
+    ]))
+      .toBe("- [ ] Survey the code\n- [x] Write the fix\n- [ ] Test it\n- [x] Ship it");
   });
 });
 
-describe("TurnCard plan-as-document", () => {
+describe("TaskPlanPanel plan-as-document", () => {
   test("offers Open as document and calls the handler with the entries", async () => {
     activateDom();
     const opened = [];
-    const rendered = renderCard({ onOpenPlanAsDocument: (entries) => opened.push(entries) });
-    await expandPlanDetail(rendered);
+    const rendered = renderPanel({ onOpenPlanAsDocument: (entries) => opened.push(entries) });
 
     const open = buttonByLabel(rendered, OPEN_LABELS);
     expect(open).toBeTruthy();
@@ -79,19 +78,21 @@ describe("TurnCard plan-as-document", () => {
 
     click(open);
     await flush();
-    expect(opened).toEqual([["Survey the code", "[x] Write the fix"]]);
+    expect(opened).toEqual([[
+      { content: "Survey the code", status: "in_progress" },
+      { content: "Write the fix", status: "completed" },
+    ]]);
     rendered.unmount();
   });
 
   test("offers Pin as artifact only when the scene declares a plan, passing checklist markdown", async () => {
     activateDom();
     const pinned = [];
-    const rendered = renderCard({
+    const rendered = renderPanel({
       onOpenPlanAsDocument: () => {},
       onPinPlanArtifact: (markdown) => pinned.push(markdown),
       canPinPlan: true,
     });
-    await expandPlanDetail(rendered);
 
     const pin = buttonByLabel(rendered, PIN_LABELS);
     expect(pin).toBeTruthy();
@@ -103,8 +104,7 @@ describe("TurnCard plan-as-document", () => {
 
   test("hides both affordances when no handlers are wired", async () => {
     activateDom();
-    const rendered = renderCard();
-    await expandPlanDetail(rendered);
+    const rendered = renderPanel();
     expect(buttonByLabel(rendered, OPEN_LABELS)).toBeFalsy();
     expect(buttonByLabel(rendered, PIN_LABELS)).toBeFalsy();
     rendered.unmount();

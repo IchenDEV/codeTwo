@@ -9,7 +9,7 @@
 use crate::memory::MemoryReceipt;
 use crate::permission::ExecutionPolicy;
 use crate::provider::ProviderId;
-use crate::session::{SessionActivity, SessionId};
+use crate::session::{PlanEntry, SessionActivity, SessionId};
 use crate::skill::DocBlock;
 use crate::worktree::ResolvedWorktreeBaseline;
 use serde::{Deserialize, Serialize};
@@ -176,7 +176,7 @@ pub enum Event {
     },
     Plan {
         session: SessionId,
-        entries: Vec<String>,
+        entries: Vec<PlanEntry>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transcript_seq: Option<i64>,
     },

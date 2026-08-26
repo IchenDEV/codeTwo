@@ -15,6 +15,27 @@ import {
 } from "../src/session/turns";
 
 describe("persisted transcript projection", () => {
+  test("preserves structured plan status and accepts legacy string entries", () => {
+    const turns = turnsFromTranscript([
+      ["user", { kind: "prompt", text: "implement", display: "implement" }],
+      [
+        "agent",
+        {
+          kind: "plan",
+          entries: [
+            "Inspect the workspace",
+            { content: "Implement the panel", priority: "high", status: "in_progress" },
+          ],
+        },
+      ],
+    ]);
+
+    expect(turns[0].plan).toEqual([
+      { content: "Inspect the workspace", priority: null, status: null },
+      { content: "Implement the panel", priority: "high", status: "in_progress" },
+    ]);
+  });
+
   test("shows the canonical prompt while preserving the agent response", () => {
     const turns = turnsFromTranscript([
       [
