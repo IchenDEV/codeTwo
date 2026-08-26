@@ -340,7 +340,7 @@
     padding-left: 6rem;
   }
   html[data-platform="macos"] .window-controls-safe-rail {
-    padding-left: 6rem;
+    padding-left: 5rem;
   }
   html[data-platform="macos"] .window-controls-safe-scene {
     padding-left: 5rem;
