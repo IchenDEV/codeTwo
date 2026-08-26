@@ -2622,7 +2622,7 @@ export default function App() {
     setCurrentModel("dev-model");
     setContextWindows((previous) => ({
       ...previous,
-      [session]: { usedTokens, contextWindow },
+      [session]: { usedTokens, contextWindow, breakdown: null },
     }));
   }, []);
 

@@ -1,14 +1,6 @@
 name: Windows desktop package
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/windows-desktop.yml"
-      - "Cargo.lock"
-      - "Cargo.toml"
-      - "apps/desktop/**"
-      - "crates/**"
-      - "vendor/libghostty-vt-sys/**"
   push:
     branches: [main]
     paths:
