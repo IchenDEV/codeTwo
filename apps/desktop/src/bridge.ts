@@ -817,6 +817,7 @@ export type CoreEvent =
       used_tokens: number;
       context_window: number;
       cost_usd?: number | null;
+      breakdown?: { id: string; tokens: number }[] | null;
     }
   | { event: "models"; session: string; available: ModelChoice[]; current: string }
   | { event: "config_options"; session: string; options: ConfigOptionInfo[] }
