@@ -334,20 +334,6 @@ export function SourceControlModal({
     }
   };
 
-  const push = async () => {
-    if (repositoryBusy) return;
-    setActionError(null);
-    setActionStatus(null);
-    setPhase("pushing");
-    try {
-      await onPush();
-      setActionStatus("Pushed.");
-    } catch (error) {
-      setActionError(`Push failed: ${error}`);
-    } finally {
-      setPhase("idle");
-    }
-  };
 
   const createPr = async () => {
     if (!changeRequest.canCreate || repositoryBusy) return;
