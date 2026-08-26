@@ -525,7 +525,7 @@ export function DocEditor({
     // Composer's Run-row hint listens for this (same window-event seam as the provider picker):
     // required slot-card fields without a value or default — a warning, never a send block.
     const unfilled = unfilledRequiredSlots(editor);
-    const key = unfilled.join(" ");
+    const key = unfilled.join("");
     if (key !== lastRequiredKey.current) {
       lastRequiredKey.current = key;
       window.dispatchEvent(new CustomEvent("codetwo-required-slots", { detail: unfilled }));
