@@ -69,9 +69,14 @@ actual ref, full SHA, and display label with the session. Later UI therefore rep
 the checkout instead of re-resolving a moving ref. New clients send that previewed full SHA back on
 Run; if the chosen ref moved between preview and submission, creation stops before mutating Git.
 
-The checkout root is a persistent sibling under `.codetwo-worktrees/`. If the selected project is
-a repository subdirectory, C2 preserves that relative path in the isolated checkout, keeps the
-session grouped under the original project, and runs project hooks marked
+By default, a new checkout lives at
+`.codetwo-worktrees/<session-id>/<repository-name>`. With a global worktree root configured, it
+lives at `<configured-root>/<repository-name>-<repository-hash>/<session-id>/<repository-name>`.
+Keeping the unique session id in the parent leaves a stable repository name at the checkout leaf
+for path-based remote clients. Existing flat checkouts remain supported, both under
+`.codetwo-worktrees/` and inside a configured repository-specific container. If the selected
+project is a repository subdirectory, C2 preserves that relative path in the isolated checkout,
+keeps the session grouped under the original project, and runs project hooks marked
 `run_on_worktree_create` from that corresponding subdirectory before announcing the session.
 
 C2 also records the repository's common Git directory and the exact per-worktree Git directory.

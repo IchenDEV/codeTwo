@@ -67,6 +67,43 @@ const WORKTREE_DIR: &str = ".codetwo-worktrees";
 const WORKTREE_SETTINGS_FILE: &str = "worktree-settings.json";
 const ORIGIN_HEAD: &str = "refs/remotes/origin/HEAD";
 
+pub(crate) fn session_checkout_name(repo_root: &Path) -> &OsStr {
+    repo_root
+        .file_name()
+        .filter(|name| name.to_str().is_some())
+        .unwrap_or_else(|| OsStr::new("repo"))
+}
+
+fn is_canonical_session_uuid(value: &str) -> bool {
+    uuid::Uuid::parse_str(value).is_ok_and(|id| id.hyphenated().to_string() == value)
+}
+
+fn remove_empty_checkout_in(path: &Path, container: &Path) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if parent != container && parent.parent() == Some(container) {
+        let _ = std::fs::remove_dir(parent);
+    }
+    let _ = std::fs::remove_dir(container);
+}
+
+fn remove_empty_session_parent(path: &Path, session_id: &str) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if parent.file_name() != Some(OsStr::new(session_id)) {
+        return;
+    }
+    let Some(container) = parent.parent() else {
+        return;
+    };
+    let _ = std::fs::remove_dir(parent);
+    if container.file_name() == Some(OsStr::new(WORKTREE_DIR)) {
+        let _ = std::fs::remove_dir(container);
+    }
+}
+
 fn default_auto_delete_limit() -> usize {
     15
 }
@@ -849,10 +886,7 @@ async fn add_for_session_at_root(
     let safe_id = branch
         .strip_prefix("codetwo/")
         .expect("session branch always has the codetwo prefix");
-    let repo_name = root
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("repo");
+    let repo_name = session_checkout_name(root);
     let container = session_container_dir_with_root(root, configured_root).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -860,7 +894,28 @@ async fn add_for_session_at_root(
         )
     })?;
     std::fs::create_dir_all(&container)?;
-    let path = container.join(format!("{repo_name}-{safe_id}"));
+    // Production sessions use canonical UUIDs. Keep the unique id in the parent so Remote sees
+    // the stable repository basename at the leaf; retain the flat shape for older helper callers.
+    let path = if is_canonical_session_uuid(safe_id) {
+        let session_container = container.join(safe_id);
+        if let Err(error) = std::fs::create_dir(&session_container) {
+            let _ = std::fs::remove_dir(&container);
+            return Err(if error.kind() == io::ErrorKind::AlreadyExists {
+                io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!(
+                        "worktree session directory already exists: {}",
+                        session_container.display()
+                    ),
+                )
+            } else {
+                error
+            });
+        }
+        session_container.join(repo_name)
+    } else {
+        container.join(format!("{}-{safe_id}", repo_name.to_string_lossy()))
+    };
     match add_from_sha(root, &path, &branch, &baseline.sha).await {
         Ok(mut worktree) => {
             let canonical = match std::fs::canonicalize(&worktree.path) {
@@ -874,8 +929,8 @@ async fn add_for_session_at_root(
             Ok(worktree)
         }
         Err(error) => {
-            // Only removes a directory if this failed attempt left the shared container empty.
-            let _ = std::fs::remove_dir(&container);
+            // Only removes directories if this failed attempt left them empty.
+            remove_empty_checkout_in(&path, &container);
             Err(error)
         }
     }
@@ -1058,15 +1113,19 @@ pub async fn discard_session_worktree(
                 ],
             )
             .await?;
-            // Leave the shared container directory only when this was its last checkout.
-            if let Some(parent) = canonical.parent() {
-                if parent.file_name() == Some(OsStr::new(WORKTREE_DIR)) {
-                    let _ = std::fs::remove_dir(parent);
-                }
-            }
             true
         }
     };
+    if is_canonical_session_uuid(suffix) {
+        remove_empty_session_parent(root, suffix);
+    }
+    // Existing releases used a flat `<repo>-<session>` checkout even when the session id was a
+    // UUID. Continue pruning the default container for those recorded paths.
+    if let Some(parent) = root.parent() {
+        if parent.file_name() == Some(OsStr::new(WORKTREE_DIR)) {
+            let _ = std::fs::remove_dir(parent);
+        }
+    }
 
     let branch_still_in_use = registrations_from_common_dir(common_dir)
         .await?
@@ -1118,10 +1177,7 @@ pub fn session_container_dir_with_root(
 ) -> Option<PathBuf> {
     match configured_root {
         Some(root) => {
-            let repo_name = repo_root
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("repo");
+            let repo_name = session_checkout_name(repo_root).to_string_lossy();
             Some(root.join(format!("{repo_name}-{:016x}", stable_path_hash(repo_root))))
         }
         None => repo_root.parent().map(|parent| parent.join(WORKTREE_DIR)),
@@ -1130,6 +1186,34 @@ pub fn session_container_dir_with_root(
 
 pub fn session_container_dir(repo_root: &Path) -> Option<PathBuf> {
     session_container_dir_with_root(repo_root, None)
+}
+
+/// Whether a checkout uses either the current `<session UUID>/<repo>` shape or C2's legacy flat
+/// shape inside the repository-specific container selected by the caller.
+pub(crate) fn is_managed_session_checkout(
+    repo_root: &Path,
+    container: &Path,
+    checkout_path: &Path,
+) -> bool {
+    let Some(parent) = checkout_path.parent() else {
+        return false;
+    };
+    let repo_name = session_checkout_name(repo_root);
+
+    if parent == container {
+        let Some(name) = checkout_path.file_name().and_then(|name| name.to_str()) else {
+            return false;
+        };
+        let repo_prefix = format!("{}-", repo_name.to_string_lossy());
+        return name.starts_with(&repo_prefix) || name.starts_with(".codetwo-rollback-");
+    }
+
+    parent.parent() == Some(container)
+        && checkout_path.file_name() == Some(repo_name)
+        && parent
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(is_canonical_session_uuid)
 }
 
 /// Test-only raw removal. Production cleanup goes through [`discard_session_worktree`], which
@@ -1371,6 +1455,53 @@ mod tests {
         assert_ne!(first, second);
         assert_eq!(first.unwrap().parent(), Some(configured));
         assert_eq!(second.unwrap().parent(), Some(configured));
+    }
+
+    #[test]
+    fn managed_session_checkout_accepts_current_and_legacy_layouts() {
+        let repo = Path::new("source/repo");
+        let container = Path::new("managed/repo-container");
+        let session_id = "01234567-89ab-4cde-8f01-23456789abcd";
+
+        assert!(is_managed_session_checkout(
+            repo,
+            container,
+            &container.join(session_id).join("repo")
+        ));
+        assert!(is_managed_session_checkout(
+            repo,
+            container,
+            &container.join("repo-legacy-session")
+        ));
+        assert!(is_managed_session_checkout(
+            repo,
+            container,
+            &container.join(".codetwo-rollback-leftover")
+        ));
+        assert!(!is_managed_session_checkout(
+            repo,
+            container,
+            &container.join(session_id).join("another-repo")
+        ));
+        assert!(!is_managed_session_checkout(
+            repo,
+            container,
+            &container.join("not-a-uuid").join("repo")
+        ));
+        assert!(!is_managed_session_checkout(
+            repo,
+            container,
+            &Path::new("outside").join(session_id).join("repo")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_repository_name_uses_the_repo_fallback() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let root = PathBuf::from(OsStr::from_bytes(b"repo-\xff"));
+        assert_eq!(session_checkout_name(&root), OsStr::new("repo"));
     }
 
     #[test]
@@ -1832,11 +1963,131 @@ mod tests {
         let created = add_for_session(&repo, "legacy-current").await.unwrap();
         assert_eq!(created.branch, "codetwo/legacy-current");
         assert_eq!(
+            created.path.file_name(),
+            Some(OsStr::new("repo-legacy-current"))
+        );
+        assert_eq!(
             git_stdout(&created.path, &["rev-parse", "HEAD"]).await,
             current
         );
 
         remove(&repo, &created.path).await.unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn uuid_session_checkout_keeps_the_repository_name_at_the_leaf() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let session_id = uuid::Uuid::new_v4().to_string();
+
+        let created = add_for_session_from_baseline(&repo, &session_id, &baseline)
+            .await
+            .unwrap();
+        let root = repo.canonicalize().unwrap();
+        let container = session_container_dir(&root).unwrap();
+
+        assert_eq!(created.path.file_name(), Some(session_checkout_name(&root)));
+        assert_eq!(
+            created.path.parent().and_then(Path::file_name),
+            Some(OsStr::new(&session_id))
+        );
+        assert_eq!(
+            created.path.parent().and_then(Path::parent),
+            Some(container.as_path())
+        );
+        assert!(is_managed_session_checkout(
+            &root,
+            &container,
+            &created.path
+        ));
+
+        remove(&repo, &created.path).await.unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn configured_root_keeps_the_repository_name_at_the_leaf() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let configured_root = base.join("managed");
+
+        let created =
+            add_for_session_from_baseline_in(&repo, &session_id, &baseline, Some(&configured_root))
+                .await
+                .unwrap();
+        let root = repo.canonicalize().unwrap();
+        let container = session_container_dir_with_root(&root, Some(&configured_root))
+            .unwrap()
+            .canonicalize()
+            .unwrap();
+        let session_parent = created.path.parent().unwrap().to_path_buf();
+
+        assert_eq!(created.path.file_name(), Some(session_checkout_name(&root)));
+        assert_eq!(session_parent.file_name(), Some(OsStr::new(&session_id)));
+        assert_eq!(session_parent.parent(), Some(container.as_path()));
+        assert!(is_managed_session_checkout(
+            &root,
+            &container,
+            &created.path
+        ));
+
+        let common = common_dir(&repo).await.unwrap();
+        discard_session_worktree(
+            &common,
+            &created.path,
+            Some(created.directory_identity()),
+            &created.branch,
+        )
+        .await
+        .unwrap();
+        assert!(!session_parent.exists());
+        assert!(
+            container.exists(),
+            "the repository container remains reusable"
+        );
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[tokio::test]
+    async fn uuid_session_parent_collision_is_never_reused() {
+        let Some((base, repo)) = test_repo().await else {
+            return;
+        };
+        let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
+            .await
+            .unwrap();
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let root = repo.canonicalize().unwrap();
+        let container = session_container_dir(&root).unwrap();
+        let session_parent = container.join(&session_id);
+        std::fs::create_dir_all(&session_parent).unwrap();
+        let sentinel = session_parent.join("sentinel");
+        std::fs::write(&sentinel, "keep").unwrap();
+
+        let error = add_for_session_from_baseline(&repo, &session_id, &baseline)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert!(sentinel.is_file());
+        assert_eq!(
+            branch_target(&repo, &branch_ref(&format!("codetwo/{session_id}")))
+                .await
+                .unwrap(),
+            None
+        );
+
         let _ = std::fs::remove_dir_all(&base);
     }
 
@@ -1848,12 +2099,14 @@ mod tests {
         let baseline = resolve_baseline(&repo, WorktreeBaseline::Current)
             .await
             .unwrap();
-        let created = add_for_session_from_baseline(&repo, "discard-me", &baseline)
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let created = add_for_session_from_baseline(&repo, &session_id, &baseline)
             .await
             .unwrap();
         std::fs::write(created.path.join("dirty.txt"), "uncommitted\n").unwrap();
         let common = common_dir(&repo).await.unwrap();
-        let container = created.path.parent().unwrap().to_path_buf();
+        let session_parent = created.path.parent().unwrap().to_path_buf();
+        let container = session_parent.parent().unwrap().to_path_buf();
 
         let outcome = discard_session_worktree(
             &common,
@@ -1867,12 +2120,16 @@ mod tests {
         assert!(outcome.removed_checkout);
         assert_eq!(
             outcome.deleted_branch.as_deref(),
-            Some("codetwo/discard-me")
+            Some(created.branch.as_str())
         );
         assert!(!created.path.exists());
+        assert!(
+            !session_parent.exists(),
+            "empty session parent should be removed"
+        );
         assert!(!container.exists(), "empty container should be removed");
         assert_eq!(
-            branch_target(&repo, "refs/heads/codetwo/discard-me")
+            branch_target(&repo, &format!("refs/heads/codetwo/{session_id}"))
                 .await
                 .unwrap(),
             None
