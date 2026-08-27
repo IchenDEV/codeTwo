@@ -29,6 +29,7 @@ import {
   setMacOSSystemBadgeCount,
 } from "./windowEffects";
 import { workspaceOpenCommand } from "./workspaceOpen";
+import { readSystemProfileAvatar } from "./systemProfile";
 
 function filterExtensions(filters: DialogFilter[] | undefined): string {
   const extensions = filters?.flatMap((filter) => filter.extensions) ?? [];
@@ -254,6 +255,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         return true;
       },
       systemBadgeSet: ({ count }) => setMacOSSystemBadgeCount(count),
+      systemProfileAvatar: readSystemProfileAvatar,
       browserZoom: ({ webviewId, factor }) => {
         BrowserView.getById(webviewId)?.setPageZoom(factor);
       },

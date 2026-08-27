@@ -122,6 +122,7 @@ export type CodeTwoRPC = {
       };
       showItemInFolder: { params: { path: string }; response: boolean };
       systemBadgeSet: { params: { count: number }; response: boolean };
+      systemProfileAvatar: { params: undefined; response: string | null };
       browserZoom: { params: { webviewId: number; factor: number }; response: void };
       desktopPetState: { params: undefined; response: DesktopPetState };
       desktopPetUpdate: { params: DesktopPetState; response: void };

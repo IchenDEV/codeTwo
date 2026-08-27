@@ -112,6 +112,10 @@ export async function desktopSetSystemBadgeCount(count: number): Promise<boolean
   return (await client()).request.systemBadgeSet({ count });
 }
 
+export async function desktopSystemProfileAvatar(): Promise<string | null> {
+  return (await client()).request.systemProfileAvatar();
+}
+
 export async function desktopAppshotSettings(): Promise<AppshotSettings> {
   return (await client()).request.appshotsSettings();
 }
