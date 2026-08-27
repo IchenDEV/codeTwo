@@ -5,7 +5,7 @@
 //! unavailable" — which is what the old wrappers had to say, nine times, because nothing in the
 //! type system stopped them from being called without one.
 
-use crate::app::service::{MemoryService, StoreService};
+use crate::app::service::StoreService;
 use crate::app::{json, take_args};
 use crate::memory::{MemoryCapability, MemoryProjectPolicy, MemorySettings};
 use crate::session::MemoryAccess;
@@ -41,7 +41,7 @@ impl Plugin for MemoryPlugin {
         let store = ctx.expect::<StoreService>()?;
         let memory = MemoryCapability::new(store.0.clone());
         memory.catch_up().map_err(PluginError::new)?;
-        ctx.provide(Arc::new(MemoryService(memory.clone())))?;
+        ctx.provide(Arc::new(memory.clone()))?;
         ctx.effect(move || memory.deactivate());
 
         let read = store.clone();

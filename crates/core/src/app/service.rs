@@ -11,7 +11,6 @@ use crate::engine::Engine;
 use crate::event::Event;
 use crate::host_tools::HostToolDiscovery;
 use crate::keymap::Keymap;
-use crate::memory::MemoryCapability;
 use crate::models::available_models;
 use crate::provider::{
     Provider, ProviderCapability, ProviderToolset, CODEX_ACP_PACKAGE, CODEX_ACP_VERSION,
@@ -109,24 +108,6 @@ impl Service for CanvasService {
 impl std::ops::Deref for StoreService {
     type Target = Store;
     fn deref(&self) -> &Store {
-        &self.0
-    }
-}
-
-/// Revocable provider-neutral recall and learning capability.
-///
-/// The store deliberately stays online when this disappears. Consumers that optionally inject
-/// `memory` therefore keep running without recalling or capturing anything.
-pub struct MemoryService(pub MemoryCapability);
-
-impl Service for MemoryService {
-    const NAME: &'static str = "memory";
-}
-
-impl std::ops::Deref for MemoryService {
-    type Target = MemoryCapability;
-
-    fn deref(&self) -> &MemoryCapability {
         &self.0
     }
 }
