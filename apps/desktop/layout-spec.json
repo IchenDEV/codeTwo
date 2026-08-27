@@ -1,0 +1,89 @@
+{
+  "name": "codetwo-desktop-layout",
+  "version": 1,
+  "baseUnit": 4,
+  "spacing": {
+    "optical": 2,
+    "inline": 4,
+    "controlGroup": 6,
+    "moduleInset": 8,
+    "surfaceInset": 12,
+    "section": 16,
+    "page": 24,
+    "pageSection": 32
+  },
+  "breakpoints": {
+    "compact": {
+      "min": 800,
+      "max": 999,
+      "behavior": "Keep the workspace fluid and overlay the navigation rail before it falls below its minimum usable width."
+    },
+    "standard": {
+      "min": 1000,
+      "max": 1399
+    },
+    "wide": {
+      "min": 1400
+    },
+    "auxiliary": {
+      "min": 0,
+      "max": 799,
+      "behavior": "Supported for dialogs, tests, and auxiliary windows; not a separate mobile application layout."
+    }
+  },
+  "shell": {
+    "titlebarHeight": 48,
+    "regions": {
+      "navigationRail": {
+        "defaultWidth": 288,
+        "minWidth": 220,
+        "maxWidth": 420,
+        "behavior": "Inline while the remaining workspace is at least 620px; otherwise an overlay drawer."
+      },
+      "workspace": {
+        "minWidth": 620,
+        "behavior": "Fluid and absorbs remaining width."
+      },
+      "dock": {
+        "defaultWidth": 440,
+        "minWidth": 300,
+        "behavior": "Inline while preserving the 620px workspace; otherwise the rail becomes an overlay."
+      }
+    }
+  },
+  "content": {
+    "primaryColumn": {
+      "maxWidth": 768,
+      "gutter": 24
+    },
+    "settings": {
+      "maxWidth": 768,
+      "profileMaxWidth": 1024
+    },
+    "workbench": {
+      "listMinWidth": 320,
+      "listPreferredWidth": "38cqw",
+      "listMaxWidth": 496,
+      "collapseAt": 704
+    }
+  },
+  "verticalRhythm": {
+    "titlebarHeight": 48,
+    "normalControlHeight": 28,
+    "fieldControlHeight": 32,
+    "sectionGap": 16,
+    "pageSectionGap": 32
+  },
+  "exceptions": [
+    {
+      "name": "settings-icon-rail",
+      "condition": "viewport width at or below 704px",
+      "width": 64,
+      "reason": "Preserve settings navigation while labels no longer fit."
+    },
+    {
+      "name": "hero-scrollbar-gutter",
+      "reason": "Reserve both scrollbar edges so the centered composer does not move when the minimum-height window starts scrolling."
+    }
+  ]
+}

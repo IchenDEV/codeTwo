@@ -49,6 +49,10 @@ export function dockMaxWidth(viewportWidth: number, reservedWidth = 0): number {
   return Math.max(DOCK_MIN_WIDTH, viewportWidth - reservedWidth - DOCK_MAIN_MIN_WIDTH);
 }
 
+export function shouldOverlayRailForWorkspace(viewportWidth: number, railWidth: number): boolean {
+  return viewportWidth < railWidth + DOCK_MAIN_MIN_WIDTH;
+}
+
 export function shouldOverlayRailForDock(viewportWidth: number, railWidth: number): boolean {
   return viewportWidth < railWidth + DOCK_MIN_WIDTH + DOCK_MAIN_MIN_WIDTH;
 }

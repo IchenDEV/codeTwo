@@ -948,6 +948,12 @@
     outline-offset: -2px;
   }
 
+  /* The empty-thread composer stays on the workspace centreline when a short window gains a
+     vertical scrollbar. Reserving both edges prevents the scrollbar from moving the content. */
+  .hero-scroll-shell {
+    scrollbar-gutter: stable both-edges;
+  }
+
   /* While a drag is live: one cursor everywhere and no text selection. The browser panel's page is
      a native webview rather than an element, so it can't be told to ignore the pointer — it watches
      for these classes and hides instead (see `useDragging` in browser/Browser.tsx). */

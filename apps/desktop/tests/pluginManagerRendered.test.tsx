@@ -374,6 +374,10 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
     expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
+    expect(view.container.querySelector(".plugin-manager-list-header")?.className)
+      .toContain("h-(--ds-layout-titlebar-height)");
+    expect(view.container.querySelector(".plugin-manager-detail-header")?.className)
+      .toContain("h-(--ds-layout-titlebar-height)");
     expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();

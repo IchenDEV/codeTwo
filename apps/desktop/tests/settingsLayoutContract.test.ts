@@ -51,13 +51,11 @@ describe("Settings page layout contract", () => {
     expect(source).toContain('<Icon className="size-3.5 shrink-0" />');
   });
 
-  test("keeps every settings tab on the shared 40px titlebar", () => {
+  test("keeps every settings tab on the shared 48px titlebar", () => {
     expect(source).toMatch(
       /<header[\s\S]*?data-settings-titlebar[\s\S]*?className="[^"]*\bsettings-titlebar\b[^"]*\bshrink-0\b[^"]*"/,
     );
-    expect(styles).toContain(
-      "height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));",
-    );
+    expect(styles).toContain("height: var(--ds-layout-titlebar-height);");
   });
 
   test("starts each settings tab at the top of its content", () => {
@@ -86,6 +84,11 @@ describe("Settings page layout contract", () => {
     expect(source).toContain('{tab === "profile" && <ProfileSettings providerNames={providerNames} />}');
     expect(styles).toContain(".settings-profile-page");
     expect(styles).toContain(".profile-activity-grid");
+    expect(styles).toContain("@container settings-page (max-width: 40rem)");
+    expect(styles).toMatch(
+      /@container settings-page \(max-width: 40rem\) \{[\s\S]*?\.profile-header \{[\s\S]*?flex-direction: column;[\s\S]*?\.profile-activity-body \{[\s\S]*?grid-template-columns: 1fr;/,
+    );
+    expect(styles).toContain("@container settings-page (max-width: 38rem)");
   });
 
   test("includes session import as a first-class personal panel", () => {
