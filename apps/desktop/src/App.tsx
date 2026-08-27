@@ -1791,14 +1791,18 @@ export default function App() {
           id: session.id,
           title: session.title,
           archived: false,
+          activity: session.activity,
+          running: runningSessions.has(session.id),
         })),
         ...archivedSessions.map((session) => ({
           id: session.id,
           title: session.title,
           archived: true,
+          activity: session.activity,
+          running: false,
         })),
       ],
-    [archivedSessions, sessions],
+    [archivedSessions, runningSessions, sessions],
   );
 
   const quickQuotaProvider = useMemo(() => {

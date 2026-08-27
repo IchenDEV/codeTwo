@@ -8,6 +8,7 @@ import {
   TASKBOARD_SNAPSHOT_VERSION,
   TASKBOARD_STORAGE_KEY,
   TASK_PRIORITIES,
+  TASK_BOARD_LANES,
   TASK_STATUSES,
   associateTaskSession,
   boardLabels,
@@ -21,6 +22,7 @@ import {
   saveBoardSnapshot,
   seedTasks,
   sortBoardTasks,
+  taskBoardLane,
   taskForSession,
   type BoardFilters,
   type BoardTask,
@@ -78,6 +80,7 @@ function idsForStatus(board: TaskBoardState, status: TaskStatus): string[] {
 describe("task board model constants and creation", () => {
   test("exposes the complete status and priority wire values", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "in_review", "done"]);
+    expect(TASK_BOARD_LANES).toEqual(["queue", "running", "needs_you", "done"]);
     expect(TASK_PRIORITIES).toEqual(["none", "low", "medium", "high", "urgent"]);
     expect(PRIORITIES).toBe(TASK_PRIORITIES);
     expect(TASKBOARD_STORAGE_KEY).toBe("codetwo.taskboard.v1");
@@ -178,6 +181,16 @@ describe("task board projection helpers", () => {
     task("equal-b", "todo", 1, { labels: ["Backend"] }),
     task("done", "done", 0),
   ];
+
+  test("projects durable task stages with live session activity", () => {
+    expect(taskBoardLane(task("queued", "todo"), "running")).toBe("queue");
+    expect(taskBoardLane(task("active", "in_progress"), "running")).toBe("running");
+    expect(taskBoardLane(task("waiting", "in_progress"), "awaiting_input")).toBe("needs_you");
+    expect(taskBoardLane(task("failed", "in_progress"), "failed")).toBe("needs_you");
+    expect(taskBoardLane(task("paused", "in_progress"), "idle")).toBe("queue");
+    expect(taskBoardLane(task("review", "in_review"), "running")).toBe("needs_you");
+    expect(taskBoardLane(task("done", "done"), "failed")).toBe("done");
+  });
 
   test("sorts by column and order without mutating, with stable equal-order tasks", () => {
     const original = [...tasks];

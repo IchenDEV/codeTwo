@@ -160,7 +160,7 @@ describe("TaskBoardPage rendered", () => {
 
     const header = view.container.querySelector("header")
     const title = header?.querySelector("h1")
-    const description = header?.querySelector("p")
+    const attention = header?.querySelector("p")
     const controls = header?.querySelector("[data-page-header-controls]")
     const content = header?.querySelector("[data-page-header-content]")
     const board = view.container.querySelector("[data-task-board-columns]")
@@ -169,40 +169,38 @@ describe("TaskBoardPage rendered", () => {
     expect(title?.textContent).toBe("任务看板")
     expect(title?.className).toContain("text-display")
     expect(title?.className).toContain("tracking-tight")
-    expect(description?.className).toContain("mt-2")
-    expect(description?.className).toContain("text-ui")
-    expect(header?.className).toContain("pt-6")
-    expect(header?.className).not.toContain("sm:pt-")
-    expect(content?.className).toContain("px-6")
-    expect(content?.className).toContain("max-w-4xl")
-    expect(content?.className).toContain("sm:px-8")
-    expect(board?.className).not.toContain("px-6")
-    expect(boardContent?.className).not.toContain("max-w-4xl")
-    expect(boardContent?.className).toContain("w-full")
-    expect(boardContent?.className).toContain("px-6")
-    expect(boardContent?.className).toContain("sm:px-8")
-    expect(controls?.className).toContain("mt-8")
+    expect(attention?.textContent).toContain("有 2 项任务需要你处理")
+    expect(header?.className).toContain("py-4")
+    expect(header?.className).toContain("px-6")
+    expect(content?.className).toContain("grid")
+    expect(content?.className).toContain("xl:grid-cols-")
+    expect(content?.className).not.toContain("max-w-4xl")
+    expect(board?.className).toContain("px-6")
+    expect(board?.className).toContain("overflow-auto")
+    expect(boardContent?.className).toContain("min-h-full")
+    expect(controls?.className).toContain("min-w-0")
+    expect(controls?.className).toContain("xl:justify-end")
     expect(view.container.querySelector('button[aria-label="返回"]')).toBeNull()
     const columns = Array.from(
       view.container.querySelectorAll("[data-task-column]"),
     )
     expect(columns.map((column) => column.getAttribute("data-task-column"))).toEqual([
-      "todo",
-      "in_progress",
-      "in_review",
+      "queue",
+      "running",
+      "needs_you",
       "done",
     ])
     expect(columns.every((column) => column.className.includes("min-w-72"))).toBe(true)
     expect(columns.every((column) => column.className.includes("flex-1"))).toBe(true)
     expect(columns.every((column) => !column.className.includes("shrink-0"))).toBe(true)
-    expect(columns.map((column) => column.querySelectorAll("[data-task-drop-before]").length)).toEqual([
+    expect(columns.map((column) => column.querySelectorAll("[data-task-card]").length)).toEqual([
       3,
-      2,
+      0,
       2,
       2,
     ])
-    expect(view.container.querySelectorAll('[draggable="true"]')).toHaveLength(9)
-    expect(view.container.querySelectorAll("[data-task-drop-end]")).toHaveLength(4)
+    expect(view.container.querySelectorAll('[draggable="true"]')).toHaveLength(0)
+    expect(view.container.textContent).toContain("还有 2 项")
     expect(view.container.textContent).not.toContain("TASK-")
   })
 
@@ -211,7 +209,8 @@ describe("TaskBoardPage rendered", () => {
 
     expect(view.container.querySelector("h1")?.textContent).toBe("Task board")
     expect(view.container.textContent).toContain("Confirm the task workflow")
-    expect(view.container.textContent).toContain("In progress")
+    expect(view.container.textContent).toContain("Queue")
+    expect(view.container.textContent).toContain("Needs you")
     expect(view.container.textContent).not.toContain("任务看板")
   })
 
@@ -254,7 +253,7 @@ describe("TaskBoardPage rendered", () => {
     )
     const view = await renderBoard()
 
-    await click(button(view.container, "保持独立的历史任务"))
+    await click(button(view.container, "编辑任务：保持独立的历史任务"))
     expect(dom.document.body.textContent).not.toContain("关联会话")
   })
 
@@ -271,17 +270,52 @@ describe("TaskBoardPage rendered", () => {
     const started = []
     const view = await renderBoard({ onStartTask: (selected) => started.push(selected.id) })
 
-    await click(button(view.container, "开始任务"))
+    await click(button(view.container, "开始任务：开始待办任务"))
     expect(started).toEqual(["TASK-2000"])
   })
 
-  test("labels the primary task action for each workflow stage", async () => {
-    const view = await renderBoard({ onStartTask: () => {} })
+  test("projects live sessions into running and attention lanes", async () => {
+    installStorage()
+    const tasks = [
+      createBoardTask({ title: "队列任务", status: "todo" }, { id: "queue", now: 1 }),
+      createBoardTask({ title: "运行任务", status: "in_progress", sessionIds: ["running"] }, { id: "running", now: 2 }),
+      createBoardTask({ title: "提问任务", status: "in_progress", sessionIds: ["question"] }, { id: "question", now: 3 }),
+      createBoardTask({ title: "完成任务", status: "done", sessionIds: ["done"] }, { id: "done", now: 4 }),
+    ]
+    dom.window.localStorage.setItem(
+      TASKBOARD_STORAGE_KEY,
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks }),
+    )
+    const opened = []
+    const view = await renderBoard({
+      sessions: [
+        { id: "running", title: "运行任务", activity: { revision: 1, state: { kind: "running", turn_id: "turn-1" } } },
+        {
+          id: "question",
+          title: "提问任务",
+          activity: {
+            revision: 2,
+            state: {
+              kind: "awaiting_input",
+              turn_id: "turn-2",
+              pending: [{ input_id: "input-1", kind: "elicitation", title: "请选择布局", options: [], sequence: 1 }],
+            },
+          },
+        },
+        { id: "done", title: "完成任务" },
+      ],
+      onOpenSession: (id) => opened.push(id),
+      onStartTask: () => {},
+    })
 
-    expect(button(view.container.querySelector('[data-task-column="todo"]'), "开始任务")).toBeTruthy()
-    expect(button(view.container.querySelector('[data-task-column="in_progress"]'), "继续任务")).toBeTruthy()
-    expect(button(view.container.querySelector('[data-task-column="in_review"]'), "审阅任务")).toBeTruthy()
-    expect(button(view.container.querySelector('[data-task-column="done"]'), "重新处理")).toBeTruthy()
+    expect(view.container.querySelector('[data-task-column="queue"]')?.textContent).toContain("队列任务")
+    expect(view.container.querySelector('[data-task-column="running"]')?.textContent).toContain("运行任务")
+    expect(view.container.querySelector('[data-task-column="needs_you"]')?.textContent).toContain("提问任务")
+    expect(view.container.querySelector('[data-task-column="done"]')?.textContent).toContain("完成任务")
+    expect(view.container.textContent).toContain("有 1 项任务需要你处理")
+    expect(view.container.textContent).toContain("请选择布局")
+    await click(button(view.container, "回答"))
+    expect(opened).toEqual(["question"])
   })
 
   test("searches the rendered cards and preserves exactly four columns", async () => {
@@ -291,15 +325,15 @@ describe("TaskBoardPage rendered", () => {
     expect(search.value).toBe("本地持久化")
 
     expect(view.container.querySelectorAll("[data-task-column]")).toHaveLength(4)
-    expect(view.container.querySelectorAll("[data-task-drop-before]")).toHaveLength(1)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(1)
     expect(view.container.textContent).toContain("接入任务本地持久化")
     expect(view.container.textContent).not.toContain("确认任务流转规则")
     expect(
-      view.container.querySelector('[data-task-column="in_progress"] header')?.textContent,
-    ).toContain("1/2")
+      view.container.querySelector('[data-task-column="queue"] header')?.textContent,
+    ).toContain("1/5")
 
     await click(button(view.container, "清除搜索"))
-    expect(view.container.querySelectorAll("[data-task-drop-before]")).toHaveLength(9)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(7)
   })
 
   test("filters rendered tasks by priority and clears the active facet", async () => {
@@ -315,12 +349,12 @@ describe("TaskBoardPage rendered", () => {
     await flush()
     expect(urgentCheckbox?.hasAttribute("data-checked")).toBe(true)
 
-    expect(view.container.querySelectorAll("[data-task-drop-before]")).toHaveLength(1)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(1)
     expect(view.container.textContent).toContain("接入任务本地持久化")
     expect(view.container.textContent).not.toContain("实现看板筛选与搜索")
 
     await click(button(dom.document.body, "清除筛选"))
-    expect(view.container.querySelectorAll("[data-task-drop-before]")).toHaveLength(9)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(7)
   })
 
   test("offers to clear filters when a newly created task is hidden", async () => {
@@ -334,7 +368,7 @@ describe("TaskBoardPage rendered", () => {
     await setValue(title, "隐藏后可找回的任务")
     await click(button(dom.document.body, "创建任务"))
 
-    expect(view.container.querySelectorAll("[data-task-drop-before]")).toHaveLength(0)
+    expect(view.container.querySelectorAll("[data-task-card]")).toHaveLength(0)
     const toast = Array.from(dom.document.body.querySelectorAll('[role="status"]')).find(
       (status) => status.textContent?.includes("但它被当前筛选隐藏"),
     )
@@ -410,8 +444,8 @@ describe("TaskBoardPage rendered", () => {
       onOpenSession: (id) => opened.push(id),
     })
 
-    expect(view.container.textContent).toContain("2 个会话")
-    await click(button(view.container, "继续任务"))
+    expect(view.container.textContent).toContain("可继续处理")
+    await click(button(view.container, "打开最近会话：继续会话中的实现"))
     expect(opened).toEqual(["session-1"])
   })
 
