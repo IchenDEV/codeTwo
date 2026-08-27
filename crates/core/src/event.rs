@@ -232,6 +232,9 @@ pub enum Event {
         session: SessionId,
         steering: bool,
         goal: Option<crate::acp::wire::GoalCapabilityInfo>,
+        /// True only after this live ACP session advertises the native `/compact` command.
+        #[serde(default)]
+        compact_context: bool,
     },
     GoalChanged {
         session: SessionId,

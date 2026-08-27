@@ -323,7 +323,7 @@ impl ActivityTracker {
                     },
                     None => PermissionOutcome::Cancelled,
                 };
-                let _ = sender.send(outcome);
+                sender.send(outcome).is_ok()
             }
             PendingReply::Elicitation(sender) => {
                 // `form` is always present on an elicitation route; a missing one can only mean a
@@ -334,10 +334,9 @@ impl ActivityTracker {
                     }
                     None => CreateElicitationResponse::Decline,
                 };
-                let _ = sender.send(response);
+                sender.send(response).is_ok()
             }
         }
-        true
     }
 
     /// Answer a parked elicitation with form content. Content is sanitized against the form the
@@ -360,8 +359,7 @@ impl ActivityTracker {
             Some(form) => elicitation_response(answer, form),
             None => CreateElicitationResponse::Decline,
         };
-        let _ = sender.send(response);
-        true
+        sender.send(response).is_ok()
     }
 
     /// Remove one pending input (publishing the revision that hides it) when `accept` agrees it is
@@ -447,6 +445,21 @@ impl ActivityTracker {
             route.reply.cancel();
         }
         true
+    }
+
+    /// Fail only the captured provider turn. A natural completion or a newer turn makes this a
+    /// no-op, so late cancellation errors cannot overwrite authoritative lifecycle progress.
+    pub fn fail_provider_turn(
+        &self,
+        session: &str,
+        turn_id: &str,
+        message: impl Into<String>,
+    ) -> bool {
+        self.terminal(
+            session,
+            turn_id,
+            Some((RunFailureReason::ProviderError, message.into())),
+        )
     }
 
     fn commit_running(
@@ -782,6 +795,50 @@ mod tests {
     }
 
     #[test]
+    fn closed_pending_receivers_are_removed_without_reporting_success() {
+        let (tracker, lease, _events) = running_tracker();
+        let (permission_id, permission_rx) = tracker
+            .park_permission(
+                "session",
+                "Permission".into(),
+                vec![("allow".into(), "Allow".into())],
+                BTreeMap::new(),
+                PermissionContext::default(),
+            )
+            .unwrap();
+        drop(permission_rx);
+
+        assert!(!tracker.answer_permission("session", &permission_id, Some("allow")));
+        assert!(matches!(
+            tracker.activity("session").unwrap().state,
+            SessionRunState::Running { .. }
+        ));
+
+        let (elicitation_id, elicitation_rx) = tracker
+            .park_elicitation(
+                "session",
+                ElicitationForm {
+                    message: "Question".into(),
+                    tool_call_id: None,
+                    fields: Vec::new(),
+                },
+            )
+            .unwrap();
+        drop(elicitation_rx);
+
+        assert!(!tracker.answer_elicitation(
+            "session",
+            &elicitation_id,
+            ElicitationAnswer::Decline,
+        ));
+        assert!(matches!(
+            tracker.activity("session").unwrap().state,
+            SessionRunState::Running { .. }
+        ));
+        assert!(lease.finish_success());
+    }
+
+    #[test]
     fn stale_terminal_cannot_end_a_new_generation() {
         let (tracker, first, _events) = running_tracker();
         assert!(first.finish_success());
@@ -806,6 +863,38 @@ mod tests {
                 reason: RunFailureReason::ProviderError,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn late_cancel_failure_cannot_end_a_new_generation() {
+        let (tracker, first, _events) = running_tracker();
+        let first_turn_id = first.turn_id().to_string();
+        assert!(first.finish_success());
+
+        let second = tracker
+            .claim(
+                "session",
+                Some("second".into()),
+                tracker.activity("session").unwrap(),
+            )
+            .unwrap();
+        let (_, running) = second.prepare_running().unwrap();
+        assert!(second.commit_running(running, false));
+
+        assert!(!tracker.fail_provider_turn("session", &first_turn_id, "cancel failed"));
+        assert!(matches!(
+            tracker.activity("session").unwrap().state,
+            SessionRunState::Running { ref turn_id, .. } if turn_id == second.turn_id()
+        ));
+        assert!(tracker.fail_provider_turn("session", second.turn_id(), "cancel failed"));
+        assert!(matches!(
+            tracker.activity("session").unwrap().state,
+            SessionRunState::Failed {
+                ref turn_id,
+                reason: RunFailureReason::ProviderError,
+                ref message,
+            } if turn_id.as_deref() == Some(second.turn_id()) && message == "cancel failed"
         ));
     }
 

@@ -33,9 +33,15 @@ export interface StatuslineUsage {
 export function Statusline({
   contextWindow,
   usage,
+  onCompact,
+  compactDisabled = false,
+  compactDisabledReason = null,
 }: {
   contextWindow: ContextWindow | null;
   usage: StatuslineUsage | null;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
+  compactDisabledReason?: string | null;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -135,7 +141,18 @@ export function Statusline({
         </TooltipContent>
       </Tooltip>
       <PopoverContent align="end" side="top" sideOffset={12} className="w-auto p-3">
-        <ContextBreakdown contextWindow={contextWindow} onClose={() => setOpen(false)} />
+        <ContextBreakdown
+          contextWindow={contextWindow}
+          onClose={() => setOpen(false)}
+          onCompact={onCompact
+            ? () => {
+                onCompact();
+                setOpen(false);
+              }
+            : undefined}
+          compactDisabled={compactDisabled}
+          compactDisabledReason={compactDisabledReason}
+        />
       </PopoverContent>
     </Popover>
   );

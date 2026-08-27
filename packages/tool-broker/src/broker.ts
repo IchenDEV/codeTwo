@@ -87,6 +87,7 @@ export class ToolBroker implements ToolBrokerPort {
         errors: [...evidence.hostToolsConfigErrors],
       },
       browserUse: {
+        accessEnabled: evidence.agentBrowserAccessEnabled,
         selections: { ...evidence.browserUseSelections },
         backends: evidence.browserUseBackends.map((backend) => ({
           ...backend,
@@ -99,6 +100,7 @@ export class ToolBroker implements ToolBrokerPort {
   }
 
   resolve({ providerId, context: { evidence } }: ResolveRequest): ToolPlan {
+    const browserAccessEnabled = evidence.agentBrowserAccessEnabled;
     const computerSelection = evidence.computerUseSelections["*"] ?? null;
     const computerExplicitlySelected = computerSelection !== null
       && computerSelection !== COMPUTER_USE_AUTOMATIC
@@ -108,7 +110,8 @@ export class ToolBroker implements ToolBrokerPort {
       : null;
     const selectedComputerMatchesProvider = selectedComputerBridge !== null
       && matchesProvider(selectedComputerBridge, providerId);
-    const nativeComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED
+    const nativeComputerAllowed = browserAccessEnabled
+      && computerSelection !== COMPUTER_USE_DISABLED
       && !selectedComputerMatchesProvider;
     const portableComputerAllowed = computerSelection !== COMPUTER_USE_DISABLED
       && !selectedComputerMatchesProvider;
@@ -122,10 +125,11 @@ export class ToolBroker implements ToolBrokerPort {
       : null;
     const selectedBrowserMatchesProvider = selectedBrowserBridge !== null
       && matchesProvider(selectedBrowserBridge, providerId);
-    const nativeBrowserAllowed = browserSelection === null
-      || browserSelection === BROWSER_USE_AUTOMATIC
-      || browserSelection === OPENAI_BROWSER_BACKEND
-      || !selectedBrowserMatchesProvider;
+    const nativeBrowserAllowed = browserAccessEnabled
+      && (browserSelection === null
+        || browserSelection === BROWSER_USE_AUTOMATIC
+        || browserSelection === OPENAI_BROWSER_BACKEND
+        || !selectedBrowserMatchesProvider);
     const hostState: CapabilityState = evidence.hostVersion && VERIFIED_HOST_VERSIONS.has(evidence.hostVersion)
       ? "ready"
       : "unverified";
@@ -174,6 +178,10 @@ export class ToolBroker implements ToolBrokerPort {
     const nativeCapabilities: ProviderCapabilityId[] = [];
     const mcpServers: AcpMcpServer[] = [];
     const instructions: string[] = [];
+
+    if (providerId === "codex" && !browserAccessEnabled) {
+      upsertMcpServer(mcpServers, evidence.browserAccessBlockerMcp);
+    }
 
     const signedRuntime = evidence.hostPresent && evidence.hostVerified;
     const nativeComputerReady = signedRuntime
@@ -296,7 +304,7 @@ export class ToolBroker implements ToolBrokerPort {
     const providerBrowserReady = capabilities.some(
       (item) => item.id === "chrome_browser" && item.state !== "unavailable",
     );
-    const configuredBrowser = browserSelection === BROWSER_USE_DISABLED
+    const configuredBrowser = !browserAccessEnabled || browserSelection === BROWSER_USE_DISABLED
       ? []
       : browserSelection === null || browserSelection === BROWSER_USE_AUTOMATIC
         ? providerBrowserReady
@@ -350,6 +358,28 @@ export class ToolBroker implements ToolBrokerPort {
       }
     }
 
-    return deepFreeze({ capabilities, nativeCapabilities, mcpServers, instructions });
+    if (!browserAccessEnabled) {
+      const reason = "Agent browser access is disabled.";
+      const fix = "Enable Agent browser access in Settings → Browser Use, then start a new session.";
+      replaceCapability(capabilities, capability("chrome_browser", "unavailable", reason, fix));
+      replaceCapability(capabilities, capability("codetwo_browser", "unavailable", reason, fix));
+      if (providerId === "codex" && nativeComputerReady && configured.length === 0) {
+        replaceCapability(capabilities, capability(
+          "computer_use",
+          "unavailable",
+          "OpenAI Computer Use shares the provider-native Browser runtime, which is withheld while Agent browser access is disabled.",
+          "Enable Agent browser access or configure a separate Computer Use backend, then start a new session.",
+          evidence.computerVersion ?? evidence.hostVersion,
+        ));
+      }
+    }
+
+    return deepFreeze({
+      browserAccessEnabled,
+      capabilities,
+      nativeCapabilities,
+      mcpServers,
+      instructions,
+    });
   }
 }

@@ -1,4 +1,6 @@
-import { X } from "@/components/ui/icons";
+import { Minimize2, X } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 import type { ContextCategory, ContextWindow } from "./contextWindow";
 import { formatContextTokens, contextWindowPercentage } from "./contextWindow";
@@ -77,9 +79,15 @@ function SegmentedBar({
 export function ContextBreakdown({
   contextWindow,
   onClose,
+  onCompact,
+  compactDisabled = false,
+  compactDisabledReason = null,
 }: {
   contextWindow: ContextWindow;
   onClose: () => void;
+  onCompact?: () => void;
+  compactDisabled?: boolean;
+  compactDisabledReason?: string | null;
 }) {
   const t = useT();
   const percentage = contextWindowPercentage(contextWindow);
@@ -146,6 +154,31 @@ export function ContextBreakdown({
           </p>
         </>
       )}
+
+      {onCompact ? (
+        <div className="mt-3">
+          <Separator className="mb-3" />
+          <p className="text-fine leading-relaxed text-muted-foreground">
+            {t("context.nativeCompaction")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="mt-2 w-full"
+            disabled={compactDisabled}
+            onClick={onCompact}
+          >
+            <Minimize2 className="size-3.5" />
+            {t("context.compact")}
+          </Button>
+          {compactDisabled && compactDisabledReason ? (
+            <p className="mt-1.5 text-fine text-muted-foreground">
+              {compactDisabledReason}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -16,8 +16,13 @@ pub trait ClientHandler: Send + Sync + 'static {
     async fn session_update(&self, _note: SessionNotification) {}
 
     /// The agent needs a permission decision. Default: cancel (deny) — safe by default.
-    async fn request_permission(&self, _req: RequestPermissionRequest) -> RequestPermissionResponse {
-        RequestPermissionResponse { outcome: PermissionOutcome::Cancelled }
+    async fn request_permission(
+        &self,
+        _req: RequestPermissionRequest,
+    ) -> RequestPermissionResponse {
+        RequestPermissionResponse {
+            outcome: PermissionOutcome::Cancelled,
+        }
     }
 
     /// The agent asks the user a structured question (`elicitation/create`, UNSTABLE). Default:
@@ -31,7 +36,10 @@ pub trait ClientHandler: Send + Sync + 'static {
     }
 
     /// The agent asks the client to read a file (ACP delegates fs to the client). Default: unsupported.
-    async fn read_text_file(&self, _req: ReadTextFileRequest) -> Result<ReadTextFileResponse, RpcError> {
+    async fn read_text_file(
+        &self,
+        _req: ReadTextFileRequest,
+    ) -> Result<ReadTextFileResponse, RpcError> {
         Err(RpcError::method_not_found("fs/read_text_file"))
     }
 
@@ -61,7 +69,10 @@ impl RecordingHandler {
 #[async_trait]
 impl ClientHandler for RecordingHandler {
     async fn session_update(&self, note: SessionNotification) {
-        if let SessionUpdate::AgentMessageChunk { content: ContentBlock::Text { text } } = note.update {
+        if let SessionUpdate::AgentMessageChunk {
+            content: ContentBlock::Text { text },
+        } = note.update
+        {
             self.texts.lock().unwrap().push(text);
         }
     }
@@ -75,9 +86,13 @@ impl ClientHandler for RecordingHandler {
             .or_else(|| req.options.first());
         match chosen {
             Some(o) => RequestPermissionResponse {
-                outcome: PermissionOutcome::Selected { option_id: o.option_id.clone() },
+                outcome: PermissionOutcome::Selected {
+                    option_id: o.option_id.clone(),
+                },
             },
-            None => RequestPermissionResponse { outcome: PermissionOutcome::Cancelled },
+            None => RequestPermissionResponse {
+                outcome: PermissionOutcome::Cancelled,
+            },
         }
     }
 }

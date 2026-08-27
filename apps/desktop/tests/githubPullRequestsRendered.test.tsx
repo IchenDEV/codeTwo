@@ -9,6 +9,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const { I18nProvider } = await import("../src/i18n");
 const { PullRequestsPage } = await import("../src/github/PullRequestsPage");
+const { associateTaskPullRequest, createBoardTask } = await import("../src/taskboard/taskBoard");
+const { githubPullRequestReference } = await import("../src/github/pullRequests");
 
 const mounted = [];
 let restoreCanvasContext = null;
@@ -132,6 +134,77 @@ describe("PullRequestsPage", () => {
     await waitFor(() => {
       expect(dom.document.body.textContent).toContain("Review the GitHub panel");
       expect(dom.document.body.textContent).toContain("Uses the filtered selection");
+    });
+  });
+
+  test("links to the rendered active task with its revision", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    dom.window.localStorage.setItem("codetwo.language", "en");
+    const activeTask = createBoardTask(
+      { title: "Ship the GitHub panel" },
+      { id: "task-active", now: 1 },
+    );
+    let command = null;
+    const view = mount(
+      <I18nProvider>
+        <PullRequestsPage
+          loadPullRequests={async () => [summary]}
+          loadPullRequest={async () => detail}
+          onChat={() => {}}
+          tasks={[activeTask]}
+          activeTaskId={activeTask.id}
+          onLinkTask={(value, target) => { command = { value, target }; }}
+        />
+      </I18nProvider>,
+    );
+    mounted.push(view);
+
+    await waitFor(() => expect(dom.document.body.textContent).toContain("feature/github-panel"));
+    click(button(dom.document.body, "Link to task"));
+    expect(command).toEqual({
+      value: detail,
+      target: { id: "task-active", revision: 0 },
+    });
+  });
+
+  test("opens and revision-guards an existing task link", async () => {
+    activateDom();
+    disableCanvasDrawing();
+    dom.window.localStorage.setItem("codetwo.language", "en");
+    const task = createBoardTask(
+      { title: "Ship the GitHub panel" },
+      { id: "task-linked", now: 1 },
+    );
+    const linked = associateTaskPullRequest(
+      [task],
+      task.id,
+      githubPullRequestReference(detail),
+      2,
+    )[0];
+    let opened = null;
+    let unlinked = null;
+    const view = mount(
+      <I18nProvider>
+        <PullRequestsPage
+          loadPullRequests={async () => [summary]}
+          loadPullRequest={async () => detail}
+          onChat={() => {}}
+          tasks={[linked]}
+          onOpenTask={(id) => { opened = id; }}
+          onUnlinkTask={(value, link) => { unlinked = { value, link }; }}
+        />
+      </I18nProvider>,
+    );
+    mounted.push(view);
+
+    await waitFor(() => expect(dom.document.body.textContent).toContain("feature/github-panel"));
+    click(button(dom.document.body, "Open task"));
+    expect(opened).toBe("task-linked");
+    click(button(dom.document.body, "Unlink task"));
+    expect(unlinked).toEqual({
+      value: detail,
+      link: { id: "task-linked", revision: 1 },
     });
   });
 });

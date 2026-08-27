@@ -523,6 +523,68 @@ describe("DocEditor Canvas insertion and lifecycle", () => {
     view.unmount();
   });
 
+  test("draft navigation replaces the editor and reports the restored canonical document", () => {
+    activateDom();
+    const restoreRef: any = { current: null };
+    const documentChanges: any[] = [];
+    const refs: any = {
+      getBlocksRef: { current: null },
+      insertTextRef: { current: null },
+      insertAnnotationRef: { current: null },
+      insertFileRef: { current: null },
+      focusRef: { current: null },
+      clearRef: { current: null },
+      openSkillPickerRef: { current: null },
+      insertSkillRef: { current: null },
+      freezeCanvasesRef: { current: null },
+    };
+    const view = mount(
+      <DocEditor
+        skills={[{
+          id: "review",
+          name: "Review",
+          macro_template: "Review {{focus}}",
+          macro_slots: [{ id: "focus", label: "Focus", kind: "text", required: true }],
+        }]}
+        cwd="."
+        sessionId={null}
+        {...refs}
+        canvasEnabled={false}
+        canvasRuntime={null}
+        createCanvas={async () => draft("unused", 1)}
+        insertCanvasRef={{ current: null }}
+        insertCanvasDraftRef={{ current: null }}
+        restoreCanvasDocumentRef={restoreRef}
+        onEmptyChange={() => {}}
+        onDocumentChange={(doc) => documentChanges.push(doc)}
+      />,
+    );
+    fakeEditor.document = [{ type: "paragraph", content: [{ type: "text", text: "other draft" }] }];
+    const restored = [
+      { type: "text", text: "Keep me" },
+      { type: "skill", skill_id: "review", params: { focus: "correctness" } },
+      { type: "file", path: "src/main.rs" },
+      { type: "image", path: "screens/result.png" },
+      { type: "appshot", id: "private-appshot" },
+      { type: "attachment", id: "private-image", name: "Diagram.png" },
+      { type: "session", session_id: "prior-session" },
+    ];
+
+    restoreRef.current(restored, new Map(), { mode: "replace" });
+
+    expect(fakeEditor.document.some((block: any) => JSON.stringify(block).includes("other draft"))).toBe(false);
+    expect(fakeEditor.document.some((block: any) => block.type === "appshot" || block.type === "attachment")).toBe(false);
+    expect(refs.getBlocksRef.current()).toEqual([
+      { type: "text", text: "Keep me" },
+      { type: "skill", skill_id: "review", params: { focus: "correctness" } },
+      { type: "file", path: "src/main.rs" },
+      { type: "image", path: "screens/result.png" },
+      { type: "session", session_id: "prior-session" },
+    ]);
+    expect(documentChanges.at(-1)).toEqual(refs.getBlocksRef.current());
+    view.unmount();
+  });
+
   test("routes provider-image rejection to matching live Canvas handles and renders recovery controls without changing the prompt", async () => {
     activateDom();
     const insertDraftRef: any = { current: null };

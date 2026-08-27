@@ -13,6 +13,14 @@ export const PRIORITIES = TASK_PRIORITIES;
 
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+export interface GitHubPullRequestReference {
+  provider: "github";
+  host: "github.com";
+  repository: string;
+  number: number;
+  url: string;
+}
+
 export interface BoardTask {
   id: string;
   title: string;
@@ -25,6 +33,10 @@ export interface BoardTask {
   updatedAt: number;
   /** Ordered oldest to newest. A Task owns its Session history, never only one Session. */
   sessionIds: string[];
+  /** Durable identity for the one GitHub pull request this Task currently owns. */
+  pullRequest: GitHubPullRequestReference | null;
+  /** Incremented on every link change so stale UI actions cannot rewrite a newer association. */
+  pullRequestLinkRevision: number;
 }
 
 /**
@@ -60,7 +72,7 @@ export interface StorageLike {
 }
 
 export const TASKBOARD_STORAGE_KEY = "codetwo.taskboard.v1";
-export const TASKBOARD_SNAPSHOT_VERSION = 2 as const;
+export const TASKBOARD_SNAPSHOT_VERSION = 3 as const;
 
 export const CORRUPT_BOARD_WARNING = "无法读取已保存的任务看板，已恢复为示例任务。";
 export const LOAD_BOARD_WARNING = "无法访问本地任务数据，已恢复为示例任务。";
@@ -82,7 +94,10 @@ const STATUS_INDEX: Record<TaskStatus, number> = {
   done: 3,
 };
 
-const DEFAULT_TASK_DATA: readonly BoardTask[] = [
+const DEFAULT_TASK_DATA: readonly Omit<
+  BoardTask,
+  "pullRequest" | "pullRequestLinkRevision"
+>[] = [
   {
     id: "seed-define-workflow",
     title: "确认任务流转规则",
@@ -245,14 +260,21 @@ const ENGLISH_SEED_COPY: Record<
 };
 
 function cloneTask(task: BoardTask): BoardTask {
-  return { ...task, labels: [...task.labels], sessionIds: [...task.sessionIds] };
+  return {
+    ...task,
+    labels: [...task.labels],
+    sessionIds: [...task.sessionIds],
+    pullRequest: task.pullRequest ? { ...task.pullRequest } : null,
+  };
 }
 
 /** Returns a fresh localized starter board so consumers cannot mutate the shared template. */
 export function seedTasks(locale: "en" | "zh-CN" = "zh-CN"): BoardTask[] {
-  return DEFAULT_TASK_DATA.map((task) =>
-    cloneTask(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
-  );
+  return DEFAULT_TASK_DATA.map((task) => cloneTask({
+    ...(locale === "en" ? { ...task, ...ENGLISH_SEED_COPY[task.id] } : task),
+    pullRequest: null,
+    pullRequestLinkRevision: 0,
+  }));
 }
 
 export const DEFAULT_TASKS: BoardTask[] = seedTasks();
@@ -315,6 +337,8 @@ export function createBoardTask(
     createdAt: now,
     updatedAt: now,
     sessionIds: normalizeSessionIds(input.sessionIds),
+    pullRequest: null,
+    pullRequestLinkRevision: 0,
   };
 }
 
@@ -339,6 +363,106 @@ export function taskForSession(
   sessionId: string,
 ): BoardTask | null {
   return tasks.find((task) => task.sessionIds.includes(sessionId)) ?? null;
+}
+
+export function githubPullRequestIdentity(reference: GitHubPullRequestReference): string {
+  return `${reference.provider}:${reference.host}/${reference.repository.toLowerCase()}#${reference.number}`;
+}
+
+function samePullRequestReference(
+  left: GitHubPullRequestReference | null,
+  right: GitHubPullRequestReference | null,
+): boolean {
+  if (left === null || right === null) return left === right;
+  return githubPullRequestIdentity(left) === githubPullRequestIdentity(right)
+    && left.url === right.url;
+}
+
+export function taskForPullRequest(
+  tasks: readonly BoardTask[],
+  reference: GitHubPullRequestReference,
+): BoardTask | null {
+  const identity = githubPullRequestIdentity(reference);
+  return tasks.find((task) =>
+    task.pullRequest !== null
+    && githubPullRequestIdentity(task.pullRequest) === identity
+  ) ?? null;
+}
+
+/**
+ * Links one Task to one PR and evicts that same PR from any previous Task. Replacing a different
+ * PR on the target is supported only for explicit callers; the UI normally asks users to unlink
+ * first. No board status changes implicitly when source-control state changes.
+ */
+export function associateTaskPullRequest(
+  tasks: readonly BoardTask[],
+  taskId: string,
+  reference: GitHubPullRequestReference,
+  now = Date.now(),
+): BoardTask[] | null {
+  const index = tasks.findIndex((task) => task.id === taskId);
+  if (index < 0) return null;
+  const identity = githubPullRequestIdentity(reference);
+  const target = tasks[index]!;
+  const linkedElsewhere = tasks.some((task, taskIndex) =>
+    taskIndex !== index
+    && task.pullRequest !== null
+    && githubPullRequestIdentity(task.pullRequest) === identity
+  );
+  if (samePullRequestReference(target.pullRequest, reference) && !linkedElsewhere) {
+    return tasks.map(cloneTask);
+  }
+
+  return tasks.map((task, taskIndex) => {
+    if (taskIndex === index) {
+      return {
+        ...cloneTask(task),
+        updatedAt: Math.max(now, task.createdAt, task.updatedAt),
+        pullRequest: { ...reference },
+        pullRequestLinkRevision: task.pullRequestLinkRevision + 1,
+      };
+    }
+    if (
+      task.pullRequest === null
+      || githubPullRequestIdentity(task.pullRequest) !== identity
+    ) {
+      return cloneTask(task);
+    }
+    return {
+      ...cloneTask(task),
+      updatedAt: Math.max(now, task.createdAt, task.updatedAt),
+      pullRequest: null,
+      pullRequestLinkRevision: task.pullRequestLinkRevision + 1,
+    };
+  });
+}
+
+/** Rejects stale unlink clicks by matching both the rendered identity and link revision. */
+export function unlinkTaskPullRequest(
+  tasks: readonly BoardTask[],
+  taskId: string,
+  expectedIdentity: string,
+  expectedRevision: number,
+  now = Date.now(),
+): BoardTask[] | null {
+  const index = tasks.findIndex((task) => task.id === taskId);
+  const task = tasks[index];
+  if (
+    index < 0
+    || !task?.pullRequest
+    || task.pullRequestLinkRevision !== expectedRevision
+    || githubPullRequestIdentity(task.pullRequest) !== expectedIdentity
+  ) {
+    return null;
+  }
+  return tasks.map((candidate, candidateIndex) => candidateIndex === index
+    ? {
+        ...cloneTask(candidate),
+        updatedAt: Math.max(now, candidate.createdAt, candidate.updatedAt),
+        pullRequest: null,
+        pullRequestLinkRevision: candidate.pullRequestLinkRevision + 1,
+      }
+    : cloneTask(candidate));
 }
 
 /**
@@ -419,7 +543,20 @@ export function filterBoardTasks(
     if (priorities.size > 0 && !priorities.has(task.priority)) return false;
     if (labels.size > 0 && !task.labels.some((label) => labels.has(label))) return false;
     if (!query) return true;
-    const searchable = [task.id, task.title, task.description, ...task.labels];
+    const searchable = [
+      task.id,
+      task.title,
+      task.description,
+      ...task.labels,
+      ...(task.pullRequest
+        ? [
+            task.pullRequest.repository,
+            String(task.pullRequest.number),
+            `${task.pullRequest.repository} #${task.pullRequest.number}`,
+            task.pullRequest.url,
+          ]
+        : []),
+    ];
     return searchable.some((value) => normalizedSearchValue(value).includes(query));
   });
 }
@@ -467,7 +604,69 @@ function isTaskPriority(value: unknown): value is TaskPriority {
   return typeof value === "string" && (TASK_PRIORITIES as readonly string[]).includes(value);
 }
 
-function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSION): BoardTask | null {
+function isGitHubRepository(value: string): boolean {
+  const [owner, name, extra] = value.split("/");
+  return extra === undefined
+    && owner !== undefined
+    && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(owner)
+    && name !== undefined
+    && name.length <= 100
+    && /^[A-Za-z0-9._-]+$/.test(name);
+}
+
+function parseGitHubPullRequestReference(
+  value: unknown,
+): GitHubPullRequestReference | null | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+  const { provider, host, repository, number, url } = value;
+  if (
+    provider !== "github"
+    || typeof host !== "string"
+    || host.toLowerCase() !== "github.com"
+    || typeof repository !== "string"
+    || typeof number !== "number"
+    || !Number.isSafeInteger(number)
+    || number <= 0
+    || typeof url !== "string"
+  ) {
+    return undefined;
+  }
+  const normalizedRepository = repository.trim();
+  if (!isGitHubRepository(normalizedRepository)) return undefined;
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.split("/").filter(Boolean);
+    if (
+      parsed.protocol !== "https:"
+      || parsed.hostname.toLowerCase() !== "github.com"
+      || parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || path.length !== 4
+      || path[2] !== "pull"
+      || path[3] !== String(number)
+      || `${path[0]}/${path[1]}`.toLowerCase()
+        !== normalizedRepository.toLowerCase()
+    ) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return {
+    provider: "github",
+    host: "github.com",
+    repository: normalizedRepository,
+    number,
+    url: `https://github.com/${normalizedRepository}/pull/${number}`,
+  };
+}
+
+type SupportedBoardSnapshotVersion = 1 | 2 | typeof TASKBOARD_SNAPSHOT_VERSION;
+
+function parseTask(value: unknown, version: SupportedBoardSnapshotVersion): BoardTask | null {
   if (!isRecord(value)) return null;
   const {
     id,
@@ -481,10 +680,16 @@ function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSIO
     updatedAt,
     sessionIds,
     linkedSessionId,
+    pullRequest,
+    pullRequestLinkRevision,
   } = value;
   const persistedSessionIds = version === 1
     ? (typeof linkedSessionId === "string" ? [linkedSessionId] : [])
     : sessionIds;
+  const persistedPullRequest = version < 3
+    ? null
+    : parseGitHubPullRequestReference(pullRequest);
+  const persistedPullRequestRevision = version < 3 ? 0 : pullRequestLinkRevision;
   if (
     typeof id !== "string"
     || !id.trim()
@@ -505,6 +710,11 @@ function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSIO
     || updatedAt < createdAt
     || !Array.isArray(persistedSessionIds)
     || !persistedSessionIds.every((sessionId) => typeof sessionId === "string" && sessionId.trim())
+    || persistedPullRequest === undefined
+    || typeof persistedPullRequestRevision !== "number"
+    || !Number.isSafeInteger(persistedPullRequestRevision)
+    || persistedPullRequestRevision < 0
+    || persistedPullRequestRevision >= Number.MAX_SAFE_INTEGER
   ) {
     return null;
   }
@@ -519,6 +729,8 @@ function parseTask(value: unknown, version: 1 | typeof TASKBOARD_SNAPSHOT_VERSIO
     createdAt,
     updatedAt,
     sessionIds: normalizeSessionIds(persistedSessionIds),
+    pullRequest: persistedPullRequest,
+    pullRequestLinkRevision: persistedPullRequestRevision,
   };
 }
 
@@ -535,7 +747,11 @@ export function parseBoardSnapshot(
     const value: unknown = JSON.parse(raw);
     if (
       !isRecord(value)
-      || (value.version !== 1 && value.version !== TASKBOARD_SNAPSHOT_VERSION)
+      || (
+        value.version !== 1
+        && value.version !== 2
+        && value.version !== TASKBOARD_SNAPSHOT_VERSION
+      )
       || !Array.isArray(value.tasks)
     ) {
       return corruptBoardState(locale);
@@ -544,6 +760,7 @@ export function parseBoardSnapshot(
     const tasks: BoardTask[] = [];
     const ids = new Set<string>();
     const claimedSessions = new Set<string>();
+    const claimedPullRequests = new Set<string>();
     for (const valueTask of value.tasks) {
       const task = parseTask(valueTask, version);
       if (!task || ids.has(task.id)) return corruptBoardState(locale);
@@ -553,6 +770,15 @@ export function parseBoardSnapshot(
         claimedSessions.add(sessionId);
         return true;
       });
+      if (task.pullRequest) {
+        const identity = githubPullRequestIdentity(task.pullRequest);
+        if (claimedPullRequests.has(identity)) {
+          task.pullRequest = null;
+          task.pullRequestLinkRevision += 1;
+        } else {
+          claimedPullRequests.add(identity);
+        }
+      }
       tasks.push(task);
     }
     return { tasks, warning: null };
@@ -643,6 +869,8 @@ function sameTask(left: BoardTask, right: BoardTask): boolean {
     && left.order === right.order
     && left.createdAt === right.createdAt
     && left.updatedAt === right.updatedAt
+    && left.pullRequestLinkRevision === right.pullRequestLinkRevision
+    && samePullRequestReference(left.pullRequest, right.pullRequest)
     && left.sessionIds.length === right.sessionIds.length
     && left.sessionIds.every((sessionId, index) => sessionId === right.sessionIds[index])
     && left.labels.length === right.labels.length

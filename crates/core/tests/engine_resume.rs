@@ -29,7 +29,11 @@ for line in sys.stdin:
     msg = json.loads(line)
     method, mid = msg.get("method"), msg.get("id")
     if method == "initialize":
-        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":True}}})
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1,
+              "agentInfo":{"name":"mock-codex-acp","version":"1.6.2"},
+              "agentCapabilities":{"loadSession":True,"sessionCapabilities":{"resume":{}}}}})
+    elif method == "session/resume":
+        send({"jsonrpc":"2.0","id":mid,"result":{}})
     elif method == "session/load":
         sid = msg["params"]["sessionId"]
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,
@@ -39,6 +43,15 @@ for line in sys.stdin:
         send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"sess-new"}})
     elif method == "session/prompt":
         sid = msg["params"]["sessionId"]
+        send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,
+              "update":{"sessionUpdate":"tool_call","toolCallId":"agent-1","title":"spawn_agent",
+                        "kind":"spawn_agent","status":"completed",
+                        "rawInput":{"agent_type":"explorer","message":"compatibility canary"}}}})
+        send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,
+              "update":{"sessionUpdate":"future_collaboration_status","secret":"not diagnostics"}}})
+        send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,
+              "update":{"sessionUpdate":"tool_call","toolCallId":"terminal-1","title":"printf canary",
+                        "kind":"execute","status":"completed"}}})
         send({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":sid,
               "update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"live:"+sid}}}})
         send({"jsonrpc":"2.0","id":mid,"result":{"stopReason":"end_turn"}})
@@ -156,7 +169,7 @@ fn agent_texts(events: &[Event]) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn a_revived_session_resumes_via_session_load() {
+async fn a_revived_session_prefers_native_resume_without_replaying_history() {
     let (engine, mut rx, store, id) = engine_with_stored_session(RESUMING_AGENT);
     let events = run_turn(&engine, &mut rx, &id).await;
 
@@ -181,6 +194,30 @@ async fn a_revived_session_resumes_via_session_load() {
         !events.iter().any(|e| matches!(e, Event::Error { .. })),
         "resume should be quiet"
     );
+
+    let compatibility = engine
+        .provider_protocol_compatibility(&id)
+        .expect("live compatibility snapshot");
+    assert_eq!(
+        compatibility.adapter_name.as_deref(),
+        Some("mock-codex-acp")
+    );
+    assert_eq!(compatibility.adapter_version.as_deref(), Some("1.6.2"));
+    assert!(compatibility.load_session);
+    assert!(compatibility.resume_session);
+    assert_eq!(compatibility.diagnostics.unhandled_session_updates, 1);
+    assert_eq!(
+        compatibility.diagnostics.unhandled_session_update_kinds[0].category,
+        "future_collaboration_status"
+    );
+    let diagnostic_json = serde_json::to_string(&compatibility).unwrap();
+    assert!(!diagnostic_json.contains("not diagnostics"));
+    assert!(events.iter().any(|event| {
+        matches!(event, Event::ToolCall { kind: Some(kind), .. } if kind == "spawn_agent")
+    }));
+    assert!(events.iter().any(|event| {
+        matches!(event, Event::ToolCall { kind: Some(kind), .. } if kind == "execute")
+    }));
 }
 
 #[tokio::test]

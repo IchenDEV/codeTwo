@@ -276,6 +276,7 @@ rpc = BrowserView.defineRPC<CodeTwoRPC>({
         mainWindow.show();
         return capture;
       },
+      appshotsGet: ({ id }) => appshots.getCapture(id),
     },
     messages: {},
   },

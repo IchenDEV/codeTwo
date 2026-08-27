@@ -46,6 +46,8 @@ pub struct DeviceSyncSession {
     pub memory_read: String,
     pub memory_write: String,
     pub created_at: i64,
+    #[serde(default)]
+    pub last_active_at: i64,
     pub updated_at: i64,
 }
 
@@ -464,7 +466,8 @@ fn snapshot_on(conn: &Connection, device_id: &str) -> Result<DeviceSyncDocument,
     let sessions = {
         let mut statement = conn.prepare(
             "SELECT id,title,title_origin,pinned,archived,provider,model,cwd,project_path,
-                    permission_mode,sandbox_policy,memory_read,memory_write,created_at,updated_at
+                    permission_mode,sandbox_policy,memory_read,memory_write,created_at,
+                    last_active_at,updated_at
              FROM sessions WHERE transient=0",
         )?;
         let rows = statement.query_map([], |row| {
@@ -483,7 +486,8 @@ fn snapshot_on(conn: &Connection, device_id: &str) -> Result<DeviceSyncDocument,
                 memory_read: row.get(11)?,
                 memory_write: row.get(12)?,
                 created_at: row.get(13)?,
-                updated_at: row.get(14)?,
+                last_active_at: row.get(14)?,
+                updated_at: row.get(15)?,
             })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
@@ -692,12 +696,13 @@ impl Store {
                 .map_err(StoreError::InvalidDeviceSync)?;
             let sandbox_policy = normalize_json_enum::<SandboxPolicy>(&session.sandbox_policy)
                 .map_err(StoreError::InvalidDeviceSync)?;
+            let last_active_at = session.last_active_at.max(session.created_at);
             if current_sessions.contains_key(&session.id) {
                 transaction.execute(
                     "UPDATE sessions SET title=?2,title_origin=?3,pinned=?4,archived=?5,
                        provider=?6,model=?7,cwd=?8,project_path=?9,permission_mode=?10,
                        sandbox_policy=?11,memory_read=?12,memory_write=?13,created_at=?14,
-                       updated_at=?15 WHERE id=?1",
+                       last_active_at=?15,updated_at=?16 WHERE id=?1",
                     params![
                         session.id,
                         session.title,
@@ -713,6 +718,7 @@ impl Store {
                         session.memory_read,
                         session.memory_write,
                         session.created_at,
+                        last_active_at,
                         session.updated_at,
                     ],
                 )?;
@@ -721,9 +727,10 @@ impl Store {
                     "INSERT INTO sessions(
                        id,title,title_origin,pinned,archived,transient,activity_json,provider,model,
                        cwd,project_path,worktree_path,worktree_discarded,permission_mode,
-                       sandbox_policy,acp_session_id,memory_read,memory_write,created_at,updated_at
+                       sandbox_policy,acp_session_id,memory_read,memory_write,created_at,
+                       last_active_at,updated_at
                      ) VALUES(?1,?2,?3,?4,?5,0,'{\"revision\":0,\"state\":{\"kind\":\"idle\"}}',
-                       ?6,?7,?8,?9,NULL,0,?10,?11,NULL,?12,?13,?14,?15)",
+                       ?6,?7,?8,?9,NULL,0,?10,?11,NULL,?12,?13,?14,?15,?16)",
                     params![
                         session.id,
                         session.title,
@@ -739,6 +746,7 @@ impl Store {
                         session.memory_read,
                         session.memory_write,
                         session.created_at,
+                        last_active_at,
                         session.updated_at,
                     ],
                 )?;

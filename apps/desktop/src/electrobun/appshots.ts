@@ -2,6 +2,7 @@ import { GlobalShortcut, Utils } from "electrobun/bun";
 import {
   chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -37,6 +38,7 @@ const HOTKEY_ACCELERATORS: Partial<Record<AppshotHotkey, string>> = {
 
 const captureRetentionMs = 7 * 24 * 60 * 60 * 1000;
 const maxStoredCaptures = 40;
+const captureIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type StoredSettings = Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">;
 
@@ -140,6 +142,8 @@ export class AppshotManager {
         text: result.text ?? "",
         text_truncated: result.text_truncated === true,
         captured_at: capturedAt,
+        width: result.width ?? 0,
+        height: result.height ?? 0,
       };
       writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, {
         encoding: "utf8",
@@ -169,6 +173,46 @@ export class AppshotManager {
     } finally {
       this.capturing = false;
     }
+  }
+
+  getCapture(id: string): AppshotCapture {
+    if (!captureIdPattern.test(id)) throw new Error("Appshot id is invalid.");
+    const imagePath = join(this.capturesDir, `${id}.png`);
+    const metadataPath = join(this.capturesDir, `${id}.json`);
+    const imageStat = lstatSync(imagePath);
+    const metadataStat = lstatSync(metadataPath);
+    if (imageStat.isSymbolicLink() || !imageStat.isFile()) {
+      throw new Error("Appshot image is invalid.");
+    }
+    if (metadataStat.isSymbolicLink() || !metadataStat.isFile()) {
+      throw new Error("Appshot metadata is invalid.");
+    }
+    if (imageStat.size === 0 || imageStat.size > 20 * 1024 * 1024) {
+      throw new Error("Appshot image is invalid.");
+    }
+    if (metadataStat.size === 0 || metadataStat.size > 1024 * 1024) {
+      throw new Error("Appshot metadata is invalid.");
+    }
+    const image = readFileSync(imagePath);
+    const rawMetadata = readFileSync(metadataPath, "utf8");
+    const value = JSON.parse(rawMetadata) as Record<string, unknown>;
+    if (value.id !== id) throw new Error("Appshot metadata does not match the image.");
+    const appName = typeof value.app_name === "string" ? value.app_name : "Application";
+    const windowTitle = typeof value.window_title === "string" ? value.window_title : "Window";
+    const text = typeof value.text === "string" ? value.text : "";
+    return {
+      id,
+      kind: "appshot",
+      app_name: appName,
+      window_title: windowTitle,
+      captured_at: typeof value.captured_at === "string" ? value.captured_at : "",
+      text_length: text.length,
+      text_truncated: value.text_truncated === true,
+      width: typeof value.width === "number" && Number.isFinite(value.width) ? value.width : 0,
+      height: typeof value.height === "number" && Number.isFinite(value.height) ? value.height : 0,
+      preview_data_url: `data:image/png;base64,${image.toString("base64")}`,
+      destination: "current",
+    };
   }
 
   shutdown(): void {

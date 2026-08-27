@@ -17,7 +17,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const { ToastProvider } = await import("../src/ui/toast")
 const { I18nProvider } = await import("../src/i18n")
 const { Simulate } = await import("react-dom/test-utils")
-const { TASKBOARD_SNAPSHOT_VERSION, TASKBOARD_STORAGE_KEY, createBoardTask } = await import(
+const {
+  TASKBOARD_SNAPSHOT_VERSION,
+  TASKBOARD_STORAGE_KEY,
+  associateTaskPullRequest,
+  createBoardTask,
+} = await import(
   "../src/taskboard/taskBoard"
 )
 const { TaskBoardPage } = await import("../src/taskboard/TaskBoardPage")
@@ -474,5 +479,36 @@ describe("TaskBoardPage rendered", () => {
     await openMenu(trigger)
     await click(menuItem("在新会话中继续"))
     expect(started).toEqual(["TASK-2002"])
+  })
+
+  test("renders and explicitly unlinks a durable pull request reference", async () => {
+    installStorage()
+    const task = createBoardTask(
+      { title: "审阅关联的 PR", status: "in_review" },
+      { id: "TASK-PR", now: 1_700_000_000_000 },
+    )
+    const linked = associateTaskPullRequest([task], task.id, {
+      provider: "github",
+      host: "github.com",
+      repository: "acme/repo",
+      number: 42,
+      url: "https://github.com/acme/repo/pull/42",
+    })
+    dom.window.localStorage.setItem(
+      TASKBOARD_STORAGE_KEY,
+      JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: linked }),
+    )
+    const view = await renderBoard()
+
+    expect(view.container.textContent).toContain("acme/repo #42")
+    const trigger = view.container.querySelector('[aria-label="任务操作：审阅关联的 PR"]')
+    await openMenu(trigger)
+    await click(menuItem("解除 pull request 关联"))
+    await waitFor(() => expect(view.container.textContent).not.toContain("acme/repo #42"))
+    const snapshot = JSON.parse(dom.window.localStorage.getItem(TASKBOARD_STORAGE_KEY))
+    expect(snapshot.tasks[0]).toMatchObject({
+      pullRequest: null,
+      pullRequestLinkRevision: 2,
+    })
   })
 })

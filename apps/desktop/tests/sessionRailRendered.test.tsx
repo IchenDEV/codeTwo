@@ -103,6 +103,37 @@ function renderRail(overrides = {}) {
 }
 
 describe("SessionRail row layout", () => {
+  test("sorts active chats by last activity inside the pinned groups", () => {
+    activateDom();
+    const pinned = {
+      ...session("pinned", "Pinned chat"),
+      pinned: true,
+      created_at: 50,
+      last_active_at: 50,
+    };
+    const revived = {
+      ...session("revived", "Revived chat"),
+      created_at: 100,
+      last_active_at: 300,
+    };
+    const newer = {
+      ...session("newer", "Newer chat"),
+      created_at: 200,
+      last_active_at: 200,
+    };
+    const view = renderRail({
+      sessions: [newer, pinned, revived],
+      activeSession: null,
+      previews: {},
+    });
+
+    const text = view.container.textContent ?? "";
+    expect(text.indexOf("Pinned chat")).toBeLessThan(text.indexOf("Revived chat"));
+    expect(text.indexOf("Revived chat")).toBeLessThan(text.indexOf("Newer chat"));
+
+    view.unmount();
+  });
+
   test("keeps resize tracking native to the separator and releases it when the pointer is cancelled", () => {
     activateDom();
     const widths: number[] = [];

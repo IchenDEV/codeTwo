@@ -46,6 +46,7 @@ import {
   confirmNative,
   discardOrphanWorktree,
   discardSessionWorktree,
+  exportRedactedDiagnostics,
   getAppUpdateStatus,
   getDeviceSyncStatus,
   getPluginDeveloperStatus,
@@ -54,6 +55,7 @@ import {
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
+  setAgentBrowserAccess,
   openAppshotPrivacySettings,
   requestAppshotPermissions,
   takeAppshot,
@@ -85,6 +87,7 @@ import {
   syncDeviceDataNow,
   reloadDevelopmentPlugins,
   type DeviceSyncStatus,
+  type DiagnosticsExportResult,
   type PluginDeveloperStatus,
 } from "../bridge";
 import { formatCombo, MOD_LABEL } from "../keys";
@@ -366,6 +369,7 @@ export function SettingsPage({
   computerUseSelectionSaver = selectComputerUseBackend,
   browserUseSettingsLoader = getBrowserUseSettings,
   browserUseSelectionSaver = selectBrowserUseBackend,
+  browserUseAccessSaver = setAgentBrowserAccess,
   appshotSettingsLoader = getAppshotSettings,
   appshotSettingsSaver = updateAppshotSettings,
   appshotPermissionRequester = requestAppshotPermissions,
@@ -381,6 +385,7 @@ export function SettingsPage({
   pluginDeveloperModeSaver = setPluginDeveloperMode,
   pluginDeveloperReloader = reloadDevelopmentPlugins,
   devtoolsOpener = openDevtools,
+  diagnosticsExporter = exportRedactedDiagnostics,
 }: {
   /** Matches the persisted width of the main session rail. */
   sidebarWidth?: number;
@@ -428,6 +433,7 @@ export function SettingsPage({
   computerUseSelectionSaver?: (backend: string) => Promise<ComputerUseSettings>;
   browserUseSettingsLoader?: () => Promise<BrowserUseSettings>;
   browserUseSelectionSaver?: (backend: string) => Promise<BrowserUseSettings>;
+  browserUseAccessSaver?: (enabled: boolean) => Promise<BrowserUseSettings>;
   appshotSettingsLoader?: () => Promise<AppshotSettings>;
   appshotSettingsSaver?: (
     patch: Partial<Pick<AppshotSettings, "hotkey" | "destination" | "play_sound">>,
@@ -447,6 +453,7 @@ export function SettingsPage({
   pluginDeveloperModeSaver?: (enabled: boolean) => Promise<PluginDeveloperStatus>;
   pluginDeveloperReloader?: () => Promise<PluginDeveloperStatus>;
   devtoolsOpener?: () => Promise<void>;
+  diagnosticsExporter?: () => Promise<DiagnosticsExportResult>;
 }) {
   const t = useT();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -484,6 +491,9 @@ export function SettingsPage({
   const [pluginDevelopmentSaving, setPluginDevelopmentSaving] = useState(false);
   const [pluginDevelopmentReloading, setPluginDevelopmentReloading] = useState(false);
   const [pluginDevelopmentError, setPluginDevelopmentError] = useState<string | null>(null);
+  const [diagnosticsExporting, setDiagnosticsExporting] = useState(false);
+  const [diagnosticsMessage, setDiagnosticsMessage] = useState<string | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   useEffect(() => setTab(initialTab), [initialTab]);
   useEffect(() => {
     if (!memoryEnabled) {
@@ -1049,6 +1059,24 @@ export function SettingsPage({
     }
   };
 
+  const exportDiagnostics = async () => {
+    setDiagnosticsExporting(true);
+    setDiagnosticsMessage(null);
+    setDiagnosticsError(null);
+    try {
+      const result = await diagnosticsExporter();
+      if (result === "saved") {
+        setDiagnosticsMessage(t("settings.diagnosticsExported"));
+      } else if (result === "unsupported") {
+        setDiagnosticsError(t("settings.diagnosticsUnsupported"));
+      }
+    } catch (error) {
+      setDiagnosticsError(t("settings.diagnosticsExportFailed", { error: String(error) }));
+    } finally {
+      setDiagnosticsExporting(false);
+    }
+  };
+
   const pluginDevelopmentStatus = (() => {
     if (!pluginDevelopment) return t("settings.pluginHotReloadLoading");
     if (!pluginDevelopment.enabled) return t("settings.pluginHotReloadOff");
@@ -1113,6 +1141,18 @@ export function SettingsPage({
     setBrowserUseError(null);
     try {
       setBrowserUseSettings(await browserUseSelectionSaver(backendId));
+    } catch (error) {
+      setBrowserUseError(t("settings.browserUseLoadFailed", { error: String(error) }));
+    } finally {
+      setBrowserUseSaving(null);
+    }
+  };
+
+  const saveAgentBrowserAccess = async (enabled: boolean) => {
+    setBrowserUseSaving("access");
+    setBrowserUseError(null);
+    try {
+      setBrowserUseSettings(await browserUseAccessSaver(enabled));
     } catch (error) {
       setBrowserUseError(t("settings.browserUseLoadFailed", { error: String(error) }));
     } finally {
@@ -2379,10 +2419,23 @@ export function SettingsPage({
                   <p className="py-5 text-ui text-muted-foreground">{t("settings.browserUseLoading")}</p>
                 ) : (
                   <>
+                    <Row
+                      label={t("settings.agentBrowserAccess")}
+                      hint={t("settings.agentBrowserAccessHint")}
+                    >
+                      <Switch
+                        data-agent-browser-access
+                        aria-label={t("settings.agentBrowserAccess")}
+                        checked={browserUseSettings.access_enabled}
+                        disabled={browserUseSaving !== null}
+                        onCheckedChange={(enabled) => void saveAgentBrowserAccess(enabled)}
+                      />
+                    </Row>
+
                     <Row label={t("settings.browserUseBackend")}>
                       <Select
                         value={browserUseSelection}
-                        disabled={browserUseSaving !== null}
+                        disabled={browserUseSaving !== null || !browserUseSettings.access_enabled}
                         onValueChange={(backend) => {
                           if (backend) void saveBrowserUseSelection(backend);
                         }}
@@ -2694,6 +2747,40 @@ export function SettingsPage({
                     {t("settings.openWebviewDevtools")}
                   </Button>
                 </Row>
+
+                <GroupHeading>{t("settings.supportDiagnostics")}</GroupHeading>
+
+                <Row
+                  label={t("settings.exportDiagnostics")}
+                  hint={(
+                    <span aria-live="polite">
+                      {diagnosticsMessage ?? t("settings.exportDiagnosticsHint")}
+                    </span>
+                  )}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={diagnosticsExporting}
+                    aria-busy={diagnosticsExporting}
+                    onClick={() => void exportDiagnostics()}
+                  >
+                    {diagnosticsExporting ? (
+                      <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <Download data-icon="inline-start" />
+                    )}
+                    {diagnosticsExporting
+                      ? t("settings.exportingDiagnostics")
+                      : t("settings.exportDiagnosticsAction")}
+                  </Button>
+                </Row>
+
+                {diagnosticsError && (
+                  <p className="pt-2 text-hint text-destructive" role="alert">
+                    {diagnosticsError}
+                  </p>
+                )}
 
                 {pluginDevelopmentError && (
                   <p className="pt-2 text-hint text-destructive" role="alert">

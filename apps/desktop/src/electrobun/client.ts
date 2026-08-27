@@ -142,6 +142,10 @@ export async function desktopCaptureAppshot(): Promise<AppshotCapture> {
   return (await client()).request.appshotsCapture();
 }
 
+export async function desktopGetAppshot(id: string): Promise<AppshotCapture> {
+  return (await client()).request.appshotsGet({ id });
+}
+
 export async function onDesktopAppshotCaptured(
   listener: (capture: AppshotCapture) => void,
 ): Promise<() => void> {

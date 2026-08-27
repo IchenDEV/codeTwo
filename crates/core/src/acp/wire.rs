@@ -28,6 +28,10 @@ pub struct InitializeRequest {
 pub struct InitializeResponse {
     #[serde(rename = "protocolVersion")]
     pub protocol_version: i64,
+    /// The ACP endpoint's own identity. Kept optional for older/custom adapters that predate the
+    /// stable field; current Codex ACP reports its package name and exact adapter version here.
+    #[serde(rename = "agentInfo", default)]
+    pub agent_info: Option<AgentInfo>,
     #[serde(rename = "agentCapabilities", default)]
     pub agent_capabilities: Value,
     #[serde(rename = "authMethods", default)]
@@ -35,6 +39,16 @@ pub struct InitializeResponse {
     /// Provider-owned optional extensions such as native steering and long-running goals.
     #[serde(rename = "_meta", default)]
     pub meta: Value,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentInfo {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +71,10 @@ pub struct AgentCaps {
     /// restoring the conversation context. This is the provider-native resume cursor — the only
     /// way an agent's context survives its process.
     pub load_session: bool,
+    /// `session/resume`: re-attach without replaying history. Prefer this when both sides support
+    /// it because C2 already owns the durable transcript and does not need provider history decoded
+    /// a second time.
+    pub resume_session: bool,
     /// Remote MCP transports are optional; stdio is the ACP baseline.
     pub mcp_http: bool,
     pub mcp_sse: bool,
@@ -70,6 +88,10 @@ impl InitializeResponse {
                 .get("loadSession")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
+            resume_session: self
+                .agent_capabilities
+                .pointer("/sessionCapabilities/resume")
+                .is_some_and(|value| value.is_object() || value.as_bool() == Some(true)),
             mcp_http: self
                 .agent_capabilities
                 .pointer("/mcpCapabilities/http")
@@ -156,6 +178,22 @@ pub struct LoadSessionResponse {
     #[serde(rename = "configOptions", default)]
     pub config_options: Option<Vec<SessionConfigOption>>,
 }
+
+// ---- session/resume (ACP: UNSTABLE) --------------------------------------------------------
+
+/// Re-attach without replaying history. The request is deliberately separate from
+/// [`LoadSessionRequest`] so method-specific schema changes remain visible at the wire boundary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumeSessionRequest {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub cwd: String,
+    #[serde(rename = "mcpServers", default)]
+    pub mcp_servers: Vec<Value>,
+}
+
+/// Current adapters return the same optional model/config projection for load and resume.
+pub type ResumeSessionResponse = LoadSessionResponse;
 
 // ---- models (ACP: UNSTABLE) ------------------------------------------------------------------
 
@@ -345,6 +383,16 @@ pub struct SessionNotification {
     pub update: SessionUpdate,
 }
 
+/// One provider-native slash command advertised for the live ACP session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AvailableCommand {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub input: Option<Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "sessionUpdate", rename_all = "snake_case")]
 pub enum SessionUpdate {
@@ -367,6 +415,12 @@ pub enum SessionUpdate {
     ConfigOptionUpdate {
         #[serde(rename = "configOptions", default)]
         config_options: Vec<SessionConfigOption>,
+    },
+    /// Full replacement set of provider-native slash commands for this session. Consumers must
+    /// feature-detect commands from this update rather than infer them from provider identity.
+    AvailableCommandsUpdate {
+        #[serde(rename = "availableCommands", default)]
+        available_commands: Vec<AvailableCommand>,
     },
     /// Provider-owned session metadata. Codex uses `_meta.goal` for live goal snapshots and
     /// `_meta.codex.threadStatus.type` to delimit turns started outside `session/prompt` (for
@@ -553,6 +607,7 @@ mod tests {
         let none: InitializeResponse =
             serde_json::from_value(json!({"protocolVersion": 1})).unwrap();
         assert!(!none.caps().load_session);
+        assert!(!none.caps().resume_session);
         assert!(!none.caps().mcp_http);
         assert!(!none.caps().mcp_sse);
         let odd: InitializeResponse = serde_json::from_value(
@@ -560,6 +615,7 @@ mod tests {
         )
         .unwrap();
         assert!(!odd.caps().load_session);
+        assert!(!odd.caps().resume_session);
     }
 
     #[test]
@@ -567,10 +623,12 @@ mod tests {
         let r: InitializeResponse =
             serde_json::from_value(json!({"protocolVersion": 1, "agentCapabilities": {
                 "loadSession": true,
+                "sessionCapabilities": {"resume": {}},
                 "mcpCapabilities": {"http": true, "sse": true}
             }}))
             .unwrap();
         assert!(r.caps().load_session);
+        assert!(r.caps().resume_session);
         assert!(r.caps().mcp_http);
         assert!(r.caps().mcp_sse);
     }

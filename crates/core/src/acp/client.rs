@@ -7,15 +7,24 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use tokio::process::Child;
 
-use super::connection::Connection;
+use super::connection::{AcpProtocolDiagnostics, Connection};
 use super::wire::*;
 use crate::error::AcpError;
+
+/// Content-free lifecycle state for the provider process behind one ACP connection.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AcpProcessDiagnostics {
+    pub started_at_unix_ms: i64,
+    pub closed_at_unix_ms: Option<i64>,
+    pub termination_requested: bool,
+}
 
 pub struct AcpClient {
     conn: Arc<Connection>,
     // Wrapped in a std Mutex so `AcpClient` is `Sync` (needed to live in desktop host state / the engine's
     // shared session map). We only touch it to kill the child on drop.
     child: Option<Mutex<Child>>,
+    started_at_unix_ms: i64,
     terminated: AtomicBool,
 }
 
@@ -24,6 +33,7 @@ impl AcpClient {
         Self {
             conn,
             child: child.map(Mutex::new),
+            started_at_unix_ms: unix_time_millis(),
             terminated: AtomicBool::new(false),
         }
     }
@@ -31,6 +41,19 @@ impl AcpClient {
     /// The underlying connection, for advanced/unsupported calls.
     pub fn connection(&self) -> &Arc<Connection> {
         &self.conn
+    }
+
+    /// Content-free, bounded protocol anomalies observed on this connection.
+    pub fn protocol_diagnostics(&self) -> AcpProtocolDiagnostics {
+        self.conn.protocol_diagnostics()
+    }
+
+    pub fn process_diagnostics(&self) -> AcpProcessDiagnostics {
+        AcpProcessDiagnostics {
+            started_at_unix_ms: self.started_at_unix_ms,
+            closed_at_unix_ms: self.conn.closed_at_unix_ms(),
+            termination_requested: self.terminated.load(Ordering::Acquire),
+        }
     }
 
     /// Negotiate protocol version and exchange capabilities.
@@ -94,6 +117,28 @@ impl AcpClient {
             .request(
                 "session/load",
                 LoadSessionRequest {
+                    session_id: session_id.to_string(),
+                    cwd: cwd.into(),
+                    mcp_servers,
+                },
+            )
+            .await?;
+        Ok(r.unwrap_or_default())
+    }
+
+    /// Re-attach without replaying history (`session/resume`, UNSTABLE). Callers must gate this on
+    /// the initialize response's `sessionCapabilities.resume` advertisement.
+    pub async fn resume_session(
+        &self,
+        session_id: &str,
+        cwd: impl Into<String>,
+        mcp_servers: Vec<Value>,
+    ) -> Result<ResumeSessionResponse, AcpError> {
+        let r: Option<ResumeSessionResponse> = self
+            .conn
+            .request(
+                "session/resume",
+                ResumeSessionRequest {
                     session_id: session_id.to_string(),
                     cwd: cwd.into(),
                     mcp_servers,
@@ -205,6 +250,14 @@ impl AcpClient {
             }
         }
     }
+}
+
+fn unix_time_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
 }
 
 impl Drop for AcpClient {

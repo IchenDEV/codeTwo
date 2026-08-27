@@ -91,6 +91,8 @@ interface ComposerProps {
   contextWindow: ContextWindow | null;
   /** Per-session cost/burn for the statusline; null until the core's usage command exists. */
   usage?: StatuslineUsage | null;
+  /** Present only after the live provider session advertises its native `/compact` command. */
+  onCompactContext?: () => void;
   /** The adapter's own pick at session/new — worth a "Default" badge in the menus. */
   defaultModel: string | null;
   onModel: (id: string) => void;
@@ -1320,6 +1322,7 @@ export function Composer({
   defaultModel,
   contextWindow,
   usage = null,
+  onCompactContext,
   onModel,
   configOptions,
   onConfigOption,
@@ -1489,7 +1492,19 @@ export function Composer({
       <CollaborationModePicker options={configOptions} onChange={onConfigOption} />
       <GoalPicker capability={goalCapability} goal={goal} onGoal={onGoal} />
 
-      <Statusline contextWindow={contextWindow} usage={usage ?? null} />
+      <Statusline
+        contextWindow={contextWindow}
+        usage={usage ?? null}
+        onCompact={onCompactContext}
+        compactDisabled={running || loading || !composerEmpty}
+        compactDisabledReason={
+          running || loading
+            ? t("context.compactBusy")
+            : !composerEmpty
+              ? t("context.compactDraft")
+              : null
+        }
+      />
 
       {pluginActions}
 

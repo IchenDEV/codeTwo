@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 
 import {
   BROWSER_USE_AUTOMATIC,
@@ -185,6 +185,18 @@ function bundledPlugin(codexHome: string, name: string): PluginBundle | null {
 
 function pluginEnabled(config: Table, name: string): boolean {
   return table(table(config.plugins)[name]).enabled === true;
+}
+
+function browserAccessBlockerMcp(): AcpStdioMcpServer {
+  const compiled = /^codetwo-tool-broker(?:\.exe)?$/i.test(basename(process.execPath));
+  return {
+    name: "node_repl",
+    command: process.execPath,
+    args: compiled
+      ? ["--empty-mcp"]
+      : [join(import.meta.dir, "..", "toolBrokerRpc.ts"), "--empty-mcp"],
+    env: [],
+  };
 }
 
 export function stdioServer(
@@ -396,19 +408,23 @@ export function loadConfiguredComputerUse(
 export function loadConfiguredBrowserUse(
   dataDir: string,
 ): {
+  accessEnabled: boolean;
   bridges: ConfiguredBrowserUseBridge[];
   selections: Record<string, string>;
   backends: BrowserUseBackendOption[];
   errors: string[];
 } {
   const path = join(dataDir, HOST_TOOLS_CONFIG_FILE);
-  if (!existsSync(path)) return { bridges: [], selections: {}, backends: [], errors: [] };
+  if (!existsSync(path)) {
+    return { accessEnabled: true, bridges: [], selections: {}, backends: [], errors: [] };
+  }
 
   let document: Table;
   try {
     document = table(JSON.parse(readFileSync(path, "utf8")));
   } catch (error) {
     return {
+      accessEnabled: false,
       bridges: [],
       selections: {},
       backends: [],
@@ -424,6 +440,7 @@ export function loadConfiguredBrowserUse(
     : {};
   if (document.schema_version !== 1) {
     return {
+      accessEnabled: false,
       bridges: [],
       selections,
       backends: [],
@@ -431,10 +448,19 @@ export function loadConfiguredBrowserUse(
     };
   }
 
+  const errors: string[] = [];
+  const accessEnabled = document.agent_browser_access === undefined
+    ? true
+    : typeof document.agent_browser_access === "boolean"
+      ? document.agent_browser_access
+      : false;
+  if (document.agent_browser_access !== undefined
+    && typeof document.agent_browser_access !== "boolean") {
+    errors.push("agent_browser_access must be a boolean");
+  }
   const entries = Array.isArray(document.browser_use) ? document.browser_use : [];
   const bridges: ConfiguredBrowserUseBridge[] = [];
   const backends: BrowserUseBackendOption[] = [];
-  const errors: string[] = [];
   const names = new Set<string>();
   const ids = new Set<string>([OPENAI_BROWSER_BACKEND]);
   const selectedIds = new Set(
@@ -520,7 +546,13 @@ export function loadConfiguredBrowserUse(
       errors.push(`browser-use selection references unknown backend ${JSON.stringify(selection)}`);
     }
   }
-  return { bridges: errors.length === 0 ? bridges : [], selections, backends, errors };
+  return {
+    accessEnabled,
+    bridges: errors.length === 0 ? bridges : [],
+    selections,
+    backends,
+    errors,
+  };
 }
 
 function cuaDriverOption(): ComputerUseBackendOption {
@@ -590,6 +622,10 @@ export function saveBrowserUseSelection(
   new JsonSelectionStore(dataDir).setGlobal("browser_use", backendId);
 }
 
+export function saveAgentBrowserAccess(dataDir: string, enabled: boolean): void {
+  new JsonSelectionStore(dataDir).setAgentBrowserAccess(enabled);
+}
+
 export function detectHostToolEvidence(
   environment: NodeJS.ProcessEnv = process.env,
   dataDir?: string,
@@ -635,7 +671,7 @@ export function detectHostToolEvidence(
     : { bridges: [], selections: {}, backends: [cuaDriverOption()], errors: [] };
   const browserConfigured = dataDir
     ? loadConfiguredBrowserUse(dataDir)
-    : { bridges: [], selections: {}, backends: [], errors: [] };
+    : { accessEnabled: true, bridges: [], selections: {}, backends: [], errors: [] };
   const browserEnabled = pluginEnabled(config, "browser@openai-bundled");
   const chromeEnabled = pluginEnabled(config, "chrome@openai-bundled");
   const browserBackends = (string(nodeEnv.BROWSER_USE_AVAILABLE_BACKENDS) ?? "")
@@ -669,6 +705,8 @@ export function detectHostToolEvidence(
     browserEnabled,
     chromeEnabled,
     chromeMcp,
+    browserAccessBlockerMcp: browserAccessBlockerMcp(),
+    agentBrowserAccessEnabled: browserConfigured.accessEnabled,
     browserBackends,
     sitesEnabled: pluginEnabled(config, "sites@openai-bundled"),
     sitesVersion: sitesBundle?.version ?? null,

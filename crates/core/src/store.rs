@@ -22,9 +22,9 @@ use crate::canvas::{
 };
 use crate::project::ProjectWorktreeMode;
 use crate::session::{
-    HandoffState, MemoryAccess, Part, Role, RunFailureReason, Session, SessionActivity,
-    SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptEntry, TranscriptPage,
-    MAX_TRANSCRIPT_TURNS, UNTITLED_SESSION_TITLE,
+    tool_status_is_terminal, HandoffState, MemoryAccess, Part, Role, RunFailureReason, Session,
+    SessionActivity, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptEntry,
+    TranscriptPage, MAX_TRANSCRIPT_TURNS, UNTITLED_SESSION_TITLE,
 };
 
 #[derive(Debug, Error)]
@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   handoff_id      TEXT,
   handoff_context_json TEXT,
   created_at      INTEGER NOT NULL,
+  last_active_at  INTEGER NOT NULL DEFAULT 0,
   updated_at      INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS parts (
@@ -363,13 +364,6 @@ fn wait_canvas_freeze_test_barrier() {
 /// state. Live events remain untouched. Metadata absent from a status-only terminal update is
 /// carried forward so slimming cannot erase launch observability.
 fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<TranscriptEntry> {
-    fn terminal(status: &str) -> bool {
-        matches!(
-            status.trim().to_ascii_lowercase().as_str(),
-            "completed" | "failed"
-        )
-    }
-
     let mut keep = vec![true; entries.len()];
     let mut later_terminal: HashMap<String, usize> = HashMap::new();
     for index in (0..entries.len()).rev() {
@@ -389,7 +383,7 @@ fn drop_superseded_tool_updates(mut entries: Vec<TranscriptEntry>) -> Vec<Transc
             continue;
         };
         let id = id.clone();
-        if terminal(status) {
+        if tool_status_is_terminal(status) {
             later_terminal.insert(id, index);
             continue;
         }
@@ -657,9 +651,25 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         [],
     )?;
     ensure_column(&tx, "parts", "search_text", "search_text TEXT")?;
-    ensure_column(&tx, "sessions", "updated_at", "updated_at INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "updated_at",
+        "updated_at INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        &tx,
+        "sessions",
+        "last_active_at",
+        "last_active_at INTEGER NOT NULL DEFAULT 0",
+    )?;
     ensure_column(&tx, "parts", "sync_id", "sync_id TEXT")?;
-    ensure_column(&tx, "parts", "created_at", "created_at INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        &tx,
+        "parts",
+        "created_at",
+        "created_at INTEGER NOT NULL DEFAULT 0",
+    )?;
     // Ordering used to come from `last_opened_at`, which meant the rail resorted itself under the
     // cursor every time you clicked a project. Backfilling `added_at` from it keeps the order an
     // existing store already shows, and freezes it there.
@@ -690,7 +700,12 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         "default_reasoning_effort",
         "default_reasoning_effort TEXT",
     )?;
-    ensure_column(&tx, "projects", "updated_at", "updated_at INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(
+        &tx,
+        "projects",
+        "updated_at",
+        "updated_at INTEGER NOT NULL DEFAULT 0",
+    )?;
     // The former Bun desktop stored enum wire values without JSON quotes while Core's durable
     // representation uses serde JSON. Normalize those known values once so replacing the Bun
     // business host with the Rust kernel does not strand existing sessions or transcripts.
@@ -706,6 +721,10 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     )?;
     tx.execute(
         "UPDATE sessions SET updated_at=created_at WHERE updated_at=0",
+        [],
+    )?;
+    tx.execute(
+        "UPDATE sessions SET last_active_at=created_at WHERE last_active_at=0",
         [],
     )?;
     tx.execute(
@@ -1976,7 +1995,10 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE sessions
-             SET archived=?2, pinned=CASE WHEN ?2=1 THEN 0 ELSE pinned END, updated_at=?3
+             SET archived=?2,
+                 pinned=CASE WHEN ?2=1 THEN 0 ELSE pinned END,
+                 last_active_at=CASE WHEN ?2=0 THEN ?3 ELSE last_active_at END,
+                 updated_at=?3
              WHERE id=?1",
             rusqlite::params![id, if archived { 1 } else { 0 }, unix_millis()],
         )?;
@@ -2003,10 +2025,10 @@ impl Store {
         let order = if archived {
             "created_at DESC"
         } else {
-            "pinned DESC, created_at DESC"
+            "pinned DESC, last_active_at DESC, created_at DESC"
         };
         let sql = format!(
-            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,last_active_at
              FROM sessions
              WHERE archived=?1 AND transient=0 AND handoff_state<>'accepted'
              ORDER BY {order}"
@@ -2023,8 +2045,8 @@ impl Store {
     pub(crate) fn upsert_session_on(conn: &Connection, s: &Session) -> Result<(), StoreError> {
         conn.execute(
             "INSERT INTO sessions
-               (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,updated_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
+               (id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,updated_at,last_active_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)
              ON CONFLICT(id) DO UPDATE SET
                provider=excluded.provider, model=excluded.model,
                cwd=excluded.cwd, project_path=excluded.project_path,
@@ -2038,7 +2060,8 @@ impl Store {
                permission_mode=excluded.permission_mode,
                sandbox_policy=excluded.sandbox_policy,
                acp_session_id=excluded.acp_session_id,
-               updated_at=excluded.updated_at",
+               updated_at=excluded.updated_at,
+               last_active_at=MAX(sessions.last_active_at,excluded.last_active_at)",
             rusqlite::params![
                 s.id,
                 s.title,
@@ -2069,6 +2092,7 @@ impl Store {
                 if s.worktree_discarded { 1 } else { 0 },
                 if s.transient { 1 } else { 0 },
                 unix_millis(),
+                s.last_active_at.max(s.created_at),
             ],
         )?;
         Ok(())
@@ -2176,7 +2200,7 @@ impl Store {
     pub fn get_session(&self, id: &str) -> Result<Option<Session>, StoreError> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient
+            "SELECT id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,last_active_at
              FROM sessions WHERE id=?1",
         )?;
         let mut rows = stmt.query_map([id], row_to_session_parts)?;
@@ -2243,7 +2267,7 @@ impl Store {
             .epoch
             .checked_add(1)
             .ok_or_else(|| StoreError::InvalidHandoff("handoff epoch is exhausted".into()))?;
-        let columns = "id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient";
+        let columns = "id,title,provider,model,cwd,project_path,worktree_path,permission_mode,sandbox_policy,acp_session_id,created_at,pinned,title_origin,activity_json,worktree_baseline_json,worktree_common_dir,worktree_git_dir,worktree_identity_json,memory_read,memory_write,worktree_discarded,transient,last_active_at";
         let mut session = build_session(tx.query_row(
             &format!("SELECT {columns} FROM sessions WHERE id=?1"),
             [session_id],
@@ -2707,7 +2731,9 @@ impl Store {
             ],
         )?;
         tx.execute(
-            "UPDATE sessions SET activity_json=?2,updated_at=?3 WHERE id=?1",
+            "UPDATE sessions
+             SET activity_json=?2,last_active_at=?3,updated_at=?3
+             WHERE id=?1",
             rusqlite::params![session_id, serde_json::to_string(activity)?, now],
         )?;
         tx.commit()?;
@@ -2803,7 +2829,9 @@ impl Store {
             ],
         )?;
         tx.execute(
-            "UPDATE sessions SET activity_json=?2,updated_at=?3 WHERE id=?1",
+            "UPDATE sessions
+             SET activity_json=?2,last_active_at=?3,updated_at=?3
+             WHERE id=?1",
             rusqlite::params![session_id, serde_json::to_string(activity)?, now],
         )?;
         tx.execute(
@@ -3453,30 +3481,30 @@ impl Store {
             None => (min_seq, None),
         };
 
-        let raw_entries: Vec<(i64, String, String, i64)> = if let Some(TranscriptCursor(cursor)) = before
-        {
-            let mut stmt = tx.prepare(
-                "SELECT seq,role,part_json,created_at FROM parts
+        let raw_entries: Vec<(i64, String, String, i64)> =
+            if let Some(TranscriptCursor(cursor)) = before {
+                let mut stmt = tx.prepare(
+                    "SELECT seq,role,part_json,created_at FROM parts
                      WHERE session_id=?1 AND seq>=?2 AND seq<?3 AND seq<=?4
                      ORDER BY seq",
-            )?;
-            let rows = stmt.query_map(
-                rusqlite::params![session_id, start_seq, cursor, snapshot_through],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        } else {
-            let mut stmt = tx.prepare(
-                "SELECT seq,role,part_json,created_at FROM parts
+                )?;
+                let rows = stmt.query_map(
+                    rusqlite::params![session_id, start_seq, cursor, snapshot_through],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+            } else {
+                let mut stmt = tx.prepare(
+                    "SELECT seq,role,part_json,created_at FROM parts
                      WHERE session_id=?1 AND seq>=?2 AND seq<=?3
                      ORDER BY seq",
-            )?;
-            let rows = stmt.query_map(
-                rusqlite::params![session_id, start_seq, snapshot_through],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )?;
-            rows.collect::<rusqlite::Result<Vec<_>>>()?
-        };
+                )?;
+                let rows = stmt.query_map(
+                    rusqlite::params![session_id, start_seq, snapshot_through],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+            };
 
         let mut entries = Vec::with_capacity(raw_entries.len());
         for (seq, role, part, created_at) in raw_entries {
@@ -3645,6 +3673,7 @@ type SessionCols = (
     String,
     i64,
     i64,
+    i64,
 );
 
 fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols> {
@@ -3671,6 +3700,7 @@ fn row_to_session_parts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionCols
         row.get(19)?,
         row.get(20)?,
         row.get(21)?,
+        row.get(22)?,
     ))
 }
 
@@ -3703,6 +3733,7 @@ fn build_session(c: SessionCols) -> Result<Session, StoreError> {
         memory_read: MemoryAccess::from_db(&c.18),
         memory_write: MemoryAccess::from_db(&c.19),
         created_at: c.10,
+        last_active_at: c.22.max(c.10),
     })
 }
 
@@ -3797,6 +3828,7 @@ mod tests {
         assert_eq!(restored.title_origin, SessionTitleOrigin::Manual);
         assert_eq!(restored.project_path.as_deref(), Some("/work"));
         assert_eq!(restored.sandbox_policy, SandboxPolicy::WorkspaceWrite);
+        assert_eq!(restored.last_active_at, restored.created_at);
     }
 
     #[test]
@@ -4258,9 +4290,11 @@ mod tests {
         let mut a = Session::new(ProviderId::Grok, "/a");
         a.title = "First".into();
         a.created_at = 100;
+        a.last_active_at = 100;
         let mut b = Session::new(ProviderId::ClaudeCode, "/b");
         b.title = "Second".into();
         b.created_at = 200;
+        b.last_active_at = 200;
 
         store.upsert_session(&a).unwrap();
         store.upsert_session(&b).unwrap();
@@ -4293,6 +4327,48 @@ mod tests {
             store.session_memory_policy(&a.id).unwrap(),
             (MemoryAccess::Allow, MemoryAccess::Deny)
         );
+    }
+
+    #[test]
+    fn accepted_prompt_and_unarchive_move_a_session_back_to_recent() {
+        let store = Store::open_in_memory().unwrap();
+        let mut older = Session::new(ProviderId::Grok, "/older");
+        older.title = "Older".into();
+        older.created_at = 100;
+        older.last_active_at = 100;
+        let mut newer = Session::new(ProviderId::Codex, "/newer");
+        newer.title = "Newer".into();
+        newer.created_at = 200;
+        newer.last_active_at = 200;
+        store.upsert_session(&older).unwrap();
+        store.upsert_session(&newer).unwrap();
+        assert_eq!(store.list_sessions().unwrap()[0].id, newer.id);
+
+        let running = SessionActivity {
+            revision: 1,
+            state: SessionRunState::Running {
+                turn_id: "turn-1".into(),
+                prompt_request_id: Some("prompt-1".into()),
+            },
+        };
+        store
+            .append_prompt_and_activity(
+                &older.id,
+                &Part::Prompt {
+                    text: "Continue".into(),
+                    display: "Continue".into(),
+                },
+                0,
+                &running,
+            )
+            .unwrap();
+        let after_prompt = store.list_sessions().unwrap();
+        assert_eq!(after_prompt[0].id, older.id);
+        assert!(after_prompt[0].last_active_at > newer.last_active_at);
+
+        store.set_archived(&newer.id, true).unwrap();
+        store.set_archived(&newer.id, false).unwrap();
+        assert_eq!(store.list_sessions().unwrap()[0].id, newer.id);
     }
 
     #[test]
@@ -4750,14 +4826,17 @@ mod tests {
         let mut pinned = Session::new(ProviderId::Grok, "/pinned");
         pinned.title = "Pinned".into();
         pinned.created_at = 100;
+        pinned.last_active_at = 100;
         pinned.pinned = true;
         let mut newer_pinned = Session::new(ProviderId::Grok, "/newer-pinned");
         newer_pinned.title = "Newer pinned".into();
         newer_pinned.created_at = 150;
+        newer_pinned.last_active_at = 150;
         newer_pinned.pinned = true;
         let mut newest = Session::new(ProviderId::Codex, "/newest");
         newest.title = "Newest".into();
         newest.created_at = 200;
+        newest.last_active_at = 200;
 
         store.upsert_session(&pinned).unwrap();
         store.upsert_session(&newer_pinned).unwrap();
@@ -5475,6 +5554,41 @@ mod tests {
         ];
 
         assert_eq!(drop_superseded_tool_updates(entries).len(), 3);
+    }
+
+    #[test]
+    fn transcript_snapshot_matches_the_client_terminal_tool_statuses() {
+        for status in [
+            "completed",
+            "failed",
+            "cancelled",
+            "canceled",
+            "rejected",
+            "denied",
+        ] {
+            let tool = |seq, status: &str| TranscriptEntry {
+                seq,
+                role: Role::Agent,
+                part: Part::ToolCall {
+                    id: "call".into(),
+                    title: "Run".into(),
+                    status: status.into(),
+                    tool_kind: None,
+                    agent_input: None,
+                    outputs: Vec::new(),
+                },
+                created_at: 100 + seq,
+                started_at: Some(100 + seq),
+            };
+
+            let projected =
+                drop_superseded_tool_updates(vec![tool(1, "in_progress"), tool(2, status)]);
+            assert_eq!(projected.len(), 1, "status={status}");
+            assert!(matches!(
+                &projected[0].part,
+                Part::ToolCall { status: projected_status, .. } if projected_status == status
+            ));
+        }
     }
 
     #[test]

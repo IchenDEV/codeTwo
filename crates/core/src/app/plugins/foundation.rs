@@ -313,6 +313,10 @@ impl Plugin for ProvidersPlugin {
         struct BrowserUseSelectionArgs {
             backend: String,
         }
+        #[derive(Deserialize)]
+        struct BrowserUseAccessArgs {
+            enabled: bool,
+        }
         let selection_path = paths.data_dir.clone();
         let selected = service.clone();
         ctx.command("computer_use.select", move |args| {
@@ -344,6 +348,20 @@ impl Plugin for ProvidersPlugin {
                     .map_err(PluginError::new)?;
                 selected.refresh_host_tools(HostToolDiscovery::detect(&path));
                 json(selected.browser_use_settings())
+            }
+        })?;
+
+        let browser_access_path = paths.data_dir.clone();
+        let browser_access_service = service.clone();
+        ctx.command("browser_use.set_access", move |args| {
+            let path = browser_access_path.clone();
+            let service = browser_access_service.clone();
+            async move {
+                let args: BrowserUseAccessArgs = take_args(args)?;
+                HostToolDiscovery::set_agent_browser_access(&path, args.enabled)
+                    .map_err(PluginError::new)?;
+                service.refresh_host_tools(HostToolDiscovery::detect(&path));
+                json(service.browser_use_settings())
             }
         })?;
 

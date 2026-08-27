@@ -45,7 +45,15 @@ pub struct ComputerUseSettings {
 }
 
 pub type BrowserUseBackendOption = ComputerUseBackendOption;
-pub type BrowserUseSettings = ComputerUseSettings;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BrowserUseSettings {
+    #[serde(default)]
+    pub access_enabled: bool,
+    pub selections: BTreeMap<String, String>,
+    pub backends: Vec<BrowserUseBackendOption>,
+    pub errors: Vec<String>,
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 struct BrokerCatalog {
@@ -223,6 +231,14 @@ impl HostToolDiscovery {
         Ok(catalog.browser_use)
     }
 
+    pub fn set_agent_browser_access(
+        data_dir: impl AsRef<Path>,
+        enabled: bool,
+    ) -> Result<BrowserUseSettings, String> {
+        let catalog = set_browser_access(data_dir.as_ref(), enabled)?;
+        Ok(catalog.browser_use)
+    }
+
     pub fn toolset(&self, provider: &ProviderId) -> ProviderToolset {
         if let Some(plan) = self.plans.get(provider.as_str()) {
             return plan.clone();
@@ -257,6 +273,16 @@ fn select(
         params["provider_id"] = json!(provider);
     }
     BrokerCommand::locate()?.call("selection.set", params)
+}
+
+fn set_browser_access(data_dir: &Path, enabled: bool) -> Result<BrokerCatalog, String> {
+    BrokerCommand::locate()?.call(
+        "browser_access.set",
+        json!({
+            "data_dir": data_dir,
+            "enabled": enabled,
+        }),
+    )
 }
 
 fn failed_catalog(error: String) -> BrokerCatalog {

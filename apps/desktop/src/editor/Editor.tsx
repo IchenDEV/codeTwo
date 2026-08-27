@@ -107,12 +107,16 @@ interface EditorProps {
   onPasteImages?: (files: readonly File[]) => void | Promise<void>;
   // Lets the toolbar disable Run — and explain why — while the document is empty.
   onEmptyChange: (empty: boolean) => void;
+  /** Canonical editor snapshot for versioned per-project/per-session draft persistence. */
+  onDocumentChange?: (doc: DocBlock[]) => void;
 }
 
 export interface CanvasInsertOptions {
   pixelPolicy?: CanvasPixelPolicy;
   deliveryError?: string;
   deliveryErrorKind?: "provider_image" | "other";
+  /** Retry recovery appends; scope navigation replaces the one mounted editor atomically. */
+  mode?: "append" | "replace";
 }
 
 // The `/` "Skills" group, built from the live library. Skills auto-discovered from a harness's
@@ -262,7 +266,10 @@ async function chatMenuItems(query: string, excludeSession: string | null): Prom
   ]);
   const q = query.toLowerCase();
   return [...active, ...archived]
-    .sort((a, b) => b.created_at - a.created_at)
+    .sort(
+      (a, b) =>
+        (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at),
+    )
     .filter((s) => s.id !== excludeSession && (!q || s.title.toLowerCase().includes(q)))
     .slice(0, q ? 6 : 3)
     .map((s) => ({ kind: "chat" as const, id: s.id, title: s.title, when: s.created_at }));
@@ -295,6 +302,7 @@ export function DocEditor({
   canvasDeliveryErrorRef,
   onPasteImages,
   onEmptyChange,
+  onDocumentChange,
 }: EditorProps) {
   // Sticky within the session: once expanded, the picker stays un-suppressed.
   const showAllSkillsRef = useRef(false);
@@ -352,35 +360,60 @@ export function DocEditor({
     drafts: ReadonlyMap<string, CanvasDraft>,
     options: CanvasInsertOptions = {},
   ) => {
-    if (!canvasEnabled) return;
-    const blocks = doc.map((block) => {
+    if (!canvasEnabled && doc.some((block) => block.type === "canvas")) {
+      throw new Error("Canvas drafts cannot be restored while Canvas is disabled");
+    }
+    const blocks = doc.flatMap<unknown>((block) => {
       switch (block.type) {
         case "text":
-          return { type: "paragraph", content: block.text };
+          return [{ type: "paragraph", content: block.text }];
         case "canvas": {
           const draft = drafts.get(block.id);
           if (!draft) throw new Error(`Canvas retry draft ${block.id} is missing`);
-          return {
+          return [{
             type: "canvas",
             props: canvasBlockPropsFromDraft(draft, {
               pixelPolicy: block.pixel_policy ?? "required",
               deliveryError: options.deliveryError,
               deliveryErrorKind: options.deliveryErrorKind,
             }),
-          };
+          }];
         }
-        case "skill":
-          return {
+        case "skill": {
+          const skill = skills.find((candidate) => candidate.id === block.skill_id);
+          if (skill?.macro_template && Object.keys(block.params).length > 0) {
+            return [{
+              type: "slotCard",
+              props: {
+                mode: "macro",
+                skillId: block.skill_id,
+                title: skill.name,
+                icon: skill.icon ?? "",
+                template: skill.macro_template,
+                slots: JSON.stringify(normalizeSlots(skill.macro_slots ?? [])),
+                values: JSON.stringify(block.params),
+              },
+            }];
+          }
+          return [{
             type: "paragraph",
-            content: [{ type: "skill", props: { skillId: block.skill_id, name: block.skill_id, icon: "✦" } }, " "],
-          };
+            content: [{
+              type: "skill",
+              props: {
+                skillId: block.skill_id,
+                name: skill?.name ?? block.skill_id,
+                icon: skill?.icon ?? "✦",
+              },
+            }, " "],
+          }];
+        }
         case "file":
-          return {
+          return [{
             type: "paragraph",
             content: [{ type: "fileMention", props: { path: block.path } }, " "],
-          };
+          }];
         case "image":
-          return {
+          return [{
             type: "image",
             props: {
               url: block.path,
@@ -388,9 +421,13 @@ export function DocEditor({
               caption: "",
               showPreview: true,
             },
-          };
+          }];
+        case "appshot":
+        case "attachment":
+          // Private prompt images live in the Composer attachment strip, not BlockNote.
+          return [];
         case "session":
-          return {
+          return [{
             type: "paragraph",
             content: [{
               type: "sessionMention",
@@ -399,11 +436,11 @@ export function DocEditor({
                 throughSeq: block.through_seq ?? 0,
               },
             }, " "],
-          };
+          }];
         case "issue":
           // Rebuild the embedded context the same way the core compile arm does (state "open"),
           // so a recovered issue card serializes back to the identical `DocBlock::Issue`.
-          return {
+          return [{
             type: "issueRef",
             props: {
               source: block.source,
@@ -414,22 +451,23 @@ export function DocEditor({
               context: issueContextMarkdown(block),
               delegatedScene: "",
             },
-          };
+          }];
       }
     });
-    const currentHasContent = docToBlocks(editor).length > 0;
     // If the user typed after the accepted turn, append the recovered prompt to preserve that
     // newer content. There is deliberately no synthetic separator block: every visible block
     // must remain part of the exact prompt rather than silently mutating it with a UI label.
     const recovered = [...blocks, { type: "paragraph", content: "" }] as never;
-    if (currentHasContent) {
+    if (options.mode !== "replace" && docToBlocks(editor).length > 0) {
       const anchor = editor.document[editor.document.length - 1];
       if (anchor) editor.insertBlocks(recovered, anchor, "after");
     } else {
       editor.replaceBlocks(editor.document, recovered);
     }
-    onEmptyChange(doc.length === 0);
-  }, [canvasEnabled, editor, onEmptyChange]);
+    const restored = docToBlocks(editor);
+    onEmptyChange(restored.length === 0);
+    onDocumentChange?.(restored);
+  }, [canvasEnabled, editor, onDocumentChange, onEmptyChange, skills]);
 
   const canvasHandles = useRef(new Map<string, import("../skillInline").CanvasBlockHandle>());
   const lastRequiredKey = useRef<string>("");
@@ -521,7 +559,9 @@ export function DocEditor({
       }
     }
     previousCanvasIds.current = currentIds;
-    onEmptyChange(docToBlocks(editor).length === 0);
+    const doc = docToBlocks(editor);
+    onEmptyChange(doc.length === 0);
+    onDocumentChange?.(doc);
     // Composer's Run-row hint listens for this (same window-event seam as the provider picker):
     // required slot-card fields without a value or default — a warning, never a send block.
     const unfilled = unfilledRequiredSlots(editor);
@@ -530,7 +570,7 @@ export function DocEditor({
       lastRequiredKey.current = key;
       window.dispatchEvent(new CustomEvent("codetwo-required-slots", { detail: unfilled }));
     }
-  }, [editor, editorCanvasRuntime, onEmptyChange]);
+  }, [editor, editorCanvasRuntime, onDocumentChange, onEmptyChange]);
 
   useEffect(() => {
     getBlocksRef.current = () => docToBlocks(editor);
