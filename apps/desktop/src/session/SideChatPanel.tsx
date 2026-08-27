@@ -558,7 +558,7 @@ export function SideChatPanel({
               rows={3}
               aria-label={t("sideChat.placeholder")}
               placeholder={t("sideChat.placeholder")}
-              className="max-h-48 min-h-20 resize-none bg-transparent px-4 pb-2 pt-3 shadow-none focus-visible:ring-0"
+              className="max-h-48 min-h-20 resize-none bg-transparent px-4 pb-2 pt-3 shadow-none focus-visible:focus-ring-inset"
               onChange={(event) => {
                 const draft = event.currentTarget.value;
                 updateTab(activeTab.localId, (tab) => ({ ...tab, draft }));

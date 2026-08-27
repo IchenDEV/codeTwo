@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   CircleAlert,
   ExternalLink,
-  Loader2,
   PackageCheck,
   ShieldAlert,
   ShieldCheck,
@@ -22,6 +21,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusBadge } from "@/components/business/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { openExternal } from "../bridge";
@@ -104,14 +105,14 @@ export function BundleAdministration({
             </div>
           </div>
           {bundle.requiresTrust ? (
-            <Badge variant={bundle.trusted ? "secondary" : "destructive"}>
+            <StatusBadge tone={bundle.trusted ? "success" : "destructive"}>
               {bundle.trusted ? (
                 <ShieldCheck aria-hidden="true" />
               ) : (
                 <ShieldAlert aria-hidden="true" />
               )}
               {bundle.trusted ? labels.trusted : labels.notTrusted}
-            </Badge>
+            </StatusBadge>
           ) : (
             <Badge variant="secondary">{labels.dataOnly}</Badge>
           )}
@@ -204,10 +205,7 @@ export function BundleAdministration({
                   onClick={() => void onSetTrusted(bundle.id, !bundle.trusted)}
                 >
                   {trustBusy ? (
-                    <Loader2
-                      data-icon="inline-start"
-                      className="animate-spin"
-                    />
+                    <Spinner data-icon="inline-start" />
                   ) : (
                     <ShieldCheck data-icon="inline-start" />
                   )}
@@ -269,7 +267,7 @@ export function BundleAdministration({
               }}
             >
               {uninstallBusy ? (
-                <Loader2 data-icon="inline-start" className="animate-spin" />
+                <Spinner data-icon="inline-start" />
               ) : null}
               {labels.uninstall}
             </AlertDialogAction>

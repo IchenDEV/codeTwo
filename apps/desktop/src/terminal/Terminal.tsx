@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, X } from "@/components/ui/icons";
 import { onPtyExit, onPtyOutput, ptyResize, ptySpawn, ptyWrite } from "../bridge";
 import { useT } from "../i18n";
 import { useColorScheme } from "../theme";
+import { Separator } from "@/components/ui/separator";
 import { useTerminalSettings } from "./settings";
 
 const FALLBACK_MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
@@ -249,42 +250,45 @@ export function TerminalPanel({
       }}
     >
       {finding && (
-        <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1.5">
-          <input
-            autoFocus
-            value={query}
-            placeholder={t("terminal.search")}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              searchRef.current?.findNext(e.target.value, { incremental: true });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") find(!e.shiftKey);
-              if (e.key === "Escape") {
+        <>
+          <div className="flex items-center gap-1 bg-muted/40 px-2 py-1.5">
+            <input
+              autoFocus
+              value={query}
+              placeholder={t("terminal.search")}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                searchRef.current?.findNext(e.target.value, { incremental: true });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") find(!e.shiftKey);
+                if (e.key === "Escape") {
+                  setFinding(false);
+                  searchRef.current?.clearDecorations();
+                  termRef.current?.focus();
+                }
+              }}
+              className="min-w-0 flex-1 bg-transparent text-fine outline-none placeholder:text-muted-foreground/60"
+            />
+            <FindButton title={t("terminal.findPrev")} onClick={() => find(false)}>
+              <ArrowUp className="size-3" />
+            </FindButton>
+            <FindButton title={t("terminal.findNext")} onClick={() => find(true)}>
+              <ArrowDown className="size-3" />
+            </FindButton>
+            <FindButton
+              title={t("terminal.closeFind")}
+              onClick={() => {
                 setFinding(false);
                 searchRef.current?.clearDecorations();
                 termRef.current?.focus();
-              }
-            }}
-            className="min-w-0 flex-1 bg-transparent text-fine outline-none placeholder:text-muted-foreground/60"
-          />
-          <FindButton title={t("terminal.findPrev")} onClick={() => find(false)}>
-            <ArrowUp className="size-3" />
-          </FindButton>
-          <FindButton title={t("terminal.findNext")} onClick={() => find(true)}>
-            <ArrowDown className="size-3" />
-          </FindButton>
-          <FindButton
-            title={t("terminal.closeFind")}
-            onClick={() => {
-              setFinding(false);
-              searchRef.current?.clearDecorations();
-              termRef.current?.focus();
-            }}
-          >
-            <X className="size-3" />
-          </FindButton>
-        </div>
+              }}
+            >
+              <X className="size-3" />
+            </FindButton>
+          </div>
+          <Separator />
+        </>
       )}
       <div className="terminal" ref={boxRef} />
     </div>

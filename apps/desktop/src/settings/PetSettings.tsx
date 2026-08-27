@@ -10,9 +10,11 @@ import {
   petSpritesheetUrl,
   type PetCatalogItem,
 } from "../pet/store";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingsSection } from "@/components/business/settings-section";
+import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useT } from "@/i18n";
 import type { StringKey } from "@/i18n/strings";
 
@@ -94,14 +96,13 @@ export function PetSettings({
   };
 
   return (
-    <div className="pet-settings">
-      <section aria-labelledby="pet-picker-heading">
-        <header className="pet-picker-header">
-          <div className="pet-picker-copy">
-            <h2 id="pet-picker-heading" className="pet-settings-heading">{t("settings.petPicker")}</h2>
-            <p>{t("settings.petPickerHint")}</p>
-          </div>
-          <div className="pet-picker-actions">
+    <div className="pet-settings flex min-w-0 flex-col gap-page-section">
+      <SettingsSection
+        headingId="pet-picker-heading"
+        title={t("settings.petPicker")}
+        description={t("settings.petPickerHint")}
+        actions={
+          <>
             <Button
               variant="ghost"
               size="sm"
@@ -109,7 +110,7 @@ export function PetSettings({
               title={t("settings.petCycleMood")}
               onClick={previewNextMood}
             >
-              <RefreshCw className="size-4" />
+              <RefreshCw data-icon="inline-start" />
               {t("settings.petPreviewAction")}
             </Button>
             <Button
@@ -119,8 +120,9 @@ export function PetSettings({
             >
               {settings.petEnabled ? t("settings.petTuckAway") : t("settings.petShow")}
             </Button>
-          </div>
-        </header>
+          </>
+        }
+      >
 
         <div className="pet-catalog" role="list" aria-label={t("settings.petPicker")}>
           {pets.map((pet) => {
@@ -180,45 +182,42 @@ export function PetSettings({
             </div>
           ) : null}
         </div>
-      </section>
+      </SettingsSection>
 
-      <section aria-labelledby="pet-behavior-heading">
-        <h2 id="pet-behavior-heading" className="pet-settings-heading">{t("settings.petBehavior")}</h2>
-        <div className="pet-setting-list">
-          <div className="pet-setting-row">
-            <span className="pet-setting-copy">
-              <strong>{t("settings.petActivity")}</strong>
-              <span>{t("settings.petActivityHint")}</span>
-            </span>
-            <Checkbox
-              aria-label={t("settings.petActivity")}
-              checked={settings.petActivityEnabled}
-              onCheckedChange={(checked) => setAppearanceSettings({ petActivityEnabled: checked === true })}
-            />
-          </div>
-          <div className="pet-setting-row">
-            <span className="pet-setting-copy">
-              <strong>{t("settings.petSize")}</strong>
-              <span>{t("settings.petSizeHint")}</span>
-            </span>
+      <SettingsSection headingId="pet-behavior-heading" title={t("settings.petBehavior")}>
+        <div className="flex flex-col gap-inline">
+          <SettingToggle
+            label={t("settings.petActivity")}
+            description={t("settings.petActivityHint")}
+            checked={settings.petActivityEnabled}
+            surface="card"
+            onCheckedChange={(petActivityEnabled) => setAppearanceSettings({ petActivityEnabled })}
+          />
+          <SettingRow
+            label={t("settings.petSize")}
+            description={t("settings.petSizeHint")}
+            surface="card"
+          >
             <Select
               value={settings.petSize}
               onValueChange={(value) => setAppearanceSettings({ petSize: value as PetSize })}
             >
-              <SelectTrigger size="sm" className="pet-size-select" aria-label={t("settings.petSize")}>
+              <SelectTrigger size="sm" className="w-32" aria-label={t("settings.petSize")}>
                 <SelectValue>{t(selectedSize.labelKey)}</SelectValue>
               </SelectTrigger>
               <SelectContent position="popper" align="end">
-                {SIZES.map(({ size, labelKey }) => (
-                  <SelectItem key={size} value={size}>
-                    {t(labelKey)}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {SIZES.map(({ size, labelKey }) => (
+                    <SelectItem key={size} value={size}>
+                      {t(labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
-          </div>
+          </SettingRow>
         </div>
-      </section>
+      </SettingsSection>
     </div>
   );
 }

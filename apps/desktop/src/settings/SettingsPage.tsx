@@ -110,13 +110,17 @@ import {
   worktreeStatusBadges,
   type WorktreeStatusBadge,
 } from "./worktrees";
+import { SettingToggle } from "@/components/business/setting-toggle";
+import { SettingRow } from "@/components/business/setting-row";
+import { SettingsPanel } from "@/components/business/settings-panel";
+import { NavigationRow } from "@/components/business/navigation-row";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { LiquidSelectionGroup } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import "./settings-page.css";
@@ -239,11 +243,6 @@ const GROUPS: { title: string; labelKey: StringKey; actions: string[] }[] = [
   { title: "Modes", labelKey: "settings.groupModes", actions: ["cycle_permission_mode"] },
 ];
 
-/**
- * One setting, on any tab: optional leading icon, name + explanation on the left, the control (or
- * status) on the right. Every settings page is built out of these — a page that hand-rolls its own
- * rows drifts a few pixels from the others, which is exactly the bug this shape retired.
- */
 function Row({
   icon,
   label,
@@ -263,36 +262,33 @@ function Row({
   children: ReactNode;
 }) {
   return (
-    <div
-      data-compact={compact || undefined}
-      className={cn(
-        "settings-row flex items-center justify-between gap-8",
-        compact ? "py-2" : "py-3.5",
-        className,
-      )}
+    <SettingRow
+      label={label}
+      description={hint}
+      leading={icon}
+      density={compact ? "compact" : "default"}
+      className={cn("settings-row", className)}
+      controlClassName={cn("settings-row-control", controlClassName)}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        {icon}
-        <div className="min-w-0 max-w-[420px]">
-          <div className="truncate text-ui font-medium">{label}</div>
-          {hint && <div className="mt-0.5 text-hint leading-relaxed text-muted-foreground">{hint}</div>}
-        </div>
-      </div>
-      <div className={cn("settings-row-control flex shrink-0 items-center gap-1", controlClassName)}>
-        {children}
-      </div>
-    </div>
+      {children}
+    </SettingRow>
   );
 }
 
 /** Project settings share one trailing control lane so fields and actions stay on the same grid. */
 function ProjectRow(props: Parameters<typeof Row>[0]) {
   return (
-    <Row
-      {...props}
+    <SettingRow
+      label={props.label}
+      description={props.hint}
+      leading={props.icon}
+      density={props.compact ? "compact" : "default"}
+      controlSize="wide"
       className={cn("project-settings-row", props.className)}
       controlClassName={cn("project-settings-control", props.controlClassName)}
-    />
+    >
+      {props.children}
+    </SettingRow>
   );
 }
 
@@ -1362,26 +1358,25 @@ export function SettingsPage({
       >
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
-        <button
+        <Button
           data-settings-back
+          type="button"
+          variant="ghost"
+          size="row"
           disabled={projectModeSaving}
           onClick={onClose}
           aria-label={t("settings.back")}
           title={t("settings.back")}
-          className="mx-3 mb-2 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="mx-3 mb-2 w-auto text-muted-foreground"
         >
           <ArrowLeft className="size-3.5 shrink-0" />
           <span className="settings-back-label">{t("settings.back")}</span>
-        </button>
+        </Button>
         <nav
           aria-label={t("settings.title")}
           className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 pb-6 pt-2"
         >
-          <LiquidSelectionGroup
-            activeSelector='[aria-current="page"]'
-            fill="var(--color-fill-hover)"
-            className="space-y-6"
-          >
+          <div className="space-y-6">
           {NAV_GROUPS.map((group) => {
             const items = group.items.filter(({ id }) => memoryEnabled || id !== "memory")
               .filter(({ id }) => deviceSyncEnabled || id !== "sync");
@@ -1400,28 +1395,23 @@ export function SettingsPage({
                 </h2>
                 <div className="space-y-1">
                   {items.map(({ id, icon: Icon, labelKey }) => (
-                    <button
+                    <NavigationRow
                       key={id}
-                      aria-current={id === tab ? "page" : undefined}
-                      aria-label={t(labelKey)}
+                      className="settings-nav-item"
+                      labelClassName="settings-nav-label"
+                      label={t(labelKey)}
+                      leading={<Icon />}
+                      current={id === tab}
+                      accessibilityLabel={t(labelKey)}
                       title={t(labelKey)}
-                      onClick={() => setTab(id)}
-                      className={cn(
-                        "settings-nav-item flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
-                        id === tab
-                          ? "font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                      )}
-                    >
-                      <Icon className="size-3.5 shrink-0" />
-                      <span className="settings-nav-label truncate">{t(labelKey)}</span>
-                    </button>
+                      onSelect={() => setTab(id)}
+                    />
                   ))}
                 </div>
               </section>
             );
           })}
-          </LiquidSelectionGroup>
+          </div>
         </nav>
       </aside>
 
@@ -1440,7 +1430,7 @@ export function SettingsPage({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 gap-1.5 text-hint text-muted-foreground hover:text-foreground"
+              className="gap-control-group text-hint text-muted-foreground hover:text-foreground"
               onClick={restore}
             >
               <RotateCcw className="size-3.5" />
@@ -1458,19 +1448,21 @@ export function SettingsPage({
             )}
           >
             {tab === "general" && (
-              <Page title={t("settings.general")} description={t("settings.generalHint")}>
+              <SettingsPanel title={t("settings.general")} description={t("settings.generalHint")}>
                 <Row label={t("settings.language")} hint={t("settings.languageHint")}>
                   <Select value={language} onValueChange={(v) => setLanguage(v as LanguagePreference)}>
                     <SelectTrigger size="sm" className="w-44 justify-between">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper" align="end">
-                      <SelectItem value="system">{t("settings.languageSystem")}</SelectItem>
-                      {(Object.keys(LOCALES) as (keyof typeof LOCALES)[]).map((l) => (
-                        <SelectItem key={l} value={l}>
-                          {LOCALES[l].label}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        <SelectItem value="system">{t("settings.languageSystem")}</SelectItem>
+                        {(Object.keys(LOCALES) as (keyof typeof LOCALES)[]).map((l) => (
+                          <SelectItem key={l} value={l}>
+                            {LOCALES[l].label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 </Row>
@@ -1523,7 +1515,7 @@ export function SettingsPage({
                     className="h-8 w-44 text-hint"
                   />
                 </Row>
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "import" && (
@@ -1594,33 +1586,32 @@ export function SettingsPage({
             )}
 
             {tab === "appearance" && (
-              <Page title={t("settings.appearance")} description={t("settings.appearanceHint")}>
+              <SettingsPanel title={t("settings.appearance")} description={t("settings.appearanceHint")}>
                 <AppearanceSettings value={theme} onChange={setTheme} />
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "profile" && <ProfileSettings providerNames={providerNames} />}
 
             {tab === "pets" && (
-              <Page title={t("settings.pets")}>
+              <SettingsPanel title={t("settings.pets")}>
                 <PetSettings />
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "sync" && deviceSyncEnabled && (
-              <Page title={t("settings.sync")} description={t("settings.syncHint")}>
-                <Row label={t("settings.pairedDeviceSync")} hint={deviceSyncHint}>
-                  <Switch
-                    checked={deviceSync?.enabled ?? false}
-                    disabled={
-                      deviceSyncSaving ||
-                      deviceSync?.state === "syncing" ||
-                      (!(deviceSync?.enabled ?? false) && !(deviceSync?.available ?? false))
-                    }
-                    onCheckedChange={(checked) => void saveDeviceSyncEnabled(checked)}
-                    aria-label={t("settings.pairedDeviceSync")}
-                  />
-                </Row>
+              <SettingsPanel title={t("settings.sync")} description={t("settings.syncHint")}>
+                <SettingToggle
+                  label={t("settings.pairedDeviceSync")}
+                  description={deviceSyncHint}
+                  checked={deviceSync?.enabled ?? false}
+                  disabled={
+                    deviceSyncSaving ||
+                    deviceSync?.state === "syncing" ||
+                    (!(deviceSync?.enabled ?? false) && !(deviceSync?.available ?? false))
+                  }
+                  onCheckedChange={(checked) => void saveDeviceSyncEnabled(checked)}
+                />
 
                 <Row label={t("settings.syncNow")} hint={t("settings.syncNowHint")}>
                   <Button
@@ -1639,22 +1630,22 @@ export function SettingsPage({
                 <p className="pt-1.5 text-hint leading-relaxed text-muted-foreground">
                   {t("settings.syncScopeHint")}
                 </p>
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "keybindings" && (
-              <Page title={t("settings.keybindings")} description={t("settings.keysHint", { mod: MOD_LABEL })}>
+              <SettingsPanel title={t("settings.keybindings")} description={t("settings.keysHint", { mod: MOD_LABEL })}>
                 {groups.map((g) => (
                   <div key={g.title}>
                     <GroupHeading>{g.title}</GroupHeading>
                     <div className="space-y-0.5">{g.actions.map(keyRow)}</div>
                   </div>
                 ))}
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "project" && (
-              <Page title={t("settings.project")} description={t("settings.projectHint")}>
+              <SettingsPanel title={t("settings.project")} description={t("settings.projectHint")}>
                 {project ? (
                   <>
                     <GroupHeading>{t("settings.projectProfile")}</GroupHeading>
@@ -1688,11 +1679,11 @@ export function SettingsPage({
                     >
                       <div
                         data-project-icon-picker
-                        className="flex h-(--ds-control-field) w-full items-stretch overflow-hidden rounded-(--ds-radius-control) bg-fill-rest"
+                        className="flex h-control-field w-full items-stretch overflow-hidden rounded-control bg-fill-rest"
                       >
                         <button
                           type="button"
-                          className="group flex min-w-0 flex-1 items-center gap-2.5 px-2 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+                          className="group flex min-w-0 flex-1 items-center gap-module-inset px-2 text-left outline-none transition-colors hover:bg-fill-hover focus-visible:focus-ring-inset disabled:pointer-events-none disabled:opacity-50"
                           disabled={projectIconSaving}
                           onClick={() => void chooseProjectIcon()}
                         >
@@ -1758,17 +1749,19 @@ export function SettingsPage({
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="automatic">{t("settings.projectProviderAutomatic")}</SelectItem>
-                          {providers.map((candidate) => (
-                            <SelectItem
-                              key={candidate.id}
-                              value={candidate.id}
-                              disabled={!candidate.available}
-                            >
-                              <ProviderIcon provider={candidate.id} className="size-4" />
-                              {candidate.display_name}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            <SelectItem value="automatic">{t("settings.projectProviderAutomatic")}</SelectItem>
+                            {providers.map((candidate) => (
+                              <SelectItem
+                                key={candidate.id}
+                                value={candidate.id}
+                                disabled={!candidate.available}
+                              >
+                                <ProviderIcon provider={candidate.id} className="size-4" />
+                                {candidate.display_name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </ProjectRow>
@@ -1778,7 +1771,7 @@ export function SettingsPage({
                     >
                       <div className="grid w-full grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
                         {projectDefaultProvider && projectDefaultModels.length > 0 ? (
-                          <div className="flex min-w-0 items-center rounded-(--ds-radius-control) bg-fill-rest px-1">
+                          <div className="flex min-w-0 items-center rounded-control bg-fill-rest px-1">
                             <ModelPicker
                               models={projectDefaultModels}
                               current={project.default_model ?? null}
@@ -1814,7 +1807,7 @@ export function SettingsPage({
                             ) : null}
                           </div>
                         ) : (
-                          <span className="col-span-2 flex h-(--ds-control-field) min-w-0 items-center rounded-(--ds-radius-control) bg-fill-rest px-3 text-hint text-muted-foreground">
+                          <span className="col-span-2 flex h-control-field min-w-0 items-center rounded-control bg-fill-rest px-3 text-hint text-muted-foreground">
                             {t("settings.projectModelDefault")}
                           </span>
                         )}
@@ -1842,12 +1835,14 @@ export function SettingsPage({
                               </SelectValue>
                             </SelectTrigger>
                             <SelectContent position="popper" align="end">
-                              <SelectItem value="automatic">{t("settings.projectModelDefault")}</SelectItem>
-                              {PROJECT_REASONING_EFFORTS.map((effort) => (
-                                <SelectItem key={effort} value={effort}>
-                                  {t(`effort.${effort}` as StringKey)}
-                                </SelectItem>
-                              ))}
+                              <SelectGroup>
+                                <SelectItem value="automatic">{t("settings.projectModelDefault")}</SelectItem>
+                                {PROJECT_REASONING_EFFORTS.map((effort) => (
+                                  <SelectItem key={effort} value={effort}>
+                                    {t(`effort.${effort}` as StringKey)}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
                             </SelectContent>
                           </Select>
                         ) : null}
@@ -1879,37 +1874,35 @@ export function SettingsPage({
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="inherit">{t("settings.projectWorkspaceInherit")}</SelectItem>
-                          <SelectItem value="local">{t("settings.projectWorkspaceLocal")}</SelectItem>
-                          <SelectItem value="current">{t("settings.projectWorkspaceCurrent")}</SelectItem>
-                          <SelectItem value="origin_default">
-                            {t("settings.projectWorkspaceOrigin")}
-                          </SelectItem>
+                          <SelectGroup>
+                            <SelectItem value="inherit">{t("settings.projectWorkspaceInherit")}</SelectItem>
+                            <SelectItem value="local">{t("settings.projectWorkspaceLocal")}</SelectItem>
+                            <SelectItem value="current">{t("settings.projectWorkspaceCurrent")}</SelectItem>
+                            <SelectItem value="origin_default">
+                              {t("settings.projectWorkspaceOrigin")}
+                            </SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </ProjectRow>
-                    <ProjectRow
+                    <SettingToggle
                       label={t("settings.scheduling")}
-                      hint={t("settings.schedulingHint")}
-                    >
-                      <Switch
-                        aria-label={t("settings.scheduling")}
-                        checked={schedulingEnabled}
-                        onCheckedChange={(checked) => {
-                          const enabled = checked;
-                          setSchedulingEnabled(enabled);
-                          setProjectError(null);
-                          void setProjectScheduling(project.path, enabled).catch((error) => {
-                            setSchedulingEnabled(!enabled);
-                            setProjectError(t("settings.projectSaveFailed", { error: String(error) }));
-                          });
-                        }}
-                      />
-                    </ProjectRow>
+                      description={t("settings.schedulingHint")}
+                      checked={schedulingEnabled}
+                      onCheckedChange={(checked) => {
+                        const enabled = checked;
+                        setSchedulingEnabled(enabled);
+                        setProjectError(null);
+                        void setProjectScheduling(project.path, enabled).catch((error) => {
+                          setSchedulingEnabled(!enabled);
+                          setProjectError(t("settings.projectSaveFailed", { error: String(error) }));
+                        });
+                      }}
+                    />
 
                     <GroupHeading>{t("settings.projectCheckout")}</GroupHeading>
                     <ProjectRow label={t("settings.projectPath")} hint={t("settings.projectPathHint")}>
-                      <div className="flex h-(--ds-control-field) w-full min-w-0 items-center overflow-hidden rounded-(--ds-radius-control) bg-fill-rest">
+                      <div className="flex h-control-field w-full min-w-0 items-center overflow-hidden rounded-control bg-fill-rest">
                         <span className="min-w-0 flex-1 truncate px-3 font-mono text-fine text-muted-foreground" title={project.path}>
                           {project.path}
                         </span>
@@ -1979,7 +1972,7 @@ export function SettingsPage({
                 ) : (
                   <p className="py-6 text-ui text-muted-foreground">{t("settings.projectNone")}</p>
                 )}
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "worktrees" && (
@@ -2192,7 +2185,7 @@ export function SettingsPage({
             )}
 
             {tab === "computer-use" && (
-              <Page title={t("settings.computerUse")} description={t("settings.computerUseHint")}>
+              <SettingsPanel title={t("settings.computerUse")} description={t("settings.computerUseHint")}>
                 <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
                   {t("settings.computerUseNewSession")}
                 </p>
@@ -2227,13 +2220,15 @@ export function SettingsPage({
                           <SelectValue>{computerUseSelectionLabel}</SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
-                          <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
-                          {computerUseSettings.backends.map((backend) => (
-                            <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
-                              {backend.display_name}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            <SelectItem value="automatic">{t("settings.computerUseAutomatic")}</SelectItem>
+                            <SelectItem value="disabled">{t("settings.computerUseDisabled")}</SelectItem>
+                            {computerUseSettings.backends.map((backend) => (
+                              <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                                {backend.display_name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Row>
@@ -2256,30 +2251,26 @@ export function SettingsPage({
                     ))}
                   </>
                 )}
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "appshots" && (
-              <Page title={t("settings.appshots")} description={t("settings.appshotsHint")}>
-                <div className="mb-3 flex items-center justify-between gap-4 rounded-(--ds-radius-module) bg-fill-quiet/60 px-3 py-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <ScanText className="size-5 shrink-0 text-primary" aria-hidden />
-                    <div className="min-w-0">
-                      <p className="text-ui font-medium">{t("settings.appshotsFrontmost")}</p>
-                      <p className="mt-0.5 text-hint leading-relaxed text-muted-foreground">
-                        {t("settings.appshotsFrontmostHint")}
-                      </p>
-                    </div>
-                  </div>
+              <SettingsPanel title={t("settings.appshots")} description={t("settings.appshotsHint")}>
+                <div className="mb-surface-inset">
+                  <SettingRow
+                    label={t("settings.appshotsFrontmost")}
+                    description={t("settings.appshotsFrontmostHint")}
+                    leading={<ScanText className="size-5 text-primary" />}
+                    surface="card"
+                  >
                   <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
+                    variant="secondary"
                     disabled={!appshotSettings?.available || appshotCapturing}
                     onClick={() => void captureAppshot()}
                   >
                     {appshotCapturing ? t("settings.appshotsCapturing") : t("settings.appshotsTakeNow")}
                   </Button>
+                  </SettingRow>
                 </div>
 
                 {appshotError && (
@@ -2307,9 +2298,11 @@ export function SettingsPage({
                           <SelectValue>{appshotHotkeyLabel}</SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="both-command">{t("settings.appshotsHotkeyBothCommand")}</SelectItem>
-                          <SelectItem value="command-shift-2">{t("settings.appshotsHotkeyCommandShift2")}</SelectItem>
-                          <SelectItem value="command-option-2">{t("settings.appshotsHotkeyCommandOption2")}</SelectItem>
+                          <SelectGroup>
+                            <SelectItem value="both-command">{t("settings.appshotsHotkeyBothCommand")}</SelectItem>
+                            <SelectItem value="command-shift-2">{t("settings.appshotsHotkeyCommandShift2")}</SelectItem>
+                            <SelectItem value="command-option-2">{t("settings.appshotsHotkeyCommandOption2")}</SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Row>
@@ -2328,21 +2321,21 @@ export function SettingsPage({
                           <SelectValue>{appshotDestinationLabel}</SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="automatic">{t("settings.appshotsDestinationAutomatic")}</SelectItem>
-                          <SelectItem value="current">{t("settings.appshotsDestinationCurrent")}</SelectItem>
-                          <SelectItem value="new">{t("settings.appshotsDestinationNew")}</SelectItem>
+                          <SelectGroup>
+                            <SelectItem value="automatic">{t("settings.appshotsDestinationAutomatic")}</SelectItem>
+                            <SelectItem value="current">{t("settings.appshotsDestinationCurrent")}</SelectItem>
+                            <SelectItem value="new">{t("settings.appshotsDestinationNew")}</SelectItem>
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Row>
 
-                    <Row label={t("settings.appshotsSound")}>
-                      <Switch
-                        aria-label={t("settings.appshotsSound")}
-                        checked={appshotSettings.play_sound}
-                        disabled={appshotSaving}
-                        onCheckedChange={(play_sound) => void saveAppshotSettings({ play_sound })}
-                      />
-                    </Row>
+                    <SettingToggle
+                      label={t("settings.appshotsSound")}
+                      checked={appshotSettings.play_sound}
+                      disabled={appshotSaving}
+                      onCheckedChange={(play_sound) => void saveAppshotSettings({ play_sound })}
+                    />
 
                     <GroupHeading>{t("settings.appshotsPermissions")}</GroupHeading>
                     <Row
@@ -2397,11 +2390,11 @@ export function SettingsPage({
                     </Row>
                   </>
                 )}
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "browser-use" && (
-              <Page title={t("settings.browserUse")} description={t("settings.browserUseHint")}>
+              <SettingsPanel title={t("settings.browserUse")} description={t("settings.browserUseHint")}>
                 <p className="pb-2 text-hint leading-relaxed text-muted-foreground">
                   {t("settings.browserUseNewSession")}
                 </p>
@@ -2449,13 +2442,15 @@ export function SettingsPage({
                           <SelectValue>{browserUseSelectionLabel}</SelectValue>
                         </SelectTrigger>
                         <SelectContent position="popper" align="end">
-                          <SelectItem value="automatic">{t("settings.browserUseAutomatic")}</SelectItem>
-                          <SelectItem value="disabled">{t("settings.browserUseDisabled")}</SelectItem>
-                          {browserUseSettings.backends.map((backend) => (
-                            <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
-                              {backend.display_name}
-                            </SelectItem>
-                          ))}
+                          <SelectGroup>
+                            <SelectItem value="automatic">{t("settings.browserUseAutomatic")}</SelectItem>
+                            <SelectItem value="disabled">{t("settings.browserUseDisabled")}</SelectItem>
+                            {browserUseSettings.backends.map((backend) => (
+                              <SelectItem key={backend.id} value={backend.id} disabled={!backend.available}>
+                                {backend.display_name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         </SelectContent>
                       </Select>
                     </Row>
@@ -2478,11 +2473,11 @@ export function SettingsPage({
                     ))}
                   </>
                 )}
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "providers" && (
-              <Page title={t("settings.providers")} description={t("settings.providersHint")}>
+              <SettingsPanel title={t("settings.providers")} description={t("settings.providersHint")}>
                 <div className="mb-2 flex items-center justify-end gap-2">
                   {(providerOperation?.action === "refresh" || providerMessage?.id === "*") && (
                     <span className="text-fine text-muted-foreground">
@@ -2534,13 +2529,13 @@ export function SettingsPage({
                       <div
                         key={p.id}
                         data-provider-row={p.id}
-                        className="rounded-(--ds-radius-module) bg-fill-quiet/40 px-3 transition-colors hover:bg-fill-quiet/70"
+                        className="rounded-module bg-fill-quiet/40 px-3 transition-colors hover:bg-fill-quiet/70"
                       >
                         <div className="flex min-h-14 items-center gap-2">
                           <button
                             type="button"
                             data-provider-disclosure={p.id}
-                            className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                            className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left outline-none focus-visible:focus-ring"
                             aria-expanded={expanded}
                             aria-controls={`provider-details-${p.id}`}
                             onClick={() => toggleProviderDetails(p.id)}
@@ -2693,7 +2688,7 @@ export function SettingsPage({
                     );
                   })}
                 </div>
-              </Page>
+              </SettingsPanel>
             )}
 
             {tab === "developer" && (
@@ -2766,7 +2761,7 @@ export function SettingsPage({
                     onClick={() => void exportDiagnostics()}
                   >
                     {diagnosticsExporting ? (
-                      <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                      <Spinner data-icon="inline-start" />
                     ) : (
                       <Download data-icon="inline-start" />
                     )}
@@ -2791,7 +2786,7 @@ export function SettingsPage({
             )}
 
             {tab === "browser" && (
-              <Page
+              <SettingsPanel
                 title="Browser"
                 description="Experimental website permissions granted permanently to C2 Browser. Sensitive actions and downloads always require one-time approval."
               >
@@ -2824,7 +2819,7 @@ export function SettingsPage({
                     </Row>
                   ))
                 )}
-              </Page>
+              </SettingsPanel>
             )}
           </div>
         </ScrollArea>

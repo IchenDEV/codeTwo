@@ -8,6 +8,10 @@ const { AutomationsPage } = await import("../src/automation/AutomationsPage");
 const { I18nProvider } = await import("../src/i18n");
 const { ToastProvider } = await import("../src/ui/toast");
 const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const automationSource = readFileSync(
+  new URL("../src/automation/AutomationsPage.tsx", import.meta.url),
+  "utf8",
+);
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -79,9 +83,11 @@ describe("AutomationsPage layout", () => {
     expect(listPane?.className).toContain("bg-sidebar");
     expect(detailPane?.className).toContain("automation-detail-pane");
     expect(detailPane?.textContent).toContain("Select an automation");
-    expect(search?.getAttribute("type")).toBe("search");
-    expect(filters?.getAttribute("role")).toBe("tablist");
-    expect(filters?.querySelectorAll('[role="tab"]').length).toBe(3);
+    expect(search?.querySelector('input[type="search"]')).not.toBeNull();
+    const switcher = filters?.querySelector('[data-slot="view-switcher"]');
+    expect(switcher?.getAttribute("role")).toBe("group");
+    expect(switcher?.querySelectorAll('button[aria-pressed]').length).toBe(3);
+    expect(switcher?.querySelectorAll('button[aria-pressed="true"]').length).toBe(1);
     expect(detailTabs?.querySelectorAll('[role="tab"]').length).toBe(2);
     expect(detailTabs?.querySelectorAll('[role="tab"]:disabled').length).toBe(2);
     expect(view.container.querySelector("[data-automation-task-center]")).toBeNull();
@@ -102,6 +108,12 @@ describe("AutomationsPage layout", () => {
     expect(automationsCall).toContain("headerLeadingAction=");
     expect(automationsCall).toContain("onAddProject=");
     expect(taskBoardCall).toContain("headerLeadingAction=");
+  });
+
+  test("maps active and paused states to the standard status tones", () => {
+    expect(automationSource).toContain(
+      '<StatusBadge tone={automation.enabled ? "success" : "neutral"}>',
+    );
   });
 
   test("keeps create and edit work in the detail pane instead of opening a dialog", async () => {

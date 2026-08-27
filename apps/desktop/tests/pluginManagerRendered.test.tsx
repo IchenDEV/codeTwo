@@ -375,9 +375,9 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
     expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
     expect(view.container.querySelector(".plugin-manager-list-header")?.className)
-      .toContain("h-(--ds-layout-titlebar-height)");
+      .toContain("h-layout-titlebar");
     expect(view.container.querySelector(".plugin-manager-detail-header")?.className)
-      .toContain("h-(--ds-layout-titlebar-height)");
+      .toContain("h-layout-titlebar");
     expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
     expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
@@ -387,12 +387,12 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] [data-plugin-status="active"] .bg-success')).not.toBeNull();
-    expect(view.container.querySelector('[data-plugin-details] [data-plugin-status="active"] .bg-success')).not.toBeNull();
     expect(view.container.textContent).toContain("Built-in feature");
     expect(view.container.textContent).toContain("Host feature");
     expect(view.container.textContent).toContain("Bundle · Review Tools");
     expect(view.container.querySelector('[data-slot="select-trigger"]')?.textContent).toContain("User");
     expect(view.container.querySelector("[data-plugin-details]")?.textContent).toContain("MemoryCapability");
+    expect(view.container.querySelector("[data-plugin-details] [data-slot='status-badge']")?.getAttribute("data-tone")).toBe("success");
     expect(view.container.querySelector("#plugin-config-endpoint")).not.toBeNull();
     expect(view.container.querySelector("#plugin-config-interval")?.getAttribute("step")).toBe("1");
     expect(view.container.querySelector('[data-slot="checkbox"]')).not.toBeNull();
@@ -465,6 +465,28 @@ describe("PluginManagerPage", () => {
     view.unmount();
   });
 
+  test("maps failed plugin and trusted bundle states independently", async () => {
+    activateDom();
+    const trustedPlugins = plugins.map((plugin) => plugin.id === "review-tools"
+      ? { ...plugin, bundle: { ...plugin.bundle, trusted: true } }
+      : plugin);
+    const { view } = renderManager({ plugins: trustedPlugins });
+    await flush();
+
+    const bundleButton = Array.from(view.container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("Review Tools"),
+    );
+    click(bundleButton);
+    await flush();
+
+    const detailsTones = Array.from(
+      view.container.querySelectorAll("[data-plugin-details] [data-slot='status-badge']"),
+    ).map((badge) => badge.getAttribute("data-tone"));
+    expect(detailsTones.filter((tone) => tone === "destructive")).toHaveLength(2);
+    expect(view.container.querySelector("[data-bundle-administration] [data-slot='status-badge']")?.getAttribute("data-tone")).toBe("success");
+    view.unmount();
+  });
+
   test("manages bundle trust and confirms removal without discarding data by default", async () => {
     activateDom();
     const { view, calls } = renderManager();
@@ -481,6 +503,7 @@ describe("PluginManagerPage", () => {
     expect(administration?.textContent).toContain("Bundle management");
     expect(administration?.textContent).toContain("1 Process runtime");
     expect(administration?.textContent).toContain("Trust before running.");
+    expect(administration?.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("destructive");
     expect(details?.querySelector("[data-plugin-trust-gate]")?.textContent).toBe(
       "Trust required before enabling",
     );

@@ -45,7 +45,7 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "glass-raised pop-layer z-50 origin-(--transform-origin) rounded-md p-4 text-popover-foreground shadow-raised ring-1 ring-foreground/10 outline-hidden",
+            "pop-layer z-50 origin-(--transform-origin) rounded-module bg-raised p-3 text-content shadow-raised outline-hidden",
             size === "wide" ? "w-2xl max-w-(--available-width)" : "w-72",
             className
           )}

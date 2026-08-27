@@ -18,15 +18,15 @@ export function fmtReset(secs: number): string {
 }
 
 /**
- * Fixed provider → semantic-token mapping. Color follows the entity, never its position in the
+ * Fixed provider → semantic-color utility mapping. Color follows the entity, never its position in the
  * data, so filtering or re-ordering series can't repaint them. The claude/codex pair passes the
  * palette checks in both schemes; the muted fallback covers a hypothetical extra source and always
  * appears with a legend and bar gaps carrying identity alongside color.
  */
-export function seriesColor(source: string): string {
-  if (source === "claude") return "var(--ds-color-primary)";
-  if (source === "codex") return "var(--ds-color-success)";
-  return "var(--ds-color-text-muted)";
+export function seriesColorClass(source: string): string {
+  if (source === "claude") return "text-primary";
+  if (source === "codex") return "text-status-success";
+  return "text-content-muted";
 }
 
 export interface StackedBucket {

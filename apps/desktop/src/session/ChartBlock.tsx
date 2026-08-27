@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useLanguage, useT } from "../i18n";
+import { cn } from "@/lib/utils";
 
 export interface ChartSeries {
   name: string;
@@ -18,6 +19,14 @@ export interface ChartSpec {
 
 const MAX_POINTS = 100;
 const MAX_SERIES = 6;
+const SERIES_COLOR_CLASSES = [
+  "text-viz-series-1",
+  "text-viz-series-2",
+  "text-viz-series-3",
+  "text-viz-series-4",
+  "text-viz-series-5",
+  "text-viz-series-6",
+] as const;
 
 function text(value: unknown, maximum: number): string | null {
   if (typeof value !== "string") return null;
@@ -161,8 +170,10 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               key={series.name}
               type="button"
               aria-pressed={visible[index]}
-              className="flex items-center gap-1.5 text-fine text-foreground disabled:opacity-50"
-              style={{ opacity: visible[index] ? 1 : 0.48 }}
+              className={cn(
+                "flex items-center gap-1.5 text-fine text-foreground disabled:opacity-50",
+                visible[index] ? "opacity-100" : "opacity-50",
+              )}
               onClick={() =>
                 setVisible((current) =>
                   current.map((value, itemIndex) => (itemIndex === index ? !value : value)),
@@ -170,8 +181,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               }
             >
               <span
-                className="size-2 rounded-full"
-                style={{ background: `var(--viz-series-${index + 1})` }}
+                className={cn("size-2 rounded-full bg-current", SERIES_COLOR_CLASSES[index])}
                 aria-hidden="true"
               />
               {series.name}
@@ -193,7 +203,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
           width={plotWidth}
           height={plotHeight}
           fill="none"
-          stroke="var(--border)"
+          className="stroke-border"
           strokeWidth="1"
           data-chart-frame
         />
@@ -204,7 +214,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               x2={margin.left + plotWidth}
               y1={y(tick)}
               y2={y(tick)}
-              stroke="var(--border)"
+              className="stroke-border"
               strokeWidth="1"
               opacity="0.55"
             />
@@ -213,8 +223,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               y={y(tick)}
               textAnchor="end"
               dominantBaseline="middle"
-              fill="var(--muted-foreground)"
-              className="text-fine"
+              className="fill-muted-foreground text-fine"
             >
               {numberFormatter.format(tick)}
             </text>
@@ -226,28 +235,25 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
             x={x(index)}
             y={margin.top + plotHeight + 18}
             textAnchor="middle"
-            fill="var(--muted-foreground)"
-            className="text-fine"
+            className="fill-muted-foreground text-fine"
           >
             {compactLabel(label)}
           </text>
         ))}
         <text
           data-axis="x"
-          className="axis-title text-fine"
+          className="axis-title fill-foreground text-fine"
           x={margin.left + plotWidth / 2}
           y={height - 8}
           textAnchor="middle"
-          fill="var(--foreground)"
         >
           {spec.xLabel}
         </text>
         <text
           data-axis="y"
-          className="axis-title text-fine"
+          className="axis-title fill-foreground text-fine"
           transform={`translate(14 ${margin.top + plotHeight / 2}) rotate(-90)`}
           textAnchor="middle"
-          fill="var(--foreground)"
         >
           {spec.yLabel}
         </text>
@@ -259,7 +265,7 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
                 .map((value, index) => `${index === 0 ? "M" : "L"}${x(index)},${y(value)}`)
                 .join(" ");
               return (
-                <g key={series.name} style={{ color: `var(--viz-series-${seriesIndex + 1})` }}>
+                <g key={series.name} className={SERIES_COLOR_CLASSES[seriesIndex]}>
                   <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
                   {series.values.map((value, index) => (
                     <circle key={index} cx={x(index)} cy={y(value)} r="3" fill="currentColor">
@@ -273,7 +279,11 @@ export function ChartBlock({ spec }: { spec: ChartSpec }) {
               const visiblePosition = visibleIndexes.indexOf(seriesIndex);
               if (visiblePosition < 0) return null;
               return (
-                <g key={series.name} fill={`var(--viz-series-${seriesIndex + 1})`}>
+                <g
+                  key={series.name}
+                  className={SERIES_COLOR_CLASSES[seriesIndex]}
+                  fill="currentColor"
+                >
                   {series.values.map((value, index) => {
                     const valueY = y(value);
                     const left =

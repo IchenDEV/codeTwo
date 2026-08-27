@@ -97,10 +97,10 @@ describe("macOS window chrome contract", () => {
 
   test("keeps the empty-session hero safely centered in constrained window heights", () => {
     expect(appSource).toContain(
-      '"hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"',
+      '"hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-page-end pt-6"',
     );
     expect(appSource).not.toContain(
-      '"order-2 min-h-0 flex-1 flex-col justify-center pb-16"',
+      '"order-2 min-h-0 flex-1 flex-col justify-center pb-page-end"',
     );
   });
 
@@ -120,7 +120,8 @@ describe("macOS window chrome contract", () => {
     );
 
     expect(titlebarClasses).toHaveLength(2);
-    expect(titlebarClasses.every((classes) => classes.includes("py-2.5"))).toBe(true);
+    expect(titlebarClasses.every((classes) => classes.includes("h-titlebar"))).toBe(true);
+    expect(titlebarClasses.every((classes) => !classes.includes("py-2.5"))).toBe(true);
     expect(dockSource).toContain(
       'size="compact" className="w-(--ds-control-normal) px-0" onClick={onClose}',
     );

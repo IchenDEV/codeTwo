@@ -11,9 +11,41 @@
       "reason": "Monaco and Shiki own syntax colors and editor content typography."
     },
     {
+      "path": "src/browser/annotate.js",
+      "rules": [
+        "raw-color",
+        "hardcoded-type-metric",
+        "hardcoded-spacing",
+        "hardcoded-radius",
+        "hardcoded-shadow",
+        "static-border"
+      ],
+      "reason": "The injected annotator owns a self-contained shadow-root palette and compact inspector geometry inside remote pages."
+    },
+    {
       "path": "src/editor/Editor.tsx",
       "rules": ["hardcoded-type-metric"],
       "reason": "BlockNote owns document content typography while C2 owns its surrounding chrome."
+    },
+    {
+      "path": "src/appearance.ts",
+      "rules": ["direct-ds-token"],
+      "reason": "The appearance controller writes validated runtime theme values into the semantic token layer."
+    },
+    {
+      "path": "src/design/DesignSystemPreview.tsx",
+      "rules": ["direct-ds-token"],
+      "reason": "The internal design-system preview intentionally inventories and renders semantic token names."
+    },
+    {
+      "path": "src/session/visualization.ts",
+      "rules": ["direct-ds-token"],
+      "reason": "The visualization sandbox ships a self-contained CSS contract into an isolated document."
+    },
+    {
+      "path": "src/canvas/canvas.editor.test.tsx",
+      "rules": ["direct-ds-token"],
+      "reason": "The Canvas contract test asserts custom-property text emitted by its isolated editor stylesheet."
     }
   ]
 }

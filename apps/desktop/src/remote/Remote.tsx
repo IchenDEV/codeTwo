@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function defaultEndpointId(status: RemoteStatus | null): string | null {
   if (!status) return null;
@@ -245,9 +245,11 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                 <Select value={clientProtocol} onValueChange={(value) => value && selectClientProtocol(value)}>
                   <SelectTrigger className="w-full" aria-labelledby="remote-client-label"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {protocols.map((protocol) => (
-                      <SelectItem key={protocol} value={protocol}>{protocolLabel(protocol)}</SelectItem>
-                    ))}
+                    <SelectGroup>
+                      {protocols.map((protocol) => (
+                        <SelectItem key={protocol} value={protocol}>{protocolLabel(protocol)}</SelectItem>
+                      ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
@@ -268,9 +270,11 @@ export function RemoteModal({ onClose }: { onClose: () => void }) {
                   <SelectValue placeholder="Choose an address" />
                 </SelectTrigger>
                 <SelectContent>
-                  {status.endpoints.map((endpoint) => (
-                    <SelectItem key={endpoint.id} value={endpoint.id}>{endpoint.label}</SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {status.endpoints.map((endpoint) => (
+                      <SelectItem key={endpoint.id} value={endpoint.id}>{endpoint.label}</SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
               <p id="remote-endpoint-help" className="text-hint text-muted-foreground">

@@ -57,7 +57,9 @@ describe("Settings device sync", () => {
     );
     await waitFor(() => expect(rendered.container.textContent).toContain("Ready to sync"));
 
-    const toggle = rendered.container.querySelector('[aria-label="Paired C2 devices"]');
+    const toggle = rendered.container.querySelector('[data-slot="setting-toggle"] [data-slot="switch"]');
+    expect(rendered.container.querySelector('[data-slot="setting-row-label"]')?.textContent)
+      .toBe("Paired C2 devices");
     expect(toggle).not.toBeNull();
     await reactAct(async () => toggle.click());
     await waitFor(() => expect(button(rendered.container, "Sync now").disabled).toBe(false));

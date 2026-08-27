@@ -15,7 +15,6 @@ import {
   ExternalLink,
   FolderOpen,
   GitFork,
-  Loader2,
   MoreHorizontal,
   Search,
   Terminal,
@@ -50,7 +49,8 @@ import {
   type ArtifactRef,
   type CanvasSnapshot,
 } from "../bridge";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/business/status-badge";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -216,7 +216,7 @@ function PromptImageThumbnail({ image }: { image: PromptImage }) {
         </div>
       ) : (
         <div role="status" aria-label={`Loading ${name}`} className="px-3 py-8 text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" aria-hidden />
+          <Spinner />
         </div>
       )}
     </figure>
@@ -1030,22 +1030,22 @@ export const TurnCard = memo(function TurnCard({
 
           <span className="ms-auto flex shrink-0 items-center gap-1.5">
             {queued ? (
-              <Badge variant="secondary" className="text-cap uppercase">
+              <StatusBadge tone="neutral">
                 {t("turn.queued", { position: turn.queuePosition ?? 1 })}
-              </Badge>
+              </StatusBadge>
             ) : running ? (
-              <Badge variant="secondary" className="gap-1 text-cap uppercase">
-                <Loader2 className="size-2.5 animate-spin" /> {t("turn.running")}
-              </Badge>
+              <StatusBadge tone="neutral">
+                <Spinner className="size-2.5" /> {t("turn.running")}
+              </StatusBadge>
             ) : turn.error ? (
-              <Badge variant="destructive" className="text-cap uppercase">
+              <StatusBadge tone="destructive">
                 {t("turn.failed")}
-              </Badge>
+              </StatusBadge>
             ) : (
               turn.stopReason && (
-                <Badge variant="outline" className="text-cap uppercase">
+                <StatusBadge tone="neutral">
                   {turn.stopReason}
-                </Badge>
+                </StatusBadge>
               )
             )}
             {dur && <span className="font-mono text-cap text-muted-foreground">{dur}</span>}

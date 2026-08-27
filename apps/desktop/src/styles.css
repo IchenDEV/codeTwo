@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./design/tokens.css";
 
 /* shadcn/ui — dark variant driven by a `.dark` class on <html> (set from the OS appearance). */
 @custom-variant dark (&:is(.dark *));
@@ -7,11 +8,10 @@
   --radius: 0.625rem;
   --hairline-width: 0.5px;
 
-  /* ---- motion (see docs/design.md) -------------------------------------------------------------
+  /* ---- legacy motion aliases (see docs/design.md) ----------------------------------------------
      One curve and four durations, so that a hover and a page mount are recognisably the same app.
-     Kept here rather than in @theme because nothing generates a utility from them: the hand-written
-     layers below use them directly, and a component that needs one reaches for
-     `duration-[var(--motion-fast)]` / `ease-[var(--ease-standard)]`. A new duration needs a reason.
+     Hand-written CSS layers still consume these aliases. Product TS/TSX uses the named Tailwind
+     utilities exposed by the design-system bridge below (`duration-feedback`, `ease-enter`, etc.).
 
        fast    120ms  colour and opacity feedback: hover, press, grabbers. Never moves layout.
        layer   160ms  anchored surfaces: menus, popovers, tooltips.
@@ -167,6 +167,12 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-viz-series-1: var(--ds-color-viz-series-1);
+  --color-viz-series-2: var(--ds-color-viz-series-2);
+  --color-viz-series-3: var(--ds-color-viz-series-3);
+  --color-viz-series-4: var(--ds-color-viz-series-4);
+  --color-viz-series-5: var(--ds-color-viz-series-5);
+  --color-viz-series-6: var(--ds-color-viz-series-6);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -175,17 +181,29 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-terminal: var(--terminal);
 
+  /* C2 design-system roles. Product code consumes these named Tailwind utilities; the underlying
+     --ds-* variables stay private to the theme bridge and CSS infrastructure. */
+  --color-canvas: var(--ds-color-canvas);
+  --color-surface: var(--ds-color-surface);
+  --color-raised: var(--ds-color-raised);
+  --color-modal: var(--ds-color-modal);
+  --color-overlay: var(--ds-color-overlay);
+  --color-content: var(--ds-color-text);
+  --color-content-muted: var(--ds-color-text-muted);
+  --color-status-success: var(--ds-color-success);
+  --color-status-warning: var(--ds-color-warning);
+  --color-status-destructive: var(--ds-color-destructive);
+
   /* ---- interaction fills ---------------------------------------------------------------------
-     Borderless controls get their shape from a fill, and that fill has to work in both schemes —
-     so it derives from the foreground rather than naming a colour. Three steps, no more: the
-     0.025/0.04/0.05/0.06/0.07/0.09 spread that had accumulated was six values doing three jobs.
+     Borderless controls get their shape from a fill, and that fill has to work in both schemes.
+     The three approved steps resolve through tokens.css; product code only names their role.
 
        quiet  list tiles, read-only chips — present but not clickable-looking
        rest   fields and borderless buttons at rest
        hover  the same surfaces under the pointer (and `accent` for rows, see design.md) */
-  --color-fill-quiet: color-mix(in oklch, var(--foreground) 4%, transparent);
-  --color-fill-rest: color-mix(in oklch, var(--foreground) 6%, transparent);
-  --color-fill-hover: color-mix(in oklch, var(--foreground) 9%, transparent);
+  --color-fill-quiet: var(--ds-color-fill-quiet);
+  --color-fill-rest: var(--ds-color-fill-rest);
+  --color-fill-hover: var(--ds-color-fill-hover);
 
   /* The terminal surface stays dark in both schemes, so its chrome can't use --foreground: in
      light mode that would paint near-black text on a near-black panel. These are the on-terminal
@@ -197,28 +215,85 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-micro: var(--ds-radius-micro);
+  --radius-control: var(--ds-radius-control);
+  --radius-module: var(--ds-radius-module);
+  --radius-modal: var(--ds-radius-modal);
+  --radius-card: var(--ds-card-radius);
+  --radius-composer: var(--ds-composer-radius);
+  --radius-menu: var(--ds-menu-radius);
+  --radius-menu-item: var(--ds-menu-item-radius);
+
+  --spacing-optical: var(--ds-space-optical);
+  --spacing-inline: var(--ds-space-inline);
+  --spacing-control-group: var(--ds-space-control-group);
+  --spacing-module-inset: var(--ds-space-module-inset);
+  --spacing-surface-inset: var(--ds-space-surface-inset);
+  --spacing-section: var(--ds-space-section);
+  --spacing-page: var(--ds-space-page);
+  --spacing-page-section: var(--ds-space-page-section);
+  --spacing-page-start: var(--ds-space-page-start);
+  --spacing-page-start-wide: var(--ds-space-page-start-wide);
+  --spacing-page-end: var(--ds-space-page-end);
+  --spacing-control-mini: var(--ds-control-mini);
+  --spacing-control: var(--ds-control-normal);
+  --spacing-control-field: var(--ds-control-field);
+  --spacing-icon-inline: var(--ds-icon-inline);
+  --spacing-icon-list: var(--ds-icon-list);
+  --spacing-icon-control: var(--ds-icon-control);
+  --spacing-menu: var(--ds-menu-padding);
+  --spacing-menu-item: var(--ds-menu-item-height);
+  --spacing-titlebar: var(--ds-titlebar-height);
+  --spacing-layout-titlebar: var(--ds-layout-titlebar-height);
+  --spacing-panel-strip: var(--ds-panel-strip-height);
+  --spacing-dialog-max: var(--ds-dialog-max-height);
+  --spacing-dialog-content: var(--ds-dialog-content-max-height);
 
   /* One restrained elevation for transient UI. The hairline ring defines the edge; the shadow
      only separates the layer from the page instead of drawing a dark halo around it. */
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 3%), 0 4px 16px rgb(0 0 0 / 5%);
+  --shadow-surface: var(--ds-elevation-surface);
+  --shadow-raised: var(--ds-elevation-raised);
+  --shadow-modal: var(--ds-elevation-modal);
+  --shadow-menu: var(--ds-menu-elevation);
+
+  --transition-duration-feedback: var(--ds-motion-feedback);
+  --transition-duration-layer: var(--ds-motion-layer);
+  --transition-duration-dialog: var(--ds-motion-dialog);
+  --transition-duration-page: var(--ds-motion-page);
+  --ease-enter: var(--ds-ease-enter);
+  --ease-exit: var(--ds-ease-exit);
 
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
   /* ---- type roles (see docs/design.md) -------------------------------------------------------
-     Six sizes, named for what they do rather than how big they are. Use these instead of
-     arbitrary text-[Npx] values — the half-pixel variants that accumulated (11.5, 12.5, 13.5)
-     were never design decisions, just drift.
+     New work uses the semantic role names with their paired line heights. The short names keep
+     existing call sites stable during Phase 2, but resolve to the same canonical token source. */
+  --text-large-title: var(--ds-type-large-title-size);
+  --text-large-title--line-height: var(--ds-type-large-title-leading);
+  --text-page: var(--ds-type-page-title-size);
+  --text-page--line-height: var(--ds-type-page-title-leading);
+  --text-section: var(--ds-type-section-size);
+  --text-section--line-height: var(--ds-type-section-leading);
+  --text-dialog: var(--ds-type-dialog-size);
+  --text-dialog--line-height: var(--ds-type-dialog-leading);
+  --text-body: var(--ds-type-body-size);
+  --text-body--line-height: var(--ds-type-body-leading);
+  --text-callout: var(--ds-type-callout-size);
+  --text-callout--line-height: var(--ds-type-callout-leading);
+  --text-metadata: var(--ds-type-metadata-size);
+  --text-metadata--line-height: var(--ds-type-metadata-leading);
+  --text-caption: var(--ds-type-caption-size);
+  --text-caption--line-height: var(--ds-type-caption-leading);
+  --text-code: var(--ds-type-code-size);
+  --text-code--line-height: var(--ds-type-code-leading);
 
-     Font-size ONLY, exactly like the text-[Npx] values these replaced: pairing default
-     line-heights here re-spaced every row and label in the app at once (the "typography is
-     suddenly wrong everywhere" incident). Line height stays a per-use decision via leading-*. */
-  --text-cap: 10px; /* keycaps, badges, all-caps micro-labels */
-  --text-fine: 11px; /* metadata, preview lines, timestamps */
-  --text-hint: 12px; /* secondary text, hints, tab labels */
-  --text-ui: 13px; /* the default: rows, buttons, menu items, body */
-  --text-title: 15px; /* panel + dialog titles */
-  --text-heading: 17px; /* page headings, empty-state greetings */
-  --text-display: 22px; /* the one heading of a full-page surface (settings) */
+  --text-cap: var(--ds-type-caption-size);
+  --text-fine: var(--ds-type-metadata-size);
+  --text-hint: var(--ds-type-callout-size);
+  --text-ui: var(--ds-type-body-size);
+  --text-title: var(--ds-type-dialog-size);
+  --text-heading: var(--ds-type-section-size);
+  --text-display: var(--ds-type-page-title-size);
 }
 
 /* The desktop shell uses macOS-style hairlines. Keep the bare Tailwind border utilities on the
@@ -261,9 +336,24 @@
   }
 }
 
+/* Product code names the focus contract; token width, color, and offset stay in CSS. */
+@utility focus-ring {
+  outline-offset: var(--ds-focus-offset);
+  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
+}
+
+@utility focus-ring-inset {
+  outline-offset: calc(-1 * var(--ds-focus-width));
+  outline: var(--ds-focus-width) solid color-mix(in srgb, var(--color-ring) 50%, transparent);
+}
+
 @layer base {
   * {
     border-color: var(--border);
+  }
+  [data-slot="search-field"][data-custom-clear="true"]
+    input[type="search"]::-webkit-search-cancel-button {
+    appearance: none;
   }
   html,
   body,

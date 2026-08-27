@@ -119,10 +119,10 @@ export function IssuesModal({
         {loading && <p className="text-hint text-muted-foreground">Loading via gh…</p>}
         {err && <p className="text-hint text-destructive">{err}</p>}
 
-        <ScrollArea className="max-h-[52vh] pr-3">
+        <ScrollArea className="max-h-dialog-content pe-3">
           <div className="space-y-1.5">
             {issues.map((it) => (
-              <div key={`${it.source}-${it.id}`} className="rounded-xl bg-fill-quiet p-2.5">
+              <div key={`${it.source}-${it.id}`} className="rounded-module bg-fill-quiet p-surface-inset">
               <div className="flex items-center gap-3">
                 <button
                   type="button"

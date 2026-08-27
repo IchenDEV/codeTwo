@@ -24,11 +24,11 @@ import {
 } from "../appearance";
 import { pickAppearanceThemeDocument, saveAppearanceThemeDocument } from "../bridge";
 import { useT } from "../i18n";
+import { SettingRow } from "@/components/business/setting-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import "../design/tokens.css";
 import "./appearance-settings.css";
 
 const SCHEMES: { value: ThemePreference; label: "settings.themeSystem" | "settings.themeLight" | "settings.themeDark" }[] = [
@@ -168,8 +168,7 @@ function ColorField({
   };
 
   return (
-    <label className="appearance-color-row">
-      <span>{label}</span>
+    <SettingRow label={label} density="compact">
       <span className="appearance-color-control">
         <input
           type="color"
@@ -190,10 +189,10 @@ function ColorField({
             if (!isHexColor(draft)) setDraft(resolved);
           }}
           spellCheck={false}
-          className="appearance-color-text"
+          className="w-28 font-mono text-metadata"
         />
       </span>
-    </label>
+    </SettingRow>
   );
 }
 
@@ -238,13 +237,11 @@ function RangeSetting({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="appearance-setting-row">
-      <span className="appearance-setting-copy">
-        <strong>{label}</strong>
-        <span>{hint}</span>
-      </span>
-      <span className="appearance-range-control">
-        <output>{value}{suffix}</output>
+    <SettingRow label={label} description={hint} surface="card">
+      <span className="flex max-w-full shrink-0 items-center gap-module-inset">
+        <output className="min-w-14 text-right font-mono text-metadata tabular-nums text-content-muted">
+          {value}{suffix}
+        </output>
         <input
           type="range"
           min={min}
@@ -252,9 +249,10 @@ function RangeSetting({
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
           aria-label={label}
+          className="w-32 max-w-full accent-primary"
         />
       </span>
-    </label>
+    </SettingRow>
   );
 }
 
@@ -427,7 +425,7 @@ export function AppearanceSettings({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="appearance-delete-button"
+                className="text-status-destructive"
                 onClick={() => removeCustomTheme(activeTheme.id)}
                 title={t("settings.deleteTheme")}
                 aria-label={t("settings.deleteTheme")}
@@ -438,15 +436,21 @@ export function AppearanceSettings({
           </div>
         </div>
         {!activeTheme.builtin && (
-          <label className="appearance-name-row">
-            <span>{t("settings.themeName")}</span>
-            <Input
-              value={activeTheme.name}
-              maxLength={40}
-              onChange={(event) => updateCustomTheme(activeTheme.id, { name: event.target.value })}
-              className="appearance-name-input"
-            />
-          </label>
+          <div className="mt-section">
+            <SettingRow
+              label={t("settings.themeName")}
+              density="compact"
+              controlSize="wide"
+            >
+              <Input
+                aria-label={t("settings.themeName")}
+                value={activeTheme.name}
+                maxLength={40}
+                onChange={(event) => updateCustomTheme(activeTheme.id, { name: event.target.value })}
+                className="w-full"
+              />
+            </SettingRow>
+          </div>
         )}
         <div className="appearance-palette-grid">
           <PaletteEditor scheme="light" palette={activeTheme.light} onChange={(key, color) => editColor("light", key, color)} />
@@ -456,19 +460,27 @@ export function AppearanceSettings({
 
       <section className="appearance-section" aria-labelledby="appearance-typography">
         <h2 id="appearance-typography" className="appearance-settings-heading">{t("settings.typography")}</h2>
-        <div className="appearance-setting-list">
-          <label className="appearance-setting-row">
-            <span className="appearance-setting-copy">
-              <strong>{t("settings.interfaceFont")}</strong>
-              <span>{t("settings.interfaceFontHint")}</span>
-            </span>
+        <div className="mt-surface-inset flex flex-col gap-inline">
+          <SettingRow
+            label={t("settings.interfaceFont")}
+            description={t("settings.interfaceFontHint")}
+            surface="card"
+          >
             <Select value={settings.uiFont} onValueChange={(font) => setAppearanceSettings({ uiFont: font as UiFontId })}>
-              <SelectTrigger size="sm" className="appearance-font-select"><SelectValue /></SelectTrigger>
+              <SelectTrigger
+                size="sm"
+                className="w-44 max-w-full"
+                aria-label={t("settings.interfaceFont")}
+              >
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent position="popper" align="end">
-                {UI_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+                <SelectGroup>
+                  {UI_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+                </SelectGroup>
               </SelectContent>
             </Select>
-          </label>
+          </SettingRow>
           <RangeSetting
             label={t("settings.interfaceFontSize")}
             hint={t("settings.interfaceFontSizeHint")}
@@ -478,18 +490,26 @@ export function AppearanceSettings({
             suffix=" px"
             onChange={(uiFontSize) => setAppearanceSettings({ uiFontSize })}
           />
-          <label className="appearance-setting-row">
-            <span className="appearance-setting-copy">
-              <strong>{t("settings.codeFont")}</strong>
-              <span>{t("settings.codeFontHint")}</span>
-            </span>
+          <SettingRow
+            label={t("settings.codeFont")}
+            description={t("settings.codeFontHint")}
+            surface="card"
+          >
             <Select value={settings.codeFont} onValueChange={(font) => setAppearanceSettings({ codeFont: font as CodeFontId })}>
-              <SelectTrigger size="sm" className="appearance-font-select"><SelectValue /></SelectTrigger>
+              <SelectTrigger
+                size="sm"
+                className="w-44 max-w-full"
+                aria-label={t("settings.codeFont")}
+              >
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent position="popper" align="end">
-                {CODE_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+                <SelectGroup>
+                  {CODE_FONTS.map((font) => <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>)}
+                </SelectGroup>
               </SelectContent>
             </Select>
-          </label>
+          </SettingRow>
           <RangeSetting
             label={t("settings.codeFontSize")}
             hint={t("settings.codeFontSizeHint")}
@@ -504,7 +524,7 @@ export function AppearanceSettings({
 
       <section className="appearance-section" aria-labelledby="appearance-surfaces">
         <h2 id="appearance-surfaces" className="appearance-settings-heading">{t("settings.surfaces")}</h2>
-        <div className="appearance-setting-list">
+        <div className="mt-surface-inset flex flex-col gap-inline">
           <RangeSetting
             label={t("settings.sidebarOpacity")}
             hint={t("settings.sidebarOpacityHint")}

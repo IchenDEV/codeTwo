@@ -53,7 +53,11 @@ describe("Pet settings", () => {
     expect(getAppearanceSettings().petEnabled).toBe(false);
     expect(findButton(view.container, "Show pet")).not.toBeNull();
 
-    const activity = view.container.querySelector<HTMLButtonElement>('[aria-label="React to task activity"]');
+    const activity = view.container.querySelector<HTMLButtonElement>(
+      '[data-slot="setting-toggle"] [data-slot="switch"]',
+    );
+    expect(view.container.querySelector('[data-slot="setting-row-label"]')?.textContent)
+      .toBe("React to task activity");
     expect(activity?.hasAttribute("data-checked")).toBe(true);
     activity?.click();
     await flush();
@@ -62,7 +66,9 @@ describe("Pet settings", () => {
     setAppearanceSettings({ petSize: "large" });
     await flush();
     expect(getAppearanceSettings().petSize).toBe("large");
-    expect(view.container.querySelector('[aria-label="Pet size"]')?.textContent).toContain("Large");
+    const size = view.container.querySelector('[aria-label="Pet size"]');
+    expect(size?.textContent).toContain("Large");
+    expect(size?.closest('[data-slot="setting-row"]')?.getAttribute("data-surface")).toBe("card");
 
     view.unmount();
   });

@@ -63,21 +63,23 @@ function EnvironmentRow({
   );
 
   if (!onClick) {
-    return <div className="flex min-h-8 items-center gap-2 px-2 py-1">{content}</div>;
+    return <div className="flex min-h-control items-center gap-module-inset px-module-inset py-control-group">{content}</div>;
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant={active ? "selectable" : "ghost"}
+      size="row"
+      focusStyle="inset"
+      data-selected={active ? "true" : "false"}
+      aria-pressed={active || undefined}
       disabled={disabled}
       onClick={onClick}
-      className={cn(
-        "flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
-        active && "bg-accent/70",
-      )}
+      className={description ? "items-start" : undefined}
     >
       {content}
-    </button>
+    </Button>
   );
 }
 
@@ -249,10 +251,10 @@ export function EnvironmentPopover({
         align="end"
         alignOffset={-36}
         sideOffset={16}
-        className="max-h-(--available-height) w-72 overflow-y-auto rounded-lg p-2"
+        className="max-h-(--available-height) overflow-y-auto p-2"
         initialFocus={false}
       >
-        <div className="mb-1 flex h-8 items-center gap-2 px-2">
+        <div className="mb-1 flex h-control-field items-center gap-module-inset px-module-inset">
           <h2 className="min-w-0 flex-1 truncate text-title font-medium text-muted-foreground">
             {t("environment.title")}
           </h2>
@@ -279,9 +281,11 @@ export function EnvironmentPopover({
 
         <Collapsible open={projectsOpen} onOpenChange={setProjectsOpen}>
           <CollapsibleTrigger
-            render={<button
+            render={<Button
               type="button"
-              className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              variant="ghost"
+              size="row"
+              focusStyle="inset"
               title={projectPath ?? undefined}
             >
               <Laptop className="size-4 shrink-0 text-muted-foreground" />
@@ -296,7 +300,7 @@ export function EnvironmentPopover({
               ) : (
                 <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
               )}
-            </button>}
+            </Button>}
           />
           <CollapsibleContent className="max-h-48 overflow-y-auto pl-3">
             {projects.map((item) => (

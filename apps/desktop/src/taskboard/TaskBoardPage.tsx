@@ -367,7 +367,7 @@ function TaskCard({
       {pullRequest ? (
         <button
           type="button"
-          className="mt-4 flex min-w-0 items-center gap-1.5 text-left text-hint text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-4 flex min-w-0 items-center gap-1.5 text-left text-hint text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
           title={pullRequest.url}
           onClick={() => void openExternal(pullRequest.url)}
         >

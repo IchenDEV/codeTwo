@@ -4,6 +4,7 @@ import { MessageSquareText, Play } from "@/components/ui/icons";
 import type { KeymapEntry, ProjectScript } from "../bridge";
 import { comboFromEvent, formatCombo, isModifierOnly } from "../keys";
 import { useT } from "../i18n";
+import { SettingToggle } from "@/components/business/setting-toggle";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,7 +22,6 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -40,30 +40,6 @@ const EMPTY_ACTION: ProjectActionDraft = {
   run_on_worktree_create: false,
   open_preview: false,
 };
-
-function SwitchRow({
-  label,
-  checked,
-  disabled = false,
-  onCheckedChange,
-}: {
-  label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-(--ds-radius-control) bg-fill-quiet px-3 py-2.5">
-      <span className={disabled ? "text-ui text-muted-foreground" : "text-ui"}>{label}</span>
-      <Switch
-        aria-label={label}
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={onCheckedChange}
-      />
-    </div>
-  );
-}
 
 export function ProjectActionDialog({
   open,
@@ -291,13 +267,13 @@ export function ProjectActionDialog({
                 </Field>
 
                 <div className="flex flex-col gap-2">
-                  <SwitchRow
+                  <SettingToggle
                     label={t("actionDialog.runOnWorktree")}
                     checked={draft.run_on_worktree_create}
                     onCheckedChange={(run_on_worktree_create) =>
                       setDraft((current) => ({ ...current, run_on_worktree_create }))}
                   />
-                  <SwitchRow
+                  <SettingToggle
                     label={t("actionDialog.openPreview")}
                     checked={draft.open_preview}
                     disabled={!draft.preview_url.trim()}

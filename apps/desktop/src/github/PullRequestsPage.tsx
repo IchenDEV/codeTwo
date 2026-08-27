@@ -29,6 +29,7 @@ import {
 } from "../bridge";
 import { ActivityOrb } from "@/components/ui/activity-orb";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -321,7 +322,7 @@ export function PullRequestsPage({
           </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}><RefreshCw className={cn("size-3.5", loading && "animate-spin")} /></Button>} />
+            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.refresh")} onClick={() => void reload()} disabled={loading}>{loading ? <Spinner /> : <RefreshCw />}</Button>} />
             <TooltipContent>{t("pullRequests.refresh")}</TooltipContent>
           </Tooltip>
         </header>
@@ -363,7 +364,7 @@ export function PullRequestsPage({
       </div>
 
       <div className="pull-request-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
+        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-module-inset">
           {selectedId && <Button variant="ghost" size="icon-xs" className="pull-request-back" aria-label={t("pullRequests.backToList")} onClick={() => setSelectedId(null)}><ArrowLeft className="size-3.5" /></Button>}
           <LiquidSelectionGroup role="tablist" aria-label={t("pullRequests.detailViews")} className="flex h-(--ds-control-normal) items-center gap-1">
             {(["summary", "code"] as const).map((id) => (

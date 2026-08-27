@@ -14,17 +14,20 @@ import {
 } from "../bridge";
 import { useLanguage, type Translate } from "../i18n";
 import { ProviderIcon } from "../providers/ProviderIcon";
+import { QuotaProgress } from "@/components/business/quota-progress";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { fmtCost, fmtReset, fmtTokens, seriesColor, stackHistory } from "./usageMath";
+import { fmtCost, fmtReset, fmtTokens, seriesColorClass, stackHistory } from "./usageMath";
 
 /** Backend window labels are stable wire values; map them onto i18n keys for display. */
 const WINDOW_LABEL_KEYS = {
@@ -109,21 +112,10 @@ export function ProviderQuotaMeter({
           {t("quota.remaining", { percent: Math.round(remaining) })}
         </span>
       </div>
-      <div
-        className="my-2 h-2 overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label={t("quota.remainingLabel", { window: label })}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(remaining)}
-      >
-        <div
-          className={cn(
-            "h-full rounded-full bg-success transition-[width]",
-            remaining <= 20 && "bg-warning",
-            remaining <= 5 && "bg-destructive",
-          )}
-          style={{ width: `${remaining}%` }}
+      <div className="my-2">
+        <QuotaProgress
+          label={t("quota.remainingLabel", { window: label })}
+          remainingPercent={remaining}
         />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-fine text-muted-foreground">
@@ -159,21 +151,10 @@ function LocalUsageWindow({ window }: { window: UsageWindow }) {
         </span>
       </div>
       {hasLimit ? (
-        <div
-          className="my-1.5 h-2 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
-          aria-label={t("usage.localRemainingLabel", { window: label })}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(remainingPercent!)}
-        >
-          <div
-            className={cn(
-              "h-full rounded-full bg-success transition-[width]",
-              remainingPercent! <= 20 && "bg-warning",
-              remainingPercent! <= 5 && "bg-destructive",
-            )}
-            style={{ width: `${remainingPercent}%` }}
+        <div className="my-1.5">
+          <QuotaProgress
+            label={t("usage.localRemainingLabel", { window: label })}
+            remainingPercent={remainingPercent!}
           />
         </div>
       ) : (
@@ -247,7 +228,7 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
             x2={CHART_W}
             y1={CHART_H * f}
             y2={CHART_H * f}
-            stroke="var(--ds-color-fill-rest)"
+            className="stroke-fill-rest"
             strokeWidth={1}
           />
         ))}
@@ -265,7 +246,8 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
                     y={y + 1}
                     width={barW}
                     height={h}
-                    fill={seriesColor(part.source)}
+                    className={seriesColorClass(part.source)}
+                    fill="currentColor"
                   />
                 );
               })}
@@ -287,7 +269,7 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
       </div>
       {hovered && hovered.parts.length > 0 && (
         <div
-          className="pointer-events-none absolute top-6 z-10 rounded-(--ds-radius-micro) bg-popover p-2 text-fine text-popover-foreground shadow-(--ds-elevation-raised) ring-1 ring-foreground/10"
+          className="pointer-events-none absolute top-6 z-10 rounded-micro bg-raised p-2 text-fine text-content shadow-raised"
           style={{
             left: `${Math.min(80, ((hover! + 0.5) / buckets.length) * 100)}%`,
           }}
@@ -295,8 +277,10 @@ function TrendChart({ report, days }: { report: UsageHistoryReport; days: number
           {hovered.parts.map((part) => (
             <div key={part.source} className="flex items-center gap-1.5">
               <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ background: seriesColor(part.source) }}
+                className={cn(
+                  "size-2 shrink-0 rounded-full bg-current",
+                  seriesColorClass(part.source),
+                )}
               />
               <span>{part.source}</span>
               <span className="ml-auto pl-2 font-mono">{fmtTokens(part.value)}</span>
@@ -313,7 +297,9 @@ function ProviderRow({ usage, t }: { usage: SourceUsage; t: ReturnType<typeof us
   return (
     <div>
       <div className="flex items-center gap-2 text-ui">
-        <span className="size-2 shrink-0 rounded-full" style={{ background: seriesColor(usage.source) }} />
+        <span
+          className={cn("size-2 shrink-0 rounded-full bg-current", seriesColorClass(usage.source))}
+        />
         <span className="font-semibold">{usage.source}</span>
         <span className="ml-auto font-mono text-hint text-muted-foreground">
           {fmtTokens(usage.total_tokens)}
@@ -393,12 +379,14 @@ function ProviderQuotaSection({
               <SelectValue>{providerName}</SelectValue>
             </SelectTrigger>
             <SelectContent position="popper" align="end">
-              {providers.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  <ProviderIcon provider={option.id} className="size-4 opacity-80" />
-                  <span>{option.name}</span>
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {providers.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    <ProviderIcon provider={option.id} className="size-4 opacity-80" />
+                    <span>{option.name}</span>
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         ) : (
@@ -574,15 +562,16 @@ function UsageView({
     <>
       <Button
         variant="ghost"
-        size="icon"
-        className="size-6"
+        size="icon-xs"
+        aria-label={t("usage.rescan")}
+        disabled={refreshing}
         onClick={() => {
           loadLocal(days);
           void loadQuota();
         }}
         title={t("usage.rescan")}
       >
-        <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
+        {refreshing ? <Spinner /> : <RefreshCw />}
       </Button>
       <span className="ml-auto flex gap-1">
         {([7, 30] as const).map((range) => (
@@ -657,8 +646,10 @@ function UsageView({
                   {history.history.series.map((s) => (
                     <span key={s.source} className="flex items-center gap-1 text-fine text-muted-foreground">
                       <span
-                        className="size-2 shrink-0 rounded-full"
-                        style={{ background: seriesColor(s.source) }}
+                        className={cn(
+                          "size-2 shrink-0 rounded-full bg-current",
+                          seriesColorClass(s.source),
+                        )}
                       />
                       {s.source}
                     </span>

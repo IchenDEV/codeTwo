@@ -20,6 +20,7 @@ import { SplitButton } from "@/components/ui/split-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   changeRequestPresentation,
@@ -60,23 +61,26 @@ function DiffView({ state }: { state: DiffState }) {
   );
 
   if (state.loading) {
-    return <p role="status" className="p-3.5 text-ui text-muted-foreground">Loading diff…</p>;
+    return <p role="status" className="p-surface-inset text-ui text-muted-foreground">Loading diff…</p>;
   }
   if (state.error) {
-    return <p role="alert" className="p-3.5 text-ui text-destructive">Diff failed: {state.error}</p>;
+    return <p role="alert" className="p-surface-inset text-ui text-destructive">Diff failed: {state.error}</p>;
   }
   if (!state.result?.text.trim()) {
-    return <p className="p-3.5 text-ui text-muted-foreground">No changes in this scope.</p>;
+    return <p className="p-surface-inset text-ui text-muted-foreground">No changes in this scope.</p>;
   }
 
   return (
     <div>
       {(state.result.truncated || preview.truncated) && (
-        <p role="status" className="sticky top-0 z-10 border-b bg-warning/10 px-3.5 py-2 text-hint text-warning-foreground">
-          {state.result.truncated
-            ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
-            : "Preview rendering is limited to 4,000 lines."}
-        </p>
+        <div className="sticky top-0 z-10">
+          <p role="status" className="bg-warning/10 px-surface-inset py-2 text-hint text-warning-foreground">
+            {state.result.truncated
+              ? `Preview truncated by the ${(state.result.truncation_reason ?? "resource").replaceAll("_", " ")} limit.`
+              : "Preview rendering is limited to 4,000 lines."}
+          </p>
+          <Separator />
+        </div>
       )}
       <pre className="diff">
         {preview.lines.map((line, index) => {
@@ -118,7 +122,7 @@ function GitFileRow({
     <div className="group flex min-w-0 items-center gap-1 rounded hover:bg-accent/50 focus-within:bg-accent/50">
       <button
         type="button"
-        className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
         aria-label={indexAction}
         title={indexAction}
         disabled={disabled}
@@ -129,7 +133,7 @@ function GitFileRow({
       <button
         type="button"
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-start text-hint outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-1 text-start text-hint outline-none focus-visible:focus-ring",
           selected && "bg-accent text-foreground",
         )}
         aria-pressed={selected}
@@ -554,7 +558,7 @@ export function SourceControlModal({
                   <dd className="min-w-0">
                     <button
                       type="button"
-                      className="block max-w-full truncate rounded text-start text-primary underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="block max-w-full truncate rounded text-start text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
                       title={currentSourceControl.info.web_url}
                       onClick={() => void openRepository()}
                     >
@@ -586,7 +590,7 @@ export function SourceControlModal({
             <button
               type="button"
               className={cn(
-                "w-full rounded px-1.5 py-1 text-start text-hint outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring",
+                "w-full rounded px-1.5 py-1 text-start text-hint outline-none hover:bg-accent/50 focus-visible:focus-ring",
                 selected("all", null) && "bg-accent text-foreground",
               )}
               aria-pressed={selected("all", null)}
@@ -603,7 +607,7 @@ export function SourceControlModal({
               {sections.staged.length > 0 && stagedPathspecs.length <= 256 && (
                 <button
                   type="button"
-                  className="min-h-6 rounded px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-control-mini rounded-control px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
                   disabled={repositoryBusy}
                   onClick={() => void mutateIndex("unstaging", stagedPathspecs)}
                 >
@@ -648,7 +652,7 @@ export function SourceControlModal({
               {sections.unstaged.length > 0 && unstagedPathspecs.length <= 256 && (
                 <button
                   type="button"
-                  className="min-h-6 rounded px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-control-mini rounded-control px-1.5 text-cap text-muted-foreground outline-none hover:text-primary focus-visible:focus-ring"
                   disabled={repositoryBusy}
                   onClick={() => void mutateIndex("staging", unstagedPathspecs)}
                 >
@@ -708,7 +712,7 @@ export function SourceControlModal({
                 </span>
                 <button
                   type="button"
-                  className="min-h-6 rounded bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-control-mini rounded-control bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:focus-ring"
                   disabled={checkpointBusy}
                   onClick={() =>
                     selectDiff({
@@ -722,7 +726,7 @@ export function SourceControlModal({
                 </button>
                 <button
                   type="button"
-                  className="min-h-6 rounded bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-h-control-mini rounded-control bg-fill-rest px-2 text-cap outline-none hover:text-primary focus-visible:focus-ring"
                   disabled={checkpointBusy}
                   onClick={() => void revertCheckpoint(checkpoint)}
                 >
@@ -815,7 +819,7 @@ export function SourceControlModal({
           {prUrl && (
             <button
               type="button"
-              className="block max-w-full break-all rounded text-start text-hint text-primary underline underline-offset-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="block max-w-full break-all rounded text-start text-hint text-primary underline underline-offset-2 outline-none focus-visible:focus-ring"
               onClick={() => void openCreatedChangeRequest()}
               aria-label={`Open created ${changeRequest.label}: ${prUrl}`}
             >

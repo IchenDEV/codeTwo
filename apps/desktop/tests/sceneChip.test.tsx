@@ -164,6 +164,7 @@ describe("SceneChip", () => {
       (node) => node.textContent === "Plan-first implementation",
     );
     expect(detail?.classList.contains("whitespace-normal")).toBe(true);
+    expect(dom.document.body.querySelector('[data-slot="selectable-row"][data-selected="true"]')).not.toBeNull();
     rendered.unmount();
   });
 
@@ -271,10 +272,19 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("marks a customized scene", () => {
+  test("marks a customized scene", async () => {
     activateDom();
     const rendered = renderChip(config({ sceneCustomized: true }));
     expect(rendered.container.querySelector('[aria-label="Customized"]')).toBeTruthy();
+
+    const trigger = rendered.container.querySelector('[aria-label="Scene: Develop"]');
+    await reactAct(async () => {
+      trigger?.dispatchEvent(new dom.window.PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1 }));
+      trigger?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+    expect(dom.document.body.querySelector('[data-slot="status-badge"]')?.getAttribute("data-tone")).toBe("warning");
+    rendered.unmount();
   });
 
   test("marks a partial soft-apply", () => {

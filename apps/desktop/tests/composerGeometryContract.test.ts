@@ -51,7 +51,7 @@ describe("composer geometry contract", () => {
     );
     expect(composer).toContain('effect={reducedMotion ? undefined : "move"}');
     expect(composer).toContain(
-      '"glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-(--ds-composer-radius) border p-2 shadow-raised"',
+      '"glass-raised pointer-events-auto mx-auto w-full max-w-3xl rounded-composer p-2 shadow-raised"',
     );
     expect(
       composer.match(
@@ -62,7 +62,7 @@ describe("composer geometry contract", () => {
       composer.match(/className="size-7 shrink-0 rounded-full(?: text-muted-foreground)?"/g),
     ).toHaveLength(2);
     expect(composer).toContain(
-      '"flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-hint',
+      '"flex h-control-mini shrink-0 items-center gap-1.5 rounded-control px-2 text-hint',
     );
     expect(voiceButton).toContain('className="size-8 shrink-0 rounded-full"');
     expect(composer).toMatch(

@@ -5,10 +5,13 @@ import type { SessionConfig } from "./config";
 import { sceneTitle, type SceneInfo, type SceneSource } from "./scene";
 import { exportSceneSkillMd } from "../bridge";
 import { useToast } from "../ui/toast";
-import { Chip, MenuRow } from "./Composer";
+import { Chip } from "./Composer";
+import { SelectableRow } from "@/components/business/selectable-row";
+import { StatusBadge } from "@/components/business/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -88,46 +91,40 @@ export function SceneChip({ config }: { config: SessionConfig }) {
             {config.scenesEnabled && active && <SourceBadge source={active.source} />}
             {config.autoScene && <Badge variant="secondary">{t("scene.auto")}</Badge>}
             {config.sceneCustomized && (
-              <Badge variant="outline" className="shrink-0 text-cap text-warning">
+              <StatusBadge tone="warning">
                 {t("scene.customized")}
-              </Badge>
+              </StatusBadge>
             )}
           </div>
 
-          <MenuRow
+          <SelectableRow
             selected={config.autoScene}
-            isDefault={false}
             label={t("scene.auto")}
-            detail={t("scene.autoHint")}
-            detailWrap
+            description={t("scene.autoHint")}
             leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
-            onClick={() => {
+            onSelect={() => {
               config.onAutoScene(true);
               setOpen(false);
             }}
           />
-          <MenuRow
+          <SelectableRow
             selected={active === null && !config.autoScene}
-            isDefault={false}
             label={t("scene.none")}
-            detail={t("scene.noneHint")}
-            detailWrap
-            onClick={() => {
+            description={t("scene.noneHint")}
+            onSelect={() => {
               config.onAutoScene(false);
               config.onScene(null, "soft");
               setOpen(false);
             }}
           />
           {config.scenes.map((scene) => (
-            <MenuRow
+            <SelectableRow
               key={scene.reference}
               selected={!config.autoScene && active?.reference === scene.reference}
-              isDefault={false}
               label={sceneTitle(scene, locale)}
-              detail={scene.localizations[locale]?.description ?? scene.description}
-              detailWrap
+              description={scene.localizations[locale]?.description ?? scene.description}
               leading={<SourceBadge source={scene.source} />}
-              onClick={() => {
+              onSelect={() => {
                 config.onAutoScene(false);
                 config.onScene(scene.reference, "soft");
                 setOpen(false);
@@ -150,7 +147,7 @@ export function SceneChip({ config }: { config: SessionConfig }) {
 
           {partial && (
             <>
-              <div className="mx-2 my-1.5 h-px bg-border" />
+              <Separator className="mx-2 my-1.5 w-auto" />
               <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
                 <span className="min-w-0 flex-1 text-fine text-muted-foreground">
                   {t("scene.partialHint", { fields: config.scenePendingFields.join(", ") })}
@@ -228,25 +225,21 @@ export function ScenePicker({
           <DialogDescription>{t("scene.pickerHint")}</DialogDescription>
         </DialogHeader>
         <div className="flex max-h-96 flex-col gap-0.5 overflow-y-auto">
-          <MenuRow
+          <SelectableRow
             selected={auto}
-            isDefault={false}
             label={t("scene.auto")}
-            detail={t("scene.autoHint")}
-            detailWrap
+            description={t("scene.autoHint")}
             leading={<Route aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />}
-            onClick={() => {
+            onSelect={() => {
               onAuto(true);
               onClose();
             }}
           />
-          <MenuRow
+          <SelectableRow
             selected={active === null && !auto}
-            isDefault={false}
             label={t("scene.none")}
-            detail={t("scene.noneHint")}
-            detailWrap
-            onClick={() => {
+            description={t("scene.noneHint")}
+            onSelect={() => {
               onAuto(false);
               onScene(null);
               onClose();
@@ -255,14 +248,12 @@ export function ScenePicker({
           {scenes.map((scene) => (
             <div key={scene.reference} className="flex items-center gap-1">
               <div className="min-w-0 flex-1">
-                <MenuRow
+                <SelectableRow
                   selected={!auto && active?.reference === scene.reference}
-                  isDefault={false}
                   label={sceneTitle(scene, locale)}
-                  detail={scene.localizations[locale]?.description ?? scene.description}
-                  detailWrap
+                  description={scene.localizations[locale]?.description ?? scene.description}
                   leading={<SourceBadge source={scene.source} />}
-                  onClick={() => {
+                  onSelect={() => {
                     onAuto(false);
                     onScene(scene.reference);
                     onClose();

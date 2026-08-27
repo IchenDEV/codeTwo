@@ -12,6 +12,8 @@ describe("Appshots desktop contract", () => {
     expect(settings).toContain('{ id: "appshots", icon: ScanText, labelKey: "settings.appshots" }');
     expect(settings).toContain('<SelectItem value="both-command">');
     expect(settings).toContain('<SelectItem value="automatic">');
+    expect(settings).toContain('label={t("settings.appshotsFrontmost")}');
+    expect(settings).toContain('leading={<ScanText className="size-5 text-primary" />}');
     expect(settings).toContain('checked={appshotSettings.play_sound}');
     expect(app).toContain("onAppshotCaptured");
     expect(app).toContain('type: "appshot"');

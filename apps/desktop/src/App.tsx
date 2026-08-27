@@ -416,6 +416,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -6903,8 +6904,8 @@ export default function App() {
             >
           {/* Also a window drag region: the overlay title bar draws nothing to grab. Buttons and
               other children stay clickable — only elements carrying the attribute start a drag. */}
-          {/* Symmetric block padding keeps the 28px controls optically centred on the 48px title
-              line, matching the rail and dock headers. With the rail collapsed, the inset clears
+          {/* The shared titlebar height centres the 28px controls on the same 48px line as the rail
+              and dock headers. With the rail collapsed, the inset clears
               the traffic lights and the expand button takes the wordmark's place. */}
           <header
             className={cn(
@@ -7103,7 +7104,7 @@ export default function App() {
                 docMode
                   ? "order-1 min-h-0 min-w-0 flex-1 flex-col"
                   : turns.length === 0 && !sessionLoading
-                    ? "hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-16 pt-6"
+                    ? "hero-scroll-shell order-2 min-h-0 flex-1 flex-col justify-center-safe overflow-y-auto pb-page-end pt-6"
                     : "order-2 shrink-0 flex-col",
               )}
             >
@@ -7738,8 +7739,7 @@ export default function App() {
                 setSkillDraft({ ...skillDraft, name: e.target.value })
               }
             />
-            <textarea
-              className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-ui outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            <Textarea
               placeholder="Prompt fragment inserted when this skill is picked"
               value={skillDraft.text}
               onChange={(e) =>

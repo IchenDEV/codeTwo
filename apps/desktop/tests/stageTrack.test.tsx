@@ -134,12 +134,13 @@ describe("StageTrack", () => {
   test("clicking a stage opens its popover with artifact titles and sessions", async () => {
     const selected: string[] = [];
     const rendered = renderTrack({ onSelectSession: (id) => selected.push(id) });
-    expect(rendered.container.querySelector("[data-testid='stage-popover-test']")).toBeNull();
+    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
 
     click(rendered.container.querySelector("[data-testid='stage-test']"));
     await flush();
-    const popover = rendered.container.querySelector("[data-testid='stage-popover-test']");
+    const popover = dom.document.body.querySelector("[data-testid='stage-popover-test']");
     expect(popover).not.toBeNull();
+    expect(popover.dataset.slot).toBe("popover-content");
     // Newest version per artifact key; both keys listed once.
     expect(popover.textContent).toContain("Test report");
     expect(popover.textContent).toContain("v2");
@@ -150,10 +151,13 @@ describe("StageTrack", () => {
     click(popover.querySelector("[data-testid='stage-session-s2']"));
     await flush();
     expect(selected).toEqual(["s2"]);
+    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
 
-    // Clicking the chip again collapses the popover.
+    // The standard trigger remains a toggle after the portalled layer closes.
     click(rendered.container.querySelector("[data-testid='stage-test']"));
     await flush();
-    expect(rendered.container.querySelector("[data-testid='stage-popover-test']")).toBeNull();
+    click(rendered.container.querySelector("[data-testid='stage-test']"));
+    await flush();
+    expect(dom.document.body.querySelector("[data-testid='stage-popover-test']")).toBeNull();
   });
 });
