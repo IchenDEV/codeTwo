@@ -72,10 +72,29 @@ describe("ProfileSettings", () => {
     expect(view.container.textContent).toContain("Codex");
     expect(view.container.textContent).toContain("42");
 
-    click(button(view.container, "Share"));
+    click(button(view.container, "Share profile"));
     await waitFor(() => expect(sharedText).toContain("1.1k tokens"));
     expect(sharedText).toContain("4 active days");
     await waitFor(() => expect(view.container.textContent).toContain("Profile shared."));
+
+    view.unmount();
+  });
+
+  test("uses the macOS account image as the default avatar", async () => {
+    const avatar = "data:image/png;base64,c3lzdGVtLWF2YXRhcg==";
+    const view = mount(
+      <I18nProvider>
+        <ProfileSettings
+          avatarLoader={async () => avatar}
+          reportLoader={async () => report}
+          historyLoader={async () => history}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(view.container.querySelector(".profile-avatar img")?.getAttribute("src")).toBe(avatar);
+    });
 
     view.unmount();
   });
@@ -90,7 +109,7 @@ describe("ProfileSettings", () => {
       </I18nProvider>,
     );
 
-    await reactAct(async () => click(button(view.container, "Edit")));
+    await reactAct(async () => click(button(view.container, "Edit profile")));
     await reactAct(async () => click(button(view.container, "Save")));
 
     const name = view.container.querySelector("#profile-display-name");
@@ -111,6 +130,34 @@ describe("ProfileSettings", () => {
       handle: "ada",
       bio: "",
     });
+
+    view.unmount();
+  });
+
+  test("keeps the activity structure useful when local usage is empty", async () => {
+    const emptyHistory = {
+      ...history,
+      history: {
+        ...history.history,
+        bucket_count: 0,
+        series: [],
+      },
+      by_source: [],
+    };
+    const view = mount(
+      <I18nProvider>
+        <ProfileSettings
+          reportLoader={async () => ({ ...report, transcripts: 0 })}
+          historyLoader={async () => emptyHistory}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(view.container.textContent).toContain("No activity yet"));
+    expect(view.container.querySelectorAll(".profile-activity-cell")).toHaveLength(90);
+    expect(view.container.textContent?.match(/No activity yet/g)).toHaveLength(1);
+    expect(view.container.textContent).toContain("Your local usage will appear here after your first C2 session.");
+    expect(view.container.textContent).not.toContain("Provider activity");
 
     view.unmount();
   });

@@ -11,6 +11,7 @@ import {
   desktopOpenWorkspace,
   desktopSaveDialog,
   desktopSetSystemBadgeCount,
+  desktopSystemProfileAvatar,
   desktopOpenAppshotPrivacySettings,
   desktopRequestAppshotPermissions,
   desktopUpdateAppshotSettings,
@@ -72,6 +73,14 @@ export async function checkForAppUpdates(): Promise<AppUpdateStatus> {
 
 export async function setSystemBadgeCount(count: number): Promise<boolean> {
   return inDesktop ? desktopSetSystemBadgeCount(count) : false;
+}
+
+let systemProfileAvatarRequest: Promise<string | null> | null = null;
+
+export function systemProfileAvatar(): Promise<string | null> {
+  if (!inDesktop) return Promise.resolve(null);
+  systemProfileAvatarRequest ??= desktopSystemProfileAvatar();
+  return systemProfileAvatarRequest;
 }
 
 const browserAppshotSettings: AppshotSettings = {
