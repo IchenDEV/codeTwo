@@ -54,7 +54,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { LiquidSelectionGroup } from "@/components/ui/tabs";
@@ -676,7 +676,9 @@ function AutomationEditor({
               <Select value={draft.projectPath} onValueChange={(value) => value && update("projectPath", value)}>
                 <SelectTrigger className="w-full"><SelectValue>{selectedProject}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {projects.map((project) => <SelectItem key={project.path} value={project.path}>{project.name}</SelectItem>)}
+                  <SelectGroup>
+                    {projects.map((project) => <SelectItem key={project.path} value={project.path}>{project.name}</SelectItem>)}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -685,11 +687,13 @@ function AutomationEditor({
               <Select value={draft.provider} onValueChange={(value) => value && update("provider", value)}>
                 <SelectTrigger className="w-full"><SelectValue>{selectedProvider}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id} disabled={!provider.available}>
-                      {provider.display_name}{provider.available ? "" : ` · ${t("settings.notInstalled")}`}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {providers.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id} disabled={!provider.available}>
+                        {provider.display_name}{provider.available ? "" : ` · ${t("settings.notInstalled")}`}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -701,11 +705,13 @@ function AutomationEditor({
               <Select value={draft.schedule.cadence} onValueChange={(value) => value && updateSchedule("cadence", value as AutomationCadence)}>
                 <SelectTrigger className="w-full"><SelectValue>{t(`automations.cadence.${draft.schedule.cadence}`)}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="hourly">{t("automations.cadence.hourly")}</SelectItem>
-                  <SelectItem value="daily">{t("automations.cadence.daily")}</SelectItem>
-                  <SelectItem value="weekdays">{t("automations.cadence.weekdays")}</SelectItem>
-                  <SelectItem value="weekly">{t("automations.cadence.weekly")}</SelectItem>
-                  <SelectItem value="custom">{t("automations.cadence.custom")}</SelectItem>
+                  <SelectGroup>
+                    <SelectItem value="hourly">{t("automations.cadence.hourly")}</SelectItem>
+                    <SelectItem value="daily">{t("automations.cadence.daily")}</SelectItem>
+                    <SelectItem value="weekdays">{t("automations.cadence.weekdays")}</SelectItem>
+                    <SelectItem value="weekly">{t("automations.cadence.weekly")}</SelectItem>
+                    <SelectItem value="custom">{t("automations.cadence.custom")}</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -728,7 +734,9 @@ function AutomationEditor({
               <Select value={String(draft.schedule.weekday)} onValueChange={(value) => value !== null && updateSchedule("weekday", Number(value))}>
                 <SelectTrigger className="w-full"><SelectValue>{t(WEEKDAY_KEYS[draft.schedule.weekday])}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {WEEKDAY_KEYS.map((key, day) => <SelectItem key={key} value={String(day)}>{t(key)}</SelectItem>)}
+                  <SelectGroup>
+                    {WEEKDAY_KEYS.map((key, day) => <SelectItem key={key} value={String(day)}>{t(key)}</SelectItem>)}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -741,9 +749,11 @@ function AutomationEditor({
               <Select value={draft.policy} onValueChange={(value) => value && update("policy", value as Draft["policy"])}>
                 <SelectTrigger className="w-full"><SelectValue>{selectedPolicy}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="automatic">{t("automations.permissions.auto")}</SelectItem>
-                  <SelectItem value="ask">{t("automations.permissions.ask")}</SelectItem>
-                  <SelectItem value="read_only">{t("automations.permissions.readOnly")}</SelectItem>
+                  <SelectGroup>
+                    <SelectItem value="automatic">{t("automations.permissions.auto")}</SelectItem>
+                    <SelectItem value="ask">{t("automations.permissions.ask")}</SelectItem>
+                    <SelectItem value="read_only">{t("automations.permissions.readOnly")}</SelectItem>
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>

@@ -335,12 +335,7 @@ describe("C2 design system", () => {
 
   test("keeps SelectItem inside SelectGroup across product surfaces", () => {
     let contentCount = 0;
-    const legacyUngroupedPaths = new Set([
-      "src/automation/AutomationsPage.tsx",
-      "src/taskboard/TaskEditorDialog.tsx",
-    ]);
     for (const path of new Bun.Glob("src/**/*.tsx").scanSync({ cwd: root })) {
-      if (legacyUngroupedPaths.has(path)) continue;
       const source = readFileSync(resolve(root, path), "utf8");
       const contents = source.match(/<SelectContent\b[\s\S]*?<\/SelectContent>/g) ?? [];
       contentCount += contents.length;
