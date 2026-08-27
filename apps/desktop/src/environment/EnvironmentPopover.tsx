@@ -17,9 +17,11 @@ import {
   type HugeIcon,
 } from "@/components/ui/icons";
 
-import { getArtifact, type GitStatus, type Project } from "../bridge";
+import { getArtifact, type GitStatus, type PlanEntry, type Project } from "../bridge";
 import { useT } from "../i18n";
+import { TaskPlanPanel } from "../session/TaskPlanPanel";
 import type { InteractiveToolPreview } from "../session/toolActivity";
+import type { Turn } from "../session/turns";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -162,6 +164,10 @@ export function EnvironmentPopover({
   onAddProject,
   onOpenSourceControl,
   onOpenSettings,
+  turns,
+  onOpenPlanAsDocument,
+  onPinPlanArtifact,
+  canPinPlan = false,
   preview = null,
   suppressed = false,
 }: {
@@ -175,6 +181,10 @@ export function EnvironmentPopover({
   onAddProject: () => void;
   onOpenSourceControl: () => void;
   onOpenSettings: () => void;
+  turns: readonly Turn[];
+  onOpenPlanAsDocument?: (entries: PlanEntry[]) => void;
+  onPinPlanArtifact?: (markdown: string) => void;
+  canPinPlan?: boolean;
   preview?: InteractiveToolPreview | null;
   /** Keeps the mounted session workspace from leaking this portal over another full-page surface. */
   suppressed?: boolean;
@@ -321,6 +331,23 @@ export function EnvironmentPopover({
           label={t("environment.commitOrPush")}
           onClick={openSourceControl}
           disabled={!isRepo}
+        />
+
+        <TaskPlanPanel
+          turns={turns}
+          onOpenPlanAsDocument={onOpenPlanAsDocument
+            ? (entries) => {
+                setOpen(false);
+                onOpenPlanAsDocument(entries);
+              }
+            : undefined}
+          onPinPlanArtifact={onPinPlanArtifact
+            ? (markdown) => {
+                setOpen(false);
+                onPinPlanArtifact(markdown);
+              }
+            : undefined}
+          canPinPlan={canPinPlan}
         />
 
         {preview && (

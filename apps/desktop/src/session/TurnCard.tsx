@@ -16,7 +16,6 @@ import {
   FolderOpen,
   GitFork,
   Loader2,
-  ListTodo,
   MoreHorizontal,
   Search,
   Terminal,
@@ -524,21 +523,6 @@ function orderedBlocks(turn: Turn): RenderBlock[] {
   return blocks;
 }
 
-/**
- * Plan entries → checklist markdown (R4 plan-as-document). Transcript plan entries are plain
- * strings — the engine keeps only the entry content — so an entry already carrying a checkbox
- * marker keeps its state and everything else starts unchecked.
- */
-export function planChecklistMarkdown(entries: readonly string[]): string {
-  return entries
-    .map((entry) => {
-      const marked = /^\s*(?:-\s*)?\[([ xX])\]\s*(.*)$/.exec(entry);
-      if (marked) return `- [${marked[1] === " " ? " " : "x"}] ${marked[2]}`;
-      return `- [ ] ${entry}`;
-    })
-    .join("\n");
-}
-
 function canvasKey(canvas: CanvasHistoryMarker): string {
   return `${canvas.id}:${canvas.revision}`;
 }
@@ -709,15 +693,12 @@ function AgentRoster({ agents }: { agents: readonly AgentActivity[] }) {
  *
  * The prompt sits in a bubble on the right and the answer runs full width beneath it, so a long
  * transcript reads as a conversation instead of a stack of equally-weighted cards. Tool calls keep
- * their streamed position, with adjacent calls sharing one disclosure; thinking and plan metadata
- * stay collapsed underneath.
+ * their streamed position, with adjacent calls sharing one disclosure; thinking and memory
+ * metadata stay collapsed underneath. The current task plan lives in the right information panel.
  */
 export const TurnCard = memo(function TurnCard({
   turn,
   canvasSnapshotLoader = canvasGetSnapshot,
-  onOpenPlanAsDocument,
-  onPinPlanArtifact,
-  canPinPlan = false,
   onSaveTemplate,
   linkActions,
   onFork,
@@ -725,12 +706,6 @@ export const TurnCard = memo(function TurnCard({
 }: {
   turn: Turn;
   canvasSnapshotLoader?: typeof canvasGetSnapshot;
-  /** Opens the plan in the composer document (R4). Absent → the affordance is hidden. */
-  onOpenPlanAsDocument?: (entries: string[]) => void;
-  /** Pins the plan as a scene artifact. Only offered while `canPinPlan` is set. */
-  onPinPlanArtifact?: (markdown: string) => void;
-  /** True when the active scene declares a `plan`-kind artifact. */
-  canPinPlan?: boolean;
   /** Opens the R2 template dialog over this turn's prompt. Absent → the turn menu is hidden. */
   onSaveTemplate?: (promptText: string) => void;
   /** Native context-menu actions for links rendered inside the assistant response. */
@@ -813,7 +788,6 @@ export const TurnCard = memo(function TurnCard({
   const hasDetail =
     agents.length +
       turn.thoughts.length +
-      turn.plan.length +
       (turn.memory?.items.length ?? 0) >
     0;
   const promptIsLong = isLongPrompt(promptText);
@@ -1020,36 +994,6 @@ export const TurnCard = memo(function TurnCard({
                 </p>
               ))}
             </div>
-          </Detail>
-
-          <Detail icon={ListTodo} label={t("turn.plan")} count={turn.plan.length}>
-            <ol className="grid list-decimal gap-0.5 ps-4 text-fine text-muted-foreground">
-              {turn.plan.map((p, i) => (
-                <li key={i}>{p}</li>
-              ))}
-            </ol>
-            {(onOpenPlanAsDocument || (canPinPlan && onPinPlanArtifact)) && (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {onOpenPlanAsDocument && (
-                  <button
-                    type="button"
-                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                    onClick={() => onOpenPlanAsDocument([...turn.plan])}
-                  >
-                    {t("planDoc.open")}
-                  </button>
-                )}
-                {canPinPlan && onPinPlanArtifact && (
-                  <button
-                    type="button"
-                    className="rounded-(--ds-radius-control) border px-2 py-1 text-cap text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-                    onClick={() => onPinPlanArtifact(planChecklistMarkdown(turn.plan))}
-                  >
-                    {t("planDoc.pin")}
-                  </button>
-                )}
-              </div>
-            )}
           </Detail>
 
           <Detail icon={BrainCircuit} label={t("turn.memory")} count={turn.memory?.items.length ?? 0}>

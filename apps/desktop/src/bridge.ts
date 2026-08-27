@@ -793,7 +793,7 @@ export type CoreEvent =
   | {
       event: "plan";
       session: string;
-      entries: string[];
+      entries: Array<PlanEntry | string>;
       transcript_seq?: number | null;
     }
   | {
@@ -929,6 +929,12 @@ export interface PtyAttach {
   restore: string;
 }
 
+export interface PlanEntry {
+  content: string;
+  priority?: string | null;
+  status?: string | null;
+}
+
 /// Mirrors core `Part` (tagged by `kind`).
 export type Part =
   | { kind: "text"; text: string }
@@ -943,7 +949,7 @@ export type Part =
       agent_input?: unknown;
       outputs?: ToolOutput[];
     }
-  | { kind: "plan"; entries: string[] };
+  | { kind: "plan"; entries: Array<PlanEntry | string> };
 
 export interface ArtifactRef {
   id: string;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { EnvironmentPopover } from "../environment/EnvironmentPopover";
 
 import { TranscriptPane } from "./TranscriptPane";
 import { TrajectoryView } from "./TrajectoryView";
@@ -119,7 +120,11 @@ const previewTurn: Turn = {
       createdAt: previewStartedAt + 24_000,
     },
   ],
-  plan: ["Inspect the transcript path", "Run renderer checks", "Report the evidence"],
+  plan: [
+    { content: "Inspect the transcript path", status: "completed" },
+    { content: "Run renderer checks", status: "in_progress" },
+    { content: "Report the evidence", status: "pending" },
+  ],
   startedAt: previewStartedAt,
   endedAt: previewStartedAt + 25_000,
 };
@@ -132,7 +137,21 @@ export function RichTranscriptPreview() {
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 bg-fill-quiet px-5 py-3">
         <p className="text-ui font-medium">Rich conversation</p>
-        <span className="ms-auto text-fine text-muted-foreground">Completed</span>
+        <span className="ms-auto text-fine text-muted-foreground">Streaming</span>
+        <EnvironmentPopover
+          project="codeTwo"
+          projectPath="/tmp/codeTwo"
+          projects={[]}
+          git={{ is_repo: true, branch: "codex/tasks", ahead: 0, behind: 0, files: [] }}
+          diffStat={{ added: 42, deleted: 8 }}
+          onRefresh={() => {}}
+          onSelectProject={() => {}}
+          onAddProject={() => {}}
+          onOpenSourceControl={() => {}}
+          onOpenSettings={() => {}}
+          turns={previewTurns}
+          onOpenPlanAsDocument={() => {}}
+        />
         <Button
           type="button"
           size="compact"

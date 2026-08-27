@@ -1588,6 +1588,15 @@ export const en = {
   "dock.tmux": "tmux",
   "dock.sendTerminal": "Send terminal output to the agent",
 
+  // current task plan
+  "taskPlan.title": "Current tasks",
+  "taskPlan.list": "Current task list",
+  "taskPlan.progress": "{completed} of {total} completed",
+  "taskPlan.step": "Step {current} / {total}",
+  "taskPlan.status.pending": "Pending",
+  "taskPlan.status.inProgress": "In progress",
+  "taskPlan.status.completed": "Completed",
+
   // GitHub pull request panel
   "githubPr.title": "GitHub pull request",
   "githubPr.refresh": "Refresh pull request",
@@ -3770,6 +3779,14 @@ export const zhCN: Record<StringKey, string> = {
   "dock.tmux": "tmux",
   "dock.sendTerminal": "把终端输出发给智能体",
 
+  "taskPlan.title": "当前任务",
+  "taskPlan.list": "当前任务清单",
+  "taskPlan.progress": "已完成 {completed} / {total}",
+  "taskPlan.step": "第 {current} / {total} 步",
+  "taskPlan.status.pending": "待处理",
+  "taskPlan.status.inProgress": "进行中",
+  "taskPlan.status.completed": "已完成",
+
   "githubPr.title": "GitHub 拉取请求",
   "githubPr.refresh": "刷新拉取请求",
   "githubPr.loading": "正在检查当前分支关联的拉取请求…",
@@ -4105,14 +4122,14 @@ export const zhCN: Record<StringKey, string> = {
   "permission.risk": "风险",
   "permission.requiredEvenFullAccess": "即使处于完全访问模式，也必须确认此操作。",
   "planDoc.open": "以文档打开",
-  "planDoc.pin": "钉为工件",
+  "planDoc.pin": "固定到场景",
   "planDoc.title": "将计划打开为文档",
   "planDoc.confirm": "编辑器中已有内容。用计划替换现有内容，还是追加到末尾？",
   "planDoc.replace": "替换",
   "planDoc.append": "追加",
   "planDoc.cancel": "取消",
-  "planDoc.pinned": "计划已钉为场景工件",
-  "planDoc.pinFailed": "无法钉住计划",
+  "planDoc.pinned": "计划已固定到场景",
+  "planDoc.pinFailed": "无法将计划固定到场景",
   "voice.hold": "语音输入——按住说话，或点按切换听写",
   "voice.stop": "停止聆听",
   "voice.structuring": "正在整理听写内容…",

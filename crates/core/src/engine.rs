@@ -38,9 +38,9 @@ use crate::permission::{
 };
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
-    initial_session_title, transcript_context_with_omission, Part, Role, Session, SessionActivity,
-    SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
-    DEFAULT_TRANSCRIPT_TURNS,
+    initial_session_title, transcript_context_with_omission, Part, PlanEntry, Role, Session,
+    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
+    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -1193,7 +1193,7 @@ mod usage_update_tests {
     use std::sync::{Arc, Mutex};
 
     use super::SessionHandler;
-    use crate::acp::wire::{SessionNotification, SessionUpdate};
+    use crate::acp::wire::{PlanEntry as AcpPlanEntry, SessionNotification, SessionUpdate};
     use crate::acp::ClientHandler;
     use crate::activity::ActivityTracker;
     use crate::engine::PermissionRouter;
@@ -1202,6 +1202,40 @@ mod usage_update_tests {
     use crate::provider::ProviderId;
     use crate::session::{SessionActivity, SessionRunState};
     use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn plan_update_preserves_task_status() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            "session-1".into(),
+            ProviderId::Codex,
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            None,
+        );
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session-1".into(),
+                update: SessionUpdate::Plan {
+                    entries: vec![AcpPlanEntry {
+                        content: "Implement the panel".into(),
+                        priority: Some("high".into()),
+                        status: Some("in_progress".into()),
+                    }],
+                },
+            })
+            .await;
+
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::Plan { entries, .. })
+                if entries[0].content == "Implement the panel"
+                    && entries[0].priority.as_deref() == Some("high")
+                    && entries[0].status.as_deref() == Some("in_progress")
+        ));
+    }
 
     #[tokio::test]
     async fn usage_update_propagates_during_replay_without_transcript_persistence() {
@@ -1489,7 +1523,14 @@ impl ClientHandler for SessionHandler {
                 )
             }
             SessionUpdate::Plan { entries } => {
-                let items: Vec<String> = entries.into_iter().map(|e| e.content).collect();
+                let items: Vec<PlanEntry> = entries
+                    .into_iter()
+                    .map(|entry| PlanEntry {
+                        content: entry.content,
+                        priority: entry.priority,
+                        status: entry.status,
+                    })
+                    .collect();
                 (
                     Some(Event::Plan {
                         session,
