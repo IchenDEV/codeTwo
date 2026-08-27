@@ -67,6 +67,12 @@ describe("Settings page layout contract", () => {
     expect(styles).toContain(".profile-activity-grid");
   });
 
+  test("includes session import as a first-class personal panel", () => {
+    expect(source).toMatch(/\{ id: "import", icon: Download, labelKey: "settings\.import" \}/);
+    expect(source).toContain('{tab === "import" && (');
+    expect(source).toContain("data-session-import-result");
+  });
+
   test("includes Pets as a first-class settings panel", () => {
     expect(source).toMatch(/\{ id: "pets", icon: PawPrint, labelKey: "settings\.pets" \}/);
     expect(source).toContain('{tab === "pets" && (');

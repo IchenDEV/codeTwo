@@ -997,6 +997,18 @@ export const en = {
   "settings.general": "General",
   "settings.generalHint":
     "Language, software updates, and how the terminal renders.",
+  "settings.import": "Import",
+  "settings.importHint": "Bring Codex, Claude Code, Cursor, and T3 Code conversations into C2.",
+  "settings.importFromFiles": "From files",
+  "settings.importSessions": "Session files",
+  "settings.importSessionsHint":
+    "Choose Codex or Claude Code JSONL, Cursor globalStorage state.vscdb, or T3 Code state.sqlite. Sessions already imported are skipped.",
+  "settings.chooseSessionFiles": "Choose files",
+  "settings.importing": "Importing…",
+  "settings.importResult": "{imported} imported · {skipped} already imported · {failed} failed",
+  "settings.importedMessages": "{count} visible messages added.",
+  "settings.openImportedSession": "Open session",
+  "settings.importFailed": "Could not import sessions: {error}",
   "settings.developer": "Developer",
   "settings.developerHint":
     "Develop installed process bundles with automatic reloads and WebView inspection. Built-in Rust plugins still require a rebuild and app restart.",
@@ -3243,6 +3255,18 @@ export const zhCN: Record<StringKey, string> = {
   "profile.shareFailed": "无法分享或复制 Profile。",
   "settings.general": "通用",
   "settings.generalHint": "应用语言、软件更新与终端显示设置。",
+  "settings.import": "导入",
+  "settings.importHint": "将已有的 Codex、Claude Code、Cursor 与 T3 Code 对话导入 C2。",
+  "settings.importFromFiles": "从文件导入",
+  "settings.importSessions": "会话文件",
+  "settings.importSessionsHint":
+    "选择 Codex 或 Claude Code JSONL、Cursor globalStorage state.vscdb，或 T3 Code state.sqlite；已导入的会话会自动跳过。",
+  "settings.chooseSessionFiles": "选择文件",
+  "settings.importing": "正在导入…",
+  "settings.importResult": "已导入 {imported} 个 · 已存在 {skipped} 个 · 失败 {failed} 个",
+  "settings.importedMessages": "已添加 {count} 条可见消息。",
+  "settings.openImportedSession": "打开会话",
+  "settings.importFailed": "无法导入会话：{error}",
   "settings.developer": "开发者",
   "settings.developerHint":
     "为已安装的进程 Bundle 启用自动重载与 WebView 检查。内置 Rust 插件仍需重新构建并重启应用。",

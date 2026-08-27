@@ -1611,6 +1611,43 @@ export async function listSessions(): Promise<SessionInfo[]> {
   return inDesktop ? call<SessionInfo[]>("sessions.list") : [];
 }
 
+export interface ImportedSessionSummary {
+  id: string;
+  title: string;
+  source: string;
+  messages: number;
+  imported: boolean;
+}
+
+export interface SessionImportResult {
+  files: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  messages: number;
+  sessions: ImportedSessionSummary[];
+  errors: Array<{ path: string; message: string }>;
+}
+
+/** Choose provider-owned transcripts or message databases and let Core parse them read-only. */
+export async function importSessionFiles(fallbackCwd: string): Promise<SessionImportResult | null> {
+  if (!inDesktop) return null;
+  const paths = await desktopOpenDialog({
+    directory: false,
+    multiple: true,
+    title: "Import conversations",
+    filters: [{
+      name: "Codex, Claude Code, Cursor, or T3 Code",
+      extensions: ["jsonl", "vscdb", "sqlite", "db"],
+    }],
+  });
+  if (paths.length === 0) return null;
+  return call<SessionImportResult>("sessions.import", {
+    paths,
+    fallback_cwd: fallbackCwd,
+  });
+}
+
 export async function getMemorySettings(): Promise<MemorySettings> {
   return inDesktop
     ? call<MemorySettings>("memory.settings")

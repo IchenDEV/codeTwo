@@ -110,6 +110,7 @@ async fn plugins_contribute_the_app_surface() {
         "providers.list",
         "scenes.apply",
         "sessions.list",
+        "sessions.import",
         "skills.list",
         "terminal.spawn",
         "usage.report",

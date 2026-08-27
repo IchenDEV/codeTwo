@@ -43,6 +43,7 @@ import {
   getDeviceSyncStatus,
   getPluginDeveloperStatus,
   getWorktreeSettings,
+  importSessionFiles,
   listProjectWorktrees,
   selectComputerUseBackend,
   selectBrowserUseBackend,
@@ -62,6 +63,7 @@ import {
   type WorktreeEntryKind,
   type WorktreeSettings,
   type WorktreeStatusEntry,
+  type SessionImportResult,
   getProjectScheduling,
   installProvider,
   openNativePath,
@@ -111,6 +113,7 @@ import "./settings-page.css";
 
 export type SettingsTab =
   | "general"
+  | "import"
   | "profile"
   | "appearance"
   | "pets"
@@ -143,6 +146,7 @@ const NAV_GROUPS: {
     labelKey: "settings.navPersonal",
     items: [
       { id: "general", icon: SlidersHorizontal, labelKey: "settings.general" },
+      { id: "import", icon: Download, labelKey: "settings.import" },
       { id: "profile", icon: UserRound, labelKey: "profile.title" },
       { id: "appearance", icon: Palette, labelKey: "settings.appearance" },
       { id: "pets", icon: PawPrint, labelKey: "settings.pets" },
@@ -327,6 +331,8 @@ export function SettingsPage({
   projectActionsCount = 0,
   onAddProjectAction = () => {},
   onOpenSession = () => {},
+  sessionImporter = importSessionFiles,
+  onSessionsImported = async () => {},
   worktreeLister = listProjectWorktrees,
   worktreeSettingsLoader = getWorktreeSettings,
   worktreeSettingsSaver = updateWorktreeSettings,
@@ -387,6 +393,8 @@ export function SettingsPage({
   projectActionsCount?: number;
   onAddProjectAction?: () => void;
   onOpenSession?: (sessionId: string) => void;
+  sessionImporter?: (fallbackCwd: string) => Promise<SessionImportResult | null>;
+  onSessionsImported?: () => void | Promise<unknown>;
   worktreeLister?: typeof listProjectWorktrees;
   worktreeSettingsLoader?: () => Promise<WorktreeSettings>;
   worktreeSettingsSaver?: (settings: WorktreeSettings) => Promise<WorktreeSettings>;
@@ -434,6 +442,9 @@ export function SettingsPage({
   );
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [appUpdate, setAppUpdate] = useState<AppUpdateStatus | null>(null);
+  const [sessionImporting, setSessionImporting] = useState(false);
+  const [sessionImportResult, setSessionImportResult] = useState<SessionImportResult | null>(null);
+  const [sessionImportError, setSessionImportError] = useState<string | null>(null);
   const [computerUseSettings, setComputerUseSettings] = useState<ComputerUseSettings | null>(null);
   const [computerUseSaving, setComputerUseSaving] = useState<string | null>(null);
   const [computerUseError, setComputerUseError] = useState<string | null>(null);
@@ -468,6 +479,21 @@ export function SettingsPage({
       setTab((current) => current === "sync" ? "general" : current);
     }
   }, [deviceSyncEnabled]);
+
+  const startSessionImport = async () => {
+    setSessionImporting(true);
+    setSessionImportError(null);
+    try {
+      const result = await sessionImporter(projectPath);
+      if (!result) return;
+      setSessionImportResult(result);
+      if (result.imported > 0) await onSessionsImported();
+    } catch (error: unknown) {
+      setSessionImportError(t("settings.importFailed", { error: String(error) }));
+    } finally {
+      setSessionImporting(false);
+    }
+  };
   useEffect(() => {
     if (tab !== "providers" || !onReloadProviders) return;
     let active = true;
@@ -1429,6 +1455,73 @@ export function SettingsPage({
                     className="h-8 w-44 text-hint"
                   />
                 </Row>
+              </Page>
+            )}
+
+            {tab === "import" && (
+              <Page title={t("settings.import")} description={t("settings.importHint")}>
+                <GroupHeading>{t("settings.importFromFiles")}</GroupHeading>
+                <Row
+                  icon={<Download className="size-4 text-muted-foreground" />}
+                  label={t("settings.importSessions")}
+                  hint={t("settings.importSessionsHint")}
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    disabled={sessionImporting}
+                    onClick={() => void startSessionImport()}
+                  >
+                    {sessionImporting
+                      ? <LoaderCircle className="size-3.5 animate-spin" />
+                      : <Download className="size-3.5" />}
+                    {sessionImporting ? t("settings.importing") : t("settings.chooseSessionFiles")}
+                  </Button>
+                </Row>
+
+                {sessionImportError && (
+                  <p role="alert" className="mt-3 text-hint leading-relaxed text-destructive">
+                    {sessionImportError}
+                  </p>
+                )}
+
+                {sessionImportResult && (
+                  <div
+                    data-session-import-result
+                    role={sessionImportResult.failed > 0 ? "alert" : "status"}
+                    aria-live="polite"
+                    className="session-import-result"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-ui font-medium">
+                        {t("settings.importResult", {
+                          imported: sessionImportResult.imported,
+                          skipped: sessionImportResult.skipped,
+                          failed: sessionImportResult.failed,
+                        })}
+                      </p>
+                      <p className="mt-0.5 text-hint leading-relaxed text-muted-foreground">
+                        {t("settings.importedMessages", { count: sessionImportResult.messages })}
+                      </p>
+                      {sessionImportResult.errors.slice(0, 3).map((error) => (
+                        <p key={`${error.path}:${error.message}`} className="mt-1 break-words text-hint text-destructive">
+                          {error.path}: {error.message}
+                        </p>
+                      ))}
+                    </div>
+                    {sessionImportResult.sessions[0] && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => onOpenSession(sessionImportResult.sessions[0].id)}
+                      >
+                        {t("settings.openImportedSession")}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </Page>
             )}
 
