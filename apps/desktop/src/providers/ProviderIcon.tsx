@@ -50,7 +50,9 @@ const CursorMark = mark(
 );
 
 const OpenCodeMark = mark(
-  "0 0 512 512",
+  // The source export carries 96px of empty padding. Crop that padding so this glyph has the
+  // same optical footprint as the full-bleed provider marks in compact rows.
+  "96 96 320 320",
   <>
     <path d="M320 224V352H192V224H320Z" />
     <path d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" />

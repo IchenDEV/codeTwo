@@ -553,7 +553,7 @@ export function SessionRail({
           render={
             <div
               data-session-id={s.id}
-              data-session-density="comfortable"
+              data-session-density="compact"
               data-session-archive-motion={archiveMotion.has(s.id)
                 ? isArchived ? "restore" : "archive"
                 : undefined}
@@ -568,8 +568,8 @@ export function SessionRail({
                   ?.focus({ preventScroll: true })
               }
               className={cn(
-                "group relative cursor-default rounded-md px-2 py-2 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
-                s.id === activeSession && "font-medium",
+                "group relative cursor-default rounded-control px-2 py-1.5 outline-none transition-[background-color,box-shadow] hover:bg-accent/50 data-[popup-open]:bg-accent/70",
+                s.id === activeSession && "bg-fill-rest",
                 s.id === activeSession && typeof ResizeObserver === "undefined" && "bg-fill-hover",
               )}
             >
@@ -683,7 +683,7 @@ export function SessionRail({
                   </span>
                 </div>
 
-                {/* 2 — latest conversation text; bounded so one long response cannot take the rail. */}
+                {/* 2 — latest conversation text; one glanceable line keeps the rail scannable. */}
                 {hasUsefulPreview && (
                   <div
                     id={`session-preview-${s.id}`}
@@ -695,7 +695,7 @@ export function SessionRail({
                       aria-hidden="true"
                       className="h-4 w-6 shrink-0"
                     />
-                    <span className="min-w-0 flex-1 line-clamp-2">{preview}</span>
+                    <span className="min-w-0 flex-1 truncate">{preview}</span>
                   </div>
                 )}
 
@@ -834,30 +834,13 @@ export function SessionRail({
       )}
 
       {/* ---- 1 · title ---------------------------------------------------------------------- */}
-      {/* Keep the controls centred in the same 48px title row as the main header, with enough
-          clearance for the macOS traffic lights. */}
+      {/* Keep the collapse control in the title row, with enough clearance for macOS traffic
+          lights. Search gets a full-width launcher below so it is visible and easy to target. */}
       <div
         data-rail-header
         className="window-controls-safe-rail electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 py-2.5 pr-2"
       >
         <div className="electrobun-webkit-app-region-drag min-w-0 flex-1" />
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button
-              variant="ghost"
-              size="icon"
-              data-rail-search
-              className="size-7 shrink-0 text-muted-foreground"
-              aria-label={t("rail.searchLabel")}
-              onClick={onOpenSearch}
-            >
-              <Search className="size-4" />
-            </Button>}
-          />
-          <TooltipContent side="bottom">
-            {t("rail.searchLabel")}{searchHint ? ` ${searchHint}` : ""}
-          </TooltipContent>
-        </Tooltip>
         <Tooltip>
           <TooltipTrigger
             render={<Button
@@ -874,6 +857,22 @@ export function SessionRail({
           <TooltipContent side="right">{t("rail.collapse")}</TooltipContent>
         </Tooltip>
       </div>
+
+      <button
+        type="button"
+        data-rail-search
+        className="mx-2 mb-1 flex h-control shrink-0 items-center gap-2 rounded-control bg-fill-quiet px-2 text-left text-ui text-muted-foreground outline-none transition-colors hover:bg-fill-hover hover:text-foreground focus-visible:focus-ring"
+        aria-label={t("rail.searchChats")}
+        onClick={onOpenSearch}
+      >
+        <Search className="size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 flex-1 truncate">{t("rail.searchChats")}</span>
+        {searchHint ? (
+          <kbd className="shrink-0 rounded-micro bg-background/45 px-1.5 py-0.5 font-mono text-fine leading-4 text-muted-foreground">
+            {searchHint}
+          </kbd>
+        ) : null}
+      </button>
 
       {/* ---- 2 · features ------------------------------------------------------------------- */}
       <div
@@ -1099,13 +1098,13 @@ export function SessionRail({
               {pinned.length > 0 && (
                 <>
                   {groupLabel(t("rail.groupPinned"))}
-                  <div className="flex flex-col gap-2">{pinned.map((s) => sessionRow(s, false))}</div>
+                  <div className="flex flex-col gap-0.5">{pinned.map((s) => sessionRow(s, false))}</div>
                 </>
               )}
               {active.length > 0 && (
                 <>
                   {groupLabel(t("rail.groupActive"))}
-                  <div className="flex flex-col gap-2">{active.map((s) => sessionRow(s, false))}</div>
+                  <div className="flex flex-col gap-0.5">{active.map((s) => sessionRow(s, false))}</div>
                 </>
               )}
               {archived.length > 0 && (
@@ -1117,14 +1116,14 @@ export function SessionRail({
                     title={archivedOpen ? t("rail.hideArchived") : t("rail.showArchived")}
                     className="flex w-full items-center gap-1 rounded px-2 pb-1 pt-2 text-ui font-normal leading-4 text-foreground/55 transition-colors hover:text-foreground"
                   >
-                    <span>{t("rail.groupArchived")}</span>
-                    <span className="font-normal text-foreground/40">{archived.length}</span>
                     <ChevronRight
                       className={cn("size-3.5 shrink-0 transition-transform", archivedOpen && "rotate-90")}
                     />
+                    <span>{t("rail.groupArchived")}</span>
+                    <span className="font-normal text-foreground/40">{archived.length}</span>
                   </CollapsibleTrigger>
                   <CollapsibleContent data-rail-archive-list className="rail-archive-panel">
-                    <div className="flex flex-col gap-2 opacity-80">
+                    <div className="flex flex-col gap-0.5">
                       {archived.map((s) => sessionRow(s, true))}
                     </div>
                   </CollapsibleContent>
@@ -1136,42 +1135,42 @@ export function SessionRail({
       </ScrollArea>
 
       {/* ---- 4 · utilities ------------------------------------------------------------------ */}
-      <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1">
+      <div data-rail-utilities className="flex shrink-0 flex-col gap-0.5 px-2 pb-2 pt-1.5">
         <div data-rail-feature="usage">
           <NavigationRow
-            label={t("quota.quick")}
+            label={quickQuota ? quickQuotaWindow : t("quota.quick")}
             busy={quickQuotaLoading}
             accessibilityLabel={quickQuotaTitle}
             title={quickQuotaTitle}
             onSelect={onOpenUsage}
             leading={quickQuota ? (
-            <span
-              data-quota-provider={quickQuota.provider}
-              className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-            >
-              <ProviderIcon provider={quickQuota.provider} className="size-4" />
-            </span>
-          ) : (
-            <ChartNoAxesColumn className="size-4" />
-          )}
-            meta={quickQuota ? (
-            <span className="flex shrink-0 items-center gap-1.5">
-              <QuotaProgress
-                density="rail"
-                label={t("quota.remainingLabel", { window: quickQuotaWindow })}
-                remainingPercent={quickQuota.remainingPercent}
-              />
-              <span className="w-7 text-right text-fine font-medium tabular-nums">
-                {quickQuota.remainingPercent}%
+              <span
+                data-quota-provider={quickQuota.provider}
+                className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+              >
+                <ProviderIcon provider={quickQuota.provider} className="size-4" />
               </span>
-            </span>
-          ) : (
-            <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
-              {quickQuotaLoading ? (
-                <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
-              ) : "—"}
-            </span>
-          )}
+            ) : (
+              <ChartNoAxesColumn className="size-4" />
+            )}
+            meta={quickQuota ? (
+              <span className="flex shrink-0 items-center gap-1.5">
+                <QuotaProgress
+                  density="rail"
+                  label={t("quota.remainingLabel", { window: quickQuotaWindow })}
+                  remainingPercent={quickQuota.remainingPercent}
+                />
+                <span className="w-7 text-right text-fine font-medium tabular-nums">
+                  {quickQuota.remainingPercent}%
+                </span>
+              </span>
+            ) : (
+              <span className="shrink-0 text-fine tabular-nums text-muted-foreground">
+                {quickQuotaLoading ? (
+                  <ActivityOrb state="searching" visualSize={14} aria-hidden="true" />
+                ) : "—"}
+              </span>
+            )}
           />
         </div>
         <div data-rail-feature="settings">

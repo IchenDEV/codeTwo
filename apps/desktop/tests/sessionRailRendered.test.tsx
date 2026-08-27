@@ -199,17 +199,19 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("keeps search and collapse compact in the window-controls row", () => {
+  test("keeps collapse in the title row and exposes search as a labeled launcher", () => {
     activateDom();
     const opened = [];
     const view = renderRail({ onOpenSearch: () => opened.push("search") });
     const header = view.container.querySelector("[data-rail-header]");
-    const search = header?.querySelector("[data-rail-search]");
+    const search = view.container.querySelector("[data-rail-search]");
 
     expect(view.container.textContent).not.toContain("C2");
     expect(search).toBeTruthy();
+    expect(header?.querySelector("[data-rail-search]")).toBeNull();
     expect(header?.querySelector('button[aria-label="Collapse the sidebar"]')).toBeTruthy();
-    expect(view.container.querySelector("kbd")).toBeNull();
+    expect(search?.textContent).toContain("Search chats");
+    expect(search?.querySelector("kbd")?.textContent).toBe("⌘K");
 
     click(search);
     expect(opened).toEqual(["search"]);
@@ -253,7 +255,7 @@ describe("SessionRail row layout", () => {
       "Plugins",
     ]);
     expect(utilityRows.map((row) => row.textContent?.replace(/\s+/g, " ").trim())).toEqual([
-      "Quota left42%",
+      "Weekly limit42%",
       "Settings",
     ]);
     expect(sessionScroll?.nextElementSibling).toBe(utilities);
@@ -398,6 +400,8 @@ describe("SessionRail row layout", () => {
     expect(meaningful?.querySelector('[data-session-line="preview"]')?.textContent).toBe(
       "A useful preview",
     );
+    expect(meaningful?.querySelector('[data-session-line="preview"] > span:last-child')?.className)
+      .toContain("truncate");
     expect(meaningful?.querySelector("[data-session-select]")?.getAttribute("aria-describedby"))
       .toBe("session-preview-meaningful");
     expect(meaningful?.getAttribute("title")).toBe("A useful preview");
@@ -409,6 +413,25 @@ describe("SessionRail row layout", () => {
       expect(provider?.contains(status ?? null)).toBe(true);
       expect(status?.className).toContain("ml-auto");
     }
+
+    view.unmount();
+  });
+
+  test("crops OpenCode export padding to match the provider icon footprint", () => {
+    activateDom();
+    const openCodeSession = { ...session("opencode", "OpenCode task"), provider: "opencode2" };
+    const view = renderRail({
+      sessions: [openCodeSession],
+      activeSession: openCodeSession.id,
+      previews: {},
+      displayProvider: () => "OpenCode 2 (Beta)",
+    });
+    const mark = view.container.querySelector(
+      '[data-session-id="opencode"] [data-session-line="provider"] svg',
+    );
+
+    expect(mark?.getAttribute("viewBox")).toBe("96 96 320 320");
+    expect(mark?.getAttribute("class")).toContain("size-3");
 
     view.unmount();
   });
@@ -457,15 +480,16 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("uses comfortable spacing and exposes real session actions on right click", async () => {
+  test("uses compact spacing and exposes real session actions on right click", async () => {
     activateDom();
     const view = renderRail();
     const row = view.container.querySelector('[data-session-id="meaningful"]');
     const activeRow = view.container.querySelector('[data-session-id="punctuation"]');
 
-    expect(row?.getAttribute("data-session-density")).toBe("comfortable");
-    expect(row?.parentElement?.className).toContain("gap-2");
+    expect(row?.getAttribute("data-session-density")).toBe("compact");
+    expect(row?.parentElement?.className).toContain("gap-0.5");
     expect(activeRow?.className).toContain("bg-fill-hover");
+    expect(activeRow?.className).toContain("rounded-control");
     expect(activeRow?.className.split(/\s+/)).not.toContain("bg-accent");
 
     row?.dispatchEvent(
