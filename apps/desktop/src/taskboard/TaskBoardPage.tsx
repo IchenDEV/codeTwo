@@ -4,19 +4,13 @@ import {
   useReducer,
   useRef,
   useState,
-  type DragEvent,
   type ReactNode,
 } from "react"
 import {
   CheckCircle2,
-  ArrowRight,
-  Circle,
-  CircleDot,
-  CircleEllipsis,
   ExternalLink,
   Filter,
   Flag,
-  GripVertical,
   MessageSquareText,
   MoreHorizontal,
   Pencil,
@@ -28,7 +22,6 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
@@ -49,7 +42,7 @@ import {
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/ui/toast"
-import { confirmNative } from "@/bridge"
+import { confirmNative, type SessionActivity } from "@/bridge"
 import { useLanguage, type Locale, type Translate } from "@/i18n"
 
 import {
@@ -57,6 +50,7 @@ import {
   LOAD_BOARD_WARNING,
   PRIORITIES,
   SAVE_BOARD_WARNING,
+  TASK_BOARD_LANES,
   TASK_STATUSES,
   boardLabels,
   boardReducer,
@@ -65,9 +59,11 @@ import {
   loadBoardSnapshot,
   saveBoardSnapshot,
   sortBoardTasks,
+  taskBoardLane,
   type BoardAction,
   type BoardFilters,
   type BoardTask,
+  type TaskBoardLane,
   type TaskPriority,
   type TaskStatus,
 } from "./taskBoard"
@@ -78,8 +74,16 @@ import {
   type TaskEditorValue,
 } from "./TaskEditorDialog"
 
+interface TaskBoardSession {
+  id: string
+  title: string
+  archived?: boolean
+  activity?: SessionActivity
+  running?: boolean
+}
+
 interface TaskBoardPageProps {
-  sessions?: Array<{ id: string; title: string; archived?: boolean }>
+  sessions?: TaskBoardSession[]
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
   headerLeadingAction?: ReactNode
@@ -90,40 +94,38 @@ interface EditorState {
   initialStatus: TaskStatus
 }
 
-interface DragState {
-  taskId: string
-  status: TaskStatus
-  beforeId?: string
+interface SessionProjection extends TaskBoardSession {
+  archived: boolean
 }
 
-const STATUS_ICONS = {
-  todo: Circle,
-  in_progress: CircleDot,
-  in_review: CircleEllipsis,
-  done: CheckCircle2,
-} satisfies Record<TaskStatus, typeof Circle>
-
-const STATUS_TONES: Record<TaskStatus, string> = {
-  todo: "text-primary",
-  in_progress: "text-success",
-  in_review: "text-warning",
-  done: "text-primary",
+interface ProjectedTask {
+  task: BoardTask
+  lane: TaskBoardLane
+  latestSession?: SessionProjection
 }
 
-const STATUS_HEADER_TONES: Record<TaskStatus, string> = {
-  todo: "bg-card",
-  in_progress: "bg-card",
-  in_review: "bg-card",
-  done: "bg-card",
+interface AttentionDetail {
+  label: string
+  description: string
+  action: string
+}
+
+const LANE_TONES: Record<TaskBoardLane, string> = {
+  queue: "text-foreground",
+  running: "text-primary",
+  needs_you: "text-warning",
+  done: "text-success",
 }
 
 const PRIORITY_TONES: Record<TaskPriority, string> = {
   none: "text-muted-foreground",
-  low: "text-success",
-  medium: "text-warning",
+  low: "text-muted-foreground",
+  medium: "text-muted-foreground",
   high: "text-destructive",
   urgent: "text-destructive",
 }
+
+const COLLAPSED_LANE_LIMIT = 3
 
 function formatUpdatedAt(value: number, locale: Locale, t: Translate): string {
   const elapsed = Math.max(0, Date.now() - value)
@@ -155,203 +157,266 @@ function toggleFilterValue<T extends string>(values: readonly T[], value: T): T[
   return values.includes(value) ? removeFilterValue(values, value) : [...values, value]
 }
 
-function taskActionLabel(t: Translate, status: TaskStatus, continuesSession: boolean): string {
-  if (continuesSession) return t("taskboard.continueTask")
-  if (status === "in_progress") return t("taskboard.continueTask")
-  if (status === "in_review") return t("taskboard.reviewTask")
-  if (status === "done") return t("taskboard.revisitTask")
-  return t("taskboard.startTask")
+function laneLabel(t: Translate, lane: TaskBoardLane): string {
+  if (lane === "queue") return t("taskboard.lane.queue")
+  if (lane === "running") return t("taskboard.lane.running")
+  if (lane === "needs_you") return t("taskboard.lane.needsYou")
+  return t("taskboard.lane.done")
+}
+
+function sessionActivityKind(session?: SessionProjection) {
+  const kind = session?.activity?.state.kind ?? "idle"
+  return session?.running && kind === "idle" ? "running" : kind
+}
+
+function latestAvailableSession(
+  task: BoardTask,
+  sessionsById: ReadonlyMap<string, SessionProjection>,
+): SessionProjection | undefined {
+  for (let index = task.sessionIds.length - 1; index >= 0; index -= 1) {
+    const session = sessionsById.get(task.sessionIds[index]!)
+    if (session && !session.archived) return session
+  }
+  return undefined
+}
+
+function projectTasks(
+  tasks: readonly BoardTask[],
+  sessionsById: ReadonlyMap<string, SessionProjection>,
+): ProjectedTask[] {
+  return tasks.map((task) => {
+    const latestSession = latestAvailableSession(task, sessionsById)
+    return {
+      task,
+      lane: taskBoardLane(task, sessionActivityKind(latestSession)),
+      latestSession,
+    }
+  })
+}
+
+function groupProjectedTasks(tasks: readonly ProjectedTask[]): Record<TaskBoardLane, ProjectedTask[]> {
+  const grouped: Record<TaskBoardLane, ProjectedTask[]> = {
+    queue: [],
+    running: [],
+    needs_you: [],
+    done: [],
+  }
+  for (const task of tasks) grouped[task.lane].push(task)
+  return grouped
+}
+
+function attentionDetail(
+  t: Translate,
+  task: BoardTask,
+  session?: SessionProjection,
+): AttentionDetail {
+  if (task.status === "in_review") {
+    return {
+      label: t("taskboard.attention.reviewReady"),
+      description: t("taskboard.attention.reviewReadyDescription"),
+      action: t("taskboard.reviewTask"),
+    }
+  }
+  const state = session?.activity?.state
+  if (state?.kind === "awaiting_input") {
+    const pending = state.pending[0]
+    const isQuestion = pending?.kind === "elicitation"
+    return {
+      label: t(isQuestion
+        ? "taskboard.attention.answerNeeded"
+        : "taskboard.attention.permissionNeeded"),
+      description: pending?.title ?? t("taskboard.attention.inputDescription"),
+      action: t(isQuestion ? "taskboard.answerTask" : "taskboard.reviewRequest"),
+    }
+  }
+  if (state?.kind === "failed") {
+    return {
+      label: t("taskboard.attention.failed"),
+      description: state.message,
+      action: t("taskboard.reviewFailure"),
+    }
+  }
+  return {
+    label: t("taskboard.attention.reviewReady"),
+    description: t("taskboard.attention.reviewReadyDescription"),
+    action: t("taskboard.reviewTask"),
+  }
 }
 
 function TaskCard({
   t,
   locale,
-  task,
-  latestSessionTitle,
-  continuesSession,
-  sessionCount,
-  dragTarget,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
+  projected,
   onEdit,
   onDelete,
   onMove,
-  onContinue,
-  onStartNewSession,
+  onOpenSession,
+  onStartTask,
 }: {
   t: Translate
   locale: Locale
-  task: BoardTask
-  latestSessionTitle?: string
-  continuesSession: boolean
-  sessionCount: number
-  dragTarget: boolean
-  onDragStart: (event: DragEvent<HTMLButtonElement>) => void
-  onDragEnd: () => void
-  onDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onDrop: (event: DragEvent<HTMLDivElement>) => void
+  projected: ProjectedTask
   onEdit: () => void
   onDelete: () => void
   onMove: (status: TaskStatus) => void
-  onContinue?: () => void
-  onStartNewSession?: () => void
+  onOpenSession?: (id: string) => void
+  onStartTask?: (task: BoardTask) => void
 }) {
-  const primaryActionLabel = taskActionLabel(t, task.status, continuesSession)
+  const { task, lane, latestSession } = projected
+  const attention = lane === "needs_you" ? attentionDetail(t, task, latestSession) : null
+  const openLatest = latestSession && onOpenSession
+    ? () => onOpenSession(latestSession.id)
+    : undefined
+  const startNew = onStartTask ? () => onStartTask(task) : undefined
+  const primaryAction = openLatest ?? startNew ?? onEdit
+  const primaryActionLabel = lane === "needs_you" && attention
+    ? attention.action
+    : openLatest
+      ? t("taskboard.openRecentSession")
+      : startNew
+        ? t("taskboard.startTask")
+        : t("taskboard.edit")
+
   return (
-    <div
-      data-task-drop-before={task.id}
-      className={cn(
-        "rounded-(--ds-radius-module) outline-none transition-[background-color,box-shadow]",
-        dragTarget && "ring-[3px] ring-primary/40"
-      )}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+    <article
+      data-task-card={task.id}
+      data-task-lane={lane}
+      className="group rounded-(--ds-radius-module) bg-card p-4 shadow-(--ds-elevation-surface) transition-colors hover:bg-accent/30"
     >
-      <Card className="gap-3 py-4">
-        <CardContent className="grid gap-3 px-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              draggable
-              className="cursor-grab touch-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
-              aria-label={t("taskboard.dragTask", { title: task.title })}
-              title={t("taskboard.dragTaskHint")}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-            >
-              <GripVertical aria-hidden className="size-4" />
-            </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    className="ml-auto"
-                    aria-label={t("taskboard.taskActions", { title: task.title })}
-                  >
-                    <MoreHorizontal data-icon="inline-start" aria-hidden />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Pencil aria-hidden />
-                    {t("taskboard.edit")}
-                  </DropdownMenuItem>
-                  {latestSessionTitle && onContinue ? (
-                    <DropdownMenuItem onClick={onContinue}>
-                      <ExternalLink aria-hidden />
-                      {t("taskboard.openRecentSession")}
-                    </DropdownMenuItem>
-                  ) : null}
-                  {onStartNewSession ? (
-                    <DropdownMenuItem onClick={onStartNewSession}>
-                      <MessageSquareText aria-hidden />
-                      {sessionCount > 0
-                        ? t("taskboard.startInNewSession")
-                        : primaryActionLabel}
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  {TASK_STATUSES.filter((status) => status !== task.status).map((status) => (
-                    <DropdownMenuItem key={status} onClick={() => onMove(status)}>
-                      {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                    <Trash2 aria-hidden />
-                    {t("taskboard.delete")}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="grid gap-2">
-            <button
-              type="button"
-              className="text-left text-title font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              onClick={onEdit}
-            >
-              {task.title}
-            </button>
-            {task.description ? (
-              <p className="line-clamp-2 text-ui leading-relaxed text-muted-foreground">
-                {task.description}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 text-hint font-medium",
-                PRIORITY_TONES[task.priority]
-              )}
-            >
-              <Flag aria-hidden className="size-3.5" />
-              {taskPriorityLabel(t, task.priority)}
-            </span>
-            {task.labels.slice(0, 2).map((label) => (
-              <Badge key={label} variant="secondary" className="text-cap font-medium">
-                {label}
-              </Badge>
-            ))}
-            {task.labels.length > 2 ? (
-              <Badge
-                variant="secondary"
-                className="text-cap font-medium"
-                title={task.labels.slice(2).join("、")}
-              >
-                +{task.labels.length - 2}
-              </Badge>
-            ) : null}
-          </div>
-
-          <div className="flex min-w-0 items-center gap-2">
-            {onContinue ? (
+      <div className="flex min-w-0 items-start gap-2">
+        <button
+          type="button"
+          className="line-clamp-2 min-w-0 flex-1 rounded-(--ds-radius-micro) text-left text-title font-semibold leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={t("taskboard.cardAction", { action: primaryActionLabel, title: task.title })}
+          onClick={primaryAction}
+        >
+          {task.title}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
               <Button
                 type="button"
                 variant="ghost"
-                size="compact"
-                className="-ml-2 text-primary"
-                onClick={onContinue}
+                size="icon-xs"
+                className="-mr-1 -mt-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                aria-label={t("taskboard.taskActions", { title: task.title })}
               >
-                {primaryActionLabel}
-                <ArrowRight data-icon="inline-end" aria-hidden />
+                <MoreHorizontal data-icon="inline-start" aria-hidden />
               </Button>
-            ) : null}
-            <span className="ml-auto truncate text-fine text-muted-foreground">
-              {sessionCount > 0 ? `${t("taskboard.sessionCount", { count: sessionCount })} · ` : ""}
-              {formatUpdatedAt(task.updatedAt, locale, t)}
+            }
+          />
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={onEdit}>
+                <Pencil aria-hidden />
+                {t("taskboard.edit")}
+              </DropdownMenuItem>
+              {openLatest ? (
+                <DropdownMenuItem onClick={openLatest}>
+                  <ExternalLink aria-hidden />
+                  {t("taskboard.openRecentSession")}
+                </DropdownMenuItem>
+              ) : null}
+              {startNew ? (
+                <DropdownMenuItem onClick={startNew}>
+                  <MessageSquareText aria-hidden />
+                  {task.sessionIds.length > 0
+                    ? t("taskboard.startInNewSession")
+                    : t("taskboard.startTask")}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              {TASK_STATUSES.filter((status) => status !== task.status).map((status) => (
+                <DropdownMenuItem key={status} onClick={() => onMove(status)}>
+                  {t("taskboard.moveTo", { status: taskStatusLabel(t, status) })}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                <Trash2 aria-hidden />
+                {t("taskboard.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {lane === "queue" && (task.priority !== "none" || latestSession) ? (
+        <div className="mt-4 flex min-w-0 items-center gap-2 text-hint text-muted-foreground">
+          {task.priority !== "none" ? (
+            <span className={cn("inline-flex items-center gap-1", PRIORITY_TONES[task.priority])}>
+              <Flag aria-hidden className="size-3" />
+              {taskPriorityLabel(t, task.priority)}
             </span>
+          ) : null}
+          {latestSession ? (
+            <span className="ml-auto truncate">{t("taskboard.readyToContinue")}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {lane === "running" ? (
+        <div className="mt-4 grid gap-2 text-hint text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2">
+            <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary animate-pulse" />
+            <span className="font-medium text-primary">{t("taskboard.runningNow")}</span>
+            <span className="ml-auto truncate">{formatUpdatedAt(task.updatedAt, locale, t)}</span>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          {latestSession && latestSession.title.trim() !== task.title.trim() ? (
+            <p className="truncate">{latestSession.title}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {lane === "needs_you" && attention ? (
+        <div className="mt-4 grid gap-3">
+          <Badge
+            variant="secondary"
+            className="w-fit bg-warning/10 text-hint font-medium text-warning shadow-none"
+          >
+            {attention.label}
+          </Badge>
+          <p className="line-clamp-2 text-hint leading-relaxed text-muted-foreground">
+            {attention.description}
+          </p>
+          <Button type="button" size="compact" className="ml-auto" onClick={primaryAction}>
+            {attention.action}
+          </Button>
+        </div>
+      ) : null}
+
+      {lane === "done" ? (
+        <div className="mt-4 grid gap-2 text-hint text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5 font-medium text-success">
+            <CheckCircle2 aria-hidden className="size-3.5" />
+            {t("taskboard.completed")}
+          </span>
+          <span>
+            {task.sessionIds.length > 0
+              ? `${t("taskboard.sessionCount", { count: task.sessionIds.length })} · `
+              : ""}
+            {formatUpdatedAt(task.updatedAt, locale, t)}
+          </span>
+        </div>
+      ) : null}
+    </article>
   )
 }
 
 function BoardColumn({
   t,
   locale,
-  status,
+  lane,
   tasks,
   totalCount,
   filtered,
-  sessionsById,
-  dragState,
-  setDragState,
+  expanded,
+  onExpandedChange,
   dispatch,
   openEditor,
   deleteTask,
@@ -360,154 +425,91 @@ function BoardColumn({
 }: {
   t: Translate
   locale: Locale
-  status: TaskStatus
-  tasks: BoardTask[]
+  lane: TaskBoardLane
+  tasks: ProjectedTask[]
   totalCount: number
   filtered: boolean
-  sessionsById: ReadonlyMap<string, { title: string; archived: boolean }>
-  dragState: DragState | null
-  setDragState: (state: DragState | null) => void
+  expanded: boolean
+  onExpandedChange: (expanded: boolean) => void
   dispatch: (action: BoardAction) => void
   openEditor: (task: BoardTask | null, status: TaskStatus) => void
   deleteTask: (task: BoardTask) => void
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
 }) {
-  const StatusIcon = STATUS_ICONS[status]
-  const columnEndTarget = dragState?.status === status && dragState.beforeId === undefined
-
-  const move = (taskId: string, targetStatus: TaskStatus, beforeId?: string) => {
-    dispatch({ type: "move", id: taskId, status: targetStatus, beforeId, now: Date.now() })
-    setDragState(null)
-  }
+  const visibleTasks = expanded ? tasks : tasks.slice(0, COLLAPSED_LANE_LIMIT)
+  const hiddenCount = Math.max(0, tasks.length - visibleTasks.length)
+  const visualCount = filtered ? `${tasks.length}/${totalCount}` : totalCount
 
   return (
     <section
-      data-task-column={status}
-      aria-labelledby={`taskboard-column-${status}`}
-      className="flex min-h-0 w-72 min-w-72 flex-1 flex-col rounded-(--ds-radius-module) bg-fill-quiet"
+      data-task-column={lane}
+      aria-labelledby={`taskboard-column-${lane}`}
+      className="flex min-h-full w-72 min-w-72 flex-1 flex-col rounded-(--ds-radius-module) bg-fill-quiet p-3"
     >
-      <header
-        className={cn(
-          "flex shrink-0 items-center gap-2 rounded-(--ds-radius-module) px-4 py-3",
-          STATUS_HEADER_TONES[status],
-          STATUS_TONES[status]
-        )}
-      >
-        <StatusIcon aria-hidden className="size-4" />
-        <h2 id={`taskboard-column-${status}`} className="text-title font-semibold">
-          {taskStatusLabel(t, status)}
+      <header className="sticky top-0 z-10 -mx-1 mb-2 flex shrink-0 items-center gap-2 bg-fill-quiet px-1 py-2">
+        <h2
+          id={`taskboard-column-${lane}`}
+          className={cn("text-title font-semibold", LANE_TONES[lane])}
+        >
+          {laneLabel(t, lane)}
         </h2>
         <span
-          className="ml-auto text-ui tabular-nums text-muted-foreground"
+          className="ml-auto text-hint tabular-nums text-muted-foreground"
           aria-label={filtered
             ? t("taskboard.visibleCount", { visible: tasks.length, total: totalCount })
             : t("taskboard.taskCount", { count: totalCount })}
         >
-          {filtered ? `${tasks.length}/${totalCount}` : totalCount}
+          {visualCount}
         </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          className="text-current"
-          aria-label={t("taskboard.addInColumn", { status: taskStatusLabel(t, status) })}
-          onClick={() => openEditor(null, status)}
-        >
-          <Plus data-icon="inline-start" aria-hidden />
-        </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
-        {tasks.map((task) => {
-          const availableSessions = task.sessionIds.filter(
-            (id) => sessionsById.get(id)?.archived === false,
-          )
-          const latestSessionId = availableSessions[availableSessions.length - 1]
-          const continueTask = latestSessionId && onOpenSession
-            ? () => onOpenSession(latestSessionId)
-            : onStartTask
-              ? () => onStartTask(task)
-              : undefined
-          return (
-            <TaskCard
-              key={task.id}
-              t={t}
-              locale={locale}
-              task={task}
-              latestSessionTitle={
-                latestSessionId ? sessionsById.get(latestSessionId)?.title : undefined
-              }
-              continuesSession={Boolean(latestSessionId && onOpenSession)}
-              sessionCount={task.sessionIds.length}
-              dragTarget={dragState?.status === status && dragState.beforeId === task.id}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "move"
-                event.dataTransfer.setData("text/plain", task.id)
-                setDragState({ taskId: task.id, status })
-              }}
-              onDragEnd={() => setDragState(null)}
-              onDragOver={(event) => {
-                event.preventDefault()
-                event.dataTransfer.dropEffect = "move"
-                if (dragState?.taskId && dragState.taskId !== task.id) {
-                  setDragState({ taskId: dragState.taskId, status, beforeId: task.id })
-                }
-              }}
-              onDrop={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                const taskId = dragState?.taskId || event.dataTransfer.getData("text/plain")
-                if (taskId && taskId !== task.id) move(taskId, status, task.id)
-                else setDragState(null)
-              }}
-              onEdit={() => openEditor(task, status)}
-              onDelete={() => deleteTask(task)}
-              onMove={(targetStatus) => move(task.id, targetStatus)}
-              onContinue={continueTask}
-              onStartNewSession={onStartTask ? () => onStartTask(task) : undefined}
-            />
-          )
-        })}
+      <div className="grid content-start gap-3">
+        {visibleTasks.map((projected) => (
+          <TaskCard
+            key={projected.task.id}
+            t={t}
+            locale={locale}
+            projected={projected}
+            onEdit={() => openEditor(projected.task, projected.task.status)}
+            onDelete={() => deleteTask(projected.task)}
+            onMove={(status) => {
+              dispatch({ type: "move", id: projected.task.id, status, now: Date.now() })
+            }}
+            onOpenSession={onOpenSession}
+            onStartTask={onStartTask}
+          />
+        ))}
 
         {tasks.length === 0 ? (
-          <div className="grid flex-1 place-content-center gap-2 px-4 py-8 text-center text-muted-foreground">
-            <Circle aria-hidden className="mx-auto size-6 opacity-50" />
-            <p className="text-ui font-medium">
-              {filtered && totalCount > 0
-                ? t("taskboard.emptyFiltered")
-                : t("taskboard.emptyColumn")}
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="compact"
-              onClick={() => openEditor(null, status)}
-            >
-              <Plus data-icon="inline-start" aria-hidden />
-              {t("taskboard.addTask")}
-            </Button>
-          </div>
+          <p className="px-3 py-8 text-center text-hint text-muted-foreground">
+            {filtered && totalCount > 0
+              ? t("taskboard.emptyFiltered")
+              : t("taskboard.emptyColumn")}
+          </p>
         ) : null}
 
-        <div
-          data-task-drop-end={status}
-          aria-label={t("taskboard.moveToEnd", { status: taskStatusLabel(t, status) })}
-          className={cn(
-            "min-h-16 flex-1 rounded-(--ds-radius-module) transition-[background-color,box-shadow]",
-            columnEndTarget && "bg-fill-hover ring-[3px] ring-primary/40"
-          )}
-          onDragOver={(event) => {
-            event.preventDefault()
-            event.dataTransfer.dropEffect = "move"
-            if (dragState?.taskId) setDragState({ taskId: dragState.taskId, status })
-          }}
-          onDrop={(event) => {
-            event.preventDefault()
-            const taskId = dragState?.taskId || event.dataTransfer.getData("text/plain")
-            if (taskId) move(taskId, status)
-          }}
-        />
+        {hiddenCount > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="compact"
+            aria-expanded={false}
+            onClick={() => onExpandedChange(true)}
+          >
+            {t("taskboard.more", { count: hiddenCount })}
+          </Button>
+        ) : expanded && tasks.length > COLLAPSED_LANE_LIMIT ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="compact"
+            aria-expanded
+            onClick={() => onExpandedChange(false)}
+          >
+            {t("taskboard.showLess")}
+          </Button>
+        ) : null}
       </div>
     </section>
   )
@@ -530,8 +532,8 @@ export function TaskBoardPage({
   const [priorities, setPriorities] = useState<TaskPriority[]>([])
   const [labels, setLabels] = useState<string[]>([])
   const [editor, setEditor] = useState<EditorState | null>(null)
-  const [dragState, setDragState] = useState<DragState | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [expandedLanes, setExpandedLanes] = useState<Partial<Record<TaskBoardLane, boolean>>>({})
   const didMount = useRef(false)
 
   useEffect(() => {
@@ -559,12 +561,29 @@ export function TaskBoardPage({
   const sessionsById = useMemo(
     () => new Map(sessions.map((session) => [
       session.id,
-      { title: session.title, archived: session.archived === true },
-    ])),
+      { ...session, archived: session.archived === true },
+    ] satisfies [string, SessionProjection])),
     [sessions]
+  )
+  const allProjectedTasks = useMemo(
+    () => projectTasks(sortBoardTasks(state.tasks), sessionsById),
+    [sessionsById, state.tasks]
+  )
+  const visibleProjectedTasks = useMemo(
+    () => projectTasks(visibleTasks, sessionsById),
+    [sessionsById, visibleTasks]
+  )
+  const allTasksByLane = useMemo(
+    () => groupProjectedTasks(allProjectedTasks),
+    [allProjectedTasks]
+  )
+  const visibleTasksByLane = useMemo(
+    () => groupProjectedTasks(visibleProjectedTasks),
+    [visibleProjectedTasks]
   )
   const activeFilterCount = (query.trim() ? 1 : 0) + priorities.length + labels.length
   const filtered = activeFilterCount > 0
+  const attentionCount = allTasksByLane.needs_you.length
 
   const dispatch = (action: BoardAction) => dispatchBase(action)
   const openEditor = (task: BoardTask | null, initialStatus: TaskStatus) => {
@@ -593,10 +612,8 @@ export function TaskBoardPage({
         ...value,
         order: nextColumnOrder(state.tasks, value.status),
       })
-      dispatch({
-        type: "create",
-        task,
-      })
+      dispatch({ type: "create", task })
+      setExpandedLanes((current) => ({ ...current, queue: true }))
       if (filterBoardTasks([task], filters).length === 0) {
         toast(t("taskboard.createdHidden", { title: task.title }), "info", {
           label: t("taskboard.clearFilters"),
@@ -616,43 +633,39 @@ export function TaskBoardPage({
 
   return (
     <main className="animate-page-in flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
-      <header className="shrink-0 bg-background pb-6 pt-6">
-        <div data-page-header-content className="mx-auto w-full max-w-4xl px-6 sm:px-8">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
-              {headerLeadingAction ? (
-                <div data-taskboard-leading-action className="shrink-0 pt-0.5">
-                  {headerLeadingAction}
-                </div>
-              ) : null}
-              <div className="min-w-0 flex-1">
-                <h1 className="text-display font-semibold tracking-tight">
-                  {t("taskboard.title")}
-                </h1>
-                <p className="mt-2 max-w-2xl text-ui leading-relaxed text-muted-foreground">
-                  {t("taskboard.description")}
-                </p>
+      <header className="shrink-0 bg-background px-6 py-4 sm:px-8">
+        <div
+          data-page-header-content
+          className="grid min-w-0 items-center gap-3 xl:grid-cols-[minmax(0,auto)_minmax(24rem,1fr)]"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            {headerLeadingAction ? (
+              <div data-taskboard-leading-action className="shrink-0">
+                {headerLeadingAction}
               </div>
-            </div>
-            <Button
-              type="button"
-              className="shrink-0"
-              size="compact"
-              onClick={() => openEditor(null, "todo")}
-            >
-              <Plus data-icon="inline-start" aria-hidden />
-              {t("taskboard.new")}
-            </Button>
+            ) : null}
+            <h1 className="shrink-0 text-display font-semibold tracking-tight">
+              {t("taskboard.title")}
+            </h1>
+            {attentionCount > 0 ? (
+              <p className="flex min-w-0 items-center gap-2 text-hint text-muted-foreground">
+                <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
+                <span className="truncate">
+                  {t("taskboard.attentionSummary", { count: attentionCount })}
+                </span>
+              </p>
+            ) : null}
           </div>
 
-          <div data-page-header-controls className="mt-8 flex items-center gap-3">
-            <div className="relative min-w-52 flex-1">
+          <div data-page-header-controls className="flex min-w-0 items-center gap-2 xl:justify-end">
+            <div className="relative min-w-0 max-w-sm flex-1">
               <Search
                 aria-hidden
-                className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               />
               <Input
-                className="h-(--ds-control-field) rounded-(--ds-radius-control) bg-background pl-10 pr-10 ring-1 ring-inset ring-border"
+                size="compact"
+                className="bg-fill-rest pl-9 pr-9 shadow-(--ds-elevation-surface)"
                 type="search"
                 aria-label={t("taskboard.search")}
                 placeholder={t("taskboard.search")}
@@ -663,8 +676,8 @@ export function TaskBoardPage({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2"
+                  size="icon-xs"
+                  className="absolute right-1 top-1/2 -translate-y-1/2"
                   aria-label={t("taskboard.clearSearch")}
                   onClick={() => setQuery("")}
                 >
@@ -745,6 +758,16 @@ export function TaskBoardPage({
                 </Button>
               </PopoverContent>
             </Popover>
+
+            <Button
+              type="button"
+              className="shrink-0"
+              size="compact"
+              onClick={() => openEditor(null, "todo")}
+            >
+              <Plus data-icon="inline-start" aria-hidden />
+              {t("taskboard.new")}
+            </Button>
           </div>
         </div>
       </header>
@@ -757,33 +780,29 @@ export function TaskBoardPage({
 
       <div
         data-task-board-columns
-        className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden pb-6 pt-1"
+        className="min-h-0 flex-1 overflow-auto px-6 pb-6 sm:px-8"
       >
-        <div
-          data-task-board-content
-          className="h-full w-full px-6 sm:px-8"
-        >
-          <div className="flex h-full min-w-max gap-4">
-            {TASK_STATUSES.map((status) => (
-              <BoardColumn
-                key={status}
-                t={t}
-                locale={locale}
-                status={status}
-                tasks={visibleTasks.filter((task) => task.status === status)}
-                totalCount={state.tasks.filter((task) => task.status === status).length}
-                filtered={filtered}
-                sessionsById={sessionsById}
-                dragState={dragState}
-                setDragState={setDragState}
-                dispatch={dispatch}
-                openEditor={openEditor}
-                deleteTask={deleteTask}
-                onOpenSession={onOpenSession}
-                onStartTask={onStartTask}
-              />
-            ))}
-          </div>
+        <div data-task-board-content className="flex min-h-full min-w-max gap-4">
+          {TASK_BOARD_LANES.map((lane) => (
+            <BoardColumn
+              key={lane}
+              t={t}
+              locale={locale}
+              lane={lane}
+              tasks={visibleTasksByLane[lane]}
+              totalCount={allTasksByLane[lane].length}
+              filtered={filtered}
+              expanded={expandedLanes[lane] === true}
+              onExpandedChange={(expanded) => {
+                setExpandedLanes((current) => ({ ...current, [lane]: expanded }))
+              }}
+              dispatch={dispatch}
+              openEditor={openEditor}
+              deleteTask={deleteTask}
+              onOpenSession={onOpenSession}
+              onStartTask={onStartTask}
+            />
+          ))}
         </div>
       </div>
 

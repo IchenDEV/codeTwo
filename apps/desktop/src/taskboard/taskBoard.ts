@@ -2,6 +2,12 @@ export const TASK_STATUSES = ["todo", "in_progress", "in_review", "done"] as con
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+export const TASK_BOARD_LANES = ["queue", "running", "needs_you", "done"] as const;
+
+export type TaskBoardLane = (typeof TASK_BOARD_LANES)[number];
+
+export type TaskSessionActivityKind = "idle" | "running" | "awaiting_input" | "failed";
+
 export const TASK_PRIORITIES = ["none", "low", "medium", "high", "urgent"] as const;
 export const PRIORITIES = TASK_PRIORITIES;
 
@@ -19,6 +25,22 @@ export interface BoardTask {
   updatedAt: number;
   /** Ordered oldest to newest. A Task owns its Session history, never only one Session. */
   sessionIds: string[];
+}
+
+/**
+ * Board lanes are a projection, not another persisted workflow field. A Task keeps its durable
+ * stage while the latest Session supplies live execution and attention state.
+ */
+export function taskBoardLane(
+  task: Pick<BoardTask, "status">,
+  activity: TaskSessionActivityKind = "idle",
+): TaskBoardLane {
+  if (task.status === "done") return "done";
+  if (task.status === "in_review") return "needs_you";
+  if (task.status === "todo") return "queue";
+  if (activity === "awaiting_input" || activity === "failed") return "needs_you";
+  if (activity === "running") return "running";
+  return "queue";
 }
 
 export interface BoardFilters {
