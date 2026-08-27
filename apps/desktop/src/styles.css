@@ -897,16 +897,34 @@
     opacity: 1;
   }
 
-  /* Side chat stays mounted for the app lifetime. This inset makes the active surface share the
-     window with it instead of letting a fixed overlay cover the transcript and composer. */
-  .workspace-with-side-chat {
-    padding-inline-end: var(--side-chat-width, 440px);
-    transition: padding-inline-end var(--motion-normal) ease-out;
+  /* Side chat is a persistent, nonmodal macOS-style panel: it floats above the workspace without
+     obscuring the whole app with a backdrop or changing the workspace's geometry. */
+  .side-chat-panel {
+    --side-chat-header-inset: var(--ds-radius-control);
+    --side-chat-tab-radius: var(--ds-radius-control);
+    --side-chat-panel-radius: calc(
+      var(--side-chat-header-inset) + var(--side-chat-tab-radius)
+    );
+    inset-inline-start: 50%;
+    top: 50%;
+    width: min(640px, calc(100vw - 48px));
+    height: min(720px, calc(100vh - 80px));
+    border-radius: var(--side-chat-panel-radius);
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px)) scale(0.98);
+    transition:
+      opacity var(--motion-normal) ease-out,
+      transform var(--motion-normal) var(--ease-standard);
   }
-
-  .side-chat-panel .dock-grip {
-    inset-inline-start: 0;
-    inset-inline-end: auto;
+  .side-chat-panel[data-open] {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .side-chat-header {
+    padding: var(--side-chat-header-inset);
+  }
+  .side-chat-tab {
+    border-radius: var(--side-chat-tab-radius);
   }
 
   /* Keep the rail's right edge as an invisible resize target. A full-height hover line is too
@@ -1024,18 +1042,16 @@
 }
 
 @media (max-width: 960px) {
-  .workspace-with-side-chat {
-    padding-inline-end: 0;
-  }
-
   .side-chat-panel {
-    max-width: min(520px, 100vw);
+    width: min(560px, calc(100vw - 32px));
+    height: min(680px, calc(100vh - 32px));
   }
 }
 
 @media (max-width: 639px) {
   .side-chat-panel {
-    max-width: 100vw;
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
   }
 }
 

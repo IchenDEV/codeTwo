@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { flushSync } from "react-dom";
 import {
@@ -712,10 +711,6 @@ export default function App() {
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
   const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
-  const [sideChatWidth, setSideChatWidth] = usePersistedNumber(
-    "codetwo.sideChatWidth",
-    440,
-  );
   // ---- R10 dock follow (docs/design/scenes-impl-frontend.md Item 6) ----
   // The latch reducer's state lives in a ref because engine events arrive outside render; only
   // the badge hint is state, so the Dock can mark the surface the agent is working on.
@@ -986,7 +981,6 @@ export default function App() {
   const [narrowLayout, setNarrowLayout] = useState(
     () => window.innerWidth < 720,
   );
-  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
   useEffect(() => {
@@ -995,21 +989,12 @@ export default function App() {
       const next = width < 720;
       if (next && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
       wasNarrowLayoutRef.current = next;
-      setViewportWidth(width);
       setNarrowLayout(next);
     };
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
   const displayedRailCollapsed = narrowLayout ? !narrowRailOpen : railCollapsed;
-  const appliedSideChatWidth =
-    viewportWidth < 640
-      ? viewportWidth
-      : viewportWidth < 960
-        ? Math.min(sideChatWidth, 520)
-        : viewportWidth < 1440
-          ? Math.min(sideChatWidth, 360)
-          : sideChatWidth;
   const toggleDisplayedRail = useCallback(() => {
     if (narrowLayout) setNarrowRailOpen((open) => !open);
     else toggleRail();
@@ -5947,13 +5932,7 @@ export default function App() {
   ) : undefined;
 
   return (
-    <div
-      className={cn(
-        "app-shell flex h-screen flex-col overflow-hidden text-foreground",
-        sideChatOpen && "workspace-with-side-chat",
-      )}
-      style={{ "--side-chat-width": `${appliedSideChatWidth}px` } as CSSProperties}
-    >
+    <div className="app-shell flex h-screen flex-col overflow-hidden text-foreground">
       <DesktopPetBridge
         animation={petAnimation}
         voiceEnabled={voiceComposerEnabled}
@@ -6076,16 +6055,23 @@ export default function App() {
             createTemporarySession();
             if (narrowLayout) setNarrowRailOpen(false);
           }}
-            onRename={(id, title) =>
-              void renameSession(id, title).then(refreshSessions)
-            }
-            onPin={(id, pinned) =>
-              void pinSession(id, pinned).then(refreshSessions)
-            }
-            onArchive={async (id, archived) => {
-              await archiveSession(id, archived);
-              await refreshSessions();
-            }}
+          sideChatOpen={sideChatOpen}
+          onToggleSideChat={() => {
+            const nextOpen = !sideChatOpen;
+            if (nextOpen) manualDockTab(null);
+            setSideChatOpen(nextOpen);
+            if (narrowLayout) setNarrowRailOpen(false);
+          }}
+          onRename={(id, title) =>
+            void renameSession(id, title).then(refreshSessions)
+          }
+          onPin={(id, pinned) =>
+            void pinSession(id, pinned).then(refreshSessions)
+          }
+          onArchive={async (id, archived) => {
+            await archiveSession(id, archived);
+            await refreshSessions();
+          }}
           onDiscardWorktree={(s) => void discardWorktreeForSession(s)}
           displayProvider={displayProvider}
           onOpenMarket={() => {
@@ -6955,8 +6941,6 @@ export default function App() {
 
       <SideChatPanel
         open={sideChatOpen}
-        width={appliedSideChatWidth}
-        onWidth={setSideChatWidth}
         onClose={() => setSideChatOpen(false)}
         provider={provider}
         providers={providers}

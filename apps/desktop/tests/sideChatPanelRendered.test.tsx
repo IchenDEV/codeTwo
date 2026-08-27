@@ -1,10 +1,12 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { activateDom, button, click, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SideChatPanel } = await import("../src/session/SideChatPanel");
+const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -25,8 +27,6 @@ function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}, open =
     <I18nProvider>
       <SideChatPanel
         open={open}
-        width={440}
-        onWidth={() => {}}
         onClose={onClose}
         provider="codex"
         providers={providers}
@@ -42,13 +42,25 @@ function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}, open =
 }
 
 describe("SideChatPanel", () => {
-  test("removes its resize separator from the tab order while hidden", () => {
+  test("keeps the selected tab concentric with the floating panel corner", () => {
+    expect(styles).toContain(
+      "var(--side-chat-header-inset) + var(--side-chat-tab-radius)",
+    );
+    expect(styles).toContain("padding: var(--side-chat-header-inset);");
+    expect(styles).toContain("border-radius: var(--side-chat-tab-radius);");
+  });
+
+  test("stays mounted as a nonmodal floating panel while hidden", () => {
     activateDom();
     const view = mount(panel(null, () => {}, () => {}, false));
-    const separator = view.container.querySelector('[role="separator"]');
+    const floatingPanel = view.container.querySelector(".side-chat-panel");
 
-    expect(separator?.getAttribute("tabindex")).toBe("-1");
-    expect(separator?.getAttribute("aria-disabled")).toBe("true");
+    expect(floatingPanel?.getAttribute("role")).toBe("dialog");
+    expect(floatingPanel?.getAttribute("aria-modal")).toBe("false");
+    expect(floatingPanel?.getAttribute("aria-hidden")).toBe("true");
+    expect(floatingPanel?.hasAttribute("inert")).toBe(true);
+    expect(floatingPanel?.className).toContain("fixed");
+    expect(view.container.querySelector('[role="separator"]')).toBeNull();
 
     view.unmount();
   });
@@ -65,6 +77,7 @@ describe("SideChatPanel", () => {
     expect(view.container.textContent).toContain(
       "Side chats are temporary and disappear when you close CodeTwo.",
     );
+    expect(view.container.querySelector(".side-chat-panel")?.hasAttribute("data-open")).toBe(true);
     click(button(view.container, "New side chat"));
     await flush();
     expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(2);
@@ -97,6 +110,24 @@ describe("SideChatPanel", () => {
     click(button(view.container, "Hide side chat"));
     expect(closes).toBe(1);
     expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(1);
+
+    view.unmount();
+  });
+
+  test("closes the floating panel with Escape", async () => {
+    activateDom();
+    let closes = 0;
+    const view = mount(panel(null, () => { closes += 1; }));
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('[role="tab"]')).toHaveLength(1);
+    });
+
+    dom.window.dispatchEvent(new dom.window.KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Escape",
+    }));
+    expect(closes).toBe(1);
 
     view.unmount();
   });
