@@ -12,7 +12,6 @@ import {
   Plus,
   Play,
   Send,
-  TerminalIcon,
   Upload,
   type HugeIcon,
 } from "@/components/ui/icons";
@@ -86,7 +85,6 @@ function PanelAction({
 
 export function SessionHeaderActions({
   canCommit,
-  terminalActive,
   panelActive,
   onAddAction,
   onOpen,
@@ -101,12 +99,10 @@ export function SessionHeaderActions({
   onCommit,
   onCheckpoint,
   onPush,
-  onToggleTerminal,
   onTogglePanel,
   onMoveTask,
 }: {
   canCommit: boolean;
-  terminalActive: boolean;
   panelActive: boolean;
   onAddAction: () => void;
   onOpen: () => void;
@@ -121,7 +117,6 @@ export function SessionHeaderActions({
   onCommit: () => void;
   onCheckpoint: () => void;
   onPush: () => void;
-  onToggleTerminal: () => void;
   onTogglePanel: () => void;
   onMoveTask: () => void;
 }) {
@@ -265,12 +260,6 @@ export function SessionHeaderActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <PanelAction
-        icon={TerminalIcon}
-        label={t("action.toggle_terminal")}
-        active={terminalActive}
-        onClick={onToggleTerminal}
-      />
       <PanelAction
         icon={PanelRight}
         label={t("header.panel")}
