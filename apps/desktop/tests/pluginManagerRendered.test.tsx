@@ -259,10 +259,16 @@ describe("PluginManagerPage", () => {
     await flush();
 
     const action = view.container.querySelector("[data-plugin-manager-leading-action]");
+    const detailAction = view.container.querySelector(
+      "[data-plugin-manager-detail-leading-action]",
+    );
     expect(action).not.toBeNull();
     expect(action?.textContent).toContain("Expand sidebar");
+    expect(detailAction).not.toBeNull();
+    expect(detailAction?.textContent).toContain("Expand sidebar");
     click(action?.querySelector("button"));
-    expect(expanded).toEqual([true]);
+    click(detailAction?.querySelector("button"));
+    expect(expanded).toEqual([true, true]);
 
     view.unmount();
   });
@@ -368,12 +374,16 @@ describe("PluginManagerPage", () => {
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("@container/plugin-manager")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-page]")?.classList.contains("plugin-manager-page")).toBe(true);
     expect(view.container.querySelector(".plugin-manager-list-pane")).not.toBeNull();
+    expect(view.container.querySelector(".plugin-manager-tabs")).not.toBeNull();
+    expect(view.container.querySelectorAll(".plugin-manager-tab-count")).toHaveLength(5);
     expect(view.container.querySelector(".plugin-manager-detail-pane")).not.toBeNull();
     expect(view.container.querySelector("[data-plugin-manager-page]")?.getAttribute("data-compact-detail")).toBe("true");
     expect(view.container.querySelector("[data-plugin-manager-scroll]")?.classList.contains("w-full")).toBe(true);
     expect(view.container.querySelector("[data-plugin-manager-search]")?.classList.contains("w-full")).toBe(true);
     expect(view.container.querySelector("[data-plugin-details]")?.tagName).toBe("ARTICLE");
     expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"]')?.textContent).toContain("Memory");
+    expect(view.container.querySelector('[aria-label="Plugin list"] [data-selected="true"] [data-plugin-status="active"] .bg-success')).not.toBeNull();
+    expect(view.container.querySelector('[data-plugin-details] [data-plugin-status="active"] .bg-success')).not.toBeNull();
     expect(view.container.textContent).toContain("Built-in feature");
     expect(view.container.textContent).toContain("Host feature");
     expect(view.container.textContent).toContain("Bundle · Review Tools");

@@ -1297,6 +1297,29 @@ pre {
   display: none;
 }
 
+.plugin-manager-detail-leading-action {
+  display: none;
+}
+
+@container plugin-manager (max-width: 50rem) {
+  .plugin-manager-list-header {
+    gap: 0;
+    padding-inline: var(--ds-space-module-inset);
+  }
+
+  .plugin-manager-tabs {
+    gap: 0;
+  }
+
+  .plugin-manager-tab {
+    padding-inline: var(--ds-space-optical);
+  }
+
+  .plugin-manager-tab-count {
+    display: none;
+  }
+}
+
 @container plugin-manager (max-width: 44rem) {
   .plugin-manager-list-pane {
     width: 100%;
@@ -1313,11 +1336,16 @@ pre {
   .plugin-manager-back {
     display: inline-flex;
   }
+
+  .plugin-manager-detail-leading-action {
+    display: block;
+  }
 }
 
 /* The command palette floats over live project context, so its tint stays translucent enough for
    the blur to read as material while the modal token keeps both schemes legible. */
 .command-palette-surface {
+  height: min(32rem, calc(100dvh - var(--ds-space-page-section)));
   background: color-mix(in oklch, var(--ds-color-modal) 78%, transparent);
   backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
   -webkit-backdrop-filter: blur(var(--ds-space-page)) saturate(135%);
@@ -1328,5 +1356,95 @@ pre {
     background: var(--ds-color-modal);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+}
+
+/* The dock picker changes anatomy at its real container width, independently of the window. */
+.dock-surface-picker {
+  padding: 18vh 1.5rem 1.5rem;
+}
+
+.dock-surface-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.dock-surface-card {
+  min-width: 0;
+  flex-direction: column;
+}
+
+.dock-surface-card > span {
+  min-width: 0;
+}
+
+@container dock (max-width: 359px) {
+  .dock-surface-picker {
+    padding-top: 1.5rem;
+  }
+
+  .dock-surface-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dock-surface-card {
+    flex-direction: row;
+  }
+}
+
+/* Header actions retain their accessible names while shedding labels before the title collapses. */
+.session-header {
+  container: session-header / inline-size;
+}
+
+@container session-header (max-width: 44rem) {
+  .session-header-action-label {
+    display: none;
+  }
+
+  .session-header [data-plugin-ui-slot="session.header"] {
+    min-width: var(--ds-control-normal);
+    scrollbar-width: none;
+  }
+
+  .session-header [data-plugin-ui-slot="session.header"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  .session-header-action-main,
+  .session-header-plugin-action {
+    flex: 0 0 var(--ds-control-normal);
+    width: var(--ds-control-normal);
+    min-width: var(--ds-control-normal);
+    max-width: var(--ds-control-normal);
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+}
+
+@container session-header (max-width: 28rem) {
+  .session-header-project-icon,
+  .session-header-project-context,
+  .session-header [data-plugin-ui-slot="session.header"] {
+    display: none;
+  }
+
+  .session-header-title {
+    min-width: 3rem;
+  }
+
+  .session-header-actions {
+    gap: 0.25rem;
+  }
+
+  .session-header-split-trigger {
+    display: none;
+  }
+
+  .session-header-split-group .session-header-action-main {
+    border-radius: var(--ds-radius-control);
   }
 }

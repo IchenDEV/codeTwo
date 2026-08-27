@@ -42,6 +42,17 @@ const SURFACES: { id: DockSurface; icon: typeof Globe; titleKey: StringKey; desc
   { id: "git", icon: GitBranch, titleKey: "dock.git", descKey: "dock.gitDesc" },
 ];
 
+export const DOCK_MIN_WIDTH = 300;
+export const DOCK_MAIN_MIN_WIDTH = 620;
+
+export function dockMaxWidth(viewportWidth: number, reservedWidth = 0): number {
+  return Math.max(DOCK_MIN_WIDTH, viewportWidth - reservedWidth - DOCK_MAIN_MIN_WIDTH);
+}
+
+export function shouldOverlayRailForDock(viewportWidth: number, railWidth: number): boolean {
+  return viewportWidth < railWidth + DOCK_MIN_WIDTH + DOCK_MAIN_MIN_WIDTH;
+}
+
 /**
  * A terminal's identity, and the reason its state survives a remount: the core keys terminals by
  * this string, so the same session, slot, and mode always reach the same emulator. `tmux` is part
@@ -90,6 +101,7 @@ export function Dock({
   onLoadEarlier,
   width,
   onWidth,
+  reservedWidth = 0,
   autoTab,
   highlightFile,
   availableSurfaces = ["trajectory", "browser", "terminal", "files", "git"],
@@ -134,6 +146,8 @@ export function Dock({
   /** Dock width in px — dragged by the left-edge grip, persisted by the caller. */
   width: number;
   onWidth: (n: number) => void;
+  /** Inline shell width that must remain beside the document while the dock is open. */
+  reservedWidth?: number;
   /** R10 dock follow: the surface the agent is working on right now — its tab gets a subtle
       primary pulse, never a forced switch. */
   autoTab?: DockSurface | null;
@@ -197,8 +211,8 @@ export function Dock({
   // Never let the dock squeeze the document below a usable measure. Persist the preferred width,
   // but clamp only what is applied so it returns in full on a larger window.
   const maxForPlacement = useCallback(
-    () => Math.max(300, window.innerWidth - 620),
-    [],
+    () => dockMaxWidth(window.innerWidth, reservedWidth),
+    [reservedWidth],
   );
   const [maxSize, setMaxSize] = useState(maxForPlacement);
   useEffect(() => {
@@ -221,7 +235,7 @@ export function Dock({
     axis: "x",
     direction: -1,
     value: applied,
-    min: 300,
+    min: DOCK_MIN_WIDTH,
     max: maxSize,
     disabled: !open,
     onStart: () => {
@@ -238,9 +252,9 @@ export function Dock({
     <button
       key={id}
       onClick={() => onTab(id)}
-      className="flex flex-col items-start gap-2.5 rounded-xl bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+      className="dock-surface-card flex items-start gap-2.5 rounded-(--ds-radius-module) bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
-      <Icon className="size-5 text-muted-foreground" />
+      <Icon className="size-4 text-muted-foreground" />
       <span>
         <span className="block text-ui font-semibold">{t(titleKey)}</span>
         <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">
@@ -299,22 +313,22 @@ export function Dock({
               <X className="size-3.5" />
             </Button>
           </div>
-          <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-6 pt-[18vh]">
+          <div className="dock-surface-picker flex min-h-0 flex-1 items-start justify-center overflow-y-auto">
             <div className="animate-rise-in w-full max-w-[420px]">
               <h2 className="text-center text-heading font-semibold">{t("dock.openSurface")}</h2>
               <p className="mt-1 text-center text-hint text-muted-foreground">
                 {t("dock.openSurfaceHint")}
               </p>
-              <div className="mt-6 grid grid-cols-2 gap-3">
+              <div className="dock-surface-grid">
                 {visibleSurfaces.slice(0, 3).map(renderSurfaceCard)}
                 {onOpenSideChat ? (
                   <button
                     type="button"
                     aria-label={t("sideChat.title")}
                     onClick={onOpenSideChat}
-                    className="flex flex-col items-start gap-2.5 rounded-(--ds-radius-module) bg-card/60 p-4 text-left ring-1 ring-foreground/10 transition-[background-color,box-shadow] hover:bg-accent/50 hover:ring-primary/40"
+                    className="dock-surface-card flex items-start gap-2.5 rounded-(--ds-radius-module) bg-card p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
-                    <MessageSquare className="size-5 text-muted-foreground" aria-hidden />
+                    <MessageSquare className="size-4 text-muted-foreground" aria-hidden />
                     <span>
                       <span className="block text-ui font-semibold">{t("sideChat.title")}</span>
                       <span className="mt-0.5 block text-fine leading-relaxed text-muted-foreground">

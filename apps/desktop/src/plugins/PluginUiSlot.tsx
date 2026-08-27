@@ -69,14 +69,14 @@ export function PluginUiSlot({
               type="button"
               variant="ghost"
               size="compact"
-              className="max-w-44 shrink-0"
+              className="session-header-plugin-action max-w-44 shrink-0"
               title={contribution.description || `${contribution.pluginName}: ${contribution.label}`}
               aria-label={`${contribution.pluginName}: ${contribution.label}`}
               disabled={busy !== null}
               onClick={() => void invoke(contribution)}
             >
               {busy === key ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <Puzzle data-icon="inline-start" />}
-              <span className="truncate">{contribution.label}</span>
+              <span className="session-header-action-label truncate">{contribution.label}</span>
             </Button>
           );
         })}

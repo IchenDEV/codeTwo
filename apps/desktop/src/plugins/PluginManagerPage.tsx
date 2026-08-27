@@ -226,20 +226,6 @@ function sourceLabel(
   return custom || labels.sourceNames[source];
 }
 
-function statusVariant(
-  status: PluginManagerStatus,
-): "default" | "secondary" | "destructive" | "ghost" {
-  if (status === "failed") return "destructive";
-  if (status === "active") return "default";
-  if (
-    status === "disabled" ||
-    status === "disposed" ||
-    status === "unsupported"
-  )
-    return "ghost";
-  return "secondary";
-}
-
 function statusDotClass(status: PluginManagerStatus): string {
   if (status === "active") return "bg-success";
   if (status === "failed") return "bg-destructive";
@@ -260,7 +246,10 @@ function CompactStatus({
   labels: PluginManagerLabels;
 }) {
   return (
-    <span className="flex shrink-0 items-center gap-1.5 text-fine text-muted-foreground">
+    <span
+      data-plugin-status={status}
+      className="flex shrink-0 items-center gap-1.5 text-fine text-muted-foreground"
+    >
       <span
         className={cn("size-1.5 rounded-full", statusDotClass(status))}
         aria-hidden="true"
@@ -279,9 +268,7 @@ function StatusSummary({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Badge variant={statusVariant(state.status)}>
-        {labels.status[state.status]}
-      </Badge>
+      <CompactStatus status={state.status} labels={labels} />
       {state.missingDependencies?.length ? (
         <Badge variant="destructive">
           <CircleAlert />
@@ -1676,13 +1663,13 @@ export function PluginManagerPage({
       aria-label={labels.title}
     >
       <div className="plugin-manager-list-pane flex min-h-0 shrink-0 flex-col bg-sidebar">
-        <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-3 py-2.5">
+        <header className="plugin-manager-list-header electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-3 py-2.5">
           {headerLeadingAction ? (
             <div data-plugin-manager-leading-action className="shrink-0">
               {headerLeadingAction}
             </div>
           ) : null}
-          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+          <LiquidSelectionGroup role="tablist" aria-label={labels.title} className="plugin-manager-tabs flex min-w-0 items-center gap-0.5 overflow-x-auto">
             {(["plugins", "mcps", "skills", "hooks", "marketplace"] as const).map((id) => (
               <button
                 key={id}
@@ -1691,11 +1678,11 @@ export function PluginManagerPage({
                 aria-selected={tab === id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  "h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-1.5 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  "plugin-manager-tab h-(--ds-control-normal) shrink-0 rounded-(--ds-radius-control) px-1 text-ui text-muted-foreground transition-colors hover:bg-accent/55 hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   tab === id && "font-medium text-foreground hover:bg-transparent",
                 )}
               >
-                {labels[id]} <span className="text-fine tabular-nums">{tabCounts[id]}</span>
+                {labels[id]} <span className="plugin-manager-tab-count text-fine tabular-nums">{tabCounts[id]}</span>
               </button>
             ))}
           </LiquidSelectionGroup>
@@ -1733,6 +1720,11 @@ export function PluginManagerPage({
 
       <div className="plugin-manager-detail-pane flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 px-4 py-2.5">
+          {headerLeadingAction ? (
+            <div data-plugin-manager-detail-leading-action className="plugin-manager-detail-leading-action shrink-0">
+              {headerLeadingAction}
+            </div>
+          ) : null}
           <Button
             variant="ghost"
             size="icon-xs"

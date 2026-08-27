@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeft,
   BrainCircuit,
@@ -253,7 +260,14 @@ function Row({
   children: ReactNode;
 }) {
   return (
-    <div className={cn("flex items-center justify-between gap-8", compact ? "py-2" : "py-3.5", className)}>
+    <div
+      data-compact={compact || undefined}
+      className={cn(
+        "settings-row flex items-center justify-between gap-8",
+        compact ? "py-2" : "py-3.5",
+        className,
+      )}
+    >
       <div className="flex min-w-0 items-center gap-3">
         {icon}
         <div className="min-w-0 max-w-[420px]">
@@ -261,7 +275,9 @@ function Row({
           {hint && <div className="mt-0.5 text-hint leading-relaxed text-muted-foreground">{hint}</div>}
         </div>
       </div>
-      <div className={cn("flex shrink-0 items-center gap-1", controlClassName)}>{children}</div>
+      <div className={cn("settings-row-control flex shrink-0 items-center gap-1", controlClassName)}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -1297,8 +1313,12 @@ export function SettingsPage({
       {/* ---- nav rail — same material as the app's rail, so settings still feels like this app */}
       <aside
         data-settings-sidebar
-        className="glass-rail flex shrink-0 flex-col"
-        style={{ width: Math.min(420, Math.max(220, sidebarWidth)) }}
+        className="settings-sidebar glass-rail flex shrink-0 flex-col"
+        style={
+          {
+            "--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`,
+          } as CSSProperties
+        }
       >
         {/* Same 40px title bar as the main shell — clears the traffic lights and drags the window. */}
         <div className="electrobun-webkit-app-region-drag settings-titlebar shrink-0" />
@@ -1306,10 +1326,12 @@ export function SettingsPage({
           data-settings-back
           disabled={projectModeSaving}
           onClick={onClose}
+          aria-label={t("settings.back")}
+          title={t("settings.back")}
           className="mx-3 mb-2 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-ui text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           <ArrowLeft className="size-3.5 shrink-0" />
-          {t("settings.back")}
+          <span className="settings-back-label">{t("settings.back")}</span>
         </button>
         <nav
           aria-label={t("settings.title")}
@@ -1325,10 +1347,14 @@ export function SettingsPage({
               .filter(({ id }) => deviceSyncEnabled || id !== "sync");
             const headingId = `settings-nav-${group.id}`;
             return (
-              <section key={group.id} aria-labelledby={headingId}>
+              <section
+                key={group.id}
+                aria-label={t(group.labelKey)}
+                aria-labelledby={headingId}
+              >
                 <h2
                   id={headingId}
-                  className="px-2 pb-2 text-hint font-medium text-muted-foreground"
+                  className="settings-nav-heading px-2 pb-2 text-hint font-medium text-muted-foreground"
                 >
                   {t(group.labelKey)}
                 </h2>
@@ -1337,16 +1363,18 @@ export function SettingsPage({
                     <button
                       key={id}
                       aria-current={id === tab ? "page" : undefined}
+                      aria-label={t(labelKey)}
+                      title={t(labelKey)}
                       onClick={() => setTab(id)}
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
+                        "settings-nav-item flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-ui transition-colors",
                         id === tab
                           ? "font-medium text-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                       )}
                     >
                       <Icon className="size-3.5 shrink-0" />
-                      <span className="truncate">{t(labelKey)}</span>
+                      <span className="settings-nav-label truncate">{t(labelKey)}</span>
                     </button>
                   ))}
                 </div>
@@ -1381,7 +1409,7 @@ export function SettingsPage({
           )}
         </header>
 
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea key={tab} className="min-h-0 flex-1">
           <div
             className={cn(
               "settings-page mx-auto w-full pb-20",

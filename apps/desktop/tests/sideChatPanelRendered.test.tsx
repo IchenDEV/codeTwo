@@ -1,12 +1,13 @@
 // @ts-nocheck
-import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, test } from "bun:test";
 import { activateDom, button, click, dom, flush, mount, restoreDom, waitFor } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { SideChatPanel } = await import("../src/session/SideChatPanel");
 const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const appSource = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -42,6 +43,13 @@ function panel(seed = null, onClose = () => {}, onSeedHandled = () => {}, open =
 }
 
 describe("SideChatPanel", () => {
+  test("restores the empty-session heading when a right panel changes the content width", () => {
+    expect(appSource).toContain("const heroScrollRef = useRef<HTMLDivElement | null>(null)");
+    expect(appSource).toContain("heroScrollRef.current?.scrollTo({ top: 0 })");
+    expect(appSource).toContain("[dockTab, docMode, sessionLoading, turns.length]");
+    expect(appSource).toContain("ref={heroScrollRef}");
+  });
+
   test("keeps the selected tab concentric with the floating panel corner", () => {
     expect(styles).toContain(
       "var(--side-chat-header-inset) + var(--side-chat-tab-radius)",
@@ -61,6 +69,17 @@ describe("SideChatPanel", () => {
     expect(floatingPanel?.hasAttribute("inert")).toBe(true);
     expect(floatingPanel?.className).toContain("fixed");
     expect(view.container.querySelector('[role="separator"]')).toBeNull();
+
+    view.unmount();
+  });
+
+  test("restores keyboard navigation when the panel opens", () => {
+    activateDom();
+    const view = mount(panel());
+    const aside = view.container.querySelector("aside");
+
+    expect(aside?.hasAttribute("inert")).toBe(false);
+    expect(aside?.getAttribute("aria-hidden")).toBe("false");
 
     view.unmount();
   });

@@ -345,7 +345,12 @@ import {
   type ToolSurfaceHint,
 } from "./session/toolActivity";
 import { needsMeCount } from "./sidebar/missionControl.ts";
-import { Dock, type DockSurface, type DockTab } from "./dock/Dock";
+import {
+  Dock,
+  shouldOverlayRailForDock,
+  type DockSurface,
+  type DockTab,
+} from "./dock/Dock";
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
@@ -419,6 +424,7 @@ function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[]
 }
 
 const EMPTY_APPSHOTS: AppshotCapture[] = [];
+const RAIL_OVERLAY_BREAKPOINT = 960;
 
 interface PendingPromptRequest {
   requestId: string;
@@ -979,35 +985,49 @@ export default function App() {
     [railCollapsed, setRailCollapsedRaw],
   );
   const [narrowLayout, setNarrowLayout] = useState(
-    () => window.innerWidth < 720,
+    () => window.innerWidth < RAIL_OVERLAY_BREAKPOINT,
   );
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [narrowRailOpen, setNarrowRailOpen] = useState(false);
   const wasNarrowLayoutRef = useRef(narrowLayout);
   useEffect(() => {
     const measure = () => {
       const width = window.innerWidth;
-      const next = width < 720;
+      const next = width < RAIL_OVERLAY_BREAKPOINT;
       if (next && !wasNarrowLayoutRef.current) setNarrowRailOpen(false);
       wasNarrowLayoutRef.current = next;
       setNarrowLayout(next);
+      setViewportWidth(width);
     };
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
-  const displayedRailCollapsed = narrowLayout ? !narrowRailOpen : railCollapsed;
+  const appliedRailWidth = Math.min(420, Math.max(220, railWidth));
+  const dockForcesRailOverlay =
+    dockTab !== null && shouldOverlayRailForDock(viewportWidth, appliedRailWidth);
+  const railOverlay = narrowLayout || dockForcesRailOverlay;
+  const wasDockRailOverlayRef = useRef(dockForcesRailOverlay);
+  useLayoutEffect(() => {
+    if (dockForcesRailOverlay && !wasDockRailOverlayRef.current) {
+      setNarrowRailOpen(false);
+    }
+    wasDockRailOverlayRef.current = dockForcesRailOverlay;
+  }, [dockForcesRailOverlay]);
+  const displayedRailCollapsed = railOverlay ? !narrowRailOpen : railCollapsed;
+  const railInlineWidth = railOverlay || displayedRailCollapsed ? 0 : appliedRailWidth;
   const toggleDisplayedRail = useCallback(() => {
-    if (narrowLayout) setNarrowRailOpen((open) => !open);
+    if (railOverlay) setNarrowRailOpen((open) => !open);
     else toggleRail();
-  }, [narrowLayout, toggleRail]);
+  }, [railOverlay, toggleRail]);
   const openTaskBoard = useCallback(() => {
     setShowAutomations(false);
     setShowPluginManager(false);
     setShowPullRequests(false);
     setShowDocker(false);
     setShowTaskBoard(true);
-    if (narrowLayout) setNarrowRailOpen(false);
+    if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
+  }, [railOverlay, railCollapsed, setRailCollapsedRaw]);
   // Full-page document is *the* mode of this app, not a temporary state it visits — it's what
   // sets a document-first tool apart from a chat box, so it is also the default. Nothing takes it
   // away on your behalf; the composer's ⤢ button, the grip double-click and Mod+Shift+E change it,
@@ -1020,6 +1040,12 @@ export default function App() {
   );
   const mainRef = useRef<HTMLElement | null>(null);
   const sessionWorkspaceRef = useRef<HTMLDivElement | null>(null);
+  const heroScrollRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!docMode && turns.length === 0 && !sessionLoading) {
+      heroScrollRef.current?.scrollTo({ top: 0 });
+    }
+  }, [dockTab, docMode, sessionLoading, turns.length]);
   useEffect(() => {
     const workspace = sessionWorkspaceRef.current;
     if (!workspace) return;
@@ -4124,11 +4150,16 @@ export default function App() {
     setShowPullRequests(false);
     setShowDocker(false);
     setShowPluginManager(true);
+    if (railOverlay) setNarrowRailOpen(false);
+    else if (railCollapsed) setRailCollapsedRaw(0);
   }, [
     activeProject,
     pluginManagerProjects,
+    railCollapsed,
+    railOverlay,
     refreshManagedCatalogs,
     refreshSkills,
+    setRailCollapsedRaw,
   ]);
 
   const refreshPluginManagerData = useCallback(
@@ -4227,11 +4258,11 @@ export default function App() {
     setShowPullRequests(false);
     setShowDocker(false);
     setShowAutomations(true);
-    if (narrowLayout) setNarrowRailOpen(false);
+    if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
   }, [
     componentEnabled,
-    narrowLayout,
+    railOverlay,
     railCollapsed,
     setRailCollapsedRaw,
     toast,
@@ -4247,9 +4278,9 @@ export default function App() {
     setShowTaskBoard(false);
     setShowDocker(false);
     setShowPullRequests(true);
-    if (narrowLayout) setNarrowRailOpen(false);
+    if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [componentEnabled, narrowLayout, railCollapsed, setRailCollapsedRaw, toast]);
+  }, [componentEnabled, railOverlay, railCollapsed, setRailCollapsedRaw, toast]);
 
   const openDocker = useCallback(() => {
     setShowAutomations(false);
@@ -4257,9 +4288,9 @@ export default function App() {
     setShowPullRequests(false);
     setShowTaskBoard(false);
     setShowDocker(true);
-    if (narrowLayout) setNarrowRailOpen(false);
+    if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [narrowLayout, railCollapsed, setRailCollapsedRaw]);
+  }, [railOverlay, railCollapsed, setRailCollapsedRaw]);
 
   const openSourceControl = useCallback(() => {
     if (!componentEnabled("git.surface")) {
@@ -6000,7 +6031,7 @@ export default function App() {
       // rather than a cut, and doubles as the app's own opening animation.
       <div className="animate-page-in flex min-h-0 flex-1">
         {/* ---------------- sessions rail ---------------- */}
-        {narrowLayout && narrowRailOpen && (
+        {railOverlay && narrowRailOpen && (
           <button
             type="button"
             aria-label={t("rail.collapse")}
@@ -6017,7 +6048,7 @@ export default function App() {
             setShowPullRequests(false);
             setShowDocker(false);
             selectProject(path);
-            if (narrowLayout) setNarrowRailOpen(false);
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           onAddProject={() => void addProjectFolder()}
           onRenameProject={(path, name) => {
@@ -6040,21 +6071,21 @@ export default function App() {
             setShowPluginManager(false);
             setShowAutomations(false);
             void selectSession(id);
-            if (narrowLayout) setNarrowRailOpen(false);
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           onNew={() => {
             setShowTaskBoard(false);
             setShowPluginManager(false);
             setShowAutomations(false);
             createTaskDraft();
-            if (narrowLayout) setNarrowRailOpen(false);
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           onNewTemporary={() => {
             setShowTaskBoard(false);
             setShowPluginManager(false);
             setShowAutomations(false);
             createTemporarySession();
-            if (narrowLayout) setNarrowRailOpen(false);
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           sideChatOpen={sideChatOpen}
           onToggleSideChat={() => {
@@ -6092,20 +6123,23 @@ export default function App() {
             setShowPullRequests(false);
             setShowDocker(false);
             setSettingsInitialTab("general");
+            if (railOverlay) setNarrowRailOpen(false);
             setShowSettings(true);
           }}
           collapsed={displayedRailCollapsed}
-          overlay={narrowLayout}
+          overlay={railOverlay}
           onToggleCollapse={toggleDisplayedRail}
           taskBoardOpen={showTaskBoard}
           onOpenTaskBoard={() => {
             if (showTaskBoard) setShowTaskBoard(false);
             else openTaskBoard();
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           pullRequestsOpen={showPullRequests}
           onOpenPullRequests={() => {
             if (showPullRequests) setShowPullRequests(false);
             else openPullRequests();
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           automationsOpen={showAutomations}
           pluginManagerOpen={showPluginManager}
@@ -6114,6 +6148,7 @@ export default function App() {
           onOpenDocker={() => {
             if (showDocker) setShowDocker(false);
             else openDocker();
+            if (railOverlay) setNarrowRailOpen(false);
           }}
           quickQuota={railQuickQuota}
           quickQuotaLoading={quickQuotaLoading}
@@ -6125,6 +6160,7 @@ export default function App() {
             setShowPullRequests(false);
             setShowDocker(false);
             setSettingsInitialTab("usage");
+            if (railOverlay) setNarrowRailOpen(false);
             setShowSettings(true);
           }}
             pluginActions={
@@ -6133,7 +6169,7 @@ export default function App() {
               contributions={pluginUiActions["rail.features"]}
               onInvoke={async (contribution) => {
                 await invokePluginAction(contribution);
-                if (narrowLayout) setNarrowRailOpen(false);
+                if (railOverlay) setNarrowRailOpen(false);
               }}
             />
             }
@@ -6158,15 +6194,16 @@ export default function App() {
           {showAutomations && (
             componentEnabled("automation.page") ? (
               <AutomationsPage
-            projects={projects}
-            providers={providers}
-            defaultProject={(activeProject ?? cwd) || "."}
-            defaultProvider={provider}
-            onOpenSession={(session) => {
-              setShowAutomations(false);
-              void selectSession(session);
-            }}
-            headerLeadingAction={railExpandAction}
+                projects={projects}
+                providers={providers}
+                defaultProject={(activeProject ?? cwd) || "."}
+                defaultProvider={provider}
+                onAddProject={() => void addProjectFolder()}
+                onOpenSession={(session) => {
+                  setShowAutomations(false);
+                  void selectSession(session);
+                }}
+                headerLeadingAction={railExpandAction}
               />
             ) : null
           )}
@@ -6349,23 +6386,25 @@ export default function App() {
               the traffic lights and the expand button takes the wordmark's place. */}
           <header
             className={cn(
-              "electrobun-webkit-app-region-drag flex shrink-0 items-center gap-2 border-b py-2.5 pr-4",
+              "session-header electrobun-webkit-app-region-drag flex min-w-0 shrink-0 items-center gap-2 border-b py-2.5 pr-4",
               displayedRailCollapsed ? "window-controls-safe-main" : "pl-4",
             )}
           >
             {railExpandAction}
             {/* Breadcrumb, reference-style: project / thread. */}
-            {activeProjectRecord ? (
-              <ProjectIcon project={activeProjectRecord} size={18} />
-            ) : (
-              <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-            )}
+            <span className="session-header-project-icon flex shrink-0 items-center">
+              {activeProjectRecord ? (
+                <ProjectIcon project={activeProjectRecord} size={18} />
+              ) : (
+                <Folder className="size-3.5 text-muted-foreground" />
+              )}
+            </span>
             {activeProjectName && (
               <>
-                <span className="electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
+                <span className="session-header-project-context electrobun-webkit-app-region-drag max-w-40 truncate text-ui text-muted-foreground">
                   {activeProjectName}
                 </span>
-                    <span className="shrink-0 text-ui text-muted-foreground/50">
+                    <span className="session-header-project-context shrink-0 text-ui text-muted-foreground/50">
                       /
                     </span>
               </>
@@ -6381,7 +6420,7 @@ export default function App() {
                 <SquareKanban className="size-3.5" aria-hidden />
               </button>
             ) : null}
-            <span className="electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
+            <span className="session-header-title electrobun-webkit-app-region-drag max-w-96 truncate text-ui font-medium">
               {activeTitle}
             </span>
             {/* The session title trails the task title for context — unless both carry the same
@@ -6536,6 +6575,7 @@ export default function App() {
                 plugin contributions remain above the document instead of consuming its width. An empty
                 thread is the hero state: the heading and the card sit together in the centre. */}
             <div
+              ref={heroScrollRef}
               className={cn(
                 "flex",
                 docMode
@@ -6935,6 +6975,7 @@ export default function App() {
               onLoadEarlier={() => void loadEarlierTranscript()}
               width={dockWidth}
               onWidth={setDockWidth}
+              reservedWidth={railInlineWidth}
             />
         </div>
       </div>

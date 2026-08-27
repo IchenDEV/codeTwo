@@ -2,7 +2,12 @@
   height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));
 }
 
+.settings-sidebar {
+  width: var(--settings-sidebar-width);
+}
+
 .settings-page {
+  container: settings-page / inline-size;
   max-width: 48rem;
   padding: 2rem 2rem 0;
 }
@@ -286,7 +291,36 @@
   gap: var(--ds-space-module-inset);
 }
 
-@media (max-width: 50rem) {
+@media (max-width: 44rem) {
+  .settings-sidebar {
+    width: 4rem;
+  }
+
+  [data-settings-back] {
+    justify-content: center;
+    margin-right: 0.75rem;
+    margin-left: 0.75rem;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .settings-sidebar nav {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  .settings-back-label,
+  .settings-nav-heading,
+  .settings-nav-label {
+    display: none;
+  }
+
+  .settings-nav-item {
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
   .settings-page {
     padding: 1rem 1rem 0;
   }
@@ -400,6 +434,23 @@
   .profile-status {
     align-self: flex-start;
     padding: 0;
+  }
+}
+
+@container settings-page (max-width: 36rem) {
+  .settings-row:not([data-compact]) {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--ds-space-module-inset);
+  }
+
+  .settings-row:not([data-compact]) .settings-row-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .settings-row:not([data-compact]) .settings-row-control > * {
+    max-width: 100%;
   }
 }
 

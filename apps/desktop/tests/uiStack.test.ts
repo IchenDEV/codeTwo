@@ -47,6 +47,16 @@ describe("desktop UI stack", () => {
     expect(productSource).not.toContain("--ds-radius-panel");
   });
 
+  test("keeps narrow dialog actions in DOM order", () => {
+    const dialogSource = read("src/components/ui/dialog.tsx");
+    const alertDialogSource = read("src/components/ui/alert-dialog.tsx");
+
+    expect(dialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
+    expect(alertDialogSource).toContain("flex flex-col gap-2 sm:flex-row sm:justify-end");
+    expect(dialogSource).not.toContain("flex-col-reverse");
+    expect(alertDialogSource).not.toContain("flex-col-reverse");
+  });
+
   test("documents selected AI Elements as the AI-native presentation source", () => {
     const designLaw = read("../../docs/design.md");
 

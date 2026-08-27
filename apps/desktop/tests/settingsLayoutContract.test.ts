@@ -30,10 +30,18 @@ describe("Settings page layout contract", () => {
 
   test("matches the settings sidebar to the persisted main rail width", () => {
     expect(appSource).toMatch(/<SettingsPage[\s\S]*?sidebarWidth=\{railWidth\}/);
-    expect(source).toMatch(
-      /data-settings-sidebar[\s\S]*?style=\{\{ width: Math\.min\(420, Math\.max\(220, sidebarWidth\)\) \}\}/,
-    );
+    expect(source).toContain('"--settings-sidebar-width": `${Math.min(420, Math.max(220, sidebarWidth))}px`');
+    expect(styles).toMatch(/\.settings-sidebar \{[\s\S]*?width: var\(--settings-sidebar-width\);/);
     expect(source).not.toContain('className="glass-rail flex w-56');
+  });
+
+  test("collapses navigation labels and stacks regular rows when space is constrained", () => {
+    expect(source).toContain("settings-nav-label");
+    expect(source).toContain("settings-row-control");
+    expect(styles).toContain("@media (max-width: 44rem)");
+    expect(styles).toMatch(/\.settings-sidebar \{[\s\S]*?width: 4rem;/);
+    expect(styles).toContain("@container settings-page (max-width: 36rem)");
+    expect(styles).toContain(".settings-row:not([data-compact])");
   });
 
   test("uses a compact item rhythm inside visibly separated groups", () => {
@@ -49,6 +57,19 @@ describe("Settings page layout contract", () => {
     );
     expect(styles).toContain(
       "height: calc(var(--ds-control-normal) + var(--ds-space-surface-inset));",
+    );
+  });
+
+  test("starts each settings tab at the top of its content", () => {
+    expect(source).toContain('<ScrollArea key={tab} className="min-h-0 flex-1">');
+  });
+
+  test("dismisses the narrow sidebar before opening settings from it", () => {
+    expect(appSource).toMatch(
+      /onOpenSettings=\{\(\) => \{[\s\S]*?setSettingsInitialTab\("general"\);\s*if \(railOverlay\) setNarrowRailOpen\(false\);\s*setShowSettings\(true\);/,
+    );
+    expect(appSource).toMatch(
+      /onOpenUsage=\{\(\) => \{[\s\S]*?setSettingsInitialTab\("usage"\);\s*if \(railOverlay\) setNarrowRailOpen\(false\);\s*setShowSettings\(true\);/,
     );
   });
 
