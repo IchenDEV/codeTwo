@@ -1,6 +1,5 @@
-import { CheckCircle2, Circle, CircleDot, ListTodo } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
+import { CheckCircle2, Circle, CircleDot, ListTodo } from "@/components/ui/icons";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
