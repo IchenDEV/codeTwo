@@ -27,7 +27,6 @@ import { ActivityOrb } from "../components/ui/activity-orb";
 import { Button } from "../components/ui/button";
 import { LiquidSelectionGroup } from "../components/ui/tabs";
 import { Textarea } from "../components/ui/textarea";
-import { useResizeHandle } from "../components/ui/use-resize-handle";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { ModelPicker } from "./Composer";
@@ -123,8 +122,6 @@ const TURN_EVENTS = new Set<CoreEvent["event"]>([
 
 export function SideChatPanel({
   open,
-  width,
-  onWidth,
   onClose,
   provider,
   providers,
@@ -137,8 +134,6 @@ export function SideChatPanel({
   linkActions,
 }: {
   open: boolean;
-  width: number;
-  onWidth: (width: number) => void;
   onClose: () => void;
   provider: string;
   providers: ProviderInfo[];
@@ -348,6 +343,25 @@ export function SideChatPanel({
 
   const activeTab = tabs.find((tab) => tab.localId === activeTabId) ?? tabs[0] ?? null;
 
+  useEffect(() => {
+    if (!open || !activeTab) return;
+    const frame = window.requestAnimationFrame(() => {
+      panelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab?.localId, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open]);
+
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
@@ -425,35 +439,20 @@ export function SideChatPanel({
     [activeTabId, onClose],
   );
 
-  const resizeMaxWidth = Math.max(360, Math.min(720, window.innerWidth - 360));
-  const resizeHandle = useResizeHandle({
-    axis: "x",
-    direction: -1,
-    value: width,
-    min: 340,
-    max: resizeMaxWidth,
-    disabled: !open,
-    onResize: onWidth,
-  });
-
   return (
     <aside
       ref={panelRef}
+      role="dialog"
+      aria-modal="false"
       aria-label={t("sideChat.title")}
       aria-hidden={!open}
+      data-open={open ? "" : undefined}
       className={cn(
-        "side-chat-panel fixed inset-y-0 right-0 z-50 flex flex-col border-s bg-background shadow-raised transition-transform",
-        open ? "translate-x-0" : "pointer-events-none translate-x-full",
+        "side-chat-panel fixed z-50 flex min-h-0 flex-col overflow-hidden bg-background shadow-(--ds-elevation-modal) ring-1 ring-foreground/10",
+        !open && "pointer-events-none",
       )}
-      style={{ width }}
     >
-      <div
-        className="dock-grip"
-        aria-label={t("sideChat.resize")}
-        {...resizeHandle}
-      />
-
-      <header className="electrobun-webkit-app-region-drag flex shrink-0 items-center gap-1 px-2 py-2.5">
+      <header className="side-chat-header flex shrink-0 items-center gap-1">
         <LiquidSelectionGroup
           activeSelector='[data-selected="true"]'
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
@@ -464,7 +463,7 @@ export function SideChatPanel({
               key={tab.localId}
               data-selected={tab.localId === activeTab?.localId}
               className={cn(
-                "flex max-w-48 shrink-0 items-center rounded-(--ds-radius-control) py-0.5 ps-1 transition-colors",
+                "side-chat-tab flex max-w-48 shrink-0 items-center py-0.5 ps-1 transition-colors",
                 tab.localId === activeTab?.localId
                   ? "text-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",

@@ -68,6 +68,8 @@ function renderRail(overrides = {}) {
           onSelect={() => {}}
           onNew={() => {}}
           onNewTemporary={() => {}}
+          sideChatOpen={false}
+          onToggleSideChat={() => {}}
           onRename={() => {}}
           onPin={() => {}}
           onArchive={() => {}}
@@ -243,27 +245,32 @@ describe("SessionRail row layout", () => {
     view.unmount();
   });
 
-  test("combines tracked and temporary creation in one source-list control", () => {
+  test("combines tracked, temporary, and side-chat creation in one source-list control", () => {
     activateDom();
     const created = [];
     const view = renderRail({
       onNew: () => created.push("task"),
       onNewTemporary: () => created.push("temporary"),
+      onToggleSideChat: () => created.push("side-chat"),
     });
 
     const control = view.container.querySelector('[data-rail-feature="new-task"]');
     const primary = control?.querySelector("button:first-of-type");
     const quickSession = control?.querySelector('button[data-rail-quick-session]');
+    const sideChat = control?.querySelector('button[data-rail-side-chat]');
 
     expect(control?.getAttribute("role")).toBe("group");
     expect(control?.className).toContain("h-(--ds-control-normal)");
     expect(control?.className).toContain("hover:bg-accent/55");
     expect(primary?.textContent?.trim()).toBe("New task");
     expect(quickSession?.getAttribute("aria-label")).toBe("Temporary session");
+    expect(sideChat?.getAttribute("aria-label")).toBe("Toggle side chat");
+    expect(sideChat?.getAttribute("aria-pressed")).toBe("false");
 
     click(primary);
     click(quickSession);
-    expect(created).toEqual(["task", "temporary"]);
+    click(sideChat);
+    expect(created).toEqual(["task", "temporary", "side-chat"]);
     expect(dom.document.body.querySelector('[role="menu"]')).toBeNull();
 
     view.unmount();

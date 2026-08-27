@@ -28,6 +28,7 @@ import {
   FolderX,
   GitPullRequest,
   Hash,
+  MessageSquarePlus,
   PanelLeft,
   Pencil,
   Pin,
@@ -151,6 +152,8 @@ export function SessionRail({
   onSelect,
   onNew,
   onNewTemporary,
+  sideChatOpen,
+  onToggleSideChat,
   onRename,
   onPin,
   onArchive,
@@ -202,6 +205,9 @@ export function SessionRail({
   onNew: () => void;
   /** Explicit escape hatch for work the user does not want tracked as a Task. */
   onNewTemporary: () => void;
+  /** App-lifetime quick chat that stays outside the tracked task list. */
+  sideChatOpen: boolean;
+  onToggleSideChat: () => void;
   onRename: (id: string, title: string) => void;
   /** Keeps an active session above the recency list until explicitly unpinned. */
   onPin: (id: string, pinned: boolean) => void;
@@ -899,6 +905,28 @@ export function SessionRail({
               }
             />
             <TooltipContent side="right">{t("rail.newTemporarySession")}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  data-rail-side-chat
+                  className={cn(
+                    "mr-1 size-6 rounded-full text-muted-foreground hover:bg-accent/80 hover:text-foreground group-hover/new-task:text-foreground",
+                    sideChatOpen && "bg-accent/80 text-foreground",
+                  )}
+                  aria-label={t("sideChat.toggle")}
+                  aria-pressed={sideChatOpen}
+                  onClick={onToggleSideChat}
+                >
+                  <MessageSquarePlus className="size-4" aria-hidden />
+                </Button>
+              }
+            />
+            <TooltipContent side="right">{t("sideChat.title")}</TooltipContent>
           </Tooltip>
         </div>
         <button
