@@ -153,7 +153,7 @@ export function CommandPalette({
           </Button>
         ))}
       </div>
-      <CommandList className="max-h-96">
+      <CommandList className="min-h-0 max-h-none flex-1">
         <CommandEmpty>{searchStatus ? null : t("palette.empty")}</CommandEmpty>
         {groups.map((group) => (
           <CommandGroup

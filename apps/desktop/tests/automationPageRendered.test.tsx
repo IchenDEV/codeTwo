@@ -17,6 +17,7 @@ afterEach(() => {
 describe("AutomationsPage layout", () => {
   test("renders the sidebar recovery action supplied by the persistent shell", async () => {
     activateDom();
+    let addedProjects = 0;
     const view = mount(
       <I18nProvider>
         <ToastProvider>
@@ -25,6 +26,7 @@ describe("AutomationsPage layout", () => {
             providers={[]}
             defaultProject="."
             defaultProvider="codex"
+            onAddProject={() => { addedProjects += 1; }}
             onOpenSession={() => {}}
             headerLeadingAction={<button aria-label="Expand the sidebar" />}
           />
@@ -32,9 +34,16 @@ describe("AutomationsPage layout", () => {
       </I18nProvider>,
     );
 
-    expect(view.container.querySelector('button[aria-label="Expand the sidebar"]')).not.toBeNull();
-
     await flush();
+
+    expect(view.container.querySelector('button[aria-label="Expand the sidebar"]')).not.toBeNull();
+    expect(view.container.textContent).toContain("Add a project before creating an automation.");
+    const addProject = button(view.container, "Add project");
+    expect(addProject).not.toBeNull();
+    expect(addProject?.hasAttribute("disabled")).toBeFalse();
+    click(addProject);
+    expect(addedProjects).toBe(1);
+
     view.unmount();
   });
 
@@ -48,6 +57,7 @@ describe("AutomationsPage layout", () => {
             providers={[]}
             defaultProject="/tmp/mini-game"
             defaultProvider="codex"
+            onAddProject={() => {}}
             onOpenSession={() => {}}
           />
         </ToastProvider>
@@ -90,6 +100,7 @@ describe("AutomationsPage layout", () => {
     const automationsCall = appSource.match(/<AutomationsPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
     const taskBoardCall = appSource.match(/<TaskBoardPage\b[\s\S]*?\n\s*\/>/)?.[0] ?? "";
     expect(automationsCall).toContain("headerLeadingAction=");
+    expect(automationsCall).toContain("onAddProject=");
     expect(taskBoardCall).toContain("headerLeadingAction=");
   });
 
@@ -103,6 +114,7 @@ describe("AutomationsPage layout", () => {
             providers={[{ id: "codex", display_name: "Codex", available: true }]}
             defaultProject="/tmp/mini-game"
             defaultProvider="codex"
+            onAddProject={() => {}}
             onOpenSession={() => {}}
           />
         </ToastProvider>

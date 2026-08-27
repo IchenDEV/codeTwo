@@ -206,6 +206,7 @@ export function AutomationsPage({
   providers,
   defaultProject,
   defaultProvider,
+  onAddProject,
   onOpenSession,
   headerLeadingAction,
 }: {
@@ -213,6 +214,7 @@ export function AutomationsPage({
   providers: ProviderInfo[];
   defaultProject: string;
   defaultProvider: string;
+  onAddProject: () => void;
   onOpenSession: (session: string) => void;
   headerLeadingAction?: ReactNode;
 }) {
@@ -388,6 +390,9 @@ export function AutomationsPage({
     setDetailTab("overview");
     setCompactListVisible(false);
   };
+  const hasProjects = projects.length > 0;
+  const primaryAction = hasProjects ? beginCreate : onAddProject;
+  const primaryActionLabel = t(hasProjects ? "automations.new" : "automations.addProject");
 
   return (
     <section
@@ -418,8 +423,8 @@ export function AutomationsPage({
           </LiquidSelectionGroup>
           <div className="electrobun-webkit-app-region-drag flex-1" />
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("automations.new")} onClick={beginCreate} disabled={projects.length === 0}><Plus className="size-3.5" /></Button>} />
-            <TooltipContent>{t("automations.new")}</TooltipContent>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={primaryActionLabel} onClick={primaryAction}><Plus className="size-3.5" /></Button>} />
+            <TooltipContent>{primaryActionLabel}</TooltipContent>
           </Tooltip>
         </header>
 
@@ -452,7 +457,8 @@ export function AutomationsPage({
               <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground">
                 <CalendarClock className="size-4" />
                 <p>{t("automations.empty")}</p>
-                <Button variant="secondary" size="compact" onClick={beginCreate} disabled={projects.length === 0}><Plus className="size-3.5" />{t("automations.new")}</Button>
+                {!hasProjects ? <p>{t("automations.projectRequired")}</p> : null}
+                <Button variant="secondary" size="compact" onClick={primaryAction}><Plus className="size-3.5" />{primaryActionLabel}</Button>
               </div>
             ) : groups.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-4 py-12 text-center text-ui text-muted-foreground"><Search className="size-4" /><p>{t("automations.noMatches")}</p></div>

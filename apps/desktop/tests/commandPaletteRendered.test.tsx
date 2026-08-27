@@ -1,10 +1,12 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { activateDom, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
 const { CommandPalette } = await import("../src/palette/CommandPalette");
+const styles = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 
 let previousResizeObserver;
 
@@ -40,6 +42,9 @@ describe("CommandPalette", () => {
 
     const body = dom.document.body;
     expect(body.querySelector(".command-palette-surface")).toBeTruthy();
+    expect(body.querySelector('[data-slot="command-list"]')?.className).toContain("flex-1");
+    expect(body.querySelector('[data-slot="command-list"]')?.className).toContain("max-h-none");
+    expect(styles).toContain("height: min(32rem, calc(100dvh - var(--ds-space-page-section)));");
     expect(body.querySelector('[data-palette-group="session"]')).toBeTruthy();
     expect(body.querySelector('[data-palette-group="action"]')).toBeTruthy();
     expect(body.querySelector('[data-palette-group="setting"]')).toBeTruthy();

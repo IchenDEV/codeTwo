@@ -66,6 +66,21 @@ describe("SessionHeaderActions", () => {
     expect(TOOLTIP_INSTANT_PHASE_TIMEOUT).toBe(400);
   });
 
+  test("keeps accessible names when responsive styling hides action labels", () => {
+    activateDom();
+    const { view } = renderActions();
+
+    const group = view.container.querySelector(".session-header-actions");
+    expect(group).not.toBeNull();
+    for (const label of ["Add action", "Open", "Commit"]) {
+      const action = button(view.container, label);
+      expect(action.classList.contains("session-header-action-main")).toBe(true);
+      expect(action.querySelector(".session-header-action-label")?.textContent).toBe(label);
+    }
+
+    view.unmount();
+  });
+
   test("wires the primary actions and exposes the split menus", async () => {
     activateDom();
     const { calls, view } = renderActions();

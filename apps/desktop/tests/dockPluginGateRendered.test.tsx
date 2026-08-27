@@ -5,7 +5,7 @@ import { activateDom, button, click, dom, flush, mount, restoreDom } from "./dom
 
 activateDom();
 const { I18nProvider } = await import("../src/i18n");
-const { Dock } = await import("../src/dock/Dock");
+const { Dock, dockMaxWidth, shouldOverlayRailForDock } = await import("../src/dock/Dock");
 
 afterEach(() => {
   dom.document.body.replaceChildren();
@@ -56,6 +56,13 @@ function renderDock(
 }
 
 describe("Dock plugin component gate", () => {
+  test("preserves the document measure after accounting for an inline rail", () => {
+    expect(dockMaxWidth(1280, 288)).toBe(372);
+    expect(dockMaxWidth(800)).toBe(300);
+    expect(shouldOverlayRailForDock(1207, 288)).toBe(true);
+    expect(shouldOverlayRailForDock(1208, 288)).toBe(false);
+  });
+
   test("removes its resize separator from the tab order while closed", async () => {
     activateDom();
     const view = renderDock(["terminal"], "home", false);
@@ -79,9 +86,14 @@ describe("Dock plugin component gate", () => {
     );
     await flush();
 
-    const cards = Array.from(view.container.querySelectorAll(".grid > button"));
+    const cards = Array.from(view.container.querySelectorAll(".dock-surface-grid > button"));
     expect(cards[2]?.textContent).toContain("Terminal");
     expect(cards[3]?.getAttribute("aria-label")).toBe("Side chat");
+    expect(cards.every((card) => card.classList.contains("dock-surface-card"))).toBe(true);
+    expect(cards.every((card) => card.classList.contains("bg-card"))).toBe(true);
+    expect(cards.every((card) => card.classList.contains("p-3"))).toBe(true);
+    expect(cards.every((card) => !card.className.includes("ring-foreground"))).toBe(true);
+    expect(cards.every((card) => card.querySelector("svg")?.classList.contains("size-4"))).toBe(true);
     click(button(view.container, "Side chat"));
     expect(opens).toBe(1);
 
