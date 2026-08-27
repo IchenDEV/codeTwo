@@ -87,7 +87,7 @@ describe("macOS window chrome contract", () => {
     expect(appSource).not.toContain('const [terminalOpen, setTerminalOpen]');
     expect(appSource).not.toContain('placement="bottom"');
     expect(appSource).toContain('availableSurfaces={availableDockSurfaces}');
-    expect(appSource).toContain('terminalActive={dockTab === "terminal"}');
+    expect(appSource).toContain('case "toggle_terminal":');
     expect(dockSource).not.toContain('DockPlacement');
     expect(dockSource).toContain('data-dock-placement="right"');
     expect(dockSource).toContain('className="dock-tab-label"');

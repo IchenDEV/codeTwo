@@ -22,7 +22,6 @@ function renderActions(overrides = {}) {
   const callback = (name: string) => () => calls.push(name);
   const props = {
     canCommit: true,
-    terminalActive: false,
     panelActive: false,
     onAddAction: callback("add"),
     onOpen: callback("open"),
@@ -35,7 +34,6 @@ function renderActions(overrides = {}) {
     onCommit: callback("commit"),
     onCheckpoint: callback("checkpoint"),
     onPush: callback("push"),
-    onToggleTerminal: callback("terminal"),
     onTogglePanel: callback("panel"),
     ...overrides,
   };
@@ -75,9 +73,9 @@ describe("SessionHeaderActions", () => {
     await press(button(view.container, "Add action"));
     await press(button(view.container, "Open"));
     await press(button(view.container, "Commit"));
-    await press(button(view.container, "Toggle terminal"));
     await press(button(view.container, "Toggle side panel"));
-    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel"]);
+    expect(calls).toEqual(["add", "open", "commit", "panel"]);
+    expect(view.container.querySelector('[aria-label="Toggle terminal"]')).toBeNull();
     expect(view.container.querySelector('[aria-label="Toggle side chat"]')).toBeNull();
 
     await press(button(view.container, "Open · More"));
@@ -90,7 +88,7 @@ describe("SessionHeaderActions", () => {
       .find((item) => item.textContent?.includes("Finder"));
     if (!finderItem) throw new Error("Finder menu item not found");
     await press(finderItem);
-    expect(calls).toEqual(["add", "open", "commit", "terminal", "panel", "finder"]);
+    expect(calls).toEqual(["add", "open", "commit", "panel", "finder"]);
 
     view.unmount();
   });

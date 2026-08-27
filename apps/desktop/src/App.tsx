@@ -6468,7 +6468,6 @@ export default function App() {
 
             <SessionHeaderActions
               canCommit={git?.is_repo === true}
-              terminalActive={dockTab === "terminal"}
               panelActive={dockTab !== null || sideChatOpen}
               actions={scripts}
               editorLaunchersAvailable={editorLaunchersAvailable}
@@ -6485,7 +6484,6 @@ export default function App() {
               onCommit={openSourceControl}
               onCheckpoint={() => void doCheckpoint()}
               onPush={() => void doPush().catch(() => {})}
-              onToggleTerminal={() => toggleDock("terminal")}
               onTogglePanel={() => {
                 const panelOpen = dockTab !== null || sideChatOpen;
                 setSideChatOpen(false);
