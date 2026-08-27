@@ -24,10 +24,11 @@ function status(enabled: boolean, reloaded = false) {
 }
 
 describe("Developer settings", () => {
-  test("enables hot reload, reloads plugins manually, and opens WebView DevTools", async () => {
+  test("runs developer tools and exports redacted diagnostics", async () => {
     let enabled = false;
     let reloads = 0;
     let devtools = 0;
+    let exports = 0;
     const rendered = mount(
       <I18nProvider>
         <SettingsPage
@@ -54,6 +55,10 @@ describe("Developer settings", () => {
           devtoolsOpener={async () => {
             devtools += 1;
           }}
+          diagnosticsExporter={async () => {
+            exports += 1;
+            return "saved";
+          }}
         />
       </I18nProvider>,
     );
@@ -68,11 +73,15 @@ describe("Developer settings", () => {
     await flush();
     await reactAct(async () => button(rendered.container, "Open WebView DevTools").click());
     await flush();
+    await reactAct(async () => button(rendered.container, "Export diagnostics").click());
+    await flush();
 
     expect(enabled).toBe(true);
     expect(reloads).toBe(1);
     expect(devtools).toBe(1);
+    expect(exports).toBe(1);
     expect(rendered.container.textContent).toContain("alpha");
+    expect(rendered.container.textContent).toContain("Diagnostics exported");
     rendered.unmount();
   });
 });

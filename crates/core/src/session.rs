@@ -283,6 +283,20 @@ pub enum Part {
     },
 }
 
+pub(crate) fn tool_status_is_terminal(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "completed" | "failed" | "cancelled" | "canceled" | "rejected" | "denied"
+    )
+}
+
+pub(crate) fn tool_status_is_in_flight(status: &str) -> bool {
+    matches!(
+        status.trim().to_ascii_lowercase().as_str(),
+        "pending" | "in_progress" | "running"
+    )
+}
+
 /// One durably ordered transcript part.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptEntry {
@@ -392,11 +406,16 @@ pub struct Session {
     /// Per-session narrowing of completed-turn learning.
     pub memory_write: MemoryAccess,
     pub created_at: i64,
+    /// Last high-value re-entry into active work. Token chunks and background updates never touch
+    /// this timestamp; accepted user prompts and explicit unarchive do.
+    #[serde(default)]
+    pub last_active_at: i64,
 }
 
 impl Session {
     pub fn new(provider: ProviderId, cwd: impl Into<String>) -> Self {
         let cwd = cwd.into();
+        let created_at = now_millis();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             title: UNTITLED_SESSION_TITLE.into(),
@@ -419,7 +438,8 @@ impl Session {
             acp_session_id: None,
             memory_read: MemoryAccess::Inherit,
             memory_write: MemoryAccess::Inherit,
-            created_at: now_millis(),
+            created_at,
+            last_active_at: created_at,
         }
     }
 }

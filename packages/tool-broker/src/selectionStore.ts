@@ -7,6 +7,7 @@ export type SelectionKind = "computer_use" | "browser_use";
 
 export interface SelectionStorePort {
   setGlobal(kind: SelectionKind, backendId: string): void;
+  setAgentBrowserAccess(enabled: boolean): void;
 }
 
 type Document = Record<string, unknown>;
@@ -20,10 +21,18 @@ export class JsonSelectionStore implements SelectionStorePort {
   constructor(private readonly dataDir: string) {}
 
   setGlobal(kind: SelectionKind, backendId: string): void {
-    this.write(kind, () => ({ "*": backendId }));
+    this.write((document) => {
+      document[`${kind}_selection`] = { "*": backendId };
+    });
   }
 
-  private write(kind: SelectionKind, update: (current: Document) => Document): void {
+  setAgentBrowserAccess(enabled: boolean): void {
+    this.write((document) => {
+      document.agent_browser_access = enabled;
+    });
+  }
+
+  private write(update: (document: Document) => void): void {
     mkdirSync(this.dataDir, { recursive: true });
     const path = join(this.dataDir, HOST_TOOLS_CONFIG_FILE);
     let document: Document = { schema_version: 1 };
@@ -32,8 +41,7 @@ export class JsonSelectionStore implements SelectionStorePort {
       throw new Error(`schema ${JSON.stringify(document.schema_version)} is unsupported; expected 1`);
     }
     document.schema_version = 1;
-    const field = `${kind}_selection`;
-    document[field] = update(table(document[field]));
+    update(document);
     const temporary = join(
       this.dataDir,
       `.${HOST_TOOLS_CONFIG_FILE}.${process.pid}.${Date.now()}.tmp`,

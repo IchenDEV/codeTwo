@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   filterPullRequests,
+  githubPullRequestReference,
   groupPullRequests,
   pullRequestCheckState,
   shortPullRequestAge,
@@ -84,5 +85,15 @@ describe("GitHub pull request projections", () => {
     expect(pullRequestCheckState({ ...base, checks: [] })).toBe("none");
     expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "IN_PROGRESS", conclusion: "", detailsUrl: null }] })).toBe("pending");
     expect(pullRequestCheckState({ ...base, checks: [{ name: "test", status: "COMPLETED", conclusion: "FAILURE", detailsUrl: null }] })).toBe("failed");
+  });
+
+  test("projects the stable GitHub identity stored by task links", () => {
+    expect(githubPullRequestReference(items[0]!)).toEqual({
+      provider: "github",
+      host: "github.com",
+      repository: "acme/repo",
+      number: 1,
+      url: "https://github.com/acme/repo/pull/1",
+    });
   });
 });

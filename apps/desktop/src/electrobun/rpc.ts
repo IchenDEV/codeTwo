@@ -145,6 +145,7 @@ export type CodeTwoRPC = {
         response: boolean;
       };
       appshotsCapture: { params: undefined; response: AppshotCapture };
+      appshotsGet: { params: { id: string }; response: AppshotCapture };
     };
     messages: Record<never, never>;
   }>;

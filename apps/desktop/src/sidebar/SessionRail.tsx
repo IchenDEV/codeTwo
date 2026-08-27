@@ -339,16 +339,26 @@ export function SessionRail({
       .map(sessionProjectPath),
   );
 
-  // "Recent" means what it says: the active project's sessions, newest first — per group.
+  // "Recent" follows deliberate re-entry into work, not background chunks or the original
+  // creation date. Archived history keeps its stable creation order.
   const forProject = useCallback(
-    (list: SessionInfo[]) =>
+    (list: SessionInfo[], activeList: boolean) =>
       list
         .filter((s) => sessionProjectPath(s) === activeProject)
-        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.created_at - a.created_at),
+        .sort(
+          (a, b) =>
+            Number(b.pinned) - Number(a.pinned) ||
+            (activeList
+              ? (b.last_active_at ?? b.created_at) - (a.last_active_at ?? a.created_at)
+              : b.created_at - a.created_at),
+        ),
     [activeProject],
   );
-  const recent = useMemo(() => forProject(sessions), [forProject, sessions]);
-  const archived = useMemo(() => forProject(archivedSessions), [forProject, archivedSessions]);
+  const recent = useMemo(() => forProject(sessions, true), [forProject, sessions]);
+  const archived = useMemo(
+    () => forProject(archivedSessions, false),
+    [forProject, archivedSessions],
+  );
   const pinned = useMemo(() => recent.filter((s) => s.pinned), [recent]);
   const active = useMemo(() => recent.filter((s) => !s.pinned), [recent]);
 

@@ -10,6 +10,15 @@ use std::path::{Path, PathBuf};
 use crate::codex_runtime::CodexRuntimeDiscovery;
 use crate::skill::McpServer;
 
+/// Reviewed Codex ACP adapter combination. Updating this pin requires the live compatibility
+/// canary in `crates/core/examples/codex_compatibility_canary.rs` to pass first.
+pub const CODEX_ACP_PACKAGE: &str = "@agentclientprotocol/codex-acp";
+pub const CODEX_ACP_VERSION: &str = "1.7.0";
+
+pub fn codex_acp_package_spec() -> String {
+    format!("{CODEX_ACP_PACKAGE}@{CODEX_ACP_VERSION}")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderCapabilityId {
@@ -49,6 +58,9 @@ pub struct ProviderCapability {
 /// can escape its adapter.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderToolset {
+    /// Session-scoped authority for browser-control tools. Missing broker output denies access.
+    #[serde(default)]
+    pub browser_access_enabled: bool,
     #[serde(default)]
     pub capabilities: Vec<ProviderCapability>,
     #[serde(default)]
@@ -154,7 +166,12 @@ pub fn default_registry() -> Vec<Provider> {
 
 /// Build the registry from one startup-time discovery snapshot.
 pub fn registry_with_codex_runtime(runtime: &CodexRuntimeDiscovery) -> Vec<Provider> {
-    let mut codex_launch = LaunchSpec::new("npx", ["-y", "@agentclientprotocol/codex-acp@1.6.2"]);
+    let mut codex_launch = LaunchSpec {
+        command: "npx".into(),
+        args: vec!["-y".into(), codex_acp_package_spec()],
+        env: Vec::new(),
+        cwd: None,
+    };
     if let Some(path) = runtime.codex_path.as_deref() {
         codex_launch
             .env
@@ -364,9 +381,7 @@ mod tests {
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::ZCode && p.needs_node));
-        assert!(reg
-            .iter()
-            .any(|p| p.id == ProviderId::Amp && p.needs_node));
+        assert!(reg.iter().any(|p| p.id == ProviderId::Amp && p.needs_node));
         assert!(reg
             .iter()
             .any(|p| p.id == ProviderId::Droid && !p.needs_node));
@@ -399,7 +414,7 @@ mod tests {
         let codex = reg.iter().find(|p| p.id == ProviderId::Codex).unwrap();
         assert_eq!(
             codex.launch.args,
-            vec!["-y", "@agentclientprotocol/codex-acp@1.6.2"]
+            vec!["-y".to_string(), codex_acp_package_spec()]
         );
     }
 

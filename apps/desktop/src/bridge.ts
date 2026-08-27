@@ -2,6 +2,7 @@ import {
   desktopCall,
   desktopAppshotSettings,
   desktopCaptureAppshot,
+  desktopGetAppshot,
   desktopConfirm,
   desktopOpenDevtools,
   desktopOpenDialog,
@@ -121,6 +122,12 @@ export async function takeAppshot(): Promise<AppshotCapture> {
   return desktopCaptureAppshot();
 }
 
+/** Reload an app-owned screen capture while its private retention window is still active. */
+export async function getAppshot(id: string): Promise<AppshotCapture> {
+  if (!inDesktop) throw new Error("Appshots require the C2 macOS desktop app.");
+  return desktopGetAppshot(id);
+}
+
 export async function onAppshotCaptured(
   cb: (capture: AppshotCapture) => void,
 ): Promise<() => void> {
@@ -237,7 +244,9 @@ export interface ComputerUseSettings {
 }
 
 export type BrowserUseBackendOption = ComputerUseBackendOption;
-export type BrowserUseSettings = ComputerUseSettings;
+export interface BrowserUseSettings extends ComputerUseSettings {
+  access_enabled: boolean;
+}
 
 interface ComputerUseBackendWire {
   id: string;
@@ -256,6 +265,11 @@ interface ComputerUseSettingsWire {
   errors?: string[];
 }
 
+interface BrowserUseSettingsWire extends ComputerUseSettingsWire {
+  access_enabled?: boolean;
+  accessEnabled?: boolean;
+}
+
 function normalizeComputerUseSettings(settings: ComputerUseSettingsWire): ComputerUseSettings {
   return {
     selections: settings.selections ?? {},
@@ -268,6 +282,13 @@ function normalizeComputerUseSettings(settings: ComputerUseSettingsWire): Comput
       exclude_providers: backend.exclude_providers ?? backend.excludeProviders ?? [],
     })),
     errors: settings.errors ?? [],
+  };
+}
+
+function normalizeBrowserUseSettings(settings: BrowserUseSettingsWire): BrowserUseSettings {
+  return {
+    ...normalizeComputerUseSettings(settings),
+    access_enabled: settings.access_enabled ?? settings.accessEnabled ?? false,
   };
 }
 
@@ -404,6 +425,8 @@ export interface SessionInfo {
   memory_read: MemoryAccess;
   memory_write: MemoryAccess;
   created_at: number;
+  /** Last accepted prompt or explicit unarchive; absent on older Core versions. */
+  last_active_at?: number;
   /** Core-owned, revisioned run/input state; survives renderer and remote reconnects. */
   activity?: SessionActivity;
 }
@@ -698,6 +721,8 @@ export interface GoalCapabilityInfo {
 export interface SessionInteractionCapabilities {
   steering: boolean;
   goal: GoalCapabilityInfo | null;
+  /** Set only after the live ACP session advertises its native `/compact` command. */
+  compact_context: boolean;
 }
 
 export interface GoalSnapshot {
@@ -835,6 +860,7 @@ export type CoreEvent =
       session: string;
       steering: boolean;
       goal: GoalCapabilityInfo | null;
+      compact_context?: boolean;
     }
   | { event: "goal_changed"; session: string; goal: GoalSnapshot | null }
   | {
@@ -1585,6 +1611,7 @@ export async function selectComputerUseBackend(
 export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
   if (!inDesktop) {
     return {
+      access_enabled: false,
       selections: {},
       backends: [{
         id: "openai-browser",
@@ -1597,16 +1624,24 @@ export async function getBrowserUseSettings(): Promise<BrowserUseSettings> {
       errors: [],
     };
   }
-  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>("browser_use.settings"));
+  return normalizeBrowserUseSettings(await call<BrowserUseSettingsWire>("browser_use.settings"));
 }
 
 export async function selectBrowserUseBackend(
   backend: string,
 ): Promise<BrowserUseSettings> {
   if (!inDesktop) return getBrowserUseSettings();
-  return normalizeComputerUseSettings(await call<ComputerUseSettingsWire>(
+  return normalizeBrowserUseSettings(await call<BrowserUseSettingsWire>(
     "browser_use.select",
     { backend },
+  ));
+}
+
+export async function setAgentBrowserAccess(enabled: boolean): Promise<BrowserUseSettings> {
+  if (!inDesktop) return getBrowserUseSettings();
+  return normalizeBrowserUseSettings(await call<BrowserUseSettingsWire>(
+    "browser_use.set_access",
+    { enabled },
   ));
 }
 
@@ -2123,6 +2158,33 @@ export async function saveAppearanceThemeDocument(
     // The save panel explicitly confirms replacement. An existing file is therefore expected.
   }
   await call("workspace.write_text", { cwd, path: name, content });
+  return "saved";
+}
+
+export type DiagnosticsExportResult = "saved" | "cancelled" | "unsupported";
+
+/** Save the Core's default-redacted support snapshot through an explicit native save panel. */
+export async function exportRedactedDiagnostics(): Promise<DiagnosticsExportResult> {
+  if (!inDesktop) return "unsupported";
+  const date = new Date().toISOString().slice(0, 10);
+  const selected = await desktopSaveDialog({
+    title: "Export C2 diagnostics",
+    defaultPath: `c2-diagnostics-${date}.json`,
+    filters: [{ name: "C2 diagnostics", extensions: ["json"] }],
+  });
+  if (typeof selected !== "string") return "cancelled";
+  const report = await call<unknown>("diagnostics.redacted_snapshot");
+  const { cwd, name } = splitNativePath(selected);
+  try {
+    await call("workspace.create_file", { cwd, path: name });
+  } catch {
+    // The native save panel already asked the user to confirm replacement.
+  }
+  await call("workspace.write_text", {
+    cwd,
+    path: name,
+    content: `${JSON.stringify(report, null, 2)}\n`,
+  });
   return "saved";
 }
 

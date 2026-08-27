@@ -817,10 +817,42 @@ fn raw_codex_usage(node: &serde_json::Value) -> Option<LineUsage> {
     })
 }
 
+// Forked rollouts restamp copied parent events into one millisecond-scale burst. A genuine child
+// turn arrives after provider work; one second matches Codex's observed split and ccusage.
+const FORK_COPY_MAX_GAP_MS: i64 = 1_000;
+
+fn is_forked_codex_session_meta(value: &serde_json::Value) -> bool {
+    if value.get("type").and_then(|value| value.as_str()) != Some("session_meta") {
+        return false;
+    }
+    let Some(payload) = value.get("payload") else {
+        return false;
+    };
+    get_string(payload, "forked_from_id").is_some()
+        || payload
+            .pointer("/source/subagent/thread_spawn/parent_thread_id")
+            .and_then(|value| value.as_str())
+            .is_some()
+}
+
+fn subtract_usage(total: LineUsage, baseline: LineUsage) -> Option<LineUsage> {
+    Some(LineUsage {
+        input: total.input.checked_sub(baseline.input)?,
+        cached: total.cached.checked_sub(baseline.cached)?,
+        output: total.output.checked_sub(baseline.output)?,
+        cumulative: false,
+    })
+}
+
 fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<UsageRecord> {
     let mut deltas = Vec::new();
     let mut previous = None;
     let mut final_total = None;
+    let mut saw_session_meta = false;
+    let mut forked_session = false;
+    let mut suppressing_fork_copies = false;
+    let mut fork_copy_anchor_ms = 0;
+    let mut fork_baseline_total = None;
     // Codex states the model on session/turn-context lines, not on every usage line; carry the
     // most recent sighting forward so each delta can be priced.
     let mut model: Option<String> = None;
@@ -828,11 +860,25 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
         };
+        if value.get("type").and_then(|value| value.as_str()) == Some("session_meta") {
+            if !saw_session_meta {
+                saw_session_meta = true;
+                if is_forked_codex_session_meta(&value) {
+                    if let Some(at_ms) = original_timestamp_ms(&value) {
+                        forked_session = true;
+                        suppressing_fork_copies = true;
+                        fork_copy_anchor_ms = at_ms;
+                    }
+                }
+            }
+            continue;
+        }
         if let Some(seen) = find_model(&value) {
             model = Some(seen);
         }
         let at_ms = original_timestamp_ms(&value).unwrap_or(fallback_ms);
-        if let Some(total) = find_key(&value, "total_token_usage", 0).and_then(raw_codex_usage) {
+        let total = find_key(&value, "total_token_usage", 0).and_then(raw_codex_usage);
+        if let Some(total) = total {
             final_total = Some((at_ms, total));
         }
         let Some(delta) = find_key(&value, "last_token_usage", 0).and_then(raw_codex_usage) else {
@@ -842,6 +888,16 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
             continue;
         }
         previous = Some(delta);
+        if suppressing_fork_copies {
+            if at_ms - fork_copy_anchor_ms < FORK_COPY_MAX_GAP_MS {
+                fork_copy_anchor_ms = at_ms;
+                if let Some(total) = total {
+                    fork_baseline_total = Some(total);
+                }
+                continue;
+            }
+            suppressing_fork_copies = false;
+        }
         let mut usage_record = record(at_ms, delta, source);
         usage_record.model = model.clone();
         deltas.push(usage_record);
@@ -860,9 +916,18 @@ fn scan_codex(reader: impl BufRead, fallback_ms: i64, source: &str) -> Vec<Usage
             cumulative: false,
         },
     );
-    let Some((at_ms, total)) = final_total else {
+    let Some((at_ms, mut total)) = final_total else {
         return deltas;
     };
+    if forked_session {
+        let Some(baseline) = fork_baseline_total else {
+            return deltas;
+        };
+        let Some(child_total) = subtract_usage(total, baseline) else {
+            return deltas;
+        };
+        total = child_total;
+    }
     if summed.input == total.input && summed.cached == total.cached && summed.output == total.output
     {
         return deltas;
@@ -1385,6 +1450,47 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn codex_fork_drops_restamped_parent_usage_and_reconciles_child_total() {
+        let lines = "{\"timestamp\":\"2026-08-01T00:00:00.000Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"child\",\"forked_from_id\":\"parent\"}}\n\
+                     {\"timestamp\":\"2026-08-01T00:00:00.000Z\",\"type\":\"turn_context\",\"payload\":{\"model\":\"gpt-5.1-codex\"}}\n\
+                     {\"timestamp\":\"2026-08-01T00:00:00.010Z\",\"payload\":{\"info\":{\"last_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":50,\"output_tokens\":10},\"total_token_usage\":{\"input_tokens\":100,\"cached_input_tokens\":50,\"output_tokens\":10}}}}\n\
+                     {\"timestamp\":\"2026-08-01T00:00:00.020Z\",\"payload\":{\"info\":{\"last_token_usage\":{\"input_tokens\":60,\"cached_input_tokens\":20,\"output_tokens\":6},\"total_token_usage\":{\"input_tokens\":160,\"cached_input_tokens\":70,\"output_tokens\":16}}}}\n\
+                     {\"timestamp\":\"2026-08-01T00:00:05.000Z\",\"payload\":{\"info\":{\"last_token_usage\":{\"input_tokens\":40,\"cached_input_tokens\":10,\"output_tokens\":4},\"total_token_usage\":{\"input_tokens\":200,\"cached_input_tokens\":80,\"output_tokens\":20}}}}\n";
+
+        let recs = scan_codex(std::io::Cursor::new(lines), 0, "codex");
+        assert_eq!(recs.len(), 1, "only the child's genuine turn is retained");
+        assert_eq!(
+            (
+                recs[0].input_tokens,
+                recs[0].cached_tokens,
+                recs[0].output_tokens
+            ),
+            (30, 10, 4)
+        );
+        assert_eq!(recs[0].at_ms, 1_785_542_405_000);
+    }
+
+    #[test]
+    fn codex_detects_both_fork_and_subagent_session_metadata() {
+        assert!(is_forked_codex_session_meta(&serde_json::json!({
+            "type": "session_meta",
+            "payload": { "forked_from_id": "parent" }
+        })));
+        assert!(is_forked_codex_session_meta(&serde_json::json!({
+            "type": "session_meta",
+            "payload": {
+                "source": {
+                    "subagent": { "thread_spawn": { "parent_thread_id": "parent" } }
+                }
+            }
+        })));
+        assert!(!is_forked_codex_session_meta(&serde_json::json!({
+            "type": "session_meta",
+            "payload": { "source": "cli" }
+        })));
     }
 
     #[test]

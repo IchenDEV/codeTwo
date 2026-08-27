@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Filter,
   Flag,
+  GitPullRequest,
   MessageSquareText,
   MoreHorizontal,
   Pencil,
@@ -42,7 +43,7 @@ import {
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/ui/toast"
-import { confirmNative, type SessionActivity } from "@/bridge"
+import { confirmNative, openExternal, type SessionActivity } from "@/bridge"
 import { useLanguage, type Locale, type Translate } from "@/i18n"
 
 import {
@@ -56,10 +57,12 @@ import {
   boardReducer,
   createBoardTask,
   filterBoardTasks,
+  githubPullRequestIdentity,
   loadBoardSnapshot,
   saveBoardSnapshot,
   sortBoardTasks,
   taskBoardLane,
+  unlinkTaskPullRequest,
   type BoardAction,
   type BoardFilters,
   type BoardTask,
@@ -252,6 +255,7 @@ function TaskCard({
   onMove,
   onOpenSession,
   onStartTask,
+  onUnlinkPullRequest,
 }: {
   t: Translate
   locale: Locale
@@ -261,8 +265,10 @@ function TaskCard({
   onMove: (status: TaskStatus) => void
   onOpenSession?: (id: string) => void
   onStartTask?: (task: BoardTask) => void
+  onUnlinkPullRequest?: () => void
 }) {
   const { task, lane, latestSession } = projected
+  const pullRequest = task.pullRequest
   const attention = lane === "needs_you" ? attentionDetail(t, task, latestSession) : null
   const openLatest = latestSession && onOpenSession
     ? () => onOpenSession(latestSession.id)
@@ -326,6 +332,18 @@ function TaskCard({
                     : t("taskboard.startTask")}
                 </DropdownMenuItem>
               ) : null}
+              {pullRequest ? (
+                <DropdownMenuItem onClick={() => void openExternal(pullRequest.url)}>
+                  <GitPullRequest aria-hidden />
+                  {t("taskboard.openPullRequest")}
+                </DropdownMenuItem>
+              ) : null}
+              {pullRequest && onUnlinkPullRequest ? (
+                <DropdownMenuItem onClick={onUnlinkPullRequest}>
+                  <X aria-hidden />
+                  {t("taskboard.unlinkPullRequest")}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -345,6 +363,21 @@ function TaskCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {pullRequest ? (
+        <button
+          type="button"
+          className="mt-4 flex min-w-0 items-center gap-1.5 text-left text-hint text-muted-foreground outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+          title={pullRequest.url}
+          onClick={() => void openExternal(pullRequest.url)}
+        >
+          <GitPullRequest aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate">
+            {pullRequest.repository} #{pullRequest.number}
+          </span>
+          <ExternalLink aria-hidden className="size-3 shrink-0" />
+        </button>
+      ) : null}
 
       {lane === "queue" && (task.priority !== "none" || latestSession) ? (
         <div className="mt-4 flex min-w-0 items-center gap-2 text-hint text-muted-foreground">
@@ -478,6 +511,20 @@ function BoardColumn({
             }}
             onOpenSession={onOpenSession}
             onStartTask={onStartTask}
+            onUnlinkPullRequest={projected.task.pullRequest
+              ? () => {
+                  const pullRequest = projected.task.pullRequest
+                  if (!pullRequest) return
+                  const unlinked = unlinkTaskPullRequest(
+                    [projected.task],
+                    projected.task.id,
+                    githubPullRequestIdentity(pullRequest),
+                    projected.task.pullRequestLinkRevision,
+                  )
+                  const updated = unlinked?.[0]
+                  if (updated) dispatch({ type: "update", task: updated })
+                }
+              : undefined}
           />
         ))}
 

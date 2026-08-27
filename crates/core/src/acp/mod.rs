@@ -13,8 +13,8 @@ mod connection;
 mod handler;
 pub mod wire;
 
-pub use client::AcpClient;
-pub use connection::Connection;
+pub use client::{AcpClient, AcpProcessDiagnostics};
+pub use connection::{AcpProtocolAnomaly, AcpProtocolDiagnostics, Connection};
 pub use handler::{ClientHandler, RecordingHandler};
 pub use wire::*;
 

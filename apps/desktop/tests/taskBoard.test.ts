@@ -10,6 +10,7 @@ import {
   TASK_PRIORITIES,
   TASK_BOARD_LANES,
   TASK_STATUSES,
+  associateTaskPullRequest,
   associateTaskSession,
   boardLabels,
   boardReducer,
@@ -18,14 +19,18 @@ import {
   createInitialTaskBoardState,
   filterBoardTasks,
   loadBoardSnapshot,
+  githubPullRequestIdentity,
   parseBoardSnapshot,
   saveBoardSnapshot,
   seedTasks,
   sortBoardTasks,
   taskBoardLane,
+  taskForPullRequest,
   taskForSession,
+  unlinkTaskPullRequest,
   type BoardFilters,
   type BoardTask,
+  type GitHubPullRequestReference,
   type StorageLike,
   type TaskBoardState,
   type TaskPriority,
@@ -63,7 +68,19 @@ function task(
     createdAt: BASE_TIME,
     updatedAt: BASE_TIME,
     sessionIds: [],
+    pullRequest: null,
+    pullRequestLinkRevision: 0,
     ...overrides,
+  };
+}
+
+function pullRequest(number = 7, repository = "acme/repo"): GitHubPullRequestReference {
+  return {
+    provider: "github",
+    host: "github.com",
+    repository,
+    number,
+    url: `https://github.com/${repository}/pull/${number}`,
   };
 }
 
@@ -135,6 +152,8 @@ describe("task board model constants and creation", () => {
       createdAt: BASE_TIME,
       updatedAt: BASE_TIME,
       sessionIds: ["session-7", "session-8"],
+      pullRequest: null,
+      pullRequestLinkRevision: 0,
     });
   });
 
@@ -155,6 +174,48 @@ describe("task board model constants and creation", () => {
     expect(associateTaskSession(tasks, "missing", "session-2")).toBeNull();
     expect(tasks[0]?.sessionIds).toEqual(["session-1"]);
   });
+
+  test("links one pull request to one task and rejects stale unlink actions", () => {
+    const reference = pullRequest();
+    const tasks = [
+      task("target"),
+      task("previous", "in_review", 0, {
+        pullRequest: reference,
+        pullRequestLinkRevision: 3,
+      }),
+    ];
+    const linked = associateTaskPullRequest(tasks, "target", reference, BASE_TIME + 1)!;
+
+    expect(taskForPullRequest(linked, reference)?.id).toBe("target");
+    expect(linked[0]).toMatchObject({
+      status: "todo",
+      pullRequest: reference,
+      pullRequestLinkRevision: 1,
+    });
+    expect(linked[1]).toMatchObject({
+      pullRequest: null,
+      pullRequestLinkRevision: 4,
+    });
+    expect(unlinkTaskPullRequest(
+      linked,
+      "target",
+      githubPullRequestIdentity(reference),
+      0,
+    )).toBeNull();
+    const unlinked = unlinkTaskPullRequest(
+      linked,
+      "target",
+      githubPullRequestIdentity(reference),
+      1,
+      BASE_TIME + 2,
+    );
+    expect(unlinked?.[0]).toMatchObject({
+      pullRequest: null,
+      pullRequestLinkRevision: 2,
+      updatedAt: BASE_TIME + 2,
+    });
+    expect(tasks[0]?.pullRequest).toBeNull();
+  });
 });
 
 describe("task board projection helpers", () => {
@@ -170,6 +231,8 @@ describe("task board projection helpers", () => {
       description: "Review accessibility",
       priority: "high",
       labels: ["QA"],
+      pullRequest: pullRequest(42, "acme/accessibility"),
+      pullRequestLinkRevision: 1,
     }),
     task("first", "todo", 0, {
       title: "Design Search",
@@ -217,6 +280,8 @@ describe("task board projection helpers", () => {
     expect(filterBoardTasks(tasks, filters("backend")).map((item) => item.id)).toEqual([
       "equal-b",
     ]);
+    expect(filterBoardTasks(tasks, filters("acme/accessibility #42")).map((item) => item.id))
+      .toEqual(["review"]);
   });
 
   test("combines query and facets while OR-ing values within each facet", () => {
@@ -271,7 +336,11 @@ describe("task board persistence", () => {
     });
     expect(loadBoardSnapshot(storage)).toEqual({ tasks: [], warning: null });
 
-    const savedTasks = [task("saved", "in_progress", 3, { labels: ["本地"] })];
+    const savedTasks = [task("saved", "in_progress", 3, {
+      labels: ["本地"],
+      pullRequest: pullRequest(),
+      pullRequestLinkRevision: 2,
+    })];
     expect(saveBoardSnapshot(state(savedTasks, "transient warning"), storage)).toEqual({ ok: true });
     expect(loadBoardSnapshot(storage)).toEqual({ tasks: savedTasks, warning: null });
   });
@@ -283,6 +352,26 @@ describe("task board persistence", () => {
       JSON.stringify({ version: 99, tasks: [] }),
       JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [{ ...malformedTask, status: "blocked" }] }),
       JSON.stringify({ version: TASKBOARD_SNAPSHOT_VERSION, tasks: [malformedTask, malformedTask] }),
+      JSON.stringify({
+        version: TASKBOARD_SNAPSHOT_VERSION,
+        tasks: [{
+          ...malformedTask,
+          pullRequest: { ...pullRequest(), host: "github.example" },
+          pullRequestLinkRevision: 1,
+        }],
+      }),
+      JSON.stringify({
+        version: TASKBOARD_SNAPSHOT_VERSION,
+        tasks: [{
+          ...malformedTask,
+          pullRequest: {
+            ...pullRequest(),
+            repository: "acme/repo?tab=files",
+            url: "https://github.com/acme/repo?tab=files/pull/7",
+          },
+          pullRequestLinkRevision: 1,
+        }],
+      }),
     ];
 
     for (const raw of corruptValues) {
@@ -325,6 +414,44 @@ describe("task board persistence", () => {
 
     expect(loaded.warning).toBeNull();
     expect(loaded.tasks[0]?.sessionIds).toEqual(["session-old"]);
+    expect(loaded.tasks[0]?.pullRequest).toBeNull();
+    expect(loaded.tasks[0]?.pullRequestLinkRevision).toBe(0);
+  });
+
+  test("migrates v2 tasks and repairs duplicate pull request ownership deterministically", () => {
+    const v2 = task("v2");
+    const {
+      pullRequest: _pullRequest,
+      pullRequestLinkRevision: _pullRequestLinkRevision,
+      ...v2Task
+    } = v2;
+    const migrated = parseBoardSnapshot(JSON.stringify({ version: 2, tasks: [v2Task] }));
+    expect(migrated.warning).toBeNull();
+    expect(migrated.tasks[0]).toMatchObject({
+      pullRequest: null,
+      pullRequestLinkRevision: 0,
+    });
+
+    const reference = pullRequest();
+    const repaired = parseBoardSnapshot(JSON.stringify({
+      version: TASKBOARD_SNAPSHOT_VERSION,
+      tasks: [
+        task("first-owner", "todo", 0, {
+          pullRequest: reference,
+          pullRequestLinkRevision: 1,
+        }),
+        task("duplicate-owner", "todo", 1, {
+          pullRequest: reference,
+          pullRequestLinkRevision: 4,
+        }),
+      ],
+    }));
+    expect(repaired.warning).toBeNull();
+    expect(repaired.tasks[0]?.pullRequest).toEqual(reference);
+    expect(repaired.tasks[1]).toMatchObject({
+      pullRequest: null,
+      pullRequestLinkRevision: 5,
+    });
   });
 
   test("reports storage read failures with a warning instead of throwing", () => {

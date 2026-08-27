@@ -17,7 +17,7 @@ import {
   SquareKanban,
 } from "@/components/ui/icons";
 
-import { DocEditor } from "./editor/Editor";
+import { DocEditor, type CanvasInsertOptions } from "./editor/Editor";
 import { type CanvasBlockRuntime } from "./skillInline";
 import { deriveCanvasManifest } from "./canvas/manifest";
 import type { CanvasEnvelope as LocalCanvasEnvelope } from "./canvas/types";
@@ -42,6 +42,7 @@ import {
   canvasCreateDraft,
   canvasDuplicate,
   canvasFeatureState,
+  canvasGetDraft,
   canvasNormalizeMedia,
   canvasPurge,
   canvasRestore,
@@ -60,6 +61,8 @@ import {
   discardSessionWorktree,
   fallbackProviders,
   getKeymap,
+  getAppshot,
+  getPromptImage,
   getTranscriptPage,
   gitCheckpoint,
   gitCheckpoints,
@@ -285,6 +288,17 @@ import {
   nextSessionWorktreeBaseline,
   projectSwitchWorktreeBaseline,
 } from "./session/projectDefaults";
+import {
+  composerDraftScopeKey,
+  loadComposerDrafts,
+  promoteComposerDraft,
+  saveComposerDrafts,
+  updateComposerDraft,
+  type ComposerDraft,
+  type ComposerDraftAttachment,
+  type ComposerDraftPosture,
+  type ComposerDraftScope,
+} from "./session/composerDrafts";
 import { QuestionDialog } from "./session/QuestionDialog";
 import { PermissionCard } from "./session/PermissionCard";
 import { TemplateDialog } from "./session/TemplateDialog";
@@ -354,15 +368,23 @@ import {
 import { SessionRail } from "./sidebar/SessionRail";
 import { EnvironmentPopover } from "./environment/EnvironmentPopover";
 import { MissionControlDialog } from "./sidebar/MissionControl.tsx";
-import { PullRequestsPage } from "./github/PullRequestsPage";
+import {
+  PullRequestsPage,
+  type PullRequestTaskLinkTarget,
+} from "./github/PullRequestsPage";
+import { githubPullRequestReference } from "./github/pullRequests";
 import { DockerPage, type DockerCommandCaller } from "./docker/DockerPage";
 import { TaskBoardPage } from "./taskboard/TaskBoardPage";
 import {
   associateTaskSession,
+  associateTaskPullRequest,
   createBoardTask,
+  githubPullRequestIdentity,
   loadBoardSnapshot,
   saveBoardSnapshot,
+  taskForPullRequest,
   taskForSession,
+  unlinkTaskPullRequest,
   type BoardTask,
 } from "./taskboard/taskBoard";
 
@@ -409,6 +431,22 @@ function privateImageBlock(capture: AppshotCapture): DocBlock {
   return capture.kind === "attachment"
     ? { type: "attachment", id: capture.id, name: capture.window_title }
     : { type: "appshot", id: capture.id, title: capture.window_title };
+}
+
+function composerDraftAttachmentKey(scope: ComposerDraftScope): string {
+  return scope.kind === "session"
+    ? scope.sessionId
+    : `draft:${scope.projectPath || "."}`;
+}
+
+function composerDraftAttachments(
+  captures: readonly AppshotCapture[],
+): ComposerDraftAttachment[] {
+  return captures.map((capture) => ({
+    id: capture.id,
+    kind: capture.kind === "attachment" ? "attachment" : "appshot",
+    name: capture.window_title,
+  }));
 }
 
 function promptImagesForTurn(captures: readonly AppshotCapture[]): PromptImage[] {
@@ -714,6 +752,7 @@ export default function App() {
   const [temporarySession, setTemporarySession] = useState(false);
   const temporarySessionRef = useRef(false);
   const [showPullRequests, setShowPullRequests] = useState(false);
+  const [pullRequestTasks, setPullRequestTasks] = useState<BoardTask[]>([]);
   const [dockTab, setDockTab] = useState<DockTab | null>(null);
   const [sideChatOpen, setSideChatOpen] = useState(false);
   const [sideChatSeed, setSideChatSeed] = useState<SideChatSeed | null>(null);
@@ -798,11 +837,7 @@ export default function App() {
   const insertCanvasDraftRef = useRef<
     | ((
     draft: CanvasDraft,
-    options?: {
-      pixelPolicy?: CanvasPixelPolicy;
-      deliveryError?: string;
-      deliveryErrorKind?: "provider_image" | "other";
-    },
+    options?: CanvasInsertOptions,
       ) => void)
     | null
   >(null);
@@ -810,11 +845,7 @@ export default function App() {
     | ((
     doc: readonly DocBlock[],
     drafts: ReadonlyMap<string, CanvasDraft>,
-    options?: {
-      pixelPolicy?: CanvasPixelPolicy;
-      deliveryError?: string;
-      deliveryErrorKind?: "provider_image" | "other";
-    },
+    options?: CanvasInsertOptions,
       ) => void)
     | null
   >(null);
@@ -893,17 +924,45 @@ export default function App() {
   // both describe whichever one is active.
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
+  const pendingAppshotsRef = useRef(pendingAppshots);
+  pendingAppshotsRef.current = pendingAppshots;
+  const composerDraftPostureRef = useRef<ComposerDraftPosture>({
+    provider,
+    model: currentModel,
+    mode,
+    sandbox,
+    worktreeBase,
+    planMode,
+    memoryRead,
+    memoryWrite,
+    scene: activeSceneName,
+    autoScene,
+  });
+  composerDraftPostureRef.current = {
+    provider,
+    model: currentModel,
+    mode,
+    sandbox,
+    worktreeBase,
+    planMode,
+    memoryRead,
+    memoryWrite,
+    scene: activeSceneName,
+    autoScene,
+  };
   const activeAppshotKey = activeSession ?? `draft:${(activeProject ?? cwd) || "."}`;
   const activeAppshots = pendingAppshots[activeAppshotKey] ?? EMPTY_APPSHOTS;
   const removePendingAppshots = useCallback((ids: readonly string[]) => {
     if (ids.length === 0) return;
     const removed = new Set(ids);
-    setPendingAppshots((current) => Object.fromEntries(
-      Object.entries(current).flatMap(([key, captures]) => {
+    setPendingAppshots((current) => {
+      const next = Object.fromEntries(Object.entries(current).flatMap(([key, captures]) => {
         const retained = captures.filter((capture) => !removed.has(capture.id));
         return retained.length > 0 ? [[key, retained]] : [];
-      }),
-    ));
+      }));
+      pendingAppshotsRef.current = next;
+      return next;
+    });
   }, []);
   const [projectBootstrapComplete, setProjectBootstrapComplete] =
     useState(false);
@@ -1070,6 +1129,15 @@ export default function App() {
 
   const getBlocksRef = useRef<(() => DocBlock[]) | null>(null);
   const editorRevisionRef = useRef(0);
+  const activeEditorDocRef = useRef<DocBlock[]>([]);
+  const [initialComposerDrafts] = useState(() => loadComposerDrafts());
+  const composerDraftsRef = useRef(initialComposerDrafts.drafts);
+  const composerDraftLoadWarningRef = useRef(initialComposerDrafts.warning);
+  const activeDraftScopeRef = useRef<ComposerDraftScope | null>(null);
+  const composerDraftSaveTimerRef = useRef<number | null>(null);
+  const composerDraftSaveWarningRef = useRef(false);
+  const composerDraftRestoreGenerationRef = useRef(0);
+  const composerDraftRestoringRef = useRef(false);
   const insertTextRef = useRef<((text: string) => void) | null>(null);
   const insertAnnotationRef = useRef<
     ((a: Annotation, context: string) => void) | null
@@ -1478,6 +1546,228 @@ export default function App() {
     [toast],
   );
 
+  const saveComposerDraftCollection = useCallback((drafts: Map<string, ComposerDraft>) => {
+    composerDraftsRef.current = drafts;
+    if (saveComposerDrafts(drafts)) {
+      composerDraftSaveWarningRef.current = false;
+      return;
+    }
+    if (!composerDraftSaveWarningRef.current) {
+      composerDraftSaveWarningRef.current = true;
+      toast(t("toast.draftSaveFailed"), "error");
+    }
+  }, [t, toast]);
+
+  const persistActiveComposerDraft = useCallback(() => {
+    const scope = activeDraftScopeRef.current;
+    if (!scope) return;
+    const captures = pendingAppshotsRef.current[composerDraftAttachmentKey(scope)] ?? [];
+    saveComposerDraftCollection(updateComposerDraft(composerDraftsRef.current, {
+      scope,
+      doc: activeEditorDocRef.current,
+      attachments: composerDraftAttachments(captures),
+      posture: composerDraftPostureRef.current,
+    }));
+  }, [saveComposerDraftCollection]);
+
+  const flushActiveComposerDraft = useCallback(() => {
+    if (composerDraftSaveTimerRef.current !== null) {
+      window.clearTimeout(composerDraftSaveTimerRef.current);
+      composerDraftSaveTimerRef.current = null;
+    }
+    persistActiveComposerDraft();
+  }, [persistActiveComposerDraft]);
+
+  const scheduleActiveComposerDraftSave = useCallback(() => {
+    if (composerDraftRestoringRef.current || !activeDraftScopeRef.current) return;
+    if (composerDraftSaveTimerRef.current !== null) {
+      window.clearTimeout(composerDraftSaveTimerRef.current);
+    }
+    composerDraftSaveTimerRef.current = window.setTimeout(() => {
+      composerDraftSaveTimerRef.current = null;
+      persistActiveComposerDraft();
+    }, 250);
+  }, [persistActiveComposerDraft]);
+
+  const applyComposerDraftPosture = useCallback((posture: ComposerDraftPosture) => {
+    setProvider(posture.provider);
+    setCurrentModel(posture.model);
+    setDefaultModel(null);
+    setConfigOptions([]);
+    setMode(posture.mode);
+    setSandboxState(posture.sandbox);
+    setWorktreeBase(posture.worktreeBase);
+    setPlanMode(posture.planMode);
+    memoryReadRef.current = posture.memoryRead;
+    memoryWriteRef.current = posture.memoryWrite;
+    setMemoryRead(posture.memoryRead);
+    setMemoryWrite(posture.memoryWrite);
+    activeSceneNameRef.current = posture.scene;
+    autoSceneRef.current = posture.autoScene;
+    setActiveSceneName(posture.scene);
+    setAutoScene(posture.autoScene);
+  }, []);
+
+  const restoreComposerDraftScope = useCallback((
+    scope: ComposerDraftScope,
+    options: { restorePosture?: boolean } = {},
+  ) => {
+    const generation = ++composerDraftRestoreGenerationRef.current;
+    composerDraftRestoringRef.current = true;
+    activeDraftScopeRef.current = scope;
+    clearEditorRef.current?.();
+    activeEditorDocRef.current = [];
+    const record = composerDraftsRef.current.get(composerDraftScopeKey(scope));
+    const attachmentKey = composerDraftAttachmentKey(scope);
+    if (record && options.restorePosture !== false && scope.kind === "project") {
+      applyComposerDraftPosture(record.posture);
+    }
+
+    const updateAttachments = (captures: AppshotCapture[]) => {
+      if (
+        generation !== composerDraftRestoreGenerationRef.current ||
+        composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !== composerDraftScopeKey(scope)
+      ) {
+        return;
+      }
+      setPendingAppshots((current) => {
+        const next = { ...current };
+        if (captures.length > 0) next[attachmentKey] = captures;
+        else delete next[attachmentKey];
+        pendingAppshotsRef.current = next;
+        return next;
+      });
+    };
+
+    if (!record) {
+      composerDraftRestoringRef.current = false;
+      updateAttachments([]);
+      return;
+    }
+
+    void Promise.all(record.attachments.map(async (attachment) => {
+      try {
+        return attachment.kind === "attachment"
+          ? await getPromptImage(attachment.id)
+          : await getAppshot(attachment.id);
+      } catch {
+        return null;
+      }
+    })).then((loaded) => {
+      const captures = loaded.filter((capture): capture is AppshotCapture => capture !== null);
+      updateAttachments(captures);
+      if (captures.length !== record.attachments.length) {
+        toast(t("toast.draftAttachmentMissing"), "error");
+      }
+    });
+
+    const applyDocument = (drafts: ReadonlyMap<string, CanvasDraft>) => {
+      if (
+        generation !== composerDraftRestoreGenerationRef.current ||
+        composerDraftScopeKey(activeDraftScopeRef.current ?? scope) !== composerDraftScopeKey(scope)
+      ) {
+        return;
+      }
+      const restore = restoreCanvasDocumentRef.current;
+      if (!restore) {
+        composerDraftRestoringRef.current = false;
+        toast(t("toast.draftRestoreFailed"), "error");
+        return;
+      }
+      composerDraftRestoringRef.current = true;
+      try {
+        restore(record.doc, drafts, { mode: "replace" });
+        activeEditorDocRef.current = record.doc.map((block) => (
+          block.type === "skill" ? { ...block, params: { ...block.params } } : { ...block }
+        ));
+      } catch {
+        toast(t("toast.draftRestoreFailed"), "error");
+      } finally {
+        composerDraftRestoringRef.current = false;
+      }
+    };
+
+    const canvasIds = record.doc.flatMap((block) => block.type === "canvas" ? [block.id] : []);
+    if (canvasIds.length === 0) {
+      applyDocument(new Map());
+      return;
+    }
+    const editorRevision = editorRevisionRef.current;
+    void Promise.all(canvasIds.map(async (id) => {
+      const cached = canvasDraftsRef.current.get(id);
+      if (cached) return cached;
+      const loaded = await canvasGetDraft(id);
+      if (!loaded) throw new Error(`Canvas draft ${id} is unavailable`);
+      return loaded;
+    })).then((drafts) => {
+      if (editorRevisionRef.current !== editorRevision) {
+        if (generation === composerDraftRestoreGenerationRef.current) {
+          composerDraftRestoringRef.current = false;
+          scheduleActiveComposerDraftSave();
+        }
+        return;
+      }
+      for (const draft of drafts) {
+        canvasDraftsRef.current.set(draft.id, draft);
+        canvasAssetsRef.current.set(
+          draft.id,
+          new Map(draft.assets.map((asset) => [asset.id, asset])),
+        );
+      }
+      applyDocument(new Map(drafts.map((draft) => [draft.id, draft])));
+    }).catch(() => {
+      if (generation === composerDraftRestoreGenerationRef.current) {
+        composerDraftRestoringRef.current = false;
+        toast(t("toast.draftRestoreFailed"), "error");
+      }
+    });
+  }, [applyComposerDraftPosture, scheduleActiveComposerDraftSave, t, toast]);
+
+  const promoteActiveComposerDraft = useCallback((session: string, projectPath: string | null) => {
+    flushActiveComposerDraft();
+    const from = activeDraftScopeRef.current;
+    const to: ComposerDraftScope = { kind: "session", sessionId: session, projectPath };
+    if (from) {
+      const promotion = promoteComposerDraft(composerDraftsRef.current, from, to);
+      if (promotion.outcome !== "conflict") {
+        saveComposerDraftCollection(promotion.drafts);
+      }
+      const fromAttachmentKey = composerDraftAttachmentKey(from);
+      const toAttachmentKey = composerDraftAttachmentKey(to);
+      if (fromAttachmentKey !== toAttachmentKey) {
+        setPendingAppshots((current) => {
+          const source = current[fromAttachmentKey];
+          if (!source || current[toAttachmentKey]?.length) return current;
+          const next = { ...current, [toAttachmentKey]: source };
+          delete next[fromAttachmentKey];
+          pendingAppshotsRef.current = next;
+          return next;
+        });
+      }
+    }
+    activeDraftScopeRef.current = to;
+  }, [flushActiveComposerDraft, saveComposerDraftCollection]);
+
+  useEffect(() => {
+    const warning = composerDraftLoadWarningRef.current;
+    composerDraftLoadWarningRef.current = null;
+    if (warning === "corrupt") toast(t("toast.draftCorrupt"), "error");
+    else if (warning === "unavailable") toast(t("toast.draftStorageUnavailable"), "error");
+  }, [t, toast]);
+
+  useEffect(() => {
+    const flush = () => persistActiveComposerDraft();
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      if (composerDraftSaveTimerRef.current !== null) {
+        window.clearTimeout(composerDraftSaveTimerRef.current);
+        composerDraftSaveTimerRef.current = null;
+      }
+      persistActiveComposerDraft();
+    };
+  }, [persistActiveComposerDraft]);
+
   const invalidatePendingCreation = useCallback(() => {
     const pending = pendingCreationRef.current;
     awaitingSessionRef.current = null;
@@ -1491,9 +1781,39 @@ export default function App() {
   }, []);
 
   const handleEditorEmptyChange = useCallback((empty: boolean) => {
-    editorRevisionRef.current += 1;
     setDocEmpty(empty);
   }, []);
+
+  const handleEditorDocumentChange = useCallback((doc: DocBlock[]) => {
+    editorRevisionRef.current += 1;
+    activeEditorDocRef.current = doc;
+    scheduleActiveComposerDraftSave();
+  }, [scheduleActiveComposerDraftSave]);
+
+  useEffect(() => {
+    scheduleActiveComposerDraftSave();
+  }, [
+    activeSceneName,
+    autoScene,
+    currentModel,
+    memoryRead,
+    memoryWrite,
+    mode,
+    pendingAppshots,
+    planMode,
+    provider,
+    sandbox,
+    scheduleActiveComposerDraftSave,
+    worktreeBase,
+  ]);
+
+  useEffect(() => {
+    if (!projectBootstrapComplete || activeDraftScopeRef.current) return;
+    restoreComposerDraftScope({
+      kind: "project",
+      projectPath: (activeProjectRef.current ?? cwd) || ".",
+    });
+  }, [cwd, projectBootstrapComplete, restoreComposerDraftScope]);
 
   // BlockNote bakes its dictionary in at creation, so the placeholder only changes language on a
   // remount — and a remount discards whatever is in the document. Wait for the document to be empty
@@ -1688,6 +2008,7 @@ export default function App() {
     (path: string) => {
       // Re-clicking the current project is still an explicit navigation choice: a late creation
       // request must not take focus or submit the draft it captured before that choice.
+      flushActiveComposerDraft();
       invalidatePendingCreation();
       setCallProjectPath(normalizePluginProjectPath(path));
       setActiveProject(path);
@@ -1700,9 +2021,9 @@ export default function App() {
       setWorktreeBase(
         projectSwitchWorktreeBaseline(project?.default_worktree_mode ?? null),
       );
-      // Selecting a project always opens a blank source-checkout draft, including a re-click of the
-      // current project. Keeping an active worktree session while `cwd` switches to the source would
-      // make file/Git/terminal surfaces show one checkout while the agent keeps editing another.
+      // Selecting a project opens its source-checkout draft. Keeping an active worktree session
+      // while `cwd` switches to the source would make file/Git/terminal surfaces show one checkout
+      // while the agent keeps editing another.
       sessionLoadSeq.current += 1;
       setSessionLoading(false);
       activeProjectRef.current = path;
@@ -1720,13 +2041,40 @@ export default function App() {
       memoryReceiptsRef.current = [];
       setMemoryRead("inherit");
       setMemoryWrite("inherit");
+      restoreComposerDraftScope({ kind: "project", projectPath: path });
       void openProject(path).then(refreshProjects);
     },
-    [invalidatePendingCreation, projects, refreshProjects, setTaskContext],
+    [
+      flushActiveComposerDraft,
+      invalidatePendingCreation,
+      projects,
+      refreshProjects,
+      restoreComposerDraftScope,
+      setTaskContext,
+    ],
   );
 
   const removeProjectEntry = useCallback(async (path: string) => {
     await removeProject(path);
+    const removedScope: ComposerDraftScope = { kind: "project", projectPath: path };
+    const removedAttachmentKey = composerDraftAttachmentKey(removedScope);
+    const drafts = new Map(composerDraftsRef.current);
+    drafts.delete(composerDraftScopeKey(removedScope));
+    saveComposerDraftCollection(drafts);
+    const removedActiveDraft = path === activeProjectRef.current;
+    if (removedActiveDraft) {
+      // Project removal is the explicit discard boundary for its unsent project draft. Prevent the
+      // next project's navigation flush from recreating the just-deleted record.
+      activeDraftScopeRef.current = null;
+      activeEditorDocRef.current = [];
+    }
+    setPendingAppshots((current) => {
+      if (!(removedAttachmentKey in current)) return current;
+      const next = { ...current };
+      delete next[removedAttachmentKey];
+      pendingAppshotsRef.current = next;
+      return next;
+    });
     try {
       const history = loadBrowserHistory(window.localStorage);
       saveBrowserHistory(window.localStorage, removeBrowserProject(history, path));
@@ -1734,15 +2082,16 @@ export default function App() {
       // Browser history is a convenience; a blocked local store must not block removal.
     }
     refreshProjects();
-    if (path !== activeProjectRef.current) return;
+    if (!removedActiveDraft) return;
     const next = projects.find((project) => project.path !== path);
     if (next) selectProject(next.path);
     else {
+      clearEditorRef.current?.();
       activeProjectRef.current = null;
       setCallProjectPath(null);
       setActiveProject(null);
     }
-  }, [projects, refreshProjects, selectProject]);
+  }, [projects, refreshProjects, saveComposerDraftCollection, selectProject]);
 
   const addProjectFolder = useCallback(async () => {
     const picked = await pickDirectory();
@@ -1956,6 +2305,10 @@ export default function App() {
           const refreshed = refreshSessions();
           if (!matchesSessionCreation(ev, awaitingSessionRef.current)) return;
           awaitingSessionRef.current = null;
+          promoteActiveComposerDraft(
+            ev.session,
+            ev.project_path ?? activeProjectRef.current,
+          );
           sessionLoadSeq.current += 1;
           setSessionLoading(false);
           activeSessionRef.current = ev.session;
@@ -2215,7 +2568,11 @@ export default function App() {
         if (ev.event === "session_capabilities") {
           setInteractionCapabilities((previous) => ({
             ...previous,
-            [ev.session]: { steering: ev.steering, goal: ev.goal },
+            [ev.session]: {
+              steering: ev.steering,
+              goal: ev.goal,
+              compact_context: ev.compact_context ?? false,
+            },
           }));
           return;
         }
@@ -2577,6 +2934,7 @@ export default function App() {
     invalidatePendingCreation,
     markSessionStarted,
     markSessionStopped,
+    promoteActiveComposerDraft,
     refreshSessions,
     restoreAcceptedCanvasForProviderError,
     restoreRejectedExecutionPolicy,
@@ -2640,6 +2998,12 @@ export default function App() {
       ...previous,
       [session]: { usedTokens, contextWindow, breakdown: null },
     }));
+    if (query.get("mockCompactContext") === "1") {
+      setInteractionCapabilities((previous) => ({
+        ...previous,
+        [session]: { steering: false, goal: null, compact_context: true },
+      }));
+    }
   }, []);
 
   const run = useCallback(async (
@@ -2984,6 +3348,7 @@ export default function App() {
       return null;
     }
 
+    flushActiveComposerDraft();
     invalidatePendingCreation();
     setShowTaskBoard(false);
     setShowPullRequests(false);
@@ -3024,6 +3389,10 @@ export default function App() {
       if (baseline !== undefined) setWorktreeBase(baseline);
       if (project?.default_provider) setProvider(project.default_provider);
       setCurrentModel(project?.default_provider ? project.default_model ?? null : null);
+      restoreComposerDraftScope({
+        kind: "project",
+        projectPath: (activeProjectRef.current ?? source) || ".",
+      });
     }
     // Caret into the document; whichever mode you're in stays yours.
     setTimeout(() => focusEditorRef.current?.(), 0);
@@ -3035,9 +3404,11 @@ export default function App() {
     sessions,
     archivedSessions,
     projects,
+    flushActiveComposerDraft,
     toast,
     t,
     invalidatePendingCreation,
+    restoreComposerDraftScope,
   ]);
 
   const createTaskDraft = useCallback(() => {
@@ -3088,6 +3459,15 @@ export default function App() {
       toast(t("toast.multitaskWorktreeUnavailable"), "error");
       return;
     }
+    const copiedDoc = [
+      ...(getBlocksRef.current?.() ?? []),
+      ...activeAppshots.map(privateImageBlock),
+    ];
+    if (copiedDoc.length === 0) {
+      toast(t("toast.emptyDoc"), "error");
+      focusEditorRef.current?.();
+      return;
+    }
     const source = createSession();
     if (!source) return;
 
@@ -3097,13 +3477,14 @@ export default function App() {
     setWorktreeBase("current");
     setProvider(provider);
     setCurrentModel(currentModel);
-    void run(undefined, {
+    void run(copiedDoc, {
       source,
       worktreeBase: "current",
       worktreeBaseSha,
       parallelTask: true,
     });
   }, [
+    activeAppshots,
     createSession,
     currentModel,
     provider,
@@ -3124,10 +3505,12 @@ export default function App() {
     const key = session ?? `draft:${(activeProjectRef.current ?? cwd) || "."}`;
     setPendingAppshots((current) => {
       const existing = current[key] ?? [];
-      return {
+      const next = {
         ...current,
         [key]: [...existing.filter((candidate) => candidate.id !== capture.id), capture],
       };
+      pendingAppshotsRef.current = next;
+      return next;
     });
     setShowSettings(false);
     setCapturing(null);
@@ -3155,10 +3538,14 @@ export default function App() {
       result.status === "fulfilled" ? [result.value] : [],
     );
     if (captures.length > 0) {
-      setPendingAppshots((current) => ({
-        ...current,
-        [key]: [...(current[key] ?? []), ...captures],
-      }));
+      setPendingAppshots((current) => {
+        const next = {
+          ...current,
+          [key]: [...(current[key] ?? []), ...captures],
+        };
+        pendingAppshotsRef.current = next;
+        return next;
+      });
       setTimeout(() => focusEditorRef.current?.(), 0);
     }
     const failure = results.find(
@@ -3223,6 +3610,116 @@ export default function App() {
     [manualDockTab, t],
   );
 
+  const readPullRequestTasks = useCallback((): BoardTask[] | null => {
+    const board = loadBoardSnapshot();
+    if (board.warning) {
+      setPullRequestTasks([]);
+      toast(board.warning, "error");
+      return null;
+    }
+    setPullRequestTasks(board.tasks);
+    return board.tasks;
+  }, [toast]);
+
+  const linkPullRequestToTask = useCallback((
+    detail: GitHubPullRequestDetail,
+    renderedTarget: PullRequestTaskLinkTarget | null,
+  ) => {
+    const current = readPullRequestTasks();
+    if (!current) return;
+    const reference = githubPullRequestReference(detail);
+    if (taskForPullRequest(current, reference)) {
+      toast(t("pullRequests.taskLinkChanged"), "error");
+      return;
+    }
+
+    let tasks = current;
+    let target = renderedTarget
+      ? current.find((task) => task.id === renderedTarget.id) ?? null
+      : null;
+    if (
+      renderedTarget
+      && (
+        !target
+        || target.pullRequestLinkRevision !== renderedTarget.revision
+        || target.pullRequest !== null
+      )
+    ) {
+      toast(t("pullRequests.taskLinkChanged"), "error");
+      return;
+    }
+
+    const created = target === null;
+    if (!target) {
+      target = createBoardTask({
+        title: detail.title,
+        description: detail.body.trim().slice(0, 600),
+        status: "in_progress",
+        priority: "none",
+        labels: ["GitHub", "PR"],
+        order: current.filter((task) => task.status === "in_progress").length,
+      });
+      tasks = [...tasks, target];
+    }
+    const targetId = target.id;
+    const associated = associateTaskPullRequest(tasks, targetId, reference);
+    if (!associated) {
+      toast(t("pullRequests.taskLinkChanged"), "error");
+      return;
+    }
+    const linked = associated.find((task) => task.id === targetId);
+    if (!linked) {
+      toast(t("pullRequests.taskLinkChanged"), "error");
+      return;
+    }
+    const saved = saveBoardSnapshot(associated);
+    if (!saved.ok) {
+      toast(saved.warning, "error");
+      return;
+    }
+    setPullRequestTasks(associated);
+    if (activeBoardTaskRef.current?.id === linked.id) setTaskContext(linked, false);
+    toast(
+      t(created ? "pullRequests.taskCreated" : "pullRequests.taskLinked", {
+        title: linked.title,
+      }),
+      "success",
+    );
+  }, [readPullRequestTasks, setTaskContext, t, toast]);
+
+  const unlinkPullRequestFromTask = useCallback((
+    detail: GitHubPullRequestDetail,
+    renderedLink: PullRequestTaskLinkTarget,
+  ) => {
+    const current = readPullRequestTasks();
+    if (!current) return;
+    const reference = githubPullRequestReference(detail);
+    const task = current.find((candidate) => candidate.id === renderedLink.id) ?? null;
+    const unlinked = unlinkTaskPullRequest(
+      current,
+      renderedLink.id,
+      githubPullRequestIdentity(reference),
+      renderedLink.revision,
+    );
+    if (!task || !unlinked) {
+      toast(t("pullRequests.taskLinkChanged"), "error");
+      return;
+    }
+    const saved = saveBoardSnapshot(unlinked);
+    if (!saved.ok) {
+      toast(saved.warning, "error");
+      return;
+    }
+    setPullRequestTasks(unlinked);
+    if (activeBoardTaskRef.current?.id === task.id) {
+      setTaskContext(
+        unlinked.find((candidate) => candidate.id === task.id) ?? null,
+        false,
+      );
+    }
+    toast(t("pullRequests.taskUnlinked", { title: task.title }), "success");
+  }, [readPullRequestTasks, setTaskContext, t, toast]);
+
   const chatAboutPullRequest = useCallback(
     (detail: GitHubPullRequestDetail) => {
       const prompt = [
@@ -3231,6 +3728,11 @@ export default function App() {
         detail.url,
         detail.body,
       ].filter(Boolean).join("\n\n");
+      const board = loadBoardSnapshot();
+      if (!board.warning) {
+        const linkedTask = taskForPullRequest(board.tasks, githubPullRequestReference(detail));
+        if (linkedTask) setTaskContext(linkedTask, false);
+      }
       setShowPullRequests(false);
       createSession();
       clearEditorRef.current?.();
@@ -3240,7 +3742,7 @@ export default function App() {
         focusEditorRef.current?.();
       }, 0);
     },
-    [createSession, setDocMode, t],
+    [createSession, setDocMode, setTaskContext, t],
   );
 
   const answer = useCallback(
@@ -3380,6 +3882,7 @@ export default function App() {
     async (id: string) => {
       // An explicit navigation wins over any in-flight session creation. Its late SessionCreated
       // can still refresh the rail, but cannot claim focus or submit the draft captured for it.
+      flushActiveComposerDraft();
       setShowTaskBoard(false);
       setShowPullRequests(false);
       setShowDocker(false);
@@ -3425,6 +3928,10 @@ export default function App() {
       activeSessionProvenanceRef.current = provenance;
       setActiveSessionReceipt(provenance);
       setActiveSession(id);
+      restoreComposerDraftScope(
+        { kind: "session", sessionId: id, projectPath },
+        { restorePosture: false },
+      );
       const board = loadBoardSnapshot();
       const task = board.warning ? null : taskForSession(board.tasks, id);
       setTaskContext(task, task === null);
@@ -3538,7 +4045,9 @@ export default function App() {
       toast,
       t,
       followDockEvent,
+      flushActiveComposerDraft,
       invalidatePendingCreation,
+      restoreComposerDraftScope,
       setTaskContext,
       updateTranscriptCursor,
     ],
@@ -4277,10 +4786,18 @@ export default function App() {
     setShowPluginManager(false);
     setShowTaskBoard(false);
     setShowDocker(false);
+    readPullRequestTasks();
     setShowPullRequests(true);
     if (railOverlay) setNarrowRailOpen(false);
     else if (railCollapsed) setRailCollapsedRaw(0);
-  }, [componentEnabled, railOverlay, railCollapsed, setRailCollapsedRaw, toast]);
+  }, [
+    componentEnabled,
+    railOverlay,
+    railCollapsed,
+    readPullRequestTasks,
+    setRailCollapsedRaw,
+    toast,
+  ]);
 
   const openDocker = useCallback(() => {
     setShowAutomations(false);
@@ -6188,6 +6705,11 @@ export default function App() {
             <PullRequestsPage
               headerLeadingAction={railExpandAction}
               onChat={chatAboutPullRequest}
+              tasks={pullRequestTasks}
+              activeTaskId={activeBoardTask?.id ?? null}
+              onLinkTask={linkPullRequestToTask}
+              onUnlinkTask={unlinkPullRequestFromTask}
+              onOpenTask={() => openTaskBoard()}
             />
           )}
 
@@ -6726,6 +7248,12 @@ export default function App() {
                         activeSession,
                       )}
                   usage={sessionUsage}
+                  {...(activeInteractionCapabilities?.compact_context
+                    ? {
+                        onCompactContext: () =>
+                          void run([{ type: "text", text: "/compact" }]),
+                      }
+                    : {})}
                   onModel={(id) => {
                     const session = activeSessionRef.current;
                     if (!session) {
@@ -6922,6 +7450,7 @@ export default function App() {
                     canvasDeliveryErrorRef={canvasDeliveryErrorRef}
                     onPasteImages={attachPromptImages}
                     onEmptyChange={handleEditorEmptyChange}
+                    onDocumentChange={handleEditorDocumentChange}
                   />
                 </Composer>
               </div>

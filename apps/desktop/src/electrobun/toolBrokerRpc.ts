@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 
+import { createInterface } from "node:readline";
+
 import { ToolBroker, type AcpMcpServer, type ToolPlan } from "../../../../packages/tool-broker/src";
 import {
   detectHostToolEvidence,
+  saveAgentBrowserAccess,
   saveBrowserUseSelection,
   saveComputerUseSelection,
 } from "./toolBroker/providerTools";
@@ -16,6 +19,11 @@ interface JsonRpcRequest {
 
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new Error(`${name} is required`);
+  return value;
+}
+
+function requiredBoolean(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
   return value;
 }
 
@@ -46,6 +54,7 @@ function wireServer(server: AcpMcpServer): Record<string, unknown> {
 
 function wirePlan(plan: ToolPlan): Record<string, unknown> {
   return {
+    browser_access_enabled: plan.browserAccessEnabled,
     capabilities: plan.capabilities,
     native_capabilities: plan.nativeCapabilities,
     mcp_servers: plan.mcpServers.map(wireServer),
@@ -68,7 +77,10 @@ function wireSettings(settings: ReturnType<ToolBroker["catalog"]>): Record<strin
   });
   return {
     computer_use: encode(settings.computerUse),
-    browser_use: encode(settings.browserUse),
+    browser_use: {
+      ...encode(settings.browserUse),
+      access_enabled: settings.browserUse.accessEnabled,
+    },
   };
 }
 
@@ -113,8 +125,63 @@ function handle(request: JsonRpcRequest): unknown {
       evidence = detectHostToolEvidence(environment(params.environment), dataDir);
       return wireSettings(broker.catalog({ evidence }));
     }
+    case "browser_access.set": {
+      saveAgentBrowserAccess(dataDir, requiredBoolean(params.enabled, "params.enabled"));
+      evidence = detectHostToolEvidence(environment(params.environment), dataDir);
+      return wireSettings(broker.catalog({ evidence }));
+    }
     default:
       throw new Error(`method not found: ${request.method}`);
+  }
+}
+
+async function runEmptyMcpServer(): Promise<void> {
+  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  for await (const line of lines) {
+    if (!line.trim()) continue;
+    let request: Record<string, unknown>;
+    try {
+      request = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!("id" in request)) continue;
+    const method = request.method;
+    const params = request.params && typeof request.params === "object" && !Array.isArray(request.params)
+      ? request.params as Record<string, unknown>
+      : {};
+    let result: Record<string, unknown>;
+    switch (method) {
+      case "initialize":
+        result = {
+          protocolVersion: typeof params.protocolVersion === "string"
+            ? params.protocolVersion
+            : "2024-11-05",
+          capabilities: { tools: { listChanged: false } },
+          serverInfo: { name: "codetwo-browser-access-disabled", version: "1" },
+        };
+        break;
+      case "tools/list":
+        result = { tools: [] };
+        break;
+      case "resources/list":
+        result = { resources: [] };
+        break;
+      case "prompts/list":
+        result = { prompts: [] };
+        break;
+      case "ping":
+        result = {};
+        break;
+      default:
+        process.stdout.write(`${JSON.stringify({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: `method not found: ${String(method)}` },
+        })}\n`);
+        continue;
+    }
+    process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
   }
 }
 
@@ -137,4 +204,5 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (process.argv.includes("--empty-mcp")) await runEmptyMcpServer();
+else await main();

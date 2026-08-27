@@ -147,6 +147,7 @@ describe("Computer Use settings", () => {
 describe("Browser Use settings", () => {
   test("lets the user choose one global backend while preserving backend compatibility metadata", async () => {
     const browserSettings = {
+      access_enabled: true,
       selections: { "*": "automatic" },
       backends: [
         {
@@ -169,6 +170,7 @@ describe("Browser Use settings", () => {
       errors: [],
     };
     const saved = [];
+    const accessSaved = [];
     const view = mount(
       <I18nProvider>
         <SettingsPage
@@ -188,6 +190,10 @@ describe("Browser Use settings", () => {
             saved.push(backend);
             return { ...browserSettings, selections: { "*": backend } };
           }}
+          browserUseAccessSaver={async (enabled) => {
+            accessSaved.push(enabled);
+            return { ...browserSettings, access_enabled: enabled };
+          }}
         />
       </I18nProvider>,
     );
@@ -195,13 +201,14 @@ describe("Browser Use settings", () => {
     await waitFor(() => {
       expect(view.container.textContent).toContain("OpenAI Browser / Chrome");
       expect(view.container.textContent).toContain("Playwright MCP");
-      expect(view.container.textContent).toContain("Choose one external browser-control backend");
+      expect(view.container.textContent).toContain("Control browser access for agents");
     });
     expect(view.container.querySelectorAll("[data-browser-use-selection]")).toHaveLength(1);
     expect(view.container.textContent).not.toContain("Claude Code");
     expect(view.container.textContent).not.toContain("OpenAI Codex");
     const trigger = view.container.querySelector("[data-browser-use-selection]");
     await openSelect(trigger);
+    expect(dom.document.body.textContent).toContain("No external backend");
     const openAiBrowser = Array.from(dom.document.body.querySelectorAll('[data-slot="select-item"]'))
       .find((item) => item.textContent?.trim() === "OpenAI Browser / Chrome");
     expect(openAiBrowser).toBeDefined();
@@ -211,6 +218,16 @@ describe("Browser Use settings", () => {
 
     expect(saved).toEqual(["playwright"]);
     expect(trigger?.textContent).toContain("Playwright MCP");
+
+    const access = view.container.querySelector("[data-agent-browser-access]");
+    expect(access?.getAttribute("aria-checked")).toBe("true");
+    await reactAct(async () => {
+      access?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    await flush();
+    expect(accessSaved).toEqual([false]);
+    expect(access?.getAttribute("aria-checked")).toBe("false");
+    expect(trigger?.hasAttribute("disabled")).toBe(true);
     view.unmount();
   });
 });

@@ -65,7 +65,9 @@ export interface ToolSettings {
 }
 
 export type ComputerUseSettings = ToolSettings;
-export type BrowserUseSettings = ToolSettings;
+export interface BrowserUseSettings extends ToolSettings {
+  accessEnabled: boolean;
+}
 
 /** Evidence is produced by adapters. It contains observations, never routing policy. */
 export interface HostToolEvidence {
@@ -80,6 +82,9 @@ export interface HostToolEvidence {
   chromeEnabled: boolean;
   /** Private Codex adapter evidence. The broker must never export this server. */
   chromeMcp: AcpMcpServer | null;
+  /** Credential-free replacement for a configured provider-native browser runtime. */
+  browserAccessBlockerMcp: AcpMcpServer;
+  agentBrowserAccessEnabled: boolean;
   browserBackends: string[];
   sitesEnabled: boolean;
   sitesVersion: string | null;
@@ -105,6 +110,7 @@ export interface ResolveRequest {
 
 /** The immutable output consumed by every host adapter. */
 export interface ToolPlan {
+  browserAccessEnabled: boolean;
   capabilities: ProviderCapability[];
   nativeCapabilities: ProviderCapabilityId[];
   mcpServers: AcpMcpServer[];

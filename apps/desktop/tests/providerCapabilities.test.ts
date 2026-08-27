@@ -9,6 +9,7 @@ import {
   loadConfiguredBrowserUse,
   loadConfiguredComputerUse,
   projectProviderToolset,
+  saveAgentBrowserAccess,
   saveBrowserUseSelection,
   saveComputerUseSelection,
   stdioServer,
@@ -43,6 +44,13 @@ const readyEvidence: HostToolEvidence = {
   browserEnabled: true,
   chromeEnabled: true,
   chromeMcp,
+  browserAccessBlockerMcp: {
+    name: "node_repl",
+    command: process.execPath,
+    args: ["toolBrokerRpc.ts", "--empty-mcp"],
+    env: [],
+  },
+  agentBrowserAccessEnabled: true,
   browserBackends: ["chrome", "iab"],
   sitesEnabled: true,
   sitesVersion: "0.1.34",
@@ -69,6 +77,7 @@ describe("provider capability wire compatibility", () => {
     const directory = mkdtempSync(join(tmpdir(), "codetwo-host-tools-catalog-"));
     try {
       const evidence = detectHostToolEvidence({}, directory);
+      expect(evidence.agentBrowserAccessEnabled).toBe(true);
       expect(evidence.computerUseBackends.find((backend) => backend.id === "cua")?.providers)
         .toEqual([]);
       expect(evidence.browserUseBackends.find((backend) => backend.id === "openai-browser")?.providers)
@@ -141,6 +150,28 @@ describe("provider capability wire compatibility", () => {
       expect(claude.mcpServers.map((server) => server.name)).not.toContain("node_repl");
       expect(claude.capabilities.find((item) => item.id === "chrome_browser")?.state)
         .toBe("unavailable");
+    }
+  });
+
+  test("persists the browser access gate and fails closed on unreadable policy", () => {
+    const directory = mkdtempSync(join(tmpdir(), "codetwo-browser-access-"));
+    try {
+      saveAgentBrowserAccess(directory, false);
+      const persisted = loadConfiguredBrowserUse(directory);
+      expect(persisted.accessEnabled).toBe(false);
+      const denied = detectHostToolEvidence({}, directory);
+      expect(denied.agentBrowserAccessEnabled).toBe(false);
+      expect(projectProviderToolset(denied, "codex").mcpServers).toEqual([
+        denied.browserAccessBlockerMcp,
+      ]);
+
+      writeFileSync(join(directory, "host-tools.json"), "not json");
+      const unreadable = detectHostToolEvidence({}, directory);
+      expect(unreadable.agentBrowserAccessEnabled).toBe(false);
+      expect(unreadable.browserUseConfigErrors).not.toEqual([]);
+      expect(projectProviderToolset(unreadable, "codex").browserAccessEnabled).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
     }
   });
 

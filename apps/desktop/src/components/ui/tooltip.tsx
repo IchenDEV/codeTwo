@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
@@ -26,11 +27,12 @@ function Tooltip({
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({
-  ...props
-}: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
-}
+const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipPrimitive.Trigger.Props>(
+  (props, ref) => (
+    <TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />
+  ),
+)
+TooltipTrigger.displayName = "TooltipTrigger"
 
 function TooltipContent({
   className,

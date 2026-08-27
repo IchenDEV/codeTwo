@@ -40,6 +40,7 @@ fn rust_adapter_consumes_the_bun_broker_plan() {
         .collect::<Vec<_>>();
 
     assert_eq!(names, vec!["cua-driver", "playwright"]);
+    assert!(plan.browser_access_enabled);
     assert!(plan.native_capabilities.is_empty());
     assert!(!names.contains(&"node_repl"));
     assert_eq!(
@@ -67,4 +68,36 @@ async fn core_app_accepts_the_desktop_global_computer_use_selection() {
         .unwrap();
 
     assert_eq!(settings["selections"]["*"], "automatic");
+}
+
+#[tokio::test]
+async fn core_app_persists_fail_closed_agent_browser_access() {
+    let directory = tempfile::tempdir().unwrap();
+    let app = codetwo_core::app::CoreApp::boot(codetwo_core::app::AppConfig::new(directory.path()))
+        .await
+        .unwrap();
+
+    let settings = app
+        .call(
+            "browser_use.set_access",
+            serde_json::json!({ "enabled": false }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(settings["access_enabled"], false);
+
+    let document: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(directory.path().join("host-tools.json")).unwrap())
+            .unwrap();
+    assert_eq!(document["agent_browser_access"], false);
+
+    let plan = HostToolDiscovery::detect(directory.path()).toolset(&ProviderId::Codex);
+    assert!(!plan.browser_access_enabled);
+    assert_eq!(
+        plan.mcp_servers
+            .iter()
+            .map(|server| server.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["node_repl"]
+    );
 }

@@ -14,7 +14,9 @@ import {
   RefreshCw,
   Search,
   SlidersHorizontal,
+  SquareKanban,
   UserRound,
+  X,
 } from "@/components/ui/icons";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -42,17 +44,27 @@ import { useT } from "../i18n";
 import { cn } from "@/lib/utils";
 import {
   filterPullRequests,
+  githubPullRequestReference,
   groupPullRequests,
   pullRequestCheckState,
   shortPullRequestAge,
   type PullRequestReadiness,
   type PullRequestView,
 } from "./pullRequests";
+import {
+  taskForPullRequest,
+  type BoardTask,
+} from "../taskboard/taskBoard";
 import "./pull-requests.css";
 
 type DetailState =
   | { id: string; loading: true; value: GitHubPullRequestDetail | null; error: null }
   | { id: string; loading: false; value: GitHubPullRequestDetail | null; error: string | null };
+
+export interface PullRequestTaskLinkTarget {
+  id: string;
+  revision: number;
+}
 
 function avatar(login: string): ReactNode {
   return (
@@ -181,11 +193,27 @@ function PullRequestRow({ item, selected, onSelect }: {
 export function PullRequestsPage({
   headerLeadingAction,
   onChat,
+  tasks = [],
+  activeTaskId = null,
+  onLinkTask,
+  onUnlinkTask,
+  onOpenTask,
   loadPullRequests = listGitHubPullRequests,
   loadPullRequest = getGitHubPullRequest,
 }: {
   headerLeadingAction?: ReactNode;
   onChat: (detail: GitHubPullRequestDetail) => void;
+  tasks?: readonly BoardTask[];
+  activeTaskId?: string | null;
+  onLinkTask?: (
+    detail: GitHubPullRequestDetail,
+    target: PullRequestTaskLinkTarget | null,
+  ) => void;
+  onUnlinkTask?: (
+    detail: GitHubPullRequestDetail,
+    link: PullRequestTaskLinkTarget,
+  ) => void;
+  onOpenTask?: (id: string) => void;
   loadPullRequests?: () => Promise<GitHubPullRequestSummary[]>;
   loadPullRequest?: (summary: GitHubPullRequestSummary) => Promise<GitHubPullRequestDetail>;
 }) {
@@ -255,6 +283,12 @@ export function PullRequestsPage({
   }, [selectedId, visible]);
   const groups = useMemo(() => groupPullRequests(visible, view), [view, visible]);
   const detail = detailState?.id === selectedId ? detailState.value : null;
+  const detailReference = detail ? githubPullRequestReference(detail) : null;
+  const linkedTask = detailReference ? taskForPullRequest(tasks, detailReference) : null;
+  const activeTask = activeTaskId
+    ? tasks.find((task) => task.id === activeTaskId) ?? null
+    : null;
+  const linkTarget = !linkedTask && activeTask?.pullRequest === null ? activeTask : null;
   const checkState = detail ? pullRequestCheckState(detail) : "none";
   const groupLabel = (id: "review-requested" | "reviewed" | "authored") => t(`pullRequests.group.${id}`);
   const readinessLabel = t(`pullRequests.filter.${readiness}`);
@@ -339,6 +373,52 @@ export function PullRequestsPage({
           <div className="electrobun-webkit-app-region-drag flex-1" />
           {detail && <>
             <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={t("pullRequests.openGithub")} onClick={() => void openExternal(detail.url)}><ExternalLink className="size-3.5" /></Button>} /><TooltipContent>{t("pullRequests.openGithub")}</TooltipContent></Tooltip>
+            {linkedTask ? (
+              <>
+                {onOpenTask ? (
+                  <Button
+                    variant="secondary"
+                    size="compact"
+                    title={linkedTask.title}
+                    onClick={() => onOpenTask(linkedTask.id)}
+                  >
+                    <SquareKanban className="size-3.5" />
+                    {t("pullRequests.openTask")}
+                  </Button>
+                ) : null}
+                {onUnlinkTask ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t("pullRequests.unlinkTask")}
+                          onClick={() => onUnlinkTask(detail, {
+                            id: linkedTask.id,
+                            revision: linkedTask.pullRequestLinkRevision,
+                          })}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>{t("pullRequests.unlinkTask")}</TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </>
+            ) : onLinkTask ? (
+              <Button
+                variant="secondary"
+                size="compact"
+                onClick={() => onLinkTask(detail, linkTarget
+                  ? { id: linkTarget.id, revision: linkTarget.pullRequestLinkRevision }
+                  : null)}
+              >
+                <SquareKanban className="size-3.5" />
+                {linkTarget ? t("pullRequests.linkTask") : t("pullRequests.createTask")}
+              </Button>
+            ) : null}
             <Button variant="secondary" size="compact" onClick={() => onChat(detail)}><MessageCircle className="size-3.5" />{t("pullRequests.chat")}</Button>
           </>}
         </header>

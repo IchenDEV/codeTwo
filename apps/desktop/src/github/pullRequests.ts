@@ -1,4 +1,5 @@
 import type { GitHubPullRequestDetail, GitHubPullRequestSummary } from "../bridge";
+import type { GitHubPullRequestReference } from "../taskboard/taskBoard";
 
 export type PullRequestView = "all" | "reviewing" | "authored";
 export type PullRequestReadiness = "all" | "draft" | "ready";
@@ -6,6 +7,19 @@ export type PullRequestReadiness = "all" | "draft" | "ready";
 export interface PullRequestGroup {
   id: "review-requested" | "reviewed" | "authored";
   items: GitHubPullRequestSummary[];
+}
+
+export function githubPullRequestReference(
+  item: GitHubPullRequestSummary,
+): GitHubPullRequestReference {
+  const repository = item.repository.nameWithOwner.trim();
+  return {
+    provider: "github",
+    host: "github.com",
+    repository,
+    number: item.number,
+    url: `https://github.com/${repository}/pull/${item.number}`,
+  };
 }
 
 function searchableText(item: GitHubPullRequestSummary): string {

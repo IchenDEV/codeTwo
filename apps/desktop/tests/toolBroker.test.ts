@@ -24,6 +24,13 @@ const context: BrokerContext = {
       args: [],
       env: [],
     },
+    browserAccessBlockerMcp: {
+      name: "node_repl",
+      command: "/codetwo/tool-broker",
+      args: ["--empty-mcp"],
+      env: [],
+    },
+    agentBrowserAccessEnabled: true,
     browserBackends: ["chrome", "iab"],
     sitesEnabled: true,
     sitesVersion: "0.1.34",
@@ -91,6 +98,7 @@ describe("provider-neutral Tool Broker", () => {
     expect(claude.mcpServers.map((server) => server.name)).not.toContain("node_repl");
 
     expect(codex.mcpServers).toEqual([]);
+    expect(codex.browserAccessEnabled).toBe(true);
     expect(codex.nativeCapabilities).toEqual([
       "image_generation",
       "computer_use",
@@ -104,5 +112,26 @@ describe("provider-neutral Tool Broker", () => {
     expect(Object.isFrozen(context.evidence.configuredComputerUse[0].server)).toBe(false);
     expect(Object.isFrozen(context.evidence.configuredComputerUse[0].providers)).toBe(false);
     expect(Object.isFrozen(context.evidence.computerUseBackends[0].providers)).toBe(false);
+  });
+
+  test("withholds every browser route while retaining a credential-free Codex blocker", () => {
+    const denied = {
+      evidence: { ...context.evidence, agentBrowserAccessEnabled: false },
+    };
+    const broker = new ToolBroker();
+    const codex = broker.resolve({ providerId: "codex", context: denied });
+    const claude = broker.resolve({ providerId: "claude_code", context: denied });
+
+    expect(broker.catalog(denied).browserUse.accessEnabled).toBe(false);
+    expect(codex.browserAccessEnabled).toBe(false);
+    expect(codex.nativeCapabilities).not.toContain("chrome_browser");
+    expect(codex.nativeCapabilities).not.toContain("computer_use");
+    expect(codex.mcpServers).toEqual([context.evidence.browserAccessBlockerMcp]);
+    expect(codex.instructions.join("\n")).not.toContain("browser MCP");
+    expect(codex.capabilities.find((item) => item.id === "chrome_browser")).toMatchObject({
+      state: "unavailable",
+      reason: "Agent browser access is disabled.",
+    });
+    expect(claude.mcpServers.map((server) => server.name)).not.toContain("playwright");
   });
 });

@@ -9,12 +9,14 @@
 //! the TUI calls [`Engine::submit`] and reads the same `Event` receiver.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde_json::{Map, Value};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::acp::wire::{
     AgentCaps, ContentBlock, CreateElicitationRequest, CreateElicitationResponse, PermissionOption,
@@ -23,7 +25,7 @@ use crate::acp::wire::{
 };
 use crate::acp::{self, AcpClient, ClientHandler};
 use crate::activity::{ActivityTracker, TurnLease};
-use crate::artifact::{ArtifactStore, ToolOutputNormalizer, ToolSource};
+use crate::artifact::{ArtifactStore, ToolOutput, ToolOutputNormalizer, ToolSource};
 use crate::canvas::{
     encode_canvas_history_marker, CanvasError, CanvasFeatureGate, CanvasPixelPolicy,
     CanvasPromptPayload, CanvasProviderImageCapability,
@@ -38,9 +40,10 @@ use crate::permission::{
 };
 use crate::provider::{LaunchSpec, Provider, ProviderId, ProviderToolset};
 use crate::session::{
-    initial_session_title, transcript_context_with_omission, Part, PlanEntry, Role, Session,
-    SessionActivity, SessionId, SessionRunState, SessionTitleOrigin, TranscriptCursor,
-    TranscriptPage, DEFAULT_TRANSCRIPT_TURNS,
+    initial_session_title, tool_status_is_in_flight, tool_status_is_terminal,
+    transcript_context_with_omission, Part, PlanEntry, Role, Session, SessionActivity, SessionId,
+    SessionRunState, SessionTitleOrigin, TranscriptCursor, TranscriptPage,
+    DEFAULT_TRANSCRIPT_TURNS,
 };
 use crate::skill::{
     canonical_doc_text, compile_with_appshots, compile_with_canvas,
@@ -148,8 +151,153 @@ impl PermissionRouter {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct ProviderProgress {
+    revision: u64,
+    active_tools: usize,
+}
+
+/// One provider session's progress clock. The handler advances it for real ACP activity while the
+/// engine watches it around `session/prompt`; tool ids are tracked so duplicate updates cannot
+/// accidentally shorten the longer active-tool timeout.
+#[derive(Clone)]
+struct ProviderLiveness {
+    progress: watch::Sender<ProviderProgress>,
+    active_tools: Arc<Mutex<HashSet<String>>>,
+}
+
+impl Default for ProviderLiveness {
+    fn default() -> Self {
+        let (progress, _) = watch::channel(ProviderProgress::default());
+        Self {
+            progress,
+            active_tools: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+}
+
+impl ProviderLiveness {
+    fn subscribe(&self) -> watch::Receiver<ProviderProgress> {
+        self.progress.subscribe()
+    }
+
+    fn advance(&self) {
+        let active_tools = self.active_tools.lock().unwrap().len();
+        self.progress.send_modify(|progress| {
+            progress.revision = progress.revision.saturating_add(1);
+            progress.active_tools = active_tools;
+        });
+    }
+
+    fn begin_turn(&self) {
+        self.active_tools.lock().unwrap().clear();
+        self.advance();
+    }
+
+    fn end_turn(&self) {
+        self.active_tools.lock().unwrap().clear();
+        self.advance();
+    }
+
+    fn tool_update(&self, tool_call_id: &str, status: &str) {
+        let mut tools = self.active_tools.lock().unwrap();
+        if tool_status_is_terminal(status) {
+            tools.remove(tool_call_id);
+        } else {
+            tools.insert(tool_call_id.to_string());
+        }
+        let active_tools = tools.len();
+        drop(tools);
+        self.progress.send_modify(|progress| {
+            progress.revision = progress.revision.saturating_add(1);
+            progress.active_tools = active_tools;
+        });
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TurnLivenessTimeouts {
+    silent: Duration,
+    active_tool: Duration,
+}
+
+impl Default for TurnLivenessTimeouts {
+    fn default() -> Self {
+        // Deliberately provider-neutral and conservative. A visible user question pauses the
+        // clock entirely; an active tool receives a substantially longer silence window.
+        Self {
+            silent: Duration::from_secs(15 * 60),
+            active_tool: Duration::from_secs(45 * 60),
+        }
+    }
+}
+
+enum ProviderPromptOutcome<T> {
+    Completed(T),
+    Silent {
+        active_tools: usize,
+        timeout: Duration,
+    },
+}
+
+async fn await_provider_prompt<F, T>(
+    future: F,
+    mut progress: watch::Receiver<ProviderProgress>,
+    activity: ActivityTracker,
+    session: &str,
+    timeouts: TurnLivenessTimeouts,
+) -> ProviderPromptOutcome<T>
+where
+    F: Future<Output = T>,
+{
+    tokio::pin!(future);
+    loop {
+        let snapshot = *progress.borrow_and_update();
+        let timeout = if snapshot.active_tools > 0 {
+            timeouts.active_tool
+        } else {
+            timeouts.silent
+        };
+        tokio::select! {
+            result = &mut future => return ProviderPromptOutcome::Completed(result),
+            changed = progress.changed() => {
+                if changed.is_err() {
+                    return ProviderPromptOutcome::Silent {
+                        active_tools: snapshot.active_tools,
+                        timeout,
+                    };
+                }
+            }
+            _ = tokio::time::sleep(timeout) => {
+                let awaiting_user = activity.activity(session).is_some_and(|activity| {
+                    matches!(activity.state, SessionRunState::AwaitingInput { .. })
+                });
+                if !awaiting_user {
+                    return ProviderPromptOutcome::Silent {
+                        active_tools: snapshot.active_tools,
+                        timeout,
+                    };
+                }
+                // User think-time is unbounded. Resume only when either the answer path advances
+                // this clock or the provider independently finishes the prompt.
+                tokio::select! {
+                    result = &mut future => return ProviderPromptOutcome::Completed(result),
+                    changed = progress.changed() => {
+                        if changed.is_err() {
+                            return ProviderPromptOutcome::Silent {
+                                active_tools: snapshot.active_tools,
+                                timeout,
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// The ACP client-side callbacks for one session: turns updates into events, persists transcript
-/// parts, and resolves permissions.
+/// parts, resolves permissions, and advances the provider-neutral liveness clock.
 pub struct SessionHandler {
     session_id: SessionId,
     provider: ProviderId,
@@ -159,6 +307,9 @@ pub struct SessionHandler {
     store: Option<Arc<Store>>,
     normalizer: ToolOutputNormalizer,
     tool_contexts: Mutex<HashMap<String, ToolContext>>,
+    interaction: RwLock<crate::acp::wire::InteractionCapabilities>,
+    native_commands: Arc<RwLock<HashSet<String>>>,
+    liveness: ProviderLiveness,
     /// True while a `session/load` replay is in flight. The replayed history already lives in the
     /// store and the UI, so updates arriving under this flag are dropped — neither re-persisted
     /// nor re-emitted. Set/cleared by the engine around the `session/load` call.
@@ -188,6 +339,9 @@ impl SessionHandler {
             ),
             store,
             tool_contexts: Mutex::new(HashMap::new()),
+            interaction: RwLock::new(Default::default()),
+            native_commands: Arc::new(RwLock::new(HashSet::new())),
+            liveness: ProviderLiveness::default(),
             replaying: Arc::default(),
             external_turn: Mutex::new(None),
         }
@@ -196,6 +350,18 @@ impl SessionHandler {
     /// The shared flag that mutes this handler during a `session/load` replay.
     pub fn replay_flag(&self) -> Arc<AtomicBool> {
         self.replaying.clone()
+    }
+
+    fn set_interaction_capabilities(&self, interaction: crate::acp::wire::InteractionCapabilities) {
+        *self.interaction.write().unwrap() = interaction;
+    }
+
+    fn native_commands(&self) -> Arc<RwLock<HashSet<String>>> {
+        self.native_commands.clone()
+    }
+
+    fn liveness(&self) -> ProviderLiveness {
+        self.liveness.clone()
     }
 
     fn emit(&self, event: Event) {
@@ -298,11 +464,70 @@ struct ToolContext {
     title: String,
     kind: Option<String>,
     source: ToolSource,
+    /// Latest complete provider output while a call is in flight. This lets a status-only terminal
+    /// update persist the final bounded output after intermediate rows have been slimmed.
+    outputs: Vec<ToolOutput>,
     /// Set at the initial ToolCall when [`crate::testsignal::classify_test_command`] recognizes a
     /// test run; carried through updates so the terminal status can emit [`Event::TestSignal`].
     test_command: Option<String>,
     /// One signal per tool call: set when the terminal outcome has been emitted.
     test_signaled: bool,
+}
+
+const MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS: usize = 2_048;
+const MAX_PERSISTED_TOOL_UPDATE_REFERENCES: usize = 32;
+
+/// Keep durable in-flight rows small even when a provider repeats its entire accumulated output.
+/// Terminal rows still receive the complete output from the normalizer's existing hard cap.
+fn persisted_tool_update_outputs(status: &str, outputs: &[ToolOutput]) -> Vec<ToolOutput> {
+    if !tool_status_is_in_flight(status) {
+        return outputs.to_vec();
+    }
+
+    let mut projected = Vec::new();
+    let mut remaining_text = MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS;
+    let mut references = 0usize;
+
+    for output in outputs {
+        match output {
+            ToolOutput::Text { text } if remaining_text > 0 => {
+                let mut chars = text.chars();
+                let preview: String = chars.by_ref().take(remaining_text).collect();
+                remaining_text = remaining_text.saturating_sub(preview.chars().count());
+                if !preview.is_empty() {
+                    projected.push(ToolOutput::Text { text: preview });
+                }
+                if chars.next().is_some() {
+                    mark_tool_preview_truncated(&mut projected);
+                    remaining_text = 0;
+                }
+            }
+            ToolOutput::Text { .. } => mark_tool_preview_truncated(&mut projected),
+            ToolOutput::Image { .. } | ToolOutput::ResourceLink { .. }
+                if references < MAX_PERSISTED_TOOL_UPDATE_REFERENCES =>
+            {
+                projected.push(output.clone());
+                references += 1;
+            }
+            ToolOutput::Image { .. } | ToolOutput::ResourceLink { .. } => {}
+        }
+    }
+
+    projected
+}
+
+fn mark_tool_preview_truncated(outputs: &mut [ToolOutput]) {
+    let Some(ToolOutput::Text { text }) = outputs
+        .iter_mut()
+        .rev()
+        .find(|output| matches!(output, ToolOutput::Text { .. }))
+    else {
+        return;
+    };
+    if !text.ends_with('…') {
+        text.pop();
+        text.push('…');
+    }
 }
 
 fn bounded_string(value: Option<&Value>, key: &str) -> Option<String> {
@@ -808,6 +1033,53 @@ fn encode_mcp_servers(
         .collect()
 }
 
+struct ReplayGuard<'a>(&'a AtomicBool);
+
+impl Drop for ReplayGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Re-attach using the least lossy advertised method. `session/resume` avoids asking an adapter
+/// to decode and replay history that C2 already persisted; older adapters fall back to
+/// `session/load` with replay suppression.
+async fn restore_provider_session(
+    client: &AcpClient,
+    caps: AgentCaps,
+    session_id: &str,
+    cwd: &str,
+    mcp_servers: Vec<Value>,
+    replaying: &AtomicBool,
+) -> Result<crate::acp::wire::LoadSessionResponse, String> {
+    let mut resume_error = None;
+    if caps.resume_session {
+        match client
+            .resume_session(session_id, cwd, mcp_servers.clone())
+            .await
+        {
+            Ok(response) => return Ok(response),
+            Err(error) => resume_error = Some(error.to_string()),
+        }
+    }
+    if caps.load_session {
+        replaying.store(true, Ordering::SeqCst);
+        let guard = ReplayGuard(replaying);
+        let loaded = client.load_session(session_id, cwd, mcp_servers).await;
+        drop(guard);
+        return loaded.map_err(|load_error| match resume_error {
+            Some(resume_error) => {
+                format!("session/resume failed: {resume_error}; session/load failed: {load_error}")
+            }
+            None => format!("session/load failed: {load_error}"),
+        });
+    }
+    Err(match resume_error {
+        Some(error) => format!("session/resume failed: {error}"),
+        None => "provider advertised no session restore capability".into(),
+    })
+}
+
 fn attach_host_mcp_servers(
     target: &mut Vec<McpServer>,
     servers: impl IntoIterator<Item = McpServer>,
@@ -873,6 +1145,7 @@ fn codex_launch_with_static_provider_context(
     launch: &LaunchSpec,
     tool_instructions: &[String],
     route_desktop_browser: bool,
+    browser_access_enabled: bool,
 ) -> Result<LaunchSpec, serde_json::Error> {
     let static_context = with_initial_provider_context(
         String::new(),
@@ -894,6 +1167,35 @@ fn codex_launch_with_static_provider_context(
         Some(value) => serde_json::from_str::<Map<String, Value>>(&value)?,
         None => Map::new(),
     };
+    if !browser_access_enabled {
+        let mut features = config
+            .remove("features")
+            .map(serde_json::from_value::<Map<String, Value>>)
+            .transpose()?
+            .unwrap_or_default();
+        for key in [
+            "browser_use",
+            "browser_use_external",
+            "browser_use_full_cdp_access",
+        ] {
+            features.insert(key.into(), Value::Bool(false));
+        }
+        config.insert("features".into(), Value::Object(features));
+
+        let mut mcp_servers = config
+            .remove("mcp_servers")
+            .map(serde_json::from_value::<Map<String, Value>>)
+            .transpose()?
+            .unwrap_or_default();
+        let mut node_repl = mcp_servers
+            .remove("node_repl")
+            .map(serde_json::from_value::<Map<String, Value>>)
+            .transpose()?
+            .unwrap_or_default();
+        node_repl.insert("enabled".into(), Value::Bool(false));
+        mcp_servers.insert("node_repl".into(), Value::Object(node_repl));
+        config.insert("mcp_servers".into(), Value::Object(mcp_servers));
+    }
     let existing_instructions = config
         .remove("developer_instructions")
         .map(serde_json::from_value::<String>)
@@ -920,6 +1222,16 @@ fn codex_launch_with_static_provider_context(
         *value = encoded;
     } else {
         launch.env.push(("CODEX_CONFIG".into(), encoded));
+    }
+    if !browser_access_enabled
+        && !launch
+            .env
+            .iter()
+            .any(|(key, value)| key == "DISABLE_MCP_CONFIG_FILTERING" && value == "true")
+    {
+        launch
+            .env
+            .push(("DISABLE_MCP_CONFIG_FILTERING".into(), "true".into()));
     }
     Ok(launch)
 }
@@ -971,6 +1283,25 @@ fn t3_prompt_receipt(request_id: Option<&str>) -> Option<(String, Option<String>
     }
     // Accept the pre-message-id encoding for in-flight migrations and non-T3 test callers.
     (!encoded.trim().is_empty()).then(|| (encoded.to_string(), None))
+}
+
+fn normalized_native_command(name: &str) -> String {
+    name.trim().trim_start_matches('/').to_ascii_lowercase()
+}
+
+/// The only provider-native command C2 currently gives a first-class action. It must remain an
+/// exact, attachment-free document so hidden project context cannot turn it into ordinary prose.
+fn provider_native_command(doc: &[DocBlock]) -> Option<&'static str> {
+    match doc {
+        [DocBlock::Text { text }] if normalized_native_command(text) == "compact" => {
+            (text.trim() == "/compact").then_some("compact")
+        }
+        _ => None,
+    }
+}
+
+fn compact_context_supported(commands: &Arc<RwLock<HashSet<String>>>) -> bool {
+    commands.read().unwrap().contains("compact")
 }
 
 fn select_kind(options: &[PermissionOption], prefix: &str) -> PermissionOutcome {
@@ -1372,6 +1703,300 @@ mod usage_update_tests {
     }
 }
 
+#[cfg(test)]
+mod native_command_tests {
+    use std::sync::{Arc, Mutex};
+
+    use tokio::sync::mpsc;
+
+    use super::{
+        compact_context_supported, provider_native_command, PermissionRouter, SessionHandler,
+    };
+    use crate::acp::wire::{AvailableCommand, SessionNotification, SessionUpdate};
+    use crate::acp::ClientHandler;
+    use crate::event::Event;
+    use crate::permission::PermissionPolicy;
+    use crate::provider::ProviderId;
+    use crate::skill::DocBlock;
+
+    #[test]
+    fn compact_is_only_a_native_command_for_one_plain_text_block() {
+        assert_eq!(
+            provider_native_command(&[DocBlock::Text {
+                text: " /compact ".into(),
+            }]),
+            Some("compact")
+        );
+        assert_eq!(
+            provider_native_command(&[
+                DocBlock::Text {
+                    text: "/compact".into(),
+                },
+                DocBlock::File {
+                    path: "notes.md".into(),
+                },
+            ]),
+            None
+        );
+        assert_eq!(
+            provider_native_command(&[DocBlock::Text {
+                text: "/compact now".into(),
+            }]),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn available_commands_are_the_authority_for_native_compaction() {
+        let (events, mut received) = mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            "session-1".into(),
+            ProviderId::ClaudeCode,
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            None,
+        );
+        let commands = handler.native_commands();
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session".into(),
+                update: SessionUpdate::AvailableCommandsUpdate {
+                    available_commands: vec![AvailableCommand {
+                        name: "compact".into(),
+                        description: "Summarize context".into(),
+                        input: None,
+                    }],
+                },
+            })
+            .await;
+
+        assert!(compact_context_supported(&commands));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::SessionCapabilities {
+                compact_context: true,
+                ..
+            })
+        ));
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session".into(),
+                update: SessionUpdate::AvailableCommandsUpdate {
+                    available_commands: Vec::new(),
+                },
+            })
+            .await;
+        assert!(!compact_context_supported(&commands));
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::SessionCapabilities {
+                compact_context: false,
+                ..
+            })
+        ));
+    }
+}
+
+#[cfg(test)]
+mod tool_update_persistence_tests {
+    use std::sync::{Arc, Mutex};
+
+    use serde_json::json;
+    use tokio::sync::mpsc;
+
+    use super::{
+        persisted_tool_update_outputs, PermissionRouter, SessionHandler,
+        MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS, MAX_PERSISTED_TOOL_UPDATE_REFERENCES,
+    };
+    use crate::acp::wire::{SessionNotification, SessionUpdate, ToolCall, ToolCallUpdate};
+    use crate::acp::ClientHandler;
+    use crate::artifact::ToolOutput;
+    use crate::event::Event;
+    use crate::permission::PermissionPolicy;
+    use crate::provider::ProviderId;
+    use crate::session::{Part, Session};
+    use crate::store::Store;
+
+    fn text_chars(outputs: &[ToolOutput]) -> usize {
+        outputs
+            .iter()
+            .map(|output| match output {
+                ToolOutput::Text { text } => text.chars().count(),
+                ToolOutput::Image { .. } | ToolOutput::ResourceLink { .. } => 0,
+            })
+            .sum()
+    }
+
+    #[test]
+    fn in_flight_projection_bounds_total_text_and_reference_count() {
+        let mut outputs = vec![
+            ToolOutput::Text {
+                text: "a".repeat(MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS),
+            },
+            ToolOutput::Text {
+                text: "b".repeat(MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS),
+            },
+        ];
+        outputs.extend((0..64).map(|index| ToolOutput::ResourceLink {
+            name: format!("result-{index}"),
+            uri: format!("https://example.test/{index}"),
+            mime_type: None,
+        }));
+
+        let projected = persisted_tool_update_outputs("in_progress", &outputs);
+
+        assert_eq!(
+            text_chars(&projected),
+            MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS
+        );
+        assert!(matches!(
+            projected.iter().find(|output| matches!(output, ToolOutput::Text { .. })),
+            Some(ToolOutput::Text { text }) if text.ends_with('…')
+        ));
+        assert_eq!(
+            projected
+                .iter()
+                .filter(|output| !matches!(output, ToolOutput::Text { .. }))
+                .count(),
+            MAX_PERSISTED_TOOL_UPDATE_REFERENCES
+        );
+        assert_eq!(
+            persisted_tool_update_outputs("completed", &outputs),
+            outputs,
+            "terminal output must remain complete"
+        );
+    }
+
+    #[tokio::test]
+    async fn accumulated_updates_have_bounded_rows_and_a_full_terminal_result() {
+        const UPDATE_COUNT: usize = 64;
+        const CHUNK_CHARS: usize = 4_096;
+
+        let store = Arc::new(Store::open_in_memory().unwrap());
+        let mut session = Session::new(ProviderId::Codex, "/work");
+        session.id = "session-1".into();
+        store.upsert_session(&session).unwrap();
+        let (events, mut received) = mpsc::unbounded_channel();
+        let handler = SessionHandler::new(
+            session.id.clone(),
+            ProviderId::Codex,
+            events,
+            Arc::new(Mutex::new(PermissionPolicy::default())),
+            PermissionRouter::default(),
+            Some(store.clone()),
+        );
+
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session".into(),
+                update: SessionUpdate::ToolCall(ToolCall {
+                    tool_call_id: "tool-1".into(),
+                    title: Some("Build".into()),
+                    kind: Some("execute".into()),
+                    status: Some("pending".into()),
+                    content: None,
+                    raw_input: None,
+                    raw_output: None,
+                    meta: None,
+                }),
+            })
+            .await;
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ToolCall { .. })
+        ));
+
+        let mut accumulated = String::new();
+        let mut naive_bytes = 0usize;
+        for _ in 0..UPDATE_COUNT {
+            accumulated.push_str(&"x".repeat(CHUNK_CHARS));
+            naive_bytes += serde_json::to_vec(&Part::ToolCall {
+                id: "tool-1".into(),
+                title: "Build".into(),
+                status: "in_progress".into(),
+                tool_kind: Some("execute".into()),
+                agent_input: None,
+                outputs: vec![ToolOutput::Text {
+                    text: accumulated.clone(),
+                }],
+            })
+            .unwrap()
+            .len();
+            handler
+                .session_update(SessionNotification {
+                    session_id: "provider-session".into(),
+                    update: SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                        tool_call_id: "tool-1".into(),
+                        title: None,
+                        status: Some("in_progress".into()),
+                        content: Some(json!({"type": "text", "text": accumulated})),
+                        kind: None,
+                        raw_input: None,
+                        raw_output: None,
+                        meta: None,
+                    }),
+                })
+                .await;
+            assert!(matches!(
+                received.recv().await,
+                Some(Event::ToolCall { outputs, .. })
+                    if text_chars(&outputs) == accumulated.chars().count()
+            ));
+        }
+
+        // Some adapters send only the terminal status. The handler must carry the latest complete
+        // output into that final durable row instead of promoting the slim preview.
+        handler
+            .session_update(SessionNotification {
+                session_id: "provider-session".into(),
+                update: SessionUpdate::ToolCallUpdate(ToolCallUpdate {
+                    tool_call_id: "tool-1".into(),
+                    title: None,
+                    status: Some("completed".into()),
+                    content: None,
+                    kind: None,
+                    raw_input: None,
+                    raw_output: None,
+                    meta: None,
+                }),
+            })
+            .await;
+        assert!(matches!(
+            received.recv().await,
+            Some(Event::ToolCall { status, outputs, .. })
+                if status == "completed" && text_chars(&outputs) == accumulated.chars().count()
+        ));
+
+        let transcript = store.transcript(&session.id).unwrap();
+        assert_eq!(transcript.len(), UPDATE_COUNT + 2);
+        let persisted_update_bytes: usize = transcript[1..=UPDATE_COUNT]
+            .iter()
+            .map(|(_, part)| {
+                let Part::ToolCall { outputs, .. } = part else {
+                    panic!("tool update row")
+                };
+                assert!(text_chars(outputs) <= MAX_PERSISTED_TOOL_UPDATE_PREVIEW_CHARS);
+                serde_json::to_vec(part).unwrap().len()
+            })
+            .sum();
+        assert!(
+            persisted_update_bytes < naive_bytes / 20,
+            "bounded rows should be far smaller than repeated accumulated output: {persisted_update_bytes} vs {naive_bytes}"
+        );
+        let Part::ToolCall {
+            status, outputs, ..
+        } = &transcript.last().unwrap().1
+        else {
+            panic!("terminal tool row")
+        };
+        assert_eq!(status, "completed");
+        assert_eq!(text_chars(outputs), accumulated.chars().count());
+    }
+}
+
 #[async_trait]
 impl ClientHandler for SessionHandler {
     async fn session_update(&self, note: SessionNotification) {
@@ -1381,11 +2006,14 @@ impl ClientHandler for SessionHandler {
         if self.replaying.load(Ordering::SeqCst)
             && !matches!(
                 &note.update,
-                SessionUpdate::UsageUpdate { .. } | SessionUpdate::SessionInfoUpdate { .. }
+                SessionUpdate::UsageUpdate { .. }
+                    | SessionUpdate::SessionInfoUpdate { .. }
+                    | SessionUpdate::AvailableCommandsUpdate { .. }
             )
         {
             return;
         }
+        self.liveness.advance();
         let session = self.session_id.clone();
         // Build the UI event and the persisted transcript part together, then emit + persist.
         let (event, part, warnings): (Option<Event>, Option<Part>, Vec<String>) = match note.update
@@ -1422,6 +2050,7 @@ impl ClientHandler for SessionHandler {
                 );
                 let title = tc.title.unwrap_or_default();
                 let status = tc.status.unwrap_or_else(|| "pending".into());
+                self.liveness.tool_update(&tc.tool_call_id, &status);
                 let source = tool_source(&title, tc.raw_input.as_ref());
                 // Classified against the raw ACP kind (only execute/None may signal), before the
                 // rich-kind projection rewrites it for the UI.
@@ -1431,14 +2060,14 @@ impl ClientHandler for SessionHandler {
                     tc.raw_input.as_ref(),
                 );
                 let tool_kind = rich_tool_kind(provider_kind, &source, &title);
-                let context = ToolContext {
+                let mut context = ToolContext {
                     title: title.clone(),
                     kind: tool_kind.clone(),
                     source,
+                    outputs: Vec::new(),
                     test_command,
                     test_signaled: false,
                 };
-                self.remember_tool(&tc.tool_call_id, context.clone());
                 let normalized = self.normalizer.normalize(
                     tc.content.as_ref(),
                     tc.raw_output.as_ref(),
@@ -1446,6 +2075,10 @@ impl ClientHandler for SessionHandler {
                     &self.session_id,
                     &tc.tool_call_id,
                 );
+                if !tool_status_is_terminal(&status) {
+                    context.outputs = normalized.outputs.clone();
+                }
+                self.remember_tool(&tc.tool_call_id, context);
                 (
                     Some(Event::ToolCall {
                         session,
@@ -1475,30 +2108,45 @@ impl ClientHandler for SessionHandler {
                     .filter(|title| !title.trim().is_empty())
                     .unwrap_or_else(|| previous.title.clone());
                 let status = u.status.unwrap_or_else(|| "in_progress".into());
+                self.liveness.tool_update(&u.tool_call_id, &status);
                 let source = if u.raw_input.is_some() {
                     tool_source(&title, u.raw_input.as_ref())
                 } else {
-                    previous.source
+                    previous.source.clone()
                 };
                 let kind =
                     rich_tool_kind(u.kind.or_else(|| previous.kind.clone()), &source, &title);
-                self.remember_tool(
-                    &u.tool_call_id,
-                    ToolContext {
-                        title: title.clone(),
-                        kind: kind.clone(),
-                        source: source.clone(),
-                        // The initial ToolCall owns classification; updates only carry it through.
-                        test_command: previous.test_command.clone(),
-                        test_signaled: previous.test_signaled,
-                    },
-                );
                 let normalized = self.normalizer.normalize(
                     u.content.as_ref(),
                     u.raw_output.as_ref(),
                     &source,
                     &self.session_id,
                     &u.tool_call_id,
+                );
+                let outputs = if tool_status_is_terminal(&status) && normalized.outputs.is_empty() {
+                    previous.outputs.clone()
+                } else {
+                    normalized.outputs
+                };
+                let persisted_outputs = persisted_tool_update_outputs(&status, &outputs);
+                let remembered_outputs = if tool_status_is_terminal(&status) {
+                    Vec::new()
+                } else if outputs.is_empty() {
+                    previous.outputs
+                } else {
+                    outputs.clone()
+                };
+                self.remember_tool(
+                    &u.tool_call_id,
+                    ToolContext {
+                        title: title.clone(),
+                        kind: kind.clone(),
+                        source: source.clone(),
+                        outputs: remembered_outputs,
+                        // The initial ToolCall owns classification; updates only carry it through.
+                        test_command: previous.test_command.clone(),
+                        test_signaled: previous.test_signaled,
+                    },
                 );
                 (
                     Some(Event::ToolCall {
@@ -1508,7 +2156,7 @@ impl ClientHandler for SessionHandler {
                         status: status.clone(),
                         kind: kind.clone(),
                         agent_input: None,
-                        outputs: normalized.outputs.clone(),
+                        outputs: outputs.clone(),
                         transcript_seq: None,
                     }),
                     Some(Part::ToolCall {
@@ -1517,7 +2165,7 @@ impl ClientHandler for SessionHandler {
                         status,
                         tool_kind: kind,
                         agent_input: None,
-                        outputs: normalized.outputs,
+                        outputs: persisted_outputs,
                     }),
                     normalized.warnings,
                 )
@@ -1551,6 +2199,26 @@ impl ClientHandler for SessionHandler {
                 None,
                 Vec::new(),
             ),
+            SessionUpdate::AvailableCommandsUpdate { available_commands } => {
+                let commands = available_commands
+                    .iter()
+                    .map(|command| normalized_native_command(&command.name))
+                    .filter(|name| !name.is_empty())
+                    .collect::<HashSet<_>>();
+                let compact_context = commands.contains("compact");
+                *self.native_commands.write().unwrap() = commands;
+                let interaction = self.interaction.read().unwrap().clone();
+                (
+                    Some(Event::SessionCapabilities {
+                        session,
+                        steering: interaction.steering,
+                        goal: interaction.goal,
+                        compact_context,
+                    }),
+                    None,
+                    Vec::new(),
+                )
+            }
             SessionUpdate::SessionInfoUpdate { meta } => {
                 self.handle_session_info(meta);
                 (None, None, Vec::new())
@@ -1649,6 +2317,7 @@ impl ClientHandler for SessionHandler {
     }
 
     async fn request_permission(&self, req: RequestPermissionRequest) -> RequestPermissionResponse {
+        self.liveness.advance();
         let kind = req
             .tool_call
             .get("kind")
@@ -1723,6 +2392,7 @@ impl ClientHandler for SessionHandler {
                 rx.await.unwrap_or(PermissionOutcome::Cancelled)
             }
         };
+        self.liveness.advance();
         RequestPermissionResponse { outcome }
     }
 
@@ -1732,6 +2402,7 @@ impl ClientHandler for SessionHandler {
     /// not what it may ask. Anything we can't render — URL mode, a schema with no answerable field
     /// — is declined, which tells the agent "nothing was chosen" and lets the turn continue.
     async fn create_elicitation(&self, req: CreateElicitationRequest) -> CreateElicitationResponse {
+        self.liveness.advance();
         if !req.is_form() {
             return CreateElicitationResponse::Decline;
         }
@@ -1751,8 +2422,44 @@ impl ClientHandler for SessionHandler {
             request_id,
             form,
         });
-        rx.await.unwrap_or(CreateElicitationResponse::Cancel)
+        let response = rx.await.unwrap_or(CreateElicitationResponse::Cancel);
+        self.liveness.advance();
+        response
     }
+}
+
+/// Negotiated ACP surface and content-free decode anomalies for one live provider process.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct ProviderProtocolCompatibility {
+    pub provider: ProviderId,
+    pub process: crate::acp::AcpProcessDiagnostics,
+    pub protocol_version: i64,
+    pub adapter_name: Option<String>,
+    pub adapter_version: Option<String>,
+    pub load_session: bool,
+    pub resume_session: bool,
+    pub mcp_http: bool,
+    pub mcp_sse: bool,
+    pub diagnostics: crate::acp::AcpProtocolDiagnostics,
+}
+
+/// Default-redacted support snapshot. Entries intentionally have no session identifier, title,
+/// model, path, prompt, tool payload, token count, account data, or raw error text.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct RedactedEngineDiagnostics {
+    pub sessions_total: usize,
+    pub sessions_truncated: bool,
+    pub sessions: Vec<RedactedSessionDiagnostics>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct RedactedSessionDiagnostics {
+    pub provider: ProviderId,
+    pub activity_revision: u64,
+    pub activity_state: String,
+    pub pending_input_count: usize,
+    pub failure_reason: Option<crate::session::RunFailureReason>,
+    pub protocol: Option<ProviderProtocolCompatibility>,
 }
 
 struct SessionRuntime {
@@ -1771,13 +2478,20 @@ struct SessionRuntime {
     /// attach at `session/new`).
     acp_session_id: Option<String>,
     /// The resume cursor (t3code-style): a previous process's ACP session id, carried by a revived
-    /// session. When [`SessionRuntime::caps`] says the agent supports `session/load`, the first
-    /// prompt re-attaches to it — restoring the agent's conversation context — instead of running
+    /// session. When [`SessionRuntime::caps`] advertises resume or load, the first prompt
+    /// re-attaches to it — restoring the agent's conversation context — instead of running
     /// `session/new` with a blank memory. Cleared once consumed (either way).
     resume_acp_session_id: Option<String>,
     /// What the agent advertised at `initialize`.
+    protocol_version: i64,
+    adapter_name: Option<String>,
+    adapter_version: Option<String>,
     caps: AgentCaps,
     interaction: crate::acp::wire::InteractionCapabilities,
+    /// Full replacement set from ACP `available_commands_update`, shared with the handler so
+    /// command actions can be authorized at the same boundary that advertises them.
+    native_commands: Arc<RwLock<HashSet<String>>>,
+    liveness: ProviderLiveness,
     /// MCP servers already attached to the live ACP session. ACP only accepts them on session
     /// creation/load, so later turns may reuse but cannot silently add a new server.
     mcp_servers: Vec<McpServer>,
@@ -1870,6 +2584,7 @@ struct EngineState {
     /// Live host-backed special tools keyed by provider id. Each session snapshots its provider's
     /// entry on creation because ACP accepts MCP servers only at session creation/load.
     provider_tools: Arc<RwLock<HashMap<String, ProviderToolset>>>,
+    turn_liveness_timeouts: RwLock<TurnLivenessTimeouts>,
 }
 
 /// Desktop-only bootstrap material for C2's authenticated browser MCP sidecar. The master
@@ -2107,6 +2822,7 @@ impl Engine {
             worktree_root: RwLock::new(None),
             desktop_mcp,
             provider_tools,
+            turn_liveness_timeouts: RwLock::new(TurnLivenessTimeouts::default()),
         });
         (Engine { state }, rx)
     }
@@ -2266,6 +2982,16 @@ impl Engine {
         request_id: &str,
         option_id: Option<&str>,
     ) -> bool {
+        if let Some(liveness) = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .map(|runtime| runtime.liveness.clone())
+        {
+            liveness.advance();
+        }
         self.state
             .router
             .answer_for_session(session, request_id, option_id)
@@ -2279,6 +3005,16 @@ impl Engine {
         request_id: &str,
         answer: crate::elicitation::ElicitationAnswer,
     ) -> bool {
+        if let Some(liveness) = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .map(|runtime| runtime.liveness.clone())
+        {
+            liveness.advance();
+        }
         self.state
             .router
             .answer_elicitation_for_session(session, request_id, answer)
@@ -3006,12 +3742,71 @@ impl Engine {
                 sessions.sort_by(|a, b| {
                     b.pinned
                         .cmp(&a.pinned)
+                        .then_with(|| b.last_active_at.cmp(&a.last_active_at))
                         .then_with(|| b.created_at.cmp(&a.created_at))
                 });
                 sessions
             }
         };
         Ok(self.overlay_activities(sessions))
+    }
+
+    /// Snapshot the actual ACP boundary for compatibility canaries and support diagnostics.
+    pub fn provider_protocol_compatibility(
+        &self,
+        session: &str,
+    ) -> Option<ProviderProtocolCompatibility> {
+        let sessions = self.state.sessions.lock().unwrap();
+        let runtime = sessions.get(session)?;
+        Some(ProviderProtocolCompatibility {
+            provider: runtime.session.provider.clone(),
+            process: runtime.client.process_diagnostics(),
+            protocol_version: runtime.protocol_version,
+            adapter_name: runtime.adapter_name.clone(),
+            adapter_version: runtime.adapter_version.clone(),
+            load_session: runtime.caps.load_session,
+            resume_session: runtime.caps.resume_session,
+            mcp_http: runtime.caps.mcp_http,
+            mcp_sse: runtime.caps.mcp_sse,
+            diagnostics: runtime.client.protocol_diagnostics(),
+        })
+    }
+
+    pub fn redacted_diagnostics(
+        &self,
+        limit: usize,
+    ) -> Result<RedactedEngineDiagnostics, StoreError> {
+        let sessions = self.list_sessions()?;
+        let sessions_total = sessions.len();
+        let limit = limit.min(100);
+        let sessions = sessions
+            .into_iter()
+            .take(limit)
+            .map(|session| {
+                let (activity_state, pending_input_count, failure_reason) =
+                    match &session.activity.state {
+                        SessionRunState::Idle => ("idle", 0, None),
+                        SessionRunState::Running { .. } => ("running", 0, None),
+                        SessionRunState::AwaitingInput { pending, .. } => {
+                            ("awaiting_input", pending.len(), None)
+                        }
+                        SessionRunState::Failed { reason, .. } => ("failed", 0, Some(*reason)),
+                    };
+                RedactedSessionDiagnostics {
+                    provider: session.provider,
+                    activity_revision: session.activity.revision,
+                    activity_state: activity_state.to_string(),
+                    pending_input_count,
+                    failure_reason,
+                    protocol: self.provider_protocol_compatibility(&session.id),
+                }
+            })
+            .collect();
+        Ok(RedactedEngineDiagnostics {
+            sessions_total,
+            sessions_truncated: sessions_total > limit,
+            sessions,
+        })
     }
 
     pub fn session_is_busy(&self, session: &str) -> bool {
@@ -3025,6 +3820,74 @@ impl Engine {
                         | crate::session::SessionRunState::AwaitingInput { .. }
                 )
             })
+    }
+
+    fn cancel_turn(&self, session: &str) -> Result<(), AcpError> {
+        self.state.activity.cancel_pending(session);
+        let active_turn = self
+            .state
+            .activity
+            .activity(session)
+            .and_then(|activity| match activity.state {
+                SessionRunState::Running {
+                    turn_id,
+                    prompt_request_id,
+                }
+                | SessionRunState::AwaitingInput {
+                    turn_id,
+                    prompt_request_id,
+                    ..
+                } => Some((turn_id, prompt_request_id)),
+                SessionRunState::Idle | SessionRunState::Failed { .. } => None,
+            });
+        let runtime = self
+            .state
+            .sessions
+            .lock()
+            .unwrap()
+            .get(session)
+            .and_then(|runtime| {
+                Some((
+                    runtime.client.clone(),
+                    runtime.acp_session_id.clone()?,
+                    runtime.liveness.clone(),
+                ))
+            });
+        let Some((client, acp_session_id, liveness)) = runtime else {
+            return Ok(());
+        };
+        liveness.advance();
+        if let Err(error) = client.cancel(&acp_session_id) {
+            if let Some((turn_id, request_id)) = active_turn {
+                let message = format!(
+                    "Cancel failed: {error}. C2 stopped the provider so the turn cannot remain active."
+                );
+                if self
+                    .state
+                    .activity
+                    .fail_provider_turn(session, &turn_id, message.clone())
+                {
+                    client.terminate();
+                    if self.state.store.is_some() {
+                        let mut sessions = self.state.sessions.lock().unwrap();
+                        if sessions
+                            .get(session)
+                            .is_some_and(|runtime| Arc::ptr_eq(&runtime.client, &client))
+                        {
+                            sessions.remove(session);
+                        }
+                    }
+                    self.emit(Event::Error {
+                        session: Some(session.to_string()),
+                        message,
+                        terminal: true,
+                        request_id,
+                    });
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Stop and forget one app-lifetime side chat. Durable sessions are deliberately refused.
@@ -3066,13 +3929,14 @@ impl Engine {
         if !self.state.sessions.lock().unwrap().contains_key(session) {
             self.revive_session(session).await?;
         }
-        let (interaction, options, models, current) = {
+        let (interaction, compact_context, options, models, current) = {
             let sessions = self.state.sessions.lock().unwrap();
             let runtime = sessions
                 .get(session)
                 .ok_or_else(|| "no such session".to_string())?;
             (
                 runtime.interaction.clone(),
+                compact_context_supported(&runtime.native_commands),
                 runtime.config_options.clone(),
                 runtime.models.clone(),
                 runtime.session.model.clone().unwrap_or_default(),
@@ -3082,6 +3946,7 @@ impl Engine {
             session: session.to_string(),
             steering: interaction.steering,
             goal: interaction.goal,
+            compact_context,
         });
         if !models.is_empty() {
             self.emit(Event::Models {
@@ -3117,12 +3982,14 @@ impl Engine {
                 runtime.resume_acp_session_id.clone(),
                 runtime.cwd.clone(),
                 runtime.caps,
+                runtime.replaying.clone(),
                 runtime.interaction.clone(),
                 runtime.provider_toolset.clone(),
                 runtime.session.provider.clone(),
                 runtime.session.model.clone(),
                 runtime.config_options.clone(),
                 runtime.initial_reasoning_effort.clone(),
+                compact_context_supported(&runtime.native_commands),
             )
         };
         let (
@@ -3131,17 +3998,20 @@ impl Engine {
             resume,
             cwd,
             caps,
+            replaying,
             interaction,
             toolset,
             provider,
             pending_model,
             existing_options,
             pending_effort,
+            compact_context,
         ) = snapshot;
         self.emit(Event::SessionCapabilities {
             session: session.to_string(),
             steering: interaction.steering,
             goal: interaction.goal.clone(),
+            compact_context,
         });
         if existing.is_some() {
             if !existing_options.is_empty() {
@@ -3156,64 +4026,78 @@ impl Engine {
         let mut servers = toolset.mcp_servers.clone();
         if let Some(config) = &self.state.desktop_mcp {
             attach_host_mcp_servers(&mut servers, [config.scene_server_for_session(session)]);
-            if provider == ProviderId::Codex && config.browser_enabled {
+            if provider == ProviderId::Codex
+                && toolset.browser_access_enabled
+                && config.browser_enabled
+            {
                 attach_host_mcp_servers(&mut servers, [config.browser_server_for_session(session)]);
             }
         }
         let encoded = encode_mcp_servers(&servers, caps)?;
         let mut restored_provider_context = false;
-        let (acp_session_id, models, mut options, mut current) =
-            if let Some(resume_id) = resume.as_deref().filter(|_| caps.load_session) {
-                match client.load_session(resume_id, &cwd, encoded.clone()).await {
-                    Ok(response) => {
-                        restored_provider_context = true;
-                        let current = response
-                            .models
-                            .as_ref()
-                            .map(|models| models.current_model_id.clone())
-                            .unwrap_or_default();
-                        let options = response
-                            .config_options
-                            .as_deref()
-                            .map(|options| provider_config_option_infos(&provider, options))
-                            .unwrap_or_default();
-                        (resume_id.to_string(), response.models, options, current)
-                    }
-                    Err(_) => {
-                        let response = client
-                            .new_session_full(&cwd, encoded.clone())
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        let current = response
-                            .models
-                            .as_ref()
-                            .map(|models| models.current_model_id.clone())
-                            .unwrap_or_default();
-                        let options = response
-                            .config_options
-                            .as_deref()
-                            .map(|options| provider_config_option_infos(&provider, options))
-                            .unwrap_or_default();
-                        (response.session_id, response.models, options, current)
-                    }
+        let (acp_session_id, models, mut options, mut current) = if let Some(resume_id) = resume
+            .as_deref()
+            .filter(|_| caps.resume_session || caps.load_session)
+        {
+            match restore_provider_session(
+                &client,
+                caps,
+                resume_id,
+                &cwd,
+                encoded.clone(),
+                &replaying,
+            )
+            .await
+            {
+                Ok(response) => {
+                    restored_provider_context = true;
+                    let current = response
+                        .models
+                        .as_ref()
+                        .map(|models| models.current_model_id.clone())
+                        .unwrap_or_default();
+                    let options = response
+                        .config_options
+                        .as_deref()
+                        .map(|options| provider_config_option_infos(&provider, options))
+                        .unwrap_or_default();
+                    (resume_id.to_string(), response.models, options, current)
                 }
-            } else {
-                let response = client
-                    .new_session_full(&cwd, encoded)
-                    .await
-                    .map_err(|error| error.to_string())?;
-                let current = response
-                    .models
-                    .as_ref()
-                    .map(|models| models.current_model_id.clone())
-                    .unwrap_or_default();
-                let options = response
-                    .config_options
-                    .as_deref()
-                    .map(|options| provider_config_option_infos(&provider, options))
-                    .unwrap_or_default();
-                (response.session_id, response.models, options, current)
-            };
+                Err(_) => {
+                    let response = client
+                        .new_session_full(&cwd, encoded.clone())
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    let current = response
+                        .models
+                        .as_ref()
+                        .map(|models| models.current_model_id.clone())
+                        .unwrap_or_default();
+                    let options = response
+                        .config_options
+                        .as_deref()
+                        .map(|options| provider_config_option_infos(&provider, options))
+                        .unwrap_or_default();
+                    (response.session_id, response.models, options, current)
+                }
+            }
+        } else {
+            let response = client
+                .new_session_full(&cwd, encoded)
+                .await
+                .map_err(|error| error.to_string())?;
+            let current = response
+                .models
+                .as_ref()
+                .map(|models| models.current_model_id.clone())
+                .unwrap_or_default();
+            let options = response
+                .config_options
+                .as_deref()
+                .map(|options| provider_config_option_infos(&provider, options))
+                .unwrap_or_default();
+            (response.session_id, response.models, options, current)
+        };
 
         if let Some(model) = pending_model.as_deref().filter(|model| *model != current) {
             match client.set_model(&acp_session_id, model).await {
@@ -3312,7 +4196,7 @@ impl Engine {
         if canonical.trim().is_empty() {
             return Err("prompt is empty".into());
         }
-        let (client, acp_session_id, cwd, interaction) = {
+        let (client, acp_session_id, cwd, interaction, liveness) = {
             let sessions = self.state.sessions.lock().unwrap();
             let runtime = sessions
                 .get(session)
@@ -3325,6 +4209,7 @@ impl Engine {
                     .ok_or_else(|| "ACP session is unavailable".to_string())?,
                 runtime.cwd.clone(),
                 runtime.interaction.clone(),
+                runtime.liveness.clone(),
             )
         };
         if !interaction.steering {
@@ -3367,6 +4252,7 @@ impl Engine {
                 mime_type: attachment.mime_type.clone(),
             });
         }
+        liveness.advance();
         let response: serde_json::Value = client
             .connection()
             .request(
@@ -3375,6 +4261,7 @@ impl Engine {
             )
             .await
             .map_err(|error| error.to_string())?;
+        liveness.advance();
         let outcome = response
             .get("outcome")
             .and_then(Value::as_str)
@@ -3539,18 +4426,23 @@ impl Engine {
             codex_launch_with_static_provider_context(
                 &prov.launch,
                 &provider_toolset.instructions,
-                self.state
-                    .desktop_mcp
-                    .as_ref()
-                    .is_some_and(|config| config.browser_enabled),
+                provider_toolset.browser_access_enabled
+                    && self
+                        .state
+                        .desktop_mcp
+                        .as_ref()
+                        .is_some_and(|config| config.browser_enabled),
+                provider_toolset.browser_access_enabled,
             )
             .map_err(|error| format!("couldn't configure {}: {error}", prov.display_name))?
         } else {
             prov.launch.clone()
         };
         let replaying = handler.replay_flag();
+        let native_commands = handler.native_commands();
+        let liveness = handler.liveness();
         let client = Arc::new(
-            acp::spawn(&launch, handler)
+            acp::spawn(&launch, handler.clone())
                 .await
                 .map_err(|e| format!("couldn't relaunch {}: {e}", prov.display_name))?,
         );
@@ -3565,6 +4457,7 @@ impl Engine {
             }
         };
         let interaction = init.interaction_capabilities();
+        handler.set_interaction_capabilities(interaction.clone());
 
         // The stored ACP session id becomes the resume cursor; the live id stays unset until the
         // next prompt either re-attaches (`session/load`) or starts over (`session/new`).
@@ -3590,8 +4483,21 @@ impl Engine {
                 client: client.clone(),
                 acp_session_id: None,
                 resume_acp_session_id: resume,
+                protocol_version: init.protocol_version,
+                adapter_name: init
+                    .agent_info
+                    .as_ref()
+                    .map(|info| info.name.clone())
+                    .filter(|name| !name.is_empty()),
+                adapter_version: init
+                    .agent_info
+                    .as_ref()
+                    .map(|info| info.version.clone())
+                    .filter(|version| !version.is_empty()),
                 caps: init.caps(),
                 interaction: interaction.clone(),
+                native_commands: native_commands.clone(),
+                liveness,
                 mcp_servers: Vec::new(),
                 replaying,
                 cwd: cwd.clone(),
@@ -3608,6 +4514,7 @@ impl Engine {
             session: id.to_string(),
             steering: interaction.steering,
             goal: interaction.goal,
+            compact_context: compact_context_supported(&native_commands),
         });
         if !models.is_empty() {
             self.emit(Event::Models {
@@ -3975,17 +4882,22 @@ impl Engine {
                     codex_launch_with_static_provider_context(
                         &prov.launch,
                         &provider_toolset.instructions,
-                        self.state
-                            .desktop_mcp
-                            .as_ref()
-                            .is_some_and(|config| config.browser_enabled),
+                        provider_toolset.browser_access_enabled
+                            && self
+                                .state
+                                .desktop_mcp
+                                .as_ref()
+                                .is_some_and(|config| config.browser_enabled),
+                        provider_toolset.browser_access_enabled,
                     )
                     .map_err(AcpError::Decode)?
                 } else {
                     prov.launch.clone()
                 };
                 let replaying = handler.replay_flag();
-                let client = Arc::new(acp::spawn(&launch, handler).await?);
+                let native_commands = handler.native_commands();
+                let liveness = handler.liveness();
+                let client = Arc::new(acp::spawn(&launch, handler.clone()).await?);
                 if !self.track_starting_client(&client) {
                     return Err(AcpError::Closed);
                 }
@@ -3997,6 +4909,7 @@ impl Engine {
                     }
                 };
                 let interaction = init.interaction_capabilities();
+                handler.set_interaction_capabilities(interaction.clone());
                 // Note: `session/new` is deferred to the first prompt (see Op::Prompt) so the
                 // document's MCP servers are attached then.
 
@@ -4166,8 +5079,21 @@ impl Engine {
                         client: client.clone(),
                         acp_session_id: None,
                         resume_acp_session_id: None,
+                        protocol_version: init.protocol_version,
+                        adapter_name: init
+                            .agent_info
+                            .as_ref()
+                            .map(|info| info.name.clone())
+                            .filter(|name| !name.is_empty()),
+                        adapter_version: init
+                            .agent_info
+                            .as_ref()
+                            .map(|info| info.version.clone())
+                            .filter(|version| !version.is_empty()),
                         caps: init.caps(),
                         interaction: interaction.clone(),
+                        native_commands: native_commands.clone(),
+                        liveness,
                         mcp_servers: Vec::new(),
                         replaying,
                         cwd: cwd_stored.clone(),
@@ -4192,6 +5118,7 @@ impl Engine {
                     session: session_id.clone(),
                     steering: interaction.steering,
                     goal: interaction.goal,
+                    compact_context: compact_context_supported(&native_commands),
                 });
                 for (hook, error) in hook_errors {
                     self.emit(Event::Error {
@@ -4226,9 +5153,35 @@ impl Engine {
                     });
                     return Ok(());
                 }
+                let native_command = provider_native_command(&doc);
+                if let Some(command) = native_command {
+                    let supported = self
+                        .state
+                        .sessions
+                        .lock()
+                        .unwrap()
+                        .get(&session)
+                        .is_some_and(|runtime| {
+                            runtime.native_commands.read().unwrap().contains(command)
+                        });
+                    if !supported {
+                        self.emit(Event::Error {
+                            session: Some(session),
+                            message: format!(
+                                "the provider has not advertised the native /{command} command for this live session"
+                            ),
+                            terminal: true,
+                            request_id,
+                        });
+                        return Ok(());
+                    }
+                }
                 // Memory observes the user's document, not its expanded files, rules, skills, or a
                 // previous memory block. Keeping this source separate prevents feedback loops.
-                let memory_source = prompt_source(&doc);
+                let memory_source = native_command
+                    .is_none()
+                    .then(|| prompt_source(&doc))
+                    .unwrap_or_default();
                 let checkout = match self.session_for_checkout_validation(&session) {
                     Ok(Some(checkout)) => checkout,
                     Ok(None) => {
@@ -4266,7 +5219,9 @@ impl Engine {
                 // App-owned attachments are resolved and validated before the turn claim and
                 // before any canonical prompt/activity row is persisted. A path, gate, provider,
                 // or budget error therefore cannot become accepted history.
-                let attachment_preflight =
+                let attachment_preflight = if native_command.is_some() {
+                    None
+                } else {
                     match self.preflight_attachment_document(&doc, &checkout.cwd) {
                         Ok(compiled) => compiled,
                         Err(error) => {
@@ -4278,7 +5233,8 @@ impl Engine {
                             });
                             return Ok(());
                         }
-                    };
+                    }
+                };
                 let turn_lease = match self.try_start_turn(&session, request_id.clone()) {
                     Some(lease) => lease,
                     None => {
@@ -4306,13 +5262,17 @@ impl Engine {
                 if canonical_user_prompt.chars().count() > 400 {
                     prompt_display.push('…');
                 }
-                let title = doc
-                    .iter()
-                    .find_map(|block| match block {
-                        DocBlock::Text { text } => initial_session_title(text),
-                        _ => None,
+                let title = native_command
+                    .is_none()
+                    .then(|| {
+                        doc.iter()
+                            .find_map(|block| match block {
+                                DocBlock::Text { text } => initial_session_title(text),
+                                _ => None,
+                            })
+                            .or_else(|| initial_session_title(&canonical_user_prompt))
                     })
-                    .or_else(|| initial_session_title(&canonical_user_prompt));
+                    .flatten();
                 let prompt_part = Part::Prompt {
                     text: canonical_prompt,
                     display: prompt_display,
@@ -4416,56 +5376,70 @@ impl Engine {
                 // `cwd` is consumed by `session/new` below; keep a copy for reading attachments.
                 let cwd_for_images = cwd.clone();
 
-                let mut compiled = match attachment_preflight {
-                    Some(compiled) => compiled,
-                    None => {
-                        let lib = self.state.skills.lock().unwrap();
-                        // `@`-mentioned past chats resolve against the store; without one (tests,
-                        // in-memory runs) they surface as unresolved rather than silently vanishing.
-                        let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
-                            self.referenced_session_context_through(id, through_seq)
-                                .ok()
-                                .flatten()
-                        };
-                        compile_with_sessions(
-                            &doc,
-                            &lib,
-                            Some(std::path::Path::new(&cwd)),
-                            Some(&resolve),
-                        )
+                let mut compiled = if let Some(command) = native_command {
+                    CompiledPrompt {
+                        prompt: format!("/{command}"),
+                        ..CompiledPrompt::default()
+                    }
+                } else {
+                    match attachment_preflight {
+                        Some(compiled) => compiled,
+                        None => {
+                            let lib = self.state.skills.lock().unwrap();
+                            // `@`-mentioned past chats resolve against the store; without one (tests,
+                            // in-memory runs) they surface as unresolved rather than silently vanishing.
+                            let resolve = |id: &str, through_seq: Option<i64>| -> Option<String> {
+                                self.referenced_session_context_through(id, through_seq)
+                                    .ok()
+                                    .flatten()
+                            };
+                            compile_with_sessions(
+                                &doc,
+                                &lib,
+                                Some(std::path::Path::new(&cwd)),
+                                Some(&resolve),
+                            )
+                        }
                     }
                 };
                 // Scene preamble (R8): guardrails, inline fragments, artifact-capture and clarify
                 // instructions of the session's persisted active scene, injected AFTER project
                 // rules and BEFORE the user's document. An unresolvable reference degrades to no
                 // preamble — never an error.
-                let scene_preamble = self.state.store.as_ref().and_then(|store| {
-                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
-                    let scenes = self.state.scenes.lock().unwrap().clone();
-                    let entry = scenes.resolve(&scene_ref)?;
-                    // R9: a stage-bound session compiles its stage's `carry` list against the
-                    // newest stored versions on every prompt — the artifact store, not session
-                    // memory, is the inter-stage contract. Unbound sessions carry nothing.
-                    let carried: Vec<crate::scene::CarriedArtifact> = store
-                        .session_pipeline(&session)
-                        .ok()
-                        .flatten()
-                        .and_then(|(instance_id, stage_id)| {
-                            let instance =
-                                store.get_pipeline_instance(&instance_id).ok().flatten()?;
-                            let pipeline = scenes.resolve_pipeline(&instance.pipeline_ref)?;
-                            let stage = pipeline
-                                .pipeline
-                                .stages
-                                .iter()
-                                .find(|stage| stage.id == stage_id)?;
-                            let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
-                            Some(artifacts.resolve_carry(&instance_id, stage))
+                let scene_preamble = native_command
+                    .is_none()
+                    .then(|| {
+                        self.state.store.as_ref().and_then(|store| {
+                            let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                            let scenes = self.state.scenes.lock().unwrap().clone();
+                            let entry = scenes.resolve(&scene_ref)?;
+                            // R9: a stage-bound session compiles its stage's `carry` list against the
+                            // newest stored versions on every prompt — the artifact store, not session
+                            // memory, is the inter-stage contract. Unbound sessions carry nothing.
+                            let carried: Vec<crate::scene::CarriedArtifact> = store
+                                .session_pipeline(&session)
+                                .ok()
+                                .flatten()
+                                .and_then(|(instance_id, stage_id)| {
+                                    let instance =
+                                        store.get_pipeline_instance(&instance_id).ok().flatten()?;
+                                    let pipeline =
+                                        scenes.resolve_pipeline(&instance.pipeline_ref)?;
+                                    let stage = pipeline
+                                        .pipeline
+                                        .stages
+                                        .iter()
+                                        .find(|stage| stage.id == stage_id)?;
+                                    let artifacts =
+                                        self.state.scene_artifacts.lock().unwrap().clone()?;
+                                    Some(artifacts.resolve_carry(&instance_id, stage))
+                                })
+                                .unwrap_or_default();
+                            let preamble = crate::scene::prompt_preamble(&entry.scene, &carried);
+                            (!preamble.trim().is_empty()).then_some(preamble)
                         })
-                        .unwrap_or_default();
-                    let preamble = crate::scene::prompt_preamble(&entry.scene, &carried);
-                    (!preamble.trim().is_empty()).then_some(preamble)
-                });
+                    })
+                    .flatten();
                 if let Some(preamble) = scene_preamble {
                     // The compiler emits `rules ⧺ "\n\n" ⧺ rest`; splice the preamble between the
                     // two so project rules stay first, exactly as the normative order requires.
@@ -4520,7 +5494,8 @@ impl Engine {
                     {
                         compiled.mcp_servers.push(server);
                     }
-                    if is_codex && config.browser_enabled {
+                    if is_codex && provider_toolset.browser_access_enabled && config.browser_enabled
+                    {
                         let server = config.browser_server_for_session(&session);
                         if !compiled
                             .mcp_servers
@@ -4547,17 +5522,22 @@ impl Engine {
                     .get(&session)
                     .map(|runtime| runtime.injected_memory_keys.clone())
                     .unwrap_or_default();
-                let memory_turn = self.state.memory.as_ref().and_then(|memory| {
-                    match memory.recall(&cwd, &session, &memory_source) {
-                        Ok(turn) => {
-                            turn.map(|turn| turn.excluding_item_keys(&injected_memory_keys))
-                        }
-                        Err(e) => {
-                            tracing::warn!("load memory context failed: {e}");
-                            None
-                        }
-                    }
-                });
+                let memory_turn = native_command
+                    .is_none()
+                    .then(|| {
+                        self.state.memory.as_ref().and_then(|memory| {
+                            match memory.recall(&cwd, &session, &memory_source) {
+                                Ok(turn) => {
+                                    turn.map(|turn| turn.excluding_item_keys(&injected_memory_keys))
+                                }
+                                Err(e) => {
+                                    tracing::warn!("load memory context failed: {e}");
+                                    None
+                                }
+                            }
+                        })
+                    })
+                    .flatten();
                 let memory_context = memory_turn
                     .as_ref()
                     .map(|turn| turn.context().clone())
@@ -4567,19 +5547,24 @@ impl Engine {
                 } else {
                     format!("{}\n\n{}", compiled.prompt, memory_context.block)
                 };
-                let auto_scene_instructions = self.state.store.as_ref().and_then(|store| {
-                    store
-                        .session_auto_scene(&session)
-                        .ok()
-                        .filter(|enabled| *enabled)?;
-                    let current = store
-                        .session_scene(&session)
-                        .ok()
-                        .flatten()
-                        .map(|(reference, _)| reference);
-                    let scenes = self.state.scenes.lock().unwrap().clone();
-                    Some(auto_scene_routing_instructions(&scenes, current.as_deref()))
-                });
+                let auto_scene_instructions = native_command
+                    .is_none()
+                    .then(|| {
+                        self.state.store.as_ref().and_then(|store| {
+                            store
+                                .session_auto_scene(&session)
+                                .ok()
+                                .filter(|enabled| *enabled)?;
+                            let current = store
+                                .session_scene(&session)
+                                .ok()
+                                .flatten()
+                                .map(|(reference, _)| reference);
+                            let scenes = self.state.scenes.lock().unwrap().clone();
+                            Some(auto_scene_routing_instructions(&scenes, current.as_deref()))
+                        })
+                    })
+                    .flatten();
                 let provider_prompt =
                     with_auto_scene_routing(provider_prompt, auto_scene_instructions);
                 let (caps, attached_mcp, inject_provider_context) = {
@@ -4594,27 +5579,33 @@ impl Engine {
                         })
                         .unwrap_or((AgentCaps::default(), Vec::new(), true))
                 };
-                let provider_prompt = with_initial_provider_context(
-                    provider_prompt,
-                    &provider_toolset.instructions,
-                    is_codex
-                        && self
-                            .state
-                            .desktop_mcp
-                            .as_ref()
-                            .is_some_and(|config| config.browser_enabled),
-                    is_codex,
-                    inject_provider_context,
-                );
+                let provider_prompt = if native_command.is_some() {
+                    provider_prompt
+                } else {
+                    with_initial_provider_context(
+                        provider_prompt,
+                        &provider_toolset.instructions,
+                        is_codex
+                            && provider_toolset.browser_access_enabled
+                            && self
+                                .state
+                                .desktop_mcp
+                                .as_ref()
+                                .is_some_and(|config| config.browser_enabled),
+                        is_codex,
+                        inject_provider_context,
+                    )
+                };
                 let provenance = MemoryTurnProvenance {
                     used_mcp: !compiled.mcp_servers.is_empty(),
                     used_files: !compiled.files.is_empty(),
                     used_images: !compiled.images.is_empty(),
                     used_session_refs: !compiled.sessions.is_empty(),
-                    used_web: doc.iter().any(|block| {
-                        matches!(block, crate::skill::DocBlock::Text { text }
+                    used_web: native_command.is_none()
+                        && doc.iter().any(|block| {
+                            matches!(block, crate::skill::DocBlock::Text { text }
                             if text.contains("**Browser context**"))
-                    }),
+                        }),
                     used_tools: false,
                     used_recalled_memory: !memory_context.items.is_empty(),
                     canvas_refs: compiled
@@ -4677,7 +5668,7 @@ impl Engine {
 
                 // Auto-checkpoint the workspace before the turn (best-effort), t3code-style: a
                 // hidden git ref you can diff/revert to later.
-                {
+                if native_command.is_none() {
                     let cp_cwd = cwd.clone();
                     let cp_msg = format!(
                         "before turn: {}",
@@ -4692,28 +5683,29 @@ impl Engine {
                 }
 
                 // A revived session first tries to re-attach the previous process's ACP session
-                // (`session/load`) so the agent's own context survives the restart — the
-                // t3code-style resume cursor. Gated on the agent advertising `loadSession`;
-                // anything else falls through to `session/new` below.
+                // so the agent's own context survives the restart — the t3code-style resume
+                // cursor. Prefer native resume and fall back to load when advertised; anything
+                // else falls through to `session/new` below.
                 if acp_sid.is_none() {
                     let resume = {
                         let map = self.state.sessions.lock().unwrap();
                         map.get(&session).and_then(|r| {
-                            r.caps
-                                .load_session
+                            (r.caps.resume_session || r.caps.load_session)
                                 .then(|| r.resume_acp_session_id.clone())
                                 .flatten()
                                 .map(|id| (id, r.replaying.clone()))
                         })
                     };
                     if let Some((resume_id, replaying)) = resume {
-                        // The agent replays the whole history before answering; the handler drops
-                        // it (it's already in the store and on screen).
-                        replaying.store(true, Ordering::SeqCst);
-                        let loaded = client
-                            .load_session(&resume_id, cwd.clone(), mcp.clone())
-                            .await;
-                        replaying.store(false, Ordering::SeqCst);
+                        let loaded = restore_provider_session(
+                            &client,
+                            caps,
+                            &resume_id,
+                            &cwd,
+                            mcp.clone(),
+                            &replaying,
+                        )
+                        .await;
                         match loaded {
                             Ok(resp) => {
                                 let mut restored_options = resp
@@ -4782,8 +5774,7 @@ impl Engine {
                             Err(e) => {
                                 // The cursor is dead (agent pruned the session, different install,
                                 // …). Fall back to `session/new`, and say so — the transcript is
-                                // kept, but the agent's memory of it is not. Never degrade
-                                // silently.
+                                // kept, but the agent's memory of it is not. Never degrade silently.
                                 {
                                     let mut map = self.state.sessions.lock().unwrap();
                                     if let Some(r) = map.get_mut(&session) {
@@ -4793,7 +5784,7 @@ impl Engine {
                                 self.emit(Event::Error {
                                     session: Some(session.clone()),
                                     message: format!(
-                                        "couldn't restore this session's saved context (session/load: {e}); \
+                                        "couldn't restore this session's saved context ({e}); \
                                          the transcript is kept, but the agent is starting with a fresh memory"
                                     ),
                                     terminal: false,
@@ -5001,13 +5992,33 @@ impl Engine {
                     }
                 }
                 let acp_sid = acp_sid.expect("acp session id set above");
-                let handoff_context = self
-                    .state
-                    .sessions
-                    .lock()
-                    .unwrap()
-                    .get(&session)
-                    .and_then(|runtime| runtime.handoff_context.clone());
+                let runtime_turn_state =
+                    self.state
+                        .sessions
+                        .lock()
+                        .unwrap()
+                        .get(&session)
+                        .map(|runtime| {
+                            (
+                                native_command
+                                    .is_none()
+                                    .then(|| runtime.handoff_context.clone())
+                                    .flatten(),
+                                runtime.liveness.clone(),
+                            )
+                        });
+                let Some((handoff_context, liveness)) = runtime_turn_state else {
+                    let message =
+                        "provider runtime disappeared before the turn started".to_string();
+                    turn_lease.fail_provider(message.clone());
+                    self.emit(Event::Error {
+                        session: Some(session),
+                        message,
+                        terminal: true,
+                        request_id,
+                    });
+                    return Ok(());
+                };
                 let clear_handoff_after_prompt = handoff_context.is_some();
                 let provider_prompt = match handoff_context {
                     Some(context) => format!(
@@ -5018,6 +6029,9 @@ impl Engine {
                 };
                 let events = self.state.events.clone();
                 let turn_engine = self.clone();
+                let turn_liveness_timeouts = *self.state.turn_liveness_timeouts.read().unwrap();
+                liveness.begin_turn();
+                let progress = liveness.subscribe();
                 let sess_for_task = session.clone();
                 let images_cwd = cwd_for_images;
                 let turn_store = self.state.store.clone();
@@ -5031,14 +6045,19 @@ impl Engine {
                 // Scene artifact auto-capture context (R8), resolved now so the spawned turn task
                 // carries plain handles instead of engine references. Best-effort by design:
                 // no active scene, no declared artifacts, or no capture layer all mean "skip".
-                let scene_capture = self.state.store.as_ref().and_then(|store| {
-                    let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
-                    let scenes = self.state.scenes.lock().unwrap().clone();
-                    let entry = scenes.resolve(&scene_ref)?;
-                    let specs = entry.scene.artifacts.clone();
-                    let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
-                    (!specs.is_empty()).then_some((scene_ref, specs, artifacts))
-                });
+                let scene_capture = native_command
+                    .is_none()
+                    .then(|| {
+                        self.state.store.as_ref().and_then(|store| {
+                            let (scene_ref, _) = store.session_scene(&session).ok().flatten()?;
+                            let scenes = self.state.scenes.lock().unwrap().clone();
+                            let entry = scenes.resolve(&scene_ref)?;
+                            let specs = entry.scene.artifacts.clone();
+                            let artifacts = self.state.scene_artifacts.lock().unwrap().clone()?;
+                            (!specs.is_empty()).then_some((scene_ref, specs, artifacts))
+                        })
+                    })
+                    .flatten();
                 let mut canvas_image_blocks = Vec::new();
                 for canvas in &compiled.canvases {
                     match lower_canvas_prompt_payload(
@@ -5087,9 +6106,18 @@ impl Engine {
                     // capability intentionally attempted every image above; any provider failure
                     // remains visible through the ACP error path.
                     blocks.extend(canvas_image_blocks);
-                    match client.prompt(&acp_sid, blocks).await {
-                        Ok(stop) => {
-                            {
+                    let outcome = await_provider_prompt(
+                        client.prompt(&acp_sid, blocks),
+                        progress,
+                        turn_engine.state.activity.clone(),
+                        &sess_for_task,
+                        turn_liveness_timeouts,
+                    )
+                    .await;
+                    liveness.end_turn();
+                    match outcome {
+                        ProviderPromptOutcome::Completed(Ok(stop)) => {
+                            if native_command.is_none() {
                                 let mut sessions = turn_engine.state.sessions.lock().unwrap();
                                 if let Some(runtime) = sessions.get_mut(&sess_for_task) {
                                     if runtime.acp_session_id.as_deref() == Some(acp_sid.as_str()) {
@@ -5190,34 +6218,64 @@ impl Engine {
                                     }
                                 }
                             }
-                            turn_lease.finish_success();
-                            let _ = events.send(Event::TurnEnded {
-                                session: sess_for_task,
-                                stop_reason: format!("{stop:?}"),
-                            });
+                            if turn_lease.finish_success() {
+                                let _ = events.send(Event::TurnEnded {
+                                    session: sess_for_task,
+                                    stop_reason: format!("{stop:?}"),
+                                });
+                            }
                         }
-                        Err(e) => {
+                        ProviderPromptOutcome::Completed(Err(e)) => {
                             let message = e.to_string();
-                            turn_lease.fail_provider(message.clone());
-                            let _ = events.send(Event::Error {
-                                session: Some(sess_for_task),
-                                message,
-                                terminal: true,
-                                request_id,
-                            });
+                            if turn_lease.fail_provider(message.clone()) {
+                                let _ = events.send(Event::Error {
+                                    session: Some(sess_for_task),
+                                    message,
+                                    terminal: true,
+                                    request_id,
+                                });
+                            }
+                        }
+                        ProviderPromptOutcome::Silent {
+                            active_tools,
+                            timeout,
+                        } => {
+                            let _ = client.cancel(&acp_sid);
+                            client.terminate();
+                            {
+                                let mut sessions = turn_engine.state.sessions.lock().unwrap();
+                                if sessions
+                                    .get(&sess_for_task)
+                                    .is_some_and(|runtime| Arc::ptr_eq(&runtime.client, &client))
+                                {
+                                    sessions.remove(&sess_for_task);
+                                }
+                            }
+                            let minutes = timeout.as_secs().div_ceil(60);
+                            let context = if active_tools > 0 {
+                                " while a tool was active"
+                            } else {
+                                ""
+                            };
+                            let message = format!(
+                                "Provider stopped making progress{context} for {minutes} minute{}; C2 stopped it so the turn cannot remain active.",
+                                if minutes == 1 { "" } else { "s" }
+                            );
+                            if turn_lease.fail_provider(message.clone()) {
+                                let _ = events.send(Event::Error {
+                                    session: Some(sess_for_task),
+                                    message,
+                                    terminal: true,
+                                    request_id,
+                                });
+                            }
                         }
                     }
                 });
             }
 
             Op::Cancel { session } => {
-                self.state.activity.cancel_pending(&session);
-                let map = self.state.sessions.lock().unwrap();
-                if let Some(rt) = map.get(&session) {
-                    if let Some(acp_sid) = &rt.acp_session_id {
-                        let _ = rt.client.cancel(acp_sid);
-                    }
-                }
+                self.cancel_turn(&session)?;
             }
 
             Op::AnswerPermission {
@@ -7382,9 +8440,9 @@ mod mcp_tests {
             r#"{"model":"kept","developer_instructions":"Existing rule."}"#.into(),
         ));
         let instructions = vec!["HOST_TOOL_MARKER".to_string()];
-        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
             .expect("valid Codex config");
-        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true)
+        let launch = codex_launch_with_static_provider_context(&launch, &instructions, true, true)
             .expect("reapplying context remains valid");
         let encoded = launch
             .env
@@ -7404,6 +8462,48 @@ mod mcp_tests {
             developer.matches("[C2 Sites routing and safety]").count(),
             1
         );
+    }
+
+    #[test]
+    fn codex_browser_access_off_withholds_the_native_runtime() {
+        let mut launch = LaunchSpec::new("codex-acp", []);
+        launch.env.push((
+            "CODEX_CONFIG".into(),
+            r#"{"features":{"kept":true},"mcp_servers":{"node_repl":{"command":"/private/node_repl"}}}"#
+                .into(),
+        ));
+
+        let launch = codex_launch_with_static_provider_context(&launch, &[], false, false)
+            .expect("valid Codex config");
+        let encoded = launch
+            .env
+            .iter()
+            .find(|(key, _)| key == "CODEX_CONFIG")
+            .map(|(_, value)| value)
+            .expect("Codex config env");
+        let config: serde_json::Value = serde_json::from_str(encoded).unwrap();
+
+        assert_eq!(config["features"]["kept"], true);
+        assert_eq!(config["features"]["browser_use"], false);
+        assert_eq!(config["features"]["browser_use_external"], false);
+        assert_eq!(config["features"]["browser_use_full_cdp_access"], false);
+        assert_eq!(config["mcp_servers"]["node_repl"]["enabled"], false);
+        assert_eq!(
+            config["mcp_servers"]["node_repl"]["command"],
+            "/private/node_repl"
+        );
+        assert!(config["developer_instructions"]
+            .as_str()
+            .unwrap()
+            .contains("[C2 Sites routing and safety]"));
+        assert!(!config["developer_instructions"]
+            .as_str()
+            .unwrap()
+            .contains("[C2 desktop browser routing]"));
+        assert!(launch
+            .env
+            .iter()
+            .any(|(key, value)| { key == "DISABLE_MCP_CONFIG_FILTERING" && value == "true" }));
     }
 
     #[test]
@@ -7553,5 +8653,361 @@ mod mcp_tests {
             elicitation_message(&tool_call).as_deref(),
             Some("Website access: Allow navigation to the requested origin")
         );
+    }
+}
+
+#[cfg(test)]
+mod liveness_tests {
+    use super::*;
+
+    const SILENT_AGENT: &str = r#"
+import json, sys
+
+def send(message):
+    print(json.dumps(message), flush=True)
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    mid = message.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1}})
+    elif method == "session/new":
+        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"silent-session"}})
+"#;
+
+    const WAITING_AGENT: &str = r#"
+import json, sys
+
+def send(message):
+    print(json.dumps(message), flush=True)
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    mid = message.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1}})
+    elif method == "session/new":
+        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"waiting-session"}})
+    elif method == "session/prompt":
+        send({"jsonrpc":"2.0","id":1000,"method":"session/request_permission","params":{
+            "sessionId":"waiting-session",
+            "toolCall":{"toolCallId":"tool-1","title":"Wait for approval","kind":"execute"},
+            "options":[{"optionId":"allow","name":"Allow","kind":"allow_once"}]
+        }})
+"#;
+
+    const ACTIVE_TOOL_AGENT: &str = r#"
+import json, sys
+
+def send(message):
+    print(json.dumps(message), flush=True)
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    mid = message.get("id")
+    if method == "initialize":
+        send({"jsonrpc":"2.0","id":mid,"result":{"protocolVersion":1}})
+    elif method == "session/new":
+        send({"jsonrpc":"2.0","id":mid,"result":{"sessionId":"tool-session"}})
+    elif method == "session/prompt":
+        send({"jsonrpc":"2.0","method":"session/update","params":{
+            "sessionId":"tool-session",
+            "update":{"sessionUpdate":"tool_call","toolCallId":"tool-1","title":"Build","kind":"execute","status":"in_progress"}
+        }})
+"#;
+
+    fn provider(script: &'static str) -> Provider {
+        Provider {
+            id: ProviderId::Grok,
+            display_name: "Liveness mock".into(),
+            launch: LaunchSpec::new("python3", ["-c", script]),
+            needs_node: false,
+        }
+    }
+
+    fn prompt(session: &str) -> Op {
+        Op::Prompt {
+            session: session.into(),
+            doc: vec![DocBlock::Text {
+                text: "exercise liveness".into(),
+            }],
+            request_id: Some("liveness-prompt".into()),
+        }
+    }
+
+    async fn next_event(rx: &mut mpsc::UnboundedReceiver<Event>) -> Event {
+        tokio::time::timeout(Duration::from_secs(10), rx.recv())
+            .await
+            .expect("event before timeout")
+            .expect("event stream remains open")
+    }
+
+    async fn create_session(
+        engine: &Engine,
+        events: &mut mpsc::UnboundedReceiver<Event>,
+    ) -> String {
+        engine
+            .submit(Op::NewSession {
+                provider: ProviderId::Grok,
+                cwd: std::env::temp_dir().to_string_lossy().into_owned(),
+                use_worktree: false,
+                worktree_base: None,
+                worktree_base_sha: None,
+                request_id: Some("create-liveness-test".into()),
+                model: None,
+                initial_policy: None,
+            })
+            .await
+            .unwrap();
+        loop {
+            if let Event::SessionCreated { session, .. } = next_event(events).await {
+                return session;
+            }
+        }
+    }
+
+    async fn terminal_error(events: &mut mpsc::UnboundedReceiver<Event>) -> String {
+        loop {
+            if let Event::Error {
+                message,
+                terminal: true,
+                ..
+            } = next_event(events).await
+            {
+                return message;
+            }
+        }
+    }
+
+    fn configure_timeouts(engine: &Engine, silent: Duration, active_tool: Duration) {
+        *engine.state.turn_liveness_timeouts.write().unwrap() = TurnLivenessTimeouts {
+            silent,
+            active_tool,
+        };
+    }
+
+    #[tokio::test]
+    async fn silent_provider_is_stopped_and_the_turn_fails() {
+        let (engine, mut events) =
+            Engine::new(vec![provider(SILENT_AGENT)], SkillLibrary::new(Vec::new()));
+        configure_timeouts(
+            &engine,
+            Duration::from_millis(120),
+            Duration::from_millis(500),
+        );
+        let session = create_session(&engine, &mut events).await;
+        engine.submit(prompt(&session)).await.unwrap();
+
+        let message = terminal_error(&mut events).await;
+        assert!(message.contains("Provider stopped making progress"));
+        assert!(matches!(
+            engine.state.activity.activity(&session).unwrap().state,
+            SessionRunState::Failed {
+                reason: crate::session::RunFailureReason::ProviderError,
+                ..
+            }
+        ));
+        assert!(!engine.state.sessions.lock().unwrap().contains_key(&session));
+    }
+
+    #[tokio::test]
+    async fn waiting_for_user_input_pauses_the_silence_clock() {
+        let (engine, mut events) =
+            Engine::new(vec![provider(WAITING_AGENT)], SkillLibrary::new(Vec::new()));
+        configure_timeouts(
+            &engine,
+            Duration::from_millis(120),
+            Duration::from_millis(500),
+        );
+        let session = create_session(&engine, &mut events).await;
+        engine.submit(prompt(&session)).await.unwrap();
+
+        let request_id = loop {
+            if let Event::PermissionRequest {
+                request_id,
+                session: routed,
+                ..
+            } = next_event(&mut events).await
+            {
+                assert_eq!(routed, session);
+                break request_id;
+            }
+        };
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(matches!(
+            engine.state.activity.activity(&session).unwrap().state,
+            SessionRunState::AwaitingInput { .. }
+        ));
+        while let Ok(event) = events.try_recv() {
+            assert!(!matches!(event, Event::Error { terminal: true, .. }));
+        }
+
+        assert!(engine.answer_permission(&session, &request_id, Some("allow")));
+        let message = terminal_error(&mut events).await;
+        assert!(message.contains("Provider stopped making progress"));
+    }
+
+    #[tokio::test]
+    async fn active_tool_uses_the_longer_silence_window() {
+        let (engine, mut events) = Engine::new(
+            vec![provider(ACTIVE_TOOL_AGENT)],
+            SkillLibrary::new(Vec::new()),
+        );
+        configure_timeouts(
+            &engine,
+            Duration::from_millis(120),
+            Duration::from_millis(500),
+        );
+        let session = create_session(&engine, &mut events).await;
+        engine.submit(prompt(&session)).await.unwrap();
+
+        loop {
+            if let Event::ToolCall { status, .. } = next_event(&mut events).await {
+                assert_eq!(status, "in_progress");
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        assert!(matches!(
+            engine.state.activity.activity(&session).unwrap().state,
+            SessionRunState::Running { .. }
+        ));
+
+        let message = terminal_error(&mut events).await;
+        assert!(message.contains("while a tool was active"));
+    }
+}
+
+#[cfg(test)]
+mod cancel_recovery_tests {
+    use std::io::{Error, ErrorKind};
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    use tokio::io::AsyncWrite;
+
+    use super::*;
+    use crate::acp::{Connection, RecordingHandler};
+    use crate::session::RunFailureReason;
+
+    struct FailingWriter;
+
+    impl AsyncWrite for FailingWriter {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Ready(Err(Error::new(ErrorKind::BrokenPipe, "provider closed")))
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_transport_failure_converges_the_captured_turn() {
+        let (engine, mut events) = Engine::new(Vec::new(), SkillLibrary::default());
+        let lease = engine
+            .state
+            .activity
+            .claim("session", Some("prompt".into()), SessionActivity::default())
+            .unwrap();
+        let (_, running) = lease.prepare_running().unwrap();
+        assert!(lease.commit_running(running, false));
+
+        let connection = Connection::new(
+            tokio::io::empty(),
+            FailingWriter,
+            Arc::new(RecordingHandler::default()),
+        );
+        let client = Arc::new(AcpClient::new(connection, None));
+        client
+            .connection()
+            .notify("test/warmup", serde_json::json!({}))
+            .unwrap();
+        let mut transport_closed = false;
+        for _ in 0..100 {
+            tokio::task::yield_now().await;
+            if client.cancel("probe").is_err() {
+                transport_closed = true;
+                break;
+            }
+        }
+        assert!(
+            transport_closed,
+            "test transport must close before cancellation"
+        );
+
+        let mut session = Session::new(ProviderId::Codex, "/tmp");
+        session.id = "session".into();
+        engine.state.sessions.lock().unwrap().insert(
+            session.id.clone(),
+            SessionRuntime {
+                session,
+                provider_toolset: ProviderToolset::default(),
+                provider_context_injected: false,
+                injected_memory_keys: HashSet::new(),
+                client,
+                acp_session_id: Some("provider-session".into()),
+                resume_acp_session_id: None,
+                protocol_version: crate::acp::wire::PROTOCOL_VERSION,
+                adapter_name: None,
+                adapter_version: None,
+                caps: AgentCaps::default(),
+                interaction: Default::default(),
+                native_commands: Arc::new(RwLock::new(HashSet::new())),
+                liveness: ProviderLiveness::default(),
+                mcp_servers: Vec::new(),
+                replaying: Arc::new(AtomicBool::new(false)),
+                cwd: "/tmp".into(),
+                policy: Arc::new(Mutex::new(PermissionPolicy::default())),
+                models: Vec::new(),
+                config_options: Vec::new(),
+                models_reported: false,
+                initial_reasoning_effort: None,
+                handoff_context: None,
+            },
+        );
+        while events.try_recv().is_ok() {}
+
+        let error = engine
+            .submit(Op::Cancel {
+                session: "session".into(),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AcpError::Closed));
+        assert!(matches!(
+            engine.state.activity.activity("session").unwrap().state,
+            SessionRunState::Failed {
+                ref turn_id,
+                reason: RunFailureReason::ProviderError,
+                ref message,
+            } if turn_id.as_deref() == Some(lease.turn_id())
+                && message.contains("Cancel failed")
+        ));
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            Event::SessionActivityChanged { .. }
+        ));
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            Event::Error {
+                terminal: true,
+                request_id: Some(ref request_id),
+                ref message,
+                ..
+            } if request_id == "prompt" && message.contains("Cancel failed")
+        ));
+        assert!(!lease.fail_provider("late provider failure"));
     }
 }

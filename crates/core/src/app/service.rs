@@ -13,7 +13,9 @@ use crate::host_tools::HostToolDiscovery;
 use crate::keymap::Keymap;
 use crate::memory::MemoryCapability;
 use crate::models::available_models;
-use crate::provider::{Provider, ProviderCapability, ProviderToolset};
+use crate::provider::{
+    Provider, ProviderCapability, ProviderToolset, CODEX_ACP_PACKAGE, CODEX_ACP_VERSION,
+};
 use crate::provider_lifecycle::{
     ProviderLaunchMode, ProviderLifecycleManager, ProviderLifecycleStatus,
 };
@@ -200,6 +202,19 @@ pub struct ProviderSummary {
     pub management: ProviderLifecycleStatus,
 }
 
+/// Provider installation facts safe for the default support bundle. Launch commands, paths,
+/// environment values, capability failure text, and update-check errors are omitted.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RedactedProviderDiagnostics {
+    pub provider: String,
+    pub enabled: bool,
+    pub installed: bool,
+    pub installed_version: Option<String>,
+    pub launch_mode: ProviderLaunchMode,
+    pub configured_adapter_package: Option<String>,
+    pub configured_adapter_version: Option<String>,
+}
+
 /// The provider registry plus the live host-tool projection shared with the engine.
 pub struct ProviderService {
     pub providers: Vec<Provider>,
@@ -319,6 +334,38 @@ impl ProviderService {
         }
         summaries.sort_by_key(|(index, _)| *index);
         summaries.into_iter().map(|(_, summary)| summary).collect()
+    }
+
+    pub async fn redacted_diagnostics(&self) -> Vec<RedactedProviderDiagnostics> {
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, provider) in self.providers.iter().cloned().enumerate() {
+            let lifecycle = self.lifecycle.clone();
+            tasks.spawn(async move {
+                let enabled = lifecycle.enabled(provider.id.as_str()).unwrap_or(false);
+                let status = lifecycle.status(&provider, false).await;
+                let codex = (provider.id.as_str() == "codex").then_some(());
+                (
+                    index,
+                    RedactedProviderDiagnostics {
+                        provider: provider.id.as_str().to_string(),
+                        enabled,
+                        installed: status.installed,
+                        installed_version: status.version,
+                        launch_mode: status.launch_mode,
+                        configured_adapter_package: codex.map(|_| CODEX_ACP_PACKAGE.to_string()),
+                        configured_adapter_version: codex.map(|_| CODEX_ACP_VERSION.to_string()),
+                    },
+                )
+            });
+        }
+        let mut reports = Vec::with_capacity(self.providers.len());
+        while let Some(result) = tasks.join_next().await {
+            if let Ok(report) = result {
+                reports.push(report);
+            }
+        }
+        reports.sort_by_key(|(index, _)| *index);
+        reports.into_iter().map(|(_, report)| report).collect()
     }
 }
 

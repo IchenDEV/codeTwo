@@ -4,7 +4,8 @@
 use base64::Engine as _;
 use codetwo_core::app::plugins::{EngineInputs, EnginePlugin};
 use codetwo_core::app::{AppConfig, CoreApp, EngineService, StoreService};
-use codetwo_core::Engine;
+use codetwo_core::session::{RunFailureReason, SessionActivity, SessionRunState};
+use codetwo_core::{Engine, ProviderId, Session};
 use codetwo_kernel::{CommandVisibility, KernelError, PluginEntry, Status};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -107,6 +108,7 @@ async fn plugins_contribute_the_app_surface() {
         "browser_use.select",
         "computer_use.settings",
         "computer_use.select",
+        "diagnostics.redacted_snapshot",
         "providers.list",
         "scenes.apply",
         "sessions.list",
@@ -156,6 +158,14 @@ async fn plugins_contribute_the_app_surface() {
         .expect("providers.list");
     assert!(providers.as_array().is_some_and(|list| !list.is_empty()));
 
+    let diagnostics = app
+        .call("diagnostics.redacted_snapshot", Value::Null)
+        .await
+        .expect("diagnostics.redacted_snapshot");
+    assert_eq!(diagnostics["redaction"]["level"], "default");
+    assert!(diagnostics["providers"].as_array().is_some());
+    assert!(diagnostics["engine"]["sessions"].as_array().is_some());
+
     // And one that writes through it.
     let record = app
         .call(
@@ -191,6 +201,77 @@ async fn plugins_contribute_the_app_surface() {
     assert!(attachment["preview_data_url"]
         .as_str()
         .is_some_and(|value| value.starts_with("data:image/png;base64,")));
+}
+
+#[tokio::test]
+async fn diagnostics_snapshot_omits_session_content_and_identifiers() {
+    let (app, _dir) = boot().await;
+    let store = app.service::<StoreService>().expect("store");
+    let mut session = Session::new(ProviderId::Codex, "/private/workspace/secret-project");
+    session.id = "private-session-id".into();
+    session.title = "private prompt title".into();
+    session.acp_session_id = Some("private-provider-cursor".into());
+    session.activity = SessionActivity {
+        revision: 7,
+        state: SessionRunState::Failed {
+            turn_id: Some("private-turn-id".into()),
+            reason: RunFailureReason::ProviderError,
+            message: "token sk-private raw provider failure".into(),
+        },
+    };
+    store.upsert_session(&session).expect("persist session");
+
+    let diagnostics = app
+        .call("diagnostics.redacted_snapshot", Value::Null)
+        .await
+        .expect("diagnostics.redacted_snapshot");
+    let serialized = serde_json::to_string(&diagnostics).unwrap();
+    for private in [
+        "/private/workspace/secret-project",
+        "private-session-id",
+        "private-provider-cursor",
+        "private prompt title",
+        "private-turn-id",
+        "sk-private",
+        "raw provider failure",
+    ] {
+        assert!(!serialized.contains(private), "leaked {private}");
+    }
+    let entry = &diagnostics["engine"]["sessions"][0];
+    assert_eq!(entry["activity_revision"], 7);
+    assert_eq!(entry["activity_state"], "failed");
+    assert_eq!(entry["failure_reason"], "provider_error");
+}
+
+#[tokio::test]
+async fn answer_commands_reject_unknown_or_expired_inputs() {
+    let (app, _dir) = boot().await;
+
+    let permission = app
+        .call(
+            "engine.answer_permission",
+            json!({
+                "session": "missing-session",
+                "request_id": "missing-permission",
+                "option_id": "allow",
+            }),
+        )
+        .await
+        .expect("answer permission");
+    assert_eq!(permission, Value::Bool(false));
+
+    let elicitation = app
+        .call(
+            "engine.answer_elicitation",
+            json!({
+                "session": "missing-session",
+                "request_id": "missing-question",
+                "answer": { "action": "decline" },
+            }),
+        )
+        .await
+        .expect("answer elicitation");
+    assert_eq!(elicitation, Value::Bool(false));
 }
 
 #[tokio::test]

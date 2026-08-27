@@ -34,6 +34,7 @@ describe("Tool Broker JSON-RPC adapter", () => {
       expect(child.exitCode).toBe(0);
       const response = JSON.parse(child.stdout.toString());
       expect(response.id).toBe(7);
+      expect(response.result.browser_access_enabled).toBe(true);
       expect(response.result.native_capabilities).toEqual([]);
       expect(response.result.mcp_servers).toEqual([{
         name: "cua-driver",
@@ -103,4 +104,64 @@ describe("Tool Broker JSON-RPC adapter", () => {
       rmSync(dataDir, { recursive: true, force: true });
     }
   }, 10_000);
+
+  test("persists the Agent browser access gate and projects a Codex blocker", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "codetwo-tool-broker-browser-access-"));
+    try {
+      const setRequest = {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "browser_access.set",
+        params: { data_dir: dataDir, enabled: false, environment: {} },
+      };
+      const setChild = Bun.spawnSync(["bun", entrypoint], {
+        stdin: new TextEncoder().encode(JSON.stringify(setRequest)),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(setChild.exitCode).toBe(0);
+      expect(JSON.parse(setChild.stdout.toString()).result.browser_use.access_enabled).toBe(false);
+      expect(JSON.parse(readFileSync(join(dataDir, "host-tools.json"), "utf8")).agent_browser_access)
+        .toBe(false);
+
+      const resolveRequest = {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tool.resolve",
+        params: { data_dir: dataDir, provider_id: "codex", environment: {} },
+      };
+      const resolveChild = Bun.spawnSync(["bun", entrypoint], {
+        stdin: new TextEncoder().encode(JSON.stringify(resolveRequest)),
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const plan = JSON.parse(resolveChild.stdout.toString()).result;
+      expect(plan.browser_access_enabled).toBe(false);
+      expect(plan.mcp_servers.map((server) => server.name)).toEqual(["node_repl"]);
+      expect(plan.instructions).toEqual([]);
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
+  test("the browser blocker is a valid MCP server with no tools", () => {
+    const requests = [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } },
+      { jsonrpc: "2.0", method: "notifications/initialized" },
+      { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} },
+    ];
+    const child = Bun.spawnSync(["bun", entrypoint, "--empty-mcp"], {
+      stdin: new TextEncoder().encode(`${requests.map((request) => JSON.stringify(request)).join("\n")}\n`),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(child.exitCode).toBe(0);
+    const responses = child.stdout.toString().trim().split("\n").map((line) => JSON.parse(line));
+    expect(responses).toHaveLength(2);
+    expect(responses[0].result).toMatchObject({
+      protocolVersion: "2025-06-18",
+      serverInfo: { name: "codetwo-browser-access-disabled" },
+    });
+    expect(responses[1]).toMatchObject({ id: 2, result: { tools: [] } });
+  });
 });

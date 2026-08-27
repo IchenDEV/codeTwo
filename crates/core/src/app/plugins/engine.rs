@@ -185,7 +185,7 @@ impl Plugin for EnginePlugin {
         }
 
         ctx.provide(Arc::new(EngineService(engine.clone())))?;
-        register_commands(&ctx, engine.clone(), store, bus, paths)?;
+        register_commands(&ctx, engine.clone(), store, providers, bus, paths)?;
         ctx.effect(move || engine.shutdown());
         Ok(())
     }
@@ -195,6 +195,7 @@ fn register_commands(
     ctx: &Context,
     engine: Arc<Engine>,
     store: Arc<StoreService>,
+    providers: Arc<ProviderService>,
     bus: Arc<EventBus>,
     paths: Arc<Paths>,
 ) -> Result<(), PluginError> {
@@ -221,6 +222,46 @@ fn register_commands(
         let engine = listing.clone();
         async move { json(engine.list_sessions().map_err(PluginError::new)?) }
     })?;
+
+    let diagnostics_engine = engine.clone();
+    let diagnostics_providers = providers.clone();
+    ctx.command_described(
+        "diagnostics.redacted_snapshot",
+        Some("Create a content-free provider and process support snapshot."),
+        move |_| {
+            let engine = diagnostics_engine.clone();
+            let providers = diagnostics_providers.clone();
+            async move {
+                let sessions = engine.redacted_diagnostics(100).map_err(PluginError::new)?;
+                let providers = providers.redacted_diagnostics().await;
+                Ok(serde_json::json!({
+                    "schema_version": 1,
+                    "generated_at": chrono::Utc::now().to_rfc3339(),
+                    "redaction": {
+                        "level": "default",
+                        "excluded": [
+                            "account_data",
+                            "environment_values",
+                            "paths",
+                            "prompts",
+                            "raw_errors",
+                            "session_identifiers",
+                            "token_usage",
+                            "tool_input",
+                            "tool_output"
+                        ]
+                    },
+                    "core": {
+                        "version": env!("CARGO_PKG_VERSION"),
+                        "os": std::env::consts::OS,
+                        "arch": std::env::consts::ARCH
+                    },
+                    "providers": providers,
+                    "engine": sessions
+                }))
+            }
+        },
+    )?;
 
     let archived = engine.clone();
     ctx.command("sessions.archived", move |_| {
@@ -729,15 +770,11 @@ fn register_commands(
         let engine = permission.clone();
         async move {
             let args: PermissionArgs = take_args(args)?;
-            engine
-                .submit(Op::AnswerPermission {
-                    session: args.session,
-                    request_id: args.request_id,
-                    option_id: args.option_id,
-                })
-                .await
-                .map_err(PluginError::new)?;
-            Ok(Value::Bool(true))
+            Ok(Value::Bool(engine.answer_permission(
+                &args.session,
+                &args.request_id,
+                args.option_id.as_deref(),
+            )))
         }
     })?;
 
@@ -752,15 +789,11 @@ fn register_commands(
         let engine = elicitation.clone();
         async move {
             let args: ElicitationArgs = take_args(args)?;
-            engine
-                .submit(Op::AnswerElicitation {
-                    session: args.session,
-                    request_id: args.request_id,
-                    answer: args.answer,
-                })
-                .await
-                .map_err(PluginError::new)?;
-            Ok(Value::Bool(true))
+            Ok(Value::Bool(engine.answer_elicitation(
+                &args.session,
+                &args.request_id,
+                args.answer,
+            )))
         }
     })?;
 
