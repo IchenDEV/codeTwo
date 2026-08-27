@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { afterEach, describe, expect, test } from "bun:test";
 import { act as reactAct } from "react";
-import { activateDom, button, dom, flush, mount, restoreDom } from "./domTestHarness";
+import { activateDom, button, click, dom, flush, mount, restoreDom } from "./domTestHarness";
 
 activateDom();
 const { SceneChip, ScenePicker, SourceBadge } = await import("../src/session/SceneChip");
@@ -167,7 +167,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("shows separate model and reasoning controls in the direct session row", () => {
+  test("keeps primary choices visible and progressively reveals secondary session settings", async () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
@@ -199,6 +199,43 @@ describe("SceneChip", () => {
     expect(row?.querySelector('button[title="Model"]')).toBeTruthy();
     expect(row?.querySelector('button[title="Reasoning"]')?.textContent).toContain("Extra High Effort");
     expect(row?.querySelector('input[type="range"]')).toBeNull();
+    expect(row?.textContent).not.toContain("Ask first");
+    expect(row?.textContent).not.toContain("Memory on");
+    expect(row?.textContent).not.toContain("No worktree");
+
+    click(button(row, "Show session settings"));
+    await flush();
+
+    expect(row?.textContent).toContain("Ask first");
+    expect(row?.textContent).toContain("Memory on");
+    expect(row?.textContent).toContain("No worktree");
+    expect(button(row, "Hide session settings").getAttribute("aria-expanded")).toBe("true");
+    rendered.unmount();
+  });
+
+  test("does not duplicate the worktree control when the checkout bar owns it", async () => {
+    activateDom();
+    const rendered = mount(
+      <I18nProvider>
+        <SessionControls
+          config={config()}
+          models={[]}
+          currentModel={null}
+          defaultModel={null}
+          onModel={() => {}}
+          configOptions={[]}
+          onConfigOption={() => {}}
+          showWorktreePicker={false}
+        />
+      </I18nProvider>,
+    );
+
+    click(button(rendered.container, "Show session settings"));
+    await flush();
+
+    expect(rendered.container.textContent).toContain("Ask first");
+    expect(rendered.container.textContent).toContain("Memory on");
+    expect(rendered.container.textContent).not.toContain("No worktree");
     rendered.unmount();
   });
 
@@ -261,7 +298,7 @@ describe("SceneChip", () => {
     rendered.unmount();
   });
 
-  test("keeps direct session controls while removing every scene surface", () => {
+  test("keeps session settings reachable while removing every scene surface", async () => {
     activateDom();
     const rendered = mount(
       <I18nProvider>
@@ -277,11 +314,16 @@ describe("SceneChip", () => {
       </I18nProvider>,
     );
 
+    expect(rendered.container.textContent).not.toContain("Develop");
+    expect(rendered.container.textContent).not.toContain("Ask first");
+
+    click(button(rendered.container, "Show session settings"));
+    await flush();
+
     const content = rendered.container.textContent ?? "";
     expect(content).toContain("Ask first");
     expect(content).toContain("Memory on");
     expect(content).toContain("No worktree");
-    expect(content).not.toContain("Develop");
     expect(content).not.toContain("Auto scene");
     expect(content).not.toContain("Manage scenes");
     rendered.unmount();

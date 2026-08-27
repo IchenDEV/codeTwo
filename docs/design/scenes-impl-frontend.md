@@ -62,13 +62,14 @@ content)`, `listSceneArtifacts(session)`, `sceneArtifactContent(recordId)`, `pin
 |---|---|---|
 | `SceneChip` | `{ config: SessionConfig }` | Scene selection only. Label: scene icon + title, amber-dot **customized** badge, partial-apply dot when `scenePendingFields.length > 0`. |
 | `SceneChipPopover` | rendered inside `PopoverContent` | Top to bottom: (1) header — scene title, `SourceBadge`, `CustomizedBadge`; (2) scene list (MenuRow per resolved scene, "None" row); (3) footer: partial-apply notice + "Restart in this scene" when pending fields exist. |
-| `SessionControls` | `{ config; models, currentModel, defaultModel, onModel, configOptions, onConfigOption }` | Always-visible wrapping composer row containing Scene, Provider, Model/Effort, Permission, Memory, and Worktree. |
+| `SessionControls` | `{ config; models, currentModel, defaultModel, onModel, configOptions, onConfigOption }` | Compact composer row with Scene, Provider, and Model/Effort visible; Permission, Memory, and Worktree sit behind one adjacent disclosure control. |
 | `SourceBadge` | `{ source: SceneSource }` | Pill styled like `DefaultBadge` (Composer.tsx:128). |
 | `ScenePicker` (full) | `{ scenes, activeScene, onScene, onClose }` | Palette-style dialog: all resolved scenes, description + SourceBadge; reached from "All scenes…" row + palette command. |
 
-The session row wraps independently from the action row, so narrow composer widths never hide the
-run, stop, voice, or document controls. Keeping configuration outside the scene popover also avoids
-nested-popover focus and dismissal behavior.
+The primary and disclosed session rows wrap independently from the action row, so narrow composer
+widths never hide the run, stop, voice, or document controls. Keeping configuration outside the
+scene popover also avoids nested-popover focus and dismissal behavior. When the checkout bar is
+rendered, it is the only worktree selector.
 
 ### SessionConfig extension (`apps/desktop/src/session/config.ts`)
 

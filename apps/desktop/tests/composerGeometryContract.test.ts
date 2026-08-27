@@ -22,8 +22,17 @@ const voiceButton = readFileSync(
   new URL("../src/voice/VoiceButton.tsx", import.meta.url),
   "utf8",
 );
+const composerLiquidSurface = composer.slice(
+  composer.indexOf("function ComposerLiquidSurface"),
+  composer.indexOf("function LiquidActionSurface"),
+);
 
 describe("composer geometry contract", () => {
+  test("keeps the composer silhouette synchronized with its interactive content", () => {
+    expect(composerLiquidSurface).not.toContain("morph=");
+    expect(composerLiquidSurface).toContain("<Liquid.Item observe>");
+  });
+
   test("keeps the circular submit control concentric with the composer corner", () => {
     expect(tokens).toContain(
       "--ds-composer-radius: calc(var(--ds-radius-modal) + var(--ds-space-module-inset));",
@@ -31,10 +40,6 @@ describe("composer geometry contract", () => {
     expect(composer).toContain("data-gooey-composer");
     expect(composer).toContain('data-composer-mode={docMode ? "document" : "compact"}');
     expect(composer).toContain('"composer-mode-transition flex flex-col"');
-    expect(composer).toContain("speed: 1.1");
-    expect(composer).toContain("bounce: 0");
-    expect(composer).toContain("roundness: 0.18");
-    expect(composer).toContain("travel: 8");
     expect(composer).toContain(
       "inset 0 0 0 0.5px var(--composer-liquid-border-color)",
     );

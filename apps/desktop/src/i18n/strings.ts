@@ -2290,6 +2290,9 @@ export const en = {
   "pullRequests.noDescription": "No description provided.",
   "pullRequests.changedFiles": "{count} changed files",
   "pullRequests.chatPrompt": "Review this GitHub pull request and help me decide what to do next:",
+  "config.showSessionOptions": "Show session settings",
+  "config.hideSessionOptions": "Hide session settings",
+  "config.sessionOptionsHint": "Permissions, memory, and worktree",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -4433,6 +4436,9 @@ export const zhCN: Record<StringKey, string> = {
   "pullRequests.noDescription": "未提供描述。",
   "pullRequests.changedFiles": "{count} 个变更文件",
   "pullRequests.chatPrompt": "审阅这个 GitHub pull request，并帮我判断下一步：",
+  "config.showSessionOptions": "显示会话设置",
+  "config.hideSessionOptions": "收起会话设置",
+  "config.sessionOptionsHint": "权限、记忆与 Worktree",
 };
 
 export const LOCALES = {
