@@ -146,4 +146,10 @@ describe("macOS window chrome contract", () => {
     );
     expect(styles).not.toMatch(/\.rail-grip(?:::after|:hover)/);
   });
+
+  test("aligns the visible dock resize affordance with the panel edge", () => {
+    expect(styles).toMatch(
+      /\.dock-grip::after\s*{[^}]*left:\s*0;[^}]*width:\s*2px;/s,
+    );
+  });
 });
